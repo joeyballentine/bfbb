@@ -91,8 +91,8 @@ void xModelBucket_PreCountBucket(RpAtomic* data, U32 pipeFlags, U32 subObjects)
         subObjects >>= 1;
     } while ((data = iModelFile_RWMultiAtomic(data)));
 
-    sBucketClipCullCount += modelcount * 2;
     sBucketCount += modelcount * numbuckets;
+    sBucketClipCullCount += modelcount * 2;
 }
 
 void xModelBucket_PreCountAlloc(S32 maxAlphaModels)

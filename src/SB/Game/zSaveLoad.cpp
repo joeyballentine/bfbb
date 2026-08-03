@@ -1836,8 +1836,8 @@ S32 zSaveLoad_SaveGame()
     S32 teststat = true;
     en_XSGASYNC_STATUS asstat = XSG_ASTAT_NOOP;
     S32 use_tgt = CardtoTgt(currentCard);
-    S32 use_game = currentGame;
     autoSaveCard = currentCard;
+    S32 use_game = currentGame;
 
     st_XSAVEGAME_DATA* xsgdata = zSaveLoadSGInit(XSG_MODE_SAVE);
     if (xSGCheckMemoryCard(xsgdata, currentCard) == 0)

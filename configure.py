@@ -330,6 +330,11 @@ cflags_bfbb = [
 
 config.linker_version = "GC/2.0p1"
 
+# The SB library is built with a patched CodeWarrior that narrows an
+# over-aggressive may-alias inference in the instruction scheduler; see
+# tools/patch_compiler.py. Derived from the stock compiler during the build.
+PATCHED_COMPILER = "GC/2.0p1a"
+
 
 # Helper function for Dolphin libraries
 def DolphinLib(lib_name: str, objects: List[Object]) -> Dict[str, Any]:
@@ -404,7 +409,7 @@ config.warn_missing_source = False
 config.libs = [
     {
         "lib": "SB",
-        "mw_version": config.linker_version,
+        "mw_version": PATCHED_COMPILER,
         "cflags": cflags_bfbb,
         "progress_category": "game",
         "objects": [
@@ -1176,6 +1181,36 @@ config.progress_categories = [
     ProgressCategory("bink", "Bink SDK"),
 ]
 config.progress_each_module = args.verbose
+
+# Compilers are fetched by a ninja rule, so the patched variant has to be
+# derived as a build step rather than at configure time. Objects already carry
+# order_only="pre-compile".
+compilers_dir = (
+    Path(config.compilers_path)
+    if config.compilers_path
+    else config.build_dir / "compilers"
+)
+config.custom_build_rules = [
+    {
+        "name": "patch_compiler",
+        "command": "$python tools/patch_compiler.py $out",
+        "description": "PATCH $out",
+    }
+]
+config.custom_build_steps = {
+    "pre-compile": [
+        {
+            "outputs": [compilers_dir / PATCHED_COMPILER / "mwcceppc.exe"],
+            "rule": "patch_compiler",
+            # The script is a real input: editing the payload must re-derive the
+            # compiler, which in turn rebuilds every object (see project.py).
+            # When the compilers are downloaded that directory is a ninja
+            # target; wait for it. With --compilers it already exists on disk.
+            "implicit": [Path("tools") / "patch_compiler.py"]
+            + ([compilers_dir] if config.compilers_path is None else []),
+        }
+    ]
+}
 
 if args.mode == "configure":
     # Write build.ninja and objdiff.json
