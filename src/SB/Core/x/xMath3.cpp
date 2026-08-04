@@ -754,19 +754,14 @@ void xBoxUnion(xBox& a, const xBox& b, const xBox& c)
 
 void xBoxFromCircle(xBox& box, const xVec3& center, const xVec3& dir, F32 r)
 {
-    xVec3 temp_vec1;
-    xVec3 temp_vec2;
+    xVec3 ext = { 0.0f, 0.0f, 0.0f };
 
-    static xVec3 stat_vec;
-    static F32 stat_f;
+    ext.x = r * xsqrt(1.0f - (dir.x * dir.x));
+    ext.y = r * xsqrt(1.0f - (dir.y * dir.y));
+    ext.z = r * xsqrt(1.0f - (dir.z * dir.z));
 
-    stat_vec.x = r * xsqrt(stat_f - (dir.x * dir.x));
-    stat_vec.y = r * xsqrt(stat_f - (dir.y * dir.y));
-    stat_vec.z = r * xsqrt(stat_f - (dir.z * dir.z));
-    temp_vec1 += center;
-    box.upper = temp_vec1;
-    temp_vec2 -= center;
-    box.lower = temp_vec2;
+    box.upper = center + ext;
+    box.lower = center - ext;
 }
 
 void xQuatSMul(xQuat* q, const xQuat* a, F32 t)
