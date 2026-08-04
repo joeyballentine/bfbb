@@ -861,7 +861,7 @@ config.libs = [
     ),
     mslLib(
         "MSL_C.PPCEABI.H",
-        ["-str pool", "-opt level=4, peephole, schedule, nospace", "-inline off", "-sym on"],
+        ["-str pool", "-opt level=4, peephole, schedule, nospace", "-inline on", "-sym on"],
         [
             Object(NonMatching, "MSL_C/PPC_EABI/abort_exit.c"),
             Object(NonMatching, "MSL_C/MSL_Common/alloc.c"),
