@@ -14,30 +14,6 @@ namespace auto_tweak
     void load_param(T1&, T2, T2, T2, xModelAssetParam*, U32, const char*);
 };
 
-struct inode;
-
-struct response_curve
-{
-    U32 values; // offset 0x0,
-    inode* curve; // offset 0x4,
-    U32 nodes; // offset 0x8,
-    U32 active_node; // offset 0xC,
-
-    static void init(U32, const void*, U32, const char*, const char**, const tweak_callback*,
-                     void*);
-    void end_t() const;
-};
-
-struct node
-{
-    F32 t;
-};
-
-struct inode : node
-{
-    F32 value[1];
-};
-
 struct zNPCB_SB2 : zNPCBoss
 {
     enum move_enum
@@ -225,8 +201,16 @@ struct zNPCB_SB2 : zNPCBoss
         xLightKitLight light[8];
     } glow_light;
 
+    static zNPCB_SB2* _singleton;
+
+    static zNPCB_SB2* singleton()
+    {
+        return _singleton;
+    }
+
     zNPCB_SB2(S32 myType);
     void Init(xEntAsset* asset);
+    void ParseINI();
     void Setup();
     void SelfSetup();
     void Reset();
@@ -235,6 +219,9 @@ struct zNPCB_SB2 : zNPCBoss
     void NewTime(xScene*, F32);
     void init_nodes();
     void move_nodes();
+    void render_nodes();
+    void bind_nodes();
+    void rebind_nodes(RpAtomic*, RwMatrixTag*);
     void move_hand(zNPCB_SB2::hand_data&, F32);
     void update_bounds();
     void update_platforms(F32);
@@ -242,11 +229,15 @@ struct zNPCB_SB2 : zNPCBoss
     void render_debug();
     void decompose();
     void update_turn(F32 dt);
+    void update_halt(F32 dt);
+    void update_follow(F32 dt);
+    void update_ymove(F32 dt);
     void update_move(F32 dt);
     void update_camera(F32 dt);
     void update_nodes(F32 dt);
     void show_nodes();
     void check_life();
+    void update_round();
     void ouchie();
     xSurface& create_surface();
     void init_hands();
@@ -257,7 +248,7 @@ struct zNPCB_SB2 : zNPCBoss
     void check_hit_fail();
     void create_glow_light();
     void destroy_glow_light();
-    void say(U32);
+    void set_glow_light_intensity(F32);
     void Render();
     F32 AttackTimeLeft();
     void HoldUpDude();
@@ -269,12 +260,15 @@ struct zNPCB_SB2 : zNPCBoss
     S32 player_on_ground() const;
     void emit_slug(zNPCB_SB2::slug_enum which);
     S32 slugs_ready() const;
+    S32 slugs_inactive() const;
     void reset_stage();
     void fire_slug(zNPCB_SB2::slug_enum which, zNPCB_SB2::platform_data& target);
     void abandon_slugs();
     void set_vulnerable(bool);
     void say(int);
     void choose_hand();
+    bool player_damaged() const;
+    S32 platform_index(const zNPCB_SB2::platform_data& p) const;
     xVec3& location() const;
     xVec3& get_home() const;
     xVec3& start_location() const;

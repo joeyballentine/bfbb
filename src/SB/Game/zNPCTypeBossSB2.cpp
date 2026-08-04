@@ -19,7 +19,9 @@
 #include "zEntDestructObj.h"
 #include "zGlobals.h"
 #include "zGrid.h"
+#include "zNPCMgr.h"
 #include "zNPCTypeBossPatrick.h"
+#include "zNPCTypeBossPlankton.h"
 #include "zRenderState.h"
 #include "zLightning.h"
 #include "zNPCTypeRobot.h"
@@ -64,10 +66,45 @@
 #define SOUND_HIT_SLAP 8
 #define SOUND_HIT_FLAIL 9
 
-zNPCB_SB2* _singleton;
+zNPCB_SB2* zNPCB_SB2::_singleton;
 
 namespace
 {
+    struct node
+    {
+        F32 t;
+    };
+
+    struct inode : node
+    {
+        F32 value[1];
+    };
+
+    struct response_curve
+    {
+        U32 values;
+        inode* curve;
+        U32 nodes;
+        U32 active_node;
+
+        void init(U32 values, const void* curve, U32 nodes, const char*, const char**,
+                  const tweak_callback*, void*)
+        {
+            this->values = values;
+            this->curve = (inode*)curve;
+            this->nodes = nodes;
+            this->active_node = 0;
+        }
+
+        void eval_linear(F32 t, F32* value);
+        U32 find_active_node(F32 t);
+        void eval_smooth(F32 t, F32* value);
+        F32 clamp_t(F32 t) const;
+        F32 end_t() const;
+        inode* get_node(u32 index) const;
+        F32 start_t() const;
+    };
+
     struct sound_data_type
     {
         U32 id;
@@ -86,8 +123,7 @@ namespace
 
     struct curve_node
     {
-        F32 time;
-        iColor_tag color;
+        F32 t;
         F32 scale;
     };
 
@@ -110,9 +146,18 @@ namespace
         { 7, "RSB_armhit2", 0, 0 },    { 8, "RSB_armsmash", 0, 0 }, { 9, "RSB_foor_impact", 0, 0 },
     };
 
-    static platform_hook platform_hooks[16];
+    static const curve_node scale_curve[4] = {
+        { 0.0f, 0.0f },
+        { 0.1f, 0.4f },
+        { 1.0f, 1.25f },
+        { 1.5f, 1.0f },
+    };
 
-    static curve_node scale_curve[4];
+    static const bool dizzy_round[9] = {
+        false, true, false, false, false, true, false, false, true
+    };
+
+    static platform_hook platform_hooks[16];
 
     void set_alpha_blend(xModelInstance* model)
     {
@@ -1005,8 +1050,19 @@ namespace
         }
     }
 
-    void response_curve::end_t() const
+    inode* response_curve::get_node(u32 index) const
     {
+        return (inode*)((U8*)curve + index * (sizeof(node) + values * sizeof(F32)));
+    }
+
+    F32 response_curve::start_t() const
+    {
+        return get_node(0)->t;
+    }
+
+    F32 response_curve::end_t() const
+    {
+        return get_node(nodes - 1)->t;
     }
 
 } // namespace
@@ -1143,15 +1199,15 @@ void zNPCB_SB2::Init(xEntAsset* asset)
     init_sound();
     zNPCCommon::Init(asset);
     this->cfg_npc->dst_castShadow = 30.0f;
-    memset((void*)this->flag.face_player, 0, 0x10);
+    memset(&this->flag.face_player, 0, 0x10);
     this->said_intro = 0;
 
     m = this->model;
     this->models[0] = this->model;
-    
-    this->models[1] = m->Next;
-    this->models[2] = m->Next;
-    this->models[3] = m->Next;
+
+    this->models[1] = this->models[0]->Next;
+    this->models[2] = this->models[1]->Next;
+    this->models[3] = this->models[2]->Next;
 
     this->models[0]->Data->boundingSphere.radius = 100.0f;
     this->models[1]->Data->boundingSphere.radius = 100.0f;
@@ -1169,9 +1225,15 @@ void zNPCB_SB2::Init(xEntAsset* asset)
     this->bound.sph.center.y = 1e38f;
     this->bound.sph.r = 0.0f;
 
-    response_curve::init((U32)&rc_scale, 0, 0, 0, 0, 0, 0);
+    rc_scale.init(1, scale_curve, 4, NULL, NULL, NULL, NULL);
 
     this->init_slugs();
+}
+
+void zNPCB_SB2::ParseINI()
+{
+    zNPCCommon::ParseINI();
+    tweak.load(this->parmdata, this->pdatsize);
 }
 
 void zNPCB_SB2::Setup()
@@ -1347,36 +1409,6 @@ void zNPCB_SB2::NewTime(xScene* xscn, F32 dt)
     zNPCCommon::NewTime(xscn, dt);
 }
 
-void zNPCB_SB2::decompose()
-{
-}
-
-void zNPCB_SB2::show_nodes() 
-{
-    // Haven't found 0x74
-    S32 i;
-    for (i = 0; i < 9; i++)
-    {
-        if (nodes->ent != 0){
-        xEntShow(nodes->ent);
-        }
-    }
-
-}
-
-void zNPCB_SB2::ouchie()
-{
-    xPsyche* psy = psy_instinct;
-    S32 tempOuch;
-    tempOuch = psy_instinct->GIDOfActive();
-    if (tempOuch != NPC_GOAL_BOSSSB2HIT)
-    {
-        set_vulnerable(false);
-        psy_instinct->GoalSet(NPC_GOAL_BOSSSB2HIT, 1);
-    }
-    
-}
-
 void zNPCB_SB2::Render()
 {
     xNPCBasic::Render();
@@ -1457,6 +1489,32 @@ void zNPCB_SB2::emit_slug(zNPCB_SB2::slug_enum which)
     }
 }
 
+S32 zNPCB_SB2::slugs_ready() const
+{
+    for (const slug_data* slug = slugs; slug != slugs + MAX_SLUG; slug++)
+    {
+        if (slug->stage != SLUG_AIM || slug->stage_delay > 0.0f)
+        {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+S32 zNPCB_SB2::slugs_inactive() const
+{
+    for (const slug_data* slug = slugs; slug != slugs + MAX_SLUG; slug++)
+    {
+        if (slug->stage != SLUG_INACTIVE)
+        {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 void zNPCB_SB2::fire_slug(zNPCB_SB2::slug_enum which, zNPCB_SB2::platform_data& target)
 {
     slug_data& slug = slugs[which]; 
@@ -1482,13 +1540,117 @@ void zNPCB_SB2::reset_stage()
     stage_delay = 0;
 }
 
+void zNPCB_SB2::set_vulnerable(bool vulnerable)
+{
+    if (flag.vulnerable == vulnerable)
+    {
+        return;
+    }
+
+    flag.vulnerable = vulnerable;
+
+    for (node_data* n = nodes; n != nodes + 9; n++)
+    {
+        n->ent->dasset->dflags = vulnerable ? 0x1F000 : 0;
+    }
+}
+
+void zNPCB_SB2::decompose()
+{
+}
+
+void zNPCB_SB2::update_move(F32 dt)
+{
+    switch (flag.move)
+    {
+    case MOVE_HALT:
+        update_halt(dt);
+        break;
+    case MOVE_FOLLOW:
+        update_follow(dt);
+        break;
+    case MOVE_Y:
+        update_ymove(dt);
+        break;
+    }
+}
+
+void zNPCB_SB2::update_camera(F32 dt)
+{
+    zCameraDisableTracking(CO_BOSS);
+
+    if (!(zCameraIsTrackingDisabled() & ~CO_BOSS))
+    {
+        boss_cam.update(dt);
+    }
+}
+
+void zNPCB_SB2::show_nodes()
+{
+    for (S32 i = 0; i < 9; i++)
+    {
+        if (nodes[i].ent != NULL)
+        {
+            xEntShow(nodes[i].ent);
+        }
+    }
+}
+
+void zNPCB_SB2::ouchie()
+{
+    if (psy_instinct->GIDOfActive() != NPC_GOAL_BOSSSB2HIT)
+    {
+        set_vulnerable(false);
+        psy_instinct->GoalSet(NPC_GOAL_BOSSSB2HIT, 1);
+    }
+}
+
+void zNPCB_SB2::update_round()
+{
+    S32 old_round = round;
+
+    round = 9 - life;
+
+    if (round != old_round)
+    {
+        reset_stage();
+    }
+
+    if (round > old_round)
+    {
+        flag.dizzy = dizzy_round[round];
+    }
+}
+
+void zNPCB_SB2::scan_cronies()
+{
+    st_XORDEREDARRAY* npclist = zNPCMgr_GetNPCList();
+
+    plankton = NULL;
+
+    for (S32 i = 0; i < npclist->cnt; i++)
+    {
+        zNPCCommon* npc = (zNPCCommon*)npclist->list[i];
+
+        if (npc->SelfType() == NPC_TYPE_BOSSPLANKTON)
+        {
+            plankton = (zNPCBPlankton*)npc;
+            return;
+        }
+    }
+}
+
 void zNPCB_SB2::destroy_glow_light()
 {
     xLightKit_Destroy(&glow_light.kit);
 }
 
-void zNPCB_SB2::say(U32)
+void zNPCB_SB2::set_glow_light_intensity(F32 intensity)
 {
+    glow_light.light[0].color.red = intensity;
+    glow_light.light[0].color.green = intensity;
+    glow_light.light[0].color.blue = intensity;
+    RpLightSetColor(glow_light.light[0].platLight, &glow_light.light[0].color);
 }
 
 xFactoryInst* zNPCGoalBossSB2Intro::create(S32 who, RyzMemGrow* grow, void* info)
