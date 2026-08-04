@@ -21,8 +21,8 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now |
 |---|---|---|
-| matched functions | 6491 / 10147 | 7190 / 10147 |
-| fuzzy match | 57.343% | 62.680% |
+| matched functions | 6491 / 10147 | 7206 / 10147 |
+| fuzzy match | 57.343% | 63.018% |
 | complete units | 195 / 543 | 195 / 543 |
 
 ## Where the remaining functions are
