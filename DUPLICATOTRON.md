@@ -210,6 +210,17 @@ writing no shared state. So N agents can share one checkout as long as:
 
 The integrating session runs the real build once at the end.
 
+**Dispatch about two at a time, not eight.** Eight concurrent agents burned
+through the session usage limit and all eight died mid-edit at the same
+moment, leaving eight half-written units and nothing verified. They resume
+cleanly from their transcripts, so it is recoverable, but a stalled fleet
+still costs an integration cycle. Two at a time finishes the same work with
+the failure surface of two.
+
+An agent that dies mid-edit has left a file that may not compile. Resume it
+with an explicit instruction to run `tools/solo.py` on its units and fix any
+compile error **before** writing anything new.
+
 First run of this, six agents on six units, +138 functions verified by a
 clean build:
 
