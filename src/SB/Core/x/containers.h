@@ -279,10 +279,9 @@ template <class T> struct static_queue
             return this;
         }
 
-        iterator* operator-=(S32 value)
+        iterator operator-=(S32 value)
         {
-            iterator* tmp = operator+=(-value);
-            return tmp;
+            return *operator+=(-value);
         }
 
         iterator operator-(S32 value) const
@@ -392,9 +391,8 @@ template <class T> struct static_queue
         if (it._it == _first)
         {
             U32 orig_size = _size;
-            U32 orig_first = _first;
             _first = other._it;
-            _size = mod_max_size((orig_first + orig_size) - _first);
+            _size = mod_max_size((it._it + orig_size) - _first);
         }
         else
         {
@@ -470,7 +468,7 @@ template <class T, U32 N> struct fixed_queue
     }
     U32 size() const
     {
-        return _last - _first;
+        return (_last + (N + 1) - _first) & N;
     }
 
     struct iterator
@@ -495,10 +493,9 @@ template <class T, U32 N> struct fixed_queue
             return this;
         }
 
-        iterator* operator-=(S32 value)
+        iterator operator-=(S32 value)
         {
-            iterator* tmp = operator+=(-value);
-            return tmp;
+            return *operator+=(-value);
         }
 
         iterator* operator--()
