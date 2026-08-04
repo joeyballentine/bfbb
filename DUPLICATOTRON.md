@@ -58,6 +58,12 @@ fastest route to raising `complete_units`.
 - `vary.py <src> <obj> <unit> <sym> <variants.py>` — patch a source snippet,
   rebuild just that object, report the percent, restore. The main workhorse:
   most fixes here were found by trying 3-4 expression shapes.
+- `flagsweep.py <obj-frag> [flags]` and `optsweep.py` — recompile each unit
+  with an extra compiler flag appended and count how many functions reach
+  100%. This is what found the MSL opt level and inlining mode. **Its baseline
+  is only trustworthy for `.c` units:** for SB `.cpp` units the reconstructed
+  command differs from the real ninja one, and it reported gains a real build
+  did not produce. Always confirm with a full build.
 - `gh.sh <out.c> <func>...` — Ghidra headless decompilation of the
   symbol-bearing `sbgcM.elf`, ~5s per batch. Use
   `ghidra_11.3.1_PUBLIC_20250219`, not `ghidra_11.3_DEV` (too old for the
@@ -76,7 +82,7 @@ fastest route to raising `complete_units`.
 
 ## Settled
 
-- **MSL_C compiler flags were wrong � +51.** `configure.py` built
+- **MSL_C compiler flags were wrong - +51.** `configure.py` built
   `MSL_C.PPCEABI.H` at `-opt level=0 -inline off`. Sweeping against the target
   objects: level 0 matches *nothing* anywhere, level 4 is best or tied for
   every unit (+40), and `-inline on` beats `-inline off` in seven more (+11).
