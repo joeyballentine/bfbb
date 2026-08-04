@@ -1,5 +1,6 @@
 #include "xVec3.h"
 #include "xMath3.h"
+#include "xMathInlines.h"
 #include "xDebug.h"
 #include "zGlobals.h"
 #include "zNPCTypeDutchman.h"
@@ -7,6 +8,10 @@
 #include <types.h>
 
 extern xVec3 dutchman_reticle_center;
+
+U32 xSndPlay3DFade(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, const xVec3* pos,
+                   F32 innerRadius, F32 outerRadius, sound_category category, F32 fadeTime,
+                   F32 delay);
 
 #define f1605 0.0f
 #define f1606 1.0f
@@ -177,18 +182,110 @@ namespace
         U32 flags;
     };
 
-    class curve_node
+    struct curve_node
     {
         F32 time;
         iColor_tag color;
         F32 scale;
     };
 
+    F32 look_at(xMat3x3& mat, const xVec3& dir)
+    {
+        F32 len = dir.length();
+
+        if (xfeq0(len))
+        {
+            mat = g_I3;
+            return 0.0f;
+        }
+
+        mat.at = dir;
+        mat.at *= 1.0f / len;
+
+        F32 ax = xabs(mat.at.x);
+        F32 ay = xabs(mat.at.y);
+        F32 az = xabs(mat.at.z);
+
+        if (ax < ay && ax < az)
+        {
+            mat.right.assign(0.0f, mat.at.z, -mat.at.y);
+        }
+        else if (ay < az)
+        {
+            mat.right.assign(-mat.at.z, 0.0f, mat.at.x);
+        }
+        else
+        {
+            mat.right.assign(mat.at.y, -mat.at.x, 0.0f);
+        }
+
+        mat.right.normalize();
+        mat.up = mat.right.cross(mat.at);
+
+        return len;
+    }
+
+    // clang-format off
+    static const delay_goal sequence[3][16] = {
+        { { NPC_GOAL_DUTCHMANIDLE, 1.0f },
+          { NPC_GOAL_DUTCHMANBEAM, 0.0f },
+          { NPC_GOAL_DUTCHMANDISAPPEAR, 0.0f },
+          { NPC_GOAL_DUTCHMANBEAM, 0.0f },
+          { NPC_GOAL_DUTCHMANIDLE, 1.0f },
+          { NPC_GOAL_DUTCHMANFLAME, 0.0f },
+          { NPC_GOAL_DUTCHMANIDLE, 0.1f },
+          { NPC_GOAL_DUTCHMANPOSTFLAME, 0.0f },
+          { 0, -1.0f } },
+        { { NPC_GOAL_DUTCHMANIDLE, 1.0f },
+          { NPC_GOAL_DUTCHMANBEAM, 0.0f },
+          { NPC_GOAL_DUTCHMANDISAPPEAR, 0.0f },
+          { NPC_GOAL_DUTCHMANBEAM, 0.0f },
+          { NPC_GOAL_DUTCHMANDISAPPEAR, 0.0f },
+          { NPC_GOAL_DUTCHMANBEAM, 0.0f },
+          { NPC_GOAL_DUTCHMANIDLE, 1.0f },
+          { NPC_GOAL_DUTCHMANFLAME, 0.0f },
+          { NPC_GOAL_DUTCHMANIDLE, 0.1f },
+          { NPC_GOAL_DUTCHMANPOSTFLAME, 0.0f },
+          { 0, -1.0f } },
+        { { NPC_GOAL_DUTCHMANIDLE, 1.0f },
+          { NPC_GOAL_DUTCHMANBEAM, 0.0f },
+          { NPC_GOAL_DUTCHMANDISAPPEAR, 0.0f },
+          { NPC_GOAL_DUTCHMANBEAM, 0.0f },
+          { NPC_GOAL_DUTCHMANDISAPPEAR, 0.0f },
+          { NPC_GOAL_DUTCHMANBEAM, 0.0f },
+          { NPC_GOAL_DUTCHMANDISAPPEAR, 0.0f },
+          { NPC_GOAL_DUTCHMANBEAM, 0.0f },
+          { NPC_GOAL_DUTCHMANIDLE, 1.0f },
+          { NPC_GOAL_DUTCHMANFLAME, 0.0f },
+          { NPC_GOAL_DUTCHMANIDLE, 0.1f },
+          { NPC_GOAL_DUTCHMANPOSTFLAME, 0.0f },
+          { 0, -1.0f } }
+    };
+    // clang-format on
+
+    static const curve_node burn_ribbon_curve[7] = {
+        { 0.0f, { 0xff, 0xff, 0xff, 0xff }, 0.4f },  { 0.05f, { 0xff, 0xff, 0x9b, 0xff }, 0.2f },
+        { 0.15f, { 0xcd, 0x9b, 0x37, 0xff }, 0.2f }, { 0.3f, { 0x9b, 0x37, 0x00, 0xff }, 0.2f },
+        { 0.45f, { 0x37, 0x00, 0x00, 0xff }, 0.2f }, { 0.65f, { 0x00, 0x00, 0x00, 0xff }, 0.4f },
+        { 1.0f, { 0x00, 0x00, 0x00, 0x00 }, 0.6f }
+    };
+
+    static const sound_asset sound_assets[6] = {
+        { "FD_eyebeam_loop", 0, 1 }, { "FD_flame_loop", 0, 1 }, { "FD_vapor_loop", 0, 1 },
+        { "FD_float_loop", 0, 1 },   { "FD_gas", 0, 0 },        { "FD_revert", 0, 0 }
+    };
+
     static sound_data_type sound_data[6];
-    static sound_asset sound_assets[6];
-    static xBinaryCamera boss_cam;
+    static xBinaryCamera boss_cam = { { { 6.0f, 3.0f, 2.0f },
+                                        { 0.2f, 2.2f, -1.0f },
+                                        { 1.0f, 0.2f, 1.5f },
+                                        10.0f,
+                                        10.0f,
+                                        10.0f,
+                                        10.0f,
+                                        30.0f,
+                                        -DEG2RAD(10) } };
     static xFXRibbon eye_scorch[2];
-    static curve_node burn_ribbon_curve[7];
     static zParEmitter* plasma_emitter;
     static xParEmitterCustomSettings plasma_emitter_settings;
     static zParEmitter* spark_emitter;
@@ -208,34 +305,380 @@ namespace
     static xParEmitterCustomSettings slime_emitter_settings;
     static zParEmitter* hand_trail_emitter;
     static zParEmitter* blob_emitter;
-    static delay_goal sequence[3][16];
-
-    static void init_sound()
-    {
-        U32 total;
-
-        memset(&sound_data, 0, 0x30);
-
-        for (U32 i = 0; i < 6; i++)
-        {
-            xStrHash((const char*)&sound_assets[i]);
-        }
-    }
-
-    U32 play_sound(S32, const xVec3*, F32)
-    {
-        return 0;
-    }
-
-    void kill_sound(S32 a, U32 b)
-    {
-    }
 
     static tweak_group tweak;
 
-    static void set_volume(S32 which, U32, F32 new_vol)
+    static void init_sound()
     {
+        memset(sound_data, 0, sizeof(sound_data));
+
+        for (S32 i = 0; i < 6; i++)
+        {
+            sound_data[i].id = xStrHash(sound_assets[i].name);
+        }
     }
+
+    U32 play_sound(S32 which, const xVec3* pos, F32 volume)
+    {
+        const sound_asset& asset = sound_assets[which];
+        const sound_property& snd = tweak.sound[which];
+        const sound_data_type& data = sound_data[which];
+
+        if (asset.flags & 1)
+        {
+            return xSndPlay3DFade(data.id, volume * snd.volume, 1.0f, asset.priority, 0x800, pos,
+                                  snd.range_inner, snd.range_outer, SND_CAT_GAME, 0.0f, snd.delay);
+        }
+
+        return xSndPlay3D(data.id, volume * snd.volume, 1.0f, asset.priority, 0x800, pos,
+                          snd.range_inner, snd.range_outer, SND_CAT_GAME, snd.delay);
+    }
+
+    void kill_sound(S32 which, U32 handle)
+    {
+        const sound_asset& asset = sound_assets[which];
+        const sound_property& snd = tweak.sound[which];
+
+        if (asset.flags & 1)
+        {
+            xSndStopFade(handle, snd.fade_time);
+        }
+        else
+        {
+            xSndStop(handle);
+        }
+    }
+
+    static void set_volume(S32 which, U32 handle, F32 new_vol)
+    {
+        xSndSetVol(handle, tweak.sound[which].volume * new_vol);
+    }
+
+} // namespace
+
+//13 new states
+//8 new transitions
+xAnimTable* ZNPC_AnimTable_Dutchman()
+{
+    // clang-format off
+    S32 ourAnims[13] = {
+        ANIM_Idle01,
+        ANIM_Fidget01, 
+        ANIM_Fidget02, 
+        ANIM_Fidget03, 
+        ANIM_Taunt01, 
+        ANIM_Death01, 
+        ANIM_AttackWindup01, 
+        ANIM_AttackLoop01,
+        ANIM_AttackEnd01, 
+        ANIM_Attack02Windup01, 
+        ANIM_Attack02Loop01, 
+        ANIM_Attack02End01,
+        ANIM_LassoGrab01,
+        
+    };
+    // clang-format on
+    xAnimTable* table = xAnimTableNew("zNPCDutchman", NULL, 0);
+
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Idle01], 0x10, 0, f1606, NULL, NULL, f1605, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Death01], 0, 0, f1606, NULL, NULL, f1605, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Fidget01], 0x20, 0, f1606, NULL, NULL, f1605,
+                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Fidget02], 0x20, 0, f1606, NULL, NULL, f1605,
+                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Fidget03], 0x20, 0, f1606, NULL, NULL, f1605,
+                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Taunt01], 0x20, 0, f1606, NULL, NULL, f1605,
+                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_AttackWindup01], 0x20, 0, f1606, NULL, NULL,
+                       f1605, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_AttackLoop01], 0x10, 0, f1606, NULL, NULL, f1605,
+                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_AttackEnd01], 0x20, 0, f1606, NULL, NULL, f1605,
+                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Attack02Windup01], 0x20, 0, f1606, NULL, NULL,
+                       f1605, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Attack02Loop01], 0x10, 0, f1606, NULL, NULL,
+                       f1605, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Attack02End01], 0x20, 0, f1606, NULL, NULL,
+                       f1605, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_LassoGrab01], 0x20, 0x2000000, f1606, NULL, NULL,
+                       f1605, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+
+    NPCC_BuildStandardAnimTran(table, g_strz_subbanim, ourAnims, 1, f1689);
+
+    xAnimTableNewTransition(table, g_strz_subbanim[ANIM_AttackWindup01],
+                            g_strz_subbanim[ANIM_AttackLoop01], 0, 0, 0x10, 0, 0, 0, 0, 0, f1690,
+                            0);
+    xAnimTableNewTransition(table, g_strz_subbanim[ANIM_AttackLoop01],
+                            g_strz_subbanim[ANIM_AttackEnd01], 0, 0, 0, 0, 0, 0, 0, 0, f1690, 0);
+    xAnimTableNewTransition(table, g_strz_subbanim[ANIM_Attack02Windup01],
+                            g_strz_subbanim[ANIM_Attack02Loop01], 0, 0, 0x10, 0, 0, 0, 0, 0, f1690,
+                            0);
+    xAnimTableNewTransition(table, g_strz_subbanim[ANIM_Attack02Loop01],
+                            g_strz_subbanim[ANIM_Attack02End01], 0, 0, 0, 0, 0, 0, 0, 0, f1690, 0);
+    xAnimTableNewTransition(table, g_strz_subbanim[ANIM_Fidget02], g_strz_subbanim[ANIM_Idle01], 0,
+                            0, 0x10, 0, 0, 0, 0, 0, f1690, 0);
+    xAnimTableNewTransition(table, g_strz_subbanim[ANIM_Fidget02],
+                            g_strz_subbanim[ANIM_AttackWindup01], 0, 0, 0, 0, 0, 0, 0, 0, f1690, 0);
+    xAnimTableNewTransition(table, g_strz_subbanim[ANIM_Fidget02], g_strz_subbanim[ANIM_Fidget01],
+                            0, 0, 0, 0, 0, 0, 0, 0, f1690, 0);
+    xAnimTableNewTransition(table, g_strz_subbanim[ANIM_LassoGrab01], g_strz_subbanim[ANIM_Death01],
+                            0, 0, 0, 0, 0, 0, 0, 0, f1690, 0);
+
+    return table;
+}
+
+void zNPCDutchman::Init(xEntAsset* asset)
+{
+    // Function is at 60%
+    // Laser_texture and m both need to be used?
+
+    char* scorch_name[2];
+    S32 i;
+    RwTexture* laser_texture;
+    S32 model_index;
+    xModelInstance* m = model;
+    xFXRibbon* ribbon;
+
+    dutchman_count = dutchman_count + 1;
+    boss_cam.init();
+    zNPCCommon::Init(asset);
+    flg_move = 1;
+    ribbon = eye_scorch;
+    flg_vuln = 1;
+
+    for (i = 0; i < 2; i++)
+    {
+        ribbon->init((S32)eye_scorch, (const char*)0x1ff);
+        ribbon->set_default_config();
+        ribbon->set_curve(ribbon->curve, 0x7);
+        ribbon->set_texture("fx_streak1");
+        ribbon->cfg.life_time = 5.0;
+        ribbon->refresh_config();
+    }
+
+    laser_raster = (RwRaster*)xSTFindAsset((U32)xStrHash("laser_beam_white_blue"), 0x0);
+
+    waves.init(0xf);
+    slime.slices.init(0x3f);
+}
+
+void zNPCDutchman::Setup()
+{
+    zNPCSubBoss::Setup();
+}
+
+void zNPCDutchman::Reset()
+{
+    // Best I can get it
+    // xFXRibbon::clear doenst make much sense
+    zNPCCommon::Reset();
+    memset((void*)flag.face_player, 0, 16);
+    decompose();
+    life = 3;
+    round = 0;
+    stage = -1;
+    alpha = 1.0f;
+    update_round();
+    face_player();
+    flg_vuln = 1;
+    reset_speed();
+    move.vel = 0.0f;
+    move.dest = get_center();
+    flag.move = MOVE_FOLLOW;
+    flames.imax_dist = 1.0f / tweak.ground_radius;
+    reset_blob_mat();
+    waves.clear();
+    slime.slices.clear();
+    //eye_scorch->joints.clear();
+    //eye_scorch->joints.clear();
+    fade.sound_handle = 0;
+    vanish();
+    refresh_reticle();
+    flag.fighting = 0;
+    plasma_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_PLASMA");
+    plasma_emitter_settings.custom_flags = 0x100;
+    plasma_emitter_settings.pos = g_O3;
+    spark_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_SPARKS");
+    spark_emitter_settings.custom_flags = 0x100;
+    spark_emitter_settings.pos = g_O3;
+    light_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_LIGHT");
+    light_emitter_settings.custom_flags = 0x110;
+    light_emitter_settings.pos = g_O3;
+    light_emitter->prop->life.set((119.99999f * tweak.beam.light_rate));
+    eyeglow_emitter[0] = zParEmitterFind("PAREMIT_DUTCHMAN_EYEGLOW0");
+    eyeglow_emitter[1] = zParEmitterFind("PAREMIT_DUTCHMAN_EYEGLOW1");
+    death_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_DEATH");
+    dissolve_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_DISSOLVE");
+    fadeout_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_FADEOUT");
+    fadein_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_FADEIN");
+    flame_emitter[0] = zParEmitterFind("PAREMIT_DUTCHMAN_FLAME_LIGHT");
+    flame_emitter[1] = zParEmitterFind("PAREMIT_DUTCHMAN_FLAME_NORMAL");
+    flame_emitter[2] = zParEmitterFind("PAREMIT_DUTCHMAN_FLAME_SPRAY");
+    flame_emitter_settings.custom_flags = 0x110;
+    flame_emitter_settings.pos = g_O3;
+    light_emitter->prop->life.set((59.999996f));
+    snot_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_FLAME_SNOT");
+    snot_emitter_settings.custom_flags = 0x300;
+    slime_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_SLIME_TRAIL");
+    slime_emitter_settings.custom_flags = 0x100;
+    hand_trail_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_HAND_TRAIL");
+    blob_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_BLOB");
+    psy_instinct->GoalSet('NGM=', 1);
+}
+
+void zNPCDutchman::Destroy()
+{
+    zNPCCommon::Destroy();
+    dutchman_count--;
+}
+
+void zNPCDutchman::Process(xScene* xscn, F32 dt)
+{
+    xVec3 player_loc;
+
+    if (flag.fighting == 0)
+    {
+        zNPCCommon::Process(xscn, dt);
+    }
+    else
+    {
+        delay = delay + dt;
+        psy_instinct->Timestep(dt, NULL);
+        if (flag.fighting == 0)
+        {
+            zNPCCommon::Process(xscn, dt);
+        }
+        else
+        {
+            if (flag.face_player != 0)
+            {
+                player_loc = globals.player.ent.model->Scale;
+                get_center();
+            }
+            update_turn(dt);
+            update_move(dt);
+            update_animation(dt);
+            update_flames(dt);
+            update_eye_glow(dt);
+            update_hand_trail(dt);
+            update_fade(dt);
+            update_slime(dt);
+
+            if ((check_player_damage() & 0xff) != 0)
+            {
+                zEntPlayer_Damage((xBase*)this, 1);
+            }
+            update_camera(dt);
+            refresh_reticle();
+            flg_xtrarend = flg_xtrarend | 1;
+            zNPCCommon::Process(xscn, dt);
+        }
+    }
+}
+
+S32 zNPCDutchman::SysEvent(xBase* from, xBase* to, U32 toEvent, const F32* toParam,
+                           xBase* toParamWidget, S32* handled)
+{
+    // Was going to try this function, but literally can't find 0x1d9
+    if (toEvent == 0x1d9)
+    {
+        psy_instinct->GoalSet('NGM=', 1);
+    }
+    else
+    {
+        if ((0x1d8 < toEvent) || (toEvent != 0x1b5))
+        {
+            handled = 0;
+            return zNPCCommon::SysEvent(from, to, toEvent, toParam, toParamWidget, handled);
+        }
+        start_fight();
+    }
+    return 1;
+}
+
+void zNPCDutchman::Render()
+{
+    zNPCDutchman::render_debug();
+}
+
+void zNPCDutchman::RenderExtra()
+{
+    S32 oldzwrite;
+    S32 oldztest;
+    U32 oldsrcblend;
+    U32 olddestblend;
+    U8 oldcmp;
+    xModelInstance* m;
+    U8 haloing;
+
+    RwRenderStateGet(rwRENDERSTATEFOGENABLE, (void*)&oldcmp);
+    RwRenderStateGet(rwRENDERSTATESRCBLEND, (void*)&oldcmp);
+    RwRenderStateGet(rwRENDERSTATEDESTBLEND, (void*)&oldcmp);
+    RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)&oldcmp);
+    RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)&oldcmp);
+    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)&oldcmp);
+    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)&oldcmp);
+    RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)&oldcmp);
+    iDrawSetFBMSK(-1);
+
+    for (m = model; m != 0; m = m)
+    {
+        xModelRenderSingle(m);
+    }
+
+    iDrawSetFBMSK(0);
+
+    for (m = model; m != 0; m = m)
+    {
+        xModelRenderSingle(m);
+    }
+
+    oldcmp = FALSE;
+
+    if (flag.beaming != 0)
+    {
+        if (beam->segments != 0)
+        {
+            oldcmp = TRUE;
+        }
+        render_beam();
+        // if (*(int*)(this + 0x430) + *(int*)(this + 0x54c) != 0)
+        // {
+        //     bVar1 = true;
+        // }
+    }
+    // 0x2c0
+    oldzwrite = flag.fade;
+    if (oldcmp)
+    {
+        render_beam();
+    }
+    if ((2U - oldzwrite | oldzwrite - 2U) < 0)
+    {
+        render_halo();
+    }
+    RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)&oldcmp);
+    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)&oldcmp);
+    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)&oldcmp);
+    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)&oldcmp);
+}
+
+void zNPCDutchman::ParseINI()
+{
+    zNPCCommon::ParseINI();
+    cfg_npc->snd_traxShare = g_sndTrax_Dutchman;
+    NPCS_SndTablePrepare(g_sndTrax_Dutchman);
+    cfg_npc->snd_trax = g_sndTrax_Dutchman;
+    NPCS_SndTablePrepare(g_sndTrax_Dutchman);
+    tweak.load(parmdata, pdatsize);
+}
+
+namespace
+{
 
     void tweak_group::register_tweaks(bool init, xModelAssetParam* ap, U32 apsize, const char*)
     {
@@ -966,328 +1409,12 @@ namespace
         }
     }
 
+    void tweak_group::load(xModelAssetParam* ap, U32 apsize)
+    {
+        register_tweaks(true, ap, apsize, NULL);
+    }
+
 } // namespace
-
-//13 new states
-//8 new transitions
-xAnimTable* ZNPC_AnimTable_Dutchman()
-{
-    // clang-format off
-    S32 ourAnims[13] = {
-        ANIM_Idle01,
-        ANIM_Fidget01, 
-        ANIM_Fidget02, 
-        ANIM_Fidget03, 
-        ANIM_Taunt01, 
-        ANIM_Death01, 
-        ANIM_AttackWindup01, 
-        ANIM_AttackLoop01,
-        ANIM_AttackEnd01, 
-        ANIM_Attack02Windup01, 
-        ANIM_Attack02Loop01, 
-        ANIM_Attack02End01,
-        ANIM_LassoGrab01,
-        
-    };
-    // clang-format on
-    xAnimTable* table = xAnimTableNew("zNPCDutchman", NULL, 0);
-
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Idle01], 0x10, 0, f1606, NULL, NULL, f1605, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Death01], 0, 0, f1606, NULL, NULL, f1605, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Fidget01], 0x20, 0, f1606, NULL, NULL, f1605,
-                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Fidget02], 0x20, 0, f1606, NULL, NULL, f1605,
-                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Fidget03], 0x20, 0, f1606, NULL, NULL, f1605,
-                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Taunt01], 0x20, 0, f1606, NULL, NULL, f1605,
-                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_AttackWindup01], 0x20, 0, f1606, NULL, NULL,
-                       f1605, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_AttackLoop01], 0x10, 0, f1606, NULL, NULL, f1605,
-                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_AttackEnd01], 0x20, 0, f1606, NULL, NULL, f1605,
-                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Attack02Windup01], 0x20, 0, f1606, NULL, NULL,
-                       f1605, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Attack02Loop01], 0x10, 0, f1606, NULL, NULL,
-                       f1605, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Attack02End01], 0x20, 0, f1606, NULL, NULL,
-                       f1605, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_LassoGrab01], 0x20, 0x2000000, f1606, NULL, NULL,
-                       f1605, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-
-    NPCC_BuildStandardAnimTran(table, g_strz_subbanim, ourAnims, 1, f1689);
-
-    xAnimTableNewTransition(table, g_strz_subbanim[ANIM_AttackWindup01],
-                            g_strz_subbanim[ANIM_AttackLoop01], 0, 0, 0x10, 0, 0, 0, 0, 0, f1690,
-                            0);
-    xAnimTableNewTransition(table, g_strz_subbanim[ANIM_AttackLoop01],
-                            g_strz_subbanim[ANIM_AttackEnd01], 0, 0, 0, 0, 0, 0, 0, 0, f1690, 0);
-    xAnimTableNewTransition(table, g_strz_subbanim[ANIM_Attack02Windup01],
-                            g_strz_subbanim[ANIM_Attack02Loop01], 0, 0, 0x10, 0, 0, 0, 0, 0, f1690,
-                            0);
-    xAnimTableNewTransition(table, g_strz_subbanim[ANIM_Attack02Loop01],
-                            g_strz_subbanim[ANIM_Attack02End01], 0, 0, 0, 0, 0, 0, 0, 0, f1690, 0);
-    xAnimTableNewTransition(table, g_strz_subbanim[ANIM_Fidget02], g_strz_subbanim[ANIM_Idle01], 0,
-                            0, 0x10, 0, 0, 0, 0, 0, f1690, 0);
-    xAnimTableNewTransition(table, g_strz_subbanim[ANIM_Fidget02],
-                            g_strz_subbanim[ANIM_AttackWindup01], 0, 0, 0, 0, 0, 0, 0, 0, f1690, 0);
-    xAnimTableNewTransition(table, g_strz_subbanim[ANIM_Fidget02], g_strz_subbanim[ANIM_Fidget01],
-                            0, 0, 0, 0, 0, 0, 0, 0, f1690, 0);
-    xAnimTableNewTransition(table, g_strz_subbanim[ANIM_LassoGrab01], g_strz_subbanim[ANIM_Death01],
-                            0, 0, 0, 0, 0, 0, 0, 0, f1690, 0);
-
-    return table;
-}
-
-void zNPCDutchman::Init(xEntAsset* asset)
-{
-    // Function is at 60%
-    // Laser_texture and m both need to be used?
-
-    char* scorch_name[2];
-    S32 i;
-    RwTexture* laser_texture;
-    S32 model_index;
-    xModelInstance* m = model;
-    xFXRibbon* ribbon;
-
-    dutchman_count = dutchman_count + 1;
-    boss_cam.init();
-    zNPCCommon::Init(asset);
-    flg_move = 1;
-    ribbon = eye_scorch;
-    flg_vuln = 1;
-
-    for (i = 0; i < 2; i++)
-    {
-        ribbon->init((S32)eye_scorch, (const char*)0x1ff);
-        ribbon->set_default_config();
-        ribbon->set_curve(ribbon->curve, 0x7);
-        ribbon->set_texture("fx_streak1");
-        ribbon->cfg.life_time = 5.0;
-        ribbon->refresh_config();
-    }
-
-    laser_raster = (RwRaster*)xSTFindAsset((U32)xStrHash("laser_beam_white_blue"), 0x0);
-
-    waves.init(0xf);
-    slime.slices.init(0x3f);
-}
-
-void zNPCDutchman::Setup()
-{
-    zNPCSubBoss::Setup();
-}
-
-void zNPCDutchman::Reset()
-{
-    // Best I can get it
-    // xFXRibbon::clear doenst make much sense
-    zNPCCommon::Reset();
-    memset((void*)flag.face_player, 0, 16);
-    decompose();
-    life = 3;
-    round = 0;
-    stage = -1;
-    alpha = 1.0f;
-    update_round();
-    face_player();
-    flg_vuln = 1;
-    reset_speed();
-    move.vel = 0.0f;
-    move.dest = get_center();
-    flag.move = MOVE_FOLLOW;
-    flames.imax_dist = 1.0f / tweak.ground_radius;
-    reset_blob_mat();
-    waves.clear();
-    slime.slices.clear();
-    //eye_scorch->joints.clear();
-    //eye_scorch->joints.clear();
-    fade.sound_handle = 0;
-    vanish();
-    refresh_reticle();
-    flag.fighting = 0;
-    plasma_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_PLASMA");
-    plasma_emitter_settings.custom_flags = 0x100;
-    plasma_emitter_settings.pos = g_O3;
-    spark_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_SPARKS");
-    spark_emitter_settings.custom_flags = 0x100;
-    spark_emitter_settings.pos = g_O3;
-    light_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_LIGHT");
-    light_emitter_settings.custom_flags = 0x110;
-    light_emitter_settings.pos = g_O3;
-    light_emitter->prop->life.set((119.99999f * tweak.beam.light_rate));
-    eyeglow_emitter[0] = zParEmitterFind("PAREMIT_DUTCHMAN_EYEGLOW0");
-    eyeglow_emitter[1] = zParEmitterFind("PAREMIT_DUTCHMAN_EYEGLOW1");
-    death_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_DEATH");
-    dissolve_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_DISSOLVE");
-    fadeout_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_FADEOUT");
-    fadein_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_FADEIN");
-    flame_emitter[0] = zParEmitterFind("PAREMIT_DUTCHMAN_FLAME_LIGHT");
-    flame_emitter[1] = zParEmitterFind("PAREMIT_DUTCHMAN_FLAME_NORMAL");
-    flame_emitter[2] = zParEmitterFind("PAREMIT_DUTCHMAN_FLAME_SPRAY");
-    flame_emitter_settings.custom_flags = 0x110;
-    flame_emitter_settings.pos = g_O3;
-    light_emitter->prop->life.set((59.999996f));
-    snot_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_FLAME_SNOT");
-    snot_emitter_settings.custom_flags = 0x300;
-    slime_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_SLIME_TRAIL");
-    slime_emitter_settings.custom_flags = 0x100;
-    hand_trail_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_HAND_TRAIL");
-    blob_emitter = zParEmitterFind("PAREMIT_DUTCHMAN_BLOB");
-    psy_instinct->GoalSet('NGM=', 1);
-}
-
-void zNPCDutchman::Destroy()
-{
-    zNPCCommon::Destroy();
-    dutchman_count--;
-}
-
-void zNPCDutchman::Process(xScene* xscn, F32 dt)
-{
-    xVec3 player_loc;
-
-    if (flag.fighting == 0)
-    {
-        zNPCCommon::Process(xscn, dt);
-    }
-    else
-    {
-        delay = delay + dt;
-        psy_instinct->Timestep(dt, NULL);
-        if (flag.fighting == 0)
-        {
-            zNPCCommon::Process(xscn, dt);
-        }
-        else
-        {
-            if (flag.face_player != 0)
-            {
-                player_loc = globals.player.ent.model->Scale;
-                get_center();
-            }
-            update_turn(dt);
-            update_move(dt);
-            update_animation(dt);
-            update_flames(dt);
-            update_eye_glow(dt);
-            update_hand_trail(dt);
-            update_fade(dt);
-            update_slime(dt);
-
-            if ((check_player_damage() & 0xff) != 0)
-            {
-                zEntPlayer_Damage((xBase*)this, 1);
-            }
-            update_camera(dt);
-            refresh_reticle();
-            flg_xtrarend = flg_xtrarend | 1;
-            zNPCCommon::Process(xscn, dt);
-        }
-    }
-}
-
-S32 zNPCDutchman::SysEvent(xBase* from, xBase* to, U32 toEvent, const F32* toParam,
-                           xBase* toParamWidget, S32* handled)
-{
-    // Was going to try this function, but literally can't find 0x1d9
-    if (toEvent == 0x1d9)
-    {
-        psy_instinct->GoalSet('NGM=', 1);
-    }
-    else
-    {
-        if ((0x1d8 < toEvent) || (toEvent != 0x1b5))
-        {
-            handled = 0;
-            return zNPCCommon::SysEvent(from, to, toEvent, toParam, toParamWidget, handled);
-        }
-        start_fight();
-    }
-    return 1;
-}
-
-void zNPCDutchman::Render()
-{
-    zNPCDutchman::render_debug();
-}
-
-void zNPCDutchman::RenderExtra()
-{
-    S32 oldzwrite;
-    S32 oldztest;
-    U32 oldsrcblend;
-    U32 olddestblend;
-    U8 oldcmp;
-    xModelInstance* m;
-    U8 haloing;
-
-    RwRenderStateGet(rwRENDERSTATEFOGENABLE, (void*)&oldcmp);
-    RwRenderStateGet(rwRENDERSTATESRCBLEND, (void*)&oldcmp);
-    RwRenderStateGet(rwRENDERSTATEDESTBLEND, (void*)&oldcmp);
-    RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)&oldcmp);
-    RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)&oldcmp);
-    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)&oldcmp);
-    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)&oldcmp);
-    RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)&oldcmp);
-    iDrawSetFBMSK(-1);
-
-    for (m = model; m != 0; m = m)
-    {
-        xModelRenderSingle(m);
-    }
-
-    iDrawSetFBMSK(0);
-
-    for (m = model; m != 0; m = m)
-    {
-        xModelRenderSingle(m);
-    }
-
-    oldcmp = FALSE;
-
-    if (flag.beaming != 0)
-    {
-        if (beam->segments != 0)
-        {
-            oldcmp = TRUE;
-        }
-        render_beam();
-        // if (*(int*)(this + 0x430) + *(int*)(this + 0x54c) != 0)
-        // {
-        //     bVar1 = true;
-        // }
-    }
-    // 0x2c0
-    oldzwrite = flag.fade;
-    if (oldcmp)
-    {
-        render_beam();
-    }
-    if ((2U - oldzwrite | oldzwrite - 2U) < 0)
-    {
-        render_halo();
-    }
-    RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)&oldcmp);
-    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)&oldcmp);
-    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)&oldcmp);
-    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)&oldcmp);
-}
-
-void zNPCDutchman::ParseINI()
-{
-    zNPCCommon::ParseINI();
-    cfg_npc->snd_traxShare = g_sndTrax_Dutchman;
-    NPCS_SndTablePrepare(g_sndTrax_Dutchman);
-    cfg_npc->snd_trax = g_sndTrax_Dutchman;
-    NPCS_SndTablePrepare(g_sndTrax_Dutchman);
-    tweak.load(parmdata, pdatsize);
-}
 
 void zNPCDutchman::SelfSetup()
 {
@@ -1411,17 +1538,19 @@ S32 zNPCDutchman::next_goal()
 {
     stage++;
 
-    if (sequence + (round << 7) + (stage * 8) == 0)
+    if (sequence[round][stage].goal == 0)
     {
         stage = 0;
     }
+
     delay = 0.0f;
-    return (S32)sequence + (round * 128) + (stage * 8);
+
+    return sequence[round][stage].goal;
 }
 
-S32 zNPCDutchman::goal_delay()
+F32 zNPCDutchman::goal_delay()
 {
-    return (S32)sequence + (round * 128) + (stage * 8 + 4);
+    return sequence[round][stage].delay;
 }
 
 void zNPCDutchman::decompose()
@@ -1433,7 +1562,7 @@ void zNPCDutchman::decompose()
         disable_emitter(*fadein_emitter);
         disable_emitter(*fadeout_emitter);
         zCameraEnableTracking(CO_BOSS);
-        boss_cam.stop;
+        boss_cam.stop();
     }
 }
 
@@ -1450,7 +1579,92 @@ namespace
         mat.up.assign(0.0f, 1.0f, 0.0f);
         mat.at.assign(tempSin, 0.0f, tempCos);
     }
+
+    void update_move_follow(xVec3& loc, zNPCDutchman::move_info& move, const xMat3x3& mat, F32 dt)
+    {
+        xVec3 local = move.dest - loc;
+
+        xMat3x3LMulVec(&local, &mat, &local);
+
+        xVec3 delta = { 0.0f, 0.0f, 0.0f };
+
+        xAccelMove(delta.x, move.vel.x, move.accel.x, dt, local.x, move.max_vel.x);
+        xAccelMove(delta.y, move.vel.y, move.accel.y, dt, local.y, move.max_vel.y);
+        xAccelMove(delta.z, move.vel.z, move.accel.z, dt, local.z, move.max_vel.z);
+
+        xMat3x3RMulVec(&delta, &mat, &delta);
+
+        loc += delta;
+    }
+
+    void update_move_accel(xVec3& loc, zNPCDutchman::move_info& move, F32 dt)
+    {
+        loc += move.accel * (0.5f * dt * dt) + move.vel * dt;
+        move.vel += move.accel * dt;
+    }
+
+    void update_move_vel(xVec3& loc, zNPCDutchman::move_info& move, F32 dt)
+    {
+        loc += move.vel * dt;
+    }
+
+    void update_move_stop(xVec3& loc, zNPCDutchman::move_info& move, F32 dt)
+    {
+        xAccelStop(loc.x, move.vel.x, move.accel.x, dt);
+        xAccelStop(loc.y, move.vel.y, move.accel.y, dt);
+        xAccelStop(loc.z, move.vel.z, move.accel.z, dt);
+    }
 } // namespace
+
+void zNPCDutchman::update_turn(F32 dt)
+{
+    get_center();
+
+    xVec2 facing = { 0.0f, 0.0f };
+
+    facing.x = model->Mat->at.x;
+    facing.y = model->Mat->at.z;
+
+    if (turning())
+    {
+        F32 cur = xatan2(facing.x, facing.y);
+        F32 diff = xatan2(turn.dir.x, turn.dir.y) - cur;
+
+        if (diff > PI)
+        {
+            diff -= 2.0f * PI;
+        }
+        else if (diff < -PI)
+        {
+            diff += 2.0f * PI;
+        }
+
+        F32 angle = cur;
+
+        xAccelMove(angle, turn.vel, turn.accel, dt, angle + diff, turn.max_vel);
+
+        set_yaw_matrix(frame->mat, angle);
+    }
+}
+
+void zNPCDutchman::update_move(F32 dt)
+{
+    switch (flag.move)
+    {
+    case MOVE_FOLLOW:
+        update_move_follow(frame->mat.pos, move, frame->mat, dt);
+        break;
+    case MOVE_ACCEL:
+        update_move_accel(frame->mat.pos, move, dt);
+        break;
+    case MOVE_VEL:
+        update_move_vel(frame->mat.pos, move, dt);
+        break;
+    case MOVE_STOP:
+        update_move_stop(frame->mat.pos, move, dt);
+        break;
+    }
+}
 
 void zNPCDutchman::render_debug()
 {
@@ -1467,6 +1681,20 @@ void zNPCDutchman::update_camera(F32 dt)
     {
         boss_cam.update(dt);
     }
+}
+
+void zNPCDutchman::init_wave(zNPCDutchman::wave_data& wave, const xVec3& loc, const xVec3& dir)
+{
+    wave.clipped = 0;
+    wave.loc = loc + dir * tweak.flame.start_dist;
+    wave.dir = dir;
+    wave.dist = 0.0f;
+    wave.vel = 0.0f;
+    wave.sound_loc = wave.loc;
+    wave.sound_handle = play_sound(SOUND_FLAME, &wave.sound_loc, 1.0f);
+    wave.emitted[0] = 0;
+    wave.emitted[1] = 0;
+    wave.emitted[2] = 0;
 }
 
 void zNPCDutchman::kill_wave(zNPCDutchman::wave_data& wave)
@@ -1488,13 +1716,11 @@ void zNPCDutchman::stop_eye_glow()
 void zNPCDutchman::start_hand_trail()
 {
     flag.hand_trail = true;
+
     for (S32 i = 0; i < 2; i++)
     {
-        get_hand_loc(i);
-        hand_trail.loc[i] = hand_trail.loc[i];
+        hand_trail.loc[i] = get_hand_loc(i);
     }
-
-    // hand_trail.loc[0] // 0x5cc
 }
 
 void zNPCDutchman::stop_hand_trail()
@@ -1505,7 +1731,7 @@ void zNPCDutchman::stop_hand_trail()
 void zNPCDutchman::dissolve(F32 delay)
 {
     F32 volume;
-    if (delay == 0.0f)
+    if (delay <= 0.0f)
     {
         flag.fade = FADE_TELEPORT;
         disable_emitter(*fadeout_emitter);
@@ -1530,11 +1756,11 @@ void zNPCDutchman::dissolve(F32 delay)
 
     if (fade.sound_handle == 0)
     {
-        fade.sound_handle = play_sound(2, (const xVec3*)&bound.pad[3], volume);
+        fade.sound_handle = play_sound(SOUND_VAPOR, (const xVec3*)&bound.pad[3], volume);
     }
     else
     {
-        set_volume(2, 0, 0.0f);
+        set_volume(SOUND_VAPOR, fade.sound_handle, volume);
     }
 }
 
@@ -1576,74 +1802,219 @@ void zNPCDutchman::coalesce(F32 delay)
 void zNPCDutchman::reset_blob_mat()
 {
     // Decomp.me says 90%
-    F32 temp;
-    F32 temp2;
+    F32 sn = isin(tweak.flame.blob_pitch);
+    F32 cs = icos(tweak.flame.blob_pitch);
 
-    temp = isin(tweak.flame.blob_pitch);
-    temp2 = icos(tweak.flame.blob_pitch);
     flames.blob_mat.right.assign(1.0f, 0.0f, 0.0f);
-    flames.blob_mat.up.assign(0.0f, temp2, temp);
-    flames.blob_mat.at.assign(0.0f, -temp, temp2);
+    flames.blob_mat.up.assign(0.0f, cs, sn);
+    flames.blob_mat.at.assign(0.0f, -sn, cs);
 }
 
 void zNPCDutchman::reset_lasso_anim()
 {
-    xAnimPlaySetState(0, lassdata->holdGuideAnim, 0);
+    xAnimPlaySetState(lassdata->grabGuideModel->Anim->Single, lassdata->grabGuideAnim, 0.0f);
 }
 
-void zNPCDutchman::update_fade(F32 delay)
+void zNPCDutchman::update_fade(F32 dt)
 {
     F32 frac;
-    if (flag.fade != FADE_TELEPORT)
+
+    switch (flag.fade)
     {
-        if (flag.fade < 1)
+    case FADE_DISSOLVE:
+        fade.time += dt;
+
+        if (fade.time >= fade.duration)
         {
-            if (flag.fade < 4)
-            {
-                fade.time = fade.time + delay;
-                if (fade.time >= fade.duration)
-                {
-                    flag.fade = FADE_TELEPORT;
-                    disable_emitter(*fadeout_emitter);
-                    set_alpha(0.0f);
-                    vanish();
-                    set_volume(2, fade.sound_handle, 1.0f);
-                }
-                else
-                {
-                    frac = fade.time * fade.iduration;
-                    set_alpha(1.0f - frac);
-                    set_volume(2, fade.sound_handle, frac);
-                }
-            }
+            flag.fade = FADE_TELEPORT;
+            disable_emitter(*fadeout_emitter);
+            set_alpha(0.0f);
+            vanish();
+            set_volume(SOUND_VAPOR, fade.sound_handle, 1.0f);
         }
-        else if (flag.fade < 4)
+        else
         {
-            fade.time = fade.time + delay;
-            if (fade.time >= fade.duration)
+            frac = fade.time * fade.iduration;
+            set_alpha(1.0f - frac);
+            set_volume(SOUND_VAPOR, fade.sound_handle, frac);
+        }
+        break;
+
+    case FADE_COALESCE:
+        fade.time += dt;
+
+        if (fade.time >= fade.duration)
+        {
+            flag.fade = FADE_NONE;
+            disable_emitter(*fadein_emitter);
+            disable_emitter(*dissolve_emitter);
+            set_alpha(1.0f);
+            stop_eye_glow();
+            stop_hand_trail();
+            reappear();
+            kill_sound(SOUND_VAPOR, fade.sound_handle);
+            fade.sound_handle = 0;
+        }
+        else
+        {
+            frac = fade.time * fade.iduration;
+            set_alpha(frac);
+            set_volume(SOUND_VAPOR, fade.sound_handle, 1.0f - frac);
+        }
+        break;
+    }
+}
+
+void zNPCDutchman::update_slime(F32 dt)
+{
+    static_queue<slime_slice>::iterator it = slime.slices.begin();
+
+    while (it != slime.slices.end())
+    {
+        slime_slice& slice = *it;
+
+        slice.age += dt;
+
+        if (slice.age > tweak.damage.slime_time)
+        {
+            slime.slices.erase(it, slime.slices.end());
+            return;
+        }
+
+        ++it;
+    }
+}
+
+void zNPCDutchman::add_slime(const xVec3& loc, F32 dt)
+{
+    slime_emitter_settings.pos = loc;
+    emit_particles(*slime_emitter, dt, slime_emitter_settings);
+
+    if (slime.slices.empty())
+    {
+        slime.origin.assign(loc.x, tweak.ground_y, loc.z);
+        slime.dir.assign(move.dest.x - loc.x, 0.0f, move.dest.z - loc.z);
+        slime.dir.normalize();
+
+        slime.slices.push_front();
+
+        slime_slice& slice = slime.slices.front();
+
+        slice.age = 0.0f;
+        slice.dist = 0.0f;
+    }
+    else
+    {
+        slime_slice& first = slime.slices.front();
+        F32 dist2 = (loc - slime.origin).length2();
+        F32 next = 0.5f + first.dist;
+
+        if (next * next <= dist2)
+        {
+            if (slime.slices.full())
             {
-                flag.fade = FADE_NONE;
-                disable_emitter(*fadein_emitter);
-                disable_emitter(*dissolve_emitter);
-                set_alpha(1.0f);
-                stop_eye_glow();
-                stop_hand_trail();
-                reappear();
-                kill_sound(2, fade.sound_handle);
-                fade.sound_handle = 0;
+                slime.slices.pop_back();
             }
-            else
-            {
-                frac = fade.time * fade.iduration;
-                set_alpha(frac);
-                set_volume(2, fade.sound_handle, 1.0f - frac);
-            }
+
+            slime.slices.push_front();
+
+            slime_slice& slice = slime.slices.front();
+
+            slice.age = 0.0f;
+            slice.dist = xsqrt(dist2);
         }
     }
 }
 
 void zNPCDutchman::add_splash(const xVec3&, float)
 {
+}
+
+void zNPCDutchman::update_flames(F32 dt)
+{
+    static_queue<wave_data>::iterator it = waves.begin();
+
+    while (it != waves.end())
+    {
+        wave_data& wave = *it;
+
+        update_wave(wave, dt);
+
+        if (wave.dist >= tweak.ground_radius)
+        {
+            static_queue<wave_data>::iterator dead = it;
+
+            while (dead != waves.end())
+            {
+                kill_wave(*dead);
+                ++dead;
+            }
+
+            waves.erase(it, waves.end());
+            return;
+        }
+
+        ++it;
+    }
+
+    if (flag.flaming)
+    {
+        flames.time += dt;
+
+        const xVec3& facing = get_facing();
+        xVec3 nose = get_nose_loc();
+
+        add_spray(nose, dt);
+
+        xVec3 splash;
+
+        splash.x = facing.x * tweak.flame.lead_dist + nose.x;
+        splash.y = tweak.ground_y;
+        splash.z = facing.z * tweak.flame.lead_dist + nose.z;
+
+        const xVec3& orbit = get_orbit();
+        xVec2 delta;
+
+        delta.x = splash.x - orbit.x;
+        delta.y = splash.z - orbit.z;
+
+        if (delta.length2() <= tweak.ground_radius * tweak.ground_radius)
+        {
+            add_slime(splash, dt);
+            add_splash(splash, dt);
+
+            S32 emitted = (S32)(flames.time * tweak.flame.wave_rate) + 1;
+
+            if (flames.emitted < emitted)
+            {
+                flames.emitted = emitted;
+
+                xVec3 dir;
+
+                dir.x = facing.z;
+                dir.y = 0.0f;
+                dir.z = -facing.x;
+
+                if (waves.full())
+                {
+                    kill_wave(waves.back());
+                    waves.pop_back();
+                }
+
+                waves.push_front();
+                init_wave(waves.front(), splash, dir);
+
+                if (waves.full())
+                {
+                    kill_wave(waves.back());
+                    waves.pop_back();
+                }
+
+                waves.push_front();
+                init_wave(waves.front(), splash, -dir);
+            }
+        }
+    }
 }
 
 void zNPCDutchman::start_fight()
@@ -1659,15 +2030,19 @@ void zNPCDutchman::start_fight()
     }
 }
 
-void zNPCDutchman::set_life(S32 lf)
+void zNPCDutchman::set_life(S32 value)
 {
-    life = range_limit<S32>(life, 0, 3);
-    if (life < lf)
+    S32 old_life = life;
+
+    life = range_limit<S32>(value, 0, 3);
+
+    if (life < old_life)
     {
-        flag.hurting = 1;
-        for (S32 i = life; i < life; i++)
+        flag.hurting = true;
+
+        for (S32 i = life; i < old_life; i++)
         {
-            zEntEvent((xBase*)lf, (xBase*)lf, 0x1d7); // Haven't found 0x1d7. only 0x1d8 and 0x1d4
+            zEntEvent((xBase*)this, (xBase*)this, 0x1d7);
         }
     }
 }
@@ -1719,6 +2094,38 @@ xVec3 zNPCDutchman::get_eye_loc(S32 index) const
     return xModelGetBoneLocation(*model, lookup[index]);
 }
 
+xVec3 zNPCDutchman::get_splash_loc() const
+{
+    const xVec3& facing = get_facing();
+    xVec3 nose = get_nose_loc();
+    xVec3 loc = { 0.0f, 0.0f, 0.0f };
+
+    loc.x = facing.x * tweak.flame.lead_dist + nose.x;
+    loc.y = tweak.ground_y;
+    loc.z = facing.z * tweak.flame.lead_dist + nose.z;
+
+    return loc;
+}
+
+void zNPCDutchman::turn_to_face(const xVec3& loc)
+{
+    flag.face_player = false;
+
+    const xVec3& center = get_center();
+    xVec2 dir = { 0.0f, 0.0f };
+
+    dir.x = loc.x - center.x;
+    dir.y = loc.z - center.z;
+
+    F32 dist2 = dir.length2();
+
+    if (!xfeq0(dist2))
+    {
+        dir *= 1.0f / xsqrt(dist2);
+        turn.dir = dir;
+    }
+}
+
 void zNPCDutchman::vanish()
 {
     old.moreFlags = moreFlags;
@@ -1740,6 +2147,10 @@ void zNPCDutchman::reappear()
 
 void zNPCDutchman::reset_speed()
 {
+    turn.accel = tweak.turn_accel;
+    turn.max_vel = tweak.turn_max_vel;
+    move.accel = tweak.accel * tweak.speed_mult[round];
+    move.max_vel = tweak.max_vel * tweak.speed_mult[round];
 }
 
 const xVec3& zNPCDutchman::get_orbit() const
@@ -1918,26 +2329,6 @@ void zNPCDutchman::update_hand_trail(F32 dt)
     }
 }
 
-void zNPCDutchman::update_slime(F32 dt)
-{
-    static_queue<slime_slice>::iterator it = slime.slices.begin();
-
-    while (it != slime.slices.end())
-    {
-        slime_slice& slice = *it;
-
-        slice.age += dt;
-
-        if (slice.age > tweak.damage.slime_time)
-        {
-            slime.slices.erase(it, slime.slices.end());
-            return;
-        }
-
-        ++it;
-    }
-}
-
 xFactoryInst* zNPCGoalDutchmanInitiate::create(S32 who, RyzMemGrow* grow, void* info)
 {
     return new (who, grow) zNPCGoalDutchmanInitiate(who, (zNPCDutchman&)*info);
@@ -1953,7 +2344,21 @@ S32 zNPCGoalDutchmanInitiate::Enter(F32 dt, void* updCtxt)
 
 S32 zNPCGoalDutchmanInitiate::Exit(F32 dt, void* updCtxt)
 {
+    owner.turn.accel = tweak.turn_accel;
+
     return xGoal::Exit(dt, updCtxt);
+}
+
+S32 zNPCGoalDutchmanInitiate::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    if (owner.move.vel.length2() < 0.01f &&
+        (owner.move.dest - owner.get_center()).length2() < 0.01f && !owner.turning(0.2f))
+    {
+        *trantype = GOAL_TRAN_SET;
+        return NPC_GOAL_DUTCHMANREAPPEAR;
+    }
+
+    return xGoal::Process(trantype, dt, updCtxt, xscn);
 }
 
 xFactoryInst* zNPCGoalDutchmanIdle::create(S32 who, RyzMemGrow* grow, void* info)
@@ -1974,20 +2379,13 @@ S32 zNPCGoalDutchmanIdle::Exit(F32 dt, void* updCtxt)
 
 S32 zNPCGoalDutchmanIdle::Process(en_trantype* trantype, float dt, void* updCtxt, xScene* xscn)
 {
-    owner.goal_delay();
-    if (owner.delay == owner.delay)
+    if (owner.delay >= owner.goal_delay())
     {
-        owner.delay = 1;
-
-        owner.next_goal();
+        *trantype = GOAL_TRAN_SET;
+        return owner.next_goal();
     }
-    else
-    {
-        xGoal::Process(trantype, dt, updCtxt, xscn);
-    }
-    return 0;
 
-    //return xGoal::Process(trantype, dt, updCtxt, xscn);
+    return xGoal::Process(trantype, dt, updCtxt, xscn);
 }
 
 xFactoryInst* zNPCGoalDutchmanNil::create(S32 who, RyzMemGrow* grow, void* info)
@@ -2048,9 +2446,34 @@ xFactoryInst* zNPCGoalDutchmanTeleport::create(S32 who, RyzMemGrow* grow, void* 
     return new (who, grow) zNPCGoalDutchmanTeleport(who, (zNPCDutchman&)*info);
 }
 
+S32 zNPCGoalDutchmanTeleport::Enter(F32 dt, void* updCtxt)
+{
+    owner.turn.accel = tweak.teleport.turn_accel;
+    owner.turn.max_vel = tweak.teleport.turn_max_vel;
+    owner.move.accel = tweak.teleport.accel;
+    owner.move.max_vel = tweak.teleport.max_vel;
+    owner.move.dest = owner.random_orbit(owner.get_center(), 0.5f * PI, PI);
+    owner.turn_to_face(owner.move.dest);
+    owner.flag.move = zNPCDutchman::MOVE_FOLLOW;
+
+    return zNPCGoalCommon::Enter(dt, updCtxt);
+}
+
 S32 zNPCGoalDutchmanTeleport::Exit(F32 dt, void* updCtxt)
 {
     return xGoal::Exit(dt, updCtxt);
+}
+
+S32 zNPCGoalDutchmanTeleport::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    if (owner.move.vel.length2() < 0.01f &&
+        (owner.move.dest - owner.get_center()).length2() < 0.01f)
+    {
+        *trantype = GOAL_TRAN_SET;
+        return NPC_GOAL_DUTCHMANREAPPEAR;
+    }
+
+    return xGoal::Process(trantype, dt, updCtxt, xscn);
 }
 
 xFactoryInst* zNPCGoalDutchmanReappear::create(S32 who, RyzMemGrow* grow, void* info)
@@ -2064,14 +2487,71 @@ S32 zNPCGoalDutchmanReappear::Exit(F32 dt, void* updCtxt)
     return xGoal::Exit(dt, updCtxt);
 }
 
+S32 zNPCGoalDutchmanReappear::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    if (owner.AnimCurState()->ID != g_hash_subbanim[5] || owner.AnimTimeRemain(NULL) < dt)
+    {
+        *trantype = GOAL_TRAN_SET;
+        return owner.next_goal();
+    }
+
+    return xGoal::Process(trantype, dt, updCtxt, xscn);
+}
+
 xFactoryInst* zNPCGoalDutchmanBeam::create(S32 who, RyzMemGrow* grow, void* info)
 {
     return new (who, grow) zNPCGoalDutchmanBeam(who, (zNPCDutchman&)*info);
 }
 
+S32 zNPCGoalDutchmanBeam::Enter(F32 dt, void* updCtxt)
+{
+    substate = SS_STOP;
+    shots = 0;
+
+    xVec3 target;
+
+    zEntPlayer_PredictPos(&target, tweak.beam.focus_time, 1.0f, 1);
+    owner.turn_to_face(target);
+
+    return zNPCGoalCommon::Enter(dt, updCtxt);
+}
+
 S32 zNPCGoalDutchmanBeam::Exit(F32 dt, void* updCtxt)
 {
     return xGoal::Exit(dt, updCtxt);
+}
+
+S32 zNPCGoalDutchmanBeam::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    switch (substate)
+    {
+    case SS_STOP:
+        update_stop(dt);
+        break;
+    case SS_FOCUS:
+        update_focus(dt);
+        break;
+    case SS_FIRE:
+        update_fire(dt);
+        break;
+    case SS_UNFOCUS:
+        update_unfocus(dt);
+        break;
+    case SS_DONE:
+        *trantype = GOAL_TRAN_SET;
+        return owner.next_goal();
+    }
+
+    return xGoal::Process(trantype, dt, updCtxt, xscn);
+}
+
+void zNPCGoalDutchmanBeam::refresh_beam(S32 index)
+{
+    xVec2 loc;
+
+    calc_beam_loc(loc, beam[index].dist, beam[index]);
+
+    beam[index].loc.assign(loc.x, tweak.ground_y, loc.y);
 }
 
 xFactoryInst* zNPCGoalDutchmanFlame::create(S32 who, RyzMemGrow* grow, void* info)
@@ -2082,10 +2562,10 @@ xFactoryInst* zNPCGoalDutchmanFlame::create(S32 who, RyzMemGrow* grow, void* inf
 S32 zNPCGoalDutchmanFlame::Enter(F32 dt, void* updCtxt)
 {
     owner.reset_lasso_anim();
-    owner.get_orbit();
-    owner.turn_to_face(owner.flames.splash_loc); //dont know the correct xVec3&
-    owner.delay = 0;
-    owner.collis = 0;
+    owner.turn_to_face(owner.get_orbit());
+    owner.delay = 0.0f;
+    substate = SS_WAIT;
+
     return zNPCGoalCommon::Enter(dt, updCtxt);
 }
 
@@ -2099,6 +2579,43 @@ S32 zNPCGoalDutchmanFlame::Exit(F32 dt, void* updCtxt)
     owner.stop_flames();
     owner.stop_hand_trail();
     return xGoal::Exit(dt, updCtxt);
+}
+
+S32 zNPCGoalDutchmanFlame::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    switch (substate)
+    {
+    case SS_WAIT:
+        update_wait(dt);
+        break;
+    case SS_MOVE:
+        update_move(dt);
+        break;
+    case SS_STOP:
+        update_stop(dt);
+        break;
+    case SS_DONE:
+        *trantype = GOAL_TRAN_SET;
+        return owner.next_goal();
+    }
+
+    return xGoal::Process(trantype, dt, updCtxt, xscn);
+}
+
+void zNPCGoalDutchmanFlame::update_stop(F32 dt)
+{
+    U8 done = FALSE;
+
+    if (owner.AnimCurState()->ID != g_hash_subbanim[18] || owner.AnimTimeRemain(NULL) < dt)
+    {
+        done = TRUE;
+    }
+
+    if (done && !owner.turning(0.1f) && (owner.move.dest - owner.get_center()).length2() < 0.01f)
+    {
+        substate = SS_DONE;
+        owner.flag.face_player = false;
+    }
 }
 
 xFactoryInst* zNPCGoalDutchmanPostFlame::create(S32 who, RyzMemGrow* grow, void* info)

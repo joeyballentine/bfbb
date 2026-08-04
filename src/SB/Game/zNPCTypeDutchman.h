@@ -188,8 +188,33 @@ struct zNPCDutchman : zNPCSubBoss
     void update_move(F32);
     void update_animation(F32);
     void update_camera(F32);
+    void update_wave(zNPCDutchman::wave_data&, F32);
+    void init_wave(zNPCDutchman::wave_data&, const xVec3&, const xVec3&);
     void kill_wave(zNPCDutchman::wave_data&);
+    void add_slime(const xVec3&, F32);
+    void add_spray(const xVec3&, F32);
     void add_splash(const xVec3&, F32);
+    xVec3 get_splash_loc() const;
+    xVec3 random_orbit(const xVec3&, F32, F32) const;
+
+    U8 turning() const
+    {
+        U8 result = 0;
+        xVec2 facing = { 0.0f, 0.0f };
+
+        facing.x = model->Mat->at.x;
+        facing.y = model->Mat->at.z;
+
+        if (!xfeq0(turn.vel) ||
+            (!xfeq0(turn.accel) &&
+             !(turn.dir.x > turn.dir.y && xabs(turn.dir.x - facing.x) < 0.001f) &&
+             !(turn.dir.x < turn.dir.y && xabs(turn.dir.y - facing.y) < 0.001f)))
+        {
+            result = 1;
+        }
+
+        return result;
+    }
     void vanish();
     void reappear();
     void turn_to_face(const xVec3&);
@@ -224,7 +249,7 @@ struct zNPCDutchman : zNPCSubBoss
     void update_round();
     void decompose();
     S32 next_goal();
-    S32 goal_delay();
+    F32 goal_delay();
     void start_eye_glow();
     void stop_eye_glow();
     void update_eye_glow(F32);
@@ -267,6 +292,7 @@ struct zNPCGoalDutchmanInitiate : zNPCGoalCommon
 
     S32 Enter(F32, void*);
     S32 Exit(F32, void*);
+    S32 Process(en_trantype*, F32, void*, xScene*);
 
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
 };
@@ -309,7 +335,9 @@ struct zNPCGoalDutchmanTeleport : zNPCGoalCommon
     {
     }
 
+    S32 Enter(F32, void*);
     S32 Exit(float, void*);
+    S32 Process(en_trantype*, F32, void*, xScene*);
 
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
 };
@@ -324,6 +352,7 @@ struct zNPCGoalDutchmanReappear : zNPCGoalCommon
 
     S32 Enter(F32, void*);
     S32 Exit(float, void*);
+    S32 Process(en_trantype*, F32, void*, xScene*);
     void reset_speed();
 
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
@@ -362,7 +391,23 @@ struct zNPCGoalDutchmanBeam : zNPCGoalCommon
     {
     }
 
+    S32 Enter(F32, void*);
     S32 Exit(float, void*);
+    S32 Process(en_trantype*, F32, void*, xScene*);
+    void update_stop(F32);
+    void update_focus(F32);
+    void update_fire(F32);
+    void update_unfocus(F32);
+    void aim_beam(beam_data&, const xVec3&, F32) const;
+    void calc_beam_loc(xVec2&, F32, const beam_data&) const;
+    void update_beam(F32, beam_data&, S32);
+    void refresh_beam(S32);
+    void start_effects(S32, F32);
+    void add_miss_effects(S32, F32);
+    void add_blast_effects(S32, F32);
+    void add_effects(S32, F32);
+    void predict_target(xVec3&) const;
+
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
 };
 
@@ -387,6 +432,11 @@ struct zNPCGoalDutchmanFlame : zNPCGoalCommon
 
     S32 Enter(float, void*);
     S32 Exit(float, void*);
+    S32 Process(en_trantype*, F32, void*, xScene*);
+    void update_wait(F32);
+    void update_move(F32);
+    void update_stop(F32);
+    void refresh_vulnerability();
 
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
 };
@@ -433,7 +483,7 @@ struct zNPCGoalDutchmanDamage : zNPCGoalCommon
 
 struct delay_goal
 {
-    U32 goal;
+    S32 goal;
     F32 delay;
 };
 
