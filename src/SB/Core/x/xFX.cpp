@@ -783,12 +783,32 @@ namespace
     {
     }
 
-    void activate_ribbon(xFXRibbon*)
+    void activate_ribbon(xFXRibbon* ribbon)
     {
+        if (active_ribbons_size < RIBBON_COUNT)
+        {
+            active_ribbons[active_ribbons_size] = ribbon;
+            active_ribbons_size++;
+            ribbons_dirty = true;
+        }
     }
 
-    void deactivate_ribbon(xFXRibbon*)
+    void deactivate_ribbon(xFXRibbon* ribbon)
     {
+        xFXRibbon** it = active_ribbons;
+        xFXRibbon** end = active_ribbons + active_ribbons_size;
+
+        while (it != end)
+        {
+            if (*it == ribbon)
+            {
+                active_ribbons_size--;
+                memmove(it, it + 1, (end - it - 1) * sizeof(xFXRibbon*));
+                return;
+            }
+
+            it++;
+        }
     }
 } // namespace
 
