@@ -472,7 +472,7 @@ namespace
     // TODO: Check all lerp return types. Only the first is in dwarf
     void lerp(vert_data& v, F32 frac, const vert_data& v0, const vert_data& v1);
     void lerp(RwTexCoords& unk0, F32 unk1, const RwTexCoords& unk2, const RwTexCoords& unk3);
-    F32 lerp(F32& unk0, F32 unk1, F32 unk2, F32 unk3);
+    void lerp(F32& unk0, F32 unk1, F32 unk2, F32 unk3);
     void lerp(RwRGBA& unk0, F32 unk1, RwRGBA unk2, RwRGBA unk3);
     void lerp(U8& unk0, F32 unk1, U8 unk2, U8 unk3);
     void lerp(xVec3& unk0, F32 unk1, const xVec3& unk2, const xVec3& unk3);
@@ -492,9 +492,9 @@ namespace
         lerp(unk0.v, unk1, unk2.v, unk3.v);
     }
 
-    F32 lerp(F32& unk0, F32 unk1, F32 unk2, F32 unk3)
+    void lerp(F32& unk0, F32 unk1, F32 unk2, F32 unk3)
     {
-        return (unk0 = unk2 + (unk3 - unk2) * unk1);
+        unk0 = unk2 + (unk3 - unk2) * unk1;
     }
 
     void lerp(RwRGBA& unk0, F32 unk1, RwRGBA unk2, RwRGBA unk3)
@@ -507,6 +507,7 @@ namespace
 
     void lerp(U8& unk0, F32 unk1, U8 unk2, U8 unk3)
     {
+        unk0 = 0.5f + ((F32)unk2 + ((F32)unk3 - (F32)unk2) * unk1);
     }
 
     void lerp(xVec3& unk0, F32 unk1, const xVec3& unk2, const xVec3& unk3)
