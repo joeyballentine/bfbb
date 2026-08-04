@@ -50,34 +50,30 @@ this is not the cheap bucket it looks like.
 86 units are within 3 functions of being complete — finishing those is the
 fastest route to raising `complete_units`.
 
-## Tooling (scratchpad)
+## Tooling
 
-- `od.py <unit-frag> [sym-frag]` — authoritative per-function diff via
-  `objdiff-cli diff --format json` against the real build outputs. With no
-  symbol it lists a unit's non-matching functions and percents.
-- `pools.py <unit-frag>` — target vs ours data-symbol layout, for diagnosing
-  POOL mismatches.
-- `classify_all.py` — classifies every non-matching function project-wide.
+The tools that earned their keep now live in `tools/` and are documented in
+`tools/README.md`: `solo.py` (compile+diff one unit without touching the
+build), `symdump.py` (read a static table out of the target object),
+`classify.py` (bucket the remaining functions by why they differ), `smoke.py`
+(compile everything, report only failures), `flagsweep.py` (find a library's
+real compiler flags).
+
+Still scratch-only, because they are either superseded or too tied to this
+machine to commit:
+
 - `vary.py <src> <obj> <unit> <sym> <variants.py>` — patch a source snippet,
-  rebuild just that object, report the percent, restore. The main workhorse:
-  most fixes here were found by trying 3-4 expression shapes.
-- `flagsweep.py <obj-frag> [flags]` and `optsweep.py` — recompile each unit
-  with an extra compiler flag appended and count how many functions reach
-  100%. This is what found the MSL opt level and inlining mode. **Its baseline
-  is only trustworthy for `.c` units:** for SB `.cpp` units the reconstructed
-  command differs from the real ninja one, and it reported gains a real build
-  did not produce. Always confirm with a full build.
-- `sym.py <unit-frag>` lists the target object's data symbols by size;
-  `sym.py <unit-frag> <sym> [raw|u32|f32|mix]` dumps one symbol's bytes. Static
-  tables — goal sequences, sound asset lists, hook name arrays, tweak defaults —
-  are sitting in the original object's `.rodata`. **Read them, do not guess.**
-  This is how `zNPCTypeBossSB2`'s 1152-byte `sequence` table was recovered
-  exactly. It also settles enum values: an enumerator you can see in a table is
-  evidence, an enumerator you invented is not.
+  rebuild just that object, report the percent, restore. Most REGS-class fixes
+  here were found by feeding it 3-4 expression shapes.
+- `pools.py <unit-frag>` — target vs ours data-symbol layout, for diagnosing
+  POOL mismatches. `tools/symdump.py` covers most of what this was for.
 - `gh.sh <out.c> <func>...` — Ghidra headless decompilation of the
-  symbol-bearing `sbgcM.elf`, ~5s per batch. Use
+  symbol-bearing `sbgcM.elf`, ~5s per batch, and the only source of a starting
+  point for the MISSING bucket. Not committed because it hardcodes a local
+  Ghidra install and project path. Use
   `ghidra_11.3.1_PUBLIC_20250219`, not `ghidra_11.3_DEV` (too old for the
-  project file).
+  project file). Batch 10-20 names per invocation; one call costs the same as
+  twenty.
 
 ## Patterns that keep working
 
