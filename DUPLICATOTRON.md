@@ -21,8 +21,8 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now |
 |---|---|---|
-| matched functions | 6491 / 10147 | 6565 / 10147 |
-| fuzzy match | 57.343% | 58.160% |
+| matched functions | 6491 / 10147 | 6592 / 10147 |
+| fuzzy match | 57.343% | 58.214% |
 | complete units | 195 / 543 | 195 / 543 |
 
 ## Where the remaining 3636 functions are
@@ -111,6 +111,29 @@ fastest route to raising `complete_units`.
   rodata template and takes `cross` from 36% to 91%, but it adds that template
   to the `.rodata` of every unit that includes `xVec3.h`, which shifts `zVar`'s
   pool and **breaks the DOL**. Reverted.
+
+## Working the MISSING bucket
+
+`zNPCTypeDutchman` went 59 -> 86 matching in one pass. What worked:
+
+1. Ghidra headless (`gh.sh`) on a batch of the smallest missing symbols at
+   once. The one-liners (`get_orbit`, `get_center`, `get_facing`,
+   `enable_emitter`, `emit_particles`, `PRIV_GetLassoData`, `IsAlive`, ...)
+   came out matching first try, 11 for 11.
+2. Reading struct offsets straight out of the Ghidra output against the
+   headers - `this+0x24` is `xEnt::model`, `model+0x4c` is `Mat`, and so on.
+3. For anonymous-namespace tweak structs, computing field offsets from the
+   declaration and looking up the one the target loads (`tweak+0x170` turned
+   out to be `damage.slime_time`).
+4. **Template members only appear when something calls them.** Explicit
+   instantiation (`template struct static_queue<T>;`) is silently ignored by
+   this compiler - CodeWarrior still only emits used members. Writing one real
+   method (`update_slime`) pulled in nine container functions with it.
+
+`static_queue::init` was also simply wrong: `_max_size` is the rounded-up
+power of two and `_max_size_mask` is that minus one, not the shift count and
+the power. Fixing it also fixed the instantiations in `xDecal` and
+`xLaserBolt`.
 
 ## Open leads
 
