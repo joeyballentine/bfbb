@@ -202,7 +202,7 @@ struct zNPCDutchman : zNPCSubBoss
     void set_alpha(F32);
     void start_flames();
     void stop_flames();
-    void get_eye_loc(S32) const;
+    xVec3 get_eye_loc(S32) const;
     U8 check_player_damage();
     xVec3 get_hand_loc(S32) const;
     void start_hand_trail();

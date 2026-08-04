@@ -1710,10 +1710,11 @@ void zNPCDutchman::stop_flames()
     flag.flaming = false;
 }
 
-void zNPCDutchman::get_eye_loc(S32 index) const
+xVec3 zNPCDutchman::get_eye_loc(S32 index) const
 {
-    S32 lookup = 0;
-    xModelGetBoneLocation(*model, lookup + index * 4);
+    static S32 lookup[] = { 20, 21 };
+
+    return xModelGetBoneLocation(*model, lookup[index]);
 }
 
 void zNPCDutchman::vanish()
@@ -1825,6 +1826,63 @@ void zNPCDutchman::set_alpha(F32 value)
 
 zNPCGoalDutchmanNil::zNPCGoalDutchmanNil(S32 goalID, zNPCDutchman&) : zNPCGoalCommon(goalID)
 {
+}
+
+void zNPCDutchman::update_eye_glow(F32 dt)
+{
+    if (!flag.eye_glow)
+    {
+        return;
+    }
+
+    xVec3 offset = get_facing() * tweak.beam.glow_dist;
+
+    for (S32 i = 0; i < 2; i++)
+    {
+        xParEmitterAsset* tasset = eyeglow_emitter[i]->tasset;
+        xParEmitterPropsAsset* prop = eyeglow_emitter[i]->prop;
+
+        tasset->pos = get_eye_loc(i) + offset;
+
+        F32 birth0 = prop->size_birth.val[0];
+        F32 birth1 = prop->size_birth.val[1];
+        F32 death0 = prop->size_death.val[0];
+        F32 death1 = prop->size_death.val[1];
+
+        prop->size_birth.val[0] = birth0 * eye_glow.size;
+        prop->size_birth.val[1] = prop->size_birth.val[1] * eye_glow.size;
+        prop->size_death.val[0] = prop->size_death.val[0] * eye_glow.size;
+        prop->size_death.val[1] = prop->size_death.val[1] * eye_glow.size;
+
+        emit_particles(*eyeglow_emitter[i], dt);
+
+        prop->size_birth.val[0] = birth0;
+        prop->size_birth.val[1] = birth1;
+        prop->size_death.val[0] = death0;
+        prop->size_death.val[1] = death1;
+    }
+}
+
+void zNPCDutchman::update_hand_trail(F32 dt)
+{
+    if (!flag.hand_trail)
+    {
+        return;
+    }
+
+    xParEmitterAsset* tasset = hand_trail_emitter->tasset;
+
+    tasset->emit_type = 5;
+    tasset->e_line.radius = tweak.teleport.trail_width;
+
+    for (S32 i = 0; i < 2; i++)
+    {
+        tasset->e_line.pos1 = hand_trail.loc[i];
+        hand_trail.loc[i] = get_hand_loc(i);
+        tasset->e_line.pos2 = hand_trail.loc[i];
+
+        emit_particles(*hand_trail_emitter, dt);
+    }
 }
 
 void zNPCDutchman::update_slime(F32 dt)
