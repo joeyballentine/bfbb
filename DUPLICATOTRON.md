@@ -67,6 +67,13 @@ fastest route to raising `complete_units`.
   is only trustworthy for `.c` units:** for SB `.cpp` units the reconstructed
   command differs from the real ninja one, and it reported gains a real build
   did not produce. Always confirm with a full build.
+- `sym.py <unit-frag>` lists the target object's data symbols by size;
+  `sym.py <unit-frag> <sym> [raw|u32|f32|mix]` dumps one symbol's bytes. Static
+  tables — goal sequences, sound asset lists, hook name arrays, tweak defaults —
+  are sitting in the original object's `.rodata`. **Read them, do not guess.**
+  This is how `zNPCTypeBossSB2`'s 1152-byte `sequence` table was recovered
+  exactly. It also settles enum values: an enumerator you can see in a table is
+  evidence, an enumerator you invented is not.
 - `gh.sh <out.c> <func>...` — Ghidra headless decompilation of the
   symbol-bearing `sbgcM.elf`, ~5s per batch. Use
   `ghidra_11.3.1_PUBLIC_20250219`, not `ghidra_11.3_DEV` (too old for the
