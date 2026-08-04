@@ -75,6 +75,95 @@ struct xFXRibbon
         return !joints.empty();
     }
 
+    bool need_update() const
+    {
+        bool result = false;
+
+        if (visible() || debug_need_update())
+        {
+            result = true;
+        }
+
+        return result;
+    }
+
+    S32 render_compare(const xFXRibbon& other) const
+    {
+        if (raster < other.raster)
+        {
+            return -1;
+        }
+
+        if (other.raster < raster)
+        {
+            return 1;
+        }
+
+        if (cfg.blend_src < other.cfg.blend_src)
+        {
+            return -1;
+        }
+
+        if (other.cfg.blend_src < cfg.blend_src)
+        {
+            return 1;
+        }
+
+        if (cfg.blend_dst < other.cfg.blend_dst)
+        {
+            return -1;
+        }
+
+        if (other.cfg.blend_dst < cfg.blend_dst)
+        {
+            return 1;
+        }
+
+        return 0;
+    }
+
+    F32 get_age(const joint_data& joint) const
+    {
+        return 0.001f * (mtime - joint.born);
+    }
+
+    void update(F32 dt)
+    {
+        debug_update(dt);
+
+        mtime += (U32)(1000.0f * dt);
+
+        while (!joints.empty())
+        {
+            joint_data& oldest = joints.back();
+
+            if (mtime - oldest.born < mlife)
+            {
+                break;
+            }
+
+            oldest.born = mtime - mlife;
+
+            if (joints.size() == 1)
+            {
+                joints.clear();
+                break;
+            }
+
+            if (mtime - (*(joints.end() - 2)).born < mlife)
+            {
+                break;
+            }
+
+            joints.pop_back();
+        }
+
+        if (!need_update())
+        {
+            deactivate();
+        }
+    }
+
     bool debug_need_update() const
     {
         return false;
@@ -103,7 +192,6 @@ struct xFXRibbon
     void deactivate();
     void start_render();
     void render();
-    S32 render_compare(const xFXRibbon&) const;
     void set_raster(RwRaster*);
 };
 

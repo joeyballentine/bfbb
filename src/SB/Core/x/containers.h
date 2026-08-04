@@ -32,17 +32,17 @@ struct tier_queue_allocator
         return _block_size_shift;
     }
 
-    U32 mod_block_size(U32 value) const
+    u32 mod_block_size(u32 value) const
     {
         return value & (_block_size - 1);
     }
 
-    void* get_block(U32 index) const
+    void* get_block(u32 index) const
     {
         return blocks[index].data;
     }
 
-    U32 log2_ceil(U32 value) const
+    u32 log2_ceil(u32 value) const
     {
         U32 shift = 0;
 
@@ -64,6 +64,8 @@ struct tier_queue_allocator
     {
         return xMemAlloc(gActiveHeap, _block_size * _unit_size, 0);
     }
+
+    void free_block(U8 block);
 };
 
 template <class T> struct tier_queue
@@ -140,27 +142,29 @@ template <class T> struct tier_queue
         return _size == 0;
     }
 
-    U8 wrap_block(U32 block) const
+    U8 wrap_block(u32 block) const
     {
         return block;
     }
 
-    U32 wrap_index(U32 index) const
+    u32 wrap_index(u32 index) const
     {
         return index & wrap_mask;
     }
 
-    U32 get_block(U32 index) const
+    u32 get_block(u32 index) const
     {
         return index >> alloc->block_size_shift();
     }
 
-    T& get_at(U32 index) const
+    T& get_at(u32 index) const
     {
-        return ((T*)alloc->get_block(blocks[get_block(index)]))[alloc->mod_block_size(index)];
+        T* data = (T*)alloc->get_block(blocks[get_block(index)]);
+
+        return data[alloc->mod_block_size(index)];
     }
 
-    iterator create_iterator(U32 index) const
+    iterator create_iterator(u32 index) const
     {
         iterator it;
         it._it = index;
@@ -188,6 +192,34 @@ template <class T> struct tier_queue
     {
         iterator it = end() - 1;
         return *it;
+    }
+
+    bool front_full() const
+    {
+        if (!alloc->full())
+        {
+            return false;
+        }
+
+        return alloc->mod_block_size(first) == 0;
+    }
+
+    void pop_back()
+    {
+        if (_size <= 1)
+        {
+            clear();
+            return;
+        }
+
+        _size--;
+
+        u32 index = wrap_index(first + _size);
+
+        if (alloc->mod_block_size(index) == 0)
+        {
+            alloc->free_block(blocks[get_block(index)]);
+        }
     }
 
     void clear();

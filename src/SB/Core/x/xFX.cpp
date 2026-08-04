@@ -1259,8 +1259,12 @@ void xFXRibbonSceneEnter()
     active_ribbons_size = 0;
 }
 
-void xFXRibbonUpdate(F32)
+void xFXRibbonUpdate(F32 dt)
 {
+    for (U32 i = 0; i < active_ribbons_size; i++)
+    {
+        active_ribbons[i]->update(dt);
+    }
 }
 
 void xFXRibbon::init(const char*, const char*)
