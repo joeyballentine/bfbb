@@ -122,50 +122,52 @@ machine to commit:
   `.text` symbol order, and the authoritative pool contents from
   `tools/symdump.py` plus `dtk elf disasm`.
 
-  **But first-use order is not the whole rule**, and this is unresolved. Our
-  objects follow it strictly — verified, our pool order always matches our own
-  `.text` order — while the target's demonstrably does not:
+  **But first-use order is not the whole rule**, and this is the sharpest
+  open problem in the project. `zThrown` is now the reduced test case: its
+  pool has exactly the target's 22 entries with exactly the target's values,
+  and differs by the position of **one object**, `0.5f`. Inserting a single
+  unused `static F32 probe(F32 x) { return 0.5f * x; }` between
+  `zThrown_Setup` and `zThrown_AddTempFrame` takes the unit from 18
+  non-matching to **9** - nine functions flip at once. That is measured, not
+  theorised, and it was removed again because shipping dead code to shift a
+  pool is not decompiling.
 
-  - `zThrown`: `@842` (0.5f) sits at pool index 1, but its first `.text`
-    reference is in `zFruit_Update`, *after* `@844` (0.0f) in
-    `zFruit_ColorFade`. Nothing ahead of `ColorFade` references 0.5f, and the
-    two functions ahead of it are structurally identical to ours (one matches
-    100%).
-  - `zShrapnel`: `@712` (0.5f) is the *first* pool entry but is used only by
-    functions #22-#36, while `@713` (0.1f) belongs to `GameInit` (#3).
-    `DestructObjInit`'s block (`@1127-@1136`, function #31) precedes
-    `ProjectileCollData`'s `@1224` (function #21).
+### What is known about the missing construct
 
-  Ruled out: parse order, source-text order, sorting by value, and the "dead
-  literal in an earlier function" theory — `F32 unused = 0.5f;` and
-  `if (0) { ... 0.5f ... }` are both folded before pool allocation. Twenty-two
-  functions across those two units hinge on nothing else, and the POOL bucket
-  project-wide is the same question.
+- `.sdata2` section order is ascending `@NNN` order - the compiler's object
+  id, assigned at creation - in the target as well as ours. This is not a
+  sorting question. It is: *what creates a literal before its first `.text`
+  use?*
+- **A function's new literals are always contiguous in our output.** In the
+  target, `zFruit_Update` uses ids 842, 847 and 932. Non-contiguous, so it
+  did not create `0.5f`; it reused one created elsewhere.
+- **`fruitPattern`'s static-local suffix pins the boundary.** Ours is `$279`
+  with body literals `@293/@294` - the static's id comes *first*. The
+  target's is `$863` with body literals `@844/@845` - the static's id comes
+  *last*. So `0.5f`, `0.0f`, `1.0f` and `1e-5f` were all created before
+  `zFruit_ColorFade` was parsed at all.
+- **Fingerprint.** The construct sits immediately after the `airTime`
+  computation in `zThrown_Setup`, is compact (ids 1-2 apart), uses
+  `0.5f, 0.0f, 1.0f, 1e-5f` in that order, and emits nothing -
+  `zThrown_Setup` is byte-count-identical to ours and `AddTempFrame` matches
+  100%.
+- `zShrapnel` has the same shape (`0.5f` created early, used only late),
+  which suggests one shared construct - a header inline or a debug/assert
+  macro - rather than a per-unit accident.
 
-### What the pool experiments established
+Mechanisms ruled out by direct experiment (introduce a novel constant at the
+top of a unit, consume it at the bottom, see where it lands;
+`poolorder.py` in the scratchpad dumps any object's section symbols in
+address order):
 
-Measured directly, by introducing a novel constant near the top of
-`zNPCTypeBossSB2.cpp`, consuming it near the bottom, and reading where it
-landed (`poolorder.py` in the scratchpad dumps a section's symbols in address
-order, for any object):
-
-- **`.sdata2` section order is ascending `@NNN` order**, in the target as well
-  as ours. The `@NNN` is the compiler's object id, assigned at creation. So the
-  question is not "how is the pool sorted" — it is "what creates a literal
-  earlier than its first `.text` use".
-- **A `static` (non-`inline`) function** defined early lands its literal at
-  index 0 — but only because with these flags it is also *emitted* out of line
-  at that position, so `.text` order and pool order agree. Not the answer.
-- **An `inline`-keyword function** defined early but called late lands its
-  literal at the *call site* (index 45 of 47), not the definition. Weak inlines
-  are compiled after the main `.text`.
-- Also ruled out, all landing at the use site: a file-scope
-  `static const F32`, a **default argument** value, and a **class static member
-  function** returning the constant.
-
-So five plausible mechanisms are eliminated with evidence. Whatever allocates
-`zThrown`'s `0.5f` at index 1 emits nothing into `.text` before
-`zFruit_ColorFade` and is none of the above.
+- an `inline`-keyword function defined early, called late - lands at the
+  **call site**, not the definition; weak inlines compile after `.text`
+- a `static` non-`inline` function defined early - lands at index 0, but it
+  is also *emitted* there, so `.text` and pool order still agree
+- a file-scope `static const F32`, a **default argument** value, and a
+  **class static member function** - all land at the use site
+- dead code: `F32 unused = 0.5f;` and `if (0) { ... 0.5f ... }` are folded
+  before pool allocation
 
 ## Settled
 
