@@ -95,6 +95,26 @@ machine to commit:
 - Container index parameters are **`u32` (`unsigned long`)**, not `U32`
   (`unsigned int`) — `CFUl` vs `CFUi` in the mangled name. This keeps coming
   up; check it before assuming a body is wrong.
+- **`a <= b` on floats gives `cror eq,lt,eq` then `beq`; `!(a > b)` gives
+  `ble`.** They are semantically identical and compile differently. Rewriting a
+  condition under negation took Dutchman's `turning() const` from 91% to 98.9%.
+- **Hoist a `const&` out of an if/else.** When the target computes an address
+  *before* the branch and both arms use it, the original bound a reference
+  first rather than indexing inside each arm. `const sound_asset& asset =
+  sound_assets[which];` ahead of the `if` took `kill_sound` from 52% to 100%
+  and `play_sound` from 3% to 96%.
+- **CodeWarrior inlines a same-TU callee only if it is defined *earlier*.**
+  So forward-declare the helper and put its body *after* the caller when the
+  target emits a real `bl`. Conversely, a static helper defined above its only
+  caller will be inlined whether you want it or not.
+- **A table that is uninitialised in our source lands in `.bss`; the target
+  has it in `.rodata`/`.data`.** Every relocation against it then mismatches,
+  which can make a dozen unrelated functions look broken. `tools/symdump.py`
+  and a real initialiser fix all of them at once.
+- **Position in the file decides pool index.** Anonymous literals are
+  allocated in codegen order, so a function sitting too early in the file
+  steals the low pool indices from whatever should own them. Moving
+  `register_tweaks` after `ParseINI` in Dutchman was worth a whole cluster.
 
 ## Settled
 
@@ -290,6 +310,36 @@ Verified with a compile of all 343 units the build knows about: 0 failures.
 `ctbsp` is the worked example: 8 non-matching -> 4 in one pass, straight from
 `gh.sh` output read against `rpcollbsptree.h`. The rwsdk headers are good
 enough that struct offsets mostly just line up.
+
+## Queued shared-header changes
+
+Agents may not edit shared headers, so they report them instead. Outstanding:
+
+- **`containers.h` — `static_queue<T>::iterator::operator-=` returns by value,
+  not by pointer.** Two agents asked for this independently with the same
+  evidence: the target's `__ami__` ends `bl operator+=; mr r4,r3;
+  lwz r3,0(r3); lwz r4,4(r4); blr`, dereferencing and returning the 8-byte
+  iterator in the r3/r4 pair. Ours returns the pointer and stops. Currently
+  75%.
+- **`containers.h` — `static_queue<T>::size()` is `(_last + (N + 1) - _first)
+  & N`,** not `_last - _first`. Target: `addi r0,_last,0x20; subf r0,_first,r0;
+  clrlwi r3,r0,27`. Currently 63.8%.
+- **`containers.h` — `erase` should reuse `it._it` rather than caching
+  `_first`.** REGS-class: identical instruction multiset, different registers,
+  because the target's `add r4, r6, r4` reuses the register already holding
+  `it._it` from the `cmplw`.
+- **`xSnd.h` — declare `xSndPlay3DFade`.** Two units declare it locally. The
+  signature is forced by the mangled name
+  `xSndPlay3DFade__FUiffUiUiPC5xVec3ff14sound_categoryff`, though the meaning
+  of the final two `F32` parameters is still a guess.
+- **`zMovePoint.h` — add inline `RadiusArena()`, `NodeByIndex(S32)` and define
+  `NumNodes()`.** The target emits all three out of line into
+  `zNPCTypeRobot.o`. There is a stopgap `inline zMovePoint::NumNodes` sitting
+  in `zNPCTypeRobot.h` that belongs here.
+- **`zNPCHazard.h` — `UVAModelInfo::Valid` should be `const` and defined
+  inline** (`return model && uv;`). The target symbol is
+  `Valid__12UVAModelInfoCFv`, emitted per-TU; it is currently declared and
+  defined nowhere, which is a live unresolved external.
 
 ## Open leads
 
