@@ -1739,6 +1739,114 @@ void zNPCDutchman::reset_speed()
 {
 }
 
+const xVec3& zNPCDutchman::get_orbit() const
+{
+    return asset->pos;
+}
+
+const xVec3& zNPCDutchman::get_center() const
+{
+    return *(const xVec3*)&model->Mat->pos;
+}
+
+const xVec3& zNPCDutchman::get_facing() const
+{
+    return *(const xVec3*)&model->Mat->at;
+}
+
+xVec3 zNPCDutchman::get_nose_loc() const
+{
+    return xModelGetBoneLocation(*model, 17);
+}
+
+xVec3 zNPCDutchman::get_chest_loc() const
+{
+    return xModelGetBoneLocation(*model, 2);
+}
+
+void zNPCDutchman::enable_emitter(zParEmitter& emitter) const
+{
+    emitter.emit_flags |= 1;
+}
+
+void zNPCDutchman::disable_emitter(zParEmitter& emitter) const
+{
+    emitter.emit_flags &= ~1;
+}
+
+void zNPCDutchman::emit_particles(zParEmitter& emitter, F32 dt) const
+{
+    xParEmitterEmit(&emitter, dt);
+}
+
+void zNPCDutchman::emit_particles(zParEmitter& emitter, F32 dt,
+                                  xParEmitterCustomSettings& settings) const
+{
+    xParEmitterEmitCustom(&emitter, dt, &settings);
+}
+
+zNPCLassoInfo* zNPCDutchman::PRIV_GetLassoData()
+{
+    return &lasso_info;
+}
+
+S32 zNPCDutchman::IsAlive()
+{
+    return life > 0;
+}
+
+xVec3 zNPCDutchman::get_hand_loc(S32 index) const
+{
+    static S32 lookup[] = { 6, 10 };
+
+    return xModelGetBoneLocation(*model, lookup[index]);
+}
+
+void zNPCDutchman::set_alpha(F32 value)
+{
+    alpha = value;
+
+    F32 model_alpha = value * tweak.alpha;
+
+    for (xModelInstance* m = model; m != NULL; m = m->Next)
+    {
+        if (model_alpha < 1.0f)
+        {
+            m->Flags |= 0x4000;
+        }
+        else
+        {
+            m->Flags &= 0xbfff;
+        }
+
+        m->Alpha = model_alpha;
+    }
+}
+
+zNPCGoalDutchmanNil::zNPCGoalDutchmanNil(S32 goalID, zNPCDutchman&) : zNPCGoalCommon(goalID)
+{
+}
+
+void zNPCDutchman::update_slime(F32 dt)
+{
+    static_queue<slime_slice>::iterator it = slime.slices.begin();
+
+    while (it != slime.slices.end())
+    {
+        slime_slice& slice = *it;
+
+        slice.age += dt;
+
+        if (slice.age > tweak.damage.slime_time)
+        {
+            slime.slices.erase(it, slime.slices.end());
+            return;
+        }
+
+        ++it;
+    }
+}
+
 xFactoryInst* zNPCGoalDutchmanInitiate::create(S32 who, RyzMemGrow* grow, void* info)
 {
     return new (who, grow) zNPCGoalDutchmanInitiate(who, (zNPCDutchman&)*info);

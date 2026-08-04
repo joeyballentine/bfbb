@@ -204,7 +204,7 @@ struct zNPCDutchman : zNPCSubBoss
     void stop_flames();
     void get_eye_loc(S32) const;
     U8 check_player_damage();
-    void get_hand_loc(S32) const;
+    xVec3 get_hand_loc(S32) const;
     void start_hand_trail();
     void stop_hand_trail();
     void refresh_reticle();
@@ -226,8 +226,15 @@ struct zNPCDutchman : zNPCSubBoss
     void start_eye_glow();
     void stop_eye_glow();
     void update_eye_glow(F32);
-    void get_orbit() const; //Weak
-    xVec3 get_center() const; //Weak
+    const xVec3& get_orbit() const; //Weak
+    const xVec3& get_center() const; //Weak
+    const xVec3& get_facing() const;
+    xVec3 get_nose_loc() const;
+    xVec3 get_chest_loc() const;
+    void emit_particles(zParEmitter&, F32) const;
+    void emit_particles(zParEmitter&, F32, xParEmitterCustomSettings&) const;
+    zNPCLassoInfo* PRIV_GetLassoData();
+    S32 IsAlive();
     void reset_blob_mat();
     void render_beam();
     void render_halo();
@@ -243,6 +250,8 @@ struct zNPCDutchman : zNPCSubBoss
 
 struct zNPCGoalDutchmanNil : zNPCGoalCommon
 {
+    zNPCGoalDutchmanNil(S32 goalID, zNPCDutchman& npc);
+
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
 };
 

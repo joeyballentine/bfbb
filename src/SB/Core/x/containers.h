@@ -63,6 +63,21 @@ template <class T> struct static_queue
             return this;
         }
 
+        iterator* operator-=(S32 value)
+        {
+            iterator* tmp = operator+=(-value);
+            return tmp;
+        }
+
+        iterator operator-(S32 value) const
+        {
+            iterator tmp;
+            tmp._it = _it;
+            tmp._owner = _owner;
+            tmp -= value;
+            return tmp;
+        }
+
         iterator* operator++()
         {
             *this += 1;
@@ -82,16 +97,19 @@ template <class T> struct static_queue
 
     void init(u32 size)
     {
-        U32 unk_r3 = 0;
+        U32 shift = 0;
+
+        size++;
+
         while (size > 1)
         {
             size /= 2;
-            unk_r3++;
+            shift++;
         }
 
-        _max_size = unk_r3;
-        _max_size_mask = 1 << _max_size;
-        _buffer = (T*)xMemAlloc(gActiveHeap, sizeof(T) * (size), 0);
+        _max_size = 1 << shift;
+        _max_size_mask = _max_size - 1;
+        _buffer = (T*)xMemAlloc(gActiveHeap, sizeof(T) * _max_size, 0);
         clear();
     }
 
@@ -104,6 +122,12 @@ template <class T> struct static_queue
     T& front()
     {
         iterator it = begin();
+        return *it;
+    }
+
+    T& back()
+    {
+        iterator it = end() - 1;
         return *it;
     }
 
