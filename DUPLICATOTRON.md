@@ -27,7 +27,7 @@ is off-limits for upstream PRs.
 
 ## Where the remaining functions are
 
-Classified with `classify_all.py` (see tooling below). This counts the
+Classified with `tools/classify.py`. This counts the
 2837 non-matching functions in units objdiff can compare; the project
 total of 3370 also includes units with no diffable object at all.
 
@@ -199,8 +199,8 @@ last one is a template with per-type specialisations - `<f,f>` calls
 ## Running several agents in parallel
 
 Naive parallelism does not work here: every agent running `ninja` in one
-checkout clobbers the others' objects and `report.json`. `solo.py` removes the
-contention - it compiles a single unit into a private temp directory with the
+checkout clobbers the others' objects and `report.json`. `tools/solo.py`
+removes the contention - it compiles a single unit into a private temp directory with the
 exact flags from `build.ninja` and diffs that against the target object, ~2s,
 writing no shared state. So N agents can share one checkout as long as:
 
@@ -225,7 +225,7 @@ clean build:
 Two of the six ran out of session mid-edit and left work that did not
 compile; both were salvageable after a few minutes of repair, so a dead
 agent is worth triaging rather than reverting. **Do not trust an agent's
-own claim that a unit is clean** - re-run `solo.py` and `clang-format -n
+own claim that a unit is clean** - re-run `tools/solo.py` and `clang-format -n
 --Werror` on its files yourself before committing. One agent reported no
 new formatting violations when it had introduced one.
 
@@ -242,7 +242,7 @@ be revisited if they ever block something:
   `volatile` as a matching device, not because they are.
 - The bone index `21` in Plankton's `aim_gun` is a literal.
 
-Note `solo.py` parses `build.ninja`, which has two rule layouts: the source
+Note `tools/solo.py` parses `build.ninja`, which has two rule layouts: the source
 file is on the same line as the `build` statement when it fits, on the next
 line when it does not. The parser handles both; if you extend it, keep that.
 
