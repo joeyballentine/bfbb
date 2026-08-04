@@ -1214,16 +1214,30 @@ RpAtomic* xFXBubbleRender(RpAtomic* atomic)
 
 void xFXRibbonRender()
 {
-    xFXRibbon* prev;
-    U32 i;
-    xFXRibbon* ribbon;
+    sort_ribbons();
 
     RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)0x0);
     RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)0x1);
     RwRenderStateSet(rwRENDERSTATESHADEMODE, (void*)0x2);
     RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)0x1);
 
-    ribbon = 0x0;
+    xFXRibbon* prev = NULL;
+
+    for (U32 i = 0; i < active_ribbons_size; i++)
+    {
+        xFXRibbon* ribbon = active_ribbons[i];
+
+        if (ribbon->visible())
+        {
+            if (prev == NULL || ribbon->render_compare(*prev))
+            {
+                ribbon->start_render();
+                prev = ribbon;
+            }
+
+            ribbon->render();
+        }
+    }
 }
 
 void xFXStreakInit()

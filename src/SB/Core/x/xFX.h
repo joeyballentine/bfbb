@@ -70,6 +70,21 @@ struct xFXRibbon
     U32 mtime;
     U32 mlife;
 
+    bool visible() const
+    {
+        return !joints.empty();
+    }
+
+    bool debug_need_update() const
+    {
+        return false;
+    }
+
+    void clear()
+    {
+        joints.clear();
+    }
+
     void init(const char*, const char*);
     void init(S32, const char*);
     void set_texture(const char* name);
@@ -87,6 +102,8 @@ struct xFXRibbon
     void activate();
     void deactivate();
     void start_render();
+    void render();
+    S32 render_compare(const xFXRibbon&) const;
     void set_raster(RwRaster*);
 };
 

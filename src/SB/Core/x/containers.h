@@ -21,6 +21,49 @@ struct tier_queue_allocator
     U32 _max_blocks;
     U32 _max_blocks_shift;
     U8 head;
+
+    U32 block_size() const
+    {
+        return _block_size;
+    }
+
+    U32 block_size_shift() const
+    {
+        return _block_size_shift;
+    }
+
+    U32 mod_block_size(U32 value) const
+    {
+        return value & (_block_size - 1);
+    }
+
+    void* get_block(U32 index) const
+    {
+        return blocks[index].data;
+    }
+
+    U32 log2_ceil(U32 value) const
+    {
+        U32 shift = 0;
+
+        while (value > 1)
+        {
+            value >>= 1;
+            shift++;
+        }
+
+        return shift;
+    }
+
+    bool full() const
+    {
+        return blocks[head].next == head;
+    }
+
+    void* alloc_block_data() const
+    {
+        return xMemAlloc(gActiveHeap, _block_size * _unit_size, 0);
+    }
 };
 
 template <class T> struct tier_queue
@@ -30,6 +73,122 @@ template <class T> struct tier_queue
     U32 wrap_mask;
     tier_queue_allocator* alloc;
     U8 blocks[256];
+
+    struct iterator
+    {
+        U32 _it;
+        tier_queue<T>* _owner;
+
+        T& operator*() const
+        {
+            return _owner->get_at(_it);
+        }
+
+        T* operator->() const
+        {
+            return &operator*();
+        }
+
+        bool operator==(const iterator& other) const
+        {
+            return _it == other._it;
+        }
+
+        bool operator!=(const iterator& other) const
+        {
+            return _it != other._it;
+        }
+
+        iterator* operator+=(S32 value)
+        {
+            _it = _owner->wrap_index(_it + value);
+            return this;
+        }
+
+        iterator operator-=(S32 value)
+        {
+            return *operator+=(-value);
+        }
+
+        iterator operator+(S32 value) const
+        {
+            iterator tmp = *this;
+            tmp += value;
+            return tmp;
+        }
+
+        iterator operator-(S32 value) const
+        {
+            iterator tmp = *this;
+            tmp -= value;
+            return tmp;
+        }
+
+        U32 global_index() const
+        {
+            return _it;
+        }
+    };
+
+    U32 size() const
+    {
+        return _size;
+    }
+
+    bool empty() const
+    {
+        return _size == 0;
+    }
+
+    U8 wrap_block(U32 block) const
+    {
+        return block;
+    }
+
+    U32 wrap_index(U32 index) const
+    {
+        return index & wrap_mask;
+    }
+
+    U32 get_block(U32 index) const
+    {
+        return index >> alloc->block_size_shift();
+    }
+
+    T& get_at(U32 index) const
+    {
+        return ((T*)alloc->get_block(blocks[get_block(index)]))[alloc->mod_block_size(index)];
+    }
+
+    iterator create_iterator(U32 index) const
+    {
+        iterator it;
+        it._it = index;
+        it._owner = const_cast<tier_queue<T>*>(this);
+        return it;
+    }
+
+    iterator begin() const
+    {
+        return create_iterator(first);
+    }
+
+    iterator end() const
+    {
+        return create_iterator(wrap_index(first + _size));
+    }
+
+    T& front()
+    {
+        iterator it = begin();
+        return *it;
+    }
+
+    T& back()
+    {
+        iterator it = end() - 1;
+        return *it;
+    }
 
     void clear();
 };
