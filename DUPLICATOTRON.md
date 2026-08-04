@@ -21,8 +21,8 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now |
 |---|---|---|
-| matched functions | 6491 / 10147 | 6592 / 10147 |
-| fuzzy match | 57.343% | 58.214% |
+| matched functions | 6491 / 10147 | 6600 / 10147 |
+| fuzzy match | 57.343% | 58.266% |
 | complete units | 195 / 543 | 195 / 543 |
 
 ## Where the remaining 3636 functions are
@@ -129,6 +129,17 @@ fastest route to raising `complete_units`.
    instantiation (`template struct static_queue<T>;`) is silently ignored by
    this compiler - CodeWarrior still only emits used members. Writing one real
    method (`update_slime`) pulled in nine container functions with it.
+
+A second pass added `update_hand_trail`, `refresh_reticle`, `halt`,
+`turning`, `get_eye_loc` and the Nil/Disappear/Reappear goal entry points.
+`zNPCTypeDutchman` is now 94 / 227.
+
+Six of those sit at 99.4-99.8% blocked on one thing: the target's `.sdata2`
+float pool starts `@1603, @1604, @1605 (0.0f), @1606 (1.0f)` while ours has
+thirteen entries ahead of `0.0f`. Literals are allocated in first-use order,
+so the pool only lines up once the functions ahead of them in the file are
+written. `@1603`/`@1604` are used by the no-argument `turning() const`, which
+suggests that function sits near the top of the original file.
 
 `static_queue::init` was also simply wrong: `_max_size` is the rounded-up
 power of two and `_max_size_mask` is that minus one, not the shift count and
