@@ -82,6 +82,7 @@ struct lightning_ring
     void destroy();
     static void destroy(S32);
     void refresh();
+    void update(F32 dt);
 };
 
 struct zNPCKingJelly : zNPCSubBoss
@@ -176,6 +177,7 @@ struct zNPCKingJelly : zNPCSubBoss
     void Destroy();
     U32 AnimPick(S32 rawgoal, en_NPC_GOAL_SPOT gspot, xGoal* goal);
     void Init(xEntAsset*);
+    void ParseLinks();
     void BUpdate(xVec3*);
     S32 SysEvent(xBase* from, xBase* to, U32 toEvent, const F32* toParam, xBase* toParamWidget,
                  S32* handled);
@@ -184,12 +186,25 @@ struct zNPCKingJelly : zNPCSubBoss
     void SelfSetup();
     void Damage(en_NPC_DAMAGE_TYPE damtype, xBase*, const xVec3*);
     S32 max_strikes() const;
+    F32 get_variance() const;
+    bool bored() const;
+    xVec3 get_away() const;
+    xVec3 get_center() const;
+    void add_child(xBase& child, S32 wave);
+    S32 count_children(S32 wave);
+    void taunt();
+    bool apply_tentacle_damage();
+    bool apply_wave_damage();
+    bool apply_ambient_damage();
+    void check_player_damage();
+    void destroy_wave_rings();
+    void show_attack_model();
+    void fade_curtain();
     void init_child(zNPCKingJelly::child_data&, zNPCCommon&, int);
     void disable_child(zNPCKingJelly::child_data&);
     void enable_child(zNPCKingJelly::child_data& child);
     void start_fight();
     void spawn_children(int, int);
-    S32 max_strikes();
     void update_camera(F32 dt);
     void set_life(S32 life);
     void load_model();
@@ -201,9 +216,9 @@ struct zNPCKingJelly : zNPCSubBoss
     void post_decompose();
     void vanish();
     void reappear();
-    xVec3* get_bottom();
-    void on_change_ambient_ring(const tweak_info&);
-    void on_change_fade_obstructions(const tweak_info&);
+    xVec3* get_bottom() const;
+    static void on_change_ambient_ring(const tweak_info&);
+    static void on_change_fade_obstructions(const tweak_info&);
     void render_debug();
     void create_tentacle_lightning();
     void destroy_tentacle_lightning();
@@ -212,9 +227,13 @@ struct zNPCKingJelly : zNPCSubBoss
     void destroy_ambient_rings();
     void generate_spawn_particles();
     void update_round();
+    void start_charge();
+    void update_charge(F32 t);
     void end_charge();
+    void update_blink(F32 dt);
+    void generate_thump_particles();
+    void create_wave_rings();
     void create_ambient_rings();
-    NPCSndTrax g_sndTrax_KingJelly;
     xBinaryCamera bossCam;
 };
 
@@ -226,7 +245,11 @@ struct zNPCGoalKJIdle : zNPCGoalCommon
     {
     }
 
+    S32 Enter(float, void*);
     S32 Exit(float, void*);
+    S32 Process(en_trantype*, float, void*, xScene*);
+    S32 rotate(float);
+    S32 move(float);
 };
 
 struct zNPCGoalKJBored : zNPCGoalCommon
@@ -237,6 +260,7 @@ struct zNPCGoalKJBored : zNPCGoalCommon
 
     S32 Enter(float, void*);
     S32 Exit(float, void*);
+    S32 Process(en_trantype*, float, void*, xScene*);
 };
 
 struct zNPCGoalKJSpawnKids : zNPCGoalCommon
@@ -253,7 +277,6 @@ struct zNPCGoalKJSpawnKids : zNPCGoalCommon
     }
     S32 Enter(float, void*);
     S32 Exit(float, void*);
-    S32 count_children(int);
 };
 
 struct zNPCGoalKJTaunt : zNPCGoalCommon
@@ -264,6 +287,7 @@ struct zNPCGoalKJTaunt : zNPCGoalCommon
 
     S32 Enter(float, void*);
     S32 Exit(float, void*);
+    S32 Process(en_trantype*, float, void*, xScene*);
 };
 
 struct zNPCGoalKJShockGround : zNPCGoalCommon
