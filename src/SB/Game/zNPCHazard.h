@@ -22,11 +22,13 @@ struct UVAModelInfo
     void Hemorrage();
     void Clear();
     void UVVelSet(float, float);
-    S32 GetUV(RwTexCoords*& coords, S32& numVertices, RpAtomic* model);
+    S32 GetUV(RwTexCoords*& coords, S32& numVertices, RpAtomic* model) const;
+    S32 CloneUV(RwTexCoords*& coords, S32& numVertices, RpAtomic* model) const;
     void SetColor(iColor_tag);
-    void Update(F32, xVec2*);
-    S32 Valid();
-    S32 Init(RpAtomic*, S32);
+    void Update(F32, const xVec2*);
+    void Refresh();
+    S32 Valid() const;
+    S32 Init(RpAtomic*, U32);
 };
 
 struct NPCHazard;
@@ -244,6 +246,9 @@ struct NPCHazard
 
     S32 ConfigHelper(en_npchaz haztype);
     void Reconfigure(en_npchaz haztype);
+    UVAModelInfo* GetUVAInfo(en_hazmodel which, F32 uvel, F32 vvel);
+    S32 GrabModel(en_hazmodel which);
+    void TypData_RotMatStore(xVec3* euler);
     void FreeModel();
     void SetNPCOwner(zNPCCommon* owner);
     void Start(const xVec3* pos, F32 tym);
@@ -307,7 +312,7 @@ struct NPCHazard
     void TypData_RotMatApply(xMat3x3* mat);
     en_hazmodel PickFunFrag();
     void PreCollide();
-    void StaggeredCollide();
+    S32 StaggeredCollide();
     void StagColGeneral(S32 who);
     void StagColStat();
     void StagColNPC();

@@ -158,6 +158,21 @@ S32 HAZ_AvailablePool()
     return 64 - g_cnt_activehaz;
 }
 
+void HAZ_Iterate(bool (*fp)(NPCHazard&, void*), void* context, S32 flag_filter)
+{
+    NPCHazard* end = &g_hazards[64];
+    NPCHazard* haz = g_hazards;
+
+    while (haz != end)
+    {
+        if ((haz->flg_hazard & 0xf) == 3 && (haz->flg_hazard & flag_filter) && !fp(*haz, context))
+        {
+            return;
+        }
+        haz++;
+    }
+}
+
 void NPCHazard::WipeIt()
 {
     this->typ_hazard = NPC_HAZ_UNKNOWN;
@@ -212,6 +227,61 @@ void NPCHazard::Reconfigure(en_npchaz haztype)
     {
         this->cb_notify->Notify(HAZ_NOTE_RECONFIG, this);
     }
+}
+
+UVAModelInfo* NPCHazard::GetUVAInfo(en_hazmodel which, F32 uvel, F32 vvel)
+{
+    UVAModelInfo* uva = &g_haz_uvAnimInfo[which];
+
+    if (!uva->Valid())
+    {
+        this->flg_hazard &= ~0x80000;
+        return NULL;
+    }
+
+    uva->UVVelSet(uvel, vvel);
+    return uva;
+}
+
+S32 NPCHazard::GrabModel(en_hazmodel which)
+{
+    xVec3 rot = { 0.0f, 0.0f, 0.0f };
+    xMat4x3 mat;
+
+    if (this->mdl_hazard != NULL)
+    {
+        FreeModel();
+    }
+
+    RpAtomic* raw = g_hazard_rawModel[which];
+    if (raw != NULL)
+    {
+        this->mdl_hazard = xModelInstanceAlloc(raw, NULL, 0, 0, NULL);
+        if (this->mdl_hazard == NULL)
+        {
+            this->flg_hazard &= ~0x100;
+        }
+        else
+        {
+            xMat3x3Euler(&mat, &rot);
+            xVec3Copy(&mat.pos, &g_O3);
+            mat.flags = 0;
+            xModelSetFrame(this->mdl_hazard, &mat);
+            this->flg_hazard |= 0x100;
+
+            U32 pipeFlags = xModelGetPipeFlags(raw);
+            if (((pipeFlags >> 12) & 0xf) == 2)
+            {
+                this->flg_hazard |= 0x400;
+            }
+            if ((pipeFlags & 0xc0) == 0x40)
+            {
+                this->flg_hazard |= 0x800;
+            }
+        }
+    }
+
+    return this->mdl_hazard != NULL;
 }
 
 void NPCHazard::FreeModel()
@@ -276,6 +346,60 @@ void NPCHazard::PosSet(const xVec3* pos)
     }
 }
 
+void NPCHazard::Cleanup()
+{
+    this->flg_hazard = 0;
+
+    if (this->mdl_hazard != NULL)
+    {
+        FreeModel();
+    }
+
+    if (this->shadowCache != NULL)
+    {
+        NPCC_ShadowCacheRelease(this->shadowCache);
+    }
+    this->shadowCache = NULL;
+
+    switch (this->typ_hazard)
+    {
+    case NPC_HAZ_TARTARPROJ:
+    case NPC_HAZ_OILBUBBLE:
+        if (this->custdata.tartar.streakID != 0xDEAD)
+        {
+            xFXStreakStop(this->custdata.tartar.streakID);
+        }
+        this->custdata.tartar.streakID = 0xDEAD;
+        break;
+    case NPC_HAZ_CATTLEPROD:
+        if (this->custdata.catprod.zap_lyta != NULL)
+        {
+            zLightningKill(this->custdata.catprod.zap_lyta);
+        }
+        if (this->custdata.catprod.zap_lytb != NULL)
+        {
+            zLightningKill(this->custdata.catprod.zap_lytb);
+        }
+        this->custdata.catprod.zap_lyta = NULL;
+        this->custdata.catprod.zap_lytb = NULL;
+        break;
+    case NPC_HAZ_MONCLOUD:
+        if (this->custdata.cloud.zap_lytnin != NULL)
+        {
+            zLightningKill(this->custdata.cloud.zap_lytnin);
+        }
+        if (this->custdata.cloud.zap_warnin != NULL)
+        {
+            zLightningKill(this->custdata.cloud.zap_warnin);
+        }
+        this->custdata.cloud.zap_lytnin = NULL;
+        this->custdata.cloud.zap_warnin = NULL;
+        break;
+    default:
+        break;
+    }
+}
+
 void NPCHazard::SetAlpha(F32 alpha)
 {
     if (this->mdl_hazard == NULL)
@@ -284,6 +408,34 @@ void NPCHazard::SetAlpha(F32 alpha)
     }
     this->mdl_hazard->Flags |= 0x4000;
     this->mdl_hazard->Alpha = alpha;
+}
+
+S32 NPCHazard::ColTestSphere(const xBound* bnd_tgt, F32 rad)
+{
+    S32 hit = 0;
+    xCollis colrec;
+    xBound bnd;
+
+    memset(&colrec, 0, sizeof(colrec));
+    memset(&bnd, 0, sizeof(bnd));
+
+    bnd.type = XBOUND_TYPE_SPHERE;
+    bnd.sph.r = rad;
+    xVec3Copy(&bnd.sph.center, &this->pos_hazard);
+
+    xSphereHitsBound(&bnd.sph, bnd_tgt, &colrec);
+
+    if (colrec.flags & 1)
+    {
+        hit = 1;
+        if (!(this->flg_hazard & 0x40000000) && this->cb_notify != NULL)
+        {
+            this->cb_notify->Notify(HAZ_NOTE_HITPLAYER, this);
+        }
+        this->flg_hazard |= 0x40000000;
+    }
+
+    return hit;
 }
 
 S32 NPCHazard::ColPlyrSphere(F32 rad)
@@ -337,6 +489,51 @@ en_hazmodel NPCHazard::PickFunFrag()
     }
 
     return (en_hazmodel)xUtil_choose<S32>(choices, cnt_choice, NULL);
+}
+
+S32 NPCHazard::StaggeredCollide()
+{
+    if (--this->custdata.collide.cnt_skipcol > 0)
+    {
+        return 0;
+    }
+
+    this->custdata.collide.cnt_skipcol = ((xrand() >> 23) & 1) + 5;
+
+    static xCollis colrec;
+    memset(&colrec, 0, sizeof(colrec));
+
+    switch (this->custdata.collide.idx_rotateCol)
+    {
+    case HAZ_COLTYP_STAT:
+        if (this->custdata.collide.flg_collide & 1)
+        {
+            StagColStat();
+        }
+        break;
+    case HAZ_COLTYP_DYN:
+        if (this->custdata.collide.flg_collide & 2)
+        {
+            StagColDyn();
+        }
+        break;
+    case HAZ_COLTYP_NPC:
+        if (this->custdata.collide.flg_collide & 4)
+        {
+            StagColNPC();
+        }
+        break;
+    default:
+        break;
+    }
+
+    this->custdata.collide.idx_rotateCol = (en_hazcol)(this->custdata.collide.idx_rotateCol + 1);
+    if (this->custdata.collide.idx_rotateCol >= HAZ_COLTYP_NOMORE)
+    {
+        this->custdata.collide.idx_rotateCol = HAZ_COLTYP_STAT;
+    }
+
+    return 0;
 }
 
 void NPCHazard::StagColStat()
@@ -1947,8 +2144,7 @@ void UVAModelInfo::Hemorrage()
     uv = 0;
 }
 
-// Need to figure out what is wrong with the final return statement, and the b and blr swaps.
-S32 UVAModelInfo::GetUV(RwTexCoords*& coords, S32& numVertices, RpAtomic* model)
+S32 UVAModelInfo::GetUV(RwTexCoords*& coords, S32& numVertices, RpAtomic* model) const
 {
     coords = NULL;
     numVertices = 0;
@@ -1966,6 +2162,25 @@ S32 UVAModelInfo::GetUV(RwTexCoords*& coords, S32& numVertices, RpAtomic* model)
     coords = geom->texCoords[0];
 
     return coords != NULL;
+}
+
+S32 UVAModelInfo::CloneUV(RwTexCoords*& coords, S32& numVertices, RpAtomic* model) const
+{
+    RwTexCoords* src;
+
+    if (!GetUV(src, numVertices, model))
+    {
+        return 0;
+    }
+
+    coords = (RwTexCoords*)xMemAlloc(gActiveHeap, numVertices * sizeof(RwTexCoords), 0);
+    if (coords == NULL)
+    {
+        return 0;
+    }
+
+    memcpy(coords, src, numVertices * sizeof(RwTexCoords));
+    return 1;
 }
 
 F32 xVec2Length2(const xVec2* v)
