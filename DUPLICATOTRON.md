@@ -21,24 +21,24 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now |
 |---|---|---|
-| matched functions | 6491 / 10147 | 6777 / 10147 |
-| fuzzy match | 57.343% | 59.125% |
+| matched functions | 6491 / 10147 | 7190 / 10147 |
+| fuzzy match | 57.343% | 62.680% |
 | complete units | 195 / 543 | 195 / 543 |
 
 ## Where the remaining functions are
 
 Classified with `tools/classify.py`. This counts the
-2837 non-matching functions in units objdiff can compare; the project
-total of 3370 also includes units with no diffable object at all.
+2681 non-matching functions in units objdiff can compare; the project
+total of 2957 also includes units with no diffable object at all.
 
 | class | count | meaning |
 |---|---|---|
-| MISSING | 1281 | not written yet — no symbol in our object |
-| OTHER | 735 | same count, different code |
-| SIZE | 626 | different instruction count — real source difference |
-| POOL | 147 | **identical code**, only anonymous `@NNN` literal/template pool composition differs |
-| SCHED | 31 | identical instruction multiset, different order |
-| REGS | 17 | identical mnemonics, different register numbers |
+| MISSING | 1029 | not written yet — no symbol in our object |
+| OTHER | 799 | same count, different code |
+| SIZE | 654 | different instruction count — real source difference |
+| POOL | 144 | **identical code**, only anonymous `@NNN` literal/template pool composition differs |
+| SCHED | 35 | identical instruction multiset, different order |
+| REGS | 20 | identical mnemonics, different register numbers |
 
 `POOL` functions are byte-identical apart from which anonymous constant they
 reference; objdiff pairs anonymous symbols by ordinal position within a
@@ -121,6 +121,26 @@ machine to commit:
   unrelated functions to 100% for free. Get the target's source order from its
   `.text` symbol order, and the authoritative pool contents from
   `tools/symdump.py` plus `dtk elf disasm`.
+
+  **But first-use order is not the whole rule**, and this is unresolved. Our
+  objects follow it strictly — verified, our pool order always matches our own
+  `.text` order — while the target's demonstrably does not:
+
+  - `zThrown`: `@842` (0.5f) sits at pool index 1, but its first `.text`
+    reference is in `zFruit_Update`, *after* `@844` (0.0f) in
+    `zFruit_ColorFade`. Nothing ahead of `ColorFade` references 0.5f, and the
+    two functions ahead of it are structurally identical to ours (one matches
+    100%).
+  - `zShrapnel`: `@712` (0.5f) is the *first* pool entry but is used only by
+    functions #22-#36, while `@713` (0.1f) belongs to `GameInit` (#3).
+    `DestructObjInit`'s block (`@1127-@1136`, function #31) precedes
+    `ProjectileCollData`'s `@1224` (function #21).
+
+  Ruled out: parse order, source-text order, sorting by value, and the "dead
+  literal in an earlier function" theory — `F32 unused = 0.5f;` and
+  `if (0) { ... 0.5f ... }` are both folded before pool allocation. Twenty-two
+  functions across those two units hinge on nothing else, and the POOL bucket
+  project-wide is the same question.
 
 ## Settled
 
