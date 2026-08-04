@@ -142,6 +142,31 @@ machine to commit:
   functions across those two units hinge on nothing else, and the POOL bucket
   project-wide is the same question.
 
+### What the pool experiments established
+
+Measured directly, by introducing a novel constant near the top of
+`zNPCTypeBossSB2.cpp`, consuming it near the bottom, and reading where it
+landed (`poolorder.py` in the scratchpad dumps a section's symbols in address
+order, for any object):
+
+- **`.sdata2` section order is ascending `@NNN` order**, in the target as well
+  as ours. The `@NNN` is the compiler's object id, assigned at creation. So the
+  question is not "how is the pool sorted" — it is "what creates a literal
+  earlier than its first `.text` use".
+- **A `static` (non-`inline`) function** defined early lands its literal at
+  index 0 — but only because with these flags it is also *emitted* out of line
+  at that position, so `.text` order and pool order agree. Not the answer.
+- **An `inline`-keyword function** defined early but called late lands its
+  literal at the *call site* (index 45 of 47), not the definition. Weak inlines
+  are compiled after the main `.text`.
+- Also ruled out, all landing at the use site: a file-scope
+  `static const F32`, a **default argument** value, and a **class static member
+  function** returning the constant.
+
+So five plausible mechanisms are eliminated with evidence. Whatever allocates
+`zThrown`'s `0.5f` at index 1 emits nothing into `.text` before
+`zFruit_ColorFade` and is none of the above.
+
 ## Settled
 
 - **MSL_C compiler flags were wrong - +51.** `configure.py` built
