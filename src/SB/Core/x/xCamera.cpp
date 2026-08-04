@@ -164,11 +164,8 @@ static void xCam_buildbasis(xCamera* cam)
 
             if (dist2 > 0.001f)
             {
-                // non-matching: wrong registers
-                dist_inv = 1.0f / dist2;
-
-                cam->mbasis.at.x *= dist_inv;
-                cam->mbasis.at.z *= dist_inv;
+                cam->mbasis.at.x *= 1.0f / dist2;
+                cam->mbasis.at.z *= 1.0f / dist2;
             }
             else
             {
@@ -264,16 +261,14 @@ static void xCam_worldtocyl(F32& d, F32& h, F32& p, const xMat4x3* tgt_mat, cons
 
 static void xCam_CorrectD(xCamera* r3, F32 f1, F32 f2, F32 f3)
 {
-    // non-matching: incorrect float register
-
     F32 tmp1, tmp2, tmp3;
 
     tmp1 = 1.4285715f * (2.0f * f1 - f2 * f3);
-    tmp1 -= f2;
-    tmp1 *= f3;
+    f2 = tmp1 - f2;
+    f2 *= f3;
 
-    tmp2 = r3->mbasis.at.x * tmp1;
-    tmp3 = r3->mbasis.at.z * tmp1;
+    tmp2 = r3->mbasis.at.x * f2;
+    tmp3 = r3->mbasis.at.z * f2;
 
     r3->mat.pos.x += tmp2;
     r3->mat.pos.z += tmp3;
@@ -324,14 +319,9 @@ static void xCam_DampP(xCamera* r3, F32 f1, F32 f2)
 }
 static void xCam_CorrectYaw(xCamera* r3, F32 f1, F32 f2, F32 f3)
 {
-    // non-matching: incorrect float registers, slightly out-of-order fmsubs instruction
+    F32 tmp2;
 
-    F32 tmp1, tmp2;
-
-    tmp1 = 1.0f / r3->yaw_ct;
-
-    tmp2 = 2.0f * r3->yaw_cd * f1 - f2 * f3;
-    tmp2 = tmp1 * tmp2;
+    tmp2 = (1.0f / r3->yaw_ct) * (2.0f * r3->yaw_cd * f1 - f2 * f3);
     tmp2 -= f2;
     tmp2 *= r3->yaw_csv * f3;
 
@@ -339,14 +329,9 @@ static void xCam_CorrectYaw(xCamera* r3, F32 f1, F32 f2, F32 f3)
 }
 static void xCam_CorrectPitch(xCamera* r3, F32 f1, F32 f2, F32 f3)
 {
-    // non-matching: same reasons as xCam_CorrectYaw
+    F32 tmp2;
 
-    F32 tmp1, tmp2;
-
-    tmp1 = 1.0f / r3->pitch_ct;
-
-    tmp2 = 2.0f * r3->pitch_cd * f1 - f2 * f3;
-    tmp2 = tmp1 * tmp2;
+    tmp2 = (1.0f / r3->pitch_ct) * (2.0f * r3->pitch_cd * f1 - f2 * f3);
     tmp2 -= f2;
     tmp2 *= r3->pitch_csv * f3;
 
@@ -355,14 +340,9 @@ static void xCam_CorrectPitch(xCamera* r3, F32 f1, F32 f2, F32 f3)
 
 static void xCam_CorrectRoll(xCamera* r3, F32 f1, F32 f2, F32 f3)
 {
-    // non-matching: same reasons as xCam_CorrectYaw
+    F32 tmp2;
 
-    F32 tmp1, tmp2;
-
-    tmp1 = 1.0f / r3->roll_ct;
-
-    tmp2 = 2.0f * r3->roll_cd * f1 - f2 * f3;
-    tmp2 = tmp1 * tmp2;
+    tmp2 = (1.0f / r3->roll_ct) * (2.0f * r3->roll_cd * f1 - f2 * f3);
     tmp2 -= f2;
     tmp2 *= r3->roll_csv * f3;
 
@@ -1264,7 +1244,7 @@ void xCameraFOV(xCamera* cam, F32 fov, F32 maxSpeed, F32 dt)
 
     if (currentFOV != fov)
     {
-        if (speed != 0.0f)
+        if (speed)
         {
             F32 len = fov - currentFOV;
 
