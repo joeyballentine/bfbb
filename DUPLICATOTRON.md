@@ -82,6 +82,16 @@ fastest route to raising `complete_units`.
   live at the same time, and therefore the register numbering.
 - A helper whose return value is never used is usually `void` in the original;
   a non-void return forces the result into `f1`/`r3`.
+- **The vtable pointer goes where the first `virtual` is declared.** CW does
+  not force it to offset 0. `struct A { void* p; S32 n; virtual void f(); };`
+  puts the vptr at 8, and a derived class stores its vtable there. If the
+  target stores the vtable at 0, move the virtual declarations above the data
+  members. This is also how to tell a *base* that has virtuals from a derived
+  class that introduces them: adding `virtual` only to the derived one puts
+  the vptr after the base's members.
+- Container index parameters are **`u32` (`unsigned long`)**, not `U32`
+  (`unsigned int`) — `CFUl` vs `CFUi` in the mangled name. This keeps coming
+  up; check it before assuming a body is wrong.
 
 ## Settled
 
@@ -232,6 +242,32 @@ be revisited if they ever block something:
 Note `solo.py` parses `build.ninja`, which has two rule layouts: the source
 file is on the same line as the `build` statement when it fits, on the next
 line when it does not. The parser handles both; if you extend it, keep that.
+
+## rwsdk — 1039 functions, now reachable
+
+Nothing here was imported from anywhere. `include/rwsdk/*.h` are upstream
+files reconstructed from the BFBB PS2 DWARF data, and `configure.py` already
+listed all 120 rwsdk units with `objdiff.json` targets. They were simply never
+built: 118 of the 120 `.c` files did not exist, and with no source there is no
+build rule, so `solo.py` could not touch them.
+
+Two things were in the way, both now fixed:
+
+- The headers were written for the C++ TUs that also include them — bare tag
+  names used as types, `typedef struct X;` with no declarator, an empty
+  struct, a member `operator=`, and quoted includes that only resolve with
+  `-i include/rwsdk`. But the rwsdk objects compile `-lang=c`: their target
+  symbols are unmangled. Every tag now has a self-typedef (structs/unions in a
+  block near the top, enums immediately after their definition — C has no
+  incomplete enum type), and the C++-only pieces are behind `__cplusplus`.
+- Empty stub `.c` files exist for the other 118 units so `configure.py` emits
+  their rules.
+
+Verified with a compile of all 343 units the build knows about: 0 failures.
+
+`ctbsp` is the worked example: 8 non-matching -> 4 in one pass, straight from
+`gh.sh` output read against `rpcollbsptree.h`. The rwsdk headers are good
+enough that struct offsets mostly just line up.
 
 ## Open leads
 
