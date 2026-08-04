@@ -45,6 +45,11 @@ struct zNPCJelly : zNPCAmbient
     void SelfSetup();
     S32 IsAlive();
 
+    void MeetTheKing(zNPCCommon* king)
+    {
+        npc_daddyJelly = king;
+    }
+
     void PlayWithAlpha(F32 unk);
     void PlayWithAnimSpd();
     void PumpFaster();

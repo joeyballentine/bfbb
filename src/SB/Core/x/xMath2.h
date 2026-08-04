@@ -93,7 +93,31 @@ struct xVec2
         return tmp;
     }
 
-    xVec2 operator/=(F32);
+    xVec2 operator/(F32 f) const
+    {
+        xVec2 tmp = *this;
+
+        tmp /= f;
+
+        return tmp;
+    }
+
+    xVec2 operator/=(F32 f)
+    {
+        x /= f;
+        y /= f;
+
+        return *this;
+    }
+
+    xVec2 operator+(const xVec2& v) const
+    {
+        xVec2 tmp = *this;
+
+        tmp += v;
+
+        return tmp;
+    }
 
     xVec2& operator+=(const xVec2& v)
     {
