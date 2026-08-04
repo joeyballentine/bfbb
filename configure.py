@@ -376,7 +376,11 @@ def RenderWareLib(lib_name: str, objects: List[Object]) -> Dict[str, Any]:
     return {
         "lib": lib_name,
         "src_dir": "src",
-        "mw_version": "GC/1.3.2",
+        # Not GC/1.3.2. Sweeping every available compiler over the seven rwsdk
+        # units that have real source, 2.0p1 wins or ties every one of them and
+        # beats 1.3.2 by ten functions overall - bacamera 9 -> 14, baworobj
+        # 35 -> 37, baframe/baclump/bageomet +1 each.
+        "mw_version": PATCHED_COMPILER,
         "cflags": cflags_renderware,
         "progress_category": "RW",
         "objects": objects,
