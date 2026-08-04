@@ -21,7 +21,7 @@ enum zFXGooState
     zFXGooStateForce32Bit = 0xffffffff
 };
 
-// Definition updated based on Rat proto data. 
+// Definition updated based on Rat proto data.
 struct zFXGooInstance
 {
     RpAtomic* atomic;

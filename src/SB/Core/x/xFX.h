@@ -96,7 +96,7 @@ struct xFXRibbon
             return -1;
         }
 
-        if (other.raster < raster)
+        if (raster > other.raster)
         {
             return 1;
         }
@@ -106,7 +106,7 @@ struct xFXRibbon
             return -1;
         }
 
-        if (other.cfg.blend_src < cfg.blend_src)
+        if (cfg.blend_src > other.cfg.blend_src)
         {
             return 1;
         }
@@ -116,7 +116,7 @@ struct xFXRibbon
             return -1;
         }
 
-        if (other.cfg.blend_dst < cfg.blend_dst)
+        if (cfg.blend_dst > other.cfg.blend_dst)
         {
             return 1;
         }
@@ -220,7 +220,7 @@ struct xFXStreak
     xFXStreakElem elem[50];
 };
 
-class xFXShineElem
+struct xFXShineElem
 {
     U32 flag;
     xVec3 p;
@@ -231,7 +231,7 @@ class xFXShineElem
     iColor_tag colb;
 };
 
-class xFXShine
+struct xFXShine
 {
     U32 flags;
     xVec3* ppos;
@@ -322,6 +322,7 @@ RpAtomic* xFXAtomicEnvMapSetup(RpAtomic* atomic, U32 envmapID, F32 shininess);
 void xFXRibbonSceneEnter();
 void xFXRibbonUpdate(F32 dt);
 void xFXRibbonRender();
+void xFXAuraSetup();
 void xFXAuraInit();
 void xFXAuraUpdate(F32 dt);
 void xFXAuraRender();

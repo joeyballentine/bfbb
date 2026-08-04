@@ -1,7 +1,9 @@
 #include "zFX.h"
 
 #include "rpworld.h"
+#include "rpskin.h"
 #include "rwplcore.h"
+#include "iAnim.h"
 #include "xDebug.h"
 #include "xDraw.h"
 #include "xEnt.h"
@@ -22,6 +24,14 @@
 #include <string.h>
 #include <stdlib.h>
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\cmath>
+
+void zParPTankSpawnBubbles(xVec3* pos, xVec3* vel, U32 count, F32 scale);
+void zParPTankSpawnMenuBubbles(xVec3* pos, xVec3* vel, U32 count);
+S32 zParPTankBubblesAvailable();
+
+void xBoundGetSphere(xSphere& o, const xBound& bound);
+void xModelSetScale(xModelInstance* model, const xVec3& scale);
+void xSCurve(F32& p, F32& v, F32& a, F32 t);
 
 const xFXRing sPatrickStunRing[3] = { { 0x741b0566,
                                         1.0f,
@@ -68,6 +78,10 @@ const xFXRing sPatrickStunRing[3] = { { 0x741b0566,
                                         1,
                                         1,
                                         NULL } };
+const xFXRing sThunderRing[1] = {
+    0x741b0566, 0.5f,  { 0.0f, 0.0f, 0.0f },   0.0f, 0.0f, 5.0f, PI / 2.0f, PI / -2.0f,
+    0.75f,      -0.6f, { 255, 255, 255, 255 }, 32,   2,    1,    NULL
+};
 const xFXRing sHammerRing[1] = {
     0x741b0566, 0.75f, { 0.0f, 0.0f, 0.0f },   0.0f, 0.4f, 2.4f, PI / 2.0f, PI / -2.0f,
     0.6f,       -0.6f, { 255, 255, 255, 127 }, 32,   2,    1,    NULL
@@ -109,8 +123,11 @@ const xFXRing sMuscleArmRing[1] = {
     0.6f,       30.0f, { 255, 255, 255, 160 }, 48,   1,    1,     NULL
 };
 
-static const float defaultGooTimes[4] = {};
-static const float defaultGooWarbc[4] = {};
+static const float defaultGooTimes[4] = { 1e-5f, 2.0f, 15.0f, 2.0f };
+static const float defaultGooWarbc[4] = { 0.25f, 2.0f, 0.25f, 1.2f };
+
+static const xVec3 bubblewall_scale = { 2.4f, 2.4f, 2.4f };
+static const xVec3 bubblewall_velscale = { 1.0f, 0.5f, 0.5f };
 
 zFXGooInstance zFXGooInstances[24];
 U32 gFXSurfaceFlags = 0;
@@ -122,6 +139,23 @@ void xDrawSphere2(const xVec3*, F32, U32)
 void on_spawn_bubble_wall(const tweak_info& tweak)
 {
     zFX_SpawnBubbleWall();
+}
+
+void xModelSetScale(xModelInstance* model, const xVec3& scale)
+{
+    for (; model != NULL; model = model->Next)
+    {
+        model->Scale = scale;
+    }
+}
+
+tweak_callback tweak_callback::create_change(void (*on_change)(const tweak_info&))
+{
+    tweak_callback cb = { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
+
+    cb.on_change = (void (*)(tweak_info&))on_change;
+
+    return cb;
 }
 
 static void init_poppers();
@@ -814,10 +848,11 @@ F32 zFXGooFreezeTimeLeft()
     return maxTime;
 }
 
-void zFX_SpawnBubbleHit(const xVec3* pos, U32 num, const xVec3* pos_rnd,
-                        const xVec3* vel_rnd, float vel_scale);
-void zFX_SpawnBubbleTrail(const xVec3* pos, U32 num, const xVec3* pos_rnd,
-                          const xVec3* vel_rnd);
+void zFX_SpawnBubbleHit(const xVec3* pos, U32 num, const xVec3* pos_rnd, const xVec3* vel_rnd,
+                        float vel_scale);
+void zFX_SpawnBubbleTrail(const xVec3* pos, U32 num, const xVec3* pos_rnd, const xVec3* vel_rnd);
+void zFX_SpawnBubbleTrailNoNegRandVel(const xVec3* pos, U32 num, const xVec3* pos_rnd,
+                                      const xVec3* vel_rnd);
 
 void zFX_SpawnBubbleHit(const xVec3* pos, U32 num)
 {
@@ -827,6 +862,46 @@ void zFX_SpawnBubbleHit(const xVec3* pos, U32 num)
 void zFX_SpawnBubbleHit(const xVec3* pos, U32 num, const xVec3* pos_rnd, const xVec3* vel_rnd,
                         float vel_scale)
 {
+    if (num == 0)
+    {
+        return;
+    }
+    if (pos_rnd == NULL)
+    {
+        pos_rnd = &bubblehit_pos_rnd;
+    }
+    if (vel_rnd == NULL)
+    {
+        vel_rnd = &bubblehit_vel_rnd;
+    }
+
+    xVec3* buffer = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
+    xVec3* vbuf = buffer + num;
+    if (buffer == NULL)
+    {
+        return;
+    }
+
+    xVec3* p = buffer;
+    xVec3* v = vbuf;
+    for (S32 i = 0; i < (S32)num; i++, p++, v++)
+    {
+        *p = *pos;
+        p->x = pos_rnd->x * (xurand() - 0.5f) + p->x;
+        p->y = pos_rnd->y * (xurand() - 0.5f) + p->y;
+        p->z = pos_rnd->z * (xurand() - 0.5f) + p->z;
+        v->x = xurand() - 0.5f;
+        v->y = xurand() - 0.5f;
+        v->z = xurand() - 0.5f;
+        xVec3NormalizeFast(v, v);
+        xVec3ScaleC(v, v, vel_scale, vel_scale, vel_scale);
+        v->x = vel_rnd->x * (xurand() - 0.5f) + v->x;
+        v->y = vel_rnd->y * (xurand() - 0.5f) + v->y;
+        v->z = vel_rnd->z * (xurand() - 0.5f) + v->z;
+    }
+
+    zParPTankSpawnBubbles(buffer, vbuf, num, 1.0f);
+    xMemPopTemp(buffer);
 }
 
 void zFX_SpawnBubbleTrail(const xVec3* pos, U32 num)
@@ -834,35 +909,262 @@ void zFX_SpawnBubbleTrail(const xVec3* pos, U32 num)
     zFX_SpawnBubbleTrail(pos, num, &bubblehit_pos_rnd, &bubblehit_vel_rnd);
 }
 
+void zFX_SpawnBubbleTrail(const xVec3* pos, U32 num, const xVec3* pos_rnd, const xVec3* vel_rnd)
+{
+    if (num < 1)
+    {
+        return;
+    }
+    if (pos_rnd == NULL)
+    {
+        pos_rnd = &bubbletrail_pos_rnd;
+    }
+    if (vel_rnd == NULL)
+    {
+        vel_rnd = &bubbletrail_vel_rnd;
+    }
+
+    xVec3* buffer = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
+    xVec3* vbuf = buffer + num;
+    if (buffer == NULL)
+    {
+        return;
+    }
+
+    xVec3* p = buffer;
+    xVec3* v = vbuf;
+    for (S32 i = 0; i < (S32)num; i++, p++, v++)
+    {
+        *p = *pos;
+        p->x = pos_rnd->x * (xurand() - 0.5f) + p->x;
+        p->y = pos_rnd->y * (xurand() - 0.5f) + p->y;
+        p->z = pos_rnd->z * (xurand() - 0.5f) + p->z;
+        v->x = vel_rnd->x * (xurand() - 0.5f);
+        v->y = vel_rnd->y * (xurand() - 0.5f);
+        v->z = vel_rnd->z * (xurand() - 0.5f);
+    }
+
+    zParPTankSpawnBubbles(buffer, vbuf, num, 1.0f);
+    xMemPopTemp(buffer);
+}
+
+void zFX_SpawnBubbleTrailNoNegRandVel(const xVec3* pos, U32 num, const xVec3* pos_rnd,
+                                      const xVec3* vel_rnd)
+{
+    if (pos_rnd == NULL)
+    {
+        pos_rnd = &bubbletrail_pos_rnd;
+    }
+    if (vel_rnd == NULL)
+    {
+        vel_rnd = &bubbletrail_vel_rnd;
+    }
+
+    xVec3* buffer = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
+    xVec3* vbuf = buffer + num;
+    if (buffer == NULL)
+    {
+        return;
+    }
+
+    xVec3* p = buffer;
+    xVec3* v = vbuf;
+    for (S32 i = 0; i < (S32)num; i++, p++, v++)
+    {
+        *p = *pos;
+        p->x = pos_rnd->x * (xurand() - 0.5f) + p->x;
+        p->y = pos_rnd->y * (xurand() - 0.5f) + p->y;
+        p->z = pos_rnd->z * (xurand() - 0.5f) + p->z;
+        v->x = vel_rnd->x * xurand();
+        v->y = vel_rnd->y * xurand();
+        v->z = vel_rnd->z * xurand();
+    }
+
+    zParPTankSpawnBubbles(buffer, vbuf, num, 1.0f);
+    xMemPopTemp(buffer);
+}
+
+void zFX_SpawnBubbleTrail(const xVec3* pos_beg, const xVec3* pos_end, U32 num, const xVec3* pos_rnd,
+                          const xVec3* vel_rnd)
+{
+    if (pos_rnd == NULL)
+    {
+        pos_rnd = &bubbletrail_pos_rnd;
+    }
+    if (vel_rnd == NULL)
+    {
+        vel_rnd = &bubbletrail_vel_rnd;
+    }
+
+    xVec3* buffer = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
+    xVec3* vbuf = buffer + num;
+    if (buffer == NULL)
+    {
+        return;
+    }
+
+    xVec3 delta = *pos_end - *pos_beg;
+
+    xVec3* p = buffer;
+    xVec3* v = vbuf;
+    for (S32 i = 0; i < (S32)num; i++, p++, v++)
+    {
+        *p = *pos_beg + delta * xurand();
+        p->x = pos_rnd->x * (xurand() - 0.5f) + p->x;
+        p->y = pos_rnd->y * (xurand() - 0.5f) + p->y;
+        p->z = pos_rnd->z * (xurand() - 0.5f) + p->z;
+        v->x = vel_rnd->x * (xurand() - 0.5f);
+        v->y = vel_rnd->y * (xurand() - 0.5f);
+        v->z = vel_rnd->z * (xurand() - 0.5f);
+    }
+
+    zParPTankSpawnBubbles(buffer, vbuf, num, 1.0f);
+    xMemPopTemp(buffer);
+}
+
+void zFX_SpawnBubbleTrail(const xVec3* pos_beg, const xVec3* pos_end, const xVec3* vel_beg,
+                          const xVec3* vel_end, U32 num, const xVec3* pos_rnd, const xVec3* vel_rnd,
+                          F32 size)
+{
+    if (pos_rnd == NULL)
+    {
+        pos_rnd = &bubbletrail_pos_rnd;
+    }
+    if (vel_rnd == NULL)
+    {
+        vel_rnd = &bubbletrail_vel_rnd;
+    }
+
+    xVec3* buffer = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
+    xVec3* vbuf = buffer + num;
+    if (buffer == NULL)
+    {
+        return;
+    }
+
+    xVec3 pos_delta = *pos_end - *pos_beg;
+    xVec3 vel_delta = *vel_end - *vel_beg;
+
+    xVec3* p = buffer;
+    xVec3* v = vbuf;
+    for (S32 i = 0; i < (S32)num; i++, p++, v++)
+    {
+        F32 t = xurand();
+        *p = *pos_beg + pos_delta * t;
+        *v = *vel_beg + vel_delta * t;
+        p->x = pos_rnd->x * (xurand() - 0.5f) + p->x;
+        p->y = pos_rnd->y * (xurand() - 0.5f) + p->y;
+        p->z = pos_rnd->z * (xurand() - 0.5f) + p->z;
+        v->x = vel_rnd->x * (xurand() - 0.5f) + v->x;
+        v->y = vel_rnd->y * (xurand() - 0.5f) + v->y;
+        v->z = vel_rnd->z * (xurand() - 0.5f) + v->z;
+    }
+
+    zParPTankSpawnBubbles(buffer, vbuf, num, size);
+    xMemPopTemp(buffer);
+}
+
+void zFX_SpawnBubbleMenuTrail(const xVec3* pos, U32 num, const xVec3* pos_rnd, const xVec3* vel_rnd)
+{
+    if (pos_rnd == NULL)
+    {
+        pos_rnd = &bubbletrail_pos_rnd;
+    }
+    if (vel_rnd == NULL)
+    {
+        vel_rnd = &bubbletrail_vel_rnd;
+    }
+
+    xVec3* buffer = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
+    xVec3* vbuf = buffer + num;
+    if (buffer == NULL)
+    {
+        return;
+    }
+
+    xVec3* p = buffer;
+    xVec3* v = vbuf;
+    for (S32 i = 0; i < (S32)num; i++, p++, v++)
+    {
+        *p = *pos;
+        p->x = pos_rnd->x * (xurand() - 0.5f) + p->x;
+        p->y = pos_rnd->y * (xurand() - 0.5f) + p->y;
+        p->z = pos_rnd->z * (xurand() - 0.5f) + p->z;
+        v->x = vel_rnd->x * (xurand() - 0.5f);
+        v->y = vel_rnd->y * (xurand() - 0.5f);
+        v->z = vel_rnd->z * (xurand() - 0.5f);
+    }
+
+    zParPTankSpawnMenuBubbles(buffer, vbuf, num);
+    xMemPopTemp(buffer);
+}
+
+void zFX_SpawnBubbleSlam(const xVec3* pos, U32 num, F32 rang, F32 bvel, F32 rvel)
+{
+    xVec3* buffer = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
+    xVec3* vbuf = buffer + num;
+    if (buffer == NULL)
+    {
+        return;
+    }
+
+    F32 yvel = 0.25f * rvel;
+
+    xVec3* p = buffer;
+    xVec3* v = buffer + num;
+    for (U32 i = 0; i < num; i++)
+    {
+        *p = *pos;
+        p->y += 0.2f;
+
+        F32 ang = (2 * PI * i) / num;
+        ang = rang * (xurand() - 0.5f) + ang;
+        v->x = bvel * icos(ang);
+        v->y = 0.0f;
+        v->z = bvel * isin(ang);
+        v->x = rvel * (xurand() - 0.5f) + v->x;
+        v->y = yvel * (xurand() - 0.5f) + v->y;
+        v->z = rvel * (xurand() - 0.5f) + v->z;
+    }
+
+    zParPTankSpawnBubbles(buffer, vbuf, num, 1.0f);
+    xMemPopTemp(buffer);
+}
+
+void zFX_SpawnBubbleBlast(const xVec3* pos, U32 num, F32 rad, F32 bvel, F32 rvel)
+{
+    xVec3* buffer = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
+    xVec3* vbuf = buffer + num;
+    if (buffer == NULL)
+    {
+        return;
+    }
+
+    xVec3* end = buffer + num;
+    xVec3* v = end;
+    for (xVec3* p = buffer; p != end; p++)
+    {
+        F32 ang = 2 * PI * xurand();
+        F32 z = 2.0f * xurand() - 1.0f;
+        F32 r = xsqrt(-(z * z - 1.0f));
+        v->assign(r * icos(ang), r * isin(ang), z);
+        *p = *pos + *v * rad;
+        *v *= bvel;
+
+        xVec3 rnd;
+        rnd.x = xurand() - 0.5f;
+        rnd.y = xurand() - 0.5f;
+        rnd.z = xurand() - 0.5f;
+        *v += rnd * rvel;
+        v++;
+    }
+
+    zParPTankSpawnBubbles(buffer, end, num, 1.0f);
+    xMemPopTemp(buffer);
+}
+
 namespace
 {
-    bool model_is_preinstanced(RpAtomic* atomic) {
-        RpGeometry* geom = RpAtomicGetGeometryMacro(atomic);
-        if(geom == NULL) {
-            return TRUE;
-        }
-
-        return !(geom->morphTarget != NULL && geom->morphTarget->verts != NULL);
-    }
-
-    void add_popper_tweaks()
-    {
-    }
-
-    void add_entrail_tweaks()
-    {
-    }
-
-    S32 count_faces(xModelInstance* mdl)
-    {
-        int i = 0;
-        for (; mdl != NULL; mdl = mdl->Next)
-        {
-            i += mdl->Data->geometry->numTriangles;
-        }
-        return i;
-    }
-
     struct entrail_data
     {
         U16 flags;
@@ -905,18 +1207,484 @@ namespace
         F32 radius;
         F32 area;
         F32 weight[768];
+
+        S32 find_weight(F32 w) const;
     };
 
     popper_data poppers[8];
     entrail_data* entrails;
     U32 entrails_size;
 
-    void entrail_data::reset()
+    S32 count_faces(xModelInstance* mdl);
+    void add_popper_tweaks();
+    void add_entrail_tweaks();
+    bool validate_popper(const xEnt& ent);
+    F32 get_triangle_area(const xVec3& a, const xVec3& b, const xVec3& c);
+    void eval_tri(xVec3* dst_verts, xVec3* dst_normals, const xMat4x3* mat, const RpGeometry* geom,
+                  const RpTriangle* tri);
+    void SkinXformVertAndNormal(xVec3* dst_verts, xVec3* dst_normals, const xVec3* verts,
+                                const xVec3* normals, const xMat4x3* mat, const xMat4x3* bone_mats,
+                                const F32* weights, const U32* bone_idx, const U16* idx, U32 count);
+    void random_point_on_triangle(xVec3& pos, xVec3& nrm, const xVec3* verts, const xVec3* normals);
+    void emit_popper_bubbles(popper_data& data, S32 count, F32 size, F32 vel);
+    void set_popper_alpha(popper_data& data, F32 alpha);
+    void destroy_popper(popper_data& data);
+    void update_popper(popper_data& data, F32 dt);
+
+    bool model_is_preinstanced(RpAtomic* atomic)
     {
-        flags = 0;
-        emitted = 0.0f;
+        RpGeometry* geom = RpAtomicGetGeometryMacro(atomic);
+        if (geom == NULL)
+        {
+            return TRUE;
+        }
+
+        return !(geom->morphTarget != NULL && geom->morphTarget->verts != NULL);
     }
 
+    bool setup_popper_emitter(popper_data& data)
+    {
+        data.faces = count_faces(data.ent->model);
+        if (data.faces <= 0)
+        {
+            return FALSE;
+        }
+        if (data.faces > 768)
+        {
+            return FALSE;
+        }
+
+        F32* w = data.weight;
+        data.area = 0.0f;
+        data.atomic_size = 0;
+
+        for (xModelInstance* mdl = data.ent->model; mdl != NULL; mdl = mdl->Next)
+        {
+            if (data.atomic_size >= 4)
+            {
+                break;
+            }
+
+            data.atomic[data.atomic_size] = mdl->Data;
+
+            RpGeometry* geom = mdl->Data->geometry;
+            const xVec3* verts = (const xVec3*)geom->morphTarget->verts;
+            const RpTriangle* tri = geom->triangles;
+            F32* end = w + geom->numTriangles;
+            for (; w != end; w++)
+            {
+                data.area += get_triangle_area(verts[tri->vertIndex[0]], verts[tri->vertIndex[1]],
+                                               verts[tri->vertIndex[2]]);
+                tri++;
+                *w = data.area;
+            }
+
+            data.atomic_size++;
+        }
+
+        if (data.atomic_size == 0)
+        {
+            return FALSE;
+        }
+
+        return TRUE;
+    }
+
+    F32 get_triangle_area(const xVec3& a, const xVec3& b, const xVec3& c)
+    {
+        xVec3 ab = { 0.0f, 0.0f, 0.0f };
+        ab.x = b.x - a.x;
+        ab.y = b.y - a.y;
+        ab.z = b.z - a.z;
+
+        xVec3 ac = { 0.0f, 0.0f, 0.0f };
+        ac.x = c.x - a.x;
+        ac.y = c.y - a.y;
+        ac.z = c.z - a.z;
+
+        xVec3 n = { 0.0f, 0.0f, 0.0f };
+        n.z = ab.x * ac.y - ac.x * ab.y;
+        n.x = ab.y * ac.z - ac.y * ab.z;
+        n.y = ab.z * ac.x - ac.z * ab.x;
+
+        return 0.5f * n.length();
+    }
+
+    S32 count_faces(xModelInstance* mdl)
+    {
+        int i = 0;
+        for (; mdl != NULL; mdl = mdl->Next)
+        {
+            i += mdl->Data->geometry->numTriangles;
+        }
+        return i;
+    }
+
+    void eval_tri(xVec3* dst_verts, xVec3* dst_normals, const xMat4x3* mat, const RpGeometry* geom,
+                  const RpTriangle* tri)
+    {
+        RpSkin* skin = RpSkinGeometryGetSkin((RpGeometry*)geom);
+        const xVec3* verts = (const xVec3*)geom->morphTarget->verts;
+        const xVec3* normals = (const xVec3*)geom->morphTarget->normals;
+
+        if (skin != NULL)
+        {
+            const xMat4x3* bone_mats = (const xMat4x3*)RpSkinGetSkinToBoneMatrices(skin);
+            const F32* weights = (const F32*)RpSkinGetVertexBoneWeights(skin);
+            const U32* bone_idx = RpSkinGetVertexBoneIndices(skin);
+
+            SkinXformVertAndNormal(dst_verts, dst_normals, verts, normals, mat, bone_mats, weights,
+                                   bone_idx, tri->vertIndex, 3);
+            return;
+        }
+
+        xMat4x3Toworld(&dst_verts[0], mat, &verts[tri->vertIndex[0]]);
+        xMat4x3Toworld(&dst_verts[1], mat, &verts[tri->vertIndex[1]]);
+        xMat4x3Toworld(&dst_verts[2], mat, &verts[tri->vertIndex[2]]);
+        xMat3x3RMulVec(&dst_normals[0], mat, &normals[tri->vertIndex[0]]);
+        dst_normals[0].up_normalize();
+        xMat3x3RMulVec(&dst_normals[1], mat, &normals[tri->vertIndex[1]]);
+        dst_normals[1].up_normalize();
+        xMat3x3RMulVec(&dst_normals[2], mat, &normals[tri->vertIndex[2]]);
+        dst_normals[2].up_normalize();
+    }
+
+    void SkinXformVertAndNormal(xVec3* dst_verts, xVec3* dst_normals, const xVec3* verts,
+                                const xVec3* normals, const xMat4x3* mat, const xMat4x3* bone_mats,
+                                const F32* weights, const U32* bone_idx, const U16* idx, U32 count)
+    {
+        xMat4x3* scratch = (xMat4x3*)giAnimScratch;
+        U32 done[2] = { 0, 0 };
+
+        for (; count != 0; count--)
+        {
+            U32 vidx = *idx;
+            U32 bones = bone_idx[vidx];
+            const F32* wt = &weights[vidx * 4];
+
+            U32 shift = 0;
+            for (U32 j = 0; j < 4; j++, shift += 8)
+            {
+                U32 b = bones >> shift;
+                U32 word = (b >> 3) & 0x1c;
+                U32 mask = 1 << (b & 0x1f);
+                if (!(mask & *(U32*)((U8*)done + word)))
+                {
+                    xMat4x3Mul(&scratch[b & 0xff], &bone_mats[b & 0xff], &mat[(b & 0xff) + 1]);
+                    *(U32*)((U8*)done + word) |= mask;
+                }
+            }
+
+            xVec3 acc;
+            acc.x = 0.0f;
+            acc.y = 0.0f;
+            acc.z = 0.0f;
+
+            U32 bits = bones;
+            const F32* w = wt;
+            for (S32 k = 4; *w != 0.0f && k != 0; k--)
+            {
+                xVec3 tmp;
+                xMat4x3Toworld(&tmp, &scratch[bits & 0xff], &verts[vidx]);
+                bits >>= 8;
+                tmp *= *w;
+                acc += tmp;
+                w++;
+            }
+            xMat4x3Toworld(dst_verts, mat, &acc);
+
+            acc = 0.0f;
+            bits = bones;
+            w = wt;
+            for (S32 k = 4; *w != 0.0f && k != 0; k--)
+            {
+                xVec3 tmp;
+                xMat3x3RMulVec(&tmp, &scratch[bits & 0xff], &normals[vidx]);
+                bits >>= 8;
+                tmp *= *w;
+                acc += tmp;
+                w++;
+            }
+            xMat3x3RMulVec(dst_normals, mat, &acc);
+
+            dst_verts++;
+            dst_normals++;
+            idx++;
+        }
+    }
+
+    void random_point_on_triangle(xVec3& pos, xVec3& nrm, const xVec3* verts, const xVec3* normals)
+    {
+        F32 a = xurand();
+        F32 b = xurand();
+        if (a + b > 1.0f)
+        {
+            a = 1.0f - a;
+            b = 1.0f - b;
+        }
+
+        pos.x = verts[0].x + a * (verts[1].x - verts[0].x) + b * (verts[2].x - verts[0].x);
+        pos.y = verts[0].y + a * (verts[1].y - verts[0].y) + b * (verts[2].y - verts[0].y);
+        pos.z = verts[0].z + a * (verts[1].z - verts[0].z) + b * (verts[2].z - verts[0].z);
+        nrm.x =
+            normals[0].x + a * (normals[1].x - normals[0].x) + b * (normals[2].x - normals[0].x);
+        nrm.y =
+            normals[0].y + a * (normals[1].y - normals[0].y) + b * (normals[2].y - normals[0].y);
+        nrm.z =
+            normals[0].z + a * (normals[1].z - normals[0].z) + b * (normals[2].z - normals[0].z);
+        nrm.up_normalize();
+    }
+
+    void random_surface_point(xVec3& pos, xVec3& nrm, const popper_data& data)
+    {
+        const xMat4x3* mat = (const xMat4x3*)data.ent->model->Mat;
+
+        S32 idx = data.find_weight(data.area * xurand());
+
+        RpGeometry* geom;
+        RpAtomic* const* a = data.atomic;
+        RpAtomic* const* end = a + data.atomic_size;
+        for (; a != end; a++)
+        {
+            geom = (*a)->geometry;
+            if (idx < geom->numTriangles)
+            {
+                break;
+            }
+            idx -= geom->numTriangles;
+        }
+
+        xVec3 verts[3];
+        xVec3 normals[3];
+        eval_tri(verts, normals, mat, geom, &geom->triangles[idx]);
+        random_point_on_triangle(pos, nrm, verts, normals);
+    }
+
+    S32 popper_data::find_weight(F32 w) const
+    {
+        S32 lo = 0;
+        S32 hi = faces;
+        do
+        {
+            S32 mid = (lo + hi) / 2;
+            if (w <= weight[mid])
+            {
+                hi = mid;
+            }
+            if (!(w <= weight[mid]))
+            {
+                lo = mid + 1;
+            }
+        } while (lo < hi);
+
+        return lo;
+    }
+
+    popper_data* find_popper(xEnt* ent)
+    {
+        popper_data* p = poppers;
+        popper_data* end = &poppers[8];
+        for (; p != end; p++)
+        {
+            if (p->ent == ent)
+            {
+                return p;
+            }
+        }
+        return NULL;
+    }
+
+    popper_data* find_free_popper()
+    {
+        popper_data* found = NULL;
+        popper_data* end = &poppers[8];
+        for (popper_data* p = poppers; p != end; p++)
+        {
+            if (p->state == STATE_NONE)
+            {
+                if (p->ent == NULL)
+                {
+                    return p;
+                }
+                found = p;
+            }
+        }
+        return found;
+    }
+
+    void emit_popper_bubbles(popper_data& data, S32 count, F32 size, F32 vel)
+    {
+        if (data.ent == NULL && data.ent->model == NULL)
+        {
+            return;
+        }
+
+        S32 avail = zParPTankBubblesAvailable();
+        if (avail <= 0)
+        {
+            return;
+        }
+        if (count > avail)
+        {
+            count = avail;
+        }
+
+        xVec3* buffer = (xVec3*)xMemPushTemp(2 * sizeof(xVec3) * count);
+        if (buffer == NULL)
+        {
+            return;
+        }
+
+        xModelInstance* mdl = data.ent->model;
+        xVec3* vbuf = buffer + count;
+        xVec3* p = buffer;
+        xVec3* v = vbuf;
+
+        xMat3x3 saved;
+        if (mdl->Scale.x != 0.0f)
+        {
+            xMat3x3* m = (xMat3x3*)mdl->Mat;
+            saved = *m;
+            m->right *= mdl->Scale.x;
+            m->up *= mdl->Scale.y;
+            m->at *= mdl->Scale.z;
+        }
+
+        F32 vscale = data.vel * size + vel;
+        F32 rloc = data.rloc * size;
+        F32 rvel = data.rvel * size;
+
+        for (; p != vbuf; p++)
+        {
+            random_surface_point(*p, *v, data);
+            *v *= vscale;
+
+            if (data.rloc != 0.0f)
+            {
+                p->x = rloc * (xurand() - 0.5f) + p->x;
+                p->y = rloc * (xurand() - 0.5f) + p->y;
+                p->z = rloc * (xurand() - 0.5f) + p->z;
+            }
+            if (data.rvel != 0.0f)
+            {
+                v->x = rvel * (xurand() - 0.5f) + v->x;
+                v->y = rvel * (xurand() - 0.5f) + v->y;
+                v->z = rvel * (xurand() - 0.5f) + v->z;
+            }
+            v++;
+        }
+
+        if (mdl->Scale.x != 0.0f)
+        {
+            *(xMat3x3*)mdl->Mat = saved;
+        }
+
+        zParPTankSpawnBubbles(buffer, vbuf, count, size);
+        xMemPopTemp(buffer);
+    }
+
+    void emit_popper_bubbles_immediate(popper_data& data)
+    {
+        F32 size;
+        F32 count = data.rate;
+        if (data.area <= 2.0f)
+        {
+            size = 1.0f;
+            count = count * (0.5f * data.area);
+        }
+        else
+        {
+            size = 0.5f * data.area;
+        }
+        if ((S32)count > 0)
+        {
+            emit_popper_bubbles(data, (S32)count, size, 0.0f);
+        }
+    }
+
+    void update_popper(popper_data& data, F32 dt)
+    {
+        data.time += dt;
+        if (data.time > data.end_time)
+        {
+            dt = data.time - data.end_time;
+            data.time = data.end_time;
+        }
+
+        F32 area = data.area;
+        F32 vel = 0.0f;
+        F32 rate = data.rate;
+
+        switch (data.state)
+        {
+        case STATE_ON:
+        {
+            F32 p, v, a;
+            xSCurve(p, v, a, data.time / data.end_time);
+            vel = v * data.radius;
+            area = area * p;
+            xVec3 scale;
+            if (data.model_scale.x == 0.0f)
+            {
+                scale = p;
+            }
+            else
+            {
+                scale = data.model_scale * p;
+            }
+            xModelSetScale(data.ent->model, scale);
+            break;
+        }
+        case STATE_OFF:
+        {
+            set_popper_alpha(data, xSCurve(1.0f - data.time / data.end_time));
+            break;
+        }
+        }
+
+        F32 size;
+        F32 emit;
+        if (area > 4.0f)
+        {
+            emit = rate * 4.0f;
+            size = 0.5f * xsqrt(area);
+        }
+        else
+        {
+            emit = rate * area;
+            size = 1.0f;
+        }
+
+        data.emitted += emit * dt;
+        if (data.emitted >= 1.0f)
+        {
+            S32 n = data.emitted;
+            data.emitted -= n;
+            emit_popper_bubbles(data, n, size, vel);
+        }
+    }
+
+} // namespace
+
+void xSCurve(F32& p, F32& v, F32& a, F32 t)
+{
+    if (t <= 0.5f)
+    {
+        a = 4.0f;
+        v = t * a;
+        p = (0.5f * t) * v;
+    }
+    else
+    {
+        F32 d = t - 1.0f;
+        a = -4.0f;
+        v = a * d;
+        p = 0.5f * v * d + 1.0f;
+    }
+}
+
+namespace
+{
     void set_popper_alpha(popper_data& data, F32 alpha)
     {
         xEntShow(data.ent);
@@ -925,17 +1693,240 @@ namespace
         p->Flags |= 0x4000;
         p->PipeFlags = (p->PipeFlags & ~0xc) | 8;
     }
+
+    void destroy_popper(popper_data& data)
+    {
+        switch (data.state)
+        {
+        case STATE_ON:
+        {
+            xModelSetScale(data.ent->model, data.model_scale);
+            break;
+        }
+        case STATE_OFF:
+        {
+            xEntHide(data.ent);
+            xModelInstance* m = data.ent->model;
+            m->Alpha = 1.0f;
+            m->Flags &= 0xbfff;
+            m->PipeFlags = (m->PipeFlags & ~0xc) | data.pipe_flags;
+            break;
+        }
+        }
+
+        data.state = STATE_NONE;
+    }
+
+    popper_data* grab_popper(xEnt& ent)
+    {
+        popper_data* data = find_popper(&ent);
+        if (data != NULL)
+        {
+            if (data->faces == count_faces(ent.model))
+            {
+                return data;
+            }
+        }
+        else
+        {
+            data = find_free_popper();
+            if (data == NULL)
+            {
+                return NULL;
+            }
+            data->ent = &ent;
+        }
+
+        if (!setup_popper_emitter(*data))
+        {
+            data->ent = NULL;
+            return NULL;
+        }
+
+        return data;
+    }
 } // namespace
 
-void update_entrails(F32 val)
+void init_poppers()
 {
-    entrail_data* pData;
-    entrail_data* pEnd = &entrails[entrails_size];
-    for (pData = entrails; pData != pEnd; pData++)
+    reset_poppers();
+    add_popper_tweaks();
+}
+
+namespace
+{
+    void add_popper_tweaks()
     {
-        pData->update(val);
+    }
+} // namespace
+
+void reset_poppers()
+{
+    popper_data* pData;
+    popper_data* pEnd = &poppers[sizeof(poppers) / sizeof(popper_data)];
+    for (pData = &poppers[0]; pData != pEnd; pData++)
+    {
+        pData->state = STATE_NONE;
+        pData->ent = NULL;
     }
 }
+
+void update_poppers(F32 dt)
+{
+    popper_data* p = poppers;
+    popper_data* end = &poppers[8];
+    for (; p != end; p++)
+    {
+        if (p->state != STATE_NONE)
+        {
+            update_popper(*p, dt);
+            if (p->time >= p->end_time)
+            {
+                destroy_popper(*p);
+            }
+        }
+    }
+}
+
+void zFXPopOn(xEnt& ent, F32 rate, F32 time)
+{
+    if (!validate_popper(ent))
+    {
+        return;
+    }
+
+    popper_data* data = grab_popper(ent);
+    if (data == NULL)
+    {
+        return;
+    }
+
+    if (rate == 0.0f)
+    {
+        rate = 200.0f;
+    }
+    if (time == 0.0f)
+    {
+        time = 0.25f;
+    }
+    else if (time < 0.0f)
+    {
+        time = 0.0f;
+    }
+
+    if (time <= 0.0f)
+    {
+        data->state = STATE_ON;
+        emit_popper_bubbles_immediate(*data);
+        data->state = STATE_NONE;
+        xEntShow(&ent);
+    }
+    else
+    {
+        xSphere sph;
+        xBoundGetSphere(sph, ent.bound);
+        data->radius = sph.r;
+        data->state = STATE_ON;
+        data->time = 0.0f;
+        data->end_time = time;
+        data->rate = rate;
+        data->vel = 0.0f;
+        data->rloc = 0.5f;
+        data->rvel = 1.0f;
+        data->emitted = 0.0f;
+        data->model_scale = ent.model->Scale;
+
+        xVec3 tiny = { 0.001f, 0.001f, 0.001f };
+        xModelSetScale(data->ent->model, tiny);
+    }
+}
+
+namespace
+{
+    bool validate_popper(const xEnt& ent)
+    {
+        if (ent.model == NULL || ent.model->Data == NULL)
+        {
+            return FALSE;
+        }
+
+        if (model_is_preinstanced(ent.model->Data))
+        {
+            return FALSE;
+        }
+
+        xVec3 scale = ent.model->Scale;
+        for (xModelInstance* m = ent.model->Next; m != NULL; m = m->Next)
+        {
+            if (!(xabs(scale.x - m->Scale.x) <= 0.1f) || !(xabs(scale.y - m->Scale.y) <= 0.1f) ||
+                !(xabs(scale.z - m->Scale.z) <= 0.1f))
+            {
+                return FALSE;
+            }
+        }
+
+        return TRUE;
+    }
+} // namespace
+
+void zFXPopOff(xEnt& ent, F32 rate, F32 time)
+{
+    if (!validate_popper(ent))
+    {
+        return;
+    }
+
+    popper_data* data = grab_popper(ent);
+    if (data == NULL)
+    {
+        return;
+    }
+
+    if (rate == 0.0f)
+    {
+        rate = 200.0f;
+    }
+    if (time == 0.0f)
+    {
+        time = 0.25f;
+    }
+    else if (time < 0.0f)
+    {
+        time = 0.0f;
+    }
+
+    if (time <= 0.0f)
+    {
+        data->state = STATE_OFF;
+        emit_popper_bubbles_immediate(*data);
+        data->state = STATE_NONE;
+        xEntHide(&ent);
+    }
+    else
+    {
+        xSphere sph;
+        xBoundGetSphere(sph, ent.bound);
+        data->radius = sph.r;
+        data->state = STATE_OFF;
+        data->time = 0.0f;
+        data->end_time = time;
+        data->rate = rate;
+        data->vel = 0.0f;
+        data->rloc = 0.0f;
+        data->rvel = 0.25f;
+        data->emitted = 0.0f;
+        data->pipe_flags = ent.model->PipeFlags & 0xc;
+
+        set_popper_alpha(*data, 0.0f);
+    }
+}
+
+namespace
+{
+    void add_entrail_tweaks()
+    {
+    }
+} // namespace
 
 void reset_entrails()
 {
@@ -947,20 +1938,22 @@ void reset_entrails()
     }
 }
 
-void init_poppers()
+namespace
 {
-    reset_poppers();
-    add_popper_tweaks();
-}
-
-void reset_poppers()
-{
-    popper_data* pData;
-    popper_data* pEnd = &poppers[sizeof(poppers) / sizeof(popper_data)];
-    for (pData = &poppers[0]; pData != pEnd; pData++)
+    void entrail_data::reset()
     {
-        pData->state = STATE_NONE;
-        pData->ent = NULL;
+        flags = 0;
+        emitted = 0.0f;
+    }
+} // namespace
+
+void update_entrails(F32 val)
+{
+    entrail_data* pData;
+    entrail_data* pEnd = &entrails[entrails_size];
+    for (pData = entrails; pData != pEnd; pData++)
+    {
+        pData->update(val);
     }
 }
 

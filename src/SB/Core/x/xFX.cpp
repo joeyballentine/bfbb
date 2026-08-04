@@ -18,6 +18,7 @@
 #include <rpmatfx.h>
 #include <rwplcore.h>
 #include <rpskin.h>
+#include <PowerPC_EABI_Support/MSL_C/MSL_Common/stdlib.h>
 
 // no clue why this file is so out of order
 
@@ -436,10 +437,6 @@ void xFXAuraAdd(void*, xVec3*, iColor_tag*, F32)
 {
 }
 
-void xFXAuraInit()
-{
-}
-
 void xFXAuraUpdate(F32)
 {
 }
@@ -592,8 +589,23 @@ struct _xFXAura
 static F32 sAuraPulse[2];
 static F32 sAuraPulseAng[2];
 static _xFXAuraAngle sAuraAngle[2];
-static RwTexture* gAuraTex = NULL;
 static _xFXAura sAura[AURA_COUNT];
+static RwTexture* gAuraTex = NULL;
+
+void xFXAuraInit()
+{
+    if (gAuraTex == NULL)
+    {
+        gAuraTex = (RwTexture*)xSTFindAsset(0x8074A95F, NULL);
+    }
+
+    memset(sAura, 0, sizeof(sAura));
+}
+
+void xFXAuraSetup()
+{
+    gAuraTex = (RwTexture*)xSTFindAsset(0x8074A95F, NULL);
+}
 
 void xFXStartup()
 {
@@ -609,6 +621,8 @@ void xFXSceneInit()
 
 void xFXSceneSetup()
 {
+    DrawRingSetup();
+    xFXAuraSetup();
 }
 
 void xFXSceneReset()
@@ -621,6 +635,8 @@ void xFXScenePrepare()
 
 void xFXSceneFinish()
 {
+    DrawRingSceneExit();
+    gAuraTex = NULL;
 }
 
 void xFXanimUV2PSetTexture(RwTexture* tex)
@@ -733,8 +749,25 @@ U32 xFXStreakStart(F32 frequency, F32 alphaFadeRate, F32 alphaStart, U32 texture
     return 10;
 }
 
-void xFXStreakStop(U32)
+void xFXStreakStop(U32 streakID)
 {
+    if (streakID == 10)
+    {
+        return;
+    }
+
+    U32 flags = sStreakList[streakID].flags;
+    if (!flags)
+    {
+        return;
+    }
+
+    if (flags & 0x1)
+    {
+        sStreakList[streakID].flags = flags ^ 0x1;
+    }
+
+    sStreakList[streakID].flags |= 0x2;
 }
 
 void xFXStreakUpdate(F32)
@@ -759,10 +792,13 @@ void xParInterp::set(F32 value1, F32 value2, F32 freq, U32 interp)
 
 void xFXShineInit()
 {
+    xFXShine* shine = sShineList;
+
     for (S32 i = 0; i < 2; i++)
     {
-        memset(&sShineList[0], 0, sizeof(xFXShine));
-        sShineList[i] = sShineList[i];
+        memset(shine, 0, sizeof(xFXShine));
+        shine->flags = 0;
+        shine++;
     }
 }
 
@@ -776,21 +812,46 @@ namespace
 {
     S32 compare_ribbons(const void* e1, const void* e2)
     {
-        return 0;
+        if (e1 == e2)
+        {
+            return 0;
+        }
+
+        if (e1 == NULL)
+        {
+            return 1;
+        }
+
+        if (e2 == NULL)
+        {
+            return -1;
+        }
+
+        return (*(const xFXRibbon* const*)e1)->render_compare(**(const xFXRibbon* const*)e2);
     }
 
     void sort_ribbons()
     {
+        if (ribbons_dirty)
+        {
+            if (active_ribbons_size)
+            {
+                qsort(active_ribbons, active_ribbons_size, sizeof(xFXRibbon*), compare_ribbons);
+                ribbons_dirty = false;
+            }
+        }
     }
 
     void activate_ribbon(xFXRibbon* ribbon)
     {
-        if (active_ribbons_size < RIBBON_COUNT)
+        if (active_ribbons_size >= RIBBON_COUNT)
         {
-            active_ribbons[active_ribbons_size] = ribbon;
-            active_ribbons_size++;
-            ribbons_dirty = true;
+            return;
         }
+
+        active_ribbons[active_ribbons_size] = ribbon;
+        active_ribbons_size = active_ribbons_size + 1;
+        ribbons_dirty = true;
     }
 
     void deactivate_ribbon(xFXRibbon* ribbon)
@@ -1016,18 +1077,19 @@ void xFXFireworksUpdate(F32 dt)
 
 RpMaterial* MaterialSetBumpMap(RpMaterial* material, void* data)
 {
-    RwFrame* frame;
     if (data == NULL)
     {
         return NULL;
     }
     else if (material->texture)
     {
-        if (data)
+        RwTexture* texture = (RwTexture*)data;
+
+        if (texture)
         {
-            frame = (RwFrame*)MainLight->object.object.parent;
+            RwFrame* frame = (RwFrame*)MainLight->object.object.parent;
             RpMatFXMaterialSetEffects(material, rpMATFXEFFECTBUMPMAP);
-            RpMatFXMaterialSetupBumpMap(material, (RwTexture*)data, frame, 1.0f);
+            RpMatFXMaterialSetupBumpMap(material, texture, frame, 1.0f);
         }
         else
         {
@@ -1046,7 +1108,9 @@ RpMaterial* MaterialSetEnvMap(RpMaterial* material, void* data)
     }
     if (material->texture)
     {
-        if (data)
+        RwTexture* texture = (RwTexture*)data;
+
+        if (texture)
         {
             RwFrame* frame = NULL;
             if ((gFXSurfaceFlags & 0x10) != 0)
@@ -1065,7 +1129,7 @@ RpMaterial* MaterialSetEnvMap(RpMaterial* material, void* data)
                 frame = (RwFrame*)MainLight->object.object.parent;
             }
             RpMatFXMaterialSetEffects(material, rpMATFXEFFECTENVMAP);
-            RpMatFXMaterialSetupEnvMap(material, (RwTexture*)data, frame, FALSE, 1.0f);
+            RpMatFXMaterialSetupEnvMap(material, texture, frame, FALSE, 1.0f);
         }
         else
         {
@@ -1140,11 +1204,12 @@ void xFXRenderProximityFade(const xModelInstance&, F32, F32)
 
 void xFXanimUV2PSetAngle(F32 angle)
 {
-    xFXanimUV2PRotMat0[0] = isin(angle);
-    angle = xFXanimUV2PRotMat0[0];
-    xFXanimUV2PRotMat0[1] = xFXanimUV2PRotMat0[0];
-    xFXanimUV2PRotMat1[0] = icos(angle);
-    xFXanimUV2PRotMat1[1] = xFXanimUV2PRotMat1[0];
+    F32 sin = isin(angle);
+    F32 cos = icos(angle);
+    xFXanimUV2PRotMat0[0] = cos;
+    xFXanimUV2PRotMat0[1] = -sin;
+    xFXanimUV2PRotMat1[0] = sin;
+    xFXanimUV2PRotMat1[1] = cos;
 }
 
 void xFXanimUV2PSetTranslation(const xVec3* trans)
@@ -1262,14 +1327,48 @@ void xFXRibbonRender()
 
 void xFXStreakInit()
 {
+    xFXStreak* streak = sStreakList;
+
     for (S32 i = 0; i < 10; i++)
     {
-        memset(&sStreakList[i], 0, sizeof(xFXStreak));
+        memset(streak, 0, sizeof(xFXStreak));
+        streak->flags = 0;
+        streak->head = 0;
+        streak++;
     }
 }
 
 void xFXStreakRender()
 {
+}
+
+U8 tier_queue_allocator::alloc_block()
+{
+    U8 block = head;
+    block_data& data = blocks[block];
+
+    head = data.next;
+    blocks[data.prev].next = data.next;
+    blocks[data.next].prev = data.prev;
+
+    if (data.data == NULL)
+    {
+        data.data = alloc_block_data();
+    }
+
+    return block;
+}
+
+void tier_queue_allocator::free_block(U8 block)
+{
+    block_data& data = blocks[block];
+
+    data.next = head;
+    data.prev = blocks[head].prev;
+    blocks[data.prev].next = block;
+    blocks[data.next].prev = block;
+
+    head = block;
 }
 
 void xFXRibbonSceneEnter()
@@ -1396,26 +1495,12 @@ void xFXRibbon::set_raster(RwRaster* rast)
 
 void xFXRibbon::set_texture(RwTexture* texture)
 {
-    RwRaster* rast = NULL;
-
-    if (texture != NULL)
-    {
-        rast = texture->raster;
-    }
-
-    set_raster(rast);
+    set_raster((texture == NULL) ? NULL : texture->raster);
 }
 
 void xFXRibbon::set_texture(U32 id)
 {
-    RwTexture* texture = NULL;
-
-    if (id != 0)
-    {
-        texture = (RwTexture*)xSTFindAsset(id, NULL);
-    }
-
-    set_texture(texture);
+    set_texture((id == 0) ? NULL : (RwTexture*)xSTFindAsset(id, NULL));
 }
 
 void xFXRibbon::set_texture(const char* name)
