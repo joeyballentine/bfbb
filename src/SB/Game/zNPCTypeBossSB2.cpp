@@ -97,7 +97,7 @@ namespace
         }
 
         void eval_linear(F32 t, F32* value);
-        U32 find_active_node(F32 t);
+        void find_active_node(F32 t);
         void eval_smooth(F32 t, F32* value);
         F32 clamp_t(F32 t) const;
         F32 end_t() const;
@@ -157,6 +157,51 @@ namespace
         false, true, false, false, false, true, false, false, true
     };
 
+    struct sequence_entry
+    {
+        S32 goal;
+        F32 delay;
+    };
+
+    // clang-format off
+    static const sequence_entry sequence[9][16] = {
+        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2SWIPE, 0.5f },
+          { 0, -1.0f } },
+        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2SWIPE, 0.01f },
+          { NPC_GOAL_BOSSSB2SWIPE, 0.5f }, { 0, -1.0f } },
+        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2CHOP, 0.01f },
+          { NPC_GOAL_BOSSSB2SWIPE, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.5f },
+          { 0, -1.0f } },
+        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
+          { NPC_GOAL_BOSSSB2CHOP, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.01f },
+          { NPC_GOAL_BOSSSB2SWIPE, 0.5f }, { 0, -1.0f } },
+        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
+          { NPC_GOAL_BOSSSB2CHOP, 0.0f }, { NPC_GOAL_BOSSSB2CHOP, 0.01f },
+          { NPC_GOAL_BOSSSB2SWIPE, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.5f },
+          { 0, -1.0f } },
+        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2KARATE, 0.01f },
+          { NPC_GOAL_BOSSSB2CHOP, 0.0f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
+          { NPC_GOAL_BOSSSB2CHOP, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.01f },
+          { NPC_GOAL_BOSSSB2SWIPE, 0.5f }, { 0, -1.0f } },
+        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2KARATE, 0.0f },
+          { NPC_GOAL_BOSSSB2KARATE, 0.01f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
+          { NPC_GOAL_BOSSSB2CHOP, 0.0f }, { NPC_GOAL_BOSSSB2CHOP, 0.01f },
+          { NPC_GOAL_BOSSSB2SWIPE, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.5f },
+          { 0, -1.0f } },
+        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2KARATE, 0.0f },
+          { NPC_GOAL_BOSSSB2KARATE, 0.01f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
+          { NPC_GOAL_BOSSSB2CHOP, 0.0f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
+          { NPC_GOAL_BOSSSB2CHOP, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.01f },
+          { NPC_GOAL_BOSSSB2SWIPE, 0.5f }, { 0, -1.0f } },
+        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2KARATE, 0.0f },
+          { NPC_GOAL_BOSSSB2KARATE, 0.0f }, { NPC_GOAL_BOSSSB2KARATE, 0.01f },
+          { NPC_GOAL_BOSSSB2CHOP, 0.0f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
+          { NPC_GOAL_BOSSSB2CHOP, 0.0f }, { NPC_GOAL_BOSSSB2CHOP, 0.01f },
+          { NPC_GOAL_BOSSSB2SWIPE, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.5f },
+          { 0, -1.0f } },
+    };
+    // clang-format on
+
     static platform_hook platform_hooks[16];
 
     void set_alpha_blend(xModelInstance* model)
@@ -190,6 +235,8 @@ namespace
     {
         return 0; // to-do
     }
+
+    void kill_sound(int which, U32 handle);
 
     struct sound_property
     {
@@ -292,6 +339,20 @@ namespace
     };
 
     static tweak_group tweak;
+
+    void kill_sound(int which, U32 handle)
+    {
+        if (sound_assets[tweak.sound[which].asset].flags & 1)
+        {
+            xSndStopFade(handle, tweak.sound[which].fade_time);
+        }
+        else
+        {
+            xSndStop(handle);
+        }
+
+        sound_data[which].handle = 0;
+    }
 
     void tweak_group::load(xModelAssetParam* params, U32 size)
     {
@@ -1050,6 +1111,34 @@ namespace
         }
     }
 
+    void response_curve::find_active_node(F32 t)
+    {
+        u32 size = values * sizeof(F32) + sizeof(node);
+        inode* n = get_node(active_node);
+
+        while (true)
+        {
+            while (t < n->t)
+            {
+                n = (inode*)((U8*)n - size);
+                active_node--;
+            }
+
+            if (t <= ((inode*)((U8*)n + size))->t)
+            {
+                return;
+            }
+
+            n = (inode*)((U8*)n + size);
+            active_node++;
+        }
+    }
+
+    F32 response_curve::clamp_t(F32 t) const
+    {
+        return range_limit(t, start_t(), end_t());
+    }
+
     inode* response_curve::get_node(u32 index) const
     {
         return (inode*)((U8*)curve + index * (sizeof(node) + values * sizeof(F32)));
@@ -1534,6 +1623,73 @@ void zNPCB_SB2::abandon_slugs()
     }
 }
 
+bool zNPCB_SB2::player_damaged() const
+{
+    return player_damage_timer > 0.0f;
+}
+
+S32 zNPCB_SB2::platform_index(const zNPCB_SB2::platform_data& p) const
+{
+    return &p - platforms;
+}
+
+S32 zNPCB_SB2::next_goal()
+{
+    if (flag.dizzy)
+    {
+        return NPC_GOAL_BOSSSB2DIZZY;
+    }
+
+    if (player_on_ground())
+    {
+        return NPC_GOAL_BOSSSB2HUNT;
+    }
+
+    if (player_damaged())
+    {
+        return NPC_GOAL_BOSSSB2TAUNT;
+    }
+
+    if (stage_delay <= 0.0f)
+    {
+        stage++;
+
+        if (sequence[round][stage].goal == 0)
+        {
+            stage = 0;
+        }
+
+        stage_delay = sequence[round][stage].delay;
+
+        return sequence[round][stage].goal;
+    }
+
+    return NPC_GOAL_BOSSSB2IDLE;
+}
+
+void zNPCB_SB2::update_delay_slug(zNPCB_SB2::slug_data& slug, F32 dt)
+{
+    if (slug.abandoned)
+    {
+        if (slug.sound_handle)
+        {
+            kill_sound(SOUND_KARATE_SLUG, slug.sound_handle);
+            slug.sound_handle = 0;
+        }
+
+        slug.stage = SLUG_DYING;
+    }
+    else
+    {
+        slug.stage_delay -= dt;
+
+        if (slug.stage_delay <= 0.0f)
+        {
+            slug.stage = SLUG_FIRE;
+        }
+    }
+}
+
 void zNPCB_SB2::reset_stage()
 {
     stage = -1;
@@ -1670,6 +1826,17 @@ S32 zNPCGoalBossSB2Intro::Enter(F32 dt, void* updCtxt)
     return zNPCGoalCommon::Enter(dt, updCtxt);
 }
 
+S32 zNPCGoalBossSB2Intro::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    if (tweak.intro_time <= owner.delay)
+    {
+        *trantype = GOAL_TRAN_SET;
+        return NPC_GOAL_BOSSSB2IDLE;
+    }
+
+    return 0;
+}
+
 S32 zNPCGoalBossSB2Intro::Exit(F32 dt, void* updCtxt)
 {
     zEntPlayerControlOn(CONTROL_OWNER_BOSS);
@@ -1702,6 +1869,17 @@ S32 zNPCGoalBossSB2Taunt::Enter(F32 dt, void* updCtxt)
     play_sound(0, &owner.sound_loc.mouth , 1.0f);
     owner.flag.face_player = 1;
     return zNPCGoalCommon::Enter(dt, updCtxt);
+}
+
+S32 zNPCGoalBossSB2Taunt::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    if (owner.AnimTimeRemain(NULL) < dt + 0.1f)
+    {
+        *trantype = GOAL_TRAN_SET;
+        return owner.next_goal();
+    }
+
+    return 0;
 }
 
 S32 zNPCGoalBossSB2Taunt::Exit(F32 dt, void* updCtxt)

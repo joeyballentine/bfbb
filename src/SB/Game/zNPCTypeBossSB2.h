@@ -233,6 +233,7 @@ struct zNPCB_SB2 : zNPCBoss
     void update_follow(F32 dt);
     void update_ymove(F32 dt);
     void update_move(F32 dt);
+    void update_delay_slug(zNPCB_SB2::slug_data& slug, F32 dt);
     void update_camera(F32 dt);
     void update_nodes(F32 dt);
     void show_nodes();
@@ -266,6 +267,7 @@ struct zNPCB_SB2 : zNPCBoss
     void abandon_slugs();
     void set_vulnerable(bool);
     void say(int);
+    S32 next_goal();
     void choose_hand();
     bool player_damaged() const;
     S32 platform_index(const zNPCB_SB2::platform_data& p) const;
@@ -285,6 +287,7 @@ struct zNPCGoalBossSB2Intro : zNPCGoalCommon
     zNPCB_SB2& owner;
 
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
+    S32 Process(en_trantype*, F32, void*, xScene*);
     S32 Enter(F32, void*);
     S32 Exit(F32, void*);
 };
@@ -314,6 +317,7 @@ struct zNPCGoalBossSB2Taunt : zNPCGoalCommon
     zNPCB_SB2& owner;
 
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
+    S32 Process(en_trantype*, F32, void*, xScene*);
     S32 Enter(F32, void*);
     S32 Exit(F32, void*);
 };
@@ -329,6 +333,7 @@ struct zNPCGoalBossSB2Dizzy : zNPCGoalCommon
     zNPCB_SB2& owner;
 
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
+    S32 Process(en_trantype*, F32, void*, xScene*);
     S32 Enter(F32, void*);
     S32 Exit(F32, void*);
 };
