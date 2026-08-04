@@ -7,7 +7,18 @@
 #include "zEvent.h"
 #include "zScene.h"
 
+#include "xEntBoulder.h"
 #include "xMathInlines.h"
+#include "xstransvc.h"
+#include "zEntButton.h"
+#include "zFX.h"
+#include "zGoo.h"
+#include "zNPCTypeCommon.h"
+
+extern xEnt* gReticleTarget;
+
+void zEntPlayer_PatrickLaunch(xEnt* patLauncher);
+void zFXGooFreeze(RpAtomic* atomic, const xVec3* center, xVec3* ref_parPosVec);
 
 static zThrownStruct zThrownList[32];
 static U32 zThrownCount;
@@ -46,6 +57,7 @@ static ThrowableStats zThrowableModels[23] = {
     {},
 };
 
+void zFruit_Update(xEnt* ent, xScene* sc, F32 dt);
 
 void zThrown_Setup(zScene* sc)
 {
@@ -56,8 +68,42 @@ void zThrown_Setup(zScene* sc)
 
     c_fruit.killTimer = globals.player.carry.fruitLifetime;
     airTime = xsqrt((2.0f * globals.player.carry.throwHeight) / globals.player.carry.throwGravity);
-    globals.player.carry.throwDistance = globals.player.carry.throwGravity * airTime;
+    l_normal.throwSpeedY = globals.player.carry.throwGravity * airTime;
     l_normal.throwSpeedXZ = globals.player.carry.throwDistance / (2.0f * airTime);
+
+    for (stats = zThrowableModels; stats->name != NULL; stats++)
+    {
+        stats->nameHash = xStrHash(stats->name);
+        strcpy(tmpstr, stats->name);
+        strcat(tmpstr, ".MINF");
+        stats->nameHashMINF = xStrHash(tmpstr);
+        if (stats->shrapName != NULL)
+        {
+            stats->shrapAsset = (zShrapnelAsset*)xSTFindAsset(xStrHash(stats->shrapName), NULL);
+        }
+        else
+        {
+            stats->shrapAsset = NULL;
+        }
+    }
+
+    for (U32 i = 0; i < sc->num_ents; i++)
+    {
+        xEnt* ent = (xEnt*)sc->base[i];
+        if (ent->baseType == eBaseTypeStatic || ent->baseType == eBaseTypeDestructObj)
+        {
+            for (stats = zThrowableModels; stats->name != NULL; stats++)
+            {
+                U32 mid = ((xEnt*)sc->base[i])->asset->modelInfoID;
+                if (stats->nameHash == mid || stats->nameHashMINF == mid)
+                {
+                    ent->moreFlags |= XENT_MORE_FLAGS_0x8;
+                    ((xEnt*)sc->base[i])->asset->moreFlags |= XENT_MORE_FLAGS_0x8;
+                    break;
+                }
+            }
+        }
+    }
 }
 
 void zThrown_AddTempFrame(zThrownStruct* thrown)
@@ -68,6 +114,131 @@ void zThrown_AddTempFrame(zThrownStruct* thrown)
         memset(&thrown->frame, 0, sizeof(xEntFrame));
         ent->frame = &thrown->frame;
         ent->frame->mat = *(xMat4x3*)ent->model->Mat;
+    }
+}
+
+void zFruit_ColorFade(zThrownStruct* thrown)
+{
+    static F32 fruitPattern[9][2] = { { 6.0f, 1.0f }, { 3.2f, 0.3f },  { 3.0f, 1.0f },
+                                      { 2.2f, 0.3f }, { 2.0f, 1.0f },  { 1.2f, 0.3f },
+                                      { 1.0f, 1.0f }, { 0.0f, 0.15f }, { -1.0f, 0.0f } };
+
+    xModelInstance* mod = thrown->ent->model;
+
+    if (!thrown->killTimer || thrown->killTimer > fruitPattern[0][0])
+    {
+        mod->RedMultiplier = mod->GreenMultiplier = mod->BlueMultiplier = fruitPattern[0][1];
+    }
+    else
+    {
+        F32 t = thrown->killTimer;
+        F32* p = &fruitPattern[0][0];
+        while (t < p[2])
+        {
+            p += 2;
+        }
+        F32 f = (t - p[0]) / (p[2] - p[0]);
+        f = f * p[3] + (1.0f - f) * p[1];
+        mod->RedMultiplier = mod->GreenMultiplier = mod->BlueMultiplier = f;
+    }
+}
+
+void zFruit_Update(xEnt* ent, xScene* sc, F32 dt)
+{
+    U32 i;
+
+    if (ent->model->Scale.x)
+    {
+        if (1e-5f == ent->model->Scale.x)
+        {
+            if (xVec3Dist((xVec3*)&ent->model->Mat->pos,
+                          (xVec3*)&globals.player.ent.model->Mat->pos) < 1.4f)
+            {
+                xEntBeginUpdate(ent, sc, dt);
+                xEntEndUpdate(ent, sc, dt);
+                return;
+            }
+            ent->chkby |= XENT_COLLTYPE_PLYR;
+        }
+
+        ent->model->Scale.x += dt / 0.5f;
+        ent->model->Scale.y = ent->model->Scale.x;
+        ent->model->Scale.z = ent->model->Scale.x;
+
+        if (ent->model->Scale.x >= 1.0f)
+        {
+            ent->model->Scale.x = 0.0f;
+            zThrown_Remove(ent);
+        }
+
+        xEntBeginUpdate(ent, sc, dt);
+        xEntEndUpdate(ent, sc, dt);
+    }
+    else
+    {
+        for (i = 0; i < zThrownCount; i++)
+        {
+            if (ent == zThrownList[i].ent)
+            {
+                break;
+            }
+        }
+
+        zThrownStruct* thrown = &zThrownList[i];
+
+        xEntBeginUpdate(ent, sc, dt);
+        xEntEndUpdate(ent, sc, dt);
+
+        if (thrown->killTimer != 0.0f)
+        {
+            thrown->killTimer -= dt;
+            if (thrown->killTimer <= 0.0f)
+            {
+                thrown->killTimer = 0.0f;
+                zFruit_ColorFade(thrown);
+
+                if (globals.player.carry.grabbed == ent)
+                {
+                    globals.player.carry.grabbed = NULL;
+                    gReticleTarget = NULL;
+                }
+                if (gReticleTarget == ent)
+                {
+                    gReticleTarget = NULL;
+                }
+
+                zShrapnelAsset* shrap = thrown->stats->shrapAsset;
+                if (shrap != NULL && shrap->initCB != NULL)
+                {
+                    shrap->initCB(shrap, ent->model, NULL, NULL);
+                }
+
+                xEntReset(ent);
+                zEntEvent(ent, eEventCollision_Visible_On);
+                ent->model->Scale.x = 1e-5f;
+                ent->model->Scale.y = 1e-5f;
+                ent->model->Scale.z = 1e-5f;
+                ent->chkby &= 0xef;
+                ent->baseFlags &= 0xffef;
+
+                for (i = 0; i < zThrownCount; i++)
+                {
+                    if (zThrownList[i].stackEnt == ent)
+                    {
+                        zThrownList[i].stackEnt = NULL;
+                        zThrownList[i].ent->update = zThrown_Update;
+                    }
+                    if (zThrownList[i].stackTgt == ent)
+                    {
+                        zThrownList[i].stackTgt = NULL;
+                    }
+                }
+            }
+            else
+            {
+                zFruit_ColorFade(thrown);
+            }
+        }
     }
 }
 
@@ -87,6 +258,222 @@ void Recurse_TranslateStack(xEnt* ent, xVec3* delta)
     sDebugDepth--;
 }
 
+void zThrown_Reset()
+{
+    for (U32 i = 0; i < zThrownCount; i++)
+    {
+        zThrownList[i].ent->update = zThrownList[i].oldupdate;
+        zThrownList[i].ent->baseFlags &= 0xff7f;
+        if (zThrownList[i].ent->frame == &zThrownList[i].frame)
+        {
+            zThrownList[i].ent->frame = NULL;
+        }
+        xModelInstance* mod = zThrownList[i].ent->model;
+        mod->RedMultiplier = mod->GreenMultiplier = mod->BlueMultiplier = 1.0f;
+        zThrownList[i].ent->chkby |= XENT_COLLTYPE_PLYR;
+        zThrownList[i].ent->baseFlags |= (U16)zThrownList[i].oldRecShadow;
+    }
+    zThrownCount = 0;
+}
+
+void zThrown_LaunchVel(xEnt* ent, xVec3* vel)
+{
+    ThrowableStats* stats;
+    zThrownStruct* newThrown;
+    U32 i;
+
+    stats = zThrowableModels + 1;
+    while (stats->name != NULL)
+    {
+        if (stats->nameHash == ent->asset->modelInfoID ||
+            stats->nameHashMINF == ent->asset->modelInfoID)
+        {
+            break;
+        }
+        stats++;
+    }
+    if (stats->name == NULL)
+    {
+        stats = zThrowableModels;
+    }
+
+    newThrown = NULL;
+    if (ent->update == zFruit_Update)
+    {
+        for (i = 0; i < zThrownCount; i++)
+        {
+            if (zThrownList[i].ent == ent)
+            {
+                newThrown = &zThrownList[i];
+                break;
+            }
+        }
+    }
+    else
+    {
+        zThrown_Remove(ent);
+        newThrown = &zThrownList[zThrownCount];
+        zThrownCount++;
+        newThrown->killTimer = stats->carry->killTimer;
+        newThrown->stats = stats;
+        newThrown->oldupdate = ent->update;
+        newThrown->ent = ent;
+        newThrown->stackEnt = NULL;
+        newThrown->stackTgt = NULL;
+        newThrown->patLauncher = NULL;
+        newThrown->oldRecShadow = ent->baseFlags & 0x10;
+        xEntDriveInit(&newThrown->drv, ent);
+        newThrown->driveDebounce = 0;
+        newThrown->driveLastFloor = NULL;
+    }
+
+    newThrown->vel = *vel;
+    newThrown->collResetTimer = stats->launch->collResetTimer;
+    ent->update = zThrown_Update;
+    ent->baseFlags |= 0x80;
+    zThrown_AddTempFrame(newThrown);
+}
+
+void zThrown_LaunchDir(xEnt* ent, xVec3* dir)
+{
+    ThrowableStats* stats;
+    xVec3 vel;
+
+    globals.player.carry.flyingToTarget = NULL;
+
+    stats = zThrowableModels + 1;
+    while (stats->name != NULL)
+    {
+        if (stats->nameHash == ent->asset->modelInfoID ||
+            stats->nameHashMINF == ent->asset->modelInfoID)
+        {
+            break;
+        }
+        stats++;
+    }
+    if (stats->name == NULL)
+    {
+        stats = zThrowableModels;
+    }
+
+    F32 speedXZ = stats->launch->throwSpeedXZ;
+    vel.x = speedXZ * dir->x;
+    vel.y = stats->launch->throwSpeedY;
+    vel.z = speedXZ * dir->z;
+
+    zThrown_LaunchVel(ent, &vel);
+}
+
+S32 zThrown_LaunchPos(xEnt* ent, xVec3* pos, xVec3* dir)
+{
+    S32 result;
+    ThrowableStats* stats;
+    xVec3 vel;
+
+    stats = zThrowableModels + 1;
+    while (stats->name != NULL)
+    {
+        if (stats->nameHash == ent->asset->modelInfoID ||
+            stats->nameHashMINF == ent->asset->modelInfoID)
+        {
+            break;
+        }
+        stats++;
+    }
+    if (stats->name == NULL)
+    {
+        stats = zThrowableModels;
+    }
+
+    F32 speedY;
+    F32 gravity = globals.player.carry.throwGravity;
+    speedY = stats->launch->throwSpeedY;
+    F32 apexTime = speedY / gravity;
+    F32 apexY;
+
+    if (ent->baseType == eBaseTypeBoulder)
+    {
+        apexY = -(apexTime * ((0.5f * gravity) * apexTime) -
+                  (speedY * apexTime + (ent->bound.sph.center.y - ent->bound.sph.r)));
+    }
+    else
+    {
+        apexY = -(apexTime * ((0.5f * gravity) * apexTime) -
+                  (speedY * apexTime + ent->model->Mat->pos.y));
+    }
+
+    if (apexY < 0.5f + pos->y)
+    {
+        result = 0;
+        vel.x = stats->launch->throwSpeedXZ * dir->x;
+        vel.y = stats->launch->throwSpeedY;
+        vel.z = stats->launch->throwSpeedXZ * dir->z;
+    }
+    else
+    {
+        F32 fallTime = xsqrt((2.0f * (apexY - pos->y)) / gravity);
+        F32 dx = ent->model->Mat->pos.x - pos->x;
+        F32 dz = ent->model->Mat->pos.z - pos->z;
+        F32 d2 = dx * dx;
+        F32 d2z = dz * dz;
+        d2 = d2 + d2z;
+        F32 speedXZ = xsqrt(d2) / (fallTime + apexTime);
+        result = 1;
+        vel.x = speedXZ * dir->x;
+        vel.y = stats->launch->throwSpeedY;
+        vel.z = speedXZ * dir->z;
+    }
+
+    zThrown_LaunchVel(ent, &vel);
+    return result;
+}
+
+void zThrown_LaunchStack(xEnt* ent, xEnt* target)
+{
+    xVec3 dir;
+    xVec3 pos;
+    xBox box;
+
+    switch (target->bound.type)
+    {
+    case XBOUND_TYPE_SPHERE:
+        pos.y = target->bound.sph.center.y + target->bound.sph.r;
+        break;
+    case XBOUND_TYPE_BOX:
+        pos.y = target->bound.box.box.upper.y;
+        break;
+    case XBOUND_TYPE_OBB:
+        xBoxInitBoundOBB(&box, &target->bound.box.box, target->bound.mat);
+        pos.y = box.upper.y;
+        break;
+    default:
+        pos.y = target->model->Mat->pos.y;
+        break;
+    }
+
+    pos.y = pos.y + 0.2f;
+    pos.x = target->model->Mat->pos.x;
+    pos.z = target->model->Mat->pos.z;
+    dir.x = pos.x - ent->model->Mat->pos.x;
+    dir.y = 0.0f;
+    dir.z = pos.z - ent->model->Mat->pos.z;
+
+    xVec3Normalize(&dir, &dir);
+
+    if (zThrown_LaunchPos(ent, &pos, &dir))
+    {
+        U32 i;
+        for (i = 0; i < zThrownCount; i++)
+        {
+            if (ent == zThrownList[i].ent)
+            {
+                break;
+            }
+        }
+        zThrownList[i].stackTgt = target;
+    }
+}
+
 void zThrown_PatrickLauncher(xEnt* ent, xEnt* launcher)
 {
     int i = 0;
@@ -104,13 +491,104 @@ void zThrown_PatrickLauncher(xEnt* ent, xEnt* launcher)
     }
 }
 
-void zThrown_Remove(class xEnt* ent)
+void zThrown_AddFruit(xEnt* ent)
 {
+    ThrowableStats* stats;
+    zThrownStruct* newThrown;
     U32 i;
-    xModelInstance* mod;
 
     for (i = 0; i < zThrownCount; i++)
     {
+        if (zThrownList[i].ent == ent)
+        {
+            zThrownList[i].stackEnt = NULL;
+            zThrownList[i].stackTgt = NULL;
+            ent->update = zFruit_Update;
+            ent->baseFlags |= 0x80;
+            if (zThrownList[i].drv.driver != NULL)
+            {
+                xEntDriveDismount(&zThrownList[i].drv, 1e-5f);
+            }
+            zThrownList[i].driveDebounce = 0;
+            zThrownList[i].driveLastFloor = NULL;
+            return;
+        }
+    }
+
+    stats = zThrowableModels + 1;
+    while (stats->name != NULL)
+    {
+        if (stats->nameHash == ent->asset->modelInfoID ||
+            stats->nameHashMINF == ent->asset->modelInfoID)
+        {
+            break;
+        }
+        stats++;
+    }
+
+    if (stats->name != NULL && stats->carry == &c_fruit)
+    {
+        newThrown = &zThrownList[zThrownCount];
+        zThrownCount++;
+        newThrown->killTimer = stats->carry->killTimer;
+        newThrown->stats = stats;
+        newThrown->oldupdate = ent->update;
+        newThrown->ent = ent;
+        newThrown->stackEnt = NULL;
+        newThrown->stackTgt = NULL;
+        newThrown->oldRecShadow = ent->baseFlags & 0x10;
+        ent->update = zFruit_Update;
+        ent->baseFlags |= 0x80;
+        zThrown_AddTempFrame(newThrown);
+        xEntDriveInit(&newThrown->drv, ent);
+        newThrown->driveDebounce = 0;
+        newThrown->driveLastFloor = NULL;
+    }
+}
+
+void zThrown_Remove(xEnt* ent)
+{
+    U32 i;
+
+    for (i = 0; i < zThrownCount; i++)
+    {
+        if (zThrownList[i].ent == ent)
+        {
+            zThrownList[i].ent->update = zThrownList[i].oldupdate;
+            ent->baseFlags &= 0xff7f;
+            if (zThrownList[i].ent->frame == &zThrownList[i].frame)
+            {
+                zThrownList[i].ent->frame = NULL;
+            }
+            xModelInstance* mod = zThrownList[i].ent->model;
+            mod->RedMultiplier = mod->GreenMultiplier = mod->BlueMultiplier = 1.0f;
+            ent->baseFlags |= (U16)zThrownList[i].oldRecShadow;
+
+            void (*collCB)(zThrownStruct*, xEntCollis*, F32*, F32*) = zThrownList[i].stats->collCB;
+
+            zThrownList[i] = zThrownList[zThrownCount - 1];
+            zThrownCount--;
+
+            if (ent->baseType == eBaseTypeNPC)
+            {
+                ((zNPCCommon*)ent)->SetCarryState(zNPCCARRY_NONE);
+            }
+            if (ent->baseType == eBaseTypeBoulder)
+            {
+                ((xEntBoulder*)ent)->vel = zThrownList[i].vel;
+            }
+            if (!xEntIsVisible(ent))
+            {
+                return;
+            }
+            if (collCB != zThrownCollide_StoneTiki && collCB != zThrownCollide_ThrowFreeze &&
+                collCB != zThrownCollide_BSandyHead && collCB != zThrownCollide_ThrowFruit)
+            {
+                return;
+            }
+            ent->chkby |= XENT_COLLTYPE_PLYR;
+            return;
+        }
     }
 }
 
@@ -129,6 +607,215 @@ S32 zThrown_KillFruit(xEnt* ent)
         }
     }
     return 0;
+}
+
+S32 zThrownCollide_CauseDamage(zThrownStruct* thrown, xEntCollis* collis)
+{
+    S32 result = 0;
+
+    for (U32 i = k_XCOLLS_IDX_COUNT; i < 18; i++)
+    {
+        if (!(collis->colls[i].flags & k_HIT_IT))
+        {
+            break;
+        }
+
+        xEnt* other = (xEnt*)collis->colls[i].optr;
+        if (other != NULL)
+        {
+            xEnt* pat = thrown->patLauncher;
+            if (pat != NULL && pat == other)
+            {
+                zEntPlayer_PatrickLaunch(pat);
+                thrown->patLauncher = NULL;
+                return 1;
+            }
+
+            if (other->baseType == eBaseTypeDestructObj)
+            {
+                zEntEvent(other, eEventHit_Throw);
+                result = 1;
+            }
+            else if (other->baseType == eBaseTypeNPC)
+            {
+                ((zNPCCommon*)other)->Damage(DMGTYP_HITBYTOSS, NULL, NULL);
+                result = 1;
+            }
+            else if (other->baseType == eBaseTypeButton)
+            {
+                zEntEvent(other, eEventHit_Throw);
+                zEntButton_Press((_zEntButton*)other, sThrowButtonMask);
+                zEntButton_Hold((_zEntButton*)other, 0x12000);
+            }
+            else if (other->moreFlags & XENT_MORE_FLAGS_HITTABLE)
+            {
+                zEntEvent(other, eEventHit_Throw);
+                zEntEvent(other, eEventHit);
+            }
+
+            F32 depth;
+            if (sFruitIsFreezy && other->model != NULL && zGooIs(other, depth, 0))
+            {
+                xVec3 pos;
+                xMat4x3* mat = (xMat4x3*)thrown->ent->model->Mat;
+                F32 dist = collis->colls[i].dist;
+                pos.x = collis->colls[i].tohit.x * dist + mat->pos.x;
+                pos.y = collis->colls[i].tohit.y * dist + mat->pos.y;
+                pos.z = collis->colls[i].tohit.z * dist + mat->pos.z;
+                zFXGooFreeze(other->model->Data, &pos, (xVec3*)&other->model->Mat->pos);
+                zEntEvent(other, eEventPlatPause, 0.25f, 0.0f, 0.0f, 0.0f);
+            }
+
+            if (zGooIs(other, depth, 0))
+            {
+                result = 1;
+            }
+        }
+    }
+
+    return result;
+}
+
+void zThrownCollide_ThrowFruit(zThrownStruct* thrown, xEntCollis* collis, F32* bounce,
+                               F32* friction)
+{
+    U32 idx;
+    xEnt* other;
+    F32 stackHeight;
+    F32 killTimer;
+    U32 i;
+
+    sThrowButtonMask = 0x80;
+
+    if (zThrownCollide_CauseDamage(thrown, collis))
+    {
+        *bounce = 0.0f;
+        *friction = 0.0f;
+        thrown->killTimer = 1e-6f;
+        return;
+    }
+
+    if (collis->colls[0].flags & k_HIT_IT)
+    {
+        other = (xEnt*)collis->colls[0].optr;
+        if (other != NULL && other->baseType == eBaseTypeStatic &&
+            zThrown_IsFruit(other, &stackHeight))
+        {
+            killTimer = 1000.0f;
+            for (i = zThrownCount; i != 0; i--)
+            {
+                if (zThrownList[zThrownCount - i].ent == other)
+                {
+                    killTimer = zThrownList[zThrownCount - i].killTimer;
+                }
+            }
+
+            xMat4x3* omat = (xMat4x3*)other->model->Mat;
+            xMat4x3* tmat = (xMat4x3*)thrown->ent->model->Mat;
+            F32 dz = tmat->pos.z - omat->pos.z;
+            F32 dx = tmat->pos.x - omat->pos.x;
+            if (dx * dx + dz * dz < 0.0225f && killTimer > 0.1f)
+            {
+                tmat->pos.y = omat->pos.y + stackHeight;
+                *bounce = 0.0f;
+                *friction = 0.0f;
+                thrown->stackEnt = other;
+                return;
+            }
+        }
+
+        if (collis->colls[0].optr != NULL &&
+            ((xEnt*)collis->colls[0].optr)->baseType == eBaseTypeButton &&
+            xabs(collis->colls[0].norm.y) < 0.9659258f)
+        {
+            *friction = 1.0f;
+            *bounce = globals.player.carry.fruitWallBounce;
+            return;
+        }
+
+        F32 speed = xVec3Length(&thrown->vel);
+        if (speed > globals.player.carry.fruitFloorDecayMax)
+        {
+            *bounce = globals.player.carry.fruitFloorBounce;
+            *friction = globals.player.carry.fruitFloorFriction;
+        }
+        else if (speed >= globals.player.carry.fruitFloorDecayMin)
+        {
+            F32 pct =
+                (speed - globals.player.carry.fruitFloorDecayMin) /
+                (globals.player.carry.fruitFloorDecayMax - globals.player.carry.fruitFloorDecayMin);
+            *bounce = pct * globals.player.carry.fruitFloorBounce;
+            *friction = pct * globals.player.carry.fruitFloorFriction;
+        }
+        else
+        {
+            *bounce = 0.0f;
+            *friction = 0.0f;
+        }
+        return;
+    }
+
+    if (collis->env_sidx < collis->env_eidx)
+    {
+        idx = collis->env_sidx;
+    }
+    else if (collis->dyn_sidx < collis->dyn_eidx)
+    {
+        idx = collis->dyn_sidx;
+    }
+    else if (collis->stat_sidx < collis->stat_eidx)
+    {
+        idx = collis->stat_sidx;
+    }
+    else
+    {
+        idx = 0;
+    }
+
+    if (idx == 0)
+    {
+        *bounce = 0.0f;
+        *friction = 0.0f;
+        return;
+    }
+
+    other = (xEnt*)collis->colls[idx].optr;
+    if (other != NULL && other->baseType == eBaseTypeStatic && zThrown_IsFruit(other, &stackHeight))
+    {
+        killTimer = 1000.0f;
+        for (i = zThrownCount; i != 0; i--)
+        {
+            if (zThrownList[zThrownCount - i].ent == other)
+            {
+                killTimer = zThrownList[zThrownCount - i].killTimer;
+            }
+        }
+
+        xMat4x3* omat = (xMat4x3*)other->model->Mat;
+        F32 dz = thrown->oldcollpos.z - omat->pos.z;
+        F32 dx = thrown->oldcollpos.x - omat->pos.x;
+        if (dx * dx + dz * dz < 0.0225f && thrown->oldcollpos.y - omat->pos.y > 0.8f &&
+            killTimer > 0.1f)
+        {
+            ((xMat4x3*)thrown->ent->model->Mat)->pos.x = thrown->oldcollpos.x;
+            ((xMat4x3*)thrown->ent->model->Mat)->pos.y = omat->pos.y + stackHeight;
+            ((xMat4x3*)thrown->ent->model->Mat)->pos.z = thrown->oldcollpos.z;
+            *bounce = 0.0f;
+            *friction = 0.0f;
+            thrown->stackEnt = other;
+            return;
+        }
+    }
+
+    *friction = 1.0f;
+    if (collis->colls[idx].norm.y >= -0.5f)
+    {
+        *bounce = globals.player.carry.fruitWallBounce;
+    }
+    else
+    {
+        *bounce = globals.player.carry.fruitCeilingBounce;
+    }
 }
 
 void zThrownCollide_ThrowFreeze(zThrownStruct* thrown, xEntCollis* collis, float* bounce,
@@ -167,16 +854,83 @@ void zThrownCollide_Tiki(zThrownStruct* thrown, xEntCollis* collis, F32* bounce,
     zEntEvent(thrown->ent, eEventDestroy);
 }
 
+void zThrownCollide_StoneTiki(zThrownStruct* thrown, xEntCollis* collis, F32* bounce, F32* friction)
+{
+    U32 idx;
+
+    *bounce = 0.0f;
+    *friction = 0.0f;
+    sThrowButtonMask = 0x40;
+    zThrownCollide_CauseDamage(thrown, collis);
+
+    for (U32 i = k_XCOLLS_IDX_COUNT; i < 18; i++)
+    {
+        if (!(collis->colls[i].flags & k_HIT_IT))
+        {
+            break;
+        }
+
+        xEnt* other = (xEnt*)collis->colls[i].optr;
+        if (other != NULL)
+        {
+            if (other->baseType == eBaseTypeNPC &&
+                (((zNPCCommon*)other)->SelfType() & 0xffffff00) == (NPC_TYPE_FISH & 0xffffff00))
+            {
+                zEntEvent(thrown->ent, eEventKill);
+            }
+            if (other->baseType == eBaseTypeTeleportBox)
+            {
+                zEntEvent(thrown->ent, eEventKill);
+            }
+        }
+    }
+
+    if (collis->env_sidx < collis->env_eidx)
+    {
+        idx = collis->env_sidx;
+    }
+    else if (collis->dyn_sidx < collis->dyn_eidx)
+    {
+        idx = collis->dyn_sidx;
+    }
+    else if (collis->stat_sidx < collis->stat_eidx)
+    {
+        idx = collis->stat_sidx;
+    }
+    else
+    {
+        idx = 0;
+    }
+
+    if (idx == 0)
+    {
+        *bounce = 0.0f;
+        *friction = 0.0f;
+    }
+    else if (collis->colls[idx].norm.y < 0.707f)
+    {
+        *friction = 1.0f;
+        *bounce = globals.player.carry.fruitWallBounce;
+    }
+}
+
 // WIP.
 S32 zThrown_IsFruit(xEnt* ent, F32* stackHeight)
 {
-    ThrowableStats* stats = zThrowableModels;
-    while (stats->nameHash != ent->asset->modelInfoID &&
-           stats->nameHashMINF != ent->asset->modelInfoID && stats->name != NULL)
+    ThrowableStats* stats;
+
+    stats = zThrowableModels + 1;
+    while (stats->name != NULL)
     {
+        if (stats->nameHash == ent->asset->modelInfoID ||
+            stats->nameHashMINF == ent->asset->modelInfoID)
+        {
+            break;
+        }
         stats++;
     }
-    if (stats != NULL && *(U32*)&stats->carry->killTimer == *(U32*)&c_fruit.killTimer)
+
+    if (stats != NULL && stats->carry == &c_fruit)
     {
         if (stackHeight != NULL)
         {
@@ -211,6 +965,19 @@ void checkAgainstButtons(xEnt* ent)
     xVec3Copy(&data.center, xBoundCenter(&ent->bound));
     data.unk = 0.5f;
     zSceneForAllBase(zThrown_ButtonIteratorCB, 0x18, (void*)&data);
+}
+
+xBase* zThrown_ButtonIteratorCB(xBase* b, zScene* scn, void* user)
+{
+    xCollis coll;
+
+    coll.flags = 0;
+    xSphereHitsModel((xSphere*)user, ((xEnt*)b)->model, &coll);
+    if (coll.flags & k_HIT_IT)
+    {
+        zEntButton_Hold((_zEntButton*)b, 0x10000);
+    }
+    return b;
 }
 
 void xDrawSphere(const xSphere*, U32)

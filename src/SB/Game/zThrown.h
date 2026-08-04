@@ -55,8 +55,14 @@ struct zThrownStruct
 
 void zThrown_Setup(zScene* sc);
 void zThrown_AddTempFrame(zThrownStruct* thrown);
+void zFruit_ColorFade(zThrownStruct* thrown);
+void zThrown_Update(xEnt* ent, xScene* sc, F32 dt);
+void zThrown_Remove(xEnt* ent);
 void Recurse_TranslateStack(xEnt* ent, xVec3* delta);
 void zThrown_Reset();
+void zThrown_LaunchVel(xEnt* ent, xVec3* vel);
+S32 zThrown_LaunchPos(xEnt* ent, xVec3* pos, xVec3* dir);
+void zThrown_LaunchStack(xEnt* ent, xEnt* target);
 void zThrown_PatrickLauncher(xEnt* ent, xEnt* launcher);
 S32 zThrownCollide_CauseDamage(zThrownStruct* thrown, xEntCollis* collis);
 void zThrownCollide_ThrowFruit(zThrownStruct* thrown, xEntCollis* collis, F32* bounce,
