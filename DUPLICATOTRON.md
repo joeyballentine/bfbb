@@ -59,6 +59,14 @@ build), `symdump.py` (read a static table out of the target object),
 (compile everything, report only failures), `flagsweep.py` (find a library's
 real compiler flags).
 
+**`tools/solo.py` counts differ from `report.json` counts, and both are
+right.** For `zNPCTypeRobot`, `solo.py` reports 129 non-matching where
+`report.json` reports 86 — but running `objdiff-cli` directly on the object
+`ninja` built gives 129 as well. `solo.py` is faithful to the build; dtk's
+report counts matched functions by a different rule. So never compare a
+`solo.py` number against a `report.json` number. Use `solo.py` for
+before/after *within* a unit, and `report.json` as the project metric.
+
 Still scratch-only, because they are either superseded or too tied to this
 machine to commit:
 
@@ -131,6 +139,13 @@ machine to commit:
   non-matching to **9** - nine functions flip at once. That is measured, not
   theorised, and it was removed again because shipping dead code to shift a
   pool is not decompiling.
+
+**Seen in three units now.** `zThrown` (`0.5f`), `zShrapnel` (`0.5f`), and
+`zNPCTypeRobot`, whose `.rodata` opens with **eleven zero-filled objects we do
+not produce**, ten of which have no relocation pointing at them from any
+section. Inserting eleven dummies proves they are worth exactly 11 functions.
+Dead constants created early and referenced late or never is the recurring
+shape, and it is unlikely to be three separate accidents.
 
 ### What is known about the missing construct
 
