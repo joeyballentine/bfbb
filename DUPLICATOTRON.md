@@ -21,8 +21,8 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now |
 |---|---|---|
-| matched functions | 6491 / 10147 | 6600 / 10147 |
-| fuzzy match | 57.343% | 58.266% |
+| matched functions | 6491 / 10147 | 6603 / 10147 |
+| fuzzy match | 57.343% | 58.275% |
 | complete units | 195 / 543 | 195 / 543 |
 
 ## Where the remaining 3636 functions are
@@ -145,6 +145,21 @@ suggests that function sits near the top of the original file.
 power of two and `_max_size_mask` is that minus one, not the shift count and
 the power. Fixing it also fixed the instantiations in `xDecal` and
 `xLaserBolt`.
+
+## Next: xFX / tier_queue
+
+`tier_queue` and `tier_queue_allocator` in `containers.h` now have their
+members (derived from the target), and `xFXRibbonRender` calls into them.
+That leaves ~25 `tier_queue<xFXRibbon::joint_data>` iterator members still
+unemitted in `xFX` - they need `xFXRibbon::render`, `insert`, `update` and
+`pop_back` written, since template members only appear when called.
+
+Return types matter more than they look:
+
+- `tier_queue::empty` reads `_size` directly; going through `size()` costs a
+  call and misses.
+- `xFXRibbon::render_compare` returns `S32`, not `bool` - the caller compares
+  with `cmpwi` rather than `clrlwi.`. `visible()` really is `bool`.
 
 ## Open leads
 
