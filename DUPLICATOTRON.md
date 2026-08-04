@@ -21,8 +21,8 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now |
 |---|---|---|
-| matched functions | 6491 / 10147 | 6603 / 10147 |
-| fuzzy match | 57.343% | 58.275% |
+| matched functions | 6491 / 10147 | 6631 / 10147 |
+| fuzzy match | 57.343% | 58.375% |
 | complete units | 195 / 543 | 195 / 543 |
 
 ## Where the remaining 3636 functions are
@@ -146,20 +146,24 @@ power of two and `_max_size_mask` is that minus one, not the shift count and
 the power. Fixing it also fixed the instantiations in `xDecal` and
 `xLaserBolt`.
 
-## Next: xFX / tier_queue
+## xFX / tier_queue
 
-`tier_queue` and `tier_queue_allocator` in `containers.h` now have their
-members (derived from the target), and `xFXRibbonRender` calls into them.
-That leaves ~25 `tier_queue<xFXRibbon::joint_data>` iterator members still
-unemitted in `xFX` - they need `xFXRibbon::render`, `insert`, `update` and
-`pop_back` written, since template members only appear when called.
+`xFX` went 109 -> 80 non-matching. `tier_queue`, `tier_queue_allocator` and
+the ribbon update/insert path are written; what remains there is the render
+side (`render`, `render_strip`, `eval_joint`, `refresh_joint`, `get_normal`)
+plus `init`, `set_texture` and `xFXRibbonSceneEnter`.
 
-Return types matter more than they look:
+Type signatures carry real information here:
 
+- Container index parameters are **`u32` (`unsigned long`)**, not `U32`
+  (`unsigned int`). The mangling says so: `CFUl` vs `CFUi`. Getting this wrong
+  costs every caller a mismatched `bl` target.
 - `tier_queue::empty` reads `_size` directly; going through `size()` costs a
-  call and misses.
-- `xFXRibbon::render_compare` returns `S32`, not `bool` - the caller compares
-  with `cmpwi` rather than `clrlwi.`. `visible()` really is `bool`.
+  call. `static_queue::empty` *does* go through `size()` - the two containers
+  genuinely differ, so do not assume symmetry.
+- `xFXRibbon::need_update` returns `bool` (caller tests with `clrlwi.`);
+  `render_compare` returns `S32` (caller tests with `cmpwi`). One instruction
+  in the *caller* is the only tell.
 
 ## Open leads
 
