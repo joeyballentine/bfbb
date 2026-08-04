@@ -294,7 +294,10 @@ struct zNPCGoalDutchmanDisappear : zNPCGoalCommon
     {
     }
 
+    S32 Enter(F32, void*);
     S32 Exit(float, void*);
+    S32 Process(en_trantype*, F32, void*, xScene*);
+
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
 };
 
@@ -319,6 +322,7 @@ struct zNPCGoalDutchmanReappear : zNPCGoalCommon
     {
     }
 
+    S32 Enter(F32, void*);
     S32 Exit(float, void*);
     void reset_speed();
 

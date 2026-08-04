@@ -1990,6 +1990,39 @@ S32 zNPCGoalDutchmanIdle::Process(en_trantype* trantype, float dt, void* updCtxt
     //return xGoal::Process(trantype, dt, updCtxt, xscn);
 }
 
+xFactoryInst* zNPCGoalDutchmanNil::create(S32 who, RyzMemGrow* grow, void* info)
+{
+    return new (who, grow) zNPCGoalDutchmanNil(who, (zNPCDutchman&)*info);
+}
+
+S32 zNPCGoalDutchmanDisappear::Enter(F32 dt, void* updCtxt)
+{
+    owner.delay = 0.0f;
+    owner.dissolve(tweak.teleport.fade_time);
+
+    return zNPCGoalCommon::Enter(dt, updCtxt);
+}
+
+S32 zNPCGoalDutchmanDisappear::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    if (owner.delay >= tweak.teleport.fade_time)
+    {
+        *trantype = GOAL_TRAN_SET;
+        return 0x4e474d41;
+    }
+
+    return xGoal::Process(trantype, dt, updCtxt, xscn);
+}
+
+S32 zNPCGoalDutchmanReappear::Enter(F32 dt, void* updCtxt)
+{
+    owner.delay = 0.0f;
+    owner.face_player();
+    owner.coalesce(tweak.teleport.fade_time);
+
+    return zNPCGoalCommon::Enter(dt, updCtxt);
+}
+
 xFactoryInst* zNPCGoalDutchmanDisappear::create(S32 who, RyzMemGrow* grow, void* info)
 {
     return new (who, grow) zNPCGoalDutchmanDisappear(who, (zNPCDutchman&)*info);
