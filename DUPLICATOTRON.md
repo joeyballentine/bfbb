@@ -21,8 +21,8 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now |
 |---|---|---|
-| matched functions | 6491 / 10147 | 6511 / 10147 |
-| fuzzy match | 57.343% | 57.388% |
+| matched functions | 6491 / 10147 | 6565 / 10147 |
+| fuzzy match | 57.343% | 58.160% |
 | complete units | 195 / 543 | 195 / 543 |
 
 ## Where the remaining 3636 functions are
@@ -75,6 +75,17 @@ fastest route to raising `complete_units`.
   a non-void return forces the result into `f1`/`r3`.
 
 ## Settled
+
+- **MSL_C compiler flags were wrong — +51.** `configure.py` built
+  `MSL_C.PPCEABI.H` at `-opt level=0 -inline off`. Sweeping against the target
+  objects: level 0 matches *nothing* anywhere, level 4 is best or tied for
+  every unit (+40), and `-inline on` beats `-inline off` in seven more (+11).
+  Nothing regressed. Two Runtime units want `-inline deferred` (+1).
+- **dolphin and SB flags are right.** A 42-flag sweep over all 90 dolphin
+  units and a 15-flag sweep over all 164 SB units produced no verified gain.
+- **bink is built with ProDG (SN gcc), not CodeWarrior.** CodeWarrior `asm`
+  blocks do not compile there; use GNU inline asm. `binkngc`'s time-base
+  readers are single asm blocks with hardcoded r11/r9/r0.
 
 - **`xVec3::operator=` â€” done, +11.** The hand-written definition was blocking
   every implicitly generated assignment operator of a struct containing an
