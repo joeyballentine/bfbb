@@ -183,6 +183,24 @@ address order):
   **class static member function** - all land at the use site
 - dead code: `F32 unused = 0.5f;` and `if (0) { ... 0.5f ... }` are folded
   before pool allocation
+- a member declared in a class body in a header, and an out-of-class `inline`
+  member defined in a header - both land at the end of `.sdata2`
+- **section splitting.** The target objects have many `.text` sections (18 for
+  `zEntCruiseBubble`) where ours have one, which looked like the answer: weak
+  inlines in their own COMDATs would explain early literal ids with no
+  main-`.text` presence. Sweeping 32 flags found the mechanism — **`-sym on`
+  produces 12 `.text` sections** — but it changes no literal ordering and
+  yields **zero** additional matches on `zEntCruiseBubble`, `zThrown` or
+  `zNPCTypeRobot`. Section layout and pool allocation are independent.
+
+**Unverified, from the `zEntCruiseBubble` agent, and it contradicts what is
+written above:** that objdiff pairs anonymous symbols **by name when the
+`@NNN` ids coincide**, not purely by ordinal. Its evidence is that
+`state_player_halt::update` reaches 100% because our `0.0001f` happens to get
+id `@1721`, matching the target's, and that adding an unrelated function which
+shifts our id numbering knocked it straight back to 99.904%. If true, aligning
+the *count* of preceding objects matters as much as their order. Worth
+confirming before anyone builds a strategy on either model.
 
 ## Settled
 
