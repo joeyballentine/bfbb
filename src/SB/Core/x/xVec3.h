@@ -13,8 +13,27 @@ struct xVec3
     static const xVec3 m_UnitAxisX;
     static const xVec3 m_UnitAxisY;
 
-    static xVec3 create(F32 x, F32 y, F32 z);
-    static xVec3 create(F32 f);
+    static xVec3 create(F32 x, F32 y, F32 z)
+    {
+        xVec3 v;
+
+        v.x = x;
+        v.y = y;
+        v.z = z;
+
+        return v;
+    }
+
+    static xVec3 create(F32 f)
+    {
+        xVec3 v;
+
+        v.x = f;
+        v.y = f;
+        v.z = f;
+
+        return v;
+    }
 
     xVec3& operator=(F32 f)
     {
@@ -23,7 +42,16 @@ struct xVec3
     }
     xVec3 operator+(const xVec3&) const;
     xVec3 operator-(const xVec3&) const;
-    xVec3 operator-() const;
+    xVec3 operator-() const
+    {
+        xVec3 v;
+
+        v.x = -x;
+        v.y = -y;
+        v.z = -z;
+
+        return v;
+    }
     xVec3 operator*(F32) const;
     xVec3 operator/(F32) const;
     xVec3& operator+=(const xVec3&);
@@ -51,7 +79,17 @@ struct xVec3
     xVec3& right_normalize();
     xVec3& safe_normalize(const xVec3& val);
     xVec3& up_normalize();
-    xVec3 up_normal() const;
+    xVec3 safe_normal(const xVec3& val) const
+    {
+        xVec3 v = *this;
+
+        return v.safe_normalize(val);
+    }
+
+    xVec3 up_normal() const
+    {
+        return safe_normal(xVec3::m_UnitAxisY);
+    }
     xVec3 normal() const;
     xVec3& assign(F32 x, F32 y, F32 z);
     F32 length() const;
