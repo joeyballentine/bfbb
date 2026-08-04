@@ -101,3 +101,40 @@ void radaudiofree(void* ptr) {
         useraramfree(ptr);
     }
 }
+
+u32 mult64andshift(u32 a, u32 b, s32 shift)
+{
+    u64 product = (u64)a * (u64)b;
+    u32 hi = (u32)(product >> 32);
+    u32 lo = (u32)product;
+
+    return (hi << (32 - shift)) | (lo >> shift);
+}
+
+void ReadTimeBase(u64* dest)
+{
+    __asm__ __volatile__("1: mftbu 11\n"
+                         "   mftb  9\n"
+                         "   mftbu 0\n"
+                         "   cmpw  11,0\n"
+                         "   bne   1b\n"
+                         "   stw   11,0(%0)\n"
+                         "   stw   9,4(%0)\n"
+                         :
+                         : "r"(dest)
+                         : "r0", "r9", "r11", "memory");
+}
+
+void RADCycleTimerStartAddr64(u64* dest)
+{
+    __asm__ __volatile__("1: mftbu 11\n"
+                         "   mftb  9\n"
+                         "   mftbu 0\n"
+                         "   cmpw  11,0\n"
+                         "   bne   1b\n"
+                         "   stw   11,0(%0)\n"
+                         "   stw   9,4(%0)\n"
+                         :
+                         : "r"(dest)
+                         : "r0", "r9", "r11", "memory");
+}
