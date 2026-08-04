@@ -115,6 +115,12 @@ machine to commit:
   allocated in codegen order, so a function sitting too early in the file
   steals the low pool indices from whatever should own them. Moving
   `register_tweaks` after `ParseINI` in Dutchman was worth a whole cluster.
+  The corollary is the most productive move found so far: **write the missing
+  pool-contributing functions in the target's source order.** In
+  `zNPCSupplement` that realigned pool indices 0-36 and cascaded thirteen
+  unrelated functions to 100% for free. Get the target's source order from its
+  `.text` symbol order, and the authoritative pool contents from
+  `tools/symdump.py` plus `dtk elf disasm`.
 
 ## Settled
 
@@ -340,6 +346,29 @@ Agents may not edit shared headers, so they report them instead. Outstanding:
   inline** (`return model && uv;`). The target symbol is
   `Valid__12UVAModelInfoCFv`, emitted per-TU; it is currently declared and
   defined nowhere, which is a live unresolved external.
+- **`xShadow.h` — declare `gShadowObjectRadius`,
+  `xShadowVertical_FillCache`, `xShadowVertical_DrawCache`,
+  `xShadowReceiveShadowSetup` and `xShadowReceiveShadow`.** All are defined in
+  `xShadow.cpp` and declared nowhere; `zNPCSupplement.cpp` carries a local
+  prototype block as a workaround. Note `xShadowReceiveShadowSetup` must be
+  declared returning **`U32`** — `xShadow.cpp` defines it `S32`, but the caller
+  emits `cmplwi`, and the unsigned declaration is what took
+  `NPCC_RenderProjTexture` to 100%.
+- **`zNPCGoalStd.h` — `zNPCGoalAttackMonsoon::SpitCloud` takes `F32 dt`**
+  (`SpitCloud__21zNPCGoalAttackMonsoonFf`), and
+  `zNPCGoalAttackHammer` is missing `ShockwaveTests(xVec3*, F32)` and
+  `FXStreakUpdate(xVec3*)` entirely. Four fully decoded functions are waiting
+  on these three declarations.
+
+### Rejected
+
+- **`containers.h` — `tier_queue<T>::wrap_block` returning `u32`.** The
+  evidence was real (it removes two `clrlwi` from
+  `tier_queue<joint_data>::clear`) but measured in isolation it costs a
+  different `xFX` function, net -1. Kept as `U8` until something explains both
+  diffs at once. **Measure every requested header change on its own before
+  believing it** — of four container changes requested with disassembly
+  evidence, one was a regression and one was neutral.
 
 ## Open leads
 
