@@ -21,8 +21,8 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now |
 |---|---|---|
-| matched functions | 6491 / 10147 | 6631 / 10147 |
-| fuzzy match | 57.343% | 58.375% |
+| matched functions | 6491 / 10147 | 6639 / 10147 |
+| fuzzy match | 57.343% | 58.403% |
 | complete units | 195 / 543 | 195 / 543 |
 
 ## Where the remaining 3636 functions are
@@ -164,6 +164,21 @@ Type signatures carry real information here:
 - `xFXRibbon::need_update` returns `bool` (caller tests with `clrlwi.`);
   `render_compare` returns `S32` (caller tests with `cmpwi`). One instruction
   in the *caller* is the only tell.
+
+## Header-declared helpers are free wins
+
+A whole class of missing functions are small helpers the headers *declare* but
+nobody ever defined - `xVec3::create`, unary `operator-`, `safe_normal`,
+`up_normal`, `xVec2::create`/`operator*`/`operator+=`/`operator*=`. In the
+target they are weak per-TU symbols, so defining them inline in the header
+makes them appear everywhere they are used at once. Cheap, and it also removes
+unresolved externs.
+
+Still unwritten in this class, worth doing next: `basic_rect<F32>` accessors,
+`xSCurve`, `xQuickCullForSphere`, and `auto_tweak::load_param<T1,T2>` (that
+last one is a template with per-type specialisations - `<f,f>` calls
+`zParamGetFloat`, `<i,i>` calls `zParamGetInt`, `<xVec3,i>` calls
+`zParamGetVector` - so it needs explicit specialisations, not one body).
 
 ## Open leads
 
