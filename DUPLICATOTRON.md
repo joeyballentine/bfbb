@@ -243,6 +243,14 @@ Note `solo.py` parses `build.ninja`, which has two rule layouts: the source
 file is on the same line as the `build` statement when it fits, on the next
 line when it does not. The parser handles both; if you extend it, keep that.
 
+## Priority: game code first
+
+`src/SB/**` comes before library code (rwsdk, MSL, Dolphin SDK, bink,
+MetroTRK), even though library code is in scope on this branch. Raw function
+count makes rwsdk look like the biggest lever — it is not what makes the
+decompilation worth anything. Library units are a fallback for when the game
+units are saturated, or when one cheap enabling fix unblocks a whole bucket.
+
 ## rwsdk — 1039 functions, now reachable
 
 Nothing here was imported from anywhere. `include/rwsdk/*.h` are upstream
