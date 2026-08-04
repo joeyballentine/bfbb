@@ -1,4 +1,5 @@
 #include "zNPCSupplement.h"
+#include "zNPCFXCinematic.h"
 #include "zNPCSupport.h"
 #include "zNPCTypeRobot.h"
 #include "zGame.h"
@@ -8,10 +9,19 @@
 
 #include "xFX.h"
 #include "xMath.h"
+#include "xMathInlines.h"
 #include "iMath.h"
 
 #include <types.h>
 #include <rwplcore.h>
+
+// These live in xShadow.cpp but are not declared in xShadow.h; see the report.
+extern F32 gShadowObjectRadius;
+void xShadowVertical_FillCache(xShadowCache* cache, xVec3* pos, F32 radius, F32 height, F32 slop);
+void xShadowVertical_DrawCache(xShadowCache* cache, F32 factor, F32 alpha, S32 flags,
+                               RwMatrixTag* mat, RwRaster* rast);
+U32 xShadowReceiveShadowSetup(xEnt* ent);
+void xShadowReceiveShadow(xEnt* ent, F32 factor, S32 flags, RwMatrixTag* mat, RwRaster* rast);
 
 static xShadowCache g_shadCaches[16];
 static NPARMgmt g_npar_mgmt[12];
@@ -336,6 +346,9 @@ extern S32 g_mon; // month
 extern S32 g_day; // day
 extern S32 g_isSpecialDay;
 static S8 g_shadCachesInUseFlags[16];
+static S32 g_doNPARCull = 1;
+
+void NPAR_CopyNPARToPTPool(NPARData* param_1, ptank_pool__pos_color_size_uv2* param_2);
 
 void NPCSupplement_Startup()
 {
@@ -373,11 +386,478 @@ void NPCSupplement_Timestep(float dt)
     NPAR_Timestep(dt);
 }
 
+void NPCC_MakeLightningInfo(en_npclyt style, _tagLightningAdd* info)
+{
+    switch (style)
+    {
+    case NPC_LYT_PLACEHOLDER:
+        info->type = 3;
+        info->total_points = 4;
+        info->thickness = 0.3f;
+        info->color = xColorFromRGBA(0xff, 0xff, 0xff, 0xff);
+        info->rand_radius = 1.0f;
+        info->arc_height = 0.2f;
+        info->rot_radius = 0.5f;
+        info->time = 1.0f;
+        info->flags = 0x2c;
+        info->setup_degrees = 20.0f + 90.0f * xurand();
+        info->move_degrees = 1280.0f + 12360.0f * xurand();
+        if (xrand() & 0x800000)
+        {
+            info->move_degrees *= -1.0f;
+        }
+        break;
+    case NPC_LYT_JELLYFISH:
+        info->type = 3;
+        info->total_points = 10;
+        info->thickness = 0.15f;
+        info->color = xColorFromRGBA(0xff, 0x00, 0xff, 0xff);
+        info->rand_radius = 1.0f;
+        info->arc_height = 0.2f;
+        info->rot_radius = 0.5f;
+        info->time = 1.0f;
+        info->flags = 0x2c;
+        info->setup_degrees = 20.0f + 90.0f * xurand();
+        info->move_degrees = 1280.0f + 12360.0f * xurand();
+        if (xrand() & 0x800000)
+        {
+            info->move_degrees *= -1.0f;
+        }
+        break;
+    case NPC_LYT_JELLYFISHBLUE:
+        info->type = 3;
+        info->total_points = 10;
+        info->color = xColorFromRGBA(0x20, 0x20, 0xff, 0xff);
+        info->thickness = 0.15f;
+        info->rand_radius = 1.0f;
+        info->arc_height = 0.2f;
+        info->rot_radius = 0.5f;
+        info->time = 1.0f;
+        info->flags = 0x2c;
+        info->setup_degrees = 20.0f + 90.0f * xurand();
+        info->move_degrees = 1280.0f + 12360.0f * xurand();
+        if (xrand() & 0x800000)
+        {
+            info->move_degrees *= -1.0f;
+        }
+        break;
+    case NPC_LYT_CATTLEPROD:
+        info->type = 3;
+        info->total_points = 4;
+        info->thickness = 0.1f;
+        info->color = xColorFromRGBA(200, 200, 0xff, 0xff);
+        info->rand_radius = 0.15f;
+        info->arc_height = 0.1f;
+        info->rot_radius = 0.1f;
+        info->time = 1.0f;
+        info->flags = 0xc28;
+        info->setup_degrees = 100.0f * (0.25f * (xurand() - 0.5f)) + 100.0f;
+        info->move_degrees = 8000.0f * (0.25f * (xurand() - 0.5f)) + 8000.0f;
+        if (xrand() & 0x800000)
+        {
+            info->move_degrees *= -1.0f;
+        }
+        break;
+    case NPC_LYT_TIKITHUNDER:
+        info->type = 3;
+        info->total_points = 4;
+        info->thickness = 1.0f;
+        info->color = xColorFromRGBA(0xff, 0xff, 0xff, 0xff);
+        info->rand_radius = 1.0f;
+        info->arc_height = 0.2f;
+        info->rot_radius = 0.5f;
+        info->time = 1.0f;
+        info->flags = 0x2c;
+        info->setup_degrees = 20.0f + 90.0f * xurand();
+        info->move_degrees = 1280.0f + 12360.0f * xurand();
+        if (xrand() & 0x800000)
+        {
+            info->move_degrees *= -1.0f;
+        }
+        break;
+    case NPC_LYT_SLEEPYARC:
+        info->type = 3;
+        info->total_points = 8;
+        info->thickness = 0.1f;
+        info->color = xColorFromRGBA(0x20, 0x20, 0xff, 0xff);
+        info->rand_radius = 0.2f;
+        info->arc_height = 0.1f;
+        info->rot_radius = 0.25f;
+        info->time = 1.0f;
+        info->flags = 0x2c;
+        info->setup_degrees = 20.0f + 90.0f * xurand();
+        info->move_degrees = 1280.0f + 12360.0f * xurand();
+        if (xrand() & 0x800000)
+        {
+            info->move_degrees *= -1.0f;
+        }
+        break;
+    case NPC_LYT_CLOUDWARN:
+        info->type = 3;
+        info->total_points = 12;
+        info->thickness = 0.4f;
+        info->color = xColorFromRGBA(0x96, 0x40, 0x80, 0xff);
+        info->rand_radius = 1.0f;
+        info->arc_height = 0.2f;
+        info->rot_radius = 0.5f;
+        info->time = 1.0f;
+        info->flags = 0x428;
+        info->setup_degrees = 20.0f;
+        info->move_degrees = 1280.0f;
+        if (xrand() & 0x800000)
+        {
+            info->move_degrees *= -1.0f;
+        }
+        break;
+    case NPC_LYT_CLOUDZAP:
+        info->type = 3;
+        info->total_points = 8;
+        info->thickness = 0.3f;
+        info->color = xColorFromRGBA(0x96, 0x40, 0x80, 0xff);
+        info->rand_radius = 1.0f;
+        info->arc_height = 0.2f;
+        info->rot_radius = 0.5f;
+        info->time = 1.0f;
+        info->flags = 0x428;
+        info->setup_degrees = 20.0f;
+        info->move_degrees = 1280.0f;
+        if (xrand() & 0x800000)
+        {
+            info->move_degrees *= -1.0f;
+        }
+        break;
+    }
+}
+
+void NPCC_MakeStreakInfo(en_npcstreak styp, StreakInfo* info)
+{
+    info->Defaults();
+
+    switch (styp)
+    {
+    case NPC_STRK_TARTARBLOB:
+        info->freq = 0.0f;
+        info->rgba_left.r = 0xf0;
+        info->rgba_left.g = 0xf0;
+        info->rgba_left.b = 0x40;
+        info->rgba_left.a = 0xff;
+        info->rgba_right.a = 0xf0;
+        info->rgba_right.g = 0xf0;
+        info->rgba_right.b = 0x40;
+        info->rgba_right.a = 0x40;
+        break;
+    case NPC_STRK_OILBUBBLE:
+        info->freq = 0.0f;
+        info->alf_fade = 1.2f;
+        info->alf_start = 0.65f;
+        info->rgba_right.r = 0x00;
+        info->rgba_right.g = 0x00;
+        info->rgba_right.b = 0x00;
+        info->rgba_right.a = 0xff;
+        info->rgba_left.r = 0x40;
+        info->rgba_left.g = 0x40;
+        info->rgba_left.b = 0x40;
+        info->rgba_left.a = 0x80;
+        break;
+    case NPC_STRK_ARFMELEE:
+        info->rgba_right.r = 0xff;
+        info->rgba_right.g = 0xff;
+        info->rgba_right.b = 0xff;
+        info->rgba_right.a = 0xff;
+        info->rgba_left.r = 0xf0;
+        info->rgba_left.g = 0xf0;
+        info->rgba_left.b = 0xf0;
+        info->rgba_left.a = 0xf0;
+        info->freq = 1.0f / 60.0f;
+        break;
+    case NPC_STRK_HAMMERSMASH_VERT:
+        info->rgba_right.r = 0xb0;
+        info->rgba_right.g = 0x30;
+        info->rgba_right.b = 0x00;
+        info->rgba_right.a = 0xcc;
+        info->rgba_left.r = 0x00;
+        info->rgba_left.g = 0xff;
+        info->rgba_left.b = 0x00;
+        info->rgba_left.a = 0xff;
+        info->freq = -1.0f;
+        info->taper = 1;
+        break;
+    case NPC_STRK_HAMMERSMASH_HORZ:
+        info->rgba_right.r = 0x66;
+        info->rgba_right.g = 0x20;
+        info->rgba_right.b = 0x40;
+        info->rgba_right.a = 0xaa;
+        info->rgba_left.r = 0x66;
+        info->rgba_left.g = 0x20;
+        info->rgba_left.b = 0x40;
+        info->rgba_left.a = 0xaa;
+        info->freq = -1.0f;
+        info->taper = 1;
+        break;
+    case NPC_STRK_TOSSEDROBOT:
+        info->rgba_right.r = 0xff;
+        info->rgba_right.g = 0xff;
+        info->rgba_right.b = 0xff;
+        info->rgba_right.a = 0xff;
+        info->rgba_left.r = 0xf0;
+        info->rgba_left.g = 0xf0;
+        info->rgba_left.b = 0xf0;
+        info->rgba_left.a = 0xf0;
+        info->freq = 0.1f;
+        break;
+    case NPC_STRK_TOSSEDJELLY:
+        info->rgba_right.r = 0xff;
+        info->rgba_right.g = 0x40;
+        info->rgba_right.b = 0xff;
+        info->rgba_right.a = 0xff;
+        info->rgba_left.r = 0xf0;
+        info->rgba_left.g = 0x40;
+        info->rgba_left.b = 0xf0;
+        info->rgba_left.a = 0xf0;
+        info->freq = 0.025f;
+        break;
+    case NPC_STRK_TOSSEDJELLYBLUE:
+        info->rgba_right.r = 0x40;
+        info->rgba_right.g = 0x40;
+        info->rgba_right.b = 0xff;
+        info->rgba_right.a = 0xff;
+        info->rgba_left.r = 0x40;
+        info->rgba_left.g = 0x40;
+        info->rgba_left.b = 0xf0;
+        info->rgba_left.a = 0xf0;
+        info->freq = 0.025f;
+        break;
+    }
+}
+
+void StreakInfo::Defaults()
+{
+    freq = 0.25f;
+    alf_fade = 4.0f;
+    alf_start = 1.0f;
+    idx_useTxtr = 0;
+    rgba_left.r = rgba_left.g = rgba_left.b = rgba_left.a = 0xff;
+    rgba_right.r = rgba_right.g = rgba_right.b = rgba_right.a = 0xff;
+    taper = 1;
+}
+
+U32 xFXStreakStart(StreakInfo* styp)
+{
+    return xFXStreakStart(styp->freq, styp->alf_fade, styp->alf_start, styp->idx_useTxtr,
+                          &styp->rgba_left, &styp->rgba_right, styp->taper);
+}
+
 U32 NPCC_StreakCreate(en_npcstreak styp)
 {
     static StreakInfo info;
     NPCC_MakeStreakInfo(styp, &info);
     return xFXStreakStart(&info);
+}
+
+void NPCC_BurstBubble(en_npcburst typ_burst, xVec3* pos)
+{
+    S32 i;
+    S32 j;
+
+    for (i = 0; i < 16; i++)
+    {
+        F32 rad_max = 3.0f;
+        F32 hyt = 0.375f * i;
+        F32 rad = rad_max * ARCH3(0.5f * hyt / rad_max);
+
+        for (j = 0; j < 20; j++)
+        {
+            F32 ang = 0.31415927f * xurand() + 0.31415927f * j;
+            ang = CLAMP(ang, 0.0f, 6.2831855f);
+
+            F32 sn = isin(ang);
+            F32 cs = icos(ang);
+
+            xVec3 pos_emit;
+            pos_emit.x = rad * sn + 0.1f * (2.0f * (xurand() - 0.5f));
+            pos_emit.y = 0.1f * (2.0f * (xurand() - 0.5f)) + hyt;
+            pos_emit.z = rad * cs + 0.1f * (2.0f * (xurand() - 0.5f));
+
+            xVec3AddTo(&pos_emit, pos);
+
+            if (typ_burst == NPC_BURST_SHIELD)
+            {
+                NPAR_EmitOilShieldPop(&pos_emit);
+            }
+            else
+            {
+                zFX_SpawnBubbleTrail(&pos_emit, 1);
+            }
+        }
+    }
+}
+
+void NPCC_MakeASplash(const xVec3* pos, F32 radius)
+{
+    F32 tym_splash = 0.35f;
+
+    if (radius < 0.0f)
+    {
+        radius = 1.5f;
+    }
+    else
+    {
+        F32 pct = (radius - 1.5f) / 8.5f;
+        tym_splash = LERP(CLAMP(pct, 0.0f, 1.0f), 0.25f, 1.15f);
+        if (1.5f > radius)
+        {
+            radius = 1.5f;
+        }
+    }
+
+    NPCHazard* haz = HAZ_Acquire();
+    if (haz != NULL)
+    {
+        if (!haz->ConfigHelper(NPC_HAZ_VISSPLASH))
+        {
+            haz->Discard();
+        }
+        else
+        {
+            haz->SetNPCOwner(NULL);
+            haz->custdata.typical.rad_max = radius;
+            haz->Start(pos, tym_splash);
+        }
+    }
+}
+
+void NPCC_Slick_MakePlayerSlip(zNPCCommon* npc)
+{
+    globals.player.ForceSlipperyTimer = MAX(globals.player.ForceSlipperyTimer, 4.0f);
+    globals.player.ForceSlipperyFriction = 0.01f;
+
+    if (npc != NULL)
+    {
+        ((zNPCSlick*)npc)->YouOwnSlipFX();
+    }
+}
+
+void NPCC_RenderProjTexture(RwRaster* rast, F32 factor, xMat4x3* mat, F32 radius, F32 height,
+                            xShadowCache* cache, S32 fillCache, xEnt* ent)
+{
+    if (fillCache)
+    {
+        xShadowVertical_FillCache(cache, &mat->pos, radius, height, 0.087156497f);
+    }
+
+    gShadowObjectRadius = radius;
+    xShadowVertical_DrawCache(cache, factor, 0.0f, 1, (RwMatrixTag*)mat, rast);
+
+    for (U32 i = 0; i < cache->entCount; i++)
+    {
+        xEnt* other = cache->ent[i];
+
+        if (other != ent && other->baseType != eBaseTypeNPC && xShadowReceiveShadowSetup(other))
+        {
+            xShadowReceiveShadow(other, factor, 1, (RwMatrixTag*)mat, rast);
+        }
+    }
+}
+
+void NPCC_RenderProjTextureFaceCamera(RwRaster* rast, F32 factor, xVec3* pos, F32 radius,
+                                      F32 height, xShadowCache* cache, S32 fillCache, xEnt* ent)
+{
+    xMat4x3 mat;
+
+    xVec3Copy(&mat.pos, pos);
+    xVec3Copy(&mat.right, &globals.camera.mat.right);
+
+    if (mat.right.y < -0.0001f || mat.right.y > 0.0001f)
+    {
+        mat.right.y = 0.0f;
+
+        F32 len = xVec3Length(&mat.right);
+        if (len < 0.0001f)
+        {
+            xVec3Init(&mat.right, 1.0f, 0.0f, 0.0f);
+        }
+        else
+        {
+            xVec3SMulBy(&mat.right, 1.0f / len);
+        }
+    }
+
+    xVec3Init(&mat.at, 0.0f, -1.0f, 0.0f);
+    xVec3Init(&mat.up, -mat.right.z, 0.0f, mat.right.x);
+
+    RwMatrixUpdate((RwMatrixTag*)&mat);
+
+    NPCC_RenderProjTexture(rast, factor, &mat, radius, height, cache, fillCache, ent);
+}
+
+void NPAR_Upd_OilBubble(NPARMgmt* mgmt, F32 dt)
+{
+    ptank_pool__pos_color_size_uv2 pool;
+
+    pool.rs.texture = mgmt->txtr;
+    pool.rs.src_blend = 5;
+    pool.rs.dst_blend = 6;
+    pool.rs.flags = 0;
+    pool.reset();
+
+    for (S32 i = 0; i < mgmt->cnt_active; i++)
+    {
+        NPARData* par = &mgmt->par_buf[i];
+
+        par->tmr_remain -= dt;
+
+        const NPARParmOilBub* parm = &g_parm_oilbub[par->nparmode];
+        F32 pct = MAX(0.0f, par->tmr_remain) / par->tym_exist;
+
+        par->pos += par->vel * dt;
+        par->vel += parm->acc_oilBubble * dt;
+        par->vel *= 0.9f;
+
+        F32 fac = ARCH(1.0f - pct);
+
+        F32 siz;
+        if (par->nparmode == 1)
+        {
+            siz = SMOOTH(pct, parm->siz_base[0], parm->siz_base[1]);
+        }
+        else
+        {
+            siz = LERP(fac, parm->siz_base[0], parm->siz_base[1]);
+        }
+
+        par->xy_size[0] = siz;
+        par->xy_size[1] = siz;
+        par->color.alpha = fac * parm->colr_base.alpha;
+
+        if (par->tmr_remain < 0.0f)
+        {
+            mgmt->PromoteTail(i);
+            i--;
+        }
+        else
+        {
+            if (g_doNPARCull)
+            {
+                RwSphere testSphere;
+                testSphere.center = *(RwV3d*)&par->pos;
+                testSphere.radius = par->xy_size[0];
+
+                if (!RwCameraFrustumTestSphere(globals.camera.lo_cam, &testSphere))
+                {
+                    continue;
+                }
+            }
+
+            pool.next();
+
+            if (pool.valid())
+            {
+                NPAR_CopyNPARToPTPool(par, &pool);
+            }
+        }
+    }
+
+    pool.flush();
 }
 
 void NPAR_ScenePrepare()
@@ -460,34 +940,32 @@ NPARMgmt* NPAR_FindParty(en_nparptyp parType)
     return mgmt;
 }
 
-#if 0
-// Matches, but appears to be using some kinda weird secret overload for xMemAlloc?? Find out wtf this is.
-void* xMemAlloc(U32 heapID, U32 size, S32 align, void* data, S32 dataSize);
-
 void NPARMgmt::Init(en_nparptyp parType, void** userData, NPARXtraData* xtraData)
 {
     S32 amt = g_npar_info[parType].num_maxParticles;
     NPARInfo* info = &g_npar_info[parType];
 
-    void* mem = xMemAlloc(gActiveHeap, amt * 0x50, 0x10, xtraData, parType << 4);
-    memset(mem, 0, amt * 0x50);
+    void* mem = xMemAlloc(gActiveHeap, amt * sizeof(NPARData), 0x10);
+    memset(mem, 0, amt * sizeof(NPARData));
+
     typ_npar = parType;
     flg_npar = info->flg_npar;
     par_buf = (NPARData*)mem;
     cnt_active = 0;
     num_max = info->num_maxParticles;
+
     UserDataSet(userData);
     XtraDataSet(xtraData);
+
     if (info->nam_texture == NULL)
     {
         txtr = NULL;
     }
     else
     {
-        txtr = NPCC_FindRWTexture( info->nam_texture );
+        txtr = NPCC_FindRWTexture(info->nam_texture);
     }
 }
-#endif
 
 void NPARMgmt::Clear()
 {
@@ -715,6 +1193,11 @@ F32 ARCH(F32 param_1)
     return 1.0f - BOWL(param_1);
 }
 
+F32 BOWL(F32 param_1)
+{
+    return SQ((F32)2.0f * (param_1 - 0.5f));
+}
+
 void NPARMgmt::Done()
 {
     Clear();
@@ -738,6 +1221,25 @@ void NPARMgmt::XtraDataSet(NPARXtraData* param_1)
 void NPARMgmt::UserDataSet(void** param_1)
 {
     user_data = param_1;
+}
+
+void NPARMgmt::PromoteTail(S32 idx)
+{
+    cnt_active--;
+    par_buf[idx] = par_buf[cnt_active];
+}
+
+NPARData* NPARMgmt::NextAvail()
+{
+    if (cnt_active >= num_max)
+    {
+        return NULL;
+    }
+
+    NPARData* par = &par_buf[cnt_active++];
+    memset(par, 0, sizeof(NPARData));
+
+    return par;
 }
 
 void NPARParmVisSplash::ConfigPar(NPARData* par, en_nparmode pmod, const xVec3* pos, const xVec3* vel) const
@@ -836,7 +1338,8 @@ void NPAR_EmitTubeSpiral(const xVec3* pos, const xVec3* vel, F32 dt)
     NPARMgmt* mgmt = NPAR_FindParty(NPAR_TYP_TUBESPIRAL);
     if ((mgmt != NULL) && (par = mgmt->NextAvail(), par != NULL))
     {
-        g_parm_tubespiral[1].ConfigPar(par, NPAR_MODE_SPIRALNORM, pos, vel, dt);
+        en_nparmode pmod = NPAR_MODE_SPIRALNORM;
+        g_parm_tubespiral[pmod].ConfigPar(par, pmod, pos, vel, dt);
     }
 }
 
@@ -897,7 +1400,8 @@ void NPARParmTubeConfetti::ConfigPar(NPARData* par, en_nparmode pmod, const xVec
     if (pmod == 0)
     {
         F32 samecalc = 2.0f * (justTheRand - 0.5f );
-        par->uv_tl[0] = ((int)(samecalc * num_uvcell[1])) * du; // Multiplication operands swapped
+        S32 idx_cell = samecalc * num_uvcell[1];
+        par->uv_tl[0] = idx_cell * du;
         par->uv_tl[1] = (row_uvstart + (int)(samecalc * num_uvcell[0])) * dv;
         par->uv_br[0] = par->uv_tl[0] + du;
         par->uv_br[1] = par->uv_tl[1] + dv;
@@ -939,7 +1443,8 @@ void NPARParmFahrwerkz::ConfigPar(NPARData* par, en_nparmode pmod, const xVec3* 
     if (pmod == 0)
     {
         F32 samecalc = 2.0f * (justTheRand - 0.5f );
-        par->uv_tl[0] = ((int)(samecalc * num_uvcell[1])) * du; // Multiplication operands swapped
+        S32 idx_cell = samecalc * num_uvcell[1];
+        par->uv_tl[0] = idx_cell * du;
         par->uv_tl[1] = (row_uvstart + (int)(samecalc * num_uvcell[0])) * dv;
         par->uv_br[0] = par->uv_tl[0] + du;
         par->uv_br[1] = par->uv_tl[1] + dv;
@@ -981,7 +1486,8 @@ void NPARParmTarTarGunk::ConfigPar(NPARData* par, en_nparmode pmod, const xVec3*
     if (pmod == 0)
     {
         F32 samecalc = 2.0f * (justTheRand - 0.5f );
-        par->uv_tl[0] = ((int)(samecalc * num_uvcell[1])) * du; // Multiplication operands swapped
+        S32 idx_cell = samecalc * num_uvcell[1];
+        par->uv_tl[0] = idx_cell * du;
         par->uv_tl[1] = (row_uvstart + (int)(samecalc * num_uvcell[0])) * dv;
         par->uv_br[0] = par->uv_tl[0] + du;
         par->uv_br[1] = par->uv_tl[1] + dv;
@@ -1023,7 +1529,8 @@ void NPARParmSleepyZeez::ConfigPar(NPARData* par, en_nparmode pmod, const xVec3*
     if (pmod == 0)
     {
         F32 samecalc = 2.0f * (justTheRand - 0.5f );
-        par->uv_tl[0] = ((int)(samecalc * num_uvcell[1])) * du; // Multiplication operands swapped
+        S32 idx_cell = samecalc * num_uvcell[1];
+        par->uv_tl[0] = idx_cell * du;
         par->uv_tl[1] = (row_uvstart + (int)(samecalc * num_uvcell[0])) * dv;
         par->uv_br[0] = par->uv_tl[0] + du;
         par->uv_br[1] = par->uv_tl[1] + dv;
@@ -1063,31 +1570,31 @@ void NPARParmChuckSplash::ConfigPar(NPARData* par, en_nparmode pmod, const xVec3
     if (pmod == NPAR_MODE_STD)
     {
         par->uv_tl[0] = 0.0f;
-        par->uv_tl[1] = 0.0f;
-        par->uv_br[0] = 1.0f;
+        par->uv_tl[1] = 0.5f;
+        par->uv_br[0] = 0.5f;
         par->uv_br[1] = 1.0f;
         par->flg_popts |= 2;
     }
-    else if ((pmod == NPAR_MODE_ALT_C) ||(pmod == NPAR_MODE_ALT_A) ||(pmod == NPAR_MODE_ALT_B))
+    else if ((pmod == NPAR_MODE_ALT_C) || (pmod == NPAR_MODE_ALT_A) || (pmod == NPAR_MODE_ALT_B))
     {
-        par->uv_tl[0] = 0.0f;
-        par->uv_tl[1] = 0.0f;
+        par->uv_tl[0] = 0.5f;
+        par->uv_tl[1] = 0.5f;
         par->uv_br[0] = 1.0f;
         par->uv_br[1] = 1.0f;
         par->flg_popts |= 2;
     }
     else if (pmod == NPAR_MODE_ALT_D)
     {
-        par->uv_tl[0] = 0.0f;
+        par->uv_tl[0] = 0.5f;
         par->uv_tl[1] = 0.0f;
         par->uv_br[0] = 1.0f;
-        par->uv_br[1] = 1.0f;
+        par->uv_br[1] = 0.5f;
         par->flg_popts |= 2;
     }
     else
     {
-        par->uv_tl[0] = 0.0f;
-        par->uv_tl[1] = 0.0f;
+        par->uv_tl[0] = 0.5f;
+        par->uv_tl[1] = 0.5f;
         par->uv_br[0] = 1.0f;
         par->uv_br[1] = 1.0f;
         par->flg_popts |= 2;
@@ -1143,7 +1650,7 @@ void NPAR_EmitGloveDust(const xVec3* pos, const xVec3* vel)
     NPARMgmt *mgmt = (NPARMgmt *)NPAR_FindParty(NPAR_TYP_GLOVEDUST);
     if ((mgmt != NULL) && (pNVar1 = mgmt->NextAvail(), pNVar1 != NULL))
     {
-        g_parm_tartargunk[0].ConfigPar(pNVar1, NPAR_MODE_STD, pos, vel);
+        g_parm_glovedust[0].ConfigPar(pNVar1, NPAR_MODE_STD, pos, vel);
     }
 }
 
@@ -1153,7 +1660,7 @@ void NPAR_EmitSleepyZeez(const xVec3* pos, const xVec3* vel)
     NPARMgmt *mgmt = (NPARMgmt *)NPAR_FindParty(NPAR_TYP_SLEEPYZEEZ);
     if ((mgmt != NULL) && (pNVar1 = mgmt->NextAvail(), pNVar1 != NULL))
     {
-        g_parm_tartargunk[0].ConfigPar(pNVar1, NPAR_MODE_STD, pos, vel);
+        g_parm_sleepyzeez[0].ConfigPar(pNVar1, NPAR_MODE_STD, pos, vel);
     }
 }
 
@@ -1256,7 +1763,8 @@ void NPAR_EmitTubeSpiralCin(const xVec3* pos, const xVec3* vel, float dt)
     NPARMgmt* mgmt = NPAR_FindParty(NPAR_TYP_TUBESPIRAL);
     if ((mgmt != NULL) && (par = mgmt->NextAvail(), par != NULL))
     {
-        g_parm_tubespiral[3].ConfigPar(par, NPAR_MODE_SPIRALCINE, pos, vel, dt);
+        en_nparmode pmod = NPAR_MODE_SPIRALCINE;
+        g_parm_tubespiral[pmod].ConfigPar(par, pmod, pos, vel, dt);
     }
 }
 
@@ -1305,5 +1813,41 @@ static void NPCC_ShadowCacheReset()
     for (int i = 0; i < sizeof(g_shadCachesInUseFlags) / sizeof(S8); i++)
     {
         g_shadCachesInUseFlags[i] = 0;
+    }
+}
+
+xShadowCache* NPCC_ShadowCacheReserve()
+{
+    xShadowCache* shadcache = NULL;
+
+    for (S32 i = 0; i < 16; i++)
+    {
+        if (g_shadCachesInUseFlags[i] == 0)
+        {
+            g_shadCachesInUseFlags[i] = 1;
+            shadcache = &g_shadCaches[i];
+            break;
+        }
+    }
+
+    if (shadcache != NULL)
+    {
+        shadcache->entCount = 0;
+        shadcache->polyCount = 0;
+        shadcache->castOnEnt = 0;
+        shadcache->castOnPoly = 0;
+    }
+
+    return shadcache;
+}
+
+void NPCC_ShadowCacheRelease(xShadowCache* shadcache)
+{
+    for (S32 i = 0; i < 16; i++)
+    {
+        if (shadcache == &g_shadCaches[i])
+        {
+            g_shadCachesInUseFlags[i] = 0;
+        }
     }
 }
