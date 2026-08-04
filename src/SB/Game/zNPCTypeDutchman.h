@@ -208,6 +208,8 @@ struct zNPCDutchman : zNPCSubBoss
     void start_hand_trail();
     void stop_hand_trail();
     void refresh_reticle();
+    void halt(F32);
+    U8 turning(F32) const;
     void update_hand_trail(F32);
     void dissolve(F32);
     void coalesce(F32);

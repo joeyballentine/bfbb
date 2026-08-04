@@ -6,6 +6,8 @@
 
 #include <types.h>
 
+extern xVec3 dutchman_reticle_center;
+
 #define f1605 0.0f
 #define f1606 1.0f
 #define f1689 0.2f
@@ -1826,6 +1828,37 @@ void zNPCDutchman::set_alpha(F32 value)
 
 zNPCGoalDutchmanNil::zNPCGoalDutchmanNil(S32 goalID, zNPCDutchman&) : zNPCGoalCommon(goalID)
 {
+}
+
+void zNPCDutchman::refresh_reticle()
+{
+    dutchman_reticle_center = xModelGetBoneLocation(*model, 0x2f);
+    dutchman_reticle_center.y += tweak.reticle_y;
+}
+
+void zNPCDutchman::halt(F32 decel)
+{
+    flag.move = MOVE_STOP;
+
+    move.accel.x = (move.vel.x < 0.0f) ? decel : -decel;
+    move.accel.y = (move.vel.y < 0.0f) ? decel : -decel;
+    move.accel.z = (move.vel.z < 0.0f) ? decel : -decel;
+}
+
+U8 zNPCDutchman::turning(F32 dt) const
+{
+    U8 result = 0;
+    xVec2 facing;
+
+    facing.x = model->Mat->at.x;
+    facing.y = model->Mat->at.z;
+
+    if (dt * turn.max_vel < xabs(turn.vel) || turn.dir.dot(facing) < 1.0f - dt)
+    {
+        result = 1;
+    }
+
+    return result;
 }
 
 void zNPCDutchman::update_eye_glow(F32 dt)
