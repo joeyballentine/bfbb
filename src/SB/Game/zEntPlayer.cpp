@@ -120,6 +120,8 @@ static xEnt* sGrabFound;
 static S32 sGrabFailed;
 
 static F32 sPlayerCollAdjust;
+static S32 cchkButtbounce;
+static S32 cchkSquish;
 
 static zPlayerLassoInfo* sLassoInfo;
 static zLasso* sLasso;
@@ -261,6 +263,10 @@ static xModelTag sPatrickMelee;
 static zSurfaceProps* sWallCollisionSurface;
 static float sTongueDblSpeedMult;
 
+// Defined in iCollide.cpp but declared in no header.
+S32 iSphereHitsEnv4(const xSphere* b, const xEnv* env, const xMat3x3* mat, xCollis* colls);
+
+static void zEntPlayer_ReticleRender(zEnt* ent);
 static void PlayerSwingUpdate(xEnt* ent, F32 mag, F32 angle, F32 dt);
 static S32 CheckObjectAgainstMeleeBound(xEnt* ent, void* data);
 static void zEntPlayer_PredictionUpdate(xEnt* ent, F32 dt);
@@ -3302,8 +3308,7 @@ static U32 LassoFlyCB(xAnimTransition*, xAnimSingle*, void* object)
         sLasso->tgRadius = 1.5f * sLassoInfo->target->model->Data->boundingSphere.radius;
 
         xVec3SMul(&sLasso->tgNormal, (xVec3*)&ent->model->Mat->at, 1.0f);
-        // Result is being subtracted from original instead of negated and added
-        sLasso->tgNormal.y += -(4.0f * sLassoInfo->dist - 5.0f);
+        sLasso->tgNormal.y += 5.0f - 4.0f * sLassoInfo->dist;
         xVec3Normalize(&sLasso->tgNormal, &sLasso->tgNormal);
     }
     else
@@ -4834,6 +4839,136 @@ F32 det3x3top1(F32 a, F32 b, F32 c, F32 d, F32 e, F32 f)
     return -((d * b) - ((a * e) + ((d * c) + ret)));
 }
 
+static void SlideTrackUpdate(xEnt* ent);
+
+static void zEntPlayerTSlideUpdate(xEnt* ent, xScene* sc, F32 dt)
+{
+    globals.player.SlideTrackSliding = (globals.player.SlideTrackSliding & 1) << 1;
+    globals.player.SlideTrackLand = 0.0f;
+
+    if (globals.player.SlideTrackCount)
+    {
+        SlideTrackUpdate(ent);
+    }
+
+    if ((globals.player.SlideTrackSliding & 1) && !(globals.player.SlideTrackSliding & 2))
+    {
+        globals.player.SlideTrackVel.x = tslide_lastrealvel.x;
+        globals.player.SlideTrackVel.y = 0.0f;
+        globals.player.SlideTrackVel.z = tslide_lastrealvel.z;
+
+        ent->frame->vel.x = 0.0f;
+        ent->frame->vel.y = 0.0f;
+        ent->frame->vel.z = 0.0f;
+
+        tslide_inair_tmr = 0.0f;
+        tslide_dbl_tmr = 0.0f;
+        tslide_ground = 1;
+    }
+    else if (!(globals.player.SlideTrackSliding & 1) && (globals.player.SlideTrackSliding & 2))
+    {
+        if (globals.player.JumpState)
+        {
+            tslide_inair_tmr = dt;
+            tslide_dbl_tmr = 0.0f;
+        }
+
+        zEntPlayer_SNDStop(ePlayerSnd_SlideLoop);
+    }
+
+    if (!(globals.player.SlideTrackSliding & 1) && !globals.player.JumpState)
+    {
+        tslide_ground = 0;
+    }
+
+    if (globals.player.JumpState)
+    {
+        if (tslide_inair_tmr)
+        {
+            if (tslide_inair_tmr > globals.player.g.SlideAirHoldTime)
+            {
+                static F32 tmax =
+                    globals.player.g.SlideAirHoldTime + globals.player.g.SlideAirSlowTime;
+
+                if (tslide_inair_tmr >= tmax)
+                {
+                    ent->frame->vel.x = 0.0f;
+                    ent->frame->vel.z = 0.0f;
+                }
+                else
+                {
+                    F32 decay = ((tmax - tslide_inair_tmr) - dt) / (tmax - tslide_inair_tmr);
+                    ent->frame->vel.x *= decay;
+                    ent->frame->vel.z *= decay;
+                }
+            }
+
+            tslide_inair_tmr += dt;
+        }
+
+        if (tslide_dbl_tmr)
+        {
+            if (tslide_dbl_tmr > globals.player.g.SlideAirDblHoldTime)
+            {
+                static F32 tmax =
+                    globals.player.g.SlideAirDblHoldTime + globals.player.g.SlideAirDblSlowTime;
+
+                if (tslide_dbl_tmr >= tmax)
+                {
+                    ent->frame->vel.x = 0.0f;
+                    ent->frame->vel.z = 0.0f;
+                }
+                else
+                {
+                    F32 decay = ((tmax - tslide_dbl_tmr) - dt) / (tmax - tslide_dbl_tmr);
+                    ent->frame->vel.x *= decay;
+                    ent->frame->vel.z *= decay;
+                }
+            }
+
+            tslide_dbl_tmr += dt;
+        }
+    }
+
+    if (!globals.player.JumpState)
+    {
+        tslide_inair_tmr = 0.0f;
+    }
+}
+
+static U32 PlayerDepenQuery(xEnt* ent, xEnt* other, xScene* scene, F32 dt, xCollis* coll)
+{
+    if (globals.player.DamageTimer > 0.0f)
+    {
+        xSurface* surf = zSurfaceGetSurface(coll);
+        if (surf && !surf->state)
+        {
+            zSurfaceProps* props = (zSurfaceProps*)surf->moprops;
+            if (props && props->asset)
+            {
+                switch (props->asset->game_damage_type)
+                {
+                case 0:
+                    return 1;
+                case 1:
+                case 2:
+                case 3:
+                case 4:
+                case 5:
+                case 6:
+                    if (props->asset->game_damage_flags & 1)
+                    {
+                        return 0;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    return 1;
+}
+
 static void PlayerBoundUpdate(xEnt* ent, xVec3* pos)
 {
     xEntDefaultBoundUpdate(ent, pos);
@@ -4893,6 +5028,40 @@ void PlayerHitAnimInit(xModelInstance* model, xAnimTransition* tran, U32* index)
     }
 }
 
+static U32 sTrackHash[10][2] = { { 0x5904a48f, 0x5904a498 }, { 0x5904a512, 0x5904a51b },
+                                 { 0x5904a595, 0x5904a59e }, { 0x5904a618, 0x5904a621 },
+                                 { 0x5904a69b, 0x5904a6a4 }, { 0x5904a71e, 0x5904a727 },
+                                 { 0x5904a7a1, 0x5904a7aa }, { 0x5904a824, 0x5904a82d },
+                                 { 0x5904a8a7, 0x5904a8b0 }, { 0x5904a92a, 0x5904a933 } };
+
+U32 zEntPlayer_ObjIDIsTrack(U32 objID)
+{
+    S32 i;
+
+    if (objID == 0xcd8dd617)
+    {
+        return 1;
+    }
+
+    if (objID >= 0x2f948df5 && objID <= 0x2f948dfe)
+    {
+        return 1;
+    }
+
+    if (objID >= 0x5904a48f && objID <= 0x5904a933)
+    {
+        for (i = 0; i < 10; i++)
+        {
+            if (objID >= sTrackHash[i][0] && objID <= sTrackHash[i][1])
+            {
+                return 1;
+            }
+        }
+    }
+
+    return 0;
+}
+
 void zEntPlayerPreReset()
 {
     globals.player.ControlOff = 0;
@@ -4901,6 +5070,109 @@ void zEntPlayerPreReset()
         zEntPlayerControlOff(CONTROL_OWNER_OOB);
         globals.player.ControlOffTimer = 1e38;
     }
+}
+
+static xEnt* PlayerCollCheckOneEnt(xEnt* ent, xScene* sc, void* data);
+static xEnt* PlayerCollCheckOneVillain(xEnt* ent, xScene* sc, void* data);
+static void PlayerCollsSelectDepen(xEnt* ent, xScene* sc, F32 dt);
+
+static void PlayerCollisBuildFromDepen(xCollis* coll)
+{
+    F32 len = xVec3Length(&coll->depen);
+
+    xVec3SMul(&coll->hdng, &coll->depen, -1.0f / len);
+    coll->dist = 0.5f - len;
+    xVec3SMul(&coll->tohit, &coll->hdng, coll->dist);
+}
+
+static void PlayerCollisTranslate(xCollis* coll, F32 x, F32 y, F32 z)
+{
+    if (coll->depen.x != 0.0f || coll->depen.y != 0.0f || coll->depen.z != 0.0f)
+    {
+        F32 dx = coll->tohit.x - x;
+        F32 dy = coll->tohit.y - y;
+        F32 dz = coll->tohit.z - z;
+
+        coll->tohit.x = dx;
+        coll->tohit.y = dy;
+        coll->tohit.z = dz;
+
+        F32 d = xsqrt(dz * dz + (dx * dx + dy * dy));
+        coll->dist = d;
+
+        F32 inv = 1.0f / d;
+
+        coll->hdng.x = dx * inv;
+        coll->hdng.y = dy * inv;
+        coll->hdng.z = dz * inv;
+
+        F32 amt = MIN(0.0f, inv * (d - 0.5f));
+
+        coll->depen.x = dx * amt;
+        coll->depen.y = dy * amt;
+        coll->depen.z = dz * amt;
+    }
+}
+
+static void PlayerCollsAllTranslate(xCollis* colls, F32 x, F32 y, F32 z)
+{
+    xCollis* end = colls + k_XCOLLS_IDX_COUNT;
+    xCollis* c = colls;
+
+    for (; c < end; c++)
+    {
+        if (c->dist < 1e38f)
+        {
+            PlayerCollisTranslate(c, x, y, z);
+        }
+    }
+}
+
+static void PlayerCollsWallsTranslate(xCollis* colls, F32 x, F32 y, F32 z)
+{
+    xCollis* end = colls + k_XCOLLS_IDX_COUNT;
+    xCollis* c = colls + k_XCOLLS_IDX_FRONT;
+
+    for (; c < end; c++)
+    {
+        if (c->dist < 1e38f)
+        {
+            PlayerCollisTranslate(c, x, y, z);
+        }
+    }
+}
+
+static void PlayerCollsWallsTranslate(xCollis* colls, const xVec3* v)
+{
+    PlayerCollsWallsTranslate(colls, v->x, v->y, v->z);
+}
+
+static void PlayerCollsSidesTranslate(xCollis* colls, F32 x, F32 y, F32 z)
+{
+    xCollis* left = &colls[k_XCOLLS_IDX_LEFT];
+    if (left->dist < 1e38f)
+    {
+        PlayerCollisTranslate(left, x, y, z);
+    }
+
+    xCollis* right = &colls[k_XCOLLS_IDX_RIGHT];
+    if (right->dist < 1e38f)
+    {
+        PlayerCollisTranslate(right, x, y, z);
+    }
+}
+
+static void PlayerCollCheckEnv(xEnt* ent, xScene* sc)
+{
+    ent->collis->env_sidx = ent->collis->idx;
+
+    ent->bound.sph.r = 0.65f;
+    iSphereHitsEnv4(&ent->bound.sph, sc->env, (xMat3x3*)ent->frame, ent->collis->colls);
+    ent->bound.sph.r = 0.5f;
+
+    PlayerCollsAllTranslate(ent->collis->colls, 0.0f, 0.0f, 0.0f);
+
+    ent->collis->env_eidx = ent->collis->idx;
 }
 
 F32 ComputeFudge(F32 a, F32 b)
@@ -4914,6 +5186,112 @@ F32 ComputeFudge(F32 a, F32 b)
     }
 
     return MIN(a, 1.0f);
+}
+
+static void CalcCombinedDepen(F32& ox, F32& oy, F32 ax, F32 ay, F32 bx, F32 by, F32 blend)
+{
+    F32 la = xsqrt(ax * ax + ay * ay);
+    F32 lb = xsqrt(bx * bx + by * by);
+
+    if (la < 1e-5f || lb < 1e-5f)
+    {
+        ox = 0.5f * (ax + bx);
+        oy = 0.5f * (ay + by);
+    }
+    else
+    {
+        F32 uax = ax / la;
+        F32 nay = -ay / la;
+        F32 ubx = bx / lb;
+        F32 dot = nay * ubx + uax * (by / lb);
+        F32 say = uax;
+
+        if (dot < 0.0f)
+        {
+            dot = -dot;
+            nay = -nay;
+            say = -uax;
+        }
+
+        if (dot < 0.0001f)
+        {
+            ox = 0.5f * (ax + bx);
+            oy = 0.5f * (ay + by);
+        }
+        else
+        {
+            F32 d = MAX(dot, 0.25f);
+            ox = (lb * nay) / d;
+            oy = (lb * say) / d;
+
+            F32 nby = -by / lb;
+            F32 dot2 = nby * uax + ubx * (ay / la);
+
+            if (dot2 < 0.0f)
+            {
+                dot2 = -dot2;
+                nby = -nby;
+                ubx = -ubx;
+            }
+
+            if (dot2 < 0.0001f)
+            {
+                ox = 0.5f * (ax + bx);
+                oy = 0.5f * (ay + by);
+            }
+
+            dot2 = MAX(dot2, 0.25f);
+            ox = ox + (la * nby) / dot2;
+            oy = oy + (la * ubx) / dot2;
+            ox = ox * blend + 0.5f * (ax + bx) * (1.0f - blend);
+            oy = oy * blend + 0.5f * (ay + by) * (1.0f - blend);
+        }
+    }
+}
+
+void zEntPlayerCollide(xEnt* ent, xScene* sc, F32 dt)
+{
+    cchkButtbounce =
+        globals.player.Health && (ent->model->Anim->Single->State->UserFlags & 0x1e) == 0xe;
+
+    cchkSquish = globals.player.Health &&
+                 (ent->model->Anim->Single->State->UserFlags & 0x1e) == 0xa &&
+                 ent->frame->mat.pos.y < ent->frame->oldmat.pos.y;
+
+    xEntBeginCollide(ent, sc, dt);
+
+    if (ent->collis->chk & XENT_COLLTYPE_ENV)
+    {
+        PlayerCollCheckEnv(ent, sc);
+    }
+
+    if (ent->collis->chk & XENT_COLLTYPE_NPC)
+    {
+        xEntCollCheckNPCsByGrid(ent, sc, PlayerCollCheckOneVillain);
+    }
+
+    if (ent->collis->chk & (XENT_COLLTYPE_STAT | XENT_COLLTYPE_DYN))
+    {
+        xEntCollCheckByGrid(ent, sc, PlayerCollCheckOneEnt);
+    }
+
+    if (ent->collis->chk & 0x2e)
+    {
+        PlayerCollsSelectDepen(ent, sc, dt);
+
+        xCollis* colls = ent->collis->colls;
+        xCollis* it = &colls[k_XCOLLS_IDX_FRONT];
+        xCollis* end = &colls[ent->collis->idx];
+        for (; it < end; it++)
+        {
+            if (it->dist > 0.5f)
+            {
+                it->flags &= ~k_HIT_IT;
+            }
+        }
+    }
+
+    xEntEndCollide(ent, sc, dt);
 }
 
 xVec3* GetPosVec(xBase* base)
@@ -5908,6 +6286,57 @@ void zEntPlayer_SNDStopStream()
 void zEntPlayer_SNDNotifyPlaying(U32 id)
 {
     sCurrentStreamSndID = id;
+}
+
+static void PlayerBeginCollideNoBupdate(xEnt* ent, xScene*, F32)
+{
+    U8 idx;
+    xCollis* coll;
+
+    for (idx = 0; idx < 18; idx++)
+    {
+        coll = &ent->collis->colls[idx];
+
+        coll->flags = 0x1F00;
+        coll->optr = NULL;
+        coll->mptr = NULL;
+        coll->dist = 1e38f;
+    }
+
+    ent->collis->idx = 6;
+    ent->collis->stat_sidx = 6;
+    ent->collis->stat_eidx = 6;
+    ent->collis->dyn_sidx = 6;
+    ent->collis->dyn_eidx = 6;
+    ent->collis->npc_sidx = 6;
+    ent->collis->npc_eidx = 6;
+    ent->collis->env_sidx = 6;
+    ent->collis->env_eidx = 6;
+}
+
+static void PlayerCollsDetect(xEnt* ent, xScene* sc, F32 dt)
+{
+    PlayerBeginCollideNoBupdate(ent, sc, dt);
+
+    if (ent->collis->chk & XENT_COLLTYPE_ENV)
+    {
+        xEntCollCheckEnv(ent, sc);
+    }
+
+    if (ent->collis->chk & XENT_COLLTYPE_NPC)
+    {
+        xEntCollCheckNPCs(ent, sc, PlayerCollCheckOneVillain);
+    }
+
+    if (ent->collis->chk & XENT_COLLTYPE_DYN)
+    {
+        xEntCollCheckDyns(ent, sc, PlayerCollCheckOneEnt);
+    }
+
+    if (ent->collis->chk & XENT_COLLTYPE_STAT)
+    {
+        xEntCollCheckStats(ent, sc, PlayerCollCheckOneEnt);
+    }
 }
 
 static void PlayerHackFixBbashMiss(xModelInstance* model)
@@ -8076,6 +8505,32 @@ void zEntPlayer_UnloadSounds()
 void dont_move(xEnt* ent, xScene* scene, F32 dt, xEntFrame* frame)
 {
     PlayerAbsControl(ent, 0.0, 0.0, dt);
+}
+
+void zEntPlayer_MinimalRender(zEnt* ent)
+{
+    F32 dot = 0.0f;
+
+    if (gReticleTarget)
+    {
+        const xVec3& pos = *(xVec3*)&ent->model->Mat->pos;
+        const xVec3& tpos = *(xVec3*)&gReticleTarget->model->Mat->pos;
+        xVec3 toCam = globals.camera.mat.pos - pos;
+        xVec3 toTarget = tpos - pos;
+
+        dot = toCam.dot(toTarget);
+        if (dot <= 0.0f)
+        {
+            zEntPlayer_ReticleRender(ent);
+        }
+    }
+
+    xEntRender(&globals.player.ent);
+
+    if (dot > 0.0f)
+    {
+        zEntPlayer_ReticleRender(ent);
+    }
 }
 
 S32 zEntPlayerDyingInGoo()
