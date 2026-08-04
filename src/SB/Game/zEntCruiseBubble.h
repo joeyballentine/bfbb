@@ -136,6 +136,8 @@ namespace cruise_bubble
                 F32 radius;
 
                 cb_damage_ent(F32 radius);
+
+                S32 operator()(xEnt&, xGridBound&);
             };
 
             state_missle_explode();
