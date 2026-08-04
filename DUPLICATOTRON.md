@@ -180,6 +180,24 @@ last one is a template with per-type specialisations - `<f,f>` calls
 `zParamGetFloat`, `<i,i>` calls `zParamGetInt`, `<xVec3,i>` calls
 `zParamGetVector` - so it needs explicit specialisations, not one body).
 
+## Running several agents in parallel
+
+Naive parallelism does not work here: every agent running `ninja` in one
+checkout clobbers the others' objects and `report.json`. `solo.py` removes the
+contention - it compiles a single unit into a private temp directory with the
+exact flags from `build.ninja` and diffs that against the target object, ~2s,
+writing no shared state. So N agents can share one checkout as long as:
+
+- each owns a different `.cpp` (+ its own `.h`),
+- nobody runs `ninja`, `configure.py`, or touches git,
+- nobody edits a shared header - they report the change they want instead.
+
+The integrating session runs the real build once at the end.
+
+Note `solo.py` parses `build.ninja`, which has two rule layouts: the source
+file is on the same line as the `build` statement when it fits, on the next
+line when it does not. The parser handles both; if you extend it, keep that.
+
 ## Open leads
 
 - **Epilogue `lwz` swap** (`lwz r31` before `lwz r0`) — checked, it is the sole
