@@ -294,7 +294,7 @@ cflags_renderware = [
     *cflags_base,
     "-lang=c",
     "-fp fmadd",
-    "-fp_contract off",
+    "-fp_contract on",
     "-char signed",
     "-str reuse",
     "-common off",
