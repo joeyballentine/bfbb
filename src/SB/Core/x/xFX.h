@@ -59,6 +59,8 @@ struct xFXRibbon
         F32 scale;
     };
 
+    static tier_queue_allocator joint_alloc;
+
     config cfg;
     bool activated;
     RwRaster* raster;

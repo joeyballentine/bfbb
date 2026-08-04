@@ -205,6 +205,14 @@ template <class T> struct tier_queue
         return alloc->mod_block_size(first) == 0;
     }
 
+    void init(tier_queue_allocator& allocator)
+    {
+        first = 0;
+        _size = 0;
+        wrap_mask = allocator.block_size() * 256 - 1;
+        alloc = &allocator;
+    }
+
     void push_front()
     {
         _size++;

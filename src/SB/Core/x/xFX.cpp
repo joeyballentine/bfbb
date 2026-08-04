@@ -1287,8 +1287,19 @@ void xFXRibbonUpdate(F32 dt)
     }
 }
 
-void xFXRibbon::init(const char*, const char*)
+void xFXRibbon::init(const char* group, const char* name)
 {
+    activated = false;
+    mtime = 0;
+
+    joints.init(joint_alloc);
+
+    if (cfg.life_time <= 0.0f)
+    {
+        set_default_config();
+    }
+
+    debug_init(group, name);
 }
 
 void tier_queue<xFXRibbon::joint_data>::clear()
@@ -1383,18 +1394,33 @@ void xFXRibbon::set_raster(RwRaster* rast)
     ribbons_dirty = true;
 }
 
-void xFXRibbon::set_texture(RwTexture*)
+void xFXRibbon::set_texture(RwTexture* texture)
 {
+    RwRaster* rast = NULL;
+
+    if (texture != NULL)
+    {
+        rast = texture->raster;
+    }
+
+    set_raster(rast);
 }
 
 void xFXRibbon::set_texture(U32 id)
 {
+    RwTexture* texture = NULL;
+
+    if (id != 0)
+    {
+        texture = (RwTexture*)xSTFindAsset(id, NULL);
+    }
+
+    set_texture(texture);
 }
 
 void xFXRibbon::set_texture(const char* name)
 {
-    xStrHash(name);
-    set_texture((U32)name);
+    set_texture(xStrHash(name));
 }
 
 void xFXRibbon::set_curve(const curve_node* curve, size_t size)
