@@ -21,27 +21,30 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now |
 |---|---|---|
-| matched functions | 6491 / 10147 | 6639 / 10147 |
-| fuzzy match | 57.343% | 58.403% |
+| matched functions | 6491 / 10147 | 6777 / 10147 |
+| fuzzy match | 57.343% | 59.125% |
 | complete units | 195 / 543 | 195 / 543 |
 
-## Where the remaining 3636 functions are
+## Where the remaining functions are
 
-Classified with `classify_all.py` (see tooling below):
+Classified with `classify_all.py` (see tooling below). This counts the
+2837 non-matching functions in units objdiff can compare; the project
+total of 3370 also includes units with no diffable object at all.
 
 | class | count | meaning |
 |---|---|---|
-| MISSING | 1483 | not written yet — no symbol in our object |
-| OTHER | 710 | same count, different code |
-| SIZE | 699 | different instruction count — real source difference |
-| POOL | 146 | **identical code**, only anonymous `@NNN` literal/template pool composition differs |
-| SCHED | 29 | identical instruction multiset, different order |
-| REGS | 16 | identical mnemonics, different register numbers |
+| MISSING | 1281 | not written yet — no symbol in our object |
+| OTHER | 735 | same count, different code |
+| SIZE | 626 | different instruction count — real source difference |
+| POOL | 147 | **identical code**, only anonymous `@NNN` literal/template pool composition differs |
+| SCHED | 31 | identical instruction multiset, different order |
+| REGS | 17 | identical mnemonics, different register numbers |
 
 `POOL` functions are byte-identical apart from which anonymous constant they
 reference; objdiff pairs anonymous symbols by ordinal position within a
 section. Biggest clusters: `xFont` (13), `zEntCruiseBubble` (13), `xMath` (9),
-`zNPCGoalRobo` (9), `zNPCTypeBossPlankton` (9). See **Settled** below for why
+`iMath3` (7), `zNPCGoalRobo` (7), `zNPCTypeVillager` (7), `zNPCSupport` (7),
+`zNPCTypeKingJelly` (7), `zNPCSupplement` (7). See **Settled** below for why
 this is not the cheap bucket it looks like.
 
 86 units are within 3 functions of being complete — finishing those is the
@@ -193,6 +196,38 @@ writing no shared state. So N agents can share one checkout as long as:
 - nobody edits a shared header - they report the change they want instead.
 
 The integrating session runs the real build once at the end.
+
+First run of this, six agents on six units, +138 functions verified by a
+clean build:
+
+| unit | non-matching before -> after |
+|---|---|
+| `zNPCTypeBossPlankton` | 105 -> 58 |
+| `zNPCTypeKingJelly` | 93 -> 56 |
+| `zNPCFXCinematic` | 72 -> 51 |
+| `xShadow` | 28 -> 18 |
+| `zNPCTypeBossSB2` | 101 -> 94 |
+| `zEntPlayerBungeeState` | 70 -> 69 |
+
+Two of the six ran out of session mid-edit and left work that did not
+compile; both were salvageable after a few minutes of repair, so a dead
+agent is worth triaging rather than reverting. **Do not trust an agent's
+own claim that a unit is clean** - re-run `solo.py` and `clang-format -n
+--Werror` on its files yourself before committing. One agent reported no
+new formatting violations when it had introduced one.
+
+Things committed from that run that are guesses, not evidence, and should
+be revisited if they ever block something:
+
+- `enum en_npcburst` in `zNPCFXCinematic` is **fabricated**. The mangled
+  name of the function forces *an* enum of that name; the enumerators are
+  invented. No such enum exists anywhere in the repo.
+- `sphere_hits_sphere_xz` returns bare `4`/`2`/`1`; there was surely an
+  enum.
+- `SysEvent` uses `switch ((S32)toEvent)` purely as a shape hack.
+- `ShadowLight` / `ShadowCamera` / `ShadowCameraRaster` are declared
+  `volatile` as a matching device, not because they are.
+- The bone index `21` in Plankton's `aim_gun` is a literal.
 
 Note `solo.py` parses `build.ninja`, which has two rule layouts: the source
 file is on the same line as the `build` statement when it fits, on the next
