@@ -1273,6 +1273,65 @@ void xFXRibbon::init(const char*, const char*)
 
 void tier_queue<xFXRibbon::joint_data>::clear()
 {
+    u32 block = get_block(first);
+    U8 last = wrap_block(block + get_block(_size + alloc->block_size() - 1));
+
+    while (block != last)
+    {
+        alloc->free_block(blocks[block]);
+        block = wrap_block(block + 1);
+    }
+
+    _size = 0;
+    first = 0;
+}
+
+void xFXRibbon::insert(const xVec3& loc, const xVec3& norm, F32 scale, F32 alpha, U32 flags)
+{
+    while (joints.front_full() && !joints.empty())
+    {
+        joints.pop_back();
+    }
+
+    if (!joints.front_full())
+    {
+        joints.push_front();
+
+        joint_data& joint = joints.front();
+
+        joint.flags = flags & 1;
+        joint.loc = loc;
+        joint.norm = norm;
+        joint.born = mtime;
+        joint.scale = scale;
+        joint.alpha = alpha;
+
+        activate();
+    }
+}
+
+void xFXRibbon::insert(const xVec3& loc, F32 orient, F32 scale, F32 alpha, U32 flags)
+{
+    while (joints.front_full() && !joints.empty())
+    {
+        joints.pop_back();
+    }
+
+    if (!joints.front_full())
+    {
+        joints.push_front();
+
+        joint_data& joint = joints.front();
+
+        joint.flags = (flags & 1) | 0x30000;
+        joint.loc = loc;
+        joint.orient = orient;
+        joint.born = mtime;
+        joint.scale = scale;
+        joint.alpha = alpha;
+
+        activate();
+    }
 }
 
 void xFXRibbon::set_default_config()
@@ -1324,14 +1383,6 @@ void xFXRibbon::set_curve(const curve_node* curve, size_t size)
     (this->curve) = ((curve_node*)curve);
     xFXRibbon::debug_update_curve();
     xFXRibbon::update_curve_tweaks();
-}
-
-void xFXRibbon::insert(const xVec3&, const xVec3&, F32, F32, U32)
-{
-}
-
-void xFXRibbon::insert(const xVec3&, F32, F32, F32, U32)
-{
 }
 
 void xFXRibbon::activate()

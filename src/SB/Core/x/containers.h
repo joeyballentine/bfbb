@@ -65,6 +65,7 @@ struct tier_queue_allocator
         return xMemAlloc(gActiveHeap, _block_size * _unit_size, 0);
     }
 
+    U8 alloc_block();
     void free_block(U8 block);
 };
 
@@ -202,6 +203,22 @@ template <class T> struct tier_queue
         }
 
         return alloc->mod_block_size(first) == 0;
+    }
+
+    void push_front()
+    {
+        _size++;
+
+        u32 old_first = first;
+
+        first = wrap_index(first - 1);
+
+        if (alloc->mod_block_size(old_first) == 0)
+        {
+            u32 block = get_block(first);
+
+            blocks[block] = alloc->alloc_block();
+        }
     }
 
     void pop_back()
