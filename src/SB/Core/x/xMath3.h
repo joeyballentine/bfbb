@@ -46,19 +46,6 @@ struct xBox
 {
     xVec3 upper;
     xVec3 lower;
-
-    xBox& operator=(const xBox& rhs)
-    {
-        *(S32*)(&this->upper.x) = *(S32*)(&rhs.upper.x);
-        *(S32*)(&this->upper.y) = *(S32*)(&rhs.upper.y);
-        *(S32*)(&this->upper.z) = *(S32*)(&rhs.upper.z);
-
-        *(S32*)(&this->lower.x) = *(S32*)(&rhs.lower.x);
-        *(S32*)(&this->lower.y) = *(S32*)(&rhs.lower.y);
-        *(S32*)(&this->lower.z) = *(S32*)(&rhs.lower.z);
-
-        return *this;
-    }
 };
 
 struct xBBox
