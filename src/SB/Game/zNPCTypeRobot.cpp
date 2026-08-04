@@ -12,6 +12,13 @@
 #include "xMath.h"
 #include "xAnim.h"
 #include "xBehaviour.h"
+#include "xMathInlines.h"
+#include "xGroup.h"
+#include "zScene.h"
+#include "xLinkAsset.h"
+#include "xutil.h"
+#include "zNPCGoalStd.h"
+#include "zNPCGoalCommon.h"
 
 #include <string.h>
 
@@ -23,6 +30,9 @@ extern S32 g_needuvincr_bzzt;
 extern S32 g_needuvincr_nightlight;
 extern S32 g_needuvincr_slickshield;
 extern S32 cnt_alerthokey__11zNPCFodBzzt;
+extern S32 g_needMusician;
+extern F32 tmr_nexthokey__11zNPCFodBzzt;
+extern RwRaster* rast_discoLight__11zNPCFodBzzt;
 
 extern F32 zNPCRobot_f_0_0;
 extern F32 zNPCRobot_f_1_0;
@@ -1618,6 +1628,9 @@ F32 zNPCRobot::GenShadCacheRad()
     case NPC_TYPE_TUBESLAVE: // 0x4e54523a:
         fac_use = 2.4f;
         break;
+    case NPC_TYPE_SLICK:
+        fac_use = 2.5f;
+        break;
     case NPC_TYPE_ARFDOG: // 0x4e545236:
     case NPC_TYPE_CHUCK: // 0x4e545238:
     case NPC_TYPE_FODDER: // 0x4e54523c:
@@ -1626,9 +1639,6 @@ F32 zNPCRobot::GenShadCacheRad()
     case NPC_TYPE_CHOMPER: // 0x4e54523f:
     case NPC_TYPE_CRITTER: // 0x4e545240:
         fac_use = 1.5f;
-        break;
-    case NPC_TYPE_SLICK:
-        fac_use = 2.5f;
         break;
     default:
         fac_use = 2.0f;
@@ -1883,4 +1893,2129 @@ U8 zNPCRobot::ColChkByFlags() const
 U8 zNPCMonsoon::FoulWeather(F32)
 {
     return 0;
+}
+
+void zNPCArfDog::LassoModelIndex(S32* idxgrab, S32* idxhold)
+{
+    *idxgrab = -1;
+    *idxhold = -1;
+}
+
+void zNPCChomper::LassoModelIndex(S32* idxgrab, S32* idxhold)
+{
+    *idxgrab = -1;
+    *idxhold = -1;
+}
+
+void zNPCCritter::LassoModelIndex(S32* idxgrab, S32* idxhold)
+{
+    *idxgrab = -1;
+    *idxhold = -1;
+}
+
+void zNPCFodBomb::LassoModelIndex(S32* idxgrab, S32* idxhold)
+{
+    *idxgrab = -1;
+    *idxhold = -1;
+}
+
+void zNPCFodBzzt::LassoModelIndex(S32* idxgrab, S32* idxhold)
+{
+    *idxgrab = -1;
+    *idxhold = -1;
+}
+
+void zNPCArfArf::LassoModelIndex(S32* idxgrab, S32* idxhold)
+{
+    *idxgrab = 2;
+    *idxhold = 3;
+}
+
+void zNPCHammer::LassoModelIndex(S32* idxgrab, S32* idxhold)
+{
+    *idxgrab = 1;
+    *idxhold = 2;
+}
+
+void zNPCSleepy::LassoModelIndex(S32* idxgrab, S32* idxhold)
+{
+    *idxgrab = 2;
+    *idxhold = 3;
+}
+
+void zNPCTarTar::LassoModelIndex(S32* idxgrab, S32* idxhold)
+{
+    *idxgrab = 2;
+    *idxhold = 3;
+}
+
+void zNPCMonsoon::LassoModelIndex(S32* idxgrab, S32* idxhold)
+{
+    *idxgrab = 1;
+    *idxhold = 2;
+}
+
+void zNPCTubelet::LassoModelIndex(S32* idxgrab, S32* idxhold)
+{
+    *idxgrab = 2;
+    *idxhold = 3;
+}
+
+void zNPCTubeSlave::LassoModelIndex(S32* idxgrab, S32* idxhold)
+{
+    *idxgrab = 2;
+    *idxhold = 3;
+}
+
+void zNPCChuck::LassoModelIndex(S32* idxgrab, S32* idxhold)
+{
+    *idxgrab = 2;
+    *idxhold = 3;
+}
+
+void zNPCGlove::LassoModelIndex(S32* idxgrab, S32* idxhold)
+{
+    *idxgrab = 1;
+    *idxhold = 2;
+}
+
+TubeNotice::TubeNotice()
+{
+}
+
+S32 zNPCRobot::IsDead()
+{
+    return IsDying() == 1;
+}
+
+void NPCLaser::TextureSet(RwRaster* rast)
+{
+    rast_laser = rast;
+}
+
+RwRaster* NPCLaser::TextureGet()
+{
+    return rast_laser;
+}
+
+void NPCLaser::RadiusSet(F32 rad_start, F32 rad_end)
+{
+    radius[0] = rad_start;
+    radius[1] = rad_end;
+}
+
+void NPCLaser::UVScrollSet(F32 u, F32 v)
+{
+    uv_scroll[0] = u;
+    uv_scroll[1] = v;
+}
+
+void NPCLaser::Prepare()
+{
+    rast_laser = NULL;
+    uv_base[0] = 0.0f;
+    uv_base[1] = 0.0f;
+}
+
+void NPCLaser::UVScrollUpdate(F32 dt)
+{
+    uv_base[0] += dt * uv_scroll[0];
+    while (uv_base[0] > 1.0f)
+    {
+        uv_base[0] -= 1.0f;
+    }
+    while (uv_base[0] < -0.0f)
+    {
+        uv_base[0] += 1.0f;
+    }
+
+    uv_base[1] += dt * uv_scroll[1];
+    while (uv_base[1] > 1.0f)
+    {
+        uv_base[1] -= 1.0f;
+    }
+    while (uv_base[1] < -0.0f)
+    {
+        uv_base[1] += 1.0f;
+    }
+}
+
+F32 RANGEWRAP(F32* val, F32 lo, F32 hi)
+{
+    F32 range = xabs(hi - lo);
+    F32 v = *val;
+
+    while (v > hi)
+    {
+        v -= range;
+    }
+    while (v < lo)
+    {
+        v += range;
+    }
+
+    *val = v;
+    return v;
+}
+
+void zNPCArfDog::RenderExtra()
+{
+    BlinkRender();
+    zNPCCommon::RenderExtra();
+}
+
+void zNPCFodBomb::RenderExtra()
+{
+    BlinkerRender();
+    zNPCCommon::RenderExtra();
+}
+
+void zNPCTubeSlave::RenderExtra()
+{
+    DoLaserRendering();
+    zNPCCommon::RenderExtra();
+}
+
+void zNPCTubeSlave::PartyOn()
+{
+    ModelAtomicShow(0, NULL);
+    ModelAtomicHide(1, NULL);
+    ModelAtomicHide(4, NULL);
+    hitpoints = cfg_npc->pts_damage;
+}
+
+void zNPCTubeSlave::PosStacked(xVec3* pos_stacked)
+{
+    F32 hyt;
+
+    if (tubespot == ROBO_TUBE_MARY)
+    {
+        hyt = 3.0f;
+    }
+    else
+    {
+        hyt = 1.5f;
+    }
+
+    xVec3Copy(pos_stacked, xEntGetPos(tub_pete));
+    pos_stacked->y += hyt;
+}
+
+void zNPCTubelet::PrepTheBand()
+{
+    tubestat = TUBE_STAT_BORN;
+    hitpoints = cfg_npc->pts_damage;
+    ModelAtomicShow(0, NULL);
+    ModelAtomicHide(1, NULL);
+    ModelAtomicHide(4, NULL);
+    tub_paul->WeGotAGig();
+    tub_mary->WeGotAGig();
+}
+
+S32 zNPCTubeSlave::RoboHandleMail(NPCMsg* mail)
+{
+    S32 handled = 0;
+    xPsyche* psy = psy_instinct;
+
+    switch (mail->msgid)
+    {
+    case NPC_MID_DAMAGE:
+        if (hitpoints != 0)
+        {
+            handled = 1;
+            if (!psy->GIDInStack(NPC_GOAL_TUBEBONKED))
+            {
+                psy->GoalPush(NPC_GOAL_TUBEBONKED, 0);
+            }
+        }
+        break;
+    }
+
+    return handled;
+}
+
+U32 zNPCTubelet::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
+{
+    U32 hashid = 0;
+    S32 idx = -1;
+
+    switch (gid)
+    {
+    case NPC_GOAL_ALERTTUBELET:
+    case NPC_GOAL_DEFLATE:
+        idx = 3;
+        break;
+    default:
+        hashid = zNPCRobot::AnimPick(gid, gspot, rawgoal);
+        break;
+    }
+
+    if (idx >= 0)
+    {
+        hashid = g_hash_roboanim[idx];
+    }
+
+    return hashid;
+}
+
+void zNPCMonsoon::Process(xScene* xscn, F32 dt)
+{
+    zNPCRobot::Process(xscn, dt);
+
+    if (psy_instinct != NULL && psy_instinct->GIDInStack(NPC_GOAL_ALERT))
+    {
+        FoulWeather(dt);
+    }
+}
+
+void zNPCChomper::Process(xScene* xscn, F32 dt)
+{
+    if (IsAlive())
+    {
+        S32 gid = psy_instinct->GIDOfActive();
+        if (gid != NPC_GOAL_ATTACKCHOMPER && gid != NPC_GOAL_RESPAWN)
+        {
+            BreathTrail();
+        }
+    }
+
+    zNPCRobot::Process(xscn, dt);
+}
+
+void zNPCSleepy::Reset()
+{
+    zNPCRobot::Reset();
+
+    ModelAtomicShow(0, NULL);
+    ModelAtomicHide(1, NULL);
+    ModelAtomicShow(4, NULL);
+
+    if (rast_killcone == NULL)
+    {
+        rast_killcone = NPCC_FindRWRaster("fx_sleepy_beamodeath");
+    }
+
+    if (rast_detectcone == NULL)
+    {
+        rast_detectcone = NPCC_FindRWRaster("fx_sleepy_nightlight");
+    }
+}
+
+void zNPCArfArf::DuploNotice(en_SM_NOTICES notice, void* data)
+{
+    S32 i;
+
+    switch (notice)
+    {
+    case SM_NOTE_NPCALIVE:
+        for (i = 0; i < 5; i++)
+        {
+            if (pup_kennel[i] == (zNPCArfDog*)data)
+            {
+                flg_puppy[i] &= ~1;
+                return;
+            }
+        }
+        break;
+    case SM_NOTE_NPCSTANDBY:
+        for (i = 0; i < 5; i++)
+        {
+            if (pup_kennel[i] == (zNPCArfDog*)data)
+            {
+                flg_puppy[i] |= 1;
+                return;
+            }
+        }
+        break;
+    }
+}
+
+void NPCArena::SyncHomeFromNav()
+{
+    flg_arena = 0;
+
+    if (nav_arena != NULL)
+    {
+        xVec3Copy(&pos_arena, nav_arena->PosGet());
+        // TODO: should be nav_arena->RadiusArena() - see hand-off notes
+        rad_arena = nav_arena->asset->arenaRadius;
+    }
+    else
+    {
+        xVec3Copy(&pos_arena, &g_O3);
+        rad_arena = -1.0f;
+    }
+}
+
+void NPCArena::SetHome(zNPCCommon* npc, zMovePoint* nav)
+{
+    flg_arena = 0;
+
+    if (nav == NULL)
+    {
+        nav_arena = NULL;
+    }
+    // TODO: should be nav->RadiusArena() - see hand-off notes
+    else if (nav->asset->arenaRadius > 1.0f)
+    {
+        nav_arena = nav;
+    }
+    else
+    {
+        nav_arena = NextBestNav(npc, nav);
+    }
+
+    nav_refer_dest = npc->nav_dest;
+    nav_refer_curr = npc->nav_curr;
+
+    SyncHomeFromNav();
+}
+
+void NPCArena::AdjustHome(zNPCCommon* npc, xVec3* pos, F32 rad)
+{
+    flg_arena |= 2;
+
+    if (pos != NULL)
+    {
+        xVec3Copy(&pos_arena, pos);
+    }
+
+    if (rad > 0.0f)
+    {
+        rad_arena = rad;
+    }
+
+    rad_arena = MAX(1.0f, rad_arena);
+}
+
+F32 NPCArena::DstSqFromHome(xVec3* pos, xVec3* delt)
+{
+    xVec3 dif;
+
+    if (!IsReady())
+    {
+        return -1.0f;
+    }
+
+    xVec3Sub(&dif, pos, &pos_arena);
+
+    if (delt != NULL)
+    {
+        *delt = dif;
+    }
+
+    dif.y = 0.0f;
+
+    return xVec3Length2(&dif);
+}
+
+F32 NPCArena::PctFromHome(xVec3* pos)
+{
+    xVec3 dif;
+
+    if (!IsReady())
+    {
+        return -1.0f;
+    }
+
+    xVec3Sub(&dif, pos, &pos_arena);
+    dif.y = 0.0f;
+
+    return xVec3Length2(&dif) / SQ(rad_arena);
+}
+
+void zNPCArfDog::BlinkUpdate(F32 dt, F32 ratio)
+{
+    blinkHead.Update(dt, ratio, 0.03f, 0.03f);
+    blinkTail.Update(dt, ratio, 0.03f, 0.03f);
+    flg_xtrarend |= 1;
+}
+
+void zNPCFodBomb::BlinkerUpdate(F32 dt, F32 pct_timeRemain)
+{
+    blinker.Update(dt, 1.0f - pct_timeRemain, 0.5f, 0.1f);
+    flg_xtrarend |= 1;
+}
+
+void zNPCRobot::ShowerConfetti(xVec3* pos)
+{
+    xVec3 pos_use = *(pos ? pos : xEntGetCenter(this));
+
+    zNPCRobot_TubeConfetti(&pos_use);
+}
+
+U32 zNPCFodder::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
+{
+    U32 hashid = 0;
+    S32 idx = -1;
+
+    switch (gid)
+    {
+    case NPC_GOAL_IDLE:
+    case NPC_GOAL_ALERT:
+        idx = 1;
+        break;
+    case NPC_GOAL_NOTICE:
+        idx = 4;
+        break;
+    case NPC_GOAL_ALERTFODDER:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 1;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 1;
+        }
+        else if (gspot == NPC_GSPOT_STARTALT)
+        {
+            idx = 3;
+        }
+        else
+        {
+            idx = 1;
+        }
+        break;
+    case NPC_GOAL_ATTACKFODDER:
+        idx = 0xe;
+        break;
+    default:
+        hashid = zNPCRobot::AnimPick(gid, gspot, rawgoal);
+        break;
+    }
+
+    if (idx >= 0)
+    {
+        hashid = g_hash_roboanim[idx];
+    }
+
+    return hashid;
+}
+
+U32 zNPCFodBomb::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
+{
+    U32 hashid = 0;
+    S32 idx = -1;
+
+    switch (gid)
+    {
+    case NPC_GOAL_ALERT:
+    case NPC_GOAL_ALERTFODBOMB:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 1;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 1;
+        }
+        else if (gspot == NPC_GSPOT_STARTALT)
+        {
+            idx = 3;
+        }
+        else
+        {
+            idx = 1;
+        }
+        break;
+    default:
+        hashid = zNPCRobot::AnimPick(gid, gspot, rawgoal);
+        break;
+    }
+
+    if (idx >= 0)
+    {
+        hashid = g_hash_roboanim[idx];
+    }
+
+    return hashid;
+}
+
+U32 zNPCFodBzzt::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
+{
+    U32 hashid = 0;
+    S32 idx = -1;
+
+    switch (gid)
+    {
+    case NPC_GOAL_ALERT:
+    case NPC_GOAL_ALERTFODBZZT:
+        idx = 0xe;
+        break;
+    case NPC_GOAL_HOKEYPOKEY:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 0x22;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 0x23;
+        }
+        else if (gspot == NPC_GSPOT_FINISH)
+        {
+            idx = 0x24;
+        }
+        else
+        {
+            idx = 0x23;
+        }
+        break;
+    default:
+        hashid = zNPCRobot::AnimPick(gid, gspot, rawgoal);
+        break;
+    }
+
+    if (idx >= 0)
+    {
+        hashid = g_hash_roboanim[idx];
+    }
+
+    return hashid;
+}
+
+U32 zNPCChomper::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
+{
+    U32 hashid = 0;
+    S32 idx = -1;
+
+    switch (gid)
+    {
+    case NPC_GOAL_ALERT:
+    case NPC_GOAL_ALERTCHOMPER:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 1;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 1;
+        }
+        else if (gspot == NPC_GSPOT_STARTALT)
+        {
+            idx = 3;
+        }
+        else
+        {
+            idx = 1;
+        }
+        break;
+    case NPC_GOAL_ATTACKCHOMPER:
+        idx = 0xe;
+        break;
+    default:
+        hashid = zNPCRobot::AnimPick(gid, gspot, rawgoal);
+        break;
+    }
+
+    if (idx >= 0)
+    {
+        hashid = g_hash_roboanim[idx];
+    }
+
+    return hashid;
+}
+
+U32 zNPCHammer::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
+{
+    U32 hashid = 0;
+    S32 idx = -1;
+
+    switch (gid)
+    {
+    case NPC_GOAL_ALERT:
+    case NPC_GOAL_ALERTHAMMER:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 3;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 3;
+        }
+        else if (gspot == NPC_GSPOT_STARTALT)
+        {
+            idx = 3;
+        }
+        else
+        {
+            idx = 3;
+        }
+        break;
+    case NPC_GOAL_ATTACKHAMMER:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 0xe;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 0xe;
+        }
+        else if (gspot == NPC_GSPOT_STARTALT)
+        {
+            idx = 0x11;
+        }
+        break;
+    case NPC_GOAL_EVILPAT:
+    case NPC_GOAL_STUNNED:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 9;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 10;
+        }
+        break;
+    case NPC_GOAL_PATCARRY:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 0x18;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 0x19;
+        }
+        break;
+    case NPC_GOAL_PATTHROW:
+        idx = 0x1a;
+        break;
+    default:
+        hashid = zNPCRobot::AnimPick(gid, gspot, rawgoal);
+        break;
+    }
+
+    if (idx >= 0)
+    {
+        hashid = g_hash_roboanim[idx];
+    }
+
+    return hashid;
+}
+
+U32 zNPCTarTar::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
+{
+    U32 hashid = 0;
+    S32 idx = -1;
+
+    switch (gid)
+    {
+    case NPC_GOAL_ALERT:
+    case NPC_GOAL_ALERTTARTAR:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 0xc;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 0xc;
+        }
+        else if (gspot == NPC_GSPOT_STARTALT)
+        {
+            idx = 3;
+        }
+        else
+        {
+            idx = 0xc;
+        }
+        break;
+    case NPC_GOAL_ATTACKTARTAR:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 0x11;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 0xe;
+        }
+        break;
+    default:
+        hashid = zNPCRobot::AnimPick(gid, gspot, rawgoal);
+        break;
+    }
+
+    if (idx >= 0)
+    {
+        hashid = g_hash_roboanim[idx];
+    }
+
+    return hashid;
+}
+
+U32 zNPCGlove::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
+{
+    U32 hashid = 0;
+    S32 idx = -1;
+
+    switch (gid)
+    {
+    case NPC_GOAL_ALERTGLOVE:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 0x11;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 0x12;
+        }
+        else
+        {
+            idx = 0x12;
+        }
+        break;
+    case NPC_GOAL_EVILPAT:
+    case NPC_GOAL_STUNNED:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 9;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 10;
+        }
+        break;
+    case NPC_GOAL_PATCARRY:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 0x18;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 0x19;
+        }
+        break;
+    case NPC_GOAL_PATTHROW:
+        idx = 0x1a;
+        break;
+    default:
+        hashid = zNPCRobot::AnimPick(gid, gspot, rawgoal);
+        break;
+    }
+
+    if (idx >= 0)
+    {
+        hashid = g_hash_roboanim[idx];
+    }
+
+    return hashid;
+}
+
+U32 zNPCMonsoon::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
+{
+    U32 hashid = 0;
+    S32 idx = -1;
+
+    switch (gid)
+    {
+    case NPC_GOAL_ALERT:
+    case NPC_GOAL_ALERTMONSOON:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 0xc;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 0xc;
+        }
+        else if (gspot == NPC_GSPOT_STARTALT)
+        {
+            idx = 0xd;
+        }
+        else
+        {
+            idx = 0xc;
+        }
+        break;
+    case NPC_GOAL_ATTACKMONSOON:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 0x11;
+        }
+        else
+        {
+            idx = 0x12;
+        }
+        break;
+    default:
+        hashid = zNPCRobot::AnimPick(gid, gspot, rawgoal);
+        break;
+    }
+
+    if (idx >= 0)
+    {
+        hashid = g_hash_roboanim[idx];
+    }
+
+    return hashid;
+}
+
+U32 zNPCArfDog::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
+{
+    U32 hashid = 0;
+    S32 idx = -1;
+
+    switch (gid)
+    {
+    case NPC_GOAL_ALERT:
+    case NPC_GOAL_ALERTPUPPY:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 0xc;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 0xc;
+        }
+        else if (gspot == NPC_GSPOT_STARTALT)
+        {
+            idx = 0xd;
+        }
+        else
+        {
+            idx = 0xc;
+        }
+        break;
+    case NPC_GOAL_DOGLAUNCH:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 0x20;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 0x20;
+        }
+        else if (gspot == NPC_GSPOT_STARTALT)
+        {
+            idx = 0x20;
+        }
+        else if (gspot == NPC_GSPOT_FINISH)
+        {
+            idx = 0x21;
+        }
+        else
+        {
+            idx = 0x20;
+        }
+        break;
+    case NPC_GOAL_DOGBARK:
+        idx = 4;
+        break;
+    case NPC_GOAL_DOGDASH:
+        idx = 0xd;
+        break;
+    case NPC_GOAL_DOGPOUNCE:
+        idx = 0x12;
+        break;
+    default:
+        hashid = zNPCRobot::AnimPick(gid, gspot, rawgoal);
+        break;
+    }
+
+    if (idx >= 0)
+    {
+        hashid = g_hash_roboanim[idx];
+    }
+
+    return hashid;
+}
+
+U32 zNPCChuck::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
+{
+    U32 hashid = 0;
+    S32 idx = -1;
+
+    switch (gid)
+    {
+    case NPC_GOAL_ALERTCHUCK:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 0xc;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 0xc;
+        }
+        else if (gspot == NPC_GSPOT_STARTALT)
+        {
+            idx = 0xd;
+        }
+        else
+        {
+            idx = 0xc;
+        }
+        break;
+    case NPC_GOAL_ATTACKCHUCK:
+        idx = 0xe;
+        break;
+    case NPC_GOAL_CHASE:
+        idx = 0xd;
+        break;
+    default:
+        hashid = zNPCRobot::AnimPick(gid, gspot, rawgoal);
+        break;
+    }
+
+    if (idx >= 0)
+    {
+        hashid = g_hash_roboanim[idx];
+    }
+
+    return hashid;
+}
+
+U32 zNPCTubeSlave::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
+{
+    U32 hashid = 0;
+    S32 idx = -1;
+
+    switch (gid)
+    {
+    case NPC_GOAL_TUBEPAL:
+        idx = 1;
+        break;
+    case NPC_GOAL_TUBEDUCKLING:
+        idx = 3;
+        break;
+    case NPC_GOAL_TUBELASSO:
+        idx = 0xe;
+        break;
+    case NPC_GOAL_TUBEBIRTH:
+        idx = 1;
+        break;
+    case NPC_GOAL_TUBEDEAD:
+        idx = 0x25;
+        break;
+    case NPC_GOAL_TUBEATTACK:
+        idx = 3;
+        break;
+    default:
+        hashid = zNPCRobot::AnimPick(gid, gspot, rawgoal);
+        break;
+    }
+
+    if (idx >= 0)
+    {
+        hashid = g_hash_roboanim[idx];
+    }
+
+    return hashid;
+}
+
+S32 zNPCRobot::IsDying()
+{
+    S32 dying = 0;
+    xGoal* goal;
+
+    if (psy_instinct == NULL)
+    {
+        return 0;
+    }
+
+    goal = psy_instinct->GetCurGoal();
+
+    if (goal == NULL)
+    {
+        return 0;
+    }
+
+    switch (goal->GetID())
+    {
+    case NPC_GOAL_DAMAGE:
+    case NPC_GOAL_KNOCK:
+    case NPC_GOAL_R54:
+    case NPC_GOAL_BASHED:
+    case NPC_GOAL_R56:
+        dying = 2;
+        break;
+    case NPC_GOAL_LIMBO:
+    case NPC_GOAL_AFTERLIFE:
+        dying = 1;
+        break;
+    }
+
+    return dying;
+}
+
+void zNPCTubeSlave::SelfSetup()
+{
+    flg_vuln &= 0xfeffffff;
+
+    xBehaveMgr* bmgr = xBehaveMgr_GetSelf();
+    psy_instinct = bmgr->Subscribe(this, 0);
+
+    xPsyche* psy = psy_instinct;
+
+    psy->BrainBegin();
+    psy->AddGoal(NPC_GOAL_TAUNT, NULL);
+    psy->AddGoal(NPC_GOAL_FIDGET, NULL);
+    psy->AddGoal(NPC_GOAL_LIMBO, NULL);
+    psy->AddGoal(NPC_GOAL_TUBEPAL, NULL);
+    psy->AddGoal(NPC_GOAL_TUBEDUCKLING, NULL);
+    psy->AddGoal(NPC_GOAL_TUBEATTACK, NULL);
+    psy->AddGoal(NPC_GOAL_TUBELASSO, NULL);
+    psy->AddGoal(NPC_GOAL_TUBEBIRTH, NULL);
+    psy->AddGoal(NPC_GOAL_TUBEBONKED, NULL);
+    psy->AddGoal(NPC_GOAL_TUBEDYING, NULL);
+    psy->AddGoal(NPC_GOAL_TUBEDEAD, NULL);
+    psy->BrainEnd();
+    psy->SetSafety(NPC_GOAL_TUBEPAL);
+}
+
+void zNPCTubelet::ParseLinks()
+{
+    zNPCCommon::ParseLinks();
+
+    for (S32 i = 0; i < linkCount; i++)
+    {
+        xLinkAsset* lnk = &link[i];
+
+        if (lnk->dstEvent == eEventConnectToChild)
+        {
+            xSceneID2Name(globals.sceneCur, id);
+            xSceneID2Name(globals.sceneCur, lnk->dstAssetID);
+
+            xBase* child = zSceneFindObject(lnk->dstAssetID);
+
+            if (child->baseType == eBaseTypeNPC || child->baseType == eBaseTypeGroup)
+            {
+                ParseChild(child);
+            }
+        }
+    }
+}
+
+void zNPCArfArf::ParseLinks()
+{
+    zNPCCommon::ParseLinks();
+
+    for (S32 i = 0; i < linkCount; i++)
+    {
+        xLinkAsset* lnk = &link[i];
+
+        if (lnk->dstEvent == eEventConnectToChild)
+        {
+            xSceneID2Name(globals.sceneCur, id);
+            xSceneID2Name(globals.sceneCur, lnk->dstAssetID);
+
+            xBase* child = zSceneFindObject(lnk->dstAssetID);
+
+            if (child != NULL &&
+                (child->baseType == eBaseTypeNPC || child->baseType == eBaseTypeGroup))
+            {
+                ParseChild(child);
+            }
+        }
+    }
+}
+
+void zNPCTubelet::ParseChild(xBase* child)
+{
+    if (child->baseType == eBaseTypeNPC)
+    {
+        if (((xNPCBasic*)child)->SelfType() == NPC_TYPE_TUBESLAVE)
+        {
+            S32 spot = ROBO_TUBE_PETE;
+
+            if (tub_paul == NULL)
+            {
+                tub_paul = (zNPCTubeSlave*)child;
+                spot = ROBO_TUBE_PAUL;
+            }
+            else if (tub_mary == NULL)
+            {
+                tub_mary = (zNPCTubeSlave*)child;
+                spot = ROBO_TUBE_MARY;
+            }
+
+            if (spot != ROBO_TUBE_PETE)
+            {
+                xSceneID2Name(globals.sceneCur, id);
+                xSceneID2Name(globals.sceneCur, child->id);
+                ((zNPCTubeSlave*)child)->SetMaster(this, (en_tubespot)spot);
+            }
+        }
+        else
+        {
+            ((xNPCBasic*)child)->SelfType();
+        }
+    }
+    else if (child->baseType == eBaseTypeGroup)
+    {
+        xSceneID2Name(globals.sceneCur, id);
+
+        U32 cnt = xGroupGetCount((xGroup*)child);
+
+        for (S32 i = 0; i < (S32)cnt; i++)
+        {
+            xBase* item = xGroupGetItemPtr((xGroup*)child, i);
+
+            if (item != NULL)
+            {
+                if (item->baseType == eBaseTypeNPC)
+                {
+                    ParseChild(item);
+                }
+                else if (item->baseType == eBaseTypeGroup)
+                {
+                    ParseChild(item);
+                }
+            }
+        }
+    }
+}
+
+void TubeNotice::Notice(en_psynote note, xGoal* goal, void* data)
+{
+    zNPCTubelet* tube = (zNPCTubelet*)npc;
+
+    switch (note)
+    {
+    case PSY_NOTE_HASRESUMED:
+    case PSY_NOTE_HASENTERED:
+        break;
+    default:
+        return;
+    }
+
+    switch (goal->GetID())
+    {
+    case NPC_GOAL_ALERTTUBELET:
+        if (tube->tubestat != TUBE_STAT_LASSO)
+        {
+            tube->tubestat = TUBE_STAT_ATTACK;
+        }
+        return;
+    case NPC_GOAL_DEFLATE:
+    case NPC_GOAL_DAMAGE:
+    case NPC_GOAL_KNOCK:
+        tube->tubestat = TUBE_STAT_DYING;
+        return;
+    case NPC_GOAL_LASSOBASE:
+    case NPC_GOAL_LASSOGRAB:
+    case NPC_GOAL_LASSOTHROW:
+        tube->tubestat = TUBE_STAT_LASSO;
+        return;
+    case NPC_GOAL_AFTERLIFE:
+        tube->tubestat = TUBE_STAT_DEAD;
+        return;
+    case NPC_GOAL_RESPAWN:
+        tube->tubestat = TUBE_STAT_BORN;
+        return;
+    }
+
+    if (tube->tubestat != TUBE_STAT_LASSO)
+    {
+        tube->tubestat = TUBE_STAT_DUCKLING;
+    }
+}
+
+void zNPCTubelet::LassoNotify(en_LASSO_EVENT event)
+{
+    zNPCLassoInfo* lassinfo = lassdata;
+
+    if (IsDead())
+    {
+        return;
+    }
+
+    zNPCRobot::LassoNotify(event);
+
+    switch (event)
+    {
+    case LASS_EVNT_ENDED:
+    case LASS_EVNT_ABORT:
+        break;
+    case LASS_EVNT_BEGIN:
+        tubestat = TUBE_STAT_LASSO;
+        return;
+    }
+
+    if ((lassinfo->stage == LASS_STAT_PENDING || lassinfo->stage == LASS_STAT_DONE) &&
+        tubestat == TUBE_STAT_LASSO && hitpoints >= 1)
+    {
+        PrepTheBand();
+
+        xPsyche* psy = psy_instinct;
+
+        if (psy->GIDInStack(NPC_GOAL_ALERT))
+        {
+            tubestat = TUBE_STAT_ATTACK;
+        }
+        else if (psy->GIDInStack(NPC_GOAL_IDLE))
+        {
+            tubestat = TUBE_STAT_DUCKLING;
+        }
+        else
+        {
+            tubestat = TUBE_STAT_DUCKLING;
+        }
+    }
+}
+
+void zNPCFodder::SelfSetup()
+{
+    zNPCRobot::SelfSetup();
+
+    xPsyche* psy = psy_instinct;
+    xGoal* goal;
+
+    goal = psy->FindGoal(NPC_GOAL_IDLE);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_FIDGET);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WAITING);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_PATROL);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WANDER);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_ALERT);
+    goal->SetCallbacks(NULL, FODR_grul_alert, NULL, NULL);
+
+    psy->BrainExtend();
+    psy->AddGoal(NPC_GOAL_ALERTFODDER, NULL);
+    psy->AddGoal(NPC_GOAL_ATTACKFODDER, NULL);
+    psy->BrainEnd();
+
+    psy->SetSafety(NPC_GOAL_IDLE);
+}
+
+void zNPCFodBomb::SelfSetup()
+{
+    flg_vuln &= 0xfeffffff;
+
+    zNPCRobot::SelfSetup();
+
+    xPsyche* psy = psy_instinct;
+    xGoal* goal;
+
+    goal = psy->FindGoal(NPC_GOAL_IDLE);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_FIDGET);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WAITING);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_PATROL);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WANDER);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_ALERT);
+    goal->SetCallbacks(NULL, BOMB_grul_alert, NULL, NULL);
+
+    psy->BrainExtend();
+    psy->AddGoal(NPC_GOAL_ALERTFODBOMB, NULL);
+    psy->BrainEnd();
+
+    psy->SetSafety(NPC_GOAL_IDLE);
+}
+
+void zNPCFodBzzt::SelfSetup()
+{
+    zNPCRobot::SelfSetup();
+
+    xPsyche* psy = psy_instinct;
+    xGoal* goal;
+
+    goal = psy->FindGoal(NPC_GOAL_IDLE);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_FIDGET);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WAITING);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_PATROL);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WANDER);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_ALERT);
+    goal->SetCallbacks(NULL, BZZT_grul_alert, NULL, NULL);
+
+    psy->BrainExtend();
+    psy->AddGoal(NPC_GOAL_ALERTFODBZZT, NULL);
+    psy->AddGoal(NPC_GOAL_HOKEYPOKEY, NULL);
+    psy->BrainEnd();
+
+    psy->SetSafety(NPC_GOAL_IDLE);
+}
+
+void zNPCChomper::SelfSetup()
+{
+    flg_vuln &= 0xfeffffff;
+
+    zNPCRobot::SelfSetup();
+
+    xPsyche* psy = psy_instinct;
+    xGoal* goal;
+
+    goal = psy->FindGoal(NPC_GOAL_IDLE);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_FIDGET);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WAITING);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_PATROL);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WANDER);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_ALERT);
+    goal->SetCallbacks(NULL, CHMP_grul_alert, NULL, NULL);
+
+    psy->BrainExtend();
+    psy->AddGoal(NPC_GOAL_ALERTCHOMPER, NULL);
+    psy->AddGoal(NPC_GOAL_ATTACKCHOMPER, NULL);
+    psy->BrainEnd();
+
+    psy->SetSafety(NPC_GOAL_IDLE);
+}
+
+void zNPCHammer::SelfSetup()
+{
+    zNPCRobot::SelfSetup();
+
+    xPsyche* psy = psy_instinct;
+    xGoal* goal;
+
+    goal = psy->FindGoal(NPC_GOAL_IDLE);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_FIDGET);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WAITING);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_PATROL);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WANDER);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_ALERT);
+    goal->SetCallbacks(NULL, HAMR_grul_alert, NULL, NULL);
+
+    psy->BrainExtend();
+    psy->AddGoal(NPC_GOAL_ALERTHAMMER, NULL);
+    psy->AddGoal(NPC_GOAL_ATTACKHAMMER, NULL);
+    psy->BrainEnd();
+
+    psy->SetSafety(NPC_GOAL_IDLE);
+}
+
+void zNPCTarTar::SelfSetup()
+{
+    zNPCRobot::SelfSetup();
+
+    xPsyche* psy = psy_instinct;
+    xGoal* goal;
+
+    goal = psy->FindGoal(NPC_GOAL_IDLE);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_FIDGET);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WAITING);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_PATROL);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WANDER);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_ALERT);
+    goal->SetCallbacks(NULL, TART_grul_alert, NULL, NULL);
+
+    psy->BrainExtend();
+    psy->AddGoal(NPC_GOAL_ALERTTARTAR, NULL);
+    psy->AddGoal(NPC_GOAL_ATTACKTARTAR, NULL);
+    psy->AddGoal(NPC_GOAL_WOUND, NULL);
+    psy->BrainEnd();
+
+    psy->SetSafety(NPC_GOAL_IDLE);
+}
+
+void zNPCGlove::SelfSetup()
+{
+    zNPCRobot::SelfSetup();
+
+    xPsyche* psy = psy_instinct;
+    xGoal* goal;
+
+    goal = psy->FindGoal(NPC_GOAL_IDLE);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_FIDGET);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WAITING);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_PATROL);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WANDER);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_ALERT);
+    goal->SetCallbacks(NULL, GLOV_grul_alert, NULL, NULL);
+
+    psy->BrainExtend();
+    psy->AddGoal(NPC_GOAL_ALERTGLOVE, NULL);
+    psy->BrainEnd();
+
+    psy->SetSafety(NPC_GOAL_IDLE);
+}
+
+void zNPCMonsoon::SelfSetup()
+{
+    zNPCRobot::SelfSetup();
+
+    xPsyche* psy = psy_instinct;
+    xGoal* goal;
+
+    goal = psy->FindGoal(NPC_GOAL_IDLE);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_FIDGET);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WAITING);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_PATROL);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WANDER);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_ALERT);
+    goal->SetCallbacks(NULL, MOON_grul_alert, NULL, NULL);
+
+    psy->BrainExtend();
+    psy->AddGoal(NPC_GOAL_ALERTMONSOON, NULL);
+    psy->AddGoal(NPC_GOAL_ATTACKMONSOON, NULL);
+    psy->BrainEnd();
+
+    psy->SetSafety(NPC_GOAL_IDLE);
+}
+
+void zNPCSleepy::SelfSetup()
+{
+    zNPCRobot::SelfSetup();
+
+    xPsyche* psy = psy_instinct;
+    xGoal* goal;
+
+    goal = psy->FindGoal(NPC_GOAL_IDLE);
+    goal->SetCallbacks(SLEP_grul_goAlert, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_FIDGET);
+    goal->SetCallbacks(SLEP_grul_goAlert, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WAITING);
+    goal->SetCallbacks(SLEP_grul_goAlert, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_PATROL);
+    goal->SetCallbacks(SLEP_grul_goAlert, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WANDER);
+    goal->SetCallbacks(SLEP_grul_goAlert, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_ALERT);
+    goal->SetCallbacks(NULL, SLEP_grul_alert, NULL, NULL);
+
+    psy->BrainExtend();
+    psy->AddGoal(NPC_GOAL_ALERTSLEEPY, NULL);
+    psy->AddGoal(NPC_GOAL_WOUND, NULL);
+    psy->BrainEnd();
+
+    psy->SetSafety(NPC_GOAL_IDLE);
+}
+
+void zNPCArfArf::SelfSetup()
+{
+    zNPCRobot::SelfSetup();
+
+    xPsyche* psy = psy_instinct;
+    xGoal* goal;
+
+    goal = psy->FindGoal(NPC_GOAL_IDLE);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_FIDGET);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WAITING);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_PATROL);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WANDER);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_ALERT);
+    goal->SetCallbacks(NULL, ARFY_grul_alert, NULL, NULL);
+
+    psy->BrainExtend();
+    psy->AddGoal(NPC_GOAL_ALERTARF, NULL);
+    psy->AddGoal(NPC_GOAL_ATTACKARF, NULL);
+    psy->AddGoal(NPC_GOAL_ATTACKARFMELEE, NULL);
+    psy->AddGoal(NPC_GOAL_TELEPORT, NULL);
+    psy->AddGoal(NPC_GOAL_WOUND, NULL);
+    psy->BrainEnd();
+
+    psy->SetSafety(NPC_GOAL_IDLE);
+}
+
+void zNPCArfDog::SelfSetup()
+{
+    zNPCRobot::SelfSetup();
+
+    xPsyche* psy = psy_instinct;
+    xGoal* goal;
+
+    goal = psy->FindGoal(NPC_GOAL_IDLE);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_FIDGET);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WAITING);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_PATROL);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WANDER);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_ALERT);
+    goal->SetCallbacks(NULL, PUPY_grul_alert, NULL, NULL);
+
+    psy->BrainExtend();
+    psy->AddGoal(NPC_GOAL_ALERTPUPPY, NULL);
+    psy->AddGoal(NPC_GOAL_DOGLAUNCH, NULL);
+    psy->AddGoal(NPC_GOAL_DOGBARK, NULL);
+    psy->AddGoal(NPC_GOAL_DOGDASH, NULL);
+    psy->AddGoal(NPC_GOAL_DOGPOUNCE, NULL);
+    psy->BrainEnd();
+
+    psy->SetSafety(NPC_GOAL_IDLE);
+}
+
+void zNPCSlick::SelfSetup()
+{
+    zNPCRobot::SelfSetup();
+
+    xPsyche* psy = psy_instinct;
+    xGoal* goal;
+
+    goal = psy->FindGoal(NPC_GOAL_IDLE);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_FIDGET);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WAITING);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_PATROL);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WANDER);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_ALERT);
+    goal->SetCallbacks(NULL, SLCK_grul_alert, NULL, NULL);
+
+    psy->BrainExtend();
+    psy->AddGoal(NPC_GOAL_ALERTSLICK, NULL);
+    psy->AddGoal(NPC_GOAL_ATTACKSLICK, NULL);
+    psy->AddGoal(NPC_GOAL_WOUND, NULL);
+    psy->BrainEnd();
+
+    psy->SetSafety(NPC_GOAL_IDLE);
+}
+
+void zNPCChuck::SelfSetup()
+{
+    zNPCRobot::SelfSetup();
+
+    xPsyche* psy = psy_instinct;
+    xGoal* goal;
+
+    goal = psy->FindGoal(NPC_GOAL_IDLE);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_FIDGET);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WAITING);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_PATROL);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WANDER);
+    goal->SetCallbacks(ROBO_grul_goAlertLobber, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_ALERT);
+    goal->SetCallbacks(NULL, CHUK_grul_alert, NULL, NULL);
+
+    psy->BrainExtend();
+    psy->AddGoal(NPC_GOAL_ALERTCHUCK, NULL);
+    psy->AddGoal(NPC_GOAL_ATTACKCHUCK, NULL);
+    psy->BrainEnd();
+
+    ((zNPCGoalIdle*)psy->FindGoal(NPC_GOAL_IDLE))->flg_idle |= 1;
+    ((zNPCGoalWander*)psy->FindGoal(NPC_GOAL_WANDER))->flg_wand |= 1;
+    ((zNPCGoalWaiting*)psy->FindGoal(NPC_GOAL_WAITING))->flg_waiting |= 1;
+
+    psy->SetSafety(NPC_GOAL_IDLE);
+}
+
+void zNPCTubelet::SelfSetup()
+{
+    zNPCRobot::SelfSetup();
+
+    xPsyche* psy = psy_instinct;
+    xGoal* goal;
+
+    goal = psy->FindGoal(NPC_GOAL_IDLE);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_FIDGET);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WAITING);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_PATROL);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_WANDER);
+    goal->SetCallbacks(ROBO_grul_goAlertMelee, NULL, NULL, NULL);
+    goal = psy->FindGoal(NPC_GOAL_ALERT);
+    goal->SetCallbacks(NULL, TUBE_grul_alert, NULL, NULL);
+
+    psy->SetNotify(&psynote);
+
+    psy->BrainExtend();
+    goal = psy->AddGoal(NPC_GOAL_ALERTTUBELET, NULL);
+    ((zNPCGoalCommon*)goal)->flg_npcgauto |= 8;
+    goal->AddFlags(0x10000);
+    psy->AddGoal(NPC_GOAL_DEFLATE, NULL);
+    psy->BrainEnd();
+
+    psy->SetSafety(NPC_GOAL_IDLE);
+}
+
+zNPCArfDog* zNPCArfArf::AdoptADoggie()
+{
+    zNPCArfDog* pup = NULL;
+    S32 i = 0;
+
+    if (pup_kennel[0] != NULL && (flg_puppy[0] & 1))
+    {
+        pup = pup_kennel[i];
+    }
+    else
+    {
+        i = 1;
+        if (pup_kennel[1] != NULL && (flg_puppy[1] & 1))
+        {
+            pup = pup_kennel[i];
+        }
+        else
+        {
+            i = 2;
+            if (pup_kennel[2] != NULL && (flg_puppy[2] & 1))
+            {
+                pup = pup_kennel[i];
+            }
+            else
+            {
+                i = 3;
+                if (pup_kennel[3] != NULL && (flg_puppy[3] & 1))
+                {
+                    pup = pup_kennel[i];
+                }
+                else
+                {
+                    i = 4;
+                    if (pup_kennel[4] != NULL && (flg_puppy[4] & 1))
+                    {
+                        pup = pup_kennel[i];
+                    }
+                }
+            }
+        }
+    }
+
+    return pup;
+}
+
+S32 NPCArena::NeedToCycle(zNPCCommon* npc)
+{
+    S32 rc;
+
+    if (IsReady() && !IncludesNPC(npc, 0.0f, NULL) && !(flg_arena & 4))
+    {
+        return 2;
+    }
+
+    if (npc->nav_dest != nav_refer_dest || npc->nav_curr != nav_refer_curr)
+    {
+        return 1;
+    }
+
+    if (!IsReady() && !(flg_arena & 4))
+    {
+        rc = 2;
+    }
+    else
+    {
+        rc = 0;
+    }
+
+    return rc;
+}
+
+S32 zNPCRobot::SetCarryState(en_NPC_CARRY_STATE stat)
+{
+    S32 rc = 0;
+
+    if (IsDead())
+    {
+        return 0;
+    }
+
+    xGoal* goal = psy_instinct->GetCurGoal();
+
+    if (goal == NULL)
+    {
+        return 0;
+    }
+
+    switch (stat)
+    {
+    case zNPCCARRY_NONE:
+        if (goal->GetID() == NPC_GOAL_PATTHROW)
+        {
+            psy_instinct->GoalSet(NPC_GOAL_DAMAGE, 0);
+        }
+        else
+        {
+            psy_instinct->GoalSet(NPC_GOAL_DAMAGE, 0);
+        }
+        break;
+    case zNPCCARRY_PICKUP:
+        if (goal->GetID() == NPC_GOAL_STUNNED)
+        {
+            psy_instinct->GoalSwap(NPC_GOAL_PATCARRY, 0);
+            rc = 1;
+        }
+        break;
+    case zNPCCARRY_THROW:
+        if (goal->GetID() == NPC_GOAL_PATCARRY)
+        {
+            psy_instinct->GoalSwap(NPC_GOAL_PATTHROW, 0);
+        }
+        break;
+    case zNPCCARRY_ATTEMPTPICKUP:
+        if ((flg_vuln & 0x20000000) && goal->GetID() == NPC_GOAL_STUNNED)
+        {
+            rc = 1;
+        }
+        break;
+    }
+
+    return rc;
+}
+
+void zNPCArfArf::ParseChild(xBase* child)
+{
+    if (child->baseType == eBaseTypeNPC)
+    {
+        if (((xNPCBasic*)child)->SelfType() == NPC_TYPE_ARFDOG)
+        {
+            S32 i;
+
+            for (i = 0; i < 5; i++)
+            {
+                if (pup_kennel[i] == NULL)
+                {
+                    pup_kennel[i] = (zNPCArfDog*)child;
+                    ((zNPCCommon*)child)->DuploOwner(this);
+                    break;
+                }
+            }
+
+            xSceneID2Name(globals.sceneCur, id);
+            xSceneID2Name(globals.sceneCur, child->id);
+        }
+        else
+        {
+            ((xNPCBasic*)child)->SelfType();
+        }
+    }
+    else if (child->baseType == eBaseTypeGroup)
+    {
+        xSceneID2Name(globals.sceneCur, id);
+
+        U32 cnt = xGroupGetCount((xGroup*)child);
+
+        for (S32 i = 0; i < (S32)cnt; i++)
+        {
+            xBase* item = xGroupGetItemPtr((xGroup*)child, i);
+
+            if (item != NULL)
+            {
+                if (item->baseType == eBaseTypeNPC)
+                {
+                    ParseChild(item);
+                }
+                else if (item->baseType == eBaseTypeGroup)
+                {
+                    ParseChild(item);
+                }
+            }
+        }
+    }
+}
+
+S32 DUMY_grul_returnToIdle(xGoal* goal, void*, en_trantype* trantype, F32, void*)
+{
+    S32 gid = 0;
+
+    if (goal->GetPsyche()->TimerGet(XPSY_TYMR_CURGOAL) > 10.0f)
+    {
+        *trantype = GOAL_TRAN_SWAP;
+        gid = NPC_GOAL_IDLE;
+    }
+
+    return gid;
+}
+
+void zNPCFodder::Stun(F32 stuntime)
+{
+    if (!IsWounded())
+    {
+        xVec3 dir_dmg = { 0.0f, 0.0f, 0.0f };
+
+        xVec3Sub(&dir_dmg, xEntGetPos(this), xEntGetPos(&globals.player.ent));
+        xVec3Normalize(&dir_dmg, &dir_dmg);
+
+        Damage(DMGTYP_SIDE, &globals.player.ent, &dir_dmg);
+    }
+}
+
+void zNPCFodBomb::Stun(F32 stuntime)
+{
+    if (!IsWounded())
+    {
+        xVec3 dir_dmg = { 0.0f, 0.0f, 0.0f };
+
+        xVec3Sub(&dir_dmg, xEntGetPos(this), xEntGetPos(&globals.player.ent));
+        xVec3Normalize(&dir_dmg, &dir_dmg);
+
+        Damage(DMGTYP_SIDE, &globals.player.ent, &dir_dmg);
+    }
+}
+
+void zNPCFodBzzt::Stun(F32 stuntime)
+{
+    if (!IsWounded())
+    {
+        xVec3 dir_dmg = { 0.0f, 0.0f, 0.0f };
+
+        xVec3Sub(&dir_dmg, xEntGetPos(this), xEntGetPos(&globals.player.ent));
+        xVec3Normalize(&dir_dmg, &dir_dmg);
+
+        Damage(DMGTYP_SIDE, &globals.player.ent, &dir_dmg);
+    }
+}
+
+void zNPCChomper::Stun(F32 stuntime)
+{
+    if (!IsWounded())
+    {
+        xVec3 dir_dmg = { 0.0f, 0.0f, 0.0f };
+
+        xVec3Sub(&dir_dmg, xEntGetPos(this), xEntGetPos(&globals.player.ent));
+        xVec3Normalize(&dir_dmg, &dir_dmg);
+
+        Damage(DMGTYP_SIDE, &globals.player.ent, &dir_dmg);
+    }
+}
+
+void zNPCArfDog::Stun(F32 stuntime)
+{
+    if (!IsWounded())
+    {
+        xVec3 dir_dmg = { 0.0f, 0.0f, 0.0f };
+
+        xVec3Sub(&dir_dmg, xEntGetPos(this), xEntGetPos(&globals.player.ent));
+        xVec3Normalize(&dir_dmg, &dir_dmg);
+
+        Damage(DMGTYP_SIDE, &globals.player.ent, &dir_dmg);
+
+        SndPlayRandom(NPC_STYP_OUCH);
+    }
+}
+
+void zNPCFodBzzt::Init(xEntAsset* asset)
+{
+    zNPCRobot::Init(asset);
+
+    flg_move &= 0xfffffffd;
+    flg_move |= 4;
+
+    flg_vuln &= 0x9effffff;
+
+    idx_neckBone = -1;
+
+    laser.Prepare();
+
+    g_cnt_fodbzzt++;
+
+    tmr_hokeypokey = -1.0f;
+    g_needMusician = 0;
+    tmr_nexthokey__11zNPCFodBzzt = -1.0f;
+    rast_discoLight__11zNPCFodBzzt = NULL;
+}
+
+S32 zNPCTubelet::Chk_IsBonked()
+{
+    S32 rc;
+
+    if (tubestat == TUBE_STAT_DYING)
+    {
+        rc = 1;
+    }
+    else if (tubestat == TUBE_STAT_DEAD)
+    {
+        rc = 1;
+    }
+    else
+    {
+        S32 cnt_dead;
+        zNPCTubeSlave* mary;
+
+        bonkSpinRate = 0.0f;
+
+        cnt_dead = (hitpoints == 0);
+
+        if (tub_paul == NULL)
+        {
+            cnt_dead++;
+        }
+        else if (tub_paul->hitpoints == 0)
+        {
+            cnt_dead++;
+        }
+
+        mary = tub_mary;
+
+        if (mary == NULL)
+        {
+            cnt_dead++;
+        }
+        else if (mary->hitpoints == 0)
+        {
+            cnt_dead++;
+        }
+
+        if (cnt_dead == 3)
+        {
+            if (mary != NULL)
+            {
+                mary->hitpoints = 0;
+            }
+
+            if (tub_paul != NULL)
+            {
+                tub_paul->hitpoints = 0;
+            }
+
+            hitpoints = 0;
+            tubestat = TUBE_STAT_DYING;
+        }
+        else if (hitpoints > 0)
+        {
+            Unbonk();
+        }
+
+        rc = (hitpoints == 0);
+    }
+
+    return rc;
+}
+
+U32 zNPCRobot::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
+{
+    S32 idx = -1;
+    U32 hashid = 0;
+
+    switch (gid)
+    {
+    case NPC_GOAL_IDLE:
+    case NPC_GOAL_WAITING:
+    case NPC_GOAL_NOMANLAND:
+    case NPC_GOAL_LIMBO:
+    case NPC_GOAL_ALERT:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 1;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 1;
+        }
+        else
+        {
+            idx = 1;
+        }
+        break;
+    case NPC_GOAL_PATROL:
+        if (gspot == NPC_GSPOT_PATROLPAUSE)
+        {
+            idx = 2;
+            break;
+        }
+    case NPC_GOAL_WANDER:
+    case NPC_GOAL_EVADE:
+    case NPC_GOAL_GOHOME:
+    case NPC_GOAL_CHASE:
+        idx = 3;
+        break;
+    case NPC_GOAL_FIDGET:
+        idx = 2;
+        break;
+    case NPC_GOAL_NOTICE:
+        idx = 4;
+        break;
+    case NPC_GOAL_TAUNT:
+        idx = 5;
+        break;
+    case NPC_GOAL_LASSOBASE:
+    case NPC_GOAL_LASSOGRAB:
+        idx = 7;
+        break;
+    case NPC_GOAL_LASSOTHROW:
+        idx = 0x17;
+        break;
+    case NPC_GOAL_EVILPAT:
+    case NPC_GOAL_STUNNED:
+        if (gspot == NPC_GSPOT_START)
+        {
+            idx = 9;
+        }
+        else if (gspot == NPC_GSPOT_RESUME)
+        {
+            idx = 10;
+        }
+        break;
+    case NPC_GOAL_PATCARRY:
+    case NPC_GOAL_PATTHROW:
+        idx = 10;
+        break;
+    case NPC_GOAL_WOUND:
+        idx = 0x14;
+        break;
+    case NPC_GOAL_KNOCK:
+    {
+        S32 pick;
+
+        if (xrand() & 0x800000)
+        {
+            pick = 0x25;
+        }
+        else
+        {
+            pick = 0x26;
+        }
+
+        idx = pick;
+        break;
+    }
+    case NPC_GOAL_R56:
+        idx = 0x15;
+        break;
+    case NPC_GOAL_BASHED:
+        idx = 0x16;
+        break;
+    case NPC_GOAL_DAMAGE:
+    case NPC_GOAL_R54:
+        idx = 0x25;
+        break;
+    case NPC_GOAL_RESPAWN:
+        idx = 6;
+        break;
+    case NPC_GOAL_AFTERLIFE:
+        idx = 1;
+        break;
+    default:
+        xUtil_idtag2string(gid, 0);
+        idx = 1;
+        break;
+    }
+
+    if (idx >= 0)
+    {
+        hashid = g_hash_roboanim[idx];
+    }
+
+    return hashid;
 }
