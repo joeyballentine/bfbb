@@ -28,7 +28,9 @@ void zAnimListInit()
 {
     // ALST = Animation list https://battlepedia.org/ALST
     nals = xSTAssetCountByType('ALST'); // 0x414C5354
-    if (nals == 0)
+    // The volatile read is a matching device: the original reloads nals here
+    // instead of reusing the just-stored value.
+    if (*(volatile S32*)&nals == 0)
     {
         return;
     }
