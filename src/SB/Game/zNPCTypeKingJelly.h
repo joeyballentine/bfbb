@@ -234,7 +234,6 @@ struct zNPCKingJelly : zNPCSubBoss
     void generate_thump_particles();
     void create_wave_rings();
     void create_ambient_rings();
-    xBinaryCamera bossCam;
 };
 
 struct zNPCGoalKJIdle : zNPCGoalCommon
