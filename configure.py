@@ -893,7 +893,7 @@ config.libs = [
             Object(NonMatching, "MSL_C/MSL_Common/string.c", extra_cflags=["-inline deferred"]),
             Object(NonMatching, "MSL_C/MSL_Common/strtold.c"),
             Object(NonMatching, "MSL_C/MSL_Common/strtoul.c", extra_cflags=["-inline deferred"]),
-            Object(NonMatching, "MSL_C/MSL_Common/float.c"),
+            Object(Matching, "MSL_C/MSL_Common/float.c"),
             Object(NonMatching, "MSL_C/MSL_Common/char_io.c"),
             Object(Matching, "MSL_C/MSL_Common/wchar_io.c"),
             Object(NonMatching, "MSL_C/MSL_Common_Embedded/uart_console_io_gcn.c")
