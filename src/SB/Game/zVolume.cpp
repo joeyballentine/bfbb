@@ -12,7 +12,7 @@ struct PreCalcOcclude
 };
 
 zVolume* vols;
-U16 nvols;
+volatile U16 nvols;
 
 S32 gOccludeCount;
 zVolume* gOccludeList[10];
@@ -33,9 +33,11 @@ void zVolumeInit()
 
     nvols = xSTAssetCountByType('VOLU');
 
-    if (nvols)
+    U32 count = nvols;
+
+    if (count)
     {
-        vols = (zVolume*)xMemAllocSize(nvols * sizeof(zVolume));
+        vols = (zVolume*)xMemAllocSize(count * sizeof(zVolume));
 
         for (i = 0; i < nvols; i++)
         {
@@ -130,7 +132,7 @@ void zVolume_OccludePrecalc(xVec3* camPos)
             depthdot = -depthdot;
         }
 
-        if (iabs(camdot - depthdot) >= 1.0f)
+        if (!(iabs(camdot - depthdot) < 1.0f))
         {
             calc->DepthVec.w = depthdot;
 
