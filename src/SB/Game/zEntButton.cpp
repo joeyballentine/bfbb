@@ -13,8 +13,8 @@
 static F32 sRedMultiplier = 1.0f;
 static F32 sGreenMultiplier = 1.0f;
 static F32 sBlueMultiplier = 1.0f;
-static F32 sColorMultiplier = 1.0f;
-static S32 sColorMultiplierSign = 1;
+static volatile F32 sColorMultiplier = 1.0f;
+static volatile S32 sColorMultiplierSign = 1;
 
 static S32 zEntButtonEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam, xBase* b3);
 
