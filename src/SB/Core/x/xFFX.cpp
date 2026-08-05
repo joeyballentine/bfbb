@@ -19,7 +19,7 @@ void xFFXPoolInit(U32 num_ffx)
 {
     psize = num_ffx;
     pool = (xFFX*)xMemAlloc(gActiveHeap, num_ffx * sizeof(xFFX), 0);
-    pool[0].next = NULL;
+    (*(xFFX* volatile*)&pool)[0].next = NULL;
     for (U32 i = 1; i < psize; i++)
     {
         pool[i].next = &pool[i - 1];
@@ -126,14 +126,11 @@ void xFFXApply(xEnt* ent, xScene* sc, F32 dt)
     }
 }
 
-// regswap
 void xFFXShakeUpdateEnt(xEnt* ent, xScene* sc, F32 dt, void* fdata)
 {
     xFFXShakeState* ss = (xFFXShakeState*)fdata;
     F32 tnext = ss->tmr + dt;
-    F32 mag = xexp(ss->alpha * tnext);
-
-    mag *= isin(ss->freq * tnext);
+    F32 mag = isin(ss->freq * tnext) * xexp(ss->alpha * tnext);
 
     if (ss->tmr == 0.0f)
     {
@@ -163,7 +160,7 @@ void xFFXShakePoolInit(U32 num)
 {
     shake_psize = num;
     shake_pool = (xFFXShakeState*)xMemAlloc(gActiveHeap, num * sizeof(xFFXShakeState), 0);
-    shake_pool->next = NULL;
+    (*(xFFXShakeState* volatile*)&shake_pool)->next = NULL;
     for (S32 i = 1; i < shake_psize; i++)
     {
         shake_pool[i].next = &shake_pool[i - 1];
@@ -195,7 +192,7 @@ void xFFXRotMatchPoolInit(U32 num)
 
     rot_match_pool = (xFFXRotMatchState*)xMemAlloc(gActiveHeap, num * sizeof(xFFXRotMatchState), 0);
 
-    rot_match_pool->next = NULL;
+    (*(xFFXRotMatchState* volatile*)&rot_match_pool)->next = NULL;
     for (U32 i = 1; i < rot_match_psize; ++i)
     {
         rot_match_pool[i].next = &rot_match_pool[i - 1];
