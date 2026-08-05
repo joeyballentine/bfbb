@@ -214,7 +214,7 @@ static void PlayFMV(char* fname, size_t buttons, F32 time)
         if (iTRCDisk::IsDiskIDed())
         {
             Bink = BinkOpen(fname, NULL);
-            if (Bink == NULL)
+            if (*(HBINK volatile*)&Bink == NULL)
             {
                 BinkGetError();
             }
@@ -241,19 +241,19 @@ static void PlayFMV(char* fname, size_t buttons, F32 time)
 
     if (Bink != NULL)
     {
-        if (Bink->Width != 0)
+        if (Bink->NumTracks != 0)
         {
-            for (ip = 0; ip <= Bink->Width; ++ip)
+            for (ip = 0; ip <= Bink->NumTracks; ++ip)
             {
                 vol = gSnd.categoryVolFader[SND_CAT_CUTSCENE];
                 vol = vol * vol;
-                vol = vol * 32768.0f;
+                vol *= 32768.0f;
                 BinkSetVolume(Bink, ip, vol);
             }
         }
 
         Image = Open_RAD_3D_image(NULL, Bink->Width, Bink->Height, fuckingSurfaceType);
-        if (Image != NULL)
+        if (*(HRAD3DIMAGE volatile*)&Image != NULL)
         {
             if (frame_num != 0)
             {
