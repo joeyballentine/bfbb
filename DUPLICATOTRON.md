@@ -23,7 +23,7 @@ is off-limits for upstream PRs.
 |---|---|---|
 | matched functions | 6491 / 10147 | 7294 / 10147 |
 | fuzzy match | 57.343% | 63.426% |
-| complete units | 195 / 543 | 195 / 543 |
+| complete units | 195 / 543 | 219 / 543 |
 
 ## Where the remaining functions are
 
@@ -204,6 +204,31 @@ confirming before anyone builds a strategy on either model.
 
 ## Settled
 
+- **`complete_units` is a `configure.py` marker, and `report.json` cannot
+  tell you when to set it.** A unit reaching 100% in `report.json` does not
+  raise `complete_units`; that number counts `Object(Matching, ...)` entries
+  (`Matching = True`, `NonMatching = False`, `Equivalent = config.non_matching`,
+  configure.py:401). Flipping a marker makes dtk link *our* object instead of
+  the extracted original, so it is only safe when our object would link to
+  the same bytes -- and `report.json` scores things 100% that would not. It
+  called `zDispatcher` 23/23 with 100% matched data while the built object's
+  `.data` was 92 bytes against the target's 96.
+
+  The reliable test is a real link, and it is cheap: the objects are already
+  built, so flipping one marker and running `ninja` costs about nine seconds.
+  `tools/fliptest.py --test` flips each candidate on its own and reports
+  PASS/FAIL; `tools/symorder.py` explains the failures. Do not bisect --
+  test every candidate singly, because the failures are independent.
+
+  The trap worth knowing: **objdiff matches symbols by name, so it is blind to
+  function order**, while the linker lays functions out in definition order.
+  Two units scored a flat 100% on every symbol and still moved the DOL.
+  `abort_exit.c` defined `abort` before `exit` and the target has `exit`
+  first -- swapping the definitions was the entire fix. `mem.c`'s `.text` was
+  the *exact reverse* of ours, which is the `-inline deferred` signature; the
+  earlier whole-tree flag sweep could not have found it, because reversing
+  the order does not move the objdiff percent. It is worth re-checking other
+  units for that signature.
 - **Compiler patch clause C — +41 on its own, and it kills the zThrown float
   meme.** Dispatch entries 1 and 3 (whole object vs subrange, both operand
   orders) only tested "same base object", so a load of a small global or a
@@ -520,6 +545,16 @@ Agents may not edit shared headers, so they report them instead. Outstanding:
   patch.
 - **Ghidra for the MISSING bucket.** 1483 functions have no implementation at
   all; `gh.sh` gives a usable starting point for each.
+- **Six units at 100% still cannot be marked Matching.** `xDebug.cpp`
+  (defines `__deadstripped_xDebug`), `xParSys.cpp` (four `operator=`
+  instantiations the retail link dropped, plus an unreferenced 4-byte
+  `.sbss2` object -- the same problem that pins `ZDSP_elcb_event`),
+  `float.c`, `global_destructor_chain.c`, `__init_cpp_exceptions.cpp` and
+  `ptankgcntransforms.c`. Run `tools/symorder.py` on each for the specific
+  reason. Note that defining a function the retail link deadstripped is *not*
+  automatically fatal -- `mem_funcs.c`, `FILE_POS.C` and `nubevent.c` all do
+  and all link fine once `-inline deferred` puts their functions in the
+  target's order, so check the order before blaming the extra symbol.
 - **`xSFXUpdateEnvironmentalStreamSounds` — the source corrections are known
   and still do not help.** Five errors were proved against the target and the
   control flow was brought to an exact match, yet the best variant scored
