@@ -58,7 +58,6 @@ void ztaskbox::write(xSerial& s)
     s.Write((U8)this->state);
 }
 
-// Equivalent: branching weirdness
 void ztaskbox::start_talk(zNPCCommon* npc)
 {
     ztaskbox* curr = this->current;
@@ -71,22 +70,24 @@ void ztaskbox::start_talk(zNPCCommon* npc)
         }
         else
         {
-            if (this->flag.enabled && this->state != STATE_INVALID)
+            if (!this->flag.enabled || this->state == STATE_INVALID)
             {
-                if (shared != NULL && shared != this)
+                return;
+            }
+
+            if (shared != NULL && shared != this)
+            {
+                shared->stop_talk();
+            }
+            ztalkbox* talkbox = (ztalkbox*)zSceneFindObject(asset->talk_box);
+            if (talkbox != NULL)
+            {
+                const char* text = current->get_text(asset->stages[state]);
+                if (text != NULL)
                 {
-                    shared->stop_talk();
-                }
-                ztalkbox* talkbox = (ztalkbox*)zSceneFindObject(asset->talk_box);
-                if (talkbox != NULL)
-                {
-                    U32 text = current->get_text(asset->stages[state]);
-                    if (text != 0)
-                    {
-                        shared = this;
-                        tcb->reset(*this);
-                        talkbox->start_talk(text, tcb, npc);
-                    }
+                    shared = this;
+                    tcb->reset(*this);
+                    talkbox->start_talk(text, tcb, npc);
                 }
             }
         }
@@ -306,7 +307,7 @@ void ztaskbox::on_talk_stop(ztalkbox::answer_enum answer)
     }
 }
 
-U32 ztaskbox::get_text(U32 textID)
+const char* ztaskbox::get_text(U32 textID)
 {
     U32 id = textID;
     xGroup* group = (xGroup*)zSceneFindObject(textID);
@@ -334,7 +335,7 @@ U32 ztaskbox::get_text(U32 textID)
     else
     {
         // HACK
-        return (U32)asset + 4;
+        return (const char*)asset + 4;
     }
 }
 
