@@ -21,9 +21,9 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now |
 |---|---|---|
-| matched functions | 6491 / 10147 | 7294 / 10147 |
-| fuzzy match | 57.343% | 63.426% |
-| complete units | 195 / 543 | 219 / 543 |
+| matched functions | 6491 / 10147 | 7302 / 10147 |
+| fuzzy match | 57.343% | 63.440% |
+| complete units | 195 / 543 | 222 / 543 |
 
 ## Where the remaining functions are
 
@@ -545,16 +545,37 @@ Agents may not edit shared headers, so they report them instead. Outstanding:
   patch.
 - **Ghidra for the MISSING bucket.** 1483 functions have no implementation at
   all; `gh.sh` gives a usable starting point for each.
-- **Six units at 100% still cannot be marked Matching.** `xDebug.cpp`
-  (defines `__deadstripped_xDebug`), `xParSys.cpp` (four `operator=`
-  instantiations the retail link dropped, plus an unreferenced 4-byte
-  `.sbss2` object -- the same problem that pins `ZDSP_elcb_event`),
-  `float.c`, `global_destructor_chain.c`, `__init_cpp_exceptions.cpp` and
-  `ptankgcntransforms.c`. Run `tools/symorder.py` on each for the specific
-  reason. Note that defining a function the retail link deadstripped is *not*
-  automatically fatal -- `mem_funcs.c`, `FILE_POS.C` and `nubevent.c` all do
-  and all link fine once `-inline deferred` puts their functions in the
-  target's order, so check the order before blaming the extra symbol.
+- **Five units at 100% still cannot be marked Matching.** Run
+  `tools/symorder.py` on each for the specific reason.
+  - `xDebug.cpp` defines `__deadstripped_xDebug`, and `__as__10iColor_tag`
+    sits in the wrong place in `.text`.
+  - `xParSys.cpp` emits four `operator=` instantiations the retail link
+    dropped, plus an unreferenced 4-byte `.sbss2` object -- the same problem
+    that pins `ZDSP_elcb_event`.
+  - `global_destructor_chain.c` and `__init_cpp_exceptions.cpp` put their
+    `_reference` objects in `.sdata2`, where the target has them in `.ctors`
+    and `.dtors`. The sources already carry
+    `__declspec(section ".dtors")` and it is simply not being honoured.
+    `#pragma section`, dropping `const`, and `-sdata 0 -sdata2 0` were all
+    tried: the thresholds move the objects to `.rodata` instead of `.sdata2`
+    but never to `.dtors`, and they also push `fragmentID` out of `.sdata`,
+    so they are the wrong answer. `__init_cpp_exceptions` is 20 bytes of
+    `.text` off besides.
+  - `ptankgcntransforms.c` is missing `_rwConst`/`_rwConstants`/`_rwFifo`.
+
+  Note that defining a function the retail link deadstripped is *not*
+  automatically fatal -- `mem_funcs.c`, `FILE_POS.C`, `nubevent.c` and
+  `float.c` all do and all link fine, so check the order before blaming the
+  extra symbol.
+- **`report.json` marks units complete that are not.** It scored `zSurface`
+  28/28 while `solo.py` had `zSurfaceUpdate` at 99.733% and our object
+  additionally emitted an out-of-line `xVec3::operator=` that the retail
+  link deduplicated away. The link test caught it. This is the same class of
+  artifact that blocks `xModel`: our object carries weak copies of
+  `xAnimFileRawTime` and the `xMat3x3`/`xMat4x3` assignment operators which
+  survive only in `xAnim.o` and `xCamera.o` in the retail link, so dtk's
+  extracted object lacks both them and the `0.5f` literal one of them
+  creates.
 - **`xSFXUpdateEnvironmentalStreamSounds` — the source corrections are known
   and still do not help.** Five errors were proved against the target and the
   control flow was brought to an exact match, yet the best variant scored
