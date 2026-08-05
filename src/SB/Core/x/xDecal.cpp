@@ -215,7 +215,7 @@ void xDecalEmitter::emit(const xMat4x3& mat, const xVec3& scale, S32 texture_ind
 
 namespace
 {
-    void lerp(iColor_tag& out, F32 t, const iColor_tag& a, const iColor_tag& b);
+    void lerp(iColor_tag& out, F32 t, iColor_tag a, iColor_tag b);
     void lerp(U8& out, F32 t, U8 a, U8 b);
     void lerp(F32& out, F32 t, F32 a, F32 b);
 }  // end of anonymous namespace
@@ -305,7 +305,7 @@ void xDecalEmitter::get_render_data(const xDecalEmitter::unit_data& unit, F32 sc
 
     if (this->cfg.flags & 0x2)
     {
-        mat = globals.camera.mat;
+        (xMat3x3&)mat = globals.camera.mat;
 
         mat.right *= scale * unit.mat.right.x;
         mat.up *= scale * unit.mat.right.y;
@@ -329,7 +329,7 @@ void xDecalEmitter::get_render_data(const xDecalEmitter::unit_data& unit, F32 sc
 
 namespace
 {
-    void lerp(iColor_tag& out, F32 t, const iColor_tag& a, const iColor_tag& b)
+    void lerp(iColor_tag& out, F32 t, iColor_tag a, iColor_tag b)
     {
         lerp(out.r, t, a.r, b.r);
         lerp(out.g, t, a.g, b.g);
