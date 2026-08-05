@@ -569,9 +569,10 @@ static S32 zSurfaceEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toPar
     }
     case eEventTextureAnimateToggle:
     {
-        zSurfaceProps* p = (zSurfaceProps*)t->moprops;
-        if (p)
+        if (t->moprops)
         {
+            zSurfaceProps* p = (zSurfaceProps*)t->moprops;
+
             if (toParam[3] == 0.0f)
             {
                 if (p->texanim_flags & SURF_TEXANIM_ON)
