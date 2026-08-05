@@ -14,23 +14,11 @@ static _zLight* sLight[32];
 S32 sLightTotal;
 static _tagPartition sLightPart;
 zVolume* sPartitionVolume;
-S32 gNumTemporaryLights;
-static _zLight* gTemporaryLights[32];
+static volatile S32 gNumTemporaryLights;
+static _zLight* volatile gTemporaryLights[32];
 void (*sEffectFuncs[18])(_zLight*, F32) = {};
 lightInitFunc sEffectInitFuncs[18] = {};
 static xVec3 sDefaultShadowVec = { 0, 1.0f, 0 };
-
-void zLightEffectSet(_zLight* zlight, S32 idx)
-{
-    if (zlight->reg)
-    {
-        zlight->effect_idx = idx;
-        if (sEffectInitFuncs[zlight->effect_idx] != NULL)
-        {
-            sEffectInitFuncs[zlight->effect_idx](zlight);
-        }
-    }
-}
 
 void zLightResetAll(xEnv* env)
 {
@@ -284,6 +272,18 @@ void zLightSetVolume(zVolume* vol)
         if (vol->id == lp_id)
         {
             sPartitionVolume = vol;
+        }
+    }
+}
+
+void zLightEffectSet(_zLight* zlight, S32 idx)
+{
+    if (zlight->reg)
+    {
+        zlight->effect_idx = idx;
+        if (sEffectInitFuncs[zlight->effect_idx] != NULL)
+        {
+            sEffectInitFuncs[zlight->effect_idx](zlight);
         }
     }
 }
