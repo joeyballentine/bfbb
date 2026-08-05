@@ -2,8 +2,8 @@
 
 #include <types.h>
 
-static xSphere* sMgrList;
 static S32 sMgrCount;
+static xSphere* sMgrList;
 static u32 sSimpleCustomCount;
 static xEnt** sSimpleCustomList;
 
@@ -91,7 +91,7 @@ void zEntSimpleObj_MgrInit(zEntSimpleObj** entList, U32 entCount)
                 {
                     temp_r0 = (entCount - 1) - var_r25;
                     var_r25 += 1;
-                    *(temp_r27 + (temp_r0 * 4)) = temp_r3;
+                    temp_r27[temp_r0] = temp_r3;
                     temp_r6_2 = *var_r30;
                     if ((temp_r6_2->driver != NULL) && (temp_r6_2->move == NULL))
                     {
@@ -106,10 +106,10 @@ void zEntSimpleObj_MgrInit(zEntSimpleObj** entList, U32 entCount)
                     var_r26 += 1;
                     temp_r3->baseFlags |= 0x80;
                     *var_r29 = *var_r30;
-                    var_r29 += 4;
+                    var_r29 += 1;
                 }
             }
-            var_r30 += 4;
+            var_r30 += 1;
             var_r28 += 1;
         }
 
@@ -117,58 +117,10 @@ void zEntSimpleObj_MgrInit(zEntSimpleObj** entList, U32 entCount)
         {
             sSimpleCustomCount = var_r25;
             sSimpleCustomList = (xEnt**)xMemAlloc(gActiveHeap, var_r25 * 4, 0);
-            var_r4 = 0;
-            if (var_r25 > 0U)
+            temp_r0_2 = entCount - 1;
+            for (var_r4 = 0; var_r4 < var_r25; var_r4++)
             {
-                temp_r6_3 = var_r25 - 8;
-                if (var_r25 > 8U)
-                {
-                    var_r3 = 0;
-                    temp_r0_2 = entCount - 1;
-                    var_ctr = (u32)(temp_r6_3 + 7) >> 3U;
-                    if (temp_r6_3 > 0U)
-                    {
-                        do
-                        {
-                            *(sSimpleCustomList + var_r3) =
-                                *(temp_r27 + ((temp_r0_2 - var_r4) * 4));
-                            *(sSimpleCustomList + (var_r3 + 4)) =
-                                *(temp_r27 + ((temp_r0_2 - (var_r4 + 1)) * 4));
-                            *(sSimpleCustomList + (var_r3 + 8)) =
-                                *(temp_r27 + ((temp_r0_2 - (var_r4 + 2)) * 4));
-                            temp_r10 = (temp_r0_2 - (var_r4 + 5)) * 4;
-                            temp_r8 = (temp_r0_2 - (var_r4 + 6)) * 4;
-                            temp_r11 = var_r3 + 0x10;
-                            temp_r9 = var_r3 + 0x14;
-                            *(sSimpleCustomList + (var_r3 + 0xC)) =
-                                *(temp_r27 + ((temp_r0_2 - (var_r4 + 3)) * 4));
-                            temp_r7 = var_r3 + 0x18;
-                            temp_r5 = var_r3 + 0x1C;
-                            temp_r6_4 = (temp_r0_2 - (var_r4 + 7)) * 4;
-                            temp_r28 = *(temp_r27 + ((temp_r0_2 - (var_r4 + 4)) * 4));
-                            var_r3 += 0x20;
-                            var_r4 += 8;
-                            *(sSimpleCustomList + temp_r11) = temp_r28;
-                            *(sSimpleCustomList + temp_r9) = *(temp_r27 + temp_r10);
-                            *(sSimpleCustomList + temp_r7) = *(temp_r27 + temp_r8);
-                            *(sSimpleCustomList + temp_r5) = *(temp_r27 + temp_r6_4);
-                            var_ctr -= 1;
-                        } while (var_ctr != 0);
-                    }
-                }
-                var_r6 = var_r4 * 4;
-                var_ctr_2 = var_r25 - var_r4;
-                if (var_r4 < var_r25)
-                {
-                    do
-                    {
-                        temp_r0_3 = ((entCount - 1) - var_r4) * 4;
-                        var_r4 += 1;
-                        *(sSimpleCustomList + var_r6) = *(temp_r27 + temp_r0_3);
-                        var_r6 += 4;
-                        var_ctr_2 -= 1;
-                    } while (var_ctr_2 != 0);
-                }
+                sSimpleCustomList[var_r4] = (xEnt*)temp_r27[temp_r0_2 - var_r4];
             }
         }
         else
@@ -186,109 +138,89 @@ void zEntSimpleObj_MgrInit(zEntSimpleObj** entList, U32 entCount)
         var_r29_2 = temp_r27;
         var_r30_2 = 0U;
         var_r25_2 = sMgrList;
-        // while (var_r30_2 < var_r26)
-        // {
-        //     temp_r24 = (*var_r29_2)->model->Data;
-        //     sp8 = temp_r24->boundingSphere.center.x;
-        //     spC = temp_r24->worldBoundingSphere.center.x;
-        //     sp10 = temp_r24->clump;
-        //     sp14 = temp_r24->inClumpLink;
-        //     temp_r24->unk28 *= 1.1f;
-        //     iModelCull(temp_r24, (*var_r29_2)->model->Mat);
-        //     RwSphereAssign(&temp_r24->boundingSphere, (RwSphere*)&sp8);
-        //     var_r25_2->unk0 = temp_r24->worldBoundingSphere.center.x;
-        //     var_r25_2->unk4 = temp_r24->worldBoundingSphere.center.y;
-        //     var_r25_2->unk8 = temp_r24->worldBoundingSphere.center.z;
-        //     var_r25_2->unkC = temp_r24->worldBoundingSphere.radius;
-        //     temp_r3_3 = zLOD_Get(*var_r29_2);
-        //     if (temp_r3_3 != NULL)
-        //     {
-        //         temp_r4_2 = (*var_r29_2)->model->Mat;
-        //         temp_f2 = temp_r4_2->right.x;
-        //         temp_f1 = temp_r4_2->right.y;
-        //         temp_f3 = temp_r4_2->right.z;
-        //         var_f2 = (temp_f3 * temp_f3) + ((temp_f2 * temp_f2) + (temp_f1 * temp_f1));
-        //         if (var_f2 < 0.0001f)
-        //         {
-        //             var_f2 = 1.0f;
-        //         }
-        //         temp_f1_2 = temp_r3_3->unk14;
-        //         if (temp_f1_2 != 0.0f)
-        //         {
-        //             var_f0 = temp_f1_2 * var_f2;
-        //         }
-        //         else
-        //         {
-        //             var_f0 = 1e38f;
-        //         }
-        //         var_r25_2->unk10 = var_f0;
-        //         temp_f1_3 = temp_r3_3->unk18;
-        //         if (temp_f1_3 != 0.0f)
-        //         {
-        //             var_f0_2 = temp_f1_3 * var_f2;
-        //         }
-        //         else
-        //         {
-        //             var_f0_2 = 1e38f;
-        //         }
-        //         var_r25_2->unk14 = var_f0_2;
-        //         temp_f1_4 = temp_r3_3->unk1C;
-        //         if (temp_f1_4 != 0.0f)
-        //         {
-        //             var_f0_3 = temp_f1_4 * var_f2;
-        //         }
-        //         else
-        //         {
-        //             var_f0_3 = 1e38f;
-        //         }
-        //         var_r25_2->unk18 = var_f0_3;
-        //         temp_f1_5 = temp_r3_3->unk4;
-        //         if (temp_f1_5 != 0.0f)
-        //         {
-        //             var_f0_4 = temp_f1_5 * var_f2;
-        //         }
-        //         else
-        //         {
-        //             var_f0_4 = 1e38f;
-        //         }
-        //         var_r25_2->unk1C = var_f0_4;
-        //         var_r25_2->unk24 = temp_r3_3->unk0;
-        //         var_r25_2->unk28 = temp_r3_3->unk8;
-        //         var_r25_2->unk2C = temp_r3_3->unkC;
-        //         var_r25_2->unk30 = temp_r3_3->unk10;
-        //         if ((u32)var_r25_2->unk28 == 0U)
-        //         {
-        //             var_r25_2->unk10 = 1e38f;
-        //         }
-        //         if ((u32)var_r25_2->unk2C == 0U)
-        //         {
-        //             var_r25_2->unk14 = 1e38f;
-        //         }
-        //         if ((u32)var_r25_2->unk30 == 0U)
-        //         {
-        //             var_r25_2->unk18 = 1e38f;
-        //         }
-        //     }
-        //     else
-        //     {
-        //         var_r25_2->unk10 = 1e38f;
-        //         var_r25_2->unk14 = 1e38f;
-        //         var_r25_2->unk18 = 1e38f;
-        //         var_r25_2->unk1C = 1e38f;
-        //         var_r25_2->unk24 = (*var_r29_2)->unk24->unk34;
-        //         var_r25_2->unk28 = 0U;
-        //         var_r25_2->unk2C = 0U;
-        //         var_r25_2->unk30 = 0U;
-        //     }
-        //     var_r25_2->unk20 = (s16)(*var_r29_2)->unk18;
-        //     var_r25_2->unk34 = (*var_r29_2)->unk24->unk4C;
-        //     var_r25_2->unk38 = *var_r29_2;
-        //     var_r25_2->unk22 = 0xFF;
-        //     xEntUpdate(*var_r29_2, globals.sceneCur, 0.0f);
-        //     var_r25_2 += 0x40;
-        //     var_r29_2 += 4;
-        //     var_r30_2 += 1;
-        // }
+        while (var_r30_2 < var_r26)
+        {
+            RpAtomic* data = (*var_r29_2)->model->Data;
+            RwSphere sph = data->boundingSphere;
+
+            data->boundingSphere.radius *= 1.1f;
+            iModelCull(data, (*var_r29_2)->model->Mat);
+            data->boundingSphere = sph;
+
+            ((F32*)var_r25_2)[0] = data->worldBoundingSphere.center.x;
+            ((F32*)var_r25_2)[1] = data->worldBoundingSphere.center.y;
+            ((F32*)var_r25_2)[2] = data->worldBoundingSphere.center.z;
+            ((F32*)var_r25_2)[3] = data->worldBoundingSphere.radius;
+
+            zLODTable* lod = zLOD_Get(*var_r29_2);
+            if (lod != NULL)
+            {
+                RwMatrixTag* m = (*var_r29_2)->model->Mat;
+                F32 scale = SQR(m->right.x) + SQR(m->right.y) + SQR(m->right.z);
+
+                if (scale < 0.0001f)
+                {
+                    scale = 1.0f;
+                }
+
+                F32 d;
+
+                d = lod->lodDist[0];
+                ((F32*)var_r25_2)[4] = (d != 0.0f) ? d * scale : 1e38f;
+
+                d = lod->lodDist[1];
+                ((F32*)var_r25_2)[5] = (d != 0.0f) ? d * scale : 1e38f;
+
+                d = lod->lodDist[2];
+                ((F32*)var_r25_2)[6] = (d != 0.0f) ? d * scale : 1e38f;
+
+                d = lod->noRenderDist;
+                ((F32*)var_r25_2)[7] = (d != 0.0f) ? d * scale : 1e38f;
+
+                ((void**)var_r25_2)[9] = lod->baseBucket;
+                ((void**)var_r25_2)[10] = lod->lodBucket[0];
+                ((void**)var_r25_2)[11] = lod->lodBucket[1];
+                ((void**)var_r25_2)[12] = lod->lodBucket[2];
+
+                if (((void**)var_r25_2)[10] == NULL)
+                {
+                    ((F32*)var_r25_2)[4] = 1e38f;
+                }
+
+                if (((void**)var_r25_2)[11] == NULL)
+                {
+                    ((F32*)var_r25_2)[5] = 1e38f;
+                }
+
+                if (((void**)var_r25_2)[12] == NULL)
+                {
+                    ((F32*)var_r25_2)[6] = 1e38f;
+                }
+            }
+            else
+            {
+                ((F32*)var_r25_2)[4] = 1e38f;
+                ((F32*)var_r25_2)[5] = 1e38f;
+                ((F32*)var_r25_2)[6] = 1e38f;
+                ((F32*)var_r25_2)[7] = 1e38f;
+
+                ((void**)var_r25_2)[9] = (*var_r29_2)->model->Bucket;
+                ((void**)var_r25_2)[10] = NULL;
+                ((void**)var_r25_2)[11] = NULL;
+                ((void**)var_r25_2)[12] = NULL;
+            }
+
+            ((S16*)var_r25_2)[16] = (*var_r29_2)->flags;
+            ((void**)var_r25_2)[13] = (*var_r29_2)->model->Mat;
+            ((void**)var_r25_2)[14] = *var_r29_2;
+            ((U8*)var_r25_2)[34] = 0xFF;
+
+            xEntUpdate(*var_r29_2, globals.sceneCur, 0.0f);
+
+            var_r25_2 += 4;
+            var_r29_2 += 1;
+            var_r30_2 += 1;
+        }
         RwFree(temp_r27);
     }
 }
@@ -436,16 +368,6 @@ void zEntSimpleObj_MgrCustomRender()
     }
 }
 
-void zEntTrackPhysics_Init(void* ent, void* asset)
-{
-    zEntSimpleObj_Init((zEntSimpleObj*)ent, (xEntAsset*)asset, 1);
-}
-
-void zEntSimpleObj_Init(void* ent, void* asset)
-{
-    zEntSimpleObj_Init((zEntSimpleObj*)ent, (xEntAsset*)asset, 0);
-}
-
 void zEntSimpleObj_Render(xEnt* ent)
 {
     if (ent->model == NULL || xEntIsVisible(ent) == FALSE)
@@ -454,6 +376,16 @@ void zEntSimpleObj_Render(xEnt* ent)
     }
 
     xModelRender(ent->model);
+}
+
+void zEntTrackPhysics_Init(void* ent, void* asset)
+{
+    zEntSimpleObj_Init((zEntSimpleObj*)ent, (xEntAsset*)asset, 1);
+}
+
+void zEntSimpleObj_Init(void* ent, void* asset)
+{
+    zEntSimpleObj_Init((zEntSimpleObj*)ent, (xEntAsset*)asset, 0);
 }
 
 void zEntSimpleObj_Init(zEntSimpleObj* ent, xEntAsset* asset, bool arg2)
@@ -553,21 +485,6 @@ void zEntSimpleObj_Move(xEnt*, xScene*, F32, xEntFrame*)
 {
 }
 
-void zEntSimpleObj_Setup(zEntSimpleObj* arg0)
-{
-    zEntSetup((zEnt*)arg0);
-}
-
-void zEntSimpleObj_Save(zEntSimpleObj* arg0, xSerial* arg1)
-{
-    zEntSave((zEnt*)arg0, arg1);
-}
-
-void zEntSimpleObj_Load(zEntSimpleObj* arg0, xSerial* arg1)
-{
-    zEntLoad((zEnt*)arg0, arg1);
-}
-
 void zEntSimpleObj_Update(zEntSimpleObj* ent, xScene* scene, float dt)
 {
     void* temp_r3;
@@ -599,6 +516,21 @@ void zEntSimpleObj_Update(zEntSimpleObj* ent, xScene* scene, float dt)
             iModelAnimMatrices(temp_r3_2->Data, temp_r31, temp_r30, temp_r3_2->Mat + 0x1);
         }
     }
+}
+
+void zEntSimpleObj_Setup(zEntSimpleObj* arg0)
+{
+    zEntSetup((zEnt*)arg0);
+}
+
+void zEntSimpleObj_Save(zEntSimpleObj* arg0, xSerial* arg1)
+{
+    zEntSave((zEnt*)arg0, arg1);
+}
+
+void zEntSimpleObj_Load(zEntSimpleObj* arg0, xSerial* arg1)
+{
+    zEntLoad((zEnt*)arg0, arg1);
 }
 
 void zEntSimpleObj_Reset(zEntSimpleObj* ent, xScene* scene)
