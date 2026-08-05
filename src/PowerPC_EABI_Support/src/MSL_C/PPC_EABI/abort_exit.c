@@ -14,27 +14,6 @@ int __aborting;
 
 static void (*__atexit_funcs[64])(void);
 
-void abort(void)
-{
-    raise(1);
-    __aborting = 1;
-    __begin_critical_region(atexit_funcs_access);
-
-    while (__atexit_curr_func > 0)
-        __atexit_funcs[--__atexit_curr_func]();
-
-    __end_critical_region(atexit_funcs_access);
-    __kill_critical_regions();
-
-    if (__console_exit != NULL)
-    {
-        __console_exit();
-        __console_exit = NULL;
-    }
-
-    _ExitProcess();
-}
-
 void exit(int status)
 {
     int i;
@@ -61,6 +40,27 @@ void exit(int status)
     }
 
     __begin_critical_region(atexit_funcs_access);
+    while (__atexit_curr_func > 0)
+        __atexit_funcs[--__atexit_curr_func]();
+
+    __end_critical_region(atexit_funcs_access);
+    __kill_critical_regions();
+
+    if (__console_exit != NULL)
+    {
+        __console_exit();
+        __console_exit = NULL;
+    }
+
+    _ExitProcess();
+}
+
+void abort(void)
+{
+    raise(1);
+    __aborting = 1;
+    __begin_critical_region(atexit_funcs_access);
+
     while (__atexit_curr_func > 0)
         __atexit_funcs[--__atexit_curr_func]();
 
