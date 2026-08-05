@@ -212,38 +212,6 @@ void xPadNormalizeAnalog(_tagxPad& pad, S32 inner_zone, S32 outer_zone)
     }
 }
 
-void xPadAnalogIsDigital(S32 idx, S32 enable)
-{
-    if (idx != 0)
-        return;
-
-    _tagxPad* pad = &mPad[idx];
-
-    if (enable)
-    {
-        pad->flags |= 0x10;
-    }
-    else
-    {
-        pad->flags &= ~0x10;
-    }
-
-    if (pad->al2d_timer >= 0.35f)
-    {
-        pad->al2d_timer = 0.35f;
-    }
-
-    if (pad->ar2d_timer >= 0.35f)
-    {
-        pad->ar2d_timer = 0.35f;
-    }
-
-    if (pad->d_timer >= 0.35f)
-    {
-        pad->d_timer = 0.35f;
-    }
-}
-
 void xPadKill()
 {
     iPadKill();
@@ -338,4 +306,70 @@ S32 xPadAddRumble(S32 idx, _tagRumbleType type, F32 time, S32 replace, U32 fxfla
         iPadStartRumble(pad, r);
     }
     return 1;
+}
+
+void xPadAnalogIsDigital(S32 idx, S32 enable)
+{
+    if (idx != 0)
+        return;
+
+    _tagxPad* pad = &mPad[idx];
+
+    if (enable)
+    {
+        pad->flags |= 0x10;
+    }
+    else
+    {
+        pad->flags &= ~0x10;
+    }
+
+    if (pad->al2d_timer >= 0.35f)
+    {
+        pad->al2d_timer = 0.35f;
+    }
+
+    if (pad->ar2d_timer >= 0.35f)
+    {
+        pad->ar2d_timer = 0.35f;
+    }
+
+    if (pad->d_timer >= 0.35f)
+    {
+        pad->d_timer = 0.35f;
+    }
+}
+
+inline F32 xVec2::length() const
+{
+    return xsqrt(length2());
+}
+
+inline F32 normalize_analog(S32 v, S32 v_min, S32 v_max, S32 dead_center, S32 dead_min,
+                            S32 dead_max)
+{
+    if (v <= dead_center)
+    {
+        if (v >= dead_min)
+        {
+            return 0.0f;
+        }
+        if (v <= v_min)
+        {
+            return -1.0f;
+        }
+        return (F32)(v - dead_min) / (F32)(dead_min - v_min);
+    }
+    else
+    {
+        if (v <= dead_max)
+        {
+            return 0.0f;
+        }
+        if (v >= v_max)
+        {
+            return 1.0f;
+        }
+        return (F32)(v - dead_max) / (F32)(v_max - dead_max);
+    }
 }
