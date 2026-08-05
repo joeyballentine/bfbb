@@ -255,8 +255,10 @@ S32 iFileReadAsync(tag_xFile* file, void* buf, U32 aSize, void (*callback)(tag_x
     {
         if (file_queue[i].stat != IFILE_RDSTAT_QUEUED && file_queue[i].stat != IFILE_RDSTAT_INPROG)
         {
+            S32 asynckey;
             S32 id = fopcount++ << 2;
-            S32 asynckey = id + i;
+
+            asynckey = id + i;
 
             file_queue[i].file = file;
             file_queue[i].buf = buf;
@@ -274,7 +276,7 @@ S32 iFileReadAsync(tag_xFile* file, void* buf, U32 aSize, void (*callback)(tag_x
 
             ps->asynckey = asynckey;
 
-            return id + i;
+            return i + id;
         }
     }
 
