@@ -4,7 +4,24 @@
 #include "xDebug.h"
 
 #include <PowerPC_EABI_Support/MSL_C++/MSL_Common/Include/new.h>
+#include <math.h>
 #include <types.h>
+
+// NOTE: these two belong in headers (std::fmodf in <math.h>, xfmod in
+// xMathInlines.h). They are inline, so the compiler emits a weak out-of-line
+// copy into every translation unit that calls them.
+namespace std
+{
+    extern inline float fmodf(float x, float y)
+    {
+        return ::fmod(x, y);
+    }
+}
+
+inline F32 xfmod(F32 a, F32 b)
+{
+    return std::fmodf(a, b);
+}
 
 namespace xhud
 {
