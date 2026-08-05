@@ -45,7 +45,7 @@ carry the same clause because the same shape occurs when one side is a whole
 object and the other a subrange of one -- zGameExtras_NewGameReset stores an
 SDA static and five members of a large global, and lands on entry 1.
 
-Clause C -- clause A for static storage; entries 1 and 3, checked first:
+Clause C -- clause A for static storage; all three entries, checked first:
 
     both memrefs carry a base expression whose first word is exactly 5
         (an object node with no storage flags: globals, SDA scalars and
@@ -53,7 +53,15 @@ Clause C -- clause A for static storage; entries 1 and 3, checked first:
         and are excluded)
     and sizeof(A) <= 4 and sizeof(B) <= 4
     and opcode(A) != opcode(B)
-    and both instructions are plain loads/stores (flags & ~0x6 == 0)
+    and both instructions are plain loads/stores (flags & ~0x86 == 0)
+
+The 0x80 bit in that mask is volatility: a volatile access sets it, so the
+plain-load/store test of clauses A and B rejects every volatile reference.
+That is why zMenu, whose timers are `static volatile F32`, kept hoisting a
+literal load across a store to a different small static even with clause C
+installed -- the instructions never reached the clause. Tolerating the bit is
+only safe behind the static-storage gate; widening entry 0's clause A the same
+way pins volatile frame locals and measures -4.
 
 Clause C is what fixes zThrown_Setup and its family: retail keeps a load of a
 small global or float literal on its source-order side of a store to a
@@ -71,6 +79,20 @@ reading, but it was not derived from the retail compiler. The differing-opcode
 condition in clause A is likewise fitted, and clause C is clause A plus a
 fitted storage-class gate. Extending clause B to entries 1 and 3
 adds no new condition -- it is the same predicate on two more dispatch cases.
+
+Do not refit the obvious next clause. A directional rule -- an `stfs` to a
+declared frame local may not be crossed by a *later* small static load, on
+entry 3 only -- looks compelling, because four otherwise-finished functions
+reduce to exactly that motion. It measures +22 functions to 100% against 18
+functions whose match percent drops, one of them (xFont's get_texture_size)
+from 100%. The gain and loss populations are indistinguishable in every field
+the predicate can see: same opcodes, same sizes, overlapping offsets, same
+storage classes, same base-expression words. What separates them is ready-time
+and pick-order context -- whether the stored slots are reloaded in the same
+block, whether the literal feeds arithmetic or a store -- none of which the
+alias predicate is given. stfs-only, the declared-local gate, entry-3-only,
+offset thresholds and a literal-only static side were all measured; none
+separates them.
 
 The predicate is assembled into the run of zero padding at the tail of .text:
 the section declares VirtualSize 0x17da4c but occupies 0x17dc00 bytes on disk,
@@ -99,7 +121,7 @@ BASE_VERSION = "GC/2.0p1"
 PATCHED_VERSION = "GC/2.0p1a"
 
 BASE_SHA1 = "74bc177b10d1bbe8a60a21a6c0aa86d2dd9c0668"
-PATCHED_SHA1 = "a271f6535e44790bac3a8772f73c7d7e7fe38814"
+PATCHED_SHA1 = "7d3ff244fb371e3b15b0becd41ac04b627869ae8"
 
 # Narrow may-alias predicate, assembled at VA 0x57ea50.
 CAVE_OFFSET = 0x17DE50
@@ -117,17 +139,24 @@ CAVE_BYTES = bytes.fromhex(
     "3b5a100f94c383e301e90d36f9ff"
 )
 
-# Clause C for entries 1 and 3, assembled at VA 0x57eb30, immediately after
-# the first cave block. Anything it rejects falls through (rel32 jump) to the
-# clause-B handler at 0x57eabf, which ends in the stock same-base-object test.
-CAVE2_OFFSET = 0x17DF30
+# Clause C, assembled at VA 0x57eb00, immediately after the first cave block:
+# the entries 1/3 copy first, falling through (rel32 jump) to the clause-B
+# handler at 0x57eabf, then the entry 0 copy at 0x57eb52, falling through to
+# the shipped entry-0 handler at 0x57ea50. Both copies end in the stock test
+# for their entry.
+CAVE2_OFFSET = 0x17DF00
 CAVE2_BYTES = bytes.fromhex(
     "8b481085c9744683390575418b4a1085"
     "c9743a83390575358b481883f904772d"
     "8b4a1883f9047725668b4e20663b4d20"
-    "741b8b4e14f7c1f9ffffff75108b4d14"
-    "f7c1f9ffffff7505e90435f9ffe93dff"
-    "ffff"
+    "741b8b4e14f7c179ffffff75108b4d14"
+    "f7c179ffffff7505e93435f9ffe96dff"
+    "ffff8b481085c9744683390575418b4a"
+    "1085c9743a83390575358b481883f904"
+    "772d8b4a1883f9047725668b4e20663b"
+    "4d20741b8b4e14f7c179ffffff75108b"
+    "4d14f7c179ffffff7505e9e234f9ffe9"
+    "acfeffff"
 )
 
 # Entries of the dispatch table at VA 0x5bd0bc that get redirected, as
@@ -137,9 +166,9 @@ CAVE2_BYTES = bytes.fromhex(
 # measured at -199 exact functions; even gated to static storage it loses 21).
 DISPATCH_OFFSET = 0x1BA6BC
 DISPATCH = (
-    (0, 0x00511FF2, 0x0057EA50),  # stock: cmp eax,edx; sete bl  (ref identity)
-    (1, 0x00511FFF, 0x0057EB30),  # stock: same base object
-    (3, 0x00511FFF, 0x0057EB30),
+    (0, 0x00511FF2, 0x0057EB52),  # stock: cmp eax,edx; sete bl  (ref identity)
+    (1, 0x00511FFF, 0x0057EB00),  # stock: same base object
+    (3, 0x00511FFF, 0x0057EB00),
 )
 
 
