@@ -341,7 +341,7 @@ static void jsp_shadow_hack(xJSPHeader* header)
         return;
     }
 
-    jsp_shadow_hack_atomic_context context = { NULL, 0, -1 };
+    jsp_shadow_hack_atomic_context context = { header, 0, -1 };
     RpClumpForAllAtomics(header->clump, jsp_shadow_hack_atomic_cb, &context);
 }
 
