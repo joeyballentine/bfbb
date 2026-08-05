@@ -44,14 +44,15 @@ static void zGustSetup(zGust* g)
     g->fx_volume = (zVolume*)zSceneFindObject(g->asset->effectID);
 }
 
-// NOTE(jelly): equivalent, reloading global variable meme
 void zGustInit()
 {
     ngusts = xSTAssetCountByType('GUST');
 
-    if (ngusts)
+    U32 n = *(volatile U16*)&ngusts;
+
+    if (n)
     {
-        gusts = (zGust*)xMemAllocSize(sizeof(zGust) * ngusts);
+        gusts = (zGust*)xMemAllocSize(sizeof(zGust) * n);
         for (U16 i = 0; i < ngusts; i++)
         {
             U32 size;
@@ -109,10 +110,10 @@ zGust* zGustGetGust(U16 n)
 // NOTE(jelly): non-matching
 void zGustUpdateEnt(xEnt* ent, xScene* sc, float dt, void* gdata)
 {
-    zGustData* data = (zGustData*)gdata;
-
     if (!gusts)
         return;
+
+    zGustData* data = (zGustData*)gdata;
 
     xCollis coll;
     coll.flags = 0;
