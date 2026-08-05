@@ -13,28 +13,18 @@ void xhud::font_meter_widget::load(xBase& data, xDynAsset& asset, u32 size_t)
     //     xhud::font_meter_widget(*(xhud::font_meter_asset*)&data); // TODO: proper size value
 }
 
-xhud::font_meter_widget::font_meter_widget(xhud::font_meter_asset& init) : meter_widget(init)
+static const basic_rect<F32> screen_bounds = { 0.0f, 0.0f, 1.0f, 1.0f };
+
+xhud::font_meter_widget::font_meter_widget(const xhud::font_meter_asset& init)
+    : meter_widget(init), font(init.font), start_font(init.font)
 {
-    basic_rect<F32> screen_bounds;
-
-    this->font.id = init.font.id;
-    this->font.justify = init.font.justify;
-    this->start_font.id = init.font.id;
-    this->start_font.justify = init.font.justify;
-
-    // No assembly for this operator but bytewise is too many instructions
-    this->font.c = init.font.c;
-    this->start_font.c = init.font.c;
-    this->font.drop_c = init.font.drop_c;
-    this->start_font.drop_c = init.font.drop_c;
-
     this->last_value = ((S32)(this->value)) - 20;
     this->xf.id = 0;
     this->xf.width = this->font.w;
     this->xf.height = this->font.h;
     this->xf.space = this->font.space;
 
-    this->xf.color = this->font.c;
+    this->xf.color = *(iColor_tag*)&this->font.c;
     this->xf.clip = screen_bounds;
 }
 
@@ -48,10 +38,10 @@ void xhud::font_meter_widget::destroy()
     this->destruct();
 }
 
-U32 xhud::font_meter_widget::type()
+U32 xhud::font_meter_widget::type() const
 {
-    static S8 init;
     static U32 myid;
+    static S8 init;
 
     if (init == 0)
     {
@@ -61,13 +51,13 @@ U32 xhud::font_meter_widget::type()
     return myid;
 }
 
-U8 xhud::font_meter_widget::is(U32 id)
+bool xhud::font_meter_widget::is(U32 id) const
 {
-    U8 val = 0;
+    bool val = false;
 
-    if ((id == this->type()) || (((xhud::meter_widget*)this->is(id)) != 0))
+    if (id == xhud::font_meter_widget::type() || xhud::meter_widget::is(id))
     {
-        val = 1;
+        val = true;
     }
     return val;
 }
@@ -180,4 +170,13 @@ void xhud::font_meter_widget::render()
 char* xhud::font_meter_asset::type_name()
 {
     return "hud:meter:font";
+}
+
+// NOTE: this belongs in xFont.h. It is inline, so the compiler emits a weak
+// out-of-line copy into every translation unit that calls it.
+inline void xfont::render(const char* text, F32 x, F32 y) const
+{
+    start_render();
+    irender(text, x, y);
+    stop_render();
 }

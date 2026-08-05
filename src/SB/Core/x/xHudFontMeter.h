@@ -41,11 +41,11 @@ namespace xhud
         xfont xf; // 0x128
 
         static void load(xBase& data, xDynAsset& asset, size_t);
-        font_meter_widget(xhud::font_meter_asset& init);
+        font_meter_widget(const xhud::font_meter_asset& init);
         void destruct();
         void destroy();
-        U32 type();
-        U8 is(U32 id);
+        U32 type() const;
+        bool is(U32 id) const;
         void update(F32 dt);
         void render();
 
