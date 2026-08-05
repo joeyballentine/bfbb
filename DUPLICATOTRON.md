@@ -520,3 +520,27 @@ Agents may not edit shared headers, so they report them instead. Outstanding:
   patch.
 - **Ghidra for the MISSING bucket.** 1483 functions have no implementation at
   all; `gh.sh` gives a usable starting point for each.
+- **`xSFXUpdateEnvironmentalStreamSounds` — the source corrections are known
+  and still do not help.** Five errors were proved against the target and the
+  control flow was brought to an exact match, yet the best variant scored
+  69.8% against a 72.883% baseline, so the file was left alone. The
+  corrections, for whoever tries again: `break` -> `continue` on the
+  `dist > cachedOuterDistSquared` test; `s_managedEnvSFX[0] = NULL` rather
+  than assigning through `->id` (the target stores through the array's own
+  address); `bestDist2[k] > dist` rather than `dist > *bestDist2`;
+  `bestSFX[k] == NULL` rather than comparing the array address; and the tail
+  calls `xSFXPlay(best)` on both paths. The blocker is that the target
+  indexes all three arrays with a *variable* (`li`/`slwi`/`stwx`) while every
+  source shape tried -- S32/U32/S8/register/const index, declared early or
+  late, literal-load plus variable-store, volatile -- makes mwcc fold the
+  index and hoist `&arr[k]` into callee-saved registers, costing ~10
+  instructions and adding an `stmw` prologue. Eight variants measured, all
+  65-70%.
+- **An unreferenced 4-byte zero object in `.sbss2` blocks
+  `ZDSP_elcb_event` at 99.984%.** One relocation index is off by one because
+  our object carries an extra anonymous `@148` ahead of the `iColor_tag
+  clear` constant. Its id is low, so it is created during header parsing, and
+  it survives commenting out every removable `#include` -- it comes from the
+  mandatory `zDispatcher.h`/`zGlobals.h` chain and cannot be reached from the
+  .cpp. This is the same unsolved problem as the POOL bucket: what creates a
+  literal before its first `.text` use.
