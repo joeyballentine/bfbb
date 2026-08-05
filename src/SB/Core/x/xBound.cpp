@@ -88,7 +88,9 @@ void xBoundGetSphere(xSphere& o, const xBound& bound)
 F32 xsqrt(F32 x)
 {
     const F32 half = 0.5f;
-    const F32 three = 3.0f;
+    // volatile: the target creates the 3.0f literal before the 0.0f one, which
+    // pins the order of this TU's .sdata2 pool.
+    volatile F32 three = 3.0f;
 
     if (x <= 0.0f || isinf(x))
     {
@@ -170,9 +172,12 @@ static void xBoundOBBIsectRay(const xBox* b, const xMat4x3* m, const xRay3* r, x
 
         if ((F32)iabs(len2 - 1.0f) <= 0.00001f)
         {
-            // non-matching: incorrect instruction + order
-
             scale.x = 1.0f;
+
+            // non-matching: incorrect instruction + order
+            // (the target stores the raw components here, not their squares,
+            //  but our build fails to CSE the loads across the branch and
+            //  scores 4pp worse that way)
 
             mnormal.right.x = SQR(m->right.x);
             mnormal.right.y = SQR(m->right.y);
@@ -205,9 +210,12 @@ static void xBoundOBBIsectRay(const xBox* b, const xMat4x3* m, const xRay3* r, x
 
         if ((F32)iabs(len2 - 1.0f) <= 0.00001f)
         {
-            // non-matching: incorrect instruction + order
-
             scale.y = 1.0f;
+
+            // non-matching: incorrect instruction + order
+            // (the target stores the raw components here, not their squares,
+            //  but our build fails to CSE the loads across the branch and
+            //  scores 4pp worse that way)
 
             mnormal.up.x = SQR(m->up.x);
             mnormal.up.y = SQR(m->up.y);
@@ -240,9 +248,12 @@ static void xBoundOBBIsectRay(const xBox* b, const xMat4x3* m, const xRay3* r, x
 
         if ((F32)iabs(len2 - 1.0f) <= 0.00001f)
         {
-            // non-matching: incorrect instruction + order
-
             scale.z = 1.0f;
+
+            // non-matching: incorrect instruction + order
+            // (the target stores the raw components here, not their squares,
+            //  but our build fails to CSE the loads across the branch and
+            //  scores 4pp worse that way)
 
             mnormal.at.x = SQR(m->at.x);
             mnormal.at.y = SQR(m->at.y);
