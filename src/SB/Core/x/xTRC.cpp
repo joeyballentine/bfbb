@@ -141,3 +141,30 @@ void RenderText(const char* text, bool enabled)
         render_fill_rect(tb.font.clip, xColorFromRGBA(0, 0, 0, 0xC8));
     }
 }
+
+// NOTE: these belong in xFont.h. They are inline, so the compiler emits a weak
+// out-of-line copy into every translation unit that calls them.
+inline F32 xtextbox::yextent(bool cache) const
+{
+    return yextent(temp_layout(cache), 0, -1);
+}
+
+inline F32 xtextbox::yextent(const layout& l, S32 begin_jot, S32 end_jot) const
+{
+    S32 size;
+
+    return yextent(1e38f, size, l, begin_jot, end_jot);
+}
+
+// NOTE: these belong in xMath2.h. They are template members, so the compiler
+// emits a weak out-of-line copy into every translation unit that instantiates
+// them.
+template <class T> basic_rect<T>& basic_rect<T>::contract(T s)
+{
+    return expand(-s);
+}
+
+template <class T> basic_rect<T>& basic_rect<T>::expand(T s)
+{
+    return expand(s, s, s, s);
+}
