@@ -150,14 +150,14 @@ void iPadRumbleFx(_tagxPad* p, _tagxRumble* r, F32 time_passed)
 {
 }
 
-void iPadStopRumble()
+void iPadStopRumble(_tagxPad* pad)
 {
-    _tagxPad* pad = &mPad[globals.currentActivePad];
     PADControlMotor(pad->port, 0);
 }
 
-void iPadStopRumble(_tagxPad* pad)
+void iPadStopRumble()
 {
+    _tagxPad* pad = &mPad[globals.currentActivePad];
     PADControlMotor(pad->port, 0);
 }
 
