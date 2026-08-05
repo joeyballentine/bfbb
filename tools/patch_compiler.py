@@ -45,10 +45,31 @@ carry the same clause because the same shape occurs when one side is a whole
 object and the other a subrange of one -- zGameExtras_NewGameReset stores an
 SDA static and five members of a large global, and lands on entry 1.
 
+Clause C -- clause A for static storage; entries 1 and 3, checked first:
+
+    both memrefs carry a base expression whose first word is exactly 5
+        (an object node with no storage flags: globals, SDA scalars and
+        literal-pool entries qualify; frame/stack objects carry 0x00010005
+        and are excluded)
+    and sizeof(A) <= 4 and sizeof(B) <= 4
+    and opcode(A) != opcode(B)
+    and both instructions are plain loads/stores (flags & ~0x6 == 0)
+
+Clause C is what fixes zThrown_Setup and its family: retail keeps a load of a
+small global or float literal on its source-order side of a store to a
+different small global (stock entries 1/3 only test for the same base object,
+so the load hoists). The static-storage gate is what makes it safe: without
+it, the same predicate also pins integer-conversion stack traffic
+(stw-to-frame-slot vs lfd-of-magic-double) and costs 50 currently-exact
+functions; with it the whole tree shows +41 exact functions and no losses.
+The frame-object encoding of the gate (base-expr word 0x00010005 vs
+0x00000005) was read out of a live compile with the query logger.
+
 The object-link and computed-address conditions are fitted: they separate named
 objects from spill slots and computed-address locals, which is a coherent
 reading, but it was not derived from the retail compiler. The differing-opcode
-condition in clause A is likewise fitted. Extending clause B to entries 1 and 3
+condition in clause A is likewise fitted, and clause C is clause A plus a
+fitted storage-class gate. Extending clause B to entries 1 and 3
 adds no new condition -- it is the same predicate on two more dispatch cases.
 
 The predicate is assembled into the run of zero padding at the tail of .text:
@@ -78,7 +99,7 @@ BASE_VERSION = "GC/2.0p1"
 PATCHED_VERSION = "GC/2.0p1a"
 
 BASE_SHA1 = "74bc177b10d1bbe8a60a21a6c0aa86d2dd9c0668"
-PATCHED_SHA1 = "013ab2321c5db77b862c513926e8b50014648dee"
+PATCHED_SHA1 = "a271f6535e44790bac3a8772f73c7d7e7fe38814"
 
 # Narrow may-alias predicate, assembled at VA 0x57ea50.
 CAVE_OFFSET = 0x17DE50
@@ -96,15 +117,29 @@ CAVE_BYTES = bytes.fromhex(
     "3b5a100f94c383e301e90d36f9ff"
 )
 
+# Clause C for entries 1 and 3, assembled at VA 0x57eb30, immediately after
+# the first cave block. Anything it rejects falls through (rel32 jump) to the
+# clause-B handler at 0x57eabf, which ends in the stock same-base-object test.
+CAVE2_OFFSET = 0x17DF30
+CAVE2_BYTES = bytes.fromhex(
+    "8b481085c9744683390575418b4a1085"
+    "c9743a83390575358b481883f904772d"
+    "8b4a1883f9047725668b4e20663b4d20"
+    "741b8b4e14f7c1f9ffffff75108b4d14"
+    "f7c1f9ffffff7505e90435f9ffe93dff"
+    "ffff"
+)
+
 # Entries of the dispatch table at VA 0x5bd0bc that get redirected, as
 # (index, expected stock handler, replacement). Entry 0 is whole-object vs
 # whole-object; entries 1 and 3 are whole-object vs subrange, in both operand
-# orders. Cases 2 and 4-8 are left alone.
+# orders. Cases 2 and 4-8 are left alone (extending clause B to entry 4 was
+# measured at -199 exact functions; even gated to static storage it loses 21).
 DISPATCH_OFFSET = 0x1BA6BC
 DISPATCH = (
     (0, 0x00511FF2, 0x0057EA50),  # stock: cmp eax,edx; sete bl  (ref identity)
-    (1, 0x00511FFF, 0x0057EABF),  # stock: same base object
-    (3, 0x00511FFF, 0x0057EABF),
+    (1, 0x00511FFF, 0x0057EB30),  # stock: same base object
+    (3, 0x00511FFF, 0x0057EB30),
 )
 
 
@@ -141,9 +176,10 @@ def patch_compiler(compilers: Path) -> bool:
 
     data = bytearray(src.read_bytes())
 
-    if any(data[CAVE_OFFSET:CAVE_OFFSET + len(CAVE_BYTES)]):
-        sys.exit(f"{src}: padding at {CAVE_OFFSET:#x} is not zero, refusing to overwrite")
-    data[CAVE_OFFSET:CAVE_OFFSET + len(CAVE_BYTES)] = CAVE_BYTES
+    for off, blob in ((CAVE_OFFSET, CAVE_BYTES), (CAVE2_OFFSET, CAVE2_BYTES)):
+        if any(data[off:off + len(blob)]):
+            sys.exit(f"{src}: padding at {off:#x} is not zero, refusing to overwrite")
+        data[off:off + len(blob)] = blob
 
     for index, stock, replacement in DISPATCH:
         offset = DISPATCH_OFFSET + 4 * index
