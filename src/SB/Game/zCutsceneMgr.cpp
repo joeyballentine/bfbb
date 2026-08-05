@@ -300,15 +300,14 @@ void zCutsceneMgrFinishLoad(xBase* to)
         iTRCDisk::CheckDVDAndResetState();
         if (t->csn->Ready)
         {
-            break;
+            zCutsceneMgrPlayStart(t);
+            zEntEvent(to, to, 0x18);
+            zEntEvent(&globals.player.ent, 8);
+            zEntEvent(&globals.player.ent, 4);
+            return;
         }
         iVSync();
     }
-    zCutsceneMgrPlayStart(t);
-    zEntEvent(to, to, 0x18);
-    zEntEvent(&globals.player.ent, 8);
-    zEntEvent(&globals.player.ent, 4);
-    return;
 }
 
 void zCutsceneMgrFinishExit(xBase* to)
@@ -320,24 +319,26 @@ void zCutsceneMgrFinishExit(xBase* to)
         iFileAsyncService();
         xSndUpdate();
         if (t->csn->Waiting == 0)
-            break;
+        {
+            if (donpcfx != 0)
+            {
+                zNPCFXCutsceneDone(globals.sceneCur, 0.0f, t);
+            }
+            donpcfx = 0;
+            if (xCutscene_Destroy(t->csn) == 0)
+            {
+                return;
+            }
+
+            zEntEvent(&globals.player.ent, 9);
+            zEntEvent(&globals.player.ent, 3);
+            zCutsceneMgrKillFX(t);
+            t->csn = NULL;
+            globals.cmgr = NULL;
+            return;
+        }
         iVSync();
     }
-    if (donpcfx != 0)
-    {
-        zNPCFXCutsceneDone(globals.sceneCur, 0.0f, t);
-    }
-    donpcfx = 0;
-    if (xCutscene_Destroy(t->csn) == 0)
-    {
-        return;
-    }
-
-    zEntEvent(&globals.player.ent, 9);
-    zEntEvent(&globals.player.ent, 3);
-    zCutsceneMgrKillFX(t);
-    t->csn = NULL;
-    globals.cmgr = NULL;
 }
 
 void zCutsceneMgrKillFX(zCutsceneMgr* t)
