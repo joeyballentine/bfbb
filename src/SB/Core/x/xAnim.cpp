@@ -361,10 +361,13 @@ void xAnimTempTransitionInit(U32 count)
 }
 
 #ifndef INLINE
-float atan2f(float y, float x)
+namespace std
 {
-    return (float)atan2((double)y, (double)x);
-}
+    extern inline float atan2f(float y, float x)
+    {
+        return (float)atan2((double)y, (double)x);
+    }
+} // namespace std
 #endif
 
 // TODO: move to xMathInlines.h
@@ -684,10 +687,13 @@ void xAnimFileEval(xAnimFile* data, F32 time, F32* bilinear, U32 flags, xVec3* t
 }
 
 #ifndef INLINE
-float floorf(float x)
+namespace std
 {
-    return (float)floor((double)x);
-}
+    extern inline float floorf(float x)
+    {
+        return (float)floor((double)x);
+    }
+} // namespace std
 #endif
 
 xAnimEffect* xAnimStateNewEffect(xAnimState* state, U32 flags, F32 startTime, F32 endTime,
