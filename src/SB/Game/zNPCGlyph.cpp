@@ -80,9 +80,9 @@ void zNPCGlyph_ScenePrepare()
             }
         }
 
-        for (i = 0; i < cnt; i++)
+        for (S32 j = 0; j < cnt; j++)
         {
-            NPCGlyph* glyph = &glist[i];
+            NPCGlyph* glyph = &glist[j];
             glyph->Init(gtyp, model_data);
         }
     }
