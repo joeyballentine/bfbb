@@ -216,6 +216,14 @@ confirming before anyone builds a strategy on either model.
   from, and it shifted every later `.sbss2` operand by four bytes in about
   140 units. Fixed in commit 134129c2.
 
+  **But the shape is not wrong everywhere -- measure, do not pattern-match.**
+  The only two other instances in the tree, `zNPCTypeDutchman.h`'s
+  `xVec2 facing = {0,0}` and `xLaserBolt.h`'s `xVec3 temp = {0,0,0}`, are
+  both correct: removing them costs `xLaserBolt` a matched function and drops
+  `zNPCTypeDutchman`'s fuzzy. In those two the original really did write an
+  aggregate initialiser; in `xGrid.h` it did not. Both were measured on a
+  full build and reverted.
+
   This is the general answer to "what creates a literal before its first
   `.text` use", and it is worth checking other headers for the same shape
   before assuming a pool ordering is unreachable. `iMath3` and `iScrFX` are
