@@ -196,7 +196,8 @@ void xParEmitterReset(xParEmitter* t)
     t->emit_flags = t->tasset->emit_flags;
 }
 
-S32 xParEmitterEventCB(xBase* to, xBase* from, U32 toEvent, F32* toParam, xBase* toParamWidget)
+S32 xParEmitterEventCB(xBase* to, xBase* from, U32 toEvent, const F32* toParam,
+                       xBase* toParamWidget)
 {
     xParEmitterCustomSettings sp8;
 
@@ -206,12 +207,12 @@ S32 xParEmitterEventCB(xBase* to, xBase* from, U32 toEvent, F32* toParam, xBase*
         xParEmitterReset((xParEmitter*)from);
         break;
     case eEventOn:
-        *(U8*)(toEvent + 0x30) |= 1;
+        ((xParEmitter*)from)->emit_flags |= 1;
         break;
     case eEventOff:
-        if (*(U8*)(toEvent + 0x30) & 1)
+        if (((xParEmitter*)from)->emit_flags & 1)
         {
-            *(U8*)(toEvent + 0x30) = *(U8*)(toEvent + 0x30) ^ 1;
+            ((xParEmitter*)from)->emit_flags ^= 1;
         }
         break;
     case eEventEmit:
@@ -391,9 +392,8 @@ F32 xParInterpCompute(S32 interp_mode, xParInterp* r, F32 time, S32 time_has_ela
     return val;
 }
 
-xPar* xParEmitterEmitSetTexIdxs(xPar* p, xParSys* ps)
+xPar* xParEmitterEmitSetTexIdxs(xPar* p, const xParSys* ps)
 {
-    U8 ps_birthMode;
     xParCmdTex* ps_cmdTex;
 
     ps_cmdTex = ps->group->m_cmdTex;
@@ -401,29 +401,24 @@ xPar* xParEmitterEmitSetTexIdxs(xPar* p, xParSys* ps)
     {
         return NULL;
     }
-    ps_birthMode = ps_cmdTex->birthMode;
-    if ((S32)ps_birthMode != 1)
+
+    switch ((S32)ps_cmdTex->birthMode)
     {
-        if ((S32)ps_birthMode < 1)
-        {
-            if ((S32)ps_birthMode < 0)
-            {
-            }
-            else
-            {
-                p->m_texIdx[0] = 0;
-                p->m_texIdx[1] = 0;
-            }
-        }
-        else if ((S32)ps_birthMode < 7)
-        {
-        }
-    }
-    else
-    {
+    case 1:
         p->m_texIdx[0] = (xrand() >> 0x11U) % ps_cmdTex->cols;
         p->m_texIdx[1] = (xrand() >> 0x11U) % ps_cmdTex->rows;
+        break;
+    case 0:
+    case 2:
+    case 3:
+    case 4:
+    case 5:
+    case 6:
+        p->m_texIdx[0] = 0;
+        p->m_texIdx[1] = 0;
+        break;
     }
+
     return p;
 }
 
@@ -671,6 +666,7 @@ xPar* xParEmitterEmit(xParEmitter* pe, F32 emit_dt, F32 par_dt)
                                                 last_p = (xPar*)&last_p->m_prev;
                                             }
                                             p->m_pos = emitPosition;
+                                            // The cast is only needed because
                                             xParEmitterEmitSetTexIdxs(p, ps);
                                             switch (pea->emit_type)
                                             {
