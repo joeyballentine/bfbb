@@ -23,19 +23,15 @@ char* g_strz_glyphmodel[10] = {
 };
 S32 g_cnt_activeGlyphs[10] = {};
 
-// FIXME: The first element of each of these needs to be constructed with `NPCGlyph(NPC_GLYPH_UNKNOWN)`,
-// rather than the default constructor. Get that working, and you should be good on sinit.
-// This is technically equivalent, since everything is initialized to zero anyway, and NPC_GLYPH_UNKNOWN
-// equals zero.
-static NPCGlyph g_glyphs_talk[8] = {};
-static NPCGlyph g_glyphs_talkOther[8] = {};
-static NPCGlyph g_glyphs_friend[1] = {};
-static NPCGlyph g_glyphs_dazed[8] = {};
-static NPCGlyph g_glyphs_shinyOne[16] = {};
-static NPCGlyph g_glyphs_shinyFive[16] = {};
-static NPCGlyph g_glyphs_shinyTen[16] = {};
-static NPCGlyph g_glyphs_shinyFifty[16] = {};
-static NPCGlyph g_glyphs_shinyHundred[16] = {};
+static NPCGlyph g_glyphs_talk[8] = { NPC_GLYPH_UNKNOWN };
+static NPCGlyph g_glyphs_talkOther[8] = { NPC_GLYPH_UNKNOWN };
+static NPCGlyph g_glyphs_friend[1] = { NPC_GLYPH_UNKNOWN };
+static NPCGlyph g_glyphs_dazed[8] = { NPC_GLYPH_UNKNOWN };
+static NPCGlyph g_glyphs_shinyOne[16] = { NPC_GLYPH_UNKNOWN };
+static NPCGlyph g_glyphs_shinyFive[16] = { NPC_GLYPH_UNKNOWN };
+static NPCGlyph g_glyphs_shinyTen[16] = { NPC_GLYPH_UNKNOWN };
+static NPCGlyph g_glyphs_shinyFifty[16] = { NPC_GLYPH_UNKNOWN };
+static NPCGlyph g_glyphs_shinyHundred[16] = { NPC_GLYPH_UNKNOWN };
 
 // This function is put here to force the string to be linked in, since it isn't used anywhere.
 char* __deadstripped_zNPCGlyph()
