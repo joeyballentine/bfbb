@@ -14,7 +14,7 @@
 #define MAX_MAPPER 1
 
 static zSurfaceProps* zsps;
-static S32 sMapperCount;
+static volatile S32 sMapperCount;
 static zMaterialMapAsset* sMapper[MAX_MAPPER] = {};
 static xSurface sDef_surf;
 static zSurfaceProps sDef_surf_props;
@@ -123,8 +123,9 @@ void zSurfaceRegisterMapper(U32 assetId)
     if (sMapperCount >= MAX_MAPPER) return;
     if (!assetId) return;
 
-    sMapper[sMapperCount] = (zMaterialMapAsset*)xSTFindAsset(assetId, NULL);
-    if (sMapper[sMapperCount]) {
+    zMaterialMapAsset* mapper = (zMaterialMapAsset*)xSTFindAsset(assetId, NULL);
+    sMapper[sMapperCount] = mapper;
+    if (mapper) {
         sMapperCount++;
     }
 }
