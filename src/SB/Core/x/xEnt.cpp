@@ -1373,19 +1373,17 @@ static void xEntCollCheckOneGrid(xEnt* p, xScene* sc, xEnt* (*hitIt)(xEnt*, xSce
         cell = xGridIterNextCell(it);
     }
 
-    // non-matching: float scheduling
+    F32 clcenterz = (grid->csizez * 0.5f);
+    F32 clcenterx = (grid->csizex * 0.5f);
 
-    F32 halfsizez = (grid->csizez * 0.5f);
-    F32 halfsizex = (grid->csizex * 0.5f);
+    F32 cellx = grid->csizex * px;
+    F32 cellz = grid->csizez * pz;
 
-    F32 clcenterx = grid->csizex * px;
-    F32 clcenterz = grid->csizez * pz;
+    cellx += grid->minx;
+    cellz += grid->minz;
 
-    clcenterx += grid->minx;
-    clcenterx += halfsizex;
-
-    clcenterz += halfsizez;
-    clcenterz += grid->minz;
+    clcenterx += cellx;
+    clcenterz += cellz;
 
     static S32 k;
 
