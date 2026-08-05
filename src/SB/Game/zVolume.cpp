@@ -14,8 +14,8 @@ struct PreCalcOcclude
 zVolume* vols;
 volatile U16 nvols;
 
-S32 gOccludeCount;
-zVolume* gOccludeList[10];
+volatile S32 gOccludeCount;
+zVolume* volatile gOccludeList[10];
 S32 gOccludeCalcCount;
 PreCalcOcclude gOccludeCalc[10];
 
@@ -199,12 +199,14 @@ S32 zVolumeEventCB(xBase*, xBase* to, U32 toEvent, const F32*, xBase*)
     }
     case eEventOccludeOn:
     {
-        if (gOccludeCount == 10)
+        S32 count = gOccludeCount;
+
+        if (count == 10)
         {
             return 1;
         }
 
-        for (i = 0; i < gOccludeCount; i++)
+        for (i = 0; i < count; i++)
         {
             if (gOccludeList[i] == vol)
             {
@@ -212,19 +214,21 @@ S32 zVolumeEventCB(xBase*, xBase* to, U32 toEvent, const F32*, xBase*)
             }
         }
 
-        gOccludeList[gOccludeCount] = vol;
-        gOccludeCount++;
+        gOccludeList[count] = vol;
+        gOccludeCount = count + 1;
 
         break;
     }
     case eEventOccludeOff:
     {
-        for (i = 0; i < gOccludeCount; i++)
+        S32 count = gOccludeCount;
+
+        for (i = 0; i < count; i++)
         {
             if (gOccludeList[i] == vol)
             {
-                gOccludeList[gOccludeCount] = gOccludeList[gOccludeCount - 1];
-                gOccludeCount--;
+                gOccludeList[count] = gOccludeList[count - 1];
+                gOccludeCount = count - 1;
 
                 return 1;
             }
