@@ -30,7 +30,6 @@ static void xEntMechMove(xEntMotion* motion, xScene* sc, F32 dt, xEntFrame* fram
 static void xEntPenMove(xEntMotion* motion, xScene* sc, F32 dt, xEntFrame* frame);
 static U32 xEntSldMove(xEntMotion* motion, xScene* sc, F32 dt, xEntFrame* frame);
 static U32 xEntRotMove(xEntMotion* motion, xScene* sc, F32 dt, xEntFrame* frame);
-void xMat4x3Rot(xMat4x3* m, xVec3* a, F32 t, xVec3* p);
 char* xbtoa(U32 param);
 
 void xEntMotionInit(xEntMotion* motion, xEnt* owner, xEntMotionAsset* asset)
@@ -283,7 +282,8 @@ void xEntMotionMove(xEntMotion* motion, xScene* sc, F32 dt, xEntFrame* frame)
 
 static void xEntERMove(xEntMotion* motion, xScene* sc, F32 dt, xEntFrame* frame)
 {
-    F32 newt = motion->t - motion->er.p;
+    F32 newt = motion->er.p;
+    newt = motion->t - newt;
 
     if (newt > 0.0f)
     {
@@ -999,13 +999,11 @@ void xEntMotionDebugExit()
     dbg_idx = -1;
 }
 
-// This scheduling is absolutely shambolic
 void xEntMotionDebugAdd(xEntMotion* motion)
 {
     if (dbg_num < dbg_num_allocd)
     {
-        dbg_num++;
-        dbg_xems[dbg_num] = motion;
+        dbg_xems[dbg_num++] = motion;
     }
 }
 
@@ -1268,10 +1266,11 @@ static void xEntMotionDebugDraw(const xEntMotion* xem)
         xMovePoint* xmp = xem->mp.dest;
         if (xmp)
         {
+            xMovePoint* src = xem->mp.src;
             for (U16 idx = 0; idx < xMovePointGetNumPoints(xmp); idx++)
             {
                 xMovePoint* omp = xMovePointGetPoint(xmp, idx);
-                if (omp != xem->mp.src)
+                if (omp != src)
                 {
                     xDrawLine(xMovePointGetPos(xmp), xMovePointGetPos(omp));
                 }
@@ -1355,7 +1354,7 @@ static void xEntMotionDebugIPad(xEntMotion* xem)
     if (gDebugPad->pressed & 0x20)
     {
         *(volatile S16*)(&dbg_idx) = *(volatile S16*)(&dbg_idx) + 1;
-        if (*(volatile U16*)(&dbg_num) >= *(volatile S16*)(&dbg_idx))
+        if (*(volatile S16*)(&dbg_idx) >= *(volatile U16*)(&dbg_num))
         {
             *(volatile S16*)(&dbg_idx) = 0;
         }
