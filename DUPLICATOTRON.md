@@ -21,8 +21,8 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now |
 |---|---|---|
-| matched functions | 6491 / 10147 | 7279 / 10147 |
-| fuzzy match | 57.343% | 63.384% |
+| matched functions | 6491 / 10147 | 7292 / 10147 |
+| fuzzy match | 57.343% | 63.414% |
 | complete units | 195 / 543 | 195 / 543 |
 
 ## Where the remaining functions are
@@ -221,8 +221,33 @@ confirming before anyone builds a strategy on either model.
   allocation permutation, i.e. REGS, not SCHED. Three sub-100 functions
   wiggle down (`NPAR_TubeSpiralMagic` 98.9 -> 81.8, `VFXSmokeStack`
   83.4 -> 77.6, `zEntPlayerTSlideUpdate` 94.4 -> 94.2) against ~84 that
-  improve. Patched compiler sha1 is now
-  `a271f6535e44790bac3a8772f73c7d7e7fe38814`.
+  improve.
+- **Clause C had to be taught about volatile — +11 more.** A volatile access
+  sets instruction flag bit `0x80`, so the plain-load/store test `flags & ~6
+  == 0` rejected every volatile reference before it reached the clause. That
+  is why `zMenu`, whose timers are `static volatile F32`, kept hoisting a
+  literal across a store to a different small static *with* clause C
+  installed. Widening the mask to `~0x86` and adding the clause to entry 0 as
+  well, both behind the static-storage gate, measures 7279 -> 7290 with zero
+  units regressed and the DOL sha1 unchanged. Widening entry 0's *clause A*
+  the same way is not safe — it pins volatile frame locals and measures -4.
+  Patched compiler sha1 is now
+  `7d3ff244fb371e3b15b0becd41ac04b627869ae8`.
+- **Clause D is dead — do not refit it.** A directional rule (an `stfs` to a
+  declared frame local may not be crossed by a *later* small static load,
+  entry 3 only) hits exactly the motion four otherwise-finished functions
+  need, and measures +22 functions to 100% against 18 whose percent drops.
+  The gain and loss populations are indistinguishable in every field the
+  predicate can see — same opcodes, sizes, overlapping offsets, same storage
+  classes, same base-expression words. stfs-only, the declared-local gate,
+  entry-3-only, offset thresholds and a literal-only static side were all
+  measured; none separates them. Recovering the losses from the *source* side
+  was then tried on four of them (`dampen_velocity`, `BoundAsRadius`,
+  `get_texture_size`, `xBoxFromCircle`): statement reordering, operand swaps,
+  binding the literal to a local, and initializer restructuring all left the
+  percent unchanged. The instruction *set* already matches; only the order
+  differs, and with the edge added the list schedule is deterministic, so
+  source shape has no purchase on it.
 - **MSL_C compiler flags were wrong - +51.** `configure.py` built
   `MSL_C.PPCEABI.H` at `-opt level=0 -inline off`. Sweeping against the target
   objects: level 0 matches *nothing* anywhere, level 4 is best or tied for
