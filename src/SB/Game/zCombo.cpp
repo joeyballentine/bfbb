@@ -31,12 +31,12 @@ static xVec3 sUnderCamPos;
 static ztextbox* sHideText[5];
 
 /* .sbss */
-widget_chunk* comboHUD; // TODO: should be externed in the header, but that doesn't show up in objdiff
+widget_chunk* volatile comboHUD; // TODO: should be externed in the header, but that doesn't show up in objdiff
 static zUIFont* sHideUIF;
-static S32 comboPending;
-static S32 comboLastCounter;
-static S32 comboCounter;
-static F32 comboTimer;
+static volatile S32 comboPending;
+static volatile S32 comboLastCounter;
+static volatile S32 comboCounter;
+static volatile F32 comboTimer;
 
 /* .sdata */
 static F32 comboMaxTime = 1.0f;
@@ -107,9 +107,11 @@ void zCombo_Setup()
 
     comboHUD = (widget_chunk*)zSceneFindObject(xStrHash("HUD_TEXT_COMBOMESSAGE"));
 
-    if (comboHUD != NULL)
+    widget_chunk* hud = comboHUD;
+
+    if (hud != NULL)
     {
-        comboHUD->w.enable();
+        hud->w.enable();
         comboHUD->w.hide();
     }
 
@@ -161,9 +163,12 @@ void zCombo_Add(S32 points)
     {
         comboTimer = comboMaxTime;
         comboCounter += points;
-        if (comboPending != 0)
+
+        S32 pending = comboPending;
+
+        if (pending != 0)
         {
-            comboCounter += comboPending;
+            comboCounter += pending;
             comboPending = 0;
         }
     }
@@ -176,9 +181,11 @@ void zComboHideMessage(xhud::widget& w, xhud::motive& motive)
 
 void zCombo_HideImmediately()
 {
-    if (comboHUD != NULL)
+    widget_chunk* hud = comboHUD;
+
+    if (hud != NULL)
     {
-        comboHUD->w.text[0] = '\0';
+        hud->w.text[0] = '\0';
     }
 }
 
@@ -187,19 +194,22 @@ void zCombo_Update(F32 dt)
     xVec3Copy(&sUnderCamPos, &globals.camera.mat.pos);
     xVec3AddScaled(&sUnderCamPos, &globals.camera.mat.up, -3.0f);
 
-    S32 toShow = comboCounter;
-    if (comboCounter >= 16)
+    S32 counter = comboCounter;
+    S32 toShow = counter;
+    if (counter >= 16)
     {
         toShow = 15;
     }
 
     zComboReward* c = &comboReward[toShow];
 
-    if (comboLastCounter != comboCounter && c->reward != 0)
+    if (comboLastCounter != counter && c->reward != 0)
     {
-        if (comboHUD != NULL)
+        widget_chunk* hud = comboHUD;
+
+        if (hud != NULL)
         {
-            strcpy(comboHUD->w.text, xTextAssetGetText(c->textAsset));
+            strcpy(hud->w.text, xTextAssetGetText(c->textAsset));
             comboHUD->w.show();
         }
         comboLastCounter = comboCounter;
@@ -219,9 +229,11 @@ void zCombo_Update(F32 dt)
         comboHUD->w.text[0] = '\0';
     }
 
-    if (comboTimer >= 0.0f)
+    F32 timer = comboTimer;
+
+    if (timer >= 0.0f)
     {
-        comboTimer -= dt;
+        comboTimer = timer - dt;
 
         if (comboTimer < 0.0f)
         {
