@@ -248,6 +248,25 @@ confirming before anyone builds a strategy on either model.
   percent unchanged. The instruction *set* already matches; only the order
   differs, and with the edge added the list schedule is deterministic, so
   source shape has no purchase on it.
+- **Edge latency is not the lever either — the zero-latency lead is
+  refuted.** The suspicion was that clause D's drops came not from adding the
+  alias edge but from the edge carrying normal store-to-load latency, where
+  retail's placement looked like what a zero-latency edge would produce. The
+  mechanism is real and now fully read out of the binary. `0x5084f0` is the
+  edge builder, `cdecl(from, to, flag)`: `flag != 0` takes the latency from
+  `word[from+0x10]` and, when bit 0 of the to-side access flags is set, adds
+  `word[[0x5e0850]+8]` from the machine model; `flag == 0` gives latency 0.
+  It has ten call sites; exactly three are the may-alias sites (`0x5081fd`,
+  `0x508376`, `0x5083ab`, each `call 0x511fc0` / `test al,al` / `je` /
+  `push 1`), and the barrier, volatile and branch chains already pass 0. The
+  same call sites confirm operand A is the earlier instruction
+  (`push [later]+0xc` then `push [current]+0xc`). Measured against the
+  installed build: zeroing only the new clause-E edges takes it from
+  +20/-17 to +10/-20; zeroing the shipped clauses A/B/C costs 108 functions;
+  zeroing every alias edge costs ~1000. And the premise is simply false —
+  `xFont.o` and `zNPCTypeCommon.o` come out byte-identical either way,
+  because an `stfs`'s `word[insn+0x10]` is already 0, so those edges never
+  carried latency to begin with. Nothing to install.
 - **MSL_C compiler flags were wrong - +51.** `configure.py` built
   `MSL_C.PPCEABI.H` at `-opt level=0 -inline off`. Sweeping against the target
   objects: level 0 matches *nothing* anywhere, level 4 is best or tied for
