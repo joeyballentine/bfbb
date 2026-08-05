@@ -26,15 +26,11 @@ static void WRAP_xsnd_setMusicVolume(S32 i);
 static void WRAP_xsnd_setSFXVolume(S32 i);
 
 S32 g_zdsp_init;
-S32 oldVibrationOption;
-U32 oldSoundMode;
-U32 oldMusicVolume;
-U32 oldSFXVolume;
 
 st_ZDISPATCH_DEPOT g_zdsp_depot = { 0 };
 
 extern U8 menu_fmv_played;
-extern char zEventLogBuf[256][20];
+extern char zEventLogBuf[20][256];
 
 void zDispatcher_Startup()
 {
@@ -74,7 +70,7 @@ st_ZDISPATCH_DATA* zDispatcher_memPool(S32 cnt)
     }
     else
     {
-        pool = (st_ZDISPATCH_DATA*)xMemAlloc(gActiveHeap, cnt * sizeof(st_ZDISPATCH_DATA), 0);
+        pool = (st_ZDISPATCH_DATA*)xMemAlloc(gActiveHeap, (U32)cnt * sizeof(st_ZDISPATCH_DATA), 0);
         memset(pool, 0, cnt * sizeof(st_ZDISPATCH_DATA));
         depot->raw_pool = pool;
         depot->raw_cnt = cnt;
@@ -338,6 +334,11 @@ static S32 ZDSP_doCommand(st_ZDISPATCH_DATA* dspdata, st_ZDISPATCH_CONTEXT* cmdC
     return 1;
 }
 
+S32 oldVibrationOption;
+U32 oldSoundMode;
+U32 oldMusicVolume;
+U32 oldSFXVolume;
+
 void zDispatcherStoreOptions()
 {
     oldVibrationOption = globals.option_vibration;
@@ -413,14 +414,68 @@ static S32 ZDSP_elcb_event(xBase*, xBase* xb, U32 toEvent, const F32* toParam, x
     case eEventDispatcher_SoundSFXDecrease:
         ZDSP_injectCmd(dspdata, ZDSP_CMD_SFXVOL_DECR);
         break;
-    case eEventDispatcher_GameState_SceneSwitch:
+    case eEventDispatcher_SetIntroState_Sony:
+    case eEventDispatcher_SetIntroState_Publisher:
+    case eEventDispatcher_SetIntroState_Developer:
+    case eEventDispatcher_SetIntroState_License:
+    case eEventDispatcher_SetIntroState_Count:
+    case eEventDispatcher_SetTitleState_Start:
+    case eEventDispatcher_SetTitleState_Attract:
+    case eEventDispatcher_SetTitleState_Count:
+    case eEventDispatcher_SetLoadState_SelectMemCard:
+    case eEventDispatcher_SetLoadState_SelectSlot:
+    case eEventDispatcher_SetLoadState_Loading:
+    case eEventDispatcher_SetLoadState_Count:
+    case eEventDispatcher_SetOptionsState_Options:
+    case eEventDispatcher_SetOptionsState_Count:
+    case eEventDispatcher_SetSaveState_SelectMemCard:
+    case eEventDispatcher_SetSaveState_SelectSlot:
+    case eEventDispatcher_SetSaveState_Saving:
+    case eEventDispatcher_SetSaveState_Count:
+    case eEventDispatcher_SetPauseState_Pause:
+    case eEventDispatcher_SetPauseState_Options:
+    case eEventDispatcher_SetPauseState_Count:
+    case eEventDispatcher_SetGameState_Play:
+    case eEventDispatcher_SetGameState_LoseChance:
+    case eEventDispatcher_SetGameState_GameOver:
+    case eEventDispatcher_SetGameState_SceneSwitch:
+    case eEventDispatcher_SetGameState_Dead:
+    case eEventDispatcher_GameState_Exit:
+    case eEventDispatcher_SetGameState_Exit:
         zGameStateSwitchEvent(toEvent);
         break;
     case eEventDispatcher_SetGameState_FirstTime:
         globals.autoSaveFeature = FALSE;
         zGameStateSwitchEvent(toEvent);
         break;
+    case eEventEnable:
+    case eEventDisable:
+    case eEventRoomBegin:
+    case eEventRoomEnd:
+    case eEventDigup:
     case eEventLobMasterShootFromWidget:
+    case eEventVilHurtBoss:
+    case eEventAttack:
+    case eEventAttackOn:
+    case eEventAttackOff:
+    case eEventDrop:
+    case eEventVilReport_StartingIdle:
+    case eEventVilReport_StartingSleep:
+    case eEventVilReport_StartingGuard:
+    case eEventVilReport_StartingPatrol:
+    case eEventVilReport_StartingDazed:
+    case eEventVilReport_StartingLook:
+    case eEventVilReport_StartingListen:
+    case eEventVilReport_StartingInvestigate:
+    case eEventVilReport_StartingChase:
+    case eEventVilReport_StartingAttack:
+    case eEventVilReport_StartingRetreat:
+    case eEventPreload:
+    case eEventDone:
+    case eEventArcto:
+    case eEventDigupReaction:
+    case eEventDispatcher_SetGameState_GameStats:
+    case eEventBubbleWipe:
         break;
     case eEventDispatcher_SLBack:
     case eEventDispatcher_SLCancel:
@@ -488,19 +543,20 @@ static S32 ZDSP_elcb_event(xBase*, xBase* xb, U32 toEvent, const F32* toParam, x
         U32 len;
         U32 i;
 
-        c = 0;
-        for (i = 0; i < 8; i += len)
+        c = 20;
+        len = 0;
+        while (len < 0x1ff)
         {
-            c += 1;
-            len = strlen((char*)&zEventLogBuf[i]);
+            c--;
+            len += strlen(zEventLogBuf[c]);
         }
 
-        strcpy((char*) events, (char*) zEventLogBuf[c + 1]);
+        strcpy(events, zEventLogBuf[c + 1]);
         for (i = c + 2; i < 0x13; i++)
         {
-            strcat(log, zEventLogBuf[i]);
+            strcat(events, zEventLogBuf[i]);
         }
-        strncpy(events, log, 0x200);
+        strncpy(log, events, 0x200);
         break;
     case eEventStoreOptions:
         zDispatcherStoreOptions();
