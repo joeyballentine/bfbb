@@ -15,6 +15,11 @@ Usage:
 
 A `|` in the left margin of a side-by-side diff marks a differing pair.
 
+The LEFT column is the TARGET (retail) and the RIGHT column is our build --
+`left` comes from `-1 <target_path>`. Getting this backwards inverts every
+conclusion you draw from a diff, so it is worth re-checking if something is
+not making sense.
+
 Requires a configured tree: run `configure.py` first so build.ninja exists, and
 have build/tools/objdiff-cli.exe downloaded (any prior `ninja` does that).
 """
