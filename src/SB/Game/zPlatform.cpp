@@ -1395,7 +1395,7 @@ S32 zPlatformEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam, xB
         }
         // fallthrough
     case eEventCollisionOn:
-        plat->chkby = (XENT_COLLTYPE_TRIG | XENT_COLLTYPE_STAT);
+        plat->chkby = (XENT_COLLTYPE_PLYR | XENT_COLLTYPE_NPC);
         plat->bupdate(plat, (xVec3*)&plat->model->Mat->pos);
         break;
     case eEventCollision_Visible_Off:
