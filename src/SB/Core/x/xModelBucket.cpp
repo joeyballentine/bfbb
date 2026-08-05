@@ -105,8 +105,12 @@ void xModelBucket_PreCountAlloc(S32 maxAlphaModels)
         (xModelAlphaBucket*)xMemAlloc(gActiveHeap, sAlphaCount * sizeof(xModelAlphaBucket), 0);
 
     RwBBox bbox;
-    bbox.sup.x = bbox.sup.y = bbox.sup.z = 100000.0f;
-    bbox.inf.x = bbox.inf.y = bbox.inf.z = -100000.0f;
+    bbox.sup.x = 100000.0f;
+    bbox.sup.y = 100000.0f;
+    bbox.sup.z = 100000.0f;
+    bbox.inf.x = -100000.0f;
+    bbox.inf.y = -100000.0f;
+    bbox.inf.z = -100000.0f;
 
     sBucketDummyWorld = RpWorldCreate(&bbox);
     sBucketDummyCamera = iCameraCreate(0, 0, 0);
