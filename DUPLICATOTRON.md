@@ -21,8 +21,8 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now |
 |---|---|---|
-| matched functions | 6491 / 10147 | 7302 / 10147 |
-| fuzzy match | 57.343% | 63.440% |
+| matched functions | 6491 / 10147 | 7305 / 10147 |
+| fuzzy match | 57.343% | 63.446% |
 | complete units | 195 / 543 | 222 / 543 |
 
 ## Where the remaining functions are
@@ -204,6 +204,25 @@ confirming before anyone builds a strategy on either model.
 
 ## Settled
 
+- **An aggregate initialiser in an inline function seeds a junk `.sbss2`
+  object -- this was the anonymous-literal mystery.** CodeWarrior creates an
+  anonymous 4-byte all-zero object at *parse* time for an aggregate
+  initialiser inside an `inline` function, in every TU that includes the
+  header, whether or not the function is ever instantiated. Minimal repro
+  under the real flags: `inline grid_index f(U16 a, U16 b) { grid_index i =
+  {a, b}; return i; }` emits `@1 4 bytes .sbss2`; rewritten as member
+  assignments it emits nothing. `xGrid.h`'s `get_grid_index` was doing this,
+  which is where `@148` in `zDispatcher` and `@150` in `xModelBucket` came
+  from, and it shifted every later `.sbss2` operand by four bytes in about
+  140 units. Fixed in commit 134129c2.
+
+  This is the general answer to "what creates a literal before its first
+  `.text` use", and it is worth checking other headers for the same shape
+  before assuming a pool ordering is unreachable. `iMath3` and `iScrFX` are
+  both blocked on exactly that: their target pools are seeded with constants
+  that no function in the `.cpp` materialises, and their anonymous indices
+  start around 555 and 527 against our 68 and 37, i.e. the original created
+  far more anonymous objects during header parsing than we do.
 - **`complete_units` is a `configure.py` marker, and `report.json` cannot
   tell you when to set it.** A unit reaching 100% in `report.json` does not
   raise `complete_units`; that number counts `Object(Matching, ...)` entries
