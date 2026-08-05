@@ -379,12 +379,16 @@ void zGameCheats(float dt)
     else if ((globals.pad0->pressed & (X | Y)) == 0)
     {
         sCheatTimer -= dt;
-        if (!(sCheatTimer <= 0.0f))
+        // The original reloads sCheatTimer here instead of reusing the value it
+        // just stored; the volatile read is what keeps that load.
+        if (*(volatile F32*)&sCheatTimer <= 0.0f)
+        {
+            startover = true;
+        }
+        else
         {
             return;
         }
-        startover = true;
-        // For some reason there's a double branch here where the first just jumps past the second one.
     }
 
     if (!startover)
