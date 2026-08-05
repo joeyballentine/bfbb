@@ -155,7 +155,8 @@ void zEGenerator_Render(zEGenerator* egen)
     xEntRender((xEnt*)egen);
 }
 
-// scheduling
+// Nonmatch: the literal loads for the two zLightningAdd blocks are hoisted above
+// the stores into `add` instead of being interleaved with them.
 void zEGenerator_TurnOn(zEGenerator* egen)
 {
     egen->flags |= 1;
@@ -193,19 +194,19 @@ void zEGenerator_TurnOn(zEGenerator* egen)
                     xVec3Copy(&egen->dst_pos, xMovePointGetPos((xMovePoint*)b));
                     xVec3AddTo(&egen->dst_pos, &egen->dst_off);
                     egen->dst = b;
-                    break;
+                    goto found;
                 }
                 if (b->baseType == eBaseTypeBoulder)
                 {
                     xVec3Copy(&egen->dst_pos, xEntGetCenter((xEntBoulder*)b));
                     egen->dst = b;
-                    break;
+                    goto found;
                 }
                 if ((b->baseFlags & 0x20) != 0)
                 {
                     xMat4x3Toworld(&egen->dst_pos, (xMat4x3*)((xEnt*)b)->model->Mat, &egen->dst_off);
                     egen->dst = b;
-                    break;
+                    goto found;
                 }
             }
             else
@@ -215,6 +216,8 @@ void zEGenerator_TurnOn(zEGenerator* egen)
         }
     }
     xDrawSphere(&egen->dst_pos, 2.0f, 0xC0006);
+
+found:
 
     for (S32 i = 0; i < 2; i++)
     {
@@ -228,11 +231,12 @@ void zEGenerator_TurnOn(zEGenerator* egen)
     _tagLightningAdd add;
     memset(&add, 0, sizeof(_tagLightningAdd));
     add.type = 3;
-    add.total_points = ((xrand() << 1) & 6) + 8;
+    add.total_points = (xrand() << 1) & 6;
+    add.total_points += 8;
     add.start = &egen->src_pos;
     add.end = &egen->dst_pos;
-    add.color = xColorFromRGBA(200, 200, 255, 200);
     add.thickness = 0.3f;
+    add.color = xColorFromRGBA(200, 200, 255, 200);
     add.arc_height = -0.2f;
     add.zeus_normal_offset = 0.2f;
     add.zeus_back_offset = 0.1f;
