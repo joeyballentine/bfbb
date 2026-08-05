@@ -1080,3 +1080,8 @@ S32 zNPCGoalBoyWeep::NPCMessage(NPCMsg* mail)
 
     return 0;
 }
+
+inline S32 xPsyche::IndexInStack(const xGoal* gid) const
+{
+    return IndexInStack(gid->GetID());
+}
