@@ -21,8 +21,8 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now |
 |---|---|---|
-| matched functions | 6491 / 10147 | 7206 / 10147 |
-| fuzzy match | 57.343% | 63.018% |
+| matched functions | 6491 / 10147 | 7279 / 10147 |
+| fuzzy match | 57.343% | 63.384% |
 | complete units | 195 / 543 | 195 / 543 |
 
 ## Where the remaining functions are
@@ -204,6 +204,25 @@ confirming before anyone builds a strategy on either model.
 
 ## Settled
 
+- **Compiler patch clause C — +41 on its own, and it kills the zThrown float
+  meme.** Dispatch entries 1 and 3 (whole object vs subrange, both operand
+  orders) only tested "same base object", so a load of a small global or a
+  float literal hoisted across a store to a *different* small global —
+  `stfs c_fruit` vs `lfs globals.throwHeight` in `zThrown_Setup`. Clause C
+  answers may-alias for those entries iff both base expressions have word 0
+  == 5, both sizes are <= 4, the opcodes differ, and both instructions are
+  plain loads/stores. Word 0 == 5 is the **static-storage gate**: frame and
+  stack objects carry `0x00010005` and are excluded. That gate is the whole
+  safety property — ungated, the same predicate pins integer-conversion stack
+  traffic (`stw` frame slot vs `lfd` magic double) and costs 50 exact
+  functions (+84/-50). Full details, including which variants were measured
+  and rejected, are in the `tools/patch_compiler.py` docstring and commit
+  message. `zThrown_Setup` 85.50% -> 99.35%; the residue is an r6/r7/r8
+  allocation permutation, i.e. REGS, not SCHED. Three sub-100 functions
+  wiggle down (`NPAR_TubeSpiralMagic` 98.9 -> 81.8, `VFXSmokeStack`
+  83.4 -> 77.6, `zEntPlayerTSlideUpdate` 94.4 -> 94.2) against ~84 that
+  improve. Patched compiler sha1 is now
+  `a271f6535e44790bac3a8772f73c7d7e7fe38814`.
 - **MSL_C compiler flags were wrong - +51.** `configure.py` built
   `MSL_C.PPCEABI.H` at `-opt level=0 -inline off`. Sweeping against the target
   objects: level 0 matches *nothing* anywhere, level 4 is best or tied for
