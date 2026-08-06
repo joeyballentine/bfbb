@@ -633,3 +633,162 @@ void zLightningKill(zLightning* l)
 {
     l->flags &= 0xfffffefe;
 }
+
+void zLightningModifyEndpoints(zLightning* l, xVec3* start, xVec3* end)
+{
+    xVec3 dir;
+    xVec3 side;
+    xVec3 hold;
+
+    if (l->type != LYT_TYPE_FUNC)
+    {
+        if (l->flags & 0x80)
+        {
+            S32 last = l->legacy.end_points - 1;
+
+            if (last < 0)
+            {
+                xVec3Sub(&dir, &start[l->legacy.total_points - 1], start);
+            }
+            else
+            {
+                xVec3Sub(&dir, &end[last], start);
+            }
+        }
+        else
+        {
+            xVec3Sub(&dir, end, start);
+        }
+
+        xVec3Normalize(&dir, &dir);
+
+        if (dir.y > 0.999f || dir.y < -0.999f)
+        {
+            xVec3Init(&l->legacy.arc_normal, 1.0f, 0.0f, 0.0f);
+        }
+        else
+        {
+            l->legacy.arc_normal.x = -(dir.x * dir.y);
+            l->legacy.arc_normal.y = dir.z * dir.z + dir.x * dir.x;
+            l->legacy.arc_normal.z = -(dir.z * dir.y);
+
+            xVec3Normalize(&l->legacy.arc_normal, &l->legacy.arc_normal);
+        }
+
+        xVec3Cross(&side, &l->legacy.arc_normal, &dir);
+
+        F32 param = 0.0f;
+        F32 dparam = 1.0f / (l->legacy.total_points - 1.0f);
+        S32 holding = 1;
+
+        for (S32 i = 0; i < l->legacy.total_points; i++)
+        {
+            if (l->flags & 0x80)
+            {
+                S32 k = i - (l->legacy.total_points - l->legacy.end_points);
+
+                if (k < 0)
+                {
+                    l->legacy.base_point[i] = start[i];
+                }
+                else
+                {
+                    l->legacy.base_point[i] = end[k];
+                }
+            }
+            else
+            {
+                xVec3Lerp(&l->legacy.base_point[i], start, end, param);
+            }
+
+            if (l->type == LYT_TYPE_ZEUS && i != 0 && i != l->legacy.total_points - 1)
+            {
+                if (holding)
+                {
+                    xVec3Copy(&hold, &l->legacy.base_point[i]);
+                    holding = 0;
+                }
+                else
+                {
+                    xVec3Copy(&l->legacy.base_point[i], &hold);
+                    xVec3AddScaled(&l->legacy.base_point[i], &l->legacy.arc_normal,
+                                   l->legacy.zeus.normal_offset);
+                    xVec3AddScaled(&l->legacy.base_point[i], &dir, -l->legacy.zeus.back_offset);
+                    xVec3AddScaled(&l->legacy.base_point[i], &side, -l->legacy.zeus.side_offset);
+                    holding = 1;
+                }
+            }
+
+            if (l->flags & 0x20)
+            {
+                F32 arc = -4.0f * (param * param) + 4.0f * param;
+
+                if (arc > 0.0f)
+                {
+                    xVec3AddScaled(&l->legacy.base_point[i], &l->legacy.arc_normal,
+                                   arc * l->legacy.arc_height);
+                }
+            }
+
+            param += dparam;
+        }
+
+        l->legacy.point[0] = l->legacy.base_point[0];
+        l->legacy.point[l->legacy.total_points - 1] =
+            l->legacy.base_point[l->legacy.total_points - 1];
+    }
+    else
+    {
+        xVec3Copy(&l->func.endPoint[0], start);
+        xVec3Copy(&l->func.endPoint[1], end);
+
+        xVec3Sub(&l->func.direction, &l->func.endPoint[1], &l->func.endPoint[0]);
+
+        l->func.length = xVec3Length(&l->func.direction);
+
+        if (l->func.length > 0.00001f)
+        {
+            xVec3SMulBy(&l->func.direction, 1.0f / l->func.length);
+        }
+        else
+        {
+            xVec3Init(&l->func.direction, 0.0f, 0.0f, 0.0f);
+        }
+
+        l->func.scale = l->func.length * sLFuncScalePerLength;
+
+        if (l->func.scale < sLFuncMinScale)
+        {
+            l->func.scale = sLFuncMinScale;
+        }
+
+        if (l->func.scale > sLFuncMaxScale)
+        {
+            l->func.scale = sLFuncMaxScale;
+        }
+
+        l->func.paramSpan[0] = l->func.length * sLFuncSpanPerLength;
+
+        if (l->func.paramSpan[0] < sLFuncMinSpan)
+        {
+            l->func.paramSpan[0] = sLFuncMinSpan;
+        }
+
+        l->func.paramSpan[1] = l->func.paramSpan[0];
+
+        if (l->func.direction.y > 0.999f || l->func.direction.y < -0.999f)
+        {
+            xVec3Init(&l->func.arc_normal, 1.0f, 0.0f, 0.0f);
+        }
+        else
+        {
+            l->func.arc_normal.x = -(l->func.direction.x * l->func.direction.y);
+            l->func.arc_normal.y =
+                l->func.direction.z * l->func.direction.z + l->func.direction.x * l->func.direction.x;
+            l->func.arc_normal.z = -(l->func.direction.z * l->func.direction.y);
+
+            xVec3Normalize(&l->func.arc_normal, &l->func.arc_normal);
+        }
+
+    }
+}
