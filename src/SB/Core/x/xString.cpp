@@ -98,6 +98,60 @@ char* xStrTok(char* string, const char* control, char** nextoken)
     return string;
 }
 
+char* xStrTokBuffer(const char* string, const char* control, void* buffer)
+{
+    U8* str;
+    U8* ctrl;
+    U8 c;
+    U8 map[32];
+    char* dest = (char*)buffer;
+    dest += 4;
+
+    for (S32 i = 0; i < 32; i++)
+    {
+        map[i] = 0;
+    }
+
+    ctrl = (U8*)control;
+
+    do
+    {
+        map[*ctrl >> 3] |= 1 << (*ctrl & 0x7);
+    } while (*ctrl++ != '\0');
+
+    str = (string) ? (U8*)string : (U8*)*(char**)buffer;
+
+    while (map[(*str >> 3) & 0x1F] & (1 << (*str & 0x7)) && *str != '\0')
+    {
+        str++;
+    }
+
+    string = (char*)str;
+
+    while ((c = *str) != '\0')
+    {
+        if (map[(c >> 3) & 0x1F] & (1 << (c & 0x7)))
+        {
+            str++;
+            break;
+        }
+
+        *dest = c;
+        dest++;
+        str++;
+    }
+
+    *dest = '\0';
+    *(char**)buffer = (char*)str;
+
+    if (string == (char*)str)
+    {
+        return NULL;
+    }
+
+    return (char*)buffer + 4;
+}
+
 S32 xStricmp(const char* string1, const char* string2) {
     S8 flag1;
     S8 flag2;
@@ -305,3 +359,135 @@ S32 icompare(const substr& s1, const substr& s2)
     }
     return result;
 }
+
+size_t atox(const substr& s, size_t& read_size)
+{
+    const char* text = s.text;
+    size_t size = s.size;
+
+    if (text == NULL)
+    {
+        return 0;
+    }
+
+    size_t value = 0;
+
+    if (size > 8)
+    {
+        size = 8;
+    }
+
+    for (read_size = 0; read_size < size; read_size++)
+    {
+        U32 digit;
+
+        if (*text >= '0' && *text <= '9')
+        {
+            digit = *text - '0';
+        }
+        else if (*text >= 'a' && *text <= 'f')
+        {
+            digit = *text - 'a' + 10;
+        }
+        else
+        {
+            if (*text < 'A' || *text > 'F')
+            {
+                return value;
+            }
+
+            digit = *text - 'A' + 10;
+        }
+
+        value = (value << 4) + digit;
+        text++;
+    }
+
+    return value;
+}
+
+// Each case of the switch is the same scan with the character set fully
+// unrolled, so that the common short sets never touch a second loop.
+#define FIND_CHAR_SCAN(match)                                                                      \
+    size = s.size;                                                                                 \
+    while (size > 0 && *text != '\0')                                                              \
+    {                                                                                              \
+        if (match)                                                                                 \
+        {                                                                                          \
+            return text;                                                                           \
+        }                                                                                          \
+        size--;                                                                                    \
+        text++;                                                                                    \
+    }                                                                                              \
+    break
+
+const char* find_char(const substr& s, const substr& cs)
+{
+    if (s.text == NULL || cs.text == NULL)
+    {
+        return NULL;
+    }
+
+    const char* text = s.text;
+    S32 size;
+
+    switch (cs.size)
+    {
+    case 0:
+        break;
+    case 1:
+        FIND_CHAR_SCAN(*text == cs.text[0]);
+    case 2:
+        FIND_CHAR_SCAN(*text == cs.text[0] || *text == cs.text[1]);
+    case 3:
+        FIND_CHAR_SCAN(*text == cs.text[0] || *text == cs.text[1] || *text == cs.text[2]);
+    case 4:
+        FIND_CHAR_SCAN(*text == cs.text[0] || *text == cs.text[1] || *text == cs.text[2] || *text == cs.text[3]);
+    case 5:
+        FIND_CHAR_SCAN(*text == cs.text[0] || *text == cs.text[1] || *text == cs.text[2] || *text == cs.text[3] ||
+                       *text == cs.text[4]);
+    case 6:
+        FIND_CHAR_SCAN(*text == cs.text[0] || *text == cs.text[1] || *text == cs.text[2] || *text == cs.text[3] ||
+                       *text == cs.text[4] || *text == cs.text[5]);
+    case 7:
+        FIND_CHAR_SCAN(*text == cs.text[0] || *text == cs.text[1] || *text == cs.text[2] || *text == cs.text[3] ||
+                       *text == cs.text[4] || *text == cs.text[5] || *text == cs.text[6]);
+    case 8:
+        FIND_CHAR_SCAN(*text == cs.text[0] || *text == cs.text[1] || *text == cs.text[2] || *text == cs.text[3] ||
+                       *text == cs.text[4] || *text == cs.text[5] || *text == cs.text[6] || *text == cs.text[7]);
+    case 9:
+        FIND_CHAR_SCAN(*text == cs.text[0] || *text == cs.text[1] || *text == cs.text[2] || *text == cs.text[3] ||
+                       *text == cs.text[4] || *text == cs.text[5] || *text == cs.text[6] || *text == cs.text[7] ||
+                       *text == cs.text[8]);
+    case 10:
+        FIND_CHAR_SCAN(*text == cs.text[0] || *text == cs.text[1] || *text == cs.text[2] || *text == cs.text[3] ||
+                       *text == cs.text[4] || *text == cs.text[5] || *text == cs.text[6] || *text == cs.text[7] ||
+                       *text == cs.text[8] || *text == cs.text[9]);
+    case 11:
+        FIND_CHAR_SCAN(*text == cs.text[0] || *text == cs.text[1] || *text == cs.text[2] || *text == cs.text[3] ||
+                       *text == cs.text[4] || *text == cs.text[5] || *text == cs.text[6] || *text == cs.text[7] ||
+                       *text == cs.text[8] || *text == cs.text[9] || *text == cs.text[10]);
+    default:
+        size = s.size;
+
+        while (size > 0 && *text != '\0')
+        {
+            for (const char* p = cs.text; *p != '\0'; p++)
+            {
+                if (*text == *p)
+                {
+                    return text;
+                }
+            }
+
+            size--;
+            text++;
+        }
+
+        break;
+    }
+
+    return NULL;
+}
+
+#undef FIND_CHAR_SCAN
