@@ -2081,8 +2081,48 @@ namespace
     void parse_tag_alpha(xtextbox::jot& a, const xtextbox& tb, const xtextbox&,
                          const xtextbox::split_tag& ti)
     {
-        // todo: uses int-to-float conversion
         static const xtextbox::callback cb = { NULL, update_tag_alpha, update_tag_alpha };
+        F32& v = (F32&)a.context;
+
+        if (ti.value.size == 0 || ti.action.size == 0)
+        {
+            return;
+        }
+
+        v = xatof(ti.value.text);
+
+        switch (ti.action.text[0])
+        {
+        case '=':
+        {
+            break;
+        }
+        case '+':
+        {
+            v += (1.0f / 255.0f) * tb.font.color.a;
+            break;
+        }
+        case '*':
+        {
+            v *= (1.0f / 255.0f) * tb.font.color.a;
+            break;
+        }
+        default:
+        {
+            return;
+        }
+        }
+
+        if (v < 0.0f)
+        {
+            v = 0.0f;
+        }
+        else if (v > 1.0f)
+        {
+            v = 1.0f;
+        }
+
+        a.cb = &cb;
     }
 
     void reset_tag_alpha(xtextbox::jot& a, const xtextbox&, const xtextbox&,
@@ -2106,8 +2146,48 @@ namespace
     void parse_tag_red(xtextbox::jot& a, const xtextbox& tb, const xtextbox&,
                        const xtextbox::split_tag& ti)
     {
-        // todo: uses int-to-float conversion
         static const xtextbox::callback cb = { NULL, update_tag_red, update_tag_red };
+        F32& v = (F32&)a.context;
+
+        if (ti.value.size == 0 || ti.action.size == 0)
+        {
+            return;
+        }
+
+        v = xatof(ti.value.text);
+
+        switch (ti.action.text[0])
+        {
+        case '=':
+        {
+            break;
+        }
+        case '+':
+        {
+            v += (1.0f / 255.0f) * tb.font.color.r;
+            break;
+        }
+        case '*':
+        {
+            v *= (1.0f / 255.0f) * tb.font.color.r;
+            break;
+        }
+        default:
+        {
+            return;
+        }
+        }
+
+        if (v < 0.0f)
+        {
+            v = 0.0f;
+        }
+        else if (v > 1.0f)
+        {
+            v = 1.0f;
+        }
+
+        a.cb = &cb;
     }
 
     void reset_tag_red(xtextbox::jot& a, const xtextbox&, const xtextbox&,
@@ -2130,8 +2210,48 @@ namespace
     void parse_tag_green(xtextbox::jot& a, const xtextbox& tb, const xtextbox&,
                          const xtextbox::split_tag& ti)
     {
-        // todo: uses int-to-float conversion
         static const xtextbox::callback cb = { NULL, update_tag_green, update_tag_green };
+        F32& v = (F32&)a.context;
+
+        if (ti.value.size == 0 || ti.action.size == 0)
+        {
+            return;
+        }
+
+        v = xatof(ti.value.text);
+
+        switch (ti.action.text[0])
+        {
+        case '=':
+        {
+            break;
+        }
+        case '+':
+        {
+            v += (1.0f / 255.0f) * tb.font.color.g;
+            break;
+        }
+        case '*':
+        {
+            v *= (1.0f / 255.0f) * tb.font.color.g;
+            break;
+        }
+        default:
+        {
+            return;
+        }
+        }
+
+        if (v < 0.0f)
+        {
+            v = 0.0f;
+        }
+        else if (v > 1.0f)
+        {
+            v = 1.0f;
+        }
+
+        a.cb = &cb;
     }
 
     void reset_tag_green(xtextbox::jot& a, const xtextbox&, const xtextbox&,
@@ -2155,8 +2275,48 @@ namespace
     void parse_tag_blue(xtextbox::jot& a, const xtextbox& tb, const xtextbox&,
                         const xtextbox::split_tag& ti)
     {
-        // todo: uses int-to-float conversion
         static const xtextbox::callback cb = { NULL, update_tag_blue, update_tag_blue };
+        F32& v = (F32&)a.context;
+
+        if (ti.value.size == 0 || ti.action.size == 0)
+        {
+            return;
+        }
+
+        v = xatof(ti.value.text);
+
+        switch (ti.action.text[0])
+        {
+        case '=':
+        {
+            break;
+        }
+        case '+':
+        {
+            v += (1.0f / 255.0f) * tb.font.color.b;
+            break;
+        }
+        case '*':
+        {
+            v *= (1.0f / 255.0f) * tb.font.color.b;
+            break;
+        }
+        default:
+        {
+            return;
+        }
+        }
+
+        if (v < 0.0f)
+        {
+            v = 0.0f;
+        }
+        else if (v > 1.0f)
+        {
+            v = 1.0f;
+        }
+
+        a.cb = &cb;
     }
 
     void reset_tag_blue(xtextbox::jot& a, const xtextbox&, const xtextbox&,
