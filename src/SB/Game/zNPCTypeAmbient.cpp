@@ -13,6 +13,8 @@
 #include "xMathInlines.h"
 #include "zNPCGoals.h"
 #include "zGrid.h"
+#include "zLightning.h"
+#include "zNPCSupplement.h"
 
 U32 g_hash_ambianim[12] = { 0 };
 char* g_strz_ambianim[12] = {
@@ -426,11 +428,6 @@ void zNPCJelly::ActLikeOctopus()
     }
 }
 
-U32 zNPCNeptune::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
-{
-    return 0;
-}
-
 void zNPCNeptune::ParseINI()
 {
     zNPCAmbient::ParseINI();
@@ -524,6 +521,10 @@ S32 zNPCJelly::AmbiHandleMail(NPCMsg* msg)
 
 void zNPCJelly::PlayWithAlpha(F32 dt)
 {
+    F32 t = NPCC_TmrCycle(&this->tmr_pulseAlpha, dt, 0.5f);
+    F32 x = PI * t;
+
+    this->SetAlpha(LERP(MAX(0.0f, MIN((F32)__fabs(isin(x)), 1.0f)), 0.7f, 0.95f));
 }
 
 void zNPCJelly::SetAlpha(F32 alpha)
@@ -578,11 +579,91 @@ void zNPCJelly::PumpFaster()
 void zNPCJelly::JellyBoneWorldPos(xVec3* pos, S32 idx_request) const
 {
     S32 idx;
-    xVec3 pos_place;
+
+    if (idx_request < 1)
+    {
+        idx = (S32)(xurand() * this->model->BoneCount);
+        if (idx < 2)
+        {
+            idx += 2;
+        }
+    }
+    else
+    {
+        idx = idx_request;
+        if (idx > this->model->BoneCount)
+        {
+            idx = 0;
+        }
+    }
+
+    xVec3 pos_place = *(const xVec3*)this->BonePos(idx);
+    xMat3x3RMulVec(&pos_place, (const xMat3x3*)this->BoneMat(0), &pos_place);
+    pos_place += *(const xVec3*)this->BonePos(0);
+
+    *pos = pos_place;
 }
 
 void zNPCJelly::PlayWithLightnin()
 {
+    _tagLightningAdd info;
+    xVec3 start;
+
+    this->JellyBoneWorldPos(&start, -1);
+
+    xVec3 end = start;
+
+    memset(&info, 0, sizeof(info));
+
+    if (this->SelfType() == NPC_TYPE_JELLYBLUE)
+    {
+        NPCC_MakeLightningInfo(NPC_LYT_JELLYFISHBLUE, &info);
+    }
+    else
+    {
+        NPCC_MakeLightningInfo(NPC_LYT_JELLYFISH, &info);
+    }
+
+    info.time = 0.1f;
+    info.start = &start;
+    info.end = &end;
+
+    for (S32 i = 0; i < 2; i++)
+    {
+        zLightningAdd(&info);
+    }
+}
+
+U32 zNPCNeptune::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
+{
+    S32 idx;
+    U32 anim = 0;
+
+    switch (gid)
+    {
+    case 'NGN0':
+    {
+        const S32 anims[3] = { 1, 2, 3 };
+        idx = xUtil_choose<S32>(anims, 3, NULL);
+        break;
+    }
+    case 'NGN3':
+    {
+        const S32 anims[3] = { 4, 5, 6 };
+        idx = xUtil_choose<S32>(anims, 3, NULL);
+        break;
+    }
+    default:
+        idx = 1;
+        break;
+    }
+
+    if (idx >= 0)
+    {
+        anim = g_hash_ambianim[idx];
+    }
+
+    return anim;
 }
 
 U32 zNPCMimeFish::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)

@@ -2100,10 +2100,38 @@ void zNPCKingJelly::end_charge()
 
 void zNPCKingJelly::load_model()
 {
+    U32 i;
+    xModelInstance* m = this->model;
+
+    for (i = 0; m != NULL && i < 4; i++)
+    {
+        this->submodel[i] = m;
+        m = m->Next;
+    }
+
+    this->submodel[0]->Data->boundingSphere.radius += 10.0f;
+    this->submodel[1]->Data->boundingSphere.radius += 10.0f;
+    this->submodel[3]->Data->boundingSphere.radius += 10.0f;
+    this->submodel[2]->Data->boundingSphere.radius += 10.0f;
+
+    this->submodel[3]->Flags |= 0x2;
+    this->submodel[3]->Flags |= 0x1;
 }
 
 void zNPCKingJelly::load_curtain_model()
 {
+    char name[] = "SHOWER CURTAIN SIMP";
+
+    this->curtain_ent = (zEnt*)zSceneFindObject(xStrHash(name));
+
+    U32 i;
+    xModelInstance* m = this->curtain_ent->model;
+
+    for (i = 0; m != NULL && i < 5; i++)
+    {
+        this->curtain_model[i] = m;
+        m = m->Next;
+    }
 }
 
 void zNPCKingJelly::show_shower_model()
@@ -2296,7 +2324,22 @@ S32 zNPCGoalKJTaunt::Process(en_trantype* trantype, float dt, void* updCtxt, xSc
 S32 zNPCGoalKJDamage::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
 {
     zNPCKingJelly& kj = *(zNPCKingJelly*)this->psyche->clt_owner;
-    return 0;
+
+    xAnimState* state = kj.AnimCurState();
+
+    if (state->ID != g_hash_subbanim[ANIM_Damage01] || dt > kj.AnimTimeRemain(NULL))
+    {
+        *trantype = GOAL_TRAN_SET;
+
+        if (kj.life <= 0)
+        {
+            return 'NGM7';
+        }
+
+        return 'NGM3';
+    }
+
+    return xGoal::Process(trantype, dt, updCtxt, xscn);
 }
 
 S32 zNPCGoalKJShockGround::Enter(F32 dt, void* updCtxt)
