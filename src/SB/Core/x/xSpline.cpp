@@ -198,23 +198,83 @@ F32 ArcLength3(xCoef3* coef, F64 ustart, F64 uend)
     u = ustart + h;
     sum = 0.0;
 
-    for (i = 2; i <= 51; i += 1)
+    for (i = 2; i <= 50; i += 1)
     {
-        if ((i & 1) == 0)
+        if (i & 1)
         {
-            u_eval = xsqrt(A + u * (B + u * (C + u * (D + E * u)))) * 4.0;
+            sum = sum + sqrt(A + u * (B + u * (C + u * (D + E * u)))) * 2.0;
         }
         else
         {
-            u_eval = xsqrt(A + u * (B + u * (C + u * (D + E * u)))) * 2.0;
+            sum = sum + sqrt(A + u * (B + u * (C + u * (D + E * u)))) * 4.0;
         }
-        sum = sum + u_eval;
         u = u + h;
     }
 
-    return (h * (sum + xsqrt(A + ustart * (B + ustart * (C + ustart * (D + E * ustart)))) +
-                 xsqrt(A + uend * (B + uend * (C + uend * (D + E * uend)))))) /
+    return (h * (sum + sqrt(A + ustart * (B + ustart * (C + ustart * (D + E * ustart)))) +
+                 sqrt(A + uend * (B + uend * (C + uend * (D + E * uend)))))) /
            3.0;
+}
+
+// We don't have the implementation provided
+double sqrt(double x)
+{
+    if (x > 0.0)
+    {
+        F64 guess = __frsqrte(x);
+        guess = 0.5 * guess * -(guess * guess * x - 3);
+        guess = 0.5 * guess * -(guess * guess * x - 3);
+        guess = 0.5 * guess * -(guess * guess * x - 3);
+        guess = 0.5 * guess * -(guess * guess * x - 3);
+        return x * guess;
+    }
+    else if (0.0 == x)
+    {
+        return 0.0;
+    }
+    else if (x != x)
+    {
+        return NAN;
+    }
+    else
+    {
+        return INFINITY;
+    }
+}
+
+void EvalCoef3(xCoef3* coef, F32 u, U32 deriv, xVec3* o)
+{
+    switch ((S32)deriv)
+    {
+    case 0:
+        o->x =
+            (u * ((u * (((coef->x).a[0] * u) + (coef->x).a[1])) + (coef->x).a[2])) + (coef->x).a[3];
+        o->y =
+            (u * ((u * (((coef->y).a[0] * u) + (coef->y).a[1])) + (coef->y).a[2])) + (coef->y).a[3];
+        o->z =
+            (u * ((u * (((coef->z).a[0] * u) + (coef->z).a[1])) + (coef->z).a[2])) + (coef->z).a[3];
+        return;
+    case 1:
+        o->x = (u * ((2.0f * (coef->x).a[1]) + (3.0f * (coef->x).a[0] * u))) + (coef->x).a[2];
+        o->y = (u * ((2.0f * (coef->y).a[1]) + (3.0f * (coef->y).a[0] * u))) + (coef->y).a[2];
+        o->z = (u * ((2.0f * (coef->z).a[1]) + (3.0f * (coef->z).a[0] * u))) + (coef->z).a[2];
+        return;
+    case 2:
+        o->x = (2.0f * (coef->x).a[1]) + (6.0f * (coef->x).a[0] * u);
+        o->y = (2.0f * (coef->y).a[1]) + (6.0f * (coef->y).a[0] * u);
+        o->z = (2.0f * (coef->z).a[1]) + (6.0f * (coef->z).a[0] * u);
+        return;
+    case 3:
+        o->x = 6.0f * (coef->x).a[0];
+        o->y = 6.0f * (coef->y).a[0];
+        o->z = 6.0f * (coef->z).a[0];
+        return;
+    default:
+        o->x = 0.0f;
+        o->y = 0.0f;
+        o->z = 0.0f;
+        return;
+    }
 }
 
 void BasisToCoef3(xCoef3* coef, F32 (*N)[4], xVec3* v1, xVec3* v2, xVec3* v3, xVec3* v4)
@@ -320,41 +380,6 @@ void BasisBspline(F32 (*N)[4], F32* t)
         }
     }
     return;
-}
-
-void EvalCoef3(xCoef3* coef, F32 u, U32 deriv, xVec3* o)
-{
-    switch ((S32)deriv)
-    {
-    case 0:
-        o->x =
-            (u * ((u * (((coef->x).a[0] * u) + (coef->x).a[1])) + (coef->x).a[2])) + (coef->x).a[3];
-        o->y =
-            (u * ((u * (((coef->y).a[0] * u) + (coef->y).a[1])) + (coef->y).a[2])) + (coef->y).a[3];
-        o->z =
-            (u * ((u * (((coef->z).a[0] * u) + (coef->z).a[1])) + (coef->z).a[2])) + (coef->z).a[3];
-        return;
-    case 1:
-        o->x = (u * ((2.0f * (coef->x).a[1]) + (3.0f * (coef->x).a[0] * u))) + (coef->x).a[2];
-        o->y = (u * ((2.0f * (coef->y).a[1]) + (3.0f * (coef->y).a[0] * u))) + (coef->y).a[2];
-        o->z = (u * ((2.0f * (coef->z).a[1]) + (3.0f * (coef->z).a[0] * u))) + (coef->z).a[2];
-        return;
-    case 2:
-        o->x = (2.0f * (coef->x).a[1]) + (6.0f * (coef->x).a[0] * u);
-        o->y = (2.0f * (coef->y).a[1]) + (6.0f * (coef->y).a[0] * u);
-        o->z = (2.0f * (coef->z).a[1]) + (6.0f * (coef->z).a[0] * u);
-        return;
-    case 3:
-        o->x = 6.0f * (coef->x).a[0];
-        o->y = 6.0f * (coef->y).a[0];
-        o->z = 6.0f * (coef->z).a[0];
-        return;
-    default:
-        o->x = 0.0f;
-        o->y = 0.0f;
-        o->z = 0.0f;
-        return;
-    }
 }
 
 F32 ClampBspline(xSpline3* spl, F32 u)
