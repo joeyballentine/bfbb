@@ -21,8 +21,8 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now |
 |---|---|---|
-| matched functions | 6491 / 10147 | 7351 / 10147 |
-| fuzzy match | 57.343% | 63.635% |
+| matched functions | 6491 / 10147 | 7385 / 10147 |
+| fuzzy match | 57.343% | 64.145% |
 | complete units | 195 / 543 | 223 / 543 |
 
 ## Where the remaining functions are
@@ -383,6 +383,53 @@ power of two and `_max_size_mask` is that minus one, not the shift count and
 the power. Fixing it also fixed the instantiations in `xDecal` and
 `xLaserBolt`.
 
+## The STUB bucket
+
+Found by `tools/stubs.py`. A **stub** is a function whose symbol exists in
+both the target and our object but whose body in our source is an empty `{ }`
+placeholder, so our object has a bare `blr`. This is a distinct bucket from
+MISSING (no symbol at all) and from the near-100% classes (real code, wrong
+details), and it was not being tracked at all until now.
+
+**74 functions, 37640 bytes, across 20 units — all of it game code.** These are
+among the cheapest work left: the target disassembly is complete and readable,
+and because the symbol already exists and is already correctly placed in
+`.text`, you are filling in a body rather than deciding where a definition
+goes.
+
+| unit | stubs | bytes |
+|---|---|---|
+| `zNPCFXCinematic` | 20 | 8200 |
+| `xFX` | 10 | 8512 |
+| `zEntPlayer` | 6 | 3704 |
+| `zNPCTypeBossPlankton` | 5 | 1096 |
+| `xFont`, `zNPCTypeKingJelly`, `zNPCTypeAmbient` | 4 each | ~1100 each |
+
+Worked so far: the `init_sound`/`play_sound`/`kill_sound` family across
+Plankton, SB2 and Prawn (the same idiom in three files — crack one and the
+rest follow), Ambient's Jelly/Neptune group, and `xFont`'s four `parse_tag`
+colour channels.
+
+Still open and worth taking in one pass because the members are siblings:
+`xFont`'s remaining group, `zNPCFXCinematic` (20 stubs, and note
+`zNPCB_SB2::singleton` and `zNPCFXCutscenePickTable` become available as a
+by-product — `g_cutmap` does not exist in our source at all), and `xSnd`'s
+entire fader subsystem (`xSndStopFade` is a stub; `update_faders`,
+`fade_data::operator=` and `xSndPlay3DFade` are all at 0%, and there is no
+`faders[]` array in the source — it needs `fade_data` moved above line 130).
+
+Two cautions learned filling these:
+
+- A filled body can emit new anonymous literals that shift *other* functions.
+  Implementing `zNPCNeptune::AnimPick` in place added two `@12` `.rodata`
+  entries ahead of `PlayWithAnimSpd`'s array and knocked it off 100%. Moving
+  the definition to the target's position fixed it. Run `symorder.py` after
+  every stub.
+- Filling a stub in a unit whose pool is already misaligned gets you
+  instruction-identical code that still does not reach 100% under `solo.py`.
+  All four `xFont` `parse_tag` functions are in that state, as is the
+  pre-existing correct `parse_tag_yspace`.
+
 ## xFX / tier_queue
 
 `xFX` went 109 -> 80 non-matching. `tier_queue`, `tier_queue_allocator` and
@@ -515,6 +562,32 @@ enough that struct offsets mostly just line up.
 ## Queued shared-header changes
 
 Agents may not edit shared headers, so they report them instead. Outstanding:
+
+- **`zEnt.h` — the 9-arg `xSndPlay3D` should be an `inline` defined in the
+  header, not a `WEAK` prototype with the body parked in `zEnt.cpp`.**
+  UNDECIDED, because it is the first proposal that is net positive overall
+  while regressing a unit we currently link. The `radius / 4.0f` in the body
+  interns `0.25f` in the literal pool *at the call site*, which is why
+  retail's `zEntTeleportBox.o` `.sdata2` has `0.25` at index 6 even though
+  only `Setup` uses it; without it our whole pool is shifted by one.
+  Measured: `zFX` **+9**, `zEntTeleportBox` **+2** (`_Init` and
+  `JumpOutEffectPlrEjectCB` both reach 100%), `zEntDestructObj` **-4**.
+  No effect on xFX, xSFX, xSnd, zEntButton, zShrapnel, zDiscoFloor, zLasso,
+  zPlatform. Net **+7 functions, -1 complete unit** — `zEntDestructObj` is
+  `Matching` at configure.py:491, so landing this means flipping it to
+  `NonMatching` and dropping `complete_units` to 222.
+  Eight callers are still unmeasured (`zAssetTypes`, `zEntCruiseBubble`,
+  `zThrown`, `zNPCGoalRobo`, `zNPCTypeCommon`, `xEntBoulder`, `zNPCSupport`,
+  `zNPCHazard`) plus `zEnt` itself, which also needs its `zEnt.cpp`
+  definition deleted. They cannot be shadow-measured: `-cwd explicit` breaks
+  any TU including `<new.h>`, because that chains to `<exception.h>` by a
+  directory-relative include. Measuring them means editing `zEnt.h` in place,
+  which is only safe when no agent is running.
+- **`xDebug.h` — no `xVec3*` overload of `xDebugAddTweak`.** There are `F32*`,
+  `S16*`, `U8*` and `const char*` ones. `zNPCTypePrawn.cpp` currently carries
+  a file-scope declaration instead, which is the same workaround Dutchman
+  already uses. The header version is **unvalidated** — nobody has measured
+  the collateral on everything that includes `xDebug.h`.
 
 - **`containers.h` — `static_queue<T>::iterator::operator-=` returns by value,
   not by pointer.** Two agents asked for this independently with the same
