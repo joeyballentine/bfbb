@@ -66,6 +66,9 @@
 #define SOUND_HIT_SLAP 8
 #define SOUND_HIT_FLAIL 9
 
+U32 xSndPlay3DFade(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, const xVec3* pos,
+                   F32 innerRadius, F32 outerRadius, sound_category category, F32 fade, F32 delay);
+
 zNPCB_SB2* zNPCB_SB2::_singleton;
 
 namespace
@@ -109,7 +112,7 @@ namespace
     {
         U32 id;
         U32 handle;
-        xVec3* loc;
+        const xVec3* loc;
         F32 volume;
     };
 
@@ -132,111 +135,10 @@ namespace
         char* name;
     };
 
+    static char* sound_asset_names[10][4];
     static U32 sound_asset_ids[10][4];
+    static S32 sound_asset_names_size[10];
     static sound_data_type sound_data[10];
-
-    static response_curve rc_scale;
-
-    static xBinaryCamera boss_cam;
-
-    static const sound_asset sound_assets[12] = {
-        { 0, "RSB_laugh", 0, 0 },      { 1, "RSB_kah", 0, 0 },      { 2, "RSB_chop_windup", 0, 0 },
-        { 3, "RSB_chop_swing", 0, 0 }, { 4, "RSB_swipe", 0, 0 },    { 5, "RSB_foot_loop", 0, 1 },
-        { 6, "RSB_armhit1", 0, 0 },    { 6, "RSB_armhit2", 0, 0 },  { 7, "RSB_armhit1", 0, 0 },
-        { 7, "RSB_armhit2", 0, 0 },    { 8, "RSB_armsmash", 0, 0 }, { 9, "RSB_foor_impact", 0, 0 },
-    };
-
-    static const curve_node scale_curve[4] = {
-        { 0.0f, 0.0f },
-        { 0.1f, 0.4f },
-        { 1.0f, 1.25f },
-        { 1.5f, 1.0f },
-    };
-
-    static const bool dizzy_round[9] = {
-        false, true, false, false, false, true, false, false, true
-    };
-
-    struct sequence_entry
-    {
-        S32 goal;
-        F32 delay;
-    };
-
-    // clang-format off
-    static const sequence_entry sequence[9][16] = {
-        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2SWIPE, 0.5f },
-          { 0, -1.0f } },
-        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2SWIPE, 0.01f },
-          { NPC_GOAL_BOSSSB2SWIPE, 0.5f }, { 0, -1.0f } },
-        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2CHOP, 0.01f },
-          { NPC_GOAL_BOSSSB2SWIPE, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.5f },
-          { 0, -1.0f } },
-        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
-          { NPC_GOAL_BOSSSB2CHOP, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.01f },
-          { NPC_GOAL_BOSSSB2SWIPE, 0.5f }, { 0, -1.0f } },
-        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
-          { NPC_GOAL_BOSSSB2CHOP, 0.0f }, { NPC_GOAL_BOSSSB2CHOP, 0.01f },
-          { NPC_GOAL_BOSSSB2SWIPE, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.5f },
-          { 0, -1.0f } },
-        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2KARATE, 0.01f },
-          { NPC_GOAL_BOSSSB2CHOP, 0.0f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
-          { NPC_GOAL_BOSSSB2CHOP, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.01f },
-          { NPC_GOAL_BOSSSB2SWIPE, 0.5f }, { 0, -1.0f } },
-        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2KARATE, 0.0f },
-          { NPC_GOAL_BOSSSB2KARATE, 0.01f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
-          { NPC_GOAL_BOSSSB2CHOP, 0.0f }, { NPC_GOAL_BOSSSB2CHOP, 0.01f },
-          { NPC_GOAL_BOSSSB2SWIPE, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.5f },
-          { 0, -1.0f } },
-        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2KARATE, 0.0f },
-          { NPC_GOAL_BOSSSB2KARATE, 0.01f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
-          { NPC_GOAL_BOSSSB2CHOP, 0.0f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
-          { NPC_GOAL_BOSSSB2CHOP, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.01f },
-          { NPC_GOAL_BOSSSB2SWIPE, 0.5f }, { 0, -1.0f } },
-        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2KARATE, 0.0f },
-          { NPC_GOAL_BOSSSB2KARATE, 0.0f }, { NPC_GOAL_BOSSSB2KARATE, 0.01f },
-          { NPC_GOAL_BOSSSB2CHOP, 0.0f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
-          { NPC_GOAL_BOSSSB2CHOP, 0.0f }, { NPC_GOAL_BOSSSB2CHOP, 0.01f },
-          { NPC_GOAL_BOSSSB2SWIPE, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.5f },
-          { 0, -1.0f } },
-    };
-    // clang-format on
-
-    static platform_hook platform_hooks[16];
-
-    void set_alpha_blend(xModelInstance* model)
-    {
-        model->PipeFlags &= ~0xFF0C;
-        model->PipeFlags |= 0x6508;
-    }
-
-    F32 max(F32 f0, F32 f1)
-    {
-        if (f0 > f1)
-        {
-            return f0;
-        }
-        return f1;
-    }
-
-    static void init_sound()
-    {
-    }
-
-    void reset_sound()
-    {
-        for (S32 i = 0; i < 10; ++i)
-        {
-            sound_data[i].handle = 0;
-        }
-    }
-
-    S32 play_sound(int, const xVec3*, F32)
-    {
-        return 0; // to-do
-    }
-
-    void kill_sound(int which, U32 handle);
 
     struct sound_property
     {
@@ -340,18 +242,169 @@ namespace
 
     static tweak_group tweak;
 
+    static response_curve rc_scale;
+
+    static xBinaryCamera boss_cam;
+
+    static const sound_asset sound_assets[12] = {
+        { 0, "RSB_laugh", 0, 0 },      { 1, "RSB_kah", 0, 0 },      { 2, "RSB_chop_windup", 0, 0 },
+        { 3, "RSB_chop_swing", 0, 0 }, { 4, "RSB_swipe", 0, 0 },    { 5, "RSB_foot_loop", 0, 1 },
+        { 6, "RSB_armhit1", 0, 0 },    { 6, "RSB_armhit2", 0, 0 },  { 7, "RSB_armhit1", 0, 0 },
+        { 7, "RSB_armhit2", 0, 0 },    { 8, "RSB_armsmash", 0, 0 }, { 9, "RSB_foor_impact", 0, 0 },
+    };
+
+    static const curve_node scale_curve[4] = {
+        { 0.0f, 0.0f },
+        { 0.1f, 0.4f },
+        { 1.0f, 1.25f },
+        { 1.5f, 1.0f },
+    };
+
+    static const bool dizzy_round[9] = {
+        false, true, false, false, false, true, false, false, true
+    };
+
+    struct sequence_entry
+    {
+        S32 goal;
+        F32 delay;
+    };
+
+    // clang-format off
+    static const sequence_entry sequence[9][16] = {
+        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2SWIPE, 0.5f },
+          { 0, -1.0f } },
+        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2SWIPE, 0.01f },
+          { NPC_GOAL_BOSSSB2SWIPE, 0.5f }, { 0, -1.0f } },
+        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2CHOP, 0.01f },
+          { NPC_GOAL_BOSSSB2SWIPE, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.5f },
+          { 0, -1.0f } },
+        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
+          { NPC_GOAL_BOSSSB2CHOP, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.01f },
+          { NPC_GOAL_BOSSSB2SWIPE, 0.5f }, { 0, -1.0f } },
+        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
+          { NPC_GOAL_BOSSSB2CHOP, 0.0f }, { NPC_GOAL_BOSSSB2CHOP, 0.01f },
+          { NPC_GOAL_BOSSSB2SWIPE, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.5f },
+          { 0, -1.0f } },
+        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2KARATE, 0.01f },
+          { NPC_GOAL_BOSSSB2CHOP, 0.0f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
+          { NPC_GOAL_BOSSSB2CHOP, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.01f },
+          { NPC_GOAL_BOSSSB2SWIPE, 0.5f }, { 0, -1.0f } },
+        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2KARATE, 0.0f },
+          { NPC_GOAL_BOSSSB2KARATE, 0.01f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
+          { NPC_GOAL_BOSSSB2CHOP, 0.0f }, { NPC_GOAL_BOSSSB2CHOP, 0.01f },
+          { NPC_GOAL_BOSSSB2SWIPE, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.5f },
+          { 0, -1.0f } },
+        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2KARATE, 0.0f },
+          { NPC_GOAL_BOSSSB2KARATE, 0.01f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
+          { NPC_GOAL_BOSSSB2CHOP, 0.0f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
+          { NPC_GOAL_BOSSSB2CHOP, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.01f },
+          { NPC_GOAL_BOSSSB2SWIPE, 0.5f }, { 0, -1.0f } },
+        { { NPC_GOAL_BOSSSB2IDLE, 0.5f }, { NPC_GOAL_BOSSSB2KARATE, 0.0f },
+          { NPC_GOAL_BOSSSB2KARATE, 0.0f }, { NPC_GOAL_BOSSSB2KARATE, 0.01f },
+          { NPC_GOAL_BOSSSB2CHOP, 0.0f }, { NPC_GOAL_BOSSSB2CHOP, 0.0f },
+          { NPC_GOAL_BOSSSB2CHOP, 0.0f }, { NPC_GOAL_BOSSSB2CHOP, 0.01f },
+          { NPC_GOAL_BOSSSB2SWIPE, 0.01f }, { NPC_GOAL_BOSSSB2SWIPE, 0.5f },
+          { 0, -1.0f } },
+    };
+    // clang-format on
+
+    static platform_hook platform_hooks[16];
+
+    void set_alpha_blend(xModelInstance* model)
+    {
+        model->PipeFlags &= ~0xFF0C;
+        model->PipeFlags |= 0x6508;
+    }
+
+    F32 max(F32 f0, F32 f1)
+    {
+        if (f0 > f1)
+        {
+            return f0;
+        }
+        return f1;
+    }
+
+    static void init_sound()
+    {
+        memset(sound_asset_names_size, 0, sizeof(sound_asset_names_size));
+
+        for (S32 i = 0; i < 12; i++)
+        {
+            const sound_asset& asset = sound_assets[i];
+            if (asset.name == NULL)
+            {
+                continue;
+            }
+
+            S32& n = sound_asset_names_size[asset.group];
+            sound_asset_names[asset.group][n] = asset.name;
+            sound_asset_ids[asset.group][n] = i;
+            n++;
+        }
+
+        memset(sound_data, 0, sizeof(sound_data));
+
+        for (S32 i = 0; i < 10; i++)
+        {
+            sound_data[i].id = 0;
+            sound_data[i].handle = 0;
+        }
+    }
+
+    void reset_sound()
+    {
+        for (S32 i = 0; i < 10; ++i)
+        {
+            sound_data[i].handle = 0;
+        }
+    }
+
+    S32 play_sound(int which, const xVec3* pos, F32 volume)
+    {
+        const sound_property& snd = tweak.sound[which];
+        sound_data_type& data = sound_data[which];
+        const sound_asset& asset = sound_assets[snd.asset];
+
+        if ((asset.flags & 2) && data.handle != 0)
+        {
+            return data.handle;
+        }
+
+        if (asset.flags & 1)
+        {
+            data.handle =
+                xSndPlay3DFade(data.id, volume * snd.volume, 1.0f, asset.priority, 0x800, pos,
+                               snd.range_inner, snd.range_outer, SND_CAT_GAME, 0.0f, snd.delay);
+        }
+        else
+        {
+            data.handle = xSndPlay3D(data.id, volume * snd.volume, 1.0f, asset.priority, 0x800, pos,
+                                     snd.range_inner, snd.range_outer, SND_CAT_GAME, snd.delay);
+        }
+
+        data.loc = pos;
+        data.volume = volume;
+        return data.handle;
+    }
+
     void kill_sound(int which, U32 handle)
     {
-        if (sound_assets[tweak.sound[which].asset].flags & 1)
+        sound_data_type& data = sound_data[which];
+        const sound_property& snd = tweak.sound[which];
+        const sound_asset& asset = sound_assets[snd.asset];
+
+        if (asset.flags & 1)
         {
-            xSndStopFade(handle, tweak.sound[which].fade_time);
+            xSndStopFade(handle, snd.fade_time);
         }
         else
         {
             xSndStop(handle);
         }
 
-        sound_data[which].handle = 0;
+        data.handle = 0;
     }
 
     void tweak_group::load(xModelAssetParam* params, U32 size)
@@ -1554,8 +1607,28 @@ void zNPCB_SB2::deactivate_hand(zNPCB_SB2::hand_enum hand)
 
 S32 zNPCB_SB2::player_on_ground() const
 {
-    return 0;
-    // TODO
+    const xVec3& loc = (const xVec3&)globals.player.ent.model->Mat->pos;
+
+    if (globals.player.Health == 0)
+    {
+        return 0;
+    }
+
+    if (loc.y >= tweak.ground_y + tweak.ground_zone_height)
+    {
+        return 0;
+    }
+
+    const xVec3& home = get_home();
+
+    F32 dx = loc.x - home.x;
+    F32 dz = loc.z - home.z;
+
+    xVec2 d = {};
+    d.x = dx;
+    d.y = dz;
+
+    return d.length2() < tweak.ground_radius * tweak.ground_radius;
 }
 
 void zNPCB_SB2::emit_slug(zNPCB_SB2::slug_enum which)

@@ -42,6 +42,7 @@
 
 U32 xSndPlay3DFade(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, const xVec3* pos,
                    F32 innerRadius, F32 outerRadius, sound_category category, F32 fade, F32 delay);
+void xDebugAddTweak(const char*, xVec3*, const tweak_callback*, void*, U32);
 
 namespace
 {
@@ -109,6 +110,29 @@ namespace
 
     void init_sound()
     {
+        memset(sound_asset_names_size, 0, sizeof(sound_asset_names_size));
+
+        for (S32 i = 0; i < 14; i++)
+        {
+            if (sound_assets[i].name == NULL)
+            {
+                continue;
+            }
+
+            S32 cat = sound_assets[i].category;
+            S32& n = sound_asset_names_size[cat];
+            sound_asset_names[cat][n] = sound_assets[i].name;
+            sound_asset_ids[cat][n] = i;
+            n++;
+        }
+
+        memset(sound_data, 0, sizeof(sound_data));
+
+        for (S32 i = 0; i < 4; i++)
+        {
+            sound_data[i].id = 0;
+            sound_data[i].handle = 0;
+        }
     }
 
     void reset_sound()
@@ -121,66 +145,72 @@ namespace
 
     U32 play_sound(S32 which, const xVec3* loc, F32 volume)
     {
-        const sound_asset_type& asset = sound_assets[tweak.sound[which].asset];
+        const sound_property& snd = tweak.sound[which];
+        sound_data_type& data = sound_data[which];
+        const sound_asset_type& asset = sound_assets[snd.asset];
 
-        if ((asset.mode & 2) && sound_data[which].handle != 0)
+        if ((asset.mode & 2) && data.handle != 0)
         {
-            return sound_data[which].handle;
+            return data.handle;
         }
 
         if (asset.mode & 1)
         {
-            sound_data[which].handle =
-                xSndPlay3DFade(sound_data[which].id, volume * tweak.sound[which].volume, 1.0f,
-                               asset.priority, 0x800, loc, tweak.sound[which].range_inner,
-                               tweak.sound[which].range_outer, (sound_category)0, 0.0f,
-                               tweak.sound[which].delay);
+            data.handle =
+                xSndPlay3DFade(data.id, volume * snd.volume, 1.0f, asset.priority, 0x800, loc,
+                               snd.range_inner, snd.range_outer, SND_CAT_GAME, 0.0f, snd.delay);
         }
         else
         {
-            sound_data[which].handle =
-                xSndPlay3D(sound_data[which].id, volume * tweak.sound[which].volume, 1.0f,
-                           asset.priority, 0x800, loc, tweak.sound[which].range_inner,
-                           tweak.sound[which].range_outer, (sound_category)0,
-                           tweak.sound[which].delay);
+            data.handle = xSndPlay3D(data.id, volume * snd.volume, 1.0f, asset.priority, 0x800, loc,
+                                     snd.range_inner, snd.range_outer, SND_CAT_GAME, snd.delay);
         }
 
-        sound_data[which].loc = loc;
-        sound_data[which].volume = volume;
-        return sound_data[which].handle;
+        data.loc = loc;
+        data.volume = volume;
+        return data.handle;
     }
 
     void kill_sound(S32 which, U32 handle)
     {
         sound_data_type& data = sound_data[which];
-        sound_property& prop = tweak.sound[which];
+        const sound_property& snd = tweak.sound[which];
+        const sound_asset_type& asset = sound_assets[snd.asset];
 
-        if (sound_assets[prop.asset].mode & 1)
+        if (asset.mode & 1)
         {
-            xSndStopFade(handle, prop.fade_time);
+            xSndStopFade(handle, snd.fade_time);
         }
         else
         {
             xSndStop(handle);
         }
+
         data.handle = 0;
     }
 
     void kill_sound(S32 which)
     {
-        U32 handle = sound_data[which].handle;
-        if (handle != 0)
+        sound_data_type& data = sound_data[which];
+
+        U32 handle = data.handle;
+        if (handle == 0)
         {
-            if (sound_assets[tweak.sound[which].asset].mode & 1)
-            {
-                xSndStopFade(handle, tweak.sound[which].fade_time);
-            }
-            else
-            {
-                xSndStop(handle);
-            }
-            sound_data[which].handle = 0;
+            return;
         }
+
+        const sound_property& snd = tweak.sound[which];
+        const sound_asset_type& asset = sound_assets[snd.asset];
+        if (asset.mode & 1)
+        {
+            xSndStopFade(handle, snd.fade_time);
+        }
+        else
+        {
+            xSndStop(handle);
+        }
+
+        data.handle = 0;
     }
 } // namespace
 
@@ -1317,6 +1347,39 @@ void zNPCPrawn::update_turn(F32 dt)
 
 void zNPCPrawn::update_animation(F32 dt)
 {
+    U32 idle_id = g_hash_subbanim[ANIM_Idle01];
+    U32 attack_id = g_hash_subbanim[ANIM_AttackLoop01];
+
+    U32 id = AnimCurStateID();
+    if (id != idle_id && id != attack_id)
+    {
+        return;
+    }
+
+    F32 amount;
+    if (this->turn.max_vel < 0.001f)
+    {
+        amount = 0.0f;
+    }
+    else
+    {
+        amount = this->turn.vel / this->turn.max_vel;
+    }
+
+    range_limit<F32>(amount, -1.0f, 1.0f);
+
+    xAnimSingle* single = this->model->Anim->Single;
+
+    static bool registered = false;
+    static F32 lerp = 1.0f;
+
+    if (!registered)
+    {
+        registered = true;
+        xDebugAddTweak("Temp|Prawn Anim Lerp", &lerp, 0.0f, 2.0f, NULL, NULL, 0);
+    }
+
+    single->BilinearLerp[0] = lerp;
 }
 
 void zNPCPrawn::update_floor(F32 dt)
@@ -1514,6 +1577,37 @@ void zNPCPrawn::reappear()
 
 void zNPCPrawn::render_closeup()
 {
+    if (this->closeups_used == 0)
+    {
+        return;
+    }
+
+    static xVec3 from = { 0.25f, 0.75f, 0.5f };
+    static xVec3 to = { 0.0f, 0.5f, 0.0f };
+    static bool registered = false;
+    static F32 lerp = 1.0f;
+
+    if (!registered)
+    {
+        registered = true;
+        xDebugAddTweak("Temp|Prawn Render 2D From", &from, NULL, NULL, 0);
+        xDebugAddTweak("Temp|Prawn Render 2D To", &to, NULL, NULL, 0);
+    }
+
+    const xMat4x3* mat = (const xMat4x3*)this->model->Mat;
+
+    xVec3 world_from;
+    xVec3 world_to;
+    xMat4x3Toworld(&world_from, mat, &from);
+    xMat4x3Toworld(&world_to, mat, &to);
+
+    closeup.move(world_from, world_to);
+    closeup.update(*this->model, this->lightKit);
+
+    for (S32 i = 0; i < this->closeups_used; i++)
+    {
+        closeup.set_model_texture(*this->closeup_model[i]);
+    }
 }
 
 namespace

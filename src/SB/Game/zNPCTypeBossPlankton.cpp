@@ -6,6 +6,10 @@
 #include "zNPCTypes.h"
 
 #include <types.h>
+#include <string.h>
+
+U32 xSndPlay3DFade(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, const xVec3* pos,
+                   F32 innerRadius, F32 outerRadius, sound_category category, F32 fade, F32 delay);
 
 #define f1585 1.0f
 #define f1586 0.0f
@@ -41,7 +45,7 @@ namespace
     {
         U32 id;
         U32 handle;
-        xVec3* loc;
+        const xVec3* loc;
         F32 volume;
     };
 
@@ -63,172 +67,24 @@ namespace
         U32 flags;
     };
 
-    struct bolt;
+    typedef xLaserBoltEmitter::effect_data effect_data;
 
-    struct effect_data
-    {
-        struct effect_callback
-        {
-            void (*fp)(bolt&, void*);
-            void* context;
-        };
+    static effect_data beam_launch_effect[2] = { { FX_TYPE_CALLBACK }, { FX_TYPE_CALLBACK } };
 
-        fx_type_enum type;
-        fx_orient_enum orient;
-        F32 rate;
-        union
-        {
-            xParEmitter* par;
-            xDecalEmitter* decal;
-            effect_callback callback;
-        };
-        F32 irate;
-    };
+    static effect_data beam_head_effect[1] = { { FX_TYPE_DECAL_DIST, FX_ORIENT_PATH, 3.0f } };
 
-    static effect_data beam_launch_effect[2]; // size: 0x30, address: 0x4E0E60
-    static effect_data beam_head_effect[1]; // size: 0x18, address: 0x4E0E90
-    static effect_data beam_impact_effect[3]; // size: 0x48, address: 0x4E0EB0
-    static effect_data beam_death_effect[1]; // size: 0x18, address: 0x5E53F0
-    static effect_data beam_kill_effect[1];
+    static effect_data beam_impact_effect[3] = { { FX_TYPE_PARTICLE, FX_ORIENT_HIT_NORM },
+                                                 { FX_TYPE_CALLBACK },
+                                                 { FX_TYPE_CALLBACK } };
 
+    static effect_data beam_death_effect[1] = { { FX_TYPE_PARTICLE } };
+
+    static effect_data beam_kill_effect[1] = { { FX_TYPE_CALLBACK } };
+
+    static char* sound_asset_names[6][10];
     static U32 sound_asset_ids[6][10];
+    static S32 sound_asset_names_size[6];
     static sound_data_type sound_data[6];
-
-    static const sound_asset sound_assets[29] = {
-        { 0, "RSB_foot_loop", 0, 3 },       { 0, "fan_loop", 0, 3 },
-        { 0, "Rocket_burn_loop", 0, 3 },    { 0, "RP_whirr_loop", 0, 3 },
-        { 0, "RP_whirr2_loop", 0, 3 },      { 0, "Glove_hover", 0, 3 },
-        { 0, "Glove_pursuit", 0, 3 },       { 1, "Prawn_FF_hit", 0, 0 },
-        { 1, "Prawn_hit", 0, 0 },           { 1, "Door_metal_shut", 0, 0 },
-        { 1, "Ghostplat_fall", 0, 0 },      { 1, "ST-death", 0, 0 },
-        { 1, "RP_Bwrrzt", 0, 0 },           { 1, "RP_chunk", 0, 0 },
-        { 1, "b201_rp_exhale", 0, 0 },      { 2, "RP_laser_alt", 0, 0 },
-        { 3, "RP_laser_loop", 0, 1 },       { 3, "ElecArc_alt_b", 0, 1 },
-        { 3, "Laser_lrg_fire_loop", 0, 1 }, { 3, "Laser_sm_fire_loop", 0, 1 },
-        { 4, "RB_stalact_brk", 0, 0 },      { 4, "Volcano_blast", 0, 0 },
-        { 4, "RP_laser_thunk", 0, 0 },      { 4, "RP_pfft", 0, 0 },
-        { 4, "RP_thwash", 0, 0 },           { 5, "RP_charge_whirr", 0, 0 },
-        { 5, "B101_SC_jump", 0, 0 },        { 5, "KJ_Charge", 0, 0 },
-        { 5, "Laser_med_pwrup1", 0, 0 }
-    };
-
-    static const xDecalEmitter::curve_node beam_ring_curve[2] = {
-        { 0.0f, { 255, 255, 255, 255 }, 0.0f },
-        { 1.0f, { 255, 255, 255, 0 }, 1.0f }
-    };
-
-    static const xDecalEmitter::curve_node beam_glow_curve[3] = {
-        { 0.0f, { 255, 255, 255, 255 }, 0.0f },
-        { 0.5f, { 255, 0, 255, 255 }, 4.0f },
-        { 1.0f, { 255, 0, 0, 0 }, 6.0f }
-    };
-
-    struct say_group
-    {
-        const zNPCNewsFish::say_enum* list;
-        U32 size;
-    };
-
-    static const zNPCNewsFish::say_enum say_intro[] = { zNPCNewsFish::SAY_B303_INTRO_1,
-                                                        zNPCNewsFish::SAY_B303_INTRO_2 };
-
-    static const zNPCNewsFish::say_enum say_fuse_near[] = { zNPCNewsFish::SAY_B303_FUSE_NEAR,
-                                                            zNPCNewsFish::SAY_ROBOT_VULN_2,
-                                                            zNPCNewsFish::SAY_SB_VULN_3,
-                                                            zNPCNewsFish::SAY_SB_VULN_4 };
-
-    static const zNPCNewsFish::say_enum say_fuse_hit[] = { zNPCNewsFish::SAY_B303_FUSE_HIT,
-                                                           zNPCNewsFish::SAY_HIT_BOSS_1,
-                                                           zNPCNewsFish::SAY_SB_HIT_BOSS_1 };
-
-    static const zNPCNewsFish::say_enum say_hit_boss_1[] = {
-        zNPCNewsFish::SAY_HIT_BOSS_1,    zNPCNewsFish::SAY_HIT_BOSS_2,
-        zNPCNewsFish::SAY_SB_HIT_BOSS_2, zNPCNewsFish::SAY_SB_HIT_BOSS_3,
-        zNPCNewsFish::SAY_ROBOT_HIT,     zNPCNewsFish::SAY_ROBOT_STUN_1
-    };
-
-    static const zNPCNewsFish::say_enum say_hit_boss_2[] = { zNPCNewsFish::SAY_B303_BRAIN_HELP_1,
-                                                             zNPCNewsFish::SAY_B303_BRAIN_HELP_2,
-                                                             zNPCNewsFish::SAY_B303_BRAIN_HELP_3 };
-
-    static const zNPCNewsFish::say_enum say_hit_boss_3[] = {
-        zNPCNewsFish::SAY_B303_BRAIN_HELP_1, zNPCNewsFish::SAY_B303_BRAIN_HELP_2,
-        zNPCNewsFish::SAY_B303_BRAIN_HELP_3, zNPCNewsFish::SAY_SB_VULN_1,
-        zNPCNewsFish::SAY_SB_VULN_2,         zNPCNewsFish::SAY_SB_VULN_5
-    };
-
-    static const zNPCNewsFish::say_enum say_hit_boss_4[] = { zNPCNewsFish::SAY_HIT_LAST };
-
-    static const zNPCNewsFish::say_enum say_hit_player[] = {
-        zNPCNewsFish::SAY_HIT_PLAYER_1, zNPCNewsFish::SAY_HIT_PLAYER_2,
-        zNPCNewsFish::SAY_HIT_PLAYER_3, zNPCNewsFish::SAY_HIT_PLAYER_4,
-        zNPCNewsFish::SAY_HIT_PLAYER_5, zNPCNewsFish::SAY_HIT_PLAYER_6
-    };
-
-    static const say_group say_set[8] = { { say_intro, 2 },      { say_fuse_near, 4 },
-                                          { say_fuse_hit, 3 },   { say_hit_boss_1, 6 },
-                                          { say_hit_boss_2, 3 }, { say_hit_boss_3, 6 },
-                                          { say_hit_boss_4, 1 }, { say_hit_player, 6 } };
-
-    xVec3* get_player_loc()
-    {
-        return (xVec3*)&globals.player.ent.model->Mat->pos;
-    }
-
-    S32 init_sound()
-    {
-        return 0;
-    }
-
-    void reset_sound()
-    {
-        for (S32 i = 0; i < 6; ++i)
-        {
-            sound_data[i].handle = 0;
-        }
-    }
-
-    void* play_sound(int, const xVec3*, F32)
-    {
-        return NULL;
-    }
-
-    void* kill_sound(S32, U32)
-    {
-        return 0; // to-do
-    }
-
-    void* kill_sound(S32)
-    {
-        return 0;
-    }
-
-    void play_beam_fly_sound(xLaserBoltEmitter::bolt& bolt, void* unk)
-    {
-        if (bolt.context == NULL)
-        {
-            bolt.context = play_sound(SOUND_BOLT_FLY, &bolt.loc, 1.0f);
-        }
-    }
-
-    void kill_beam_fly_sound(xLaserBoltEmitter::bolt& bolt, void* unk)
-    {
-        if (bolt.context != NULL)
-        {
-            kill_sound(3, (U32)bolt.context);
-            bolt.context = NULL;
-        }
-    }
-
-    void play_beam_fire_sound(xLaserBoltEmitter::bolt& bolt, void* unk)
-    {
-        play_sound(SOUND_BOLT_FIRE, &bolt.origin, 1.0f);
-    }
-
-    void play_beam_hit_sound(xLaserBoltEmitter::bolt& bolt, void* unk)
-    {
-        play_sound(SOUND_BOLT_HIT, &bolt.loc, 1.0f);
-    }
 
     struct tweak_group
     {
@@ -343,6 +199,220 @@ namespace
     };
 
     static tweak_group tweak;
+
+    static const sound_asset sound_assets[29] = {
+        { 0, "RSB_foot_loop", 0, 3 },       { 0, "fan_loop", 0, 3 },
+        { 0, "Rocket_burn_loop", 0, 3 },    { 0, "RP_whirr_loop", 0, 3 },
+        { 0, "RP_whirr2_loop", 0, 3 },      { 0, "Glove_hover", 0, 3 },
+        { 0, "Glove_pursuit", 0, 3 },       { 1, "Prawn_FF_hit", 0, 0 },
+        { 1, "Prawn_hit", 0, 0 },           { 1, "Door_metal_shut", 0, 0 },
+        { 1, "Ghostplat_fall", 0, 0 },      { 1, "ST-death", 0, 0 },
+        { 1, "RP_Bwrrzt", 0, 0 },           { 1, "RP_chunk", 0, 0 },
+        { 1, "b201_rp_exhale", 0, 0 },      { 2, "RP_laser_alt", 0, 0 },
+        { 3, "RP_laser_loop", 0, 1 },       { 3, "ElecArc_alt_b", 0, 1 },
+        { 3, "Laser_lrg_fire_loop", 0, 1 }, { 3, "Laser_sm_fire_loop", 0, 1 },
+        { 4, "RB_stalact_brk", 0, 0 },      { 4, "Volcano_blast", 0, 0 },
+        { 4, "RP_laser_thunk", 0, 0 },      { 4, "RP_pfft", 0, 0 },
+        { 4, "RP_thwash", 0, 0 },           { 5, "RP_charge_whirr", 0, 0 },
+        { 5, "B101_SC_jump", 0, 0 },        { 5, "KJ_Charge", 0, 0 },
+        { 5, "Laser_med_pwrup1", 0, 0 }
+    };
+
+    static const xDecalEmitter::curve_node beam_ring_curve[2] = {
+        { 0.0f, { 255, 255, 255, 255 }, 0.0f },
+        { 1.0f, { 255, 255, 255, 0 }, 1.0f }
+    };
+
+    static const xDecalEmitter::curve_node beam_glow_curve[3] = {
+        { 0.0f, { 255, 255, 255, 255 }, 0.0f },
+        { 0.5f, { 255, 0, 255, 255 }, 4.0f },
+        { 1.0f, { 255, 0, 0, 0 }, 6.0f }
+    };
+
+    struct say_group
+    {
+        const zNPCNewsFish::say_enum* list;
+        U32 size;
+    };
+
+    static const zNPCNewsFish::say_enum say_intro[] = { zNPCNewsFish::SAY_B303_INTRO_1,
+                                                        zNPCNewsFish::SAY_B303_INTRO_2 };
+
+    static const zNPCNewsFish::say_enum say_fuse_near[] = { zNPCNewsFish::SAY_B303_FUSE_NEAR,
+                                                            zNPCNewsFish::SAY_ROBOT_VULN_2,
+                                                            zNPCNewsFish::SAY_SB_VULN_3,
+                                                            zNPCNewsFish::SAY_SB_VULN_4 };
+
+    static const zNPCNewsFish::say_enum say_fuse_hit[] = { zNPCNewsFish::SAY_B303_FUSE_HIT,
+                                                           zNPCNewsFish::SAY_HIT_BOSS_1,
+                                                           zNPCNewsFish::SAY_SB_HIT_BOSS_1 };
+
+    static const zNPCNewsFish::say_enum say_hit_boss_1[] = {
+        zNPCNewsFish::SAY_HIT_BOSS_1,    zNPCNewsFish::SAY_HIT_BOSS_2,
+        zNPCNewsFish::SAY_SB_HIT_BOSS_2, zNPCNewsFish::SAY_SB_HIT_BOSS_3,
+        zNPCNewsFish::SAY_ROBOT_HIT,     zNPCNewsFish::SAY_ROBOT_STUN_1
+    };
+
+    static const zNPCNewsFish::say_enum say_hit_boss_2[] = { zNPCNewsFish::SAY_B303_BRAIN_HELP_1,
+                                                             zNPCNewsFish::SAY_B303_BRAIN_HELP_2,
+                                                             zNPCNewsFish::SAY_B303_BRAIN_HELP_3 };
+
+    static const zNPCNewsFish::say_enum say_hit_boss_3[] = {
+        zNPCNewsFish::SAY_B303_BRAIN_HELP_1, zNPCNewsFish::SAY_B303_BRAIN_HELP_2,
+        zNPCNewsFish::SAY_B303_BRAIN_HELP_3, zNPCNewsFish::SAY_SB_VULN_1,
+        zNPCNewsFish::SAY_SB_VULN_2,         zNPCNewsFish::SAY_SB_VULN_5
+    };
+
+    static const zNPCNewsFish::say_enum say_hit_boss_4[] = { zNPCNewsFish::SAY_HIT_LAST };
+
+    static const zNPCNewsFish::say_enum say_hit_player[] = {
+        zNPCNewsFish::SAY_HIT_PLAYER_1, zNPCNewsFish::SAY_HIT_PLAYER_2,
+        zNPCNewsFish::SAY_HIT_PLAYER_3, zNPCNewsFish::SAY_HIT_PLAYER_4,
+        zNPCNewsFish::SAY_HIT_PLAYER_5, zNPCNewsFish::SAY_HIT_PLAYER_6
+    };
+
+    static const say_group say_set[8] = { { say_intro, 2 },      { say_fuse_near, 4 },
+                                          { say_fuse_hit, 3 },   { say_hit_boss_1, 6 },
+                                          { say_hit_boss_2, 3 }, { say_hit_boss_3, 6 },
+                                          { say_hit_boss_4, 1 }, { say_hit_player, 6 } };
+
+    xVec3* get_player_loc()
+    {
+        return (xVec3*)&globals.player.ent.model->Mat->pos;
+    }
+
+    void init_sound()
+    {
+        memset(sound_asset_names_size, 0, sizeof(sound_asset_names_size));
+
+        for (S32 i = 0; i < 29; i++)
+        {
+            const sound_asset& asset = sound_assets[i];
+            if (asset.name == NULL)
+            {
+                continue;
+            }
+
+            S32& n = sound_asset_names_size[asset.group];
+            sound_asset_names[asset.group][n] = asset.name;
+            sound_asset_ids[asset.group][n] = i;
+            n++;
+        }
+
+        memset(sound_data, 0, sizeof(sound_data));
+
+        for (S32 i = 0; i < 6; i++)
+        {
+            sound_data[i].id = 0;
+            sound_data[i].handle = 0;
+        }
+    }
+
+    void reset_sound()
+    {
+        for (S32 i = 0; i < 6; ++i)
+        {
+            sound_data[i].handle = 0;
+        }
+    }
+
+    U32 play_sound(int which, const xVec3* pos, F32 volume)
+    {
+        const sound_property& snd = tweak.sound[which];
+        sound_data_type& data = sound_data[which];
+        const sound_asset& asset = sound_assets[snd.asset];
+
+        if ((asset.flags & 2) && data.handle != 0)
+        {
+            return data.handle;
+        }
+
+        if (asset.flags & 1)
+        {
+            data.handle =
+                xSndPlay3DFade(data.id, volume * snd.volume, 1.0f, asset.priority, 0x800, pos,
+                               snd.range_inner, snd.range_outer, SND_CAT_GAME, 0.0f, snd.delay);
+        }
+        else
+        {
+            data.handle = xSndPlay3D(data.id, volume * snd.volume, 1.0f, asset.priority, 0x800, pos,
+                                     snd.range_inner, snd.range_outer, SND_CAT_GAME, snd.delay);
+        }
+
+        data.loc = pos;
+        data.volume = volume;
+        return data.handle;
+    }
+
+    void kill_sound(S32 which, U32 handle)
+    {
+        sound_data_type& data = sound_data[which];
+        const sound_property& snd = tweak.sound[which];
+        const sound_asset& asset = sound_assets[snd.asset];
+
+        if (asset.flags & 1)
+        {
+            xSndStopFade(handle, snd.fade_time);
+        }
+        else
+        {
+            xSndStop(handle);
+        }
+
+        data.handle = 0;
+    }
+
+    void kill_sound(S32 which)
+    {
+        sound_data_type& data = sound_data[which];
+
+        U32 handle = data.handle;
+        if (handle == 0)
+        {
+            return;
+        }
+
+        const sound_property& snd = tweak.sound[which];
+        const sound_asset& asset = sound_assets[snd.asset];
+        if (asset.flags & 1)
+        {
+            xSndStopFade(handle, snd.fade_time);
+        }
+        else
+        {
+            xSndStop(handle);
+        }
+
+        data.handle = 0;
+    }
+
+    void play_beam_fly_sound(xLaserBoltEmitter::bolt& bolt, void* unk)
+    {
+        if (bolt.context == NULL)
+        {
+            bolt.context = (void*)play_sound(SOUND_BOLT_FLY, &bolt.loc, 1.0f);
+        }
+    }
+
+    void kill_beam_fly_sound(xLaserBoltEmitter::bolt& bolt, void* unk)
+    {
+        if (bolt.context != NULL)
+        {
+            kill_sound(3, (U32)bolt.context);
+            bolt.context = NULL;
+        }
+    }
+
+    void play_beam_fire_sound(xLaserBoltEmitter::bolt& bolt, void* unk)
+    {
+        play_sound(SOUND_BOLT_FIRE, &bolt.origin, 1.0f);
+    }
+
+    void play_beam_hit_sound(xLaserBoltEmitter::bolt& bolt, void* unk)
+    {
+        play_sound(SOUND_BOLT_HIT, &bolt.loc, 1.0f);
+    }
+
 
     void tweak_group::load(xModelAssetParam* ap, U32 apsize)
     {
@@ -1606,6 +1676,30 @@ void zNPCBPlankton::init_beam()
 
 void zNPCBPlankton::setup_beam()
 {
+    beam_launch_effect[0].callback.fp = play_beam_fire_sound;
+    beam_launch_effect[0].callback.context = this;
+    beam_launch_effect[1].callback.fp = play_beam_fly_sound;
+    beam_launch_effect[1].callback.context = this;
+    beam.attach_effects(xLaserBoltEmitter::FX_WHEN_LAUNCH, beam_launch_effect, 2);
+
+    beam_head_effect[0].decal = &beam_ring;
+    beam.attach_effects(xLaserBoltEmitter::FX_WHEN_HEAD, beam_head_effect, 1);
+
+    beam_impact_effect[0].par = zParEmitterFind("PAREMIT_BPLANK_SPARKS");
+    beam_impact_effect[1].callback.fp = kill_beam_fly_sound;
+    beam_impact_effect[1].callback.context = this;
+    beam_impact_effect[2].callback.fp = play_beam_hit_sound;
+    beam_impact_effect[2].callback.context = this;
+    beam.attach_effects(xLaserBoltEmitter::FX_WHEN_IMPACT, beam_impact_effect, 3);
+
+    beam_death_effect[0].par = zParEmitterFind("PAREMIT_BPLANK_PLASMA");
+    beam.attach_effects(xLaserBoltEmitter::FX_WHEN_DEATH, beam_death_effect, 1);
+
+    beam_kill_effect[0].callback.fp = kill_beam_fly_sound;
+    beam_kill_effect[0].callback.context = this;
+    beam.attach_effects(xLaserBoltEmitter::FX_WHEN_KILL, beam_kill_effect, 1);
+
+    beam_charge = zParEmitterFind("PAREMIT_BPLANK_CHARGE");
 }
 
 void zNPCBPlankton::reset_beam()
