@@ -3593,3 +3593,23 @@ F32 __deadstripped_zNPCTypeCommon_int2flt(S32 i)
 {
     return i;
 }
+
+NPCConfig* xListItem<NPCConfig>::Next()
+{
+    return this->next;
+}
+
+void xListItem<NPCConfig>::Insert(NPCConfig* list)
+{
+    NPCConfig* node = (NPCConfig*)this;
+
+    node->prev = list;
+    node->next = list->next;
+
+    if (list->next)
+    {
+        list->next->prev = node;
+    }
+
+    list->next = node;
+}

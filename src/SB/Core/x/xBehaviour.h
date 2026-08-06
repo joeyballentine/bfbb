@@ -222,7 +222,13 @@ struct xGoal : xListItem<xGoal>, xFactoryInst
     void AddFlags(S32 flags);
     xPsyche* GetPsyche() const;
     void SetCallbacks(xGoalProcessCallback process, xGoalChkRuleCallback chkRule,
-                      xGoalPreCalcCallback precalc, void* cbdata);
+                      xGoalPreCalcCallback precalc, void* cbdata)
+    {
+        this->fun_process = process;
+        this->fun_chkRule = chkRule;
+        this->fun_precalc = precalc;
+        this->cbdata = cbdata;
+    }
     S32 GetFlags() const
     {
         return flg_able;
