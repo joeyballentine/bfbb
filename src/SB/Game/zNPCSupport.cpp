@@ -1248,3 +1248,8 @@ void NPCC_MakeArbPlane(const xVec3* dir_norm, xVec3* at, xVec3* rt)
     NPCC_MakePerp(at, dir_norm);
     xVec3Cross(rt, at, dir_norm);
 }
+
+U32 NPCWidget::IsLocked()
+{
+    return npc_ownerlock != NULL;
+}
