@@ -464,3 +464,18 @@ xCutscene* xCutscene_CurrentCutscene()
 {
     return &sActiveCutscene;
 }
+
+namespace std
+{
+    float atanf(float x);
+}
+
+float std::atan(float x)
+{
+    return std::atanf(x);
+}
+
+float std::atanf(float x)
+{
+    return (float)::atan((double)x);
+}
