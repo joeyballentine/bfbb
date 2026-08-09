@@ -5,12 +5,11 @@
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\printf.h>
 #include <PowerPC_EABI_Support\MSL_C++\MSL_Common\Include\new.h>
 
-void xhud::font_meter_widget::load(xBase& data, xDynAsset& asset, u32 size_t)
+void xhud::font_meter_widget::load(xBase& data, xDynAsset& asset, size_t)
 {
-    // Stubbed out for now for causing build failure. 100% match locally though if method redefined to be nonstatic.
-    // widget::init_base((xBase&)*this, *(xBaseAsset*)&data, sizeof(xhud::font_meter_widget) + 0x10);
-    // new (&this->rc.size)
-    //     xhud::font_meter_widget(*(xhud::font_meter_asset*)&data); // TODO: proper size value
+    init_base(data, asset, sizeof(xBase) + sizeof(font_meter_widget));
+    font_meter_widget* widget = (font_meter_widget*)(&data + 1);
+    new (widget) font_meter_widget((font_meter_asset&)asset);
 }
 
 static const basic_rect<F32> screen_bounds = { 0.0f, 0.0f, 1.0f, 1.0f };

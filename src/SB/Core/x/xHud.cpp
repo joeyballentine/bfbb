@@ -412,10 +412,14 @@ namespace xhud
         }
     }
 
-    S32 widget::cb_dispatch(xBase*, xBase* target, U32, const F32*, xBase*)
+    S32 widget::cb_dispatch(xBase* sender, xBase* target, U32 event, const F32* toParam,
+                            xBase* toParamWidget)
     {
-        // Target gets cast to some type we probably don't have decomped yet.
-        return 0;
+        widget* w = (widget*)(target + 1);
+
+        w->dispatch(sender, event, toParam, toParamWidget);
+
+        return 1;
     }
 
     void widget::render_all()
