@@ -1,3 +1,7 @@
+// Expanding xSndPlay3D here adds a 0.25f .sdata2 literal that retail does not
+// have; it shifts this unit's pool. See zEnt.h.
+#define XSNDPLAY3D_OUT_OF_LINE
+
 #include "zPlatform.h"
 #include "zEnt.h"
 #include "zEntPlayer.h"
