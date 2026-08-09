@@ -596,6 +596,55 @@ Note `tools/solo.py` parses `build.ninja`, which has two rule layouts: the sourc
 file is on the same line as the `build` statement when it fits, on the next
 line when it does not. The parser handles both; if you extend it, keep that.
 
+## Bulk Ghidra: what it can and cannot do
+
+Measured, not estimated. `tools/ghidra/DumpFuncs.java` plus the local
+`analyzeHeadless` wrapper dumped **every game function currently at 0.000%
+fuzzy — 597 unique names across 38 units, 278 KB of code — in 73 seconds, with
+0 decompile failures and 0 not-found.** Extraction is emphatically not the
+bottleneck. Per-unit corpora land in `scratchpad/ghidra/<unit>.c`.
+
+**It is safe to attempt.** A unit containing a 0%-fuzzy function cannot be
+byte-identical, so none of those 38 units are `Matching` — verified, 0 of 38.
+Bulk-filling them **cannot break the DOL sha1**. The only exposure is pool
+shifts knocking neighbours off 100% inside those same units, which `solo.py`
+before/after catches.
+
+**What the output is actually like**, over the 100-block zNPCTypeRobot sample:
+
+| trait | share | meaning |
+|---|---|---|
+| decompile failures | 0% | control flow always recovered |
+| `halt_baddata`, unrecovered jumptables | 0% | no dead ends |
+| correct mangled callee names | ~all | the symbol-bearing ELF earning its keep |
+| `undefined*` types present | 52% | needs retyping against our headers |
+| raw offset derefs `*(int *)(p + 0x228)` | 30% | needs mapping to struct members |
+| `goto`/`LAB_` | 5% | |
+| bogus `undefined8 param_1..9` signature | 5% | C++ `this` misplaced by ABI misread |
+| `extraout_*` artifacts | 1% | garbage, e.g. `param_1 = extraout_f1;` |
+
+So: **the algorithm and call graph come out right; compilable C++ does not.**
+Even the cleanest cases need work — `xMat3x3RMulVec` decompiles perfectly but as
+`(float *param_1, float *param_2, float *param_3)` with `param_2[5]` indexing,
+where we need `xMat3x3*` and named members. Effectively **0% compile as-is.**
+
+The correct use is therefore **Ghidra output as agent input, not as committed
+code.** Agents previously started from raw PPC asm; starting from recovered
+control flow with real callee names is a large accelerant. It is not auto-fill,
+and anything from it needs the same measurement discipline as hand-written code.
+
+Two traps worth keeping:
+
+**Never pass function names as command-line arguments on Windows.** Mangled C++
+names can contain `<` and `>` — `xUtil_choose<i>__FPCiiPCf` is real and lives in
+this project. cmd.exe reads them as redirection and the entire `analyzeHeadless`
+invocation dies **silently, in 0.2 s, with no error output**. `DumpFuncs.java`
+takes a list file for exactly this reason.
+
+**Some symbols have several copies in the ELF.** 597 requested names produced
+650 blocks. Duplicated symbols are annotated in the per-unit corpora; check the
+address matches the unit before trusting a copy.
+
 ## Shared-header changes: the xSndPlay3D case
 
 Settled, and the method generalises. The 9-arg `xSndPlay3D(const xVec3*, ...)`
