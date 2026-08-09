@@ -2589,17 +2589,29 @@ F32 xMat3x3LookVec3(xMat3x3& mat, const xVec3& at)
     return len;
 }
 
-void xModelAnimCollRestore(const xModelInstance&)
+static RpMorphTarget anim_coll_old_mt;
+
+void xModelAnimCollRestore(const xModelInstance& cm)
 {
+    cm.Data->geometry->morphTarget->verts = anim_coll_old_mt.verts;
 }
 
-void xModelAnimCollApply(const xModelInstance&)
+void xModelAnimCollApply(const xModelInstance& cm)
 {
+    if (xModelAnimCollDirty(cm))
+    {
+        xModelAnimCollRefresh(cm);
+
+        RpMorphTarget* mt = cm.Data->geometry->morphTarget;
+
+        anim_coll_old_mt.verts = mt->verts;
+        mt->verts = (RwV3d*)cm.anim_coll.verts;
+    }
 }
 
-bool xModelAnimCollDirty(const xModelInstance&)
+bool xModelAnimCollDirty(const xModelInstance& cm)
 {
-    return false;
+    return (cm.Flags & 0x1800) == 0x800;
 }
 
 // Make these into inline definitions somewhere appropriate later
@@ -2650,12 +2662,14 @@ xVec3 xVec3::operator/(F32 f) const
     return vec;
 }
 
-void xQuickCullForRay(xQCData*, const xRay3*)
+void xQuickCullForRay(xQCData* q, const xRay3* r)
 {
+    xQuickCullForRay(&xqc_def_ctrl, q, r);
 }
 
-void xQuickCullForBox(xQCData*, const xBox*)
+void xQuickCullForBox(xQCData* q, const xBox* box)
 {
+    xQuickCullForBox(&xqc_def_ctrl, q, box);
 }
 
 bool xSphereHitsCapsule(const xVec3& center, F32 radius, const xVec3& v1, const xVec3& v2,
