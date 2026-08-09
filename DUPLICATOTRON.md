@@ -21,9 +21,11 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now |
 |---|---|---|
-| matched functions | 6491 / 10147 | 7385 / 10147 |
-| fuzzy match | 57.343% | 64.145% |
+| matched functions | 6491 / 10147 | 7388 / 10147 |
+| fuzzy match | 57.343% | 64.152% |
 | complete units | 195 / 543 | 223 / 543 |
+
+Merged `bfbbdecomp/main` (d226f0ae..24d388c4) at `297ce59f`.
 
 ## Where the remaining functions are
 
@@ -75,6 +77,12 @@ machine to commit:
   here were found by feeding it 3-4 expression shapes.
 - `pools.py <unit-frag>` — target vs ours data-symbol layout, for diagnosing
   POOL mismatches. `tools/symdump.py` covers most of what this was for.
+- `candidate.py <unit-frag> <src-path> <cand1> <cand2>` — swap each candidate
+  version of a source file into the tree, compile that one unit, and report
+  exact-match counts plus which functions are exact in only one of them.
+  Always restores the original. Written for merge-conflict resolution: it
+  answers "is upstream's version of this file better than ours" with a number
+  instead of an opinion. See "Merging upstream" below.
 - `gh.sh <out.c> <func>...` — Ghidra headless decompilation of the
   symbol-bearing `sbgcM.elf`, ~5s per batch, and the only source of a starting
   point for the MISSING bucket. Not committed because it hardcodes a local
@@ -391,19 +399,27 @@ placeholder, so our object has a bare `blr`. This is a distinct bucket from
 MISSING (no symbol at all) and from the near-100% classes (real code, wrong
 details), and it was not being tracked at all until now.
 
-**74 functions, 37640 bytes, across 20 units — all of it game code.** These are
-among the cheapest work left: the target disassembly is complete and readable,
-and because the symbol already exists and is already correctly placed in
-`.text`, you are filling in a body rather than deciding where a definition
-goes.
+Started at **74 functions, 37640 bytes, across 20 units**; down to **52
+functions, 32116 bytes, across 15 units** after the first wave and the
+24d388c4 merge. These are among the cheapest work left: the target
+disassembly is complete and readable, and because the symbol already exists
+and is already correctly placed in `.text`, you are filling in a body rather
+than deciding where a definition goes.
+
+Current state — re-run `python tools/stubs.py` rather than trusting this table:
 
 | unit | stubs | bytes |
 |---|---|---|
 | `zNPCFXCinematic` | 20 | 8200 |
 | `xFX` | 10 | 8512 |
 | `zEntPlayer` | 6 | 3704 |
-| `zNPCTypeBossPlankton` | 5 | 1096 |
-| `xFont`, `zNPCTypeKingJelly`, `zNPCTypeAmbient` | 4 each | ~1100 each |
+| `xCollide` | 3 | 200 |
+| `zMain`, `xParCmd` | 2 each | 2136 / 1112 |
+| `zLasso`, `xCutscene`, `zNPCTypeKingJelly`, `xSnd`, `xLaserBolt`, `iFX`, `xParEmitterType`, `xHudFontMeter`, `xHud` | 1 each | 4048 / 2444 / 648 / 352 / 340 / 164 / 108 / 88 / 60 |
+
+Note the two singletons with outsized bodies: `zLasso_Render` at 4048 bytes
+and `xCutscene_Render` at 2444 are each worth more code than most whole units
+in the table.
 
 Worked so far: the `init_sound`/`play_sound`/`kill_sound` family across
 Plankton, SB2 and Prawn (the same idiom in three files — crack one and the
@@ -524,6 +540,57 @@ be revisited if they ever block something:
 Note `tools/solo.py` parses `build.ninja`, which has two rule layouts: the source
 file is on the same line as the `build` statement when it fits, on the next
 line when it does not. The parser handles both; if you extend it, keep that.
+
+## Merging upstream
+
+This branch tracks `bfbbdecomp/main` but never merges back. Upstream keeps
+decompiling the same functions we do, so most conflicts are two independent
+implementations of one function — not something a 3-way merge can judge.
+
+**Resolve by measurement, not by reading.** Extract both sides and compare
+exact-match counts:
+
+```
+git show :2:<path> > ours.cpp     # stage 2 = HEAD (ours)
+git show :3:<path> > theirs.cpp   # stage 3 = upstream (theirs)
+python candidate.py <unit-frag> <path> ours.cpp theirs.cpp
+```
+
+The "exact only in X" lists are the part that matters. A side can lose 10-for-1
+overall and still hold the one function the other lacks — take the bulk winner,
+then port the individual wins across.
+
+From the 24d388c4 merge, all seven conflicts:
+
+| file | resolution | evidence |
+|---|---|---|
+| `xShadow.cpp` | ours | ours 46 exact, theirs 28, **zero** exact-only-in-theirs |
+| `zFX.cpp` | ours + 1 port | ours 63, theirs 53; theirs held `zFX_SpawnBubbleTrail` |
+| `zEntTeleportBox.cpp` | ours | dead tie 32/32, nothing exact-only either way |
+| `xHudFontMeter.cpp` | ours | their only hunk (a `const`) already in ours |
+| `zNPCTypeRobot.cpp` | ours | their only hunk (a float literal) already in ours |
+| `xShadow.h` | ours | cosmetic param rename, ours a superset |
+| `zNPCHazard.h` | **both** | their `const` + our added declaration |
+
+Two traps worth knowing:
+
+**A one-hunk upstream diff can produce a huge conflict.** `zNPCTypeRobot.cpp`
+showed ~20 conflicting lines for what was a single changed float literal. We
+had relocated `zNPCSleepy_Timestep` for definition-order matching, and the
+merge could not align the moved block. Always diff `<merge-base>..upstream` for
+the file before judging the conflict — the real change is usually tiny, and
+often something we already have.
+
+**Upstream's side can carry code that is dead in ours.** Their
+`zNPCTypeRobot.cpp` hunk included `extern char stringBase[];`, live upstream
+but dead here because we replaced every `stringBase + 0xNN` with real string
+literals. Check whether a symbol is actually referenced before preserving it.
+
+The one genuine win in that merge was a bug: our 2-arg
+`zFX_SpawnBubbleTrail` passed `&bubblehit_pos_rnd` / `&bubblehit_vel_rnd`,
+copy-pasted from `zFX_SpawnBubbleHit` directly above it. Upstream had the
+correct `&bubbletrail_*`. Worth reading their version of anything we already
+"finished" — they catch things.
 
 ## Priority: game code first
 
