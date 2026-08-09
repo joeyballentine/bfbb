@@ -1,3 +1,7 @@
+// Expanding xSndPlay3D here adds a .sdata2 literal that shifts this unit's
+// pool and drops four functions to ~99.6%. See the note in zEnt.h.
+#define XSNDPLAY3D_OUT_OF_LINE
+
 #include "zEntDestructObj.h"
 
 #include <types.h>

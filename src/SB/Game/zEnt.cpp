@@ -1,3 +1,7 @@
+// Keeps zEnt.h from inlining xSndPlay3D in this TU, so the out-of-line body
+// below stays where this object's layout needs it. See the note in zEnt.h.
+#define XSNDPLAY3D_OUT_OF_LINE
+
 #include "zEnt.h"
 
 #include <types.h>
