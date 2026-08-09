@@ -21,11 +21,19 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now |
 |---|---|---|
-| matched functions | 6491 / 10147 | 7388 / 10147 |
-| fuzzy match | 57.343% | 64.152% |
+| matched functions | 6491 / 10147 | 7398 / 10147 |
+| fuzzy match | 57.343% | 64.580% |
 | complete units | 195 / 543 | 223 / 543 |
 
 Merged `bfbbdecomp/main` (d226f0ae..24d388c4) at `297ce59f`.
+
+**`report.json` credits near-misses, so it understates stub work.** The xFX
+wave moved seven functions from ~0.5% to 72-100% and promoted six neighbours
+to exact, and `report.json` recorded **+1** for the unit — because it was
+already counting those six at 99.3-99.9%, while the newly-filled bodies at
+72-96% are still below its bar. Same for zEntPlayer: six stubs filled, +3
+recorded. Judge stub waves by `solo.py` non-matching counts; `report.json`
+only sees the crossings.
 
 ## Where the remaining functions are
 
@@ -43,11 +51,31 @@ total of 2957 also includes units with no diffable object at all.
 | REGS | 20 | identical mnemonics, different register numbers |
 
 `POOL` functions are byte-identical apart from which anonymous constant they
-reference; objdiff pairs anonymous symbols by ordinal position within a
-section. Biggest clusters: `xFont` (13), `zEntCruiseBubble` (13), `xMath` (9),
+reference. Biggest clusters: `xFont` (13), `zEntCruiseBubble` (13), `xMath` (9),
 `iMath3` (7), `zNPCGoalRobo` (7), `zNPCTypeVillager` (7), `zNPCSupport` (7),
 `zNPCTypeKingJelly` (7), `zNPCSupplement` (7). See **Settled** below for why
 this is not the cheap bucket it looks like.
+
+**objdiff compares relocations by target offset, not by symbol name.** This
+corrects the earlier assumption that anonymous names are cosmetic.
+`sStripVert$2188` vs `sStripVert_2188` is *not* flagged — the name differs but
+the target is the same object. `@958@sda21` vs `@256@sda21` *is* flagged,
+because those two literals sit at different `.sdata2` offsets. So what matters
+is pool **layout**, not pool numbering, and layout is something source order
+can actually control.
+
+That makes POOL partially reachable, and it cuts both ways within a file.
+Writing `DrawRing` at the target's position in `xFX.cpp` seeded `.sdata2` with
+the target's first nine constants in the target's own order, and six unrelated
+neighbours went from 99.3-99.9% to exact as a side effect. The inverse is the
+standing hazard: one unwritten function that owns an early pool slot shifts
+everything after it. `xFXRenderProximityFade` owns slot 0x2C (255.0f), so
+nothing in `xFX` can align past 0x28 until it exists — which is the current
+ceiling on four other functions in that unit.
+
+Practical consequence: when a unit has several near-100% functions and one
+large unwritten function early in the file, write the big one first. Filling
+small stubs around it just re-shuffles a pool that is going to move again.
 
 86 units are within 3 functions of being complete — finishing those is the
 fastest route to raising `complete_units`.
@@ -420,6 +448,30 @@ Current state — re-run `python tools/stubs.py` rather than trusting this table
 Note the two singletons with outsized bodies: `zLasso_Render` at 4048 bytes
 and `xCutscene_Render` at 2444 are each worth more code than most whole units
 in the table.
+
+**Look for a matched sibling before reading any stub's asm.** Several stubs are
+near-copies of a function already written in the same file, and the sibling is
+a far better starting point than the disassembly:
+
+- `xQuickCullForRay`/`xQuickCullForBox` in `xCollide.cpp` are the same
+  one-line forwarder as `xQuickCullForBound` in `xBound.cpp:399` —
+  `xQuickCullForX(&xqc_def_ctrl, q, x)`. Both went straight to 100%.
+- `xHudFontMeter::load` is the `init_base` + placement-new idiom shared by
+  `xHudText`, `xHudModel` and `xHudUnitMeter`. Its comment claimed it was
+  stubbed because the real body "caused a build failure" — the actual cause
+  was that the definition named its third parameter `size_t` (of type `u32`),
+  shadowing the type so `new` would not parse. Renaming it fixed the build and
+  the function matched 100% immediately. **Treat "this does not compile"
+  comments as unverified.**
+- `xParCmd_AlphaInOut_Update` is `xParCmd_SizeInOut_Update` with `custAlpha`
+  for `custSize`, writing `p->m_cfl[3]` and then `p->m_c[3] = (U8)p->m_cfl[3]`.
+  0.990% -> 87.525% from the sibling alone.
+
+`xParCmd_SizeInOut_Update` (90.542%) and `_AlphaInOut_Update` (87.525%) now
+share the same two residuals, both already flagged in the SizeInOut source: the
+clamp is not the `CLAMP` macro, and `0.33333334f` is cached before the loop
+rather than reloaded. Crack that idiom once and both functions move —
+`xParCmd_Shaper_Update` (708b, still a stub) reuses it a third time.
 
 Worked so far: the `init_sound`/`play_sound`/`kill_sound` family across
 Plankton, SB2 and Prawn (the same idiom in three files — crack one and the
