@@ -771,7 +771,48 @@ void xParCmd_SizeInOut_Update(xParCmd* c, xParGroup* ps, F32 dt)
 
 void xParCmd_AlphaInOut_Update(xParCmd* c, xParGroup* ps, F32 dt)
 {
-    // todo: this is very similar to xParCmd_SizeInOut_Update
+    xPar* p;
+    xParCmdAlphaInOutData* cmd = (xParCmdAlphaInOutData*)c->tasset;
+
+    if (cmd->enabled)
+    {
+        p = ps->m_root;
+
+        S32 seg;
+        F32 slope_alpha[3];
+
+        slope_alpha[0] = 3.0f * (cmd->custAlpha[1] - cmd->custAlpha[0]);
+        slope_alpha[1] = 3.0f * (cmd->custAlpha[2] - cmd->custAlpha[1]);
+        slope_alpha[2] = 3.0f * (cmd->custAlpha[3] - cmd->custAlpha[2]);
+
+        while (p)
+        {
+            F32 frac = CLAMP(1.0f - p->m_lifetime / p->totalLifespan, 0.0f, 1.0f);
+
+            if (frac < 0.33333334f)
+            {
+                seg = 0;
+            }
+            else if (frac < 0.6666667f)
+            {
+                seg = 1;
+            }
+            else
+            {
+                seg = 2;
+            }
+
+            for (S32 i = seg; i > 0; i--)
+            {
+                frac -= 0.33333334f;
+            }
+
+            p->m_cfl[3] = CLAMP(frac * slope_alpha[seg] + cmd->custAlpha[seg], 0.0f, 255.0f);
+            p->m_c[3] = (U8)p->m_cfl[3];
+
+            p = p->m_next;
+        }
+    }
 }
 
 void xParCmd_Shaper_Update(xParCmd* c, xParGroup* ps, F32 dt)
