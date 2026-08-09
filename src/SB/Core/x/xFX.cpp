@@ -1,6 +1,7 @@
 #include "xFX.h"
 
 #include "iFX.h"
+#include "iParMgr.h"
 #include "iMath.h"
 
 #include "xDebug.h"
@@ -116,7 +117,188 @@ static void DrawRingSceneExit()
 
 static void DrawRing(xFXRing* m)
 {
-    // todo: uses int-to-float conversion
+    RwCullMode cmode;
+    xVec3 lprev;
+    xVec3 lcur;
+    xVec3 uprev;
+    xVec3 ucur;
+    S32 i;
+    RwRaster* raster;
+    U8 red;
+    U8 green;
+    U8 blue;
+    U8 alpha;
+    F32 u;
+    F32 radius;
+    F32 oradius;
+    F32 height;
+    F32 tilt;
+    F32 dt;
+    xVec3* center;
+    RxObjSpace3DVertex* Im3DBuffer;
+    RxObjSpace3DVertex* imv;
+    F32 oour;
+
+    if (m->time <= 0.0f)
+    {
+        return;
+    }
+
+    dt = m->time / m->lifetime;
+
+    radius = m->ring_radius + m->ring_radius_delta * dt;
+    height = m->ring_height + m->ring_height_delta * dt;
+    tilt = m->ring_tilt + m->ring_tilt_delta * dt;
+
+    oradius = radius + height * icos(tilt);
+    height = height * isin(tilt);
+
+    center = &m->pos;
+
+    Im3DBuffer = gRenderBuffer.m_vertex;
+
+    lprev.x = center->x;
+    lprev.y = center->y;
+    lprev.z = center->z + radius;
+    uprev.x = center->x;
+    uprev.y = center->y + height;
+    uprev.z = center->z + oradius;
+
+    if (g_txtr_drawRing)
+    {
+        raster = g_txtr_drawRing->raster;
+    }
+    else
+    {
+        raster = NULL;
+    }
+
+    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
+    RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+    RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)raster);
+    RwRenderStateGet(rwRENDERSTATECULLMODE, &cmode);
+    RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLNONE);
+
+    oour = (F32)m->u_repeat / m->ring_segs;
+
+    for (i = 1; i <= m->ring_segs; i++)
+    {
+        if (Im3DBufferPos > 474)
+        {
+            if (RwIm3DTransform(Im3DBuffer, Im3DBufferPos, NULL,
+                                rwIM3D_VERTEXUV | rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA))
+            {
+                RwIm3DRenderPrimitive(rwPRIMTYPETRILIST);
+                RwIm3DEnd();
+            }
+
+            Im3DBufferPos = 0;
+        }
+
+        imv = Im3DBuffer + Im3DBufferPos;
+
+        if (i == m->ring_segs)
+        {
+            tilt = 0.0f;
+        }
+        else
+        {
+            tilt = 6.2831855f * i / m->ring_segs;
+        }
+
+        F32 si = isin(tilt);
+        F32 co = icos(tilt);
+
+        lcur.x = center->x + radius * si;
+        lcur.y = center->y;
+        lcur.z = center->z + radius * co;
+        ucur.x = center->x + oradius * si;
+        ucur.y = center->y + height;
+        ucur.z = center->z + oradius * co;
+
+        F32 fr = m->ring_color.r - m->ring_color.r * dt;
+        F32 fg = m->ring_color.g - m->ring_color.g * dt;
+        F32 fb = m->ring_color.b - m->ring_color.b * dt;
+        F32 fa = m->ring_color.a - m->ring_color.a * dt;
+
+        if (fr < 0.0f)
+        {
+            fr = 0.0f;
+        }
+
+        if (fg < 0.0f)
+        {
+            fg = 0.0f;
+        }
+
+        if (fb < 0.0f)
+        {
+            fb = 0.0f;
+        }
+
+        if (fa < 0.0f)
+        {
+            fa = 0.0f;
+        }
+
+        red = fr;
+        green = fg;
+        blue = fb;
+        alpha = fa * (1.0f - dt);
+
+        u = i * oour;
+
+        RwIm3DVertexSetPos(&imv[0], lprev.x, lprev.y, lprev.z);
+        RwIm3DVertexSetPos(&imv[1], uprev.x, uprev.y, uprev.z);
+        RwIm3DVertexSetPos(&imv[2], lcur.x, lcur.y, lcur.z);
+        RwIm3DVertexSetPos(&imv[3], uprev.x, uprev.y, uprev.z);
+        RwIm3DVertexSetPos(&imv[4], lcur.x, lcur.y, lcur.z);
+        RwIm3DVertexSetPos(&imv[5], ucur.x, ucur.y, ucur.z);
+
+        imv[0].u = u;
+        imv[1].u = u;
+        imv[2].u = u + oour;
+        imv[3].u = u;
+        imv[4].u = u + oour;
+        imv[5].u = u + oour;
+
+        imv[0].v = 0.0f;
+        imv[1].v = 0.999f;
+        imv[2].v = 0.0f;
+        imv[3].v = 0.999f;
+        imv[4].v = 0.0f;
+        imv[5].v = 0.999f;
+
+        RwIm3DVertexSetRGBA(&imv[0], red, green, blue, alpha);
+        RwIm3DVertexSetRGBA(&imv[1], red, green, blue, alpha);
+        RwIm3DVertexSetRGBA(&imv[2], red, green, blue, alpha);
+        RwIm3DVertexSetRGBA(&imv[3], red, green, blue, alpha);
+        RwIm3DVertexSetRGBA(&imv[4], red, green, blue, alpha);
+        RwIm3DVertexSetRGBA(&imv[5], red, green, blue, alpha);
+
+        Im3DBufferPos += 6;
+
+        lprev = lcur;
+        uprev = ucur;
+    }
+
+    if (Im3DBufferPos != 0)
+    {
+        if (RwIm3DTransform(Im3DBuffer, Im3DBufferPos, NULL,
+                            rwIM3D_VERTEXUV | rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA))
+        {
+            RwIm3DRenderPrimitive(rwPRIMTYPETRILIST);
+            RwIm3DEnd();
+        }
+
+        Im3DBufferPos = 0;
+    }
+
+    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+    RwRenderStateSet(rwRENDERSTATETEXTURERASTER, NULL);
+    RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)cmode);
 }
 
 xFXRing* xFXRingCreate(const xVec3* pos, const xFXRing* params)
@@ -433,14 +615,6 @@ RpAtomic* xFXAtomicEnvMapSetup(RpAtomic* atomic, U32 aid, F32 shininess)
     return NULL;
 }
 
-void xFXAuraAdd(void*, xVec3*, iColor_tag*, F32)
-{
-}
-
-void xFXAuraUpdate(F32)
-{
-}
-
 U32 xFXanimUVCreate()
 {
     if (xFXanimUVPipeline == NULL)
@@ -607,6 +781,97 @@ void xFXAuraSetup()
     gAuraTex = (RwTexture*)xSTFindAsset(0x8074A95F, NULL);
 }
 
+void xFXAuraAdd(void* parent, xVec3* pos, iColor_tag* color, F32 size)
+{
+    S32 i;
+    _xFXAura* ap;
+
+    ap = sAura;
+
+    for (i = 0; i < AURA_COUNT; i++)
+    {
+        if (ap->parent == parent)
+        {
+            ap->frame = gFrameCount;
+            ap->pos = *pos;
+            ap->color = *color;
+            ap->size = size;
+            return;
+        }
+        ap++;
+    }
+
+    ap = sAura;
+
+    for (i = 0; i < AURA_COUNT; i++)
+    {
+        if (ap->parent == NULL)
+        {
+            ap->frame = gFrameCount;
+            ap->parent = parent;
+            ap->pos = *pos;
+            ap->color = *color;
+            ap->size = size;
+            ap->dangle[0] = 0.5f;
+            ap->dangle[1] = -0.5f;
+            return;
+        }
+        ap++;
+    }
+}
+
+void xFXAuraUpdate(F32 dt)
+{
+    _xFXAura* ap;
+    S32 i;
+
+    if (gAuraTex == NULL)
+    {
+        return;
+    }
+
+    sAuraPulseAng[0] += 2.0f * dt;
+    sAuraPulseAng[1] += 2.3f * dt;
+
+    if (sAuraPulseAng[0] > 6.2831855f)
+    {
+        sAuraPulseAng[0] -= 6.2831855f;
+    }
+
+    if (sAuraPulseAng[1] > 6.2831855f)
+    {
+        sAuraPulseAng[1] -= 6.2831855f;
+    }
+
+    sAuraPulse[0] = 0.1f * isin(sAuraPulseAng[0]);
+    sAuraPulse[1] = 0.1f * isin(sAuraPulseAng[1]);
+
+    sAuraAngle[0].angle += 0.5f * dt;
+
+    if (sAuraAngle[0].angle > 3.1415927f)
+    {
+        sAuraAngle[0].angle -= 6.2831855f;
+    }
+
+    sAuraAngle[0].cc = icos(sAuraAngle[0].angle);
+    sAuraAngle[0].ss = isin(sAuraAngle[0].angle);
+
+    sAuraAngle[1].angle = -sAuraAngle[0].angle;
+    sAuraAngle[1].cc = sAuraAngle[0].cc;
+    sAuraAngle[1].ss = -sAuraAngle[0].ss;
+
+    ap = sAura;
+
+    for (i = 0; i < AURA_COUNT; i++)
+    {
+        if (ap->frame != gFrameCount)
+        {
+            ap->parent = NULL;
+        }
+        ap++;
+    }
+}
+
 void xFXStartup()
 {
 }
@@ -675,6 +940,29 @@ void xFXanimUVSetTranslation(const xVec3* translation)
 void xFXStreakUpdate(U32 id, const xVec3* a, const xVec3* b)
 {
     xFXStreak* s;
+
+    if (id == 10)
+    {
+        return;
+    }
+
+    s = &sStreakList[id];
+
+    if (s->elapsed > s->frequency)
+    {
+        s->elapsed -= s->frequency;
+        s->head = s->head + 1;
+
+        if (s->head >= 50)
+        {
+            s->head = 0;
+        }
+    }
+
+    s->elem[s->head].p[0] = *a;
+    s->elem[s->head].p[1] = *b;
+    s->elem[s->head].flag = 1;
+    s->elem[s->head].a = s->alphaStart;
 }
 
 U32 xFXStreakStart(F32 frequency, F32 alphaFadeRate, F32 alphaStart, U32 textureID,
@@ -770,8 +1058,67 @@ void xFXStreakStop(U32 streakID)
     sStreakList[streakID].flags |= 0x2;
 }
 
-void xFXStreakUpdate(F32)
+void xFXStreakUpdate(F32 dt)
 {
+    xFXStreak* s = sStreakList;
+    S32 i;
+
+    for (i = 0; i < 10; i++, s++)
+    {
+        if (s->flags == 0)
+        {
+            continue;
+        }
+
+        s->elapsed += dt;
+        s->lifetime += dt;
+
+        S32 j;
+        xFXStreakElem* e;
+
+        for (j = 0; j < 50; j++)
+        {
+            e = &s->elem[j];
+
+            if (s->flags & 0x4)
+            {
+                xVec3 diff = e->p[0] - e->p[1];
+
+                diff *= 0.5f * (s->alphaFadeRate * dt);
+
+                e->p[0] -= diff;
+                e->p[1] += diff;
+            }
+
+            e->a -= s->alphaFadeRate * dt;
+
+            if (e->a < 0.01f)
+            {
+                e->a = 0.0f;
+                e->flag = 0;
+            }
+        }
+
+        if (s->flags & 0x2)
+        {
+            S32 done = 1;
+            S32 k;
+
+            for (k = 0; k < 50; k++)
+            {
+                if (s->elem[k].flag == 1)
+                {
+                    done = 0;
+                    break;
+                }
+            }
+
+            if (done)
+            {
+                s->flags = 0;
+            }
+        }
+    }
 }
 
 void xParInterp::set(F32 value1, F32 value2, F32 freq, U32 interp)
@@ -873,17 +1220,369 @@ namespace
     }
 } // namespace
 
-void xFXShineUpdate(F32)
+void xFXShineUpdate(F32 dt)
 {
+    xFXShine* s;
+    S32 i;
+    S32 j;
+    xFXShineElem* e;
+
+    s = sShineList;
+
+    for (i = 0; i < 2; i++, s++)
+    {
+        if (s->flags == 0)
+        {
+            continue;
+        }
+
+        s->elapsed += dt;
+        s->lifetime += dt;
+        s->rotateZ += s->rotateSpeed * dt;
+
+        if (s->lifetimeMax != 0.0f && !(s->flags & 0x2) && s->lifetime > s->lifetimeMax)
+        {
+            s->flags |= 0x2;
+        }
+
+        if (s->ppos != NULL)
+        {
+            s->pos = *s->ppos;
+        }
+
+        for (j = 0; j < 100; j++)
+        {
+            e = &s->elem[j];
+
+            if (e->flag == 0 && s->elapsed >= s->frequency && !(s->flags & 0x2))
+            {
+                e->vel.x = s->spd * (2.0f * xurand() - 1.0f);
+                e->vel.y = s->spd * (2.0f * xurand() - 1.0f);
+                e->vel.z = s->spd * (2.0f * xurand() - 1.0f);
+
+                e->p = e->vel;
+
+                e->cola.r = s->color_a.r;
+                e->cola.g = s->color_a.g;
+                e->cola.b = s->color_a.b;
+                e->colb.r = s->color_b.r;
+                e->colb.g = s->color_b.g;
+                e->colb.b = s->color_b.b;
+
+                e->a = 1.0f;
+                e->lifetime = 0.0f;
+                e->flag = 1;
+
+                s->elapsed -= s->frequency;
+            }
+
+            if (e->flag != 0)
+            {
+                e->p += e->vel * dt;
+                e->lifetime += dt;
+
+                if (e->lifetime < s->lifetimeElemMax)
+                {
+                    e->a = isin(3.1415927f * (e->lifetime / s->lifetimeElemMax));
+                }
+                else
+                {
+                    e->a = 0.0f;
+                    e->flag = 0;
+                }
+            }
+        }
+
+        if (s->flags & 0x2)
+        {
+            S32 done = 1;
+            S32 k;
+
+            for (k = 0; k < 100; k++)
+            {
+                if (s->elem[k].flag & 1)
+                {
+                    done = 0;
+                    break;
+                }
+            }
+
+            if (done)
+            {
+                s->flags = 0;
+            }
+        }
+    }
 }
 
 void xFXShineRender()
 {
+    xFXShineElem* e;
+    S32 shine;
+    xFXShine* s;
+    S32 j;
+    RwFrame* frame;
+    xMat3x3 mat;
+    xVec3 v;
+    xVec3 w;
+    xVec3 w2;
+    F32 uoff;
+
+    s = sShineList;
+
+    for (shine = 0; shine < 2; shine++, s++)
+    {
+        if (s->flags == 0)
+        {
+            continue;
+        }
+
+        for (j = 0; j < 100; j++)
+        {
+            e = &s->elem[j];
+
+            if (e->flag == 0)
+            {
+                continue;
+            }
+
+            if (globals.camera.lo_cam)
+            {
+                frame = RwCameraGetFrame(globals.camera.lo_cam);
+            }
+
+            v.x = e->p.x;
+            v.y = e->p.y;
+            v.z = e->p.z;
+
+            w.x = 0.5f * (frame->ltm.right.x * s->width);
+            w.y = 0.5f * (frame->ltm.right.y * s->width);
+            w.z = 0.5f * (frame->ltm.right.z * s->width);
+
+            w2 = w * 1.2f;
+
+            uoff = e->lifetime * s->spd;
+
+            xMat3x3Transpose(&mat, (xMat3x3*)frame);
+            xMat3x3LMulVec(&v, &mat, &v);
+
+            RwIm3DVertexSetPos(&blah_2485[0], s->pos.x, s->pos.y, s->pos.z);
+            RwIm3DVertexSetUV(&blah_2485[0], uoff, 0.0f);
+            RwIm3DVertexSetRGBA(&blah_2485[0], e->cola.r, e->cola.g, e->cola.b, 0);
+
+            RwIm3DVertexSetPos(&blah_2485[1], s->pos.x, s->pos.y, s->pos.z);
+            RwIm3DVertexSetUV(&blah_2485[1], uoff, 1.0f);
+            RwIm3DVertexSetRGBA(&blah_2485[1], e->cola.r, e->cola.g, e->cola.b, 0);
+
+            RwIm3DVertexSetPos(&blah_2485[2], s->pos.x + v.x - w.x, s->pos.y + v.y - w.y,
+                               s->pos.z + v.z - w.z);
+            RwIm3DVertexSetUV(&blah_2485[2], 1.0f + uoff, 0.0f);
+            RwIm3DVertexSetRGBA(&blah_2485[2], e->cola.r, e->cola.g, e->cola.b,
+                                (U8)(255.0f * e->a));
+
+            RwIm3DVertexSetPos(&blah_2485[3], w.x + (s->pos.x + v.x), w.y + (s->pos.y + v.y),
+                               w.z + (s->pos.z + v.z));
+            RwIm3DVertexSetUV(&blah_2485[3], 1.0f + uoff, 1.0f);
+            RwIm3DVertexSetRGBA(&blah_2485[3], e->cola.r, e->cola.g, e->cola.b,
+                                (U8)(255.0f * e->a));
+
+            RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)s->textureRasterPtr);
+
+            if (RwIm3DTransform(blah_2485, 4, NULL,
+                                rwIM3D_VERTEXUV | rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA))
+            {
+                RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
+                RwIm3DEnd();
+            }
+
+            RwIm3DVertexSetPos(&blah_2485[0], s->pos.x, s->pos.y, s->pos.z);
+            RwIm3DVertexSetUV(&blah_2485[0], uoff, 0.0f);
+            RwIm3DVertexSetRGBA(&blah_2485[0], e->colb.r, e->colb.g, e->colb.b, 0);
+
+            RwIm3DVertexSetPos(&blah_2485[1], s->pos.x, s->pos.y, s->pos.z);
+            RwIm3DVertexSetUV(&blah_2485[1], 0.0f, 1.0f);
+            RwIm3DVertexSetRGBA(&blah_2485[1], e->colb.r, e->colb.g, e->colb.b, 0);
+
+            RwIm3DVertexSetPos(&blah_2485[2], s->pos.x + v.x - w2.x, s->pos.y + v.y - w2.y,
+                               s->pos.z + v.z - w2.z);
+            RwIm3DVertexSetUV(&blah_2485[2], 1.0f, 0.0f);
+            RwIm3DVertexSetRGBA(&blah_2485[2], e->colb.r, e->colb.g, e->colb.b,
+                                (U8)(255.0f * e->a));
+
+            RwIm3DVertexSetPos(&blah_2485[3], w2.x + (s->pos.x + v.x), w2.y + (s->pos.y + v.y),
+                               w2.z + (s->pos.z + v.z));
+            RwIm3DVertexSetUV(&blah_2485[3], 1.0f, 1.0f);
+            RwIm3DVertexSetRGBA(&blah_2485[3], e->colb.r, e->colb.g, e->colb.b,
+                                (U8)(255.0f * e->a));
+
+            RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)s->textureRasterPtr);
+
+            if (RwIm3DTransform(blah_2485, 4, NULL,
+                                rwIM3D_VERTEXUV | rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA))
+            {
+                RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
+                RwIm3DEnd();
+            }
+        }
+    }
 }
 
 static void RenderRotatedBillboard(xVec3* pos, _xFXAuraAngle* rot, U32 count, F32 width, F32 height,
                                    iColor_tag tint, U32 flipUV)
 {
+    RxObjSpace3DVertex vert[384];
+    xVec3 rtv;
+    xVec3 upv;
+    xVec3 v;
+    xVec3 myat;
+    U32 i;
+    RxObjSpace3DVertex* vp;
+    xMat4x3* cammat;
+    xVec3* rt;
+    xVec3* up;
+    F32 zero;
+    F32 one;
+    F32 nearclip;
+    F32 camdist;
+    F32 at_offset;
+    F32 scale;
+    F32 dx;
+    F32 dy;
+
+    RwCamera* cam = (RwCamera*)RwEngineInstance->curCamera;
+
+    cammat = (xMat4x3*)&((RwFrame*)cam->object.object.parent)->modelling;
+
+    if (pos == NULL || cammat == NULL)
+    {
+        return;
+    }
+
+    rt = &cammat->right;
+    up = &cammat->up;
+
+    width *= 1.0f + sAuraPulse[0];
+    height *= 1.0f + sAuraPulse[1];
+
+    if (flipUV)
+    {
+        zero = 0.999f;
+    }
+    else
+    {
+        zero = 0.0f;
+    }
+
+    if (flipUV)
+    {
+        one = 0.0f;
+    }
+    else
+    {
+        one = 0.999f;
+    }
+
+    width = 0.5f * width;
+    height = 0.5f * height;
+
+    nearclip = 0.1f + cam->nearPlane;
+
+    vp = vert;
+
+    for (i = 0; i < count; i++, pos++)
+    {
+        xVec3Sub(&myat, &pos[i], &cammat->pos);
+        camdist = xVec3Normalize(&myat, &myat);
+
+        if (camdist < nearclip)
+        {
+            continue;
+        }
+
+        at_offset = -2.0f + camdist;
+
+        if (at_offset <= nearclip)
+        {
+            at_offset = nearclip;
+        }
+
+        scale = at_offset / camdist;
+
+        xVec3SMul(&v, &myat, at_offset - camdist);
+        xVec3Add(&v, pos, &v);
+
+        dx = width * scale;
+        dy = height * scale;
+
+        xVec3SMul(&rtv, rt, dx);
+        xVec3SMul(&upv, up, -dy);
+
+        if (rot != NULL)
+        {
+            xVec3SMul(&rtv, rt, -dx * rot[i].ss);
+            xVec3SMul(&upv, up, -dy * rot[i].cc);
+        }
+
+        RwIm3DVertexSetPos(&vp[0], upv.x + (v.x + rtv.x), upv.y + (v.y + rtv.y),
+                           upv.z + (v.z + rtv.z));
+        RwIm3DVertexSetRGBA(&vp[0], tint.r, tint.g, tint.b, tint.a);
+        RwIm3DVertexSetUV(&vp[0], zero, zero);
+
+        if (rot != NULL)
+        {
+            xVec3SMul(&rtv, rt, dx * rot[i].cc);
+            xVec3SMul(&upv, up, -dy * rot[i].ss);
+        }
+
+        RwIm3DVertexSetPos(&vp[1], upv.x + (v.x + rtv.x), upv.y + (v.y + rtv.y),
+                           upv.z + (v.z + rtv.z));
+        RwIm3DVertexSetRGBA(&vp[1], tint.r, tint.g, tint.b, tint.a);
+        RwIm3DVertexSetUV(&vp[1], one, zero);
+
+        if (rot != NULL)
+        {
+            xVec3SMul(&rtv, rt, -dx * rot[i].cc);
+            xVec3SMul(&upv, up, dy * rot[i].ss);
+        }
+
+        RwIm3DVertexSetPos(&vp[2], upv.x + (v.x + rtv.x), upv.y + (v.y + rtv.y),
+                           upv.z + (v.z + rtv.z));
+        RwIm3DVertexSetRGBA(&vp[2], tint.r, tint.g, tint.b, tint.a);
+        RwIm3DVertexSetUV(&vp[2], zero, one);
+
+        RwIm3DVertexSetPos(&vp[3], upv.x + (v.x + rtv.x), upv.y + (v.y + rtv.y),
+                           upv.z + (v.z + rtv.z));
+        RwIm3DVertexSetRGBA(&vp[3], tint.r, tint.g, tint.b, tint.a);
+        RwIm3DVertexSetUV(&vp[3], zero, one);
+
+        if (rot != NULL)
+        {
+            xVec3SMul(&rtv, rt, dx * rot[i].cc);
+            xVec3SMul(&upv, up, -dy * rot[i].ss);
+        }
+
+        RwIm3DVertexSetPos(&vp[4], upv.x + (v.x + rtv.x), upv.y + (v.y + rtv.y),
+                           upv.z + (v.z + rtv.z));
+        RwIm3DVertexSetRGBA(&vp[4], tint.r, tint.g, tint.b, tint.a);
+        RwIm3DVertexSetUV(&vp[4], one, zero);
+
+        if (rot != NULL)
+        {
+            xVec3SMul(&rtv, rt, dx * rot[i].ss);
+            xVec3SMul(&upv, up, dy * rot[i].cc);
+        }
+
+        RwIm3DVertexSetPos(&vp[5], upv.x + (v.x + rtv.x), upv.y + (v.y + rtv.y),
+                           upv.z + (v.z + rtv.z));
+        RwIm3DVertexSetRGBA(&vp[5], tint.r, tint.g, tint.b, tint.a);
+        RwIm3DVertexSetUV(&vp[5], one, one);
+
+        vp += 6;
+    }
+
+    RwIm3DTransform(vert, count * 6, NULL, rwIM3D_VERTEXUV | rwIM3D_VERTEXXYZ);
+    RwIm3DRenderPrimitive(rwPRIMTYPETRILIST);
+    RwIm3DEnd();
 }
 
 void xFXAuraRender()
@@ -1340,6 +2039,84 @@ void xFXStreakInit()
 
 void xFXStreakRender()
 {
+    xFXStreakElem* e1;
+    S32 streak;
+    xFXStreak* s;
+    S32 count;
+    S32 j;
+    xFXStreakElem* e;
+
+    s = sStreakList;
+
+    for (streak = 0; streak < 10; streak++, s++)
+    {
+        if (s->flags == 0)
+        {
+            continue;
+        }
+
+        count = s->head;
+
+        for (j = 49; j > 0; j--)
+        {
+            e = &s->elem[count];
+
+            if (count - 1 > 0)
+            {
+                e1 = &s->elem[count - 1];
+            }
+            else
+            {
+                e1 = &s->elem[49];
+            }
+
+            if (e->flag == 0)
+            {
+                break;
+            }
+
+            if (e1->flag == 0)
+            {
+                break;
+            }
+
+            RwIm3DVertexSetPos(&sStripVert_2188[0], e->p[0].x, e->p[0].y, e->p[0].z);
+            RwIm3DVertexSetUV(&sStripVert_2188[0], 0.0f, 0.0f);
+            RwIm3DVertexSetRGBA(&sStripVert_2188[0], s->color_a.r, s->color_a.g, s->color_a.b,
+                                (U8)(255.0f * e->a));
+
+            RwIm3DVertexSetPos(&sStripVert_2188[1], e->p[1].x, e->p[1].y, e->p[1].z);
+            RwIm3DVertexSetUV(&sStripVert_2188[1], 0.0f, 1.0f);
+            RwIm3DVertexSetRGBA(&sStripVert_2188[1], s->color_b.r, s->color_b.g, s->color_b.b,
+                                (U8)(255.0f * e->a));
+
+            RwIm3DVertexSetPos(&sStripVert_2188[2], e1->p[0].x, e1->p[0].y, e1->p[0].z);
+            RwIm3DVertexSetUV(&sStripVert_2188[2], 1.0f, 0.0f);
+            RwIm3DVertexSetRGBA(&sStripVert_2188[2], s->color_a.r, s->color_a.g, s->color_a.b,
+                                (U8)(255.0f * e1->a));
+
+            RwIm3DVertexSetPos(&sStripVert_2188[3], e1->p[1].x, e1->p[1].y, e1->p[1].z);
+            RwIm3DVertexSetUV(&sStripVert_2188[3], 1.0f, 1.0f);
+            RwIm3DVertexSetRGBA(&sStripVert_2188[3], s->color_b.r, s->color_b.g, s->color_b.b,
+                                (U8)(255.0f * e1->a));
+
+            RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)s->textureRasterPtr);
+
+            if (RwIm3DTransform(sStripVert_2188, 4, NULL,
+                                rwIM3D_VERTEXUV | rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA))
+            {
+                RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
+                RwIm3DEnd();
+            }
+
+            count--;
+
+            if (count < 0)
+            {
+                count = 49;
+            }
+        }
+    }
 }
 
 U8 tier_queue_allocator::alloc_block()
