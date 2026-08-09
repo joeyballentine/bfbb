@@ -906,7 +906,7 @@ void zFX_SpawnBubbleHit(const xVec3* pos, U32 num, const xVec3* pos_rnd, const x
 
 void zFX_SpawnBubbleTrail(const xVec3* pos, U32 num)
 {
-    zFX_SpawnBubbleTrail(pos, num, &bubblehit_pos_rnd, &bubblehit_vel_rnd);
+    zFX_SpawnBubbleTrail(pos, num, &bubbletrail_pos_rnd, &bubbletrail_vel_rnd);
 }
 
 void zFX_SpawnBubbleTrail(const xVec3* pos, U32 num, const xVec3* pos_rnd, const xVec3* vel_rnd)
