@@ -12,6 +12,7 @@
 #include "iTRC.h"
 
 #include "xDebug.h"
+#include "xDraw.h"
 #include "xEnt.h"
 #include "xEntBoulder.h"
 #include "xEvent.h"
@@ -3634,9 +3635,203 @@ static S32 MeleeAttackBoundCollide(xEnt* ent, zScene* zscn, xBound* meleeB)
     return cbdata.hitsomething;
 }
 
+void xEntBoulder_AddForce(xEntBoulder* ent, xVec3* force);
+
 static S32 CheckObjectAgainstMeleeBound(xEnt* ent, void* data)
 {
-    return 0;
+    Melee_cbData* cbd = (Melee_cbData*)data;
+    S32 hit = cbd->hitsomething;
+    xEnt* pent = cbd->ent;
+    xBound* meleeB = cbd->meleeB;
+    xCollis coll;
+    xRay3 ray;
+    xVec3 dir;
+    xVec3 tmp;
+    S32 worldSpaceNorm;
+
+    if (!(ent->baseFlags & 0x20) ||
+        (!(ent->moreFlags & 0x10) && ent->baseType != eBaseTypeStatic) ||
+        !(ent->flags & 1) || ent->model == NULL)
+    {
+        return 1;
+    }
+
+    if (ent->baseType == eBaseTypeStatic)
+    {
+        if (zThrown_IsFruit(ent, NULL))
+        {
+            zThrown_AddFruit(ent);
+            zThrown_KillFruit(ent);
+        }
+        else if (!(ent->moreFlags & 0x10))
+        {
+            return 1;
+        }
+    }
+
+    xBoundHitsBound(meleeB, &ent->bound, &coll);
+
+    if (!(coll.flags & 1))
+    {
+        return 1;
+    }
+
+    if (ent->baseType != eBaseTypeNPC)
+    {
+        xFXShineStart((xVec3*)&ent->model->Mat->pos, 1.0f, 0.3f, 0.01f, 0.1f, 0, NULL, NULL, 0.1f,
+                      0);
+        zEntEvent(ent, 0x163);
+    }
+
+    if (ent->baseType == eBaseTypeNPC)
+    {
+        zNPCCommon* npc = (zNPCCommon*)ent;
+
+        if ((((xNPCBasic*)ent)->SelfType() & 0xffffff00) == 'NTR\0')
+        {
+            iColor_tag col1;
+            iColor_tag col2;
+
+            col1.r = 255;
+            col1.g = 255;
+            col1.b = 255;
+            col2.r = 255;
+            col2.g = 255;
+            col2.b = 0;
+            xFXShineStart((xVec3*)&ent->model->Mat->pos, 1.0f, 0.5f, 0.01f, 0.1f, 0, &col1, &col2,
+                          0.1f, 0);
+        }
+
+        if (globals.player.SundaeTimer > 0.0f)
+        {
+            npc->Damage(DMGTYP_INSTAKILL, &globals.player.ent, NULL);
+        }
+        else
+        {
+            npc->Damage(DMGTYP_SIDE, &globals.player.ent, NULL);
+        }
+
+        hit = 1;
+    }
+    else if (ent->baseType == eBaseTypeBoulder)
+    {
+        xEntBoulder* boul = (xEntBoulder*)ent;
+
+        if (boul->basset->flags & 0x100)
+        {
+            zEntEvent(ent, 0x3a);
+        }
+
+        xVec3Sub(&dir, (xVec3*)&boul->model->Mat->pos, (xVec3*)&pent->model->Mat->pos);
+        xVec3Normalize(&dir, &dir);
+        xVec3SMulBy(&dir, 10.0f);
+        xEntBoulder_AddForce(boul, &dir);
+        hit = 1;
+    }
+    else if (ent->baseType == eBaseTypeButton)
+    {
+        if (gCurrentPlayer == eCurrentPlayerSpongeBob)
+        {
+            zEntButton_Press((_zEntButton*)ent, 1);
+        }
+
+        if (gCurrentPlayer == eCurrentPlayerSandy)
+        {
+            zEntButton_Press((_zEntButton*)ent, 0x4000);
+        }
+
+        if (gCurrentPlayer == eCurrentPlayerPatrick)
+        {
+            zEntButton_Press((_zEntButton*)ent, 0x8000);
+        }
+
+        hit = 1;
+    }
+    else if (ent->baseType == eBaseTypeDestructObj)
+    {
+        zEntDestructObj_Hit((zEntDestructObj*)ent, 0x1000);
+        hit = 1;
+    }
+    else if (ent->baseType == eBaseTypePlatform && ent->subType == ZPLATFORM_SUBTYPE_PADDLE)
+    {
+        {
+            U32 pflags = ((zPlatform*)ent)->passet->paddle.paddleFlags;
+
+            if ((gCurrentPlayer == eCurrentPlayerSpongeBob && (pflags & 0x8)) ||
+                (gCurrentPlayer == eCurrentPlayerPatrick && (pflags & 0x80)) ||
+                (gCurrentPlayer == eCurrentPlayerSandy && (pflags & 0x40)))
+            {
+                worldSpaceNorm = 0;
+
+                if (gCurrentPlayer == eCurrentPlayerSpongeBob)
+                {
+                    ray.origin.x = pent->model->Mat->pos.x;
+                    ray.origin.y = pent->model->Mat->pos.y + pent->bound.sph.r;
+                    ray.origin.z = pent->model->Mat->pos.z;
+                    ray.dir.x = meleeB->sph.center.x - ray.origin.x;
+                    ray.dir.y = meleeB->sph.center.y - ray.origin.y;
+                    ray.dir.z = meleeB->sph.center.z - ray.origin.z;
+                    ray.min_t = 0.0f;
+                    ray.max_t = meleeB->sph.r + xVec3Normalize(&ray.dir, &ray.dir);
+                }
+                else
+                {
+                    ray.dir = *(xVec3*)&pent->model->Mat->at;
+                    ray.origin.x = meleeB->sph.center.x;
+                    ray.origin.y = meleeB->sph.center.y;
+                    ray.origin.z = meleeB->sph.center.z;
+                    tmp.x = pent->model->Mat->pos.x - ray.origin.x;
+                    tmp.y = pent->model->Mat->pos.y - ray.origin.y;
+                    tmp.z = pent->model->Mat->pos.z - ray.origin.z;
+                    ray.min_t = xVec3Dot(&tmp, &ray.dir);
+                    ray.max_t = 0.0f;
+
+                    if (ray.min_t > 0.0f)
+                    {
+                        ray.min_t = -meleeB->sph.r;
+                    }
+                }
+
+                ray.flags = 0xc00;
+                coll.flags = 0x200;
+                iRayHitsModel(&ray, ent->model, &coll);
+                xDrawSetColor(0xff, 0x00, 0xff, 0xff);
+                xDrawLine(&ray.origin, &meleeB->sph.center);
+
+                if (!(coll.flags & 1))
+                {
+                    coll.flags = 0x200;
+                    worldSpaceNorm = 1;
+                    xSphereHitsModel(&meleeB->sph, ent->model, &coll);
+                }
+
+                if (coll.flags & 1)
+                {
+                    coll.optr = ent;
+
+                    if (zPlatform_PaddleCollide(&coll, (xVec3*)&pent->model->Mat->pos, &ray.dir,
+                                                worldSpaceNorm))
+                    {
+                        hit = 1;
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        zEntEvent(ent, 0x3a);
+        hit = 1;
+    }
+
+    if (hit)
+    {
+        zFX_SpawnBubbleHit(&meleeB->sph.center, 10);
+    }
+
+    cbd->hitsomething = hit;
+
+    return 1;
 }
 
 S32 zEntPlayer_IsSneaking()
@@ -4121,6 +4316,50 @@ static void zEntPlayer_SpringboardFX(xEnt* ent, F32 dt)
 
 static void getPadDefl(_tagPadAnalog* stick, class xVec2* v)
 {
+    v->x = 0.0f;
+    v->y = 0.0f;
+
+    if (stick->x > 45.0f || stick->x < -45.0f)
+    {
+        if (stick->x > 0.0f)
+        {
+            v->x = 1.0f;
+        }
+        else
+        {
+            v->x = -1.0f;
+        }
+
+        if (stick->x < globals.player.g.AnalogMax && stick->x > 0)
+        {
+            v->x = (stick->x - 45.0f) / (127.0f - globals.player.g.AnalogMin);
+        }
+        else if (stick->x > -127.0f && stick->x < 0)
+        {
+            v->x = (45.0f + stick->x) / (127.0f - globals.player.g.AnalogMin);
+        }
+    }
+
+    if (stick->y > 45.0f || stick->y < -45.0f)
+    {
+        if (stick->y > 0.0f)
+        {
+            v->y = 1.0f;
+        }
+        else
+        {
+            v->y = -1.0f;
+        }
+
+        if (stick->y < 127.0f && stick->y > 0)
+        {
+            v->y = (stick->y - 45.0f) / 82.0f;
+        }
+        else if (stick->y > -127.0f && stick->y < 0)
+        {
+            v->y = (45.0f + stick->y) / 82.0f;
+        }
+    }
 }
 
 static S32 BoulderVEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam,
@@ -4374,6 +4613,14 @@ void zEntPlayer_ShadowModelDisable()
     }
 }
 
+extern F32 gShadowObjectRadius;
+
+void xShadowVertical_FillCache(xShadowCache* cache, xVec3* pos, F32 radius, F32 height, F32 slop);
+void xShadowVertical_DrawCache(xShadowCache* cache, F32 factor, F32 alpha, S32 flags,
+                               RwMatrixTag* mat, RwRaster* rast);
+U32 xShadowReceiveShadowSetup(xEnt* ent);
+void xShadowReceiveShadow(xEnt* ent, F32 factor, S32 flags, RwMatrixTag* mat, RwRaster* rast);
+
 static void zEntPlayer_BubbleBowlLaneRender(zEnt* ent)
 {
     xShadowCache cache;
@@ -4382,6 +4629,43 @@ static void zEntPlayer_BubbleBowlLaneRender(zEnt* ent)
     xMat4x3 matrix;
     U32 i;
     xEnt* ep;
+
+    factor = 1.75f * sBubbleBowlTimer;
+
+    if (factor < 0.0f)
+    {
+        factor = 0.0f;
+    }
+
+    if (factor > 1.0f)
+    {
+        factor = 1.0f;
+    }
+
+    xVec3Copy(&center, (xVec3*)&ent->model->Mat->pos);
+    xVec3AddScaled(&center, (xVec3*)&ent->model->Mat->up, 2.0f);
+    xVec3AddScaled(&center, (xVec3*)&ent->model->Mat->at, 4.5f + factor);
+
+    xShadowVertical_FillCache(&cache, &center, 0.5f * factor + 0.7f, 6.0f, 0.65f);
+
+    xVec3Copy(&matrix.pos, &center);
+    xVec3Copy(&matrix.right, (xVec3*)&ent->model->Mat->right);
+    xVec3Copy(&matrix.up, (xVec3*)&ent->model->Mat->at);
+    xVec3Inv(&matrix.at, (xVec3*)&ent->model->Mat->up);
+    xMat3x3SMul(&matrix, &matrix, 1.0f);
+
+    gShadowObjectRadius = 0.5f * factor + 0.7f;
+    xShadowVertical_DrawCache(&cache, factor, 0.0f, 1, (RwMatrixTag*)&matrix, sBowlingLaneRast);
+
+    for (i = 0; i < cache.entCount; i++)
+    {
+        ep = cache.ent[i];
+
+        if (xShadowReceiveShadowSetup(ep))
+        {
+            xShadowReceiveShadow(ep, factor, 1, (RwMatrixTag*)&matrix, sBowlingLaneRast);
+        }
+    }
 }
 
 void zEntPlayerUpdateModelSB();
@@ -4445,14 +4729,29 @@ static void zEntPlayerCheckShoePop()
 {
     xEnt& ent = globals.player.ent;
     xModelInstance** mlist;
-    S32 bone_index[2];
-    xModelInstance* model_index[2];
     S32 i;
     S32 bone;
     xModelInstance* m;
 
     if (globals.player.IsBubbleBouncing != 0)
     {
+        S32 bone_index[2] = { 38, 42 };
+        xModelInstance* model_index[2] = { globals.player.sb_models[8],
+                                           globals.player.sb_models[9] };
+
+        for (i = 0; i < 2; i++)
+        {
+            bone = bone_index[i];
+            m = model_index[i];
+
+            if (!(m->Flags & 1))
+            {
+                xMat4x3Mul((xMat4x3*)m->Mat, (xMat4x3*)&ent.model->Mat[bone],
+                           (xMat4x3*)ent.model->Mat);
+                zFX_SpawnBubbleHit((xVec3*)&m->Mat->pos, 10);
+                globals.player.IsBubbleBouncing = 0;
+            }
+        }
     }
 }
 
@@ -4748,7 +5047,62 @@ void zEntPlayer_GiveLevelPickupCurrentLevel(S32 quantity)
 
 static F32 CalcJumpImpulse_Smooth(F32 g, F32 j, F32 h, F32 Tgc, F32 Tgs)
 {
-    return 0;
+    F32 t[3];
+    U32 n;
+    U32 i;
+    F32 best;
+
+    F32 b0 = 0.0f;
+    F32 b1 = 0.0f;
+    F32 b2 = -j * 0.5f;
+    F32 c2 = -g * 0.5f;
+    F32 A = (j - g) / (6.0f * Tgs);
+    F32 B = (g * Tgc - j * Tgc - j * Tgs) / (2.0f * Tgs);
+    F32 T1 = Tgc + Tgs;
+    F32 A3 = 3.0f * A;
+    F32 B2 = 2.0f * B;
+    F32 Tgc2 = Tgc * Tgc;
+    F32 T12 = T1 * T1;
+
+    F32 C = -(A3 * Tgc2 + j * Tgc + B2 * Tgc);
+    F32 D = b2 * Tgc2 - A * (Tgc * Tgc2) - B * Tgc2 - C * Tgc;
+    F32 v1 = A3 * T12 + B2 * T1 + g * T1;
+    F32 c0 = D + (A * (T1 * T12) + B * T12) - c2 * T12 - v1 * T1;
+
+    F32 t1 = xsqrt((b0 - h) / b2);
+    F32 t2 = xsqrt((c0 - h) / c2);
+
+    n = xMathSolveCubic(-2.0f * A, -B, 0.0f, D - h, &t[0], &t[1], &t[2]);
+
+    if (t1 <= Tgc && t1 >= 0.0f)
+    {
+        return -b1 - 2.0f * b2 * t1;
+    }
+
+    if (t2 >= T1)
+    {
+        return -(v1 + C) - 2.0f * c2 * t2;
+    }
+
+    best = -1.0f;
+
+    for (i = 0; i < n; i++)
+    {
+        if (t[i] >= Tgc && t[i] <= T1)
+        {
+            if (best < 0.0f || t[i] < best)
+            {
+                best = t[i];
+            }
+        }
+    }
+
+    if (best != -1.0f)
+    {
+        return -C - B2 * best - A3 * best * best;
+    }
+
+    return 1.0f;
 }
 
 void CalcJumpImpulse(zJumpParam* param, const zPlayerSettings* settings)
@@ -6339,17 +6693,61 @@ static void PlayerCollsDetect(xEnt* ent, xScene* sc, F32 dt)
     }
 }
 
+S32 _iAnimSKBExtractTranslate(iAnimSKBHeader* skb, U32 bone, xVec3* tran, S32 maxTran);
+void _iAnimSKBAdjustTranslate(iAnimSKBHeader* skb, U32 bone, F32* tranStart, F32* tranEnd);
+
 static void PlayerHackFixBbashMiss(xModelInstance* model)
 {
+    static char* bbstate[4] = { "BbashStart01", "BbashAttack01", "BbashStrike01",
+                                "BbashMiss01" };
+    static F32 bbadjust[4][2] = { { 0.0f, -0.55f },
+                                  { -0.55f, -0.55f },
+                                  { -0.55f, -0.55f },
+                                  { -0.55f, -0.55f } };
+    static F32 bbspeed[4] = { 1.0f, 0.96f, 0.96f, 0.92f };
+
     S32 i;
     xAnimState* astate;
     xVec3 tran[2];
     iAnimSKBHeader* skb;
     xVec3 tranList[128];
     S32 tranCount;
-    F32 bbspeed[4];
-    F32 bbadjust[4][2];
-    char* bbstate[4];
+
+    for (i = 0; i < 4; i++)
+    {
+        astate = xAnimTableGetState(model->Anim->Table, bbstate[i]);
+
+        if (astate)
+        {
+            skb = (iAnimSKBHeader*)astate->Data->RawData[0];
+
+            if (!(skb->Flags & 0x80000000))
+            {
+                if (i == 3)
+                {
+                    tranCount = _iAnimSKBExtractTranslate(skb, 1, tranList, 128);
+                    tranList[0].y += bbadjust[i][0];
+                    tranList[tranCount - 1].y += bbadjust[i][1];
+                    _iAnimSKBAdjustTranslate(skb, 1, (F32*)tranList,
+                                             (F32*)&tranList[tranCount - 1]);
+                }
+                else
+                {
+                    tran[0].x = 0.0f;
+                    tran[0].y = bbadjust[i][0];
+                    tran[0].z = 0.0f;
+                    tran[1].x = 0.0f;
+                    tran[1].y = bbadjust[i][1];
+                    tran[1].z = 0.0f;
+                    _iAnimSKBAdjustTranslate(skb, 1, (F32*)&tran[0], (F32*)&tran[1]);
+                }
+
+                skb->Flags |= 0x80000000;
+            }
+
+            astate->Speed = bbspeed[i];
+        }
+    }
 }
 
 xAnimTable* zSandy_AnimTable()
