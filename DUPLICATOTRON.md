@@ -21,11 +21,14 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now |
 |---|---|---|
-| matched functions | 6491 / 10147 | 7398 / 10147 |
-| fuzzy match | 57.343% | 64.580% |
+| matched functions | 6491 / 10147 | 7408 / 10147 |
+| fuzzy match | 57.343% | 65.020% |
 | complete units | 195 / 543 | 223 / 543 |
 
 Merged `bfbbdecomp/main` (d226f0ae..24d388c4) at `297ce59f`.
+
+See **PCPORT.md** for the PC-port follow-up plan, and specifically for why the
+port's gate is "all of `src/SB/**` written and correct" rather than this table.
 
 **`report.json` credits near-misses, so it understates stub work.** The xFX
 wave moved seven functions from ~0.5% to 72-100% and promoted six neighbours
@@ -626,7 +629,22 @@ of exact across 24 units.** Catastrophic. Do not reach for it.
 and not others, so a single global choice is wrong either way. Define the
 inline in the header by default and let the TUs that must not expand it opt out
 with a macro. Finding which TUs those are is mechanical — snapshot every caller
-with `snapshot.py`, apply the change, snapshot again, and read the LOST list.
+with `snapshot.py`, apply the change, snapshot again, and read the drop list.
+
+`XSNDPLAY3D_OUT_OF_LINE` is currently set by four TUs: `zEnt.cpp` (layout of a
+`Matching` unit), `zEntDestructObj.cpp` (pool shift in a `Matching` unit),
+`zLasso.cpp` and `zPlatform.cpp` (pool shift, both `NonMatching`).
+
+**4. Comparing exact-match sets is not enough, and this cost real accuracy.**
+The first version of `snapshot.py --cmp` only diffed which functions were at
+100%. It reported the change as clean. It was not: the inline interned a `0.25f`
+literal in `zLasso` and `zPlatform`, dropping their `.sdata2` match from
+65.217% to 63.830% and 92.063% to 90.625%. No function crossed the 100%
+boundary, so nothing showed up. A later agent working `zLasso` found it
+independently and applied the opt-out; `zPlatform` was only caught by re-running
+the comparison over the **full percentage distribution**. `snapshot.py --cmp`
+now always prints an `ANY DROP` section covering sub-100% functions and data
+symbols. Read it.
 
 `snapshot.py <out.json> <src>...` / `snapshot.py --cmp <before> <after>`
 (scratch) does that sweep: compiles each unit privately, records every symbol's
