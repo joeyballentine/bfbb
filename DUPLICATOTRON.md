@@ -593,6 +593,47 @@ Note `tools/solo.py` parses `build.ninja`, which has two rule layouts: the sourc
 file is on the same line as the `build` statement when it fits, on the next
 line when it does not. The parser handles both; if you extend it, keep that.
 
+## Shared-header changes: the xSndPlay3D case
+
+Settled, and the method generalises. The 9-arg `xSndPlay3D(const xVec3*, ...)`
+is now `inline` in `zEnt.h`, with two TUs opting out via
+`#define XSNDPLAY3D_OUT_OF_LINE` before the include. Result: **+12 exact
+(zFX +10, zEntTeleportBox +2), nothing lost, `complete_units` unchanged.**
+
+Getting there killed three assumptions worth writing down.
+
+**1. objdiff being blind to definition order can hide a broken `Matching`
+unit.** The naive change — mark it `inline`, delete the body from `zEnt.cpp` —
+built a `main.dol` that failed its sha1. Not because of the unit I expected:
+`zEnt.cpp` is `Matching` too, and deleting the out-of-line body *relocates the
+symbol inside `zEnt.o`*. objdiff pairs symbols by name, so it still cheerfully
+reported zEnt at 38/38 while the object was no longer byte-identical. **A unit
+reading 100% in objdiff is not proof its object is byte-exact.** For `Matching`
+units, only the DOL sha1 is proof.
+
+**2. A `solo.py` gain can be worth exactly zero on the project metric.** That
+same change measured net +7 exact and showed **+0 matched functions, −1
+complete unit** in `report.json` — every one of the +7 was a 99.x% -> 100%
+crossing that report.json already counted. Before trading a complete unit for
+exactness, check whether report.json can even see the gain.
+
+**3. `WEAK` is not a substitute for `inline` here.** Defining the body `WEAK`
+in the header (the convention this codebase uses elsewhere in `zEnt.h`) emits a
+weak copy into every TU that includes it: **net −217 exact, 340 functions out
+of exact across 24 units.** Catastrophic. Do not reach for it.
+
+**The pattern worth reusing:** retail inlined a given helper into some callers
+and not others, so a single global choice is wrong either way. Define the
+inline in the header by default and let the TUs that must not expand it opt out
+with a macro. Finding which TUs those are is mechanical — snapshot every caller
+with `snapshot.py`, apply the change, snapshot again, and read the LOST list.
+
+`snapshot.py <out.json> <src>...` / `snapshot.py --cmp <before> <after>`
+(scratch) does that sweep: compiles each unit privately, records every symbol's
+percentage, and diffs two snapshots into per-unit GAIN/LOST lists with a net.
+It replaces the old `shadowhdr.py`, which could not measure any TU including
+`<new.h>` because `-cwd explicit` breaks that include chain.
+
 ## Merging upstream
 
 This branch tracks `bfbbdecomp/main` but never merges back. Upstream keeps
@@ -682,26 +723,12 @@ enough that struct offsets mostly just line up.
 
 Agents may not edit shared headers, so they report them instead. Outstanding:
 
-- **`zEnt.h` — the 9-arg `xSndPlay3D` should be an `inline` defined in the
-  header, not a `WEAK` prototype with the body parked in `zEnt.cpp`.**
-  UNDECIDED, because it is the first proposal that is net positive overall
-  while regressing a unit we currently link. The `radius / 4.0f` in the body
-  interns `0.25f` in the literal pool *at the call site*, which is why
-  retail's `zEntTeleportBox.o` `.sdata2` has `0.25` at index 6 even though
-  only `Setup` uses it; without it our whole pool is shifted by one.
-  Measured: `zFX` **+9**, `zEntTeleportBox` **+2** (`_Init` and
-  `JumpOutEffectPlrEjectCB` both reach 100%), `zEntDestructObj` **-4**.
-  No effect on xFX, xSFX, xSnd, zEntButton, zShrapnel, zDiscoFloor, zLasso,
-  zPlatform. Net **+7 functions, -1 complete unit** — `zEntDestructObj` is
-  `Matching` at configure.py:491, so landing this means flipping it to
-  `NonMatching` and dropping `complete_units` to 222.
-  Eight callers are still unmeasured (`zAssetTypes`, `zEntCruiseBubble`,
-  `zThrown`, `zNPCGoalRobo`, `zNPCTypeCommon`, `xEntBoulder`, `zNPCSupport`,
-  `zNPCHazard`) plus `zEnt` itself, which also needs its `zEnt.cpp`
-  definition deleted. They cannot be shadow-measured: `-cwd explicit` breaks
-  any TU including `<new.h>`, because that chains to `<exception.h>` by a
-  directory-relative include. Measuring them means editing `zEnt.h` in place,
-  which is only safe when no agent is running.
+- ~~**`zEnt.h` — the 9-arg `xSndPlay3D`.**~~ **DONE**, all 27 callers measured.
+  Landed as an `inline` in the header with `XSNDPLAY3D_OUT_OF_LINE` opt-outs in
+  `zEnt.cpp` and `zEntDestructObj.cpp`: +12 exact, nothing lost, no unit
+  flipped. See "Shared-header changes: the xSndPlay3D case" above — the
+  original -1-complete-unit framing was wrong in both directions, and the three
+  assumptions it broke are the reusable part.
 - **`xDebug.h` — no `xVec3*` overload of `xDebugAddTweak`.** There are `F32*`,
   `S16*`, `U8*` and `const char*` ones. `zNPCTypePrawn.cpp` currently carries
   a file-scope declaration instead, which is the same workaround Dutchman
