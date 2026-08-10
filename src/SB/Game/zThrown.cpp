@@ -972,9 +972,9 @@ void zThrown_PatrickLauncher(xEnt* ent, xEnt* launcher)
 
 void zThrown_AddFruit(xEnt* ent)
 {
+    U32 i;
     ThrowableStats* stats;
     zThrownStruct* newThrown;
-    U32 i;
 
     for (i = 0; i < zThrownCount; i++)
     {
@@ -1159,8 +1159,8 @@ void zThrownCollide_ThrowFruit(zThrownStruct* thrown, xEntCollis* collis, F32* b
     U32 idx;
     xEnt* other;
     F32 stackHeight;
-    F32 killTimer;
     U32 i;
+    F32 killTimer;
 
     sThrowButtonMask = 0x80;
 
@@ -1263,8 +1263,8 @@ void zThrownCollide_ThrowFruit(zThrownStruct* thrown, xEntCollis* collis, F32* b
             }
 
             xMat4x3* omat = (xMat4x3*)other->model->Mat;
-            F32 dz = thrown->oldcollpos.z - omat->pos.z;
             F32 dx = thrown->oldcollpos.x - omat->pos.x;
+            F32 dz = thrown->oldcollpos.z - omat->pos.z;
             F32 dy = thrown->oldcollpos.y - omat->pos.y;
             if (dx * dx + dz * dz < 0.0225f && dy > 0.8f && killTimer > 0.1f)
             {

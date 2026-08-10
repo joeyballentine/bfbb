@@ -245,8 +245,8 @@ zLightning* zLightningAdd(_tagLightningAdd* add)
         new_lightning->legacy.arc_height = add->arc_height;
         new_lightning->legacy.rand_radius = add->rand_radius;
         
-        S32 zeusOnStraightPoint = TRUE;
         F32 currot = 0.0f;
+        S32 zeusOnStraightPoint = TRUE;
 
         switch (new_lightning->type)
         {
@@ -297,11 +297,11 @@ zLightning* zLightningAdd(_tagLightningAdd* add)
         xVec3 arc_orthogonal;
         xVec3Cross(&arc_orthogonal, &new_lightning->legacy.arc_normal, &dir);
 
+        S32 j = 0;
         F32 pos = 0.0f;
         F32 inc = 1.0f / (new_lightning->legacy.total_points - 1.0f);
 
         S32 i;
-        S32 j = 0;
         for (i = 0; i < new_lightning->legacy.total_points; i++)
         {
 
@@ -677,9 +677,9 @@ void zLightningModifyEndpoints(zLightning* l, xVec3* start, xVec3* end)
 
         xVec3Cross(&side, &l->legacy.arc_normal, &dir);
 
+        S32 zeusOnStraightPoint = 1;
         F32 pos = 0.0f;
         F32 inc = 1.0f / (l->legacy.total_points - 1.0f);
-        S32 zeusOnStraightPoint = 1;
 
         for (S32 i = 0; i < l->legacy.total_points; i++)
         {

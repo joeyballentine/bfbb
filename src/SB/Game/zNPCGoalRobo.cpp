@@ -1353,7 +1353,6 @@ void zNPCGoalAlertChomper::CirclePlayer(F32 dt)
         xVec3Copy(&pos_plyr, xEntGetPos(&globals.player.ent));
     }
 
-    F32 rot;
     npc->XZVecToPlayer(&dir_plyr, NULL);
 
     F32 length = xVec3Length(&dir_plyr);
@@ -1367,6 +1366,7 @@ void zNPCGoalAlertChomper::CirclePlayer(F32 dt)
     }
 
     xVec3 dir_dest = dir_plyr;
+    F32 rot;
     xVec3 dir;
 
     npc->ThrottleAdjust(dt, 5.0f, 10.0f);
