@@ -127,7 +127,10 @@ struct xLaserBoltEmitter
     void emit_decal(effect_data& effect, bolt& b, F32 from_dist, F32 to_dist, F32 dt);
     void emit_decal_dist(effect_data& effect, bolt& b, F32 from_dist, F32 to_dist, F32 dt);
     ;
-    U32 visible() const;
+    bool visible() const
+    {
+        return !bolts.empty();
+    }
 
     void debug_init(const char* texture_name)
     {

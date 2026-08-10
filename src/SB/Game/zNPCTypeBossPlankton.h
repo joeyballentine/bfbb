@@ -147,12 +147,12 @@ struct zNPCBPlankton : zNPCBoss
     void reappear();
     U8 crony_attacking() const;
     void stun();
-    S32 cronies_dead() const;
+    U8 cronies_dead() const;
     void impart_velocity(const xVec3&);
     void next_territory();
     U8 have_cronies() const;
-    S32 move_to_player_territory();
-    S32 player_left_territory() const;
+    U8 move_to_player_territory();
+    U8 player_left_territory() const;
     void say(int, int, bool);
     void sickum();
     static void aim_gun(xAnimPlay*, xQuat*, xVec3*, int);

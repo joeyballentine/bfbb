@@ -46,6 +46,20 @@ The worked case is `zNPCGoalRobo`, and it is a ghost-literal ceiling, not a fixa
 
 Function **definition order** is worth checking at the same time, since it drives interning order: extract `.fn` order from both objects and take the longest increasing subsequence. `zNPCGoalRobo` scores 320 of 361 common symbols with 10 descents, so its source order is also genuinely wrong in places — but fixing that cannot realign a pool whose head is already displaced by ghosts.
 
+## Source shapes worth trying before you give up
+
+Each of these was measured on a real function, and the gain is the measured one.
+
+- **Brace-initialised aggregates emit a template, not stores.** `xVec2 v = { a, b };` with non-constant elements makes CW emit an 8-byte **`.sbss2`** template and copy it to the stack before storing the fields; `xVec3 v = { a, b, c };` does the same with a 12-byte **`.rodata`** template. Using `xVec2::create`/`xVec3::create` instead costs a `bl` and misplaces the template. Switching six functions in `zNPCTypeBossPlankton` to brace-init moved five of them from 47–64% to 99.3–99.7%.
+- **`xabs()` and `std::fabsf()` are not interchangeable.** `xabs` inlines to `fabs`+`frsp`; `std::fabsf` emits `bl fabsf__3stdFf`. Retail used both, in different functions in the same file. MSL's `cmath` in this tree does not declare `fabsf`, so a file-local `namespace std { float fabsf(float); }` is the byte-neutral way to reach it.
+- **Collapse early returns into one condition.** `if (A) { return X; } else if (B && C)` and `if (A || (B && C))` produce visibly different exit structure. `update_follow_player` went 49% → **100%** purely from that collapse.
+- **A `switch` is not an if/else-if chain.** CW compiles `switch` over small integers as a binary search. `stun`'s dialogue selection went 84% → 96% on that change alone; `impart_velocity` dispatches on `flag.move` the same way.
+- **Splitting a fused expression into a named local blocks `fmadds`.** `apply_yaw` went 97.25% → **99.92%** from hoisting one multiply.
+- **`&= 0xfffd` and `&= ~0x2` are different instructions.** The 16-bit literal gives `andi.`; the complement gives `rlwinm`.
+- **`xfeq0(x)`** (`xMath.h`, `((x) >= -1e-5f) && ((x) <= 1e-5f)`) is the source of the `fcmpo` / `cror eq,gt,eq` / `bne` triple. If you see that triple, do not hand-roll the comparison — use the macro, and note the epsilon is `1e-5f`, not `1e-6f`.
+- **CW assigns stack slots in *descending* declaration order** for some frames. If every `r1+offset` in a function is permuted but the instructions are right, reverse the local declaration list. That took Sandy's 3852-byte `Process` from a permuted frame to exact offsets in one edit.
+- **`inline` in the `.cpp` reproduces a weak symbol without touching a header.** When the target has a member as `scope:weak` in its own `.text` section, retail declared it `inline`. Marking it `inline` at the definition in the `.cpp` gets the weak scope and the `.sbss2`/`.rodata` template ordering that comes with it. Moving the body into the class in the *header* also works but adds the template object to every including TU — which broke a `Matching` unit when tried.
+
 ## Things that are not your fault
 
 - **Scheduling residue.** Identical instruction multiset in a different order, often just two epilogue instructions swapped. Not reachable from source.

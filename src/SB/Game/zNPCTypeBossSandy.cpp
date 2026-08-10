@@ -1,11 +1,15 @@
 #include "xVec3Inlines.h"
 #include <types.h>
 
+#include "iMath.h"
+#include "iModel.h"
+#include "iParMgr.h"
 #include "xAnim.h"
 #include "xVec3.h"
 #include "xEvent.h"
 #include "xCamera.h"
 #include "xMath3.h"
+#include "xMathInlines.h"
 #include "xDebug.h"
 #include "xJaw.h"
 
@@ -65,7 +69,7 @@ static F32 sRadiusOfRing;
 static F32 sElbowDropTimer;
 static F32 sChaseTimer;
 static S32 sNumAttacks;
-static F32 sDidClothesline;
+static S32 sDidClothesline;
 static F32 sElbowDropThreshold;
 static zNPCBSandy* sSandyPtr;
 static xVec3* sCamSubTarget;
@@ -738,11 +742,334 @@ U32 zNPCBSandy::AnimPick(S32 gid, en_NPC_GOAL_SPOT param_2, xGoal* rawgoal)
     return animID;
 }
 
+static void SpringRender(SandyLimbSpring* spring)
+{
+    RxObjSpace3DVertex* vert = gRenderArr.m_vertex;
+    F32 minX = spring->bound->box.box.lower.x;
+    F32 maxX = spring->bound->box.box.upper.x;
+    F32 radius = spring->bound->box.box.upper.y;
+    F32 len = maxX - minX;
+    F32 maxStep = 0.1f * (4.0f * (2.0f * len)) / (478.0f - 0.6f * (2.0f * len) / 0.1f);
+    S32 numVerts = 0;
+    S32 done = 0;
+    S32 i = 0;
+    S32 j = 4;
+    RxObjSpace3DVertex* v;
+    F32 x;
+    F32 t;
+    F32 d1;
+    F32 d2;
+    F32 step;
+
+    RwRenderStateSet(rwRENDERSTATETEXTURERASTER, NULL);
+
+    x = minX;
+    t = 0.0f;
+    v = vert;
+
+    do
+    {
+        if (!done && x > maxX)
+        {
+            x = maxX;
+            t = 1.0f;
+            done = 1;
+        }
+
+        RwIm3DVertexSetPos(&v[0], x, radius * (0.9f * sSinTable[i]), radius * (0.9f * sSinTable[j]));
+        RwIm3DVertexSetPos(&v[1], x, radius * (1.1f * sSinTable[i]), radius * (1.1f * sSinTable[j]));
+        RwIm3DVertexSetRGBA(&v[0], 0x80, 0x80, 0x80, 0xff);
+        RwIm3DVertexSetRGBA(&v[1], 0x80, 0x80, 0x80, 0xff);
+
+        numVerts += 2;
+        v += 2;
+
+        d1 = spring->node1 - t;
+        if (d1 < 0.0f)
+        {
+            d1 = -d1;
+        }
+        if (d1 > 0.1f)
+        {
+            step = 1.0f;
+        }
+        else
+        {
+            step = 10.0f * d1;
+        }
+
+        d2 = spring->node2 - t;
+        if (d2 < 0.0f)
+        {
+            d2 = -d2;
+        }
+        if (d2 > 0.1f)
+        {
+            d2 = 1.0f;
+        }
+        else
+        {
+            d2 = 10.0f * d2;
+        }
+
+        if (d2 < step)
+        {
+            step = d2;
+        }
+
+        step = 0.1f * step;
+        if (step < maxStep)
+        {
+            step = maxStep;
+        }
+
+        x += step;
+        t = (x - minX) / len;
+
+        i++;
+        if (i == 16)
+        {
+            i = 0;
+        }
+
+        j++;
+        if (j == 16)
+        {
+            j = 0;
+        }
+    } while (!done);
+
+    RwIm3DTransform(vert, numVerts, (RwMatrix*)spring->bound->mat,
+                    rwIM3D_VERTEXUV | rwIM3D_NOCLIP | rwIM3D_VERTEXRGBA);
+    RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
+    RwIm3DEnd();
+
+    spring->node1 += spring->vel1;
+    if ((spring->node1 > 0.9f && spring->vel1 > 0.0f) ||
+        (spring->node1 < 0.1f && spring->vel1 < 0.0f))
+    {
+        spring->vel1 = -spring->vel1;
+        spring->node1 += 2.0f * spring->vel1;
+    }
+
+    spring->node2 += spring->vel2;
+    if ((spring->node2 > 0.9f && spring->vel2 > 0.0f) ||
+        (spring->node2 < 0.1f && spring->vel2 < 0.0f))
+    {
+        spring->vel2 = -spring->vel2;
+        spring->node2 += 2.0f * spring->vel2;
+    }
+}
+
 void zNPCBSandy_BossDamageEffect_Init()
 {
     for (S32 i = 0; i < 4; i++)
     {
         BDErecord[i].BDEminst = NULL;
+    }
+}
+
+static void zNPCBSandy_BossDamageEffect(xModelInstance* minst, U32 remove)
+{
+    S32 idx;
+    S32 i;
+    xModelInstance* m;
+
+    if (remove)
+    {
+        for (idx = 0; idx < 4; idx++)
+        {
+            if (BDErecord[idx].BDEminst == minst)
+            {
+                break;
+            }
+        }
+
+        if (idx >= 4)
+        {
+            return;
+        }
+
+        i = 0;
+        BDErecord[idx].BDEtimer = 0.0f;
+
+        for (minst = BDErecord[idx].BDEminst; minst != NULL; minst = minst->Next)
+        {
+            minst->RedMultiplier = BDErecord[idx].save_F32[i++];
+            minst->GreenMultiplier = BDErecord[idx].save_F32[i++];
+            minst->BlueMultiplier = BDErecord[idx].save_F32[i++];
+        }
+
+        BDErecord[idx].BDEminst = NULL;
+    }
+    else
+    {
+        for (idx = 0; idx < 4; idx++)
+        {
+            if (BDErecord[idx].BDEminst == NULL)
+            {
+                break;
+            }
+        }
+
+        if (idx >= 4)
+        {
+            return;
+        }
+
+        i = 0;
+        BDErecord[idx].BDEminst = minst;
+        BDErecord[idx].BDEtimer = 3.0f;
+
+        while (minst != NULL)
+        {
+            BDErecord[idx].save_F32[i++] = minst->RedMultiplier;
+            minst->RedMultiplier = 1.0f;
+            BDErecord[idx].save_F32[i++] = minst->GreenMultiplier;
+            minst->GreenMultiplier = 0.0f;
+            BDErecord[idx].save_F32[i++] = minst->BlueMultiplier;
+            minst->BlueMultiplier = 0.0f;
+            minst = minst->Next;
+        }
+    }
+}
+
+static void zNPCBSandy_BossDamageEffect_Update(F32 dt)
+{
+    S32 i;
+    xModelInstance* m;
+    F32 frac;
+    F32 phase;
+    F32 gb;
+
+    for (i = 0; i < 4; i++)
+    {
+        if (BDErecord[i].BDEminst == NULL)
+        {
+            continue;
+        }
+
+        if (!(BDErecord[i].BDEtimer > 0.0f))
+        {
+            continue;
+        }
+
+        if (BDErecord[i].BDEtimer < dt)
+        {
+            zNPCBSandy_BossDamageEffect(BDErecord[i].BDEminst, 1);
+        }
+
+        if (!(BDErecord[i].BDEtimer > 0.0f))
+        {
+            continue;
+        }
+
+        BDErecord[i].BDEtimer -= dt;
+
+        frac = 1.0f - BDErecord[i].BDEtimer / 3.0f;
+        phase = 9.0f * (6.2831855f * frac);
+        gb = 0.7f * xpow(icos(3.1415927f * frac), 100.0f) + 0.3f;
+
+        for (m = BDErecord[i].BDEminst; m != NULL; m = m->Next)
+        {
+            m->RedMultiplier = 0.25f * icos(phase) + 0.75f;
+            m->GreenMultiplier = gb;
+            m->BlueMultiplier = gb;
+        }
+    }
+}
+
+void zNPCBSandy::Render()
+{
+    RwMatrix mat;
+    F32 len;
+
+    if (iModelSphereCull(&this->boundList[10]->bound.sph))
+    {
+        this->model->Next->Next->Next->Next->Flags &= ~0x1;
+    }
+    else
+    {
+        this->model->Next->Next->Next->Next->Flags |= 0x1;
+    }
+
+    if (iModelSphereCull(&this->boundList[12]->bound.sph))
+    {
+        this->model->Next->Next->Next->Flags &= ~0x1;
+    }
+    else
+    {
+        this->model->Next->Next->Next->Flags |= 0x1;
+    }
+
+    if (iModelSphereCull(&this->boundList[3]->bound.sph))
+    {
+        this->model->Next->Next->Next->Next->Next->Flags &= ~0x1;
+    }
+    else
+    {
+        this->model->Next->Next->Next->Next->Next->Flags |= 0x1;
+    }
+
+    if (iModelSphereCull(&this->boundList[5]->bound.sph))
+    {
+        this->model->Next->Next->Next->Next->Next->Next->Flags &= ~0x1;
+    }
+    else
+    {
+        this->model->Next->Next->Next->Next->Next->Next->Flags |= 0x1;
+    }
+
+    xEntRender(this);
+
+    if (this->bossFlags & 0x80)
+    {
+        RwRenderStateSet(rwRENDERSTATETEXTURERASTER, this->targetRaster);
+
+        xVec3Copy((xVec3*)&mat.pos, &this->targetPos);
+        xVec3Copy((xVec3*)&mat.at, (xVec3*)&globals.camera.mat.at);
+
+        mat.at.y = 0.0f;
+
+        len = xVec3Length((xVec3*)&mat.at);
+        if (len < 1e-05f)
+        {
+            xVec3Init((xVec3*)&mat.at, 0.0f, 0.0f, 1.0f);
+        }
+        else
+        {
+            xVec3SMulBy((xVec3*)&mat.at, 1.0f / len);
+        }
+
+        xVec3Init((xVec3*)&mat.up, 0.0f, 1.0f, 0.0f);
+        xVec3Init((xVec3*)&mat.right, mat.at.z, 0.0f, -mat.at.x);
+
+        RwMatrixUpdate(&mat);
+
+        RwIm3DTransform(&this->iconVert[0], 4, &mat,
+                        rwIM3D_VERTEXUV | rwIM3D_ALLOPAQUE | rwIM3D_VERTEXRGBA);
+        RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
+        RwIm3DEnd();
+    }
+
+    if (sLeftLegSpring.bound)
+    {
+        SpringRender(&sLeftLegSpring);
+    }
+
+    if (sRightLegSpring.bound)
+    {
+        SpringRender(&sRightLegSpring);
+    }
+
+    if (sLeftArmSpring.bound)
+    {
+        SpringRender(&sLeftArmSpring);
+    }
+
+    if (sRightArmSpring.bound)
+    {
+        SpringRender(&sRightArmSpring);
     }
 }
 
@@ -793,8 +1120,8 @@ void zNPCBSandy::InitFX()
     this->sparks[0].rand_radius = 13.0f;
     this->sparks[0].flags = 0x1c28;
 
-    xVec3Init((xVec3*)&this->endPoints[0][2], -2.0f, 2.0f, 0.0f);
-    xVec3Init((xVec3*)&this->endPoints[0][3], 2.0f, 2.0f, 0.0f);
+    xVec3Init((xVec3*)&this->endPoints[1][0], -2.0f, 2.0f, 0.0f);
+    xVec3Init((xVec3*)&this->endPoints[1][1], 2.0f, 2.0f, 0.0f);
 
     this->sparks[1].type = 0x3;
     this->sparks[1].setup_degrees = 66.0f;
@@ -812,8 +1139,8 @@ void zNPCBSandy::InitFX()
     this->sparks[1].rand_radius = 13.0f;
     this->sparks[1].flags = 0x1c28;
 
-    xVec3Init((xVec3*)&this->endPoints[1][0], 0.0f, 2.0f, 0.0f);
-    xVec3Init((xVec3*)&this->endPoints[1][1], 3.5f, 2.0f, 0.0f);
+    xVec3Init((xVec3*)&this->endPoints[2][0], 0.0f, 2.0f, 0.0f);
+    xVec3Init((xVec3*)&this->endPoints[2][1], 3.5f, 2.0f, 0.0f);
 
     this->sparks[2].type = 0x3;
     this->sparks[2].setup_degrees = 66.0f;
@@ -831,8 +1158,8 @@ void zNPCBSandy::InitFX()
     this->sparks[2].rand_radius = 13.0f;
     this->sparks[2].flags = 0x1c20;
 
-    xVec3Init((xVec3*)&this->endPoints[1][2], 0.0f, 2.0f, 0.0f);
-    xVec3Init((xVec3*)&this->endPoints[1][3], 3.5f, 2.0f, 0.0f);
+    xVec3Init((xVec3*)&this->endPoints[3][0], 0.0f, 2.0f, 0.0f);
+    xVec3Init((xVec3*)&this->endPoints[3][1], 3.5f, 2.0f, 0.0f);
 
     this->sparks[3].type = 0x3;
     this->sparks[3].zeus_normal_offset = 1.0f;
@@ -865,6 +1192,74 @@ void zNPCBSandy::InitFX()
     this->sparks[5].time = 1.0f;
     this->sparks[5].thickness = 1.0f;
     this->sparks[5].flags = 0x110;
+}
+
+void zNPCBSandy::UpdateFX(F32 dt)
+{
+    S32 i;
+    S32 boltIdx;
+    S32 board;
+    xVec3 pntA;
+    xVec3 pntB;
+    xMat3x3 rotMat;
+
+    if (!(this->bustedScoreboard->flags & 0x1) && !(this->crashedScoreboard->flags & 0x1))
+    {
+        return;
+    }
+
+    board = !(this->bustedScoreboard->flags & 0x1);
+
+    for (i = 0; i < 2; i++)
+    {
+        this->maxLightningWait[i] += 0.2f * dt;
+        if (this->maxLightningWait[i] > 1.0f)
+        {
+            this->maxLightningWait[i] = 1.0f;
+        }
+
+        if (i == 1 && board == 0)
+        {
+            return;
+        }
+
+        this->timeToNextBolt[i] -= dt;
+        if (this->timeToNextBolt[i] < 0.0f)
+        {
+            this->timeToNextBolt[i] = this->maxLightningWait[i] * xurand();
+            boltIdx = (xrand() >> 13) & 0x3;
+
+            xMat3x3RotY(&rotMat, 6.2831855f * xurand());
+
+            xMat3x3RMulVec(&pntB, &rotMat, &this->endPoints[boltIdx][0]);
+            xMat3x3RMulVec(&pntB, &this->sparkTransform[board][i], &pntB);
+            xVec3AddTo(&pntB, &this->sparkTransform[board][i].pos);
+
+            xMat3x3RMulVec(&pntA, &rotMat, &this->endPoints[boltIdx][1]);
+            xMat3x3RMulVec(&pntA, &this->sparkTransform[board][i], &pntA);
+            xVec3AddTo(&pntA, &this->sparkTransform[board][i].pos);
+
+            this->sparks[boltIdx].start = &pntB;
+            this->sparks[boltIdx].end = &pntA;
+
+            if (board == 1 && i == 1)
+            {
+                if (this->sparks[boltIdx].arc_height < 0.0f)
+                {
+                    this->sparks[boltIdx].arc_height = -this->sparks[boltIdx].arc_height;
+                }
+            }
+            else
+            {
+                if (this->sparks[boltIdx].arc_height > 0.0f)
+                {
+                    this->sparks[boltIdx].arc_height = -this->sparks[boltIdx].arc_height;
+                }
+            }
+
+            zLightningAdd(&this->sparks[boltIdx]);
+        }
+    }
 }
 
 static void UpdateSandyBossCam(zNPCBSandy* sandy, F32 dt)
@@ -960,6 +1355,584 @@ static void GetBonePos(xVec3* result, xMat4x3* matArray, S32 index, xVec3* offse
             xVec3Copy(result, &tmpMat.pos);
         }
     }
+}
+
+static void MakeOBBFor(S32 startBone, S32 endBone, xEnt* ent, xMat4x3* matArray)
+{
+    xVec3 axis;
+    xVec3 dir;
+    xVec3 startPos;
+    F32 len;
+    F32 angle;
+
+    GetBonePos(&startPos, matArray, sBone[startBone], &sBoneOffset[startBone]);
+    GetBonePos(&dir, matArray, sBone[endBone], &sBoneOffset[endBone]);
+
+    xVec3SubFrom(&dir, &startPos);
+    len = xVec3Normalize(&dir, &dir);
+
+    xVec3Init(&ent->bound.box.box.lower, 0.0f, -0.4f, -0.4f);
+    xVec3Init(&ent->bound.box.box.upper, len, 0.4f, 0.4f);
+    xVec3Init(&ent->bound.box.center, 0.5f * len, 0.0f, 0.0f);
+
+    xVec3Init(&axis, 0.0f, -dir.z, dir.y);
+    angle = xasin(xVec3Normalize(&axis, &axis));
+
+    if (dir.x < 0.0f)
+    {
+        if (angle < 0.0f)
+        {
+            angle = -3.1415927f - angle;
+        }
+        else
+        {
+            angle = 3.1415927f - angle;
+        }
+    }
+
+    xMat3x3RotC(ent->bound.mat, axis.x, axis.y, axis.z, angle);
+    xVec3Copy(&ent->bound.mat->pos, &startPos);
+}
+
+static S32 BoundEventCB(xBase*, xBase* to, U32 toEvent, const F32*, xBase*)
+{
+    xEnt* ent = (xEnt*)to;
+    U32 idx = ent->id;
+    zNPCBSandy* sandy = (zNPCBSandy*)ent->driver;
+
+    switch (toEvent)
+    {
+    case eEventHit:
+        sandy->boundFlags[idx] |= 0x2;
+        break;
+    case eEventHit_BubbleBash:
+        sandy->boundFlags[idx] |= 0x2;
+        sandy->boundFlags[idx] |= 0x4;
+        break;
+    }
+
+    return 1;
+}
+
+void zNPCBSandy::Process(xScene* xscn, F32 dt)
+{
+    S32 i;
+    S32 j;
+    S32 hidden;
+    S32 oldRound;
+    S32 allDone;
+    S32 prev;
+    S32 wasBeat;
+    S32 idx;
+    S32 jawLen;
+    F32 fadeRate;
+    F32 amp;
+    F32 base;
+    F32 spread;
+    F32 distSq;
+    F32 radSq;
+    xEnt* rope;
+    xVec3 toEdge;
+    F32 color[3];
+    xVec3 point;
+    xVec3 normal;
+    xVec3 toPlayer;
+    xVec3 knock;
+    xVec3 endA;
+    xVec3 endB;
+    xVec3 boneOffset;
+
+    if (this->firstUpdate != 0)
+    {
+        this->firstUpdate = 0;
+
+        switch (this->round)
+        {
+        case 1:
+            if (this->firstTimeR1Csn != 0)
+            {
+                this->firstTimeR1Csn = 0;
+            }
+            else
+            {
+                zEntEvent(this->round1Csn, eEventPreload);
+            }
+            this->hitPoints = 9;
+            break;
+        case 2:
+            zEntEvent(this->round2Csn, eEventPreload);
+            this->hitPoints = 6;
+            break;
+        case 3:
+            zEntEvent(this->round3Csn, eEventPreload);
+            this->hitPoints = 3;
+            break;
+        }
+    }
+
+    hidden = 0;
+
+    if (globals.cmgr != NULL)
+    {
+        if (globals.cmgr->csn->Ready != 0)
+        {
+            hidden = 1;
+        }
+    }
+
+    if (hidden)
+    {
+        if (this->bossFlags & 0x1000)
+        {
+            this->csnTimer += dt;
+        }
+        else
+        {
+            this->csnTimer = 0.0f;
+        }
+
+        if (this->bossFlags & 0x400)
+        {
+            this->bossFlags &= ~0x400;
+            this->hiddenByCutscene();
+        }
+    }
+    else if (this->bossFlags & 0x1000)
+    {
+        this->bossFlags |= 0x4000;
+        this->jawTime = 0.0f;
+        sElbowDropTimer = 0.0f;
+        sChaseTimer = 0.0f;
+    }
+
+    if (!(this->baseFlags & 0x1))
+    {
+        hidden = 1;
+    }
+
+    if (hidden)
+    {
+        this->bossFlags |= 0x1000;
+    }
+    else
+    {
+        this->bossFlags &= ~0x1000;
+    }
+
+    if (this->psy_instinct)
+    {
+        this->psy_instinct->Timestep(dt, NULL);
+    }
+
+    if (sWasUsingBossCam != sUseBossCam)
+    {
+        if (sWasUsingBossCam)
+        {
+            globals.camera.hcur = sCurrHeight;
+            globals.camera.dcur = sCurrRadius;
+            globals.camera.pcur = 3.1415927f + sCurrYaw;
+
+            if (globals.camera.pcur > 6.2831855f)
+            {
+                globals.camera.pcur = globals.camera.pcur - 6.2831855f;
+            }
+
+            globals.camera.yaw_cur = sCurrYaw;
+            globals.camera.pitch_cur = sCurrPitch;
+            globals.camera.roll_cur = 0.0f;
+        }
+        else
+        {
+            sCurrYaw = globals.camera.yaw_cur;
+            sCurrHeight = globals.camera.hcur;
+            sCurrRadius = globals.camera.dcur;
+            sCurrPitch = globals.camera.pitch_cur;
+        }
+
+        sWasUsingBossCam = sUseBossCam;
+    }
+
+    if (sUseBossCam)
+    {
+        UpdateSandyBossCam(this, dt);
+    }
+    else
+    {
+        zCameraEnableTracking(CO_BOSS);
+    }
+
+    this->scoreboardAlpha = 1.0f;
+
+    if (this->bossFlags & 0x1000)
+    {
+        for (i = 0; i < 8; i++)
+        {
+            this->edgeAlpha[i] = 1.0f;
+        }
+    }
+    else
+    {
+        for (i = 0; i < 8; i++)
+        {
+            this->edgeAlpha[i] = 1.0f;
+
+            xVec3Sub(&toEdge, (xVec3*)&globals.camera.mat.pos, &this->ringEdgeCenter[i]);
+
+            if (xVec3Dot(&toEdge, &this->ropeNormal[i]) < 0.0f)
+            {
+                this->edgeAlpha[i] = 0.1f;
+
+                if (i == 4)
+                {
+                    this->scoreboardAlpha = 0.1f;
+                }
+            }
+        }
+    }
+
+    fadeRate = 4.0f * dt;
+
+    for (i = 0; i < 8; i++)
+    {
+        if (this->edgeAlpha[i] > 0.9f)
+        {
+            for (j = 0; j < 4; j++)
+            {
+                this->ropeObject[i][j]->model->Alpha += dt;
+
+                if (this->ropeObject[i][j]->model->Alpha > this->edgeAlpha[i])
+                {
+                    this->ropeObject[i][j]->model->Alpha = this->edgeAlpha[i];
+                }
+            }
+
+            this->ropeObjectLo[i]->model->Alpha += dt;
+
+            if (this->ropeObjectLo[i]->model->Alpha > this->edgeAlpha[i])
+            {
+                this->ropeObjectLo[i]->model->Alpha = this->edgeAlpha[i];
+            }
+        }
+        else
+        {
+            for (j = 0; j < 4; j++)
+            {
+                this->ropeObject[i][j]->model->Alpha -= fadeRate;
+
+                if (this->ropeObject[i][j]->model->Alpha < this->edgeAlpha[i])
+                {
+                    this->ropeObject[i][j]->model->Alpha = this->edgeAlpha[i];
+                }
+            }
+
+            this->ropeObjectLo[i]->model->Alpha -= fadeRate;
+
+            if (this->ropeObjectLo[i]->model->Alpha < this->edgeAlpha[i])
+            {
+                this->ropeObjectLo[i]->model->Alpha = this->edgeAlpha[i];
+            }
+        }
+
+        prev = i - 1;
+        if (prev < 0)
+        {
+            prev += 8;
+        }
+
+        if (this->edgeAlpha[i] < 0.9f)
+        {
+            this->turnbuckle[i]->model->Alpha -= fadeRate;
+
+            if (this->turnbuckle[i]->model->Alpha < this->edgeAlpha[i])
+            {
+                this->turnbuckle[i]->model->Alpha = this->edgeAlpha[i];
+            }
+        }
+        else if (this->edgeAlpha[prev] < 0.9f)
+        {
+            this->turnbuckle[i]->model->Alpha -= fadeRate;
+
+            if (this->turnbuckle[i]->model->Alpha < this->edgeAlpha[prev])
+            {
+                this->turnbuckle[i]->model->Alpha = this->edgeAlpha[prev];
+            }
+        }
+        else
+        {
+            this->turnbuckle[i]->model->Alpha += dt;
+
+            if (this->turnbuckle[i]->model->Alpha > this->edgeAlpha[i])
+            {
+                this->turnbuckle[i]->model->Alpha = this->edgeAlpha[i];
+            }
+        }
+    }
+
+    if (this->scoreboardAlpha > 0.9f)
+    {
+        this->crashedScoreboard->model->Alpha += dt;
+
+        if (this->crashedScoreboard->model->Alpha > this->scoreboardAlpha)
+        {
+            this->crashedScoreboard->model->Alpha = this->scoreboardAlpha;
+        }
+    }
+    else
+    {
+        this->crashedScoreboard->model->Alpha -= fadeRate;
+
+        if (this->crashedScoreboard->model->Alpha < this->scoreboardAlpha)
+        {
+            this->crashedScoreboard->model->Alpha = this->scoreboardAlpha;
+        }
+    }
+
+    this->UpdateFX(dt);
+
+    sElbowDropTimer += dt;
+    sElbowDropThreshold = sElbowDropThreshold - 0.5f;
+
+    if (sElbowDropThreshold < 0.0f)
+    {
+        sElbowDropThreshold = 0.0f;
+    }
+
+    if (strcmp("BbounceAttack01", globals.player.ent.model->Anim->Single->State->Name) != 0 &&
+        strcmp("StunFall", globals.player.ent.model->Anim->Single->State->Name) != 0)
+    {
+        if (sPCWasBubbleBouncing)
+        {
+            sHeadPopOffFactor = 1.1f;
+        }
+        else
+        {
+            sHeadPopOffFactor = -1.0f;
+        }
+
+        sPCHeightDiff = globals.player.ent.model->Mat->pos.y;
+        sPCWasBubbleBouncing = 0;
+    }
+    else
+    {
+        sPCWasBubbleBouncing = 1;
+    }
+
+    oldRound = this->round;
+
+    if ((this->bossFlags & 0x20) && globals.player.ControlOff == 0)
+    {
+        if (oldRound == 1)
+        {
+            if (this->hitPoints <= 6)
+            {
+                this->round = 2;
+            }
+        }
+        else if (oldRound == 2)
+        {
+            if (this->hitPoints <= 3)
+            {
+                this->round = 3;
+            }
+        }
+    }
+
+    if (oldRound != this->round)
+    {
+        this->bossFlags |= 0x400;
+
+        if (this->round == 1)
+        {
+            zEntEvent(this->round1Csn, eEventPreload);
+        }
+        else if (this->round == 2)
+        {
+            zEntEvent(this->round2Csn, eEventPreload);
+        }
+        else if (this->round == 3)
+        {
+            zEntEvent(this->round3Csn, eEventPreload);
+        }
+
+        this->nfFlags = 0;
+    }
+
+    xprintf("Round %d\n", this->round);
+    xprintf("R1 - Next  R2 - Prev\n");
+
+    for (i = 0; i < 8; i++)
+    {
+        allDone = 1;
+
+        for (j = 0; j < 4; j++)
+        {
+            if (this->ropeObject[i][j]->model->Anim->Single->CurrentSpeed > 1e-05f)
+            {
+                allDone = 0;
+            }
+        }
+
+        if (allDone)
+        {
+            for (j = 0; j < 4; j++)
+            {
+                rope = this->ropeObject[i][j];
+                rope->model->Flags &= 0xfffd;
+                xEntHide(rope);
+            }
+
+            xEntShow(this->ropeObjectLo[i]);
+        }
+    }
+
+    this->jawTime += dt;
+
+    jawLen = *(S32*)this->jawData;
+
+    if (60.0f * this->jawTime > jawLen)
+    {
+        this->jawTime = this->jawTime - jawLen / 60.0f;
+    }
+
+    amp = xJaw_EvalData(this->jawData, this->jawTime);
+
+    this->jawLevel = this->jawLevel * 0.9f;
+    this->jawLevel = 0.1f * amp + this->jawLevel;
+    this->jawThreshold = this->jawThreshold * 0.99f;
+    this->jawThreshold = 0.01f * amp + this->jawThreshold;
+
+    wasBeat = this->isBeat;
+
+    if (amp > 0.5f)
+    {
+        this->isBeat = 1;
+    }
+    else
+    {
+        this->isBeat = 0;
+    }
+
+    if (wasBeat == 0 && this->isBeat != 0)
+    {
+        color[0] = 0.5f * xurand();
+        color[1] = 0.5f * xurand();
+        color[2] = 0.5f * xurand();
+
+        idx = (S32)(2.95f * xurand());
+
+        this->curveNodeAlpha = 1.0f;
+
+        color[idx] += 0.5f;
+
+        this->curveNodeR = color[0];
+        this->curveNodeG = color[1];
+        this->curveNodeB = color[2];
+    }
+
+    this->curveNodeAlpha -= dt;
+
+    base = 0.25f * this->jawLevel + 0.25f;
+
+    if (this->curveNodeAlpha < 0.5f * this->jawLevel)
+    {
+        this->curveNodeAlpha = base;
+    }
+
+    this->curveNode[0].color.a = (U8)(255.0f * LERP(1.0f, base, this->curveNodeAlpha));
+    this->curveNode[0].color.r = (U8)(255.0f * this->curveNodeR);
+    this->curveNode[0].color.g = (U8)(255.0f * this->curveNodeG);
+    this->curveNode[0].color.b = (U8)(255.0f * this->curveNodeB);
+    this->curveNode[1].color.a = (U8)(255.0f * LERP(0.0f, base, this->curveNodeAlpha));
+    this->curveNode[1].color.r = (U8)(255.0f * this->curveNodeR);
+    this->curveNode[1].color.g = (U8)(255.0f * this->curveNodeG);
+    this->curveNode[1].color.b = (U8)(255.0f * this->curveNodeB);
+
+    this->laserShow.set_curve(&this->curveNode[0], 2);
+
+    xVec3Copy(&point, &this->laserPoint[(S32)(15.5f * xurand())]);
+
+    normal.x = -point.z;
+    normal.y = 0.0f;
+    normal.z = point.x;
+
+    xVec3Normalize(&normal, &normal);
+
+    this->laserShow.insert(point, normal, 1.0f, 1.0f, 0);
+
+    spread = 2.0f * (xurand() - 0.5f);
+    point.x = 20.0f * (spread * (1.5f - (0.5f * spread) * spread));
+
+    spread = 2.0f * (xurand() - 0.5f);
+    point.z = 20.0f * (spread * (1.5f - (0.5f * spread) * spread));
+    point.y = 40.0f;
+
+    this->laserShow.insert(point, normal, 1.0f, 1.0f, 0);
+
+    if (this->bossFlags & 0x800)
+    {
+        this->shockRadius =
+            this->shockRadius + dt * this->shockwaveGrowthRate / xsqrt(this->shockRadius);
+
+        if (this->shockRadius > this->shockwaveMaxRadius)
+        {
+            this->bossFlags &= ~0x800;
+            this->shockwaveEmitter->emit_flags &= ~0x1;
+        }
+        else
+        {
+            this->shockwaveEmitter->emit_flags |= 0x1;
+            this->shockwaveEmitter->tasset->e_circle.radius = this->shockRadius;
+
+            if (globals.player.JumpState == 0)
+            {
+                xVec3Sub(&toPlayer, (xVec3*)&globals.player.ent.model->Mat->pos,
+                         (xVec3*)&this->shockwaveEmitter->tasset->pos);
+
+                distSq = xVec3Length2(&toPlayer);
+                radSq = this->shockRadius * this->shockRadius;
+
+                if (distSq < radSq && distSq > 0.81f * radSq)
+                {
+                    xVec3Sub(&knock, (xVec3*)&globals.player.ent.model->Mat->pos,
+                             &this->frame->mat.pos);
+
+                    knock.y = 0.0f;
+                    xVec3Normalize(&knock, &knock);
+
+                    xVec3SMul((xVec3*)&globals.player.ent.model->Mat->at, &knock, -1.0f);
+                    xVec3Cross((xVec3*)&globals.player.ent.model->Mat->right,
+                               (xVec3*)&globals.player.ent.model->Mat->up,
+                               (xVec3*)&globals.player.ent.model->Mat->at);
+
+                    xVec3SMulBy(&knock, 10.0f);
+                    knock.y = 7.0f;
+
+                    zEntPlayer_Damage(NULL, 1, &knock);
+
+                    this->bossFlags |= 0x2;
+                }
+            }
+        }
+    }
+    else
+    {
+        this->shockwaveEmitter->emit_flags &= ~0x1;
+    }
+
+    if (this->round != 1)
+    {
+        xVec3Init(&boneOffset, 0.0f, 0.0f, 0.5f);
+
+        GetBonePos(&endA, (xMat4x3*)this->crashedScoreboard->model->Mat, 5, &boneOffset);
+        GetBonePos(&endB, (xMat4x3*)this->crashedScoreboard->model->Mat, 8, &boneOffset);
+
+        zLightningModifyEndpoints(this->wireLight[0], &endA, &endB);
+        zLightningModifyEndpoints(this->wireLight[1], &endB, &endA);
+    }
+
+    zNPCCommon::Process(xscn, dt);
+
+    zNPCBSandy_BossDamageEffect_Update(dt);
 }
 
 void zNPCBSandy::hiddenByCutscene()
@@ -1091,6 +2064,220 @@ void zNPCBSandy_GameIsPaused(zScene*)
     }
 }
 
+void zNPCBSandy::NewTime(xScene* xscn, F32 dt)
+{
+    S32 i;
+    S32 hidden = 0;
+    F32 dot;
+    F32 dist;
+    F32 posDist;
+    F32 negDist;
+    F32 amount;
+    xCollis* coll;
+    xCollis* collEnd;
+    xVec3 dir;
+    xVec3 toEdge;
+    xVec3 up;
+
+    if (globals.cmgr != NULL)
+    {
+        if (globals.cmgr->csn->Ready != 0)
+        {
+            hidden = 1;
+        }
+    }
+
+    if (!(this->baseFlags & 0x1))
+    {
+        hidden = 1;
+    }
+
+    xVec3Init(&up, 1.0f, 0.0f, 0.0f);
+
+    posDist = 30.0f;
+    negDist = 30.0f;
+
+    for (i = 0; i < 8; i++)
+    {
+        dot = xVec3Dot(&this->ropeNormal[i], (xVec3*)&this->model->Mat->right);
+
+        if (dot >= 1e-05f || dot <= -1e-05f)
+        {
+            xVec3Sub(&toEdge, (xVec3*)&this->model->Mat->pos, &this->ringEdgeCenter[i]);
+
+            dist = xVec3Dot(&toEdge, &this->ropeNormal[i]) / -dot;
+
+            if (dist < 0.0f)
+            {
+                if (-dist < negDist)
+                {
+                    negDist = -dist;
+                }
+            }
+            else
+            {
+                if (dist < posDist)
+                {
+                    posDist = dist;
+                }
+            }
+        }
+    }
+
+    if (this->bossFlags & 0x8)
+    {
+        amount = -(negDist - 2.0f);
+        for (i = 0; i < 2; i++)
+        {
+            xVec3AddScaled((xVec3*)&this->model->Mat[sLeftFootBones[i]].pos, &up, amount);
+        }
+
+        amount = posDist - 2.0f;
+        for (i = 0; i < 2; i++)
+        {
+            xVec3AddScaled((xVec3*)&this->model->Mat[sRightFootBones[i]].pos, &up, amount);
+        }
+    }
+
+    if (this->bossFlags & 0x10)
+    {
+        amount = -(negDist - 1.0f);
+        for (i = 0; i < 4; i++)
+        {
+            xVec3AddScaled((xVec3*)&this->model->Mat[sLeftHandBones[i]].pos, &up, amount);
+        }
+
+        amount = posDist - 1.0f;
+        for (i = 0; i < 4; i++)
+        {
+            xVec3AddScaled((xVec3*)&this->model->Mat[sRightHandBones[i]].pos, &up, amount);
+        }
+    }
+
+    for (i = 0; i < 13; i++)
+    {
+        if (sBoundRadius[i] < 0.0f)
+        {
+            continue;
+        }
+
+        GetBonePos(&this->boundList[i]->bound.sph.center, (xMat4x3*)this->model->Mat, sBone[i],
+                   &sBoneOffset[i]);
+        xQuickCullForBound(&this->boundList[i]->bound.qcd, &this->boundList[i]->bound);
+        zGridUpdateEnt(this->boundList[i]);
+
+        if (this->boundList[i]->bound.sph.center.y - this->boundList[i]->bound.sph.r > 0.0f)
+        {
+            this->boundFlags[i] |= 0x8;
+        }
+        else if (this->boundFlags[i] & 0x8)
+        {
+            this->boundFlags[i] &= ~0x8;
+
+            if (this->boundEmitTimer[i] <= 0.0f && (this->boundFlags[i] & 0x10) && hidden == 0)
+            {
+                if (xrand() & 0x4)
+                {
+                    xSndPlay3D(xStrHash("B101_SC_step1"), 2.31f, 0.0f, 0x0, 0x0, this, 30.0f,
+                               SND_CAT_GAME, 0.0f);
+                }
+                else
+                {
+                    xSndPlay3D(xStrHash("B101_SC_step2"), 2.31f, 0.0f, 0x0, 0x0, this, 30.0f,
+                               SND_CAT_GAME, 0.0f);
+                }
+            }
+
+            this->boundEmitTimer[i] = 0.5f;
+        }
+
+        if (this->boundEmitTimer[i] > 0.0f && hidden == 0)
+        {
+            this->boundEmitTimer[i] = this->boundEmitTimer[i] - dt;
+            this->dustEddieSetting.pos.y = 0.0f;
+            this->dustEddieSetting.pos.x = this->boundList[i]->bound.sph.center.x;
+            this->dustEddieSetting.pos.z = this->boundList[i]->bound.sph.center.z;
+            xParEmitterEmitCustom(this->dustEddieEmitter, dt, &this->dustEddieSetting);
+        }
+    }
+
+    MakeOBBFor(2, 3, this->boundList[2], (xMat4x3*)this->model->Mat);
+    xQuickCullForBound(&this->boundList[2]->bound.qcd, &this->boundList[2]->bound);
+    zGridUpdateEnt(this->boundList[2]);
+
+    MakeOBBFor(4, 5, this->boundList[4], (xMat4x3*)this->model->Mat);
+    xQuickCullForBound(&this->boundList[4]->bound.qcd, &this->boundList[4]->bound);
+    zGridUpdateEnt(this->boundList[4]);
+
+    MakeOBBFor(9, 10, this->boundList[9], (xMat4x3*)this->model->Mat);
+    xQuickCullForBound(&this->boundList[9]->bound.qcd, &this->boundList[9]->bound);
+    zGridUpdateEnt(this->boundList[9]);
+
+    MakeOBBFor(11, 12, this->boundList[11], (xMat4x3*)this->model->Mat);
+    xQuickCullForBound(&this->boundList[11]->bound.qcd, &this->boundList[11]->bound);
+    zGridUpdateEnt(this->boundList[11]);
+
+    if (this->bossFlags & 0x1)
+    {
+        coll = globals.player.ent.collis->colls;
+        collEnd = coll + globals.player.ent.collis->idx;
+
+        for (; coll < collEnd; coll++)
+        {
+            if (!(coll->flags & 0x1))
+            {
+                continue;
+            }
+
+            xEnt* hit = (xEnt*)coll->optr;
+            if (hit == NULL)
+            {
+                continue;
+            }
+
+            if (hit->baseType != eBaseTypeNPC)
+            {
+                continue;
+            }
+
+            if (hit->driver != (xEnt*)this)
+            {
+                continue;
+            }
+
+            if (!(this->boundFlags[hit->id] & 0x1))
+            {
+                continue;
+            }
+
+            xVec3Sub(&dir, (xVec3*)&globals.player.ent.model->Mat->pos, &this->frame->mat.pos);
+            dir.y = 0.0f;
+            xVec3Normalize(&dir, &dir);
+
+            xVec3SMul((xVec3*)&globals.player.ent.model->Mat->at, &dir, -1.0f);
+            xVec3Cross((xVec3*)&globals.player.ent.model->Mat->right,
+                       (xVec3*)&globals.player.ent.model->Mat->up,
+                       (xVec3*)&globals.player.ent.model->Mat->at);
+
+            xVec3SMulBy(&dir, 10.0f);
+            dir.y = 7.0f;
+
+            zEntPlayer_Damage(NULL, 1, &dir);
+
+            this->bossFlags |= 0x2;
+        }
+    }
+
+    for (i = 0; i < 13; i++)
+    {
+        this->boundFlags[i] &= ~0x7;
+    }
+
+    this->bossFlags &= ~0x1;
+
+    zNPCCommon::NewTime(xscn, dt);
+}
+
 static S32 idleCB(xGoal* rawgoal, void*, en_trantype* trantype, F32, void*)
 {
     zNPCGoalBossSandyIdle* idle = (zNPCGoalBossSandyIdle*)rawgoal;
@@ -1182,8 +2369,163 @@ static S32 tauntCB(xGoal* rawgoal, void*, en_trantype* trantype, F32 dt, void*)
     return nextgoal;
 }
 
-static S32 chaseCB(xGoal* rawgoal, void*, en_trantype* trantype, F32 dt, void*);
-static S32 meleeCB(xGoal* rawgoal, void*, en_trantype* trantype, F32 dt, void*);
+static S32 chaseCB(xGoal* rawgoal, void*, en_trantype* trantype, F32 dt, void*)
+{
+    zNPCGoalBossSandyChase* chase = (zNPCGoalBossSandyChase*)rawgoal;
+    zNPCBSandy* sandy = (zNPCBSandy*)chase->psyche->clt_owner;
+    S32 nextgoal = 0;
+    xVec3 pcFuturePos;
+    xVec3 tempVector;
+    F32 length;
+    F32 futureDist;
+    F32 atDot;
+    F32 rightDot;
+    F32 ringDistSq;
+
+    if (chase->timeInGoal > 0.30000001192092896f)
+    {
+        if (sandy->bossFlags & 0x400)
+        {
+            *trantype = GOAL_TRAN_SET;
+            return 'NGB1';
+        }
+    }
+
+    xVec3Sub(&tempVector, (xVec3*)&globals.player.ent.model->Mat->pos,
+             (xVec3*)&sandy->model->Mat->pos);
+
+    tempVector.y = 0.0f;
+    length = xVec3Length2(&tempVector);
+
+    zEntPlayer_PredictPos(&pcFuturePos, 1.0f, 1.0f, 1);
+    xVec3SubFrom(&pcFuturePos, (xVec3*)&sandy->model->Mat->pos);
+
+    futureDist = xVec3Normalize(&pcFuturePos, &pcFuturePos);
+    atDot = xVec3Dot(&pcFuturePos, (xVec3*)&sandy->model->Mat->at);
+    rightDot = xVec3Dot(&pcFuturePos, (xVec3*)&sandy->model->Mat->right);
+
+    ringDistSq = globals.player.ent.model->Mat->pos.x * globals.player.ent.model->Mat->pos.x +
+                 globals.player.ent.model->Mat->pos.z * globals.player.ent.model->Mat->pos.z;
+
+    if (futureDist > 3.5f && futureDist < 6.0f && atDot > 0.70700002f && rightDot < 0.0f)
+    {
+        sElbowDropThreshold = sElbowDropThreshold + 1.0f;
+    }
+
+    if (globals.player.ControlOff)
+    {
+        *trantype = GOAL_TRAN_SET;
+        nextgoal = 'NGB1';
+    }
+    else if (chase->timeInGoal > 0.30000001192092896f)
+    {
+        if (length < 12.0f)
+        {
+            *trantype = GOAL_TRAN_SET;
+            nextgoal = 'NGB4';
+        }
+        else if (sChaseTimer > 2.5f)
+        {
+            if (sandy->round != 1 && sNumAttacks == 1)
+            {
+                *trantype = GOAL_TRAN_SET;
+                nextgoal = 'NGB:';
+            }
+            else if (sNumAttacks == 0)
+            {
+                *trantype = GOAL_TRAN_SET;
+                nextgoal = 'NGB6';
+            }
+            else if (sandy->round == 1 && sNumAttacks >= 1)
+            {
+                *trantype = GOAL_TRAN_SET;
+                nextgoal = 'NGB7';
+            }
+            else if (sandy->round != 1 && sNumAttacks >= 2)
+            {
+                *trantype = GOAL_TRAN_SET;
+                nextgoal = 'NGB7';
+            }
+        }
+        else if (sandy->round == 1 && sNumAttacks == 1 && ringDistSq < 9.0f)
+        {
+            *trantype = GOAL_TRAN_SET;
+            nextgoal = 'NGB7';
+        }
+    }
+
+    return nextgoal;
+}
+
+static S32 meleeCB(xGoal* rawgoal, void*, en_trantype* trantype, F32 dt, void*)
+{
+    zNPCGoalBossSandyMelee* melee = (zNPCGoalBossSandyMelee*)rawgoal;
+    zNPCBSandy* sandy = (zNPCBSandy*)melee->psyche->clt_owner;
+    S32 nextgoal = 0;
+    U32 numHints;
+    xVec3 tempVector;
+    F32 length;
+
+    xVec3Sub(&tempVector, (xVec3*)&globals.player.ent.model->Mat->pos,
+             (xVec3*)&sandy->model->Mat->pos);
+
+    tempVector.y = 0.0f;
+    length = xVec3Length2(&tempVector);
+
+    if (sandy->AnimTimeRemain(NULL) < 1.7000000476837158f * dt)
+    {
+        if (globals.player.ControlOff)
+        {
+            *trantype = GOAL_TRAN_SET;
+            nextgoal = 'NGB1';
+        }
+        else if (sandy->bossFlags & 0x2)
+        {
+            sandy->bossFlags &= ~0x2;
+            nextgoal = 'NGB2';
+            *trantype = GOAL_TRAN_SET;
+        }
+        else if (length > 12.0f)
+        {
+            *trantype = GOAL_TRAN_SET;
+            nextgoal = 'NGB3';
+        }
+        else
+        {
+            melee->timeInGoal = 0.0f;
+            xSndPlay3D(xStrHash("B101_SC_chop"), 0.77f, 0.0f, 0x0, 0x0, sandy, 30.0f, SND_CAT_GAME,
+                       0.6f);
+        }
+    }
+
+    if (nextgoal == 'NGB2')
+    {
+        numHints = sandy->nfFlags & 0x3;
+
+        if (numHints < 3 || (xrand() & 0x300) == 0)
+        {
+            U32 idx = 2;
+            if (numHints < 3)
+            {
+                idx = numHints;
+            }
+
+            if (sandy->round == 2)
+            {
+                sandy->newsfish->SpeakStart(sNFSoundValue[idx + 9], 0, 0xFFFFFFFF);
+            }
+            else
+            {
+                sandy->newsfish->SpeakStart(sNFSoundValue[idx], 0, 0xFFFFFFFF);
+            }
+
+            sandy->nfFlags &= ~0x3;
+            sandy->nfFlags |= idx + 1;
+        }
+    }
+
+    return nextgoal;
+}
 
 static S32 noHeadCB(xGoal* rawgoal, void*, en_trantype* trantype, F32 dt, void*)
 {
@@ -1819,10 +3161,476 @@ S32 zNPCGoalBossSandyElbowDrop::Exit(F32 dt, void* updCtxt)
     return xGoal::Exit(dt, updCtxt);
 }
 
+S32 zNPCGoalBossSandyLeap::Enter(F32 dt, void* updCtxt)
+{
+    zNPCBSandy* sandy = (zNPCBSandy*)psyche->clt_owner;
+    xVec3 toRing;
+    F32 dist;
+    F32 mag;
+
+    timeInGoal = 0.0f;
+    stage = 0;
+
+    sandy->bossFlags &= ~0x2;
+    sandy->bossFlags &= ~0x4;
+
+    endX = globals.player.ent.model->Mat->pos.x;
+    endZ = globals.player.ent.model->Mat->pos.z;
+
+    if (sandy->round == 2)
+    {
+        toRing.x = endX - sandy->ringEdgeCenter[4].x;
+        toRing.y = 0.0f;
+        toRing.z = endZ - sandy->ringEdgeCenter[4].z;
+
+        dist = xVec3Length2(&toRing);
+        if (dist < 100.0f)
+        {
+            xVec3SMulBy(&toRing, 10.0f / xsqrt(dist));
+            endX = toRing.x + sandy->ringEdgeCenter[4].x;
+            endZ = toRing.z + sandy->ringEdgeCenter[4].z;
+        }
+    }
+
+    if (endX < 3.0f && endX > -3.0f && endZ < 3.0f && endZ > -3.0f)
+    {
+        endX = 0.0f;
+        endZ = 0.0f;
+    }
+
+    mag = endX * endX + endZ * endZ;
+    if (mag > 100.0f)
+    {
+        mag = 10.0f * (1.0f / xsqrt(mag));
+        endX = endX * mag;
+        endZ = endZ * mag;
+    }
+
+    startX = sandy->model->Mat->pos.x - endX;
+    startZ = sandy->model->Mat->pos.z - endZ;
+
+    sNumAttacks = 0;
+    sDidClothesline = 0;
+
+    xVec3Init(&sandy->frame->vel, 0.0f, 0.0f, 0.0f);
+
+    return zNPCGoalCommon::Enter(dt, updCtxt);
+}
+
+S32 zNPCGoalBossSandyLeap::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    zNPCBSandy* sandy = (zNPCBSandy*)psyche->clt_owner;
+    S32 i;
+    S32 hurtAll = 0;
+    S32 animIdx = -1;
+    U32 animID;
+    F32 timeLeft;
+    F32 recip;
+    zJumpParam jump;
+
+    timeInGoal += dt;
+
+    timeLeft = sandy->AnimTimeRemain(NULL);
+    recip = 1.0f / sandy->model->Anim->Single->State->Data->Duration;
+
+    switch (stage)
+    {
+    case 0:
+        if (timeLeft < 1.7000000476837158f * dt)
+        {
+            stage = 1;
+            xSndPlay3D(xStrHash("B101_SC_jump"), 0.77f, 0.0f, 0x0, 0x0, sandy, 30.0f, SND_CAT_GAME,
+                       0.0f);
+            animIdx = 13;
+            timeInGoal = 0.0f;
+        }
+        break;
+    case 1:
+        if (timeLeft < 1.7000000476837158f * dt)
+        {
+            stage = 2;
+            animIdx = 14;
+            timeInGoal = 0.0f;
+        }
+        else
+        {
+            sandy->frame->mat.pos.y =
+                7.0f - timeLeft * ((7.0f * recip) * recip * timeLeft);
+            sandy->frame->mat.pos.x = startX * (timeLeft * recip) + endX;
+            sandy->frame->mat.pos.z = startZ * (timeLeft * recip) + endZ;
+        }
+        break;
+    case 2:
+        hurtAll = 1;
+        if (timeLeft < 1.7000000476837158f * dt)
+        {
+            stage = 3;
+            sandy->bossFlags |= 0x800;
+            xVec3Copy((xVec3*)&sandy->shockwaveEmitter->tasset->pos,
+                      (xVec3*)&sandy->model->Mat->pos);
+            sandy->shockwaveEmitter->tasset->pos.y = 0.0f;
+            sandy->shockRadius = 1.0f;
+            animIdx = 15;
+            timeInGoal = 0.0f;
+            sandy->frame->mat.pos.y = 0.0f;
+            xSndPlay(xStrHash("B101_SC_butt"), 1.0f, 0.0f, 0x0, 0x0, 0x0, SND_CAT_GAME, 0.0f);
+        }
+        else
+        {
+            sandy->frame->mat.pos.y =
+                7.0f - timeInGoal * ((7.0f * recip) * recip * timeInGoal);
+        }
+        break;
+    case 3:
+        if (timeInGoal < 0.2f)
+        {
+            hurtAll = 1;
+            sandy->bossFlags |= 0x40;
+
+            if (!(sandy->bossFlags & 0x2) && !(sandy->bossFlags & 0x4) &&
+                globals.player.JumpState == 0)
+            {
+                sandy->bossFlags |= 0x4;
+
+                jump.PeakHeight = 5.25f;
+                jump.TimeHold = 0.0f;
+                jump.TimeGravChange = 0.3f;
+
+                CalcJumpImpulse(&jump, NULL);
+                zEntPlayerJumpStart(&globals.player.ent, &jump);
+                zEntPlayer_SNDPlay(ePlayerSnd_Jump, 0.0f);
+
+                globals.player.Jump_CanDouble = 0;
+                globals.player.Jump_CanFloat = 1;
+                globals.player.Jump_Springboard = NULL;
+                globals.player.Jump_SpringboardStart = 0;
+                globals.player.Bounced = 1;
+            }
+        }
+        break;
+    }
+
+    if (hurtAll)
+    {
+        for (i = 0; i < 13; i++)
+        {
+            sandy->boundFlags[i] |= 0x1;
+        }
+
+        sandy->bossFlags |= 0x1;
+    }
+
+    if (animIdx > -1)
+    {
+        animID = g_hash_bossanim[animIdx];
+        if (animID)
+        {
+            if (sandy->AnimStart(animID, 0))
+            {
+                anid_played = animID;
+            }
+            else
+            {
+                Name();
+                anid_played = 0;
+            }
+        }
+    }
+
+    return xGoal::Process(trantype, dt, updCtxt, xscn);
+}
+
 S32 zNPCGoalBossSandyLeap::Exit(F32 dt, void* updCtxt)
 {
     sChaseTimer = 0.0f;
     return xGoal::Exit(dt, updCtxt);
+}
+
+S32 zNPCGoalBossSandySit::Enter(F32 dt, void* updCtxt)
+{
+    zNPCBSandy* sandy = (zNPCBSandy*)psyche->clt_owner;
+    U32 numHints;
+    U32 idx;
+
+    timeInGoal = 0.0f;
+    sitFlags = 0;
+
+    xVec3Init(&sandy->frame->vel, 0.0f, 0.0f, 0.0f);
+
+    if ((sandy->nfFlags & 0x4) == 0 && sandy->round == 1)
+    {
+        numHints = (sandy->nfFlags >> 3) & 3;
+
+        if (numHints < 3 || (xrand() & 0x300) == 0)
+        {
+            idx = 2;
+            if (numHints < 3)
+            {
+                idx = numHints;
+            }
+
+            sandy->newsfish->SpeakStart(sNFSoundValue[idx + 3], 0, 0xFFFFFFFF);
+
+            sandy->nfFlags &= ~0x18;
+            sandy->nfFlags |= (idx + 1) * 8;
+        }
+    }
+
+    return zNPCGoalCommon::Enter(dt, updCtxt);
+}
+
+S32 zNPCGoalBossSandySit::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    zNPCBSandy* sandy = (zNPCBSandy*)psyche->clt_owner;
+    S32 inRing;
+    S32 numSpins;
+    F32 popFactor;
+    xVec3 shrapVel;
+    xVec3 boulderCenter;
+    RwMatrix* bmat;
+
+    timeInGoal += dt;
+
+    if (globals.player.carry.grabbed == sandy->headBoulder)
+    {
+        xVec3Init(&sandy->headBoulder->vel, 0.0f, 0.0f, 0.0f);
+    }
+
+    if ((sitFlags & 0x1) == 0 && globals.player.ent.model->Mat->pos.y >= 0.25f)
+    {
+        sandy->bossFlags |= 0x80;
+        sandy->targetRaster = sandy->feetRaster;
+        sandy->targetPos.x = globals.player.ent.model->Mat->pos.x;
+        sandy->targetPos.y = 0.1f;
+        sandy->targetPos.z = globals.player.ent.model->Mat->pos.z;
+    }
+    else
+    {
+        sandy->bossFlags &= ~0x80;
+    }
+
+    if (sHeadPopOffFactor > 0.0f && (sitFlags & 0x1) == 0 && sandy->round != 3)
+    {
+        sitFlags |= 0x1;
+
+        xSndPlay3D(xStrHash("B101_SC_headoff1"), 2.31f, 0.0f, 0x0, 0x0, sandy, 30.0f, SND_CAT_GAME,
+                   0.0f);
+
+        timeInGoal = 0.0f;
+        zEntEvent(sandy->headBoulder, eEventReset);
+
+        sandy->headBoulder->moreFlags |= 0x8;
+        sandy->headBoulder->collis_chk = 0x20;
+        sandy->headBoulder->collis_pen = 0x20;
+
+        xMat4x3Mul((xMat4x3*)sandy->headBoulder->model->Mat,
+                   (xMat4x3*)&sandy->model->Mat[sBone[1]], (xMat4x3*)sandy->model->Mat);
+        xMat3x3RMulVec(&boulderCenter, (xMat3x3*)sandy->headBoulder->model->Mat,
+                       &sandy->headBoulder->localCenter);
+        xVec3Copy(&sandy->headBoulder->bound.box.center, &sandy->boundList[1]->bound.box.center);
+        xVec3Sub((xVec3*)&sandy->headBoulder->model->Mat->pos,
+                 &sandy->headBoulder->bound.box.center, &boulderCenter);
+
+        sandy->model->Flags &= ~0x1;
+        sandy->model->Next->Flags &= ~0x1;
+
+        sandy->boundList[1]->chkby = 0;
+        sandy->boundList[1]->penby = 0;
+
+        if (sandy->round == 1 && sHeadPopOffFactor >= 1.0f)
+        {
+            popFactor = 10.0f;
+        }
+        else
+        {
+            popFactor = 3.0f * sHeadPopOffFactor;
+            if (popFactor < 1.0f)
+            {
+                popFactor = 1.0f;
+            }
+        }
+
+        if (sandy->round == 1)
+        {
+            xVec3Init(&sandy->headBoulder->vel, 0.0f,
+                      xsqrt(2.0f * popFactor * sandy->headBoulder->basset->gravity), 0.0f);
+
+            totalTime = 2.0f * sandy->headBoulder->vel.y / sandy->headBoulder->basset->gravity;
+
+            sandy->headBoulder->rotVec.x = xurand();
+            sandy->headBoulder->rotVec.y = 0.0f;
+            sandy->headBoulder->rotVec.z =
+                xsqrt(1.0f - sandy->headBoulder->rotVec.x * sandy->headBoulder->rotVec.x);
+
+            if (sHeadPopOffFactor >= 1.0f)
+            {
+                numSpins = 3;
+            }
+            else if (sHeadPopOffFactor > 0.7f)
+            {
+                numSpins = 2;
+            }
+            else
+            {
+                numSpins = 1;
+            }
+
+            sandy->headBoulder->angVel = 6.2831855f * numSpins / totalTime;
+        }
+        else if (sandy->round == 2)
+        {
+            sCamSubTarget = &sandy->headBoulder->bound.box.center;
+
+            xVec3SMul(&sandy->headBoulder->vel, &sandy->headBoulder->bound.box.center, -1.0f);
+
+            if (xVec3Normalize(&sandy->headBoulder->vel, &sandy->headBoulder->vel) < 0.001f)
+            {
+                xVec3Init(&sandy->headBoulder->vel, 1.0f, 2.0f, 0.0f);
+            }
+            else
+            {
+                sandy->headBoulder->vel.y = 2.0f;
+            }
+
+            xVec3SMulBy(&sandy->headBoulder->vel, 5.0f);
+
+            sandy->headBoulder->rotVec.x = xurand();
+            sandy->headBoulder->rotVec.y = 0.0f;
+            sandy->headBoulder->rotVec.z =
+                xsqrt(1.0f - sandy->headBoulder->rotVec.x * sandy->headBoulder->rotVec.x);
+
+            sandy->headBoulder->angVel = 4.712389f;
+            totalTime = 0.5f;
+        }
+
+        sHeadPopOffFactor = -1.0f;
+    }
+    else if (sandy->round == 1 && (sitFlags & 0x1) && !(sitFlags & 0x2) &&
+             sandy->headBoulder->model->Mat->pos.y > 10.0f)
+    {
+        sitFlags |= 0x2;
+
+        sandy->newsfish->SpeakStart(sNFSoundValue[(9 - sandy->hitPoints) + 6], 0, 0xFFFFFFFF);
+
+        sandy->nfFlags |= 0x4;
+        sandy->hitPoints = sandy->hitPoints - 1;
+
+        xSndPlay3D(xStrHash("B101_SC_damage3"), 1.155f, 0.0f, 0x0, 0x0, sandy, 80.0f, SND_CAT_GAME,
+                   0.0f);
+        zEntEvent(sandy, sandy, eEventNPCHPDecremented);
+
+        inRing = 0;
+        bmat = sandy->headBoulder->model->Mat;
+
+        if (bmat->pos.x > -3.0f && bmat->pos.x < 3.0f && bmat->pos.z > -3.0f && bmat->pos.z < 3.0f)
+        {
+            inRing = 1;
+        }
+
+        if (inRing || (sandy->hitPoints == 6 && (sandy->hangingScoreboard->flags & 0x1)))
+        {
+            sandy->maxLightningWait[0] = 0.1f;
+
+            if (sandy->hangingScoreboard->flags & 0x1)
+            {
+                sandy->bustedScoreboard->flags |= 0x1;
+                sandy->hangingScoreboard->flags &= ~0x1;
+
+                xVec3Init(&shrapVel, 0.0f, -2.5f, 0.0f);
+
+                sandy->scoreboardShrap->initCB(sandy->scoreboardShrap,
+                                               sandy->hangingScoreboard->model, &shrapVel, NULL);
+            }
+            else
+            {
+                sandy->sboardSecondShrap->initCB(sandy->sboardSecondShrap,
+                                                 sandy->bustedScoreboard->model, NULL, NULL);
+            }
+        }
+
+        if (!inRing)
+        {
+            if (bmat->pos.x > bmat->pos.z)
+            {
+                if (bmat->pos.x < -bmat->pos.z)
+                {
+                    sandy->lightRigShrap->initCB(sandy->lightRigShrap, sandy->lightRig[2]->model,
+                                                 NULL, NULL);
+                }
+                else
+                {
+                    sandy->lightRigShrap->initCB(sandy->lightRigShrap, sandy->lightRig[1]->model,
+                                                 NULL, NULL);
+                }
+            }
+            else
+            {
+                if (bmat->pos.x < -bmat->pos.z)
+                {
+                    sandy->lightRigShrap->initCB(sandy->lightRigShrap, sandy->lightRig[0]->model,
+                                                 NULL, NULL);
+                }
+                else
+                {
+                    sandy->lightRigShrap->initCB(sandy->lightRigShrap, sandy->lightRig[3]->model,
+                                                 NULL, NULL);
+                }
+            }
+        }
+
+        zNPCBSandy_BossDamageEffect(sandy->model, 0);
+        zNPCBSandy_BossDamageEffect(sandy->headBoulder->model, 0);
+
+        DoAutoAnim(NPC_GSPOT_START, FALSE);
+    }
+
+    return xGoal::Process(trantype, dt, updCtxt, xscn);
+}
+
+S32 zNPCGoalBossSandySit::Exit(F32 dt, void* updCtxt)
+{
+    zNPCBSandy* sandy = (zNPCBSandy*)psyche->clt_owner;
+
+    sandy->bossFlags &= ~0x80;
+
+    if (sandy->bossFlags & 0x40)
+    {
+        sCurrHeight = sCurrHeight - globals.player.ent.model->Mat->pos.y;
+        sandy->bossFlags &= ~0x40;
+    }
+
+    return xGoal::Exit(dt, updCtxt);
+}
+
+S32 zNPCGoalBossSandyGetUp::Enter(F32 dt, void* updCtxt)
+{
+    zNPCBSandy* sandy = (zNPCBSandy*)psyche->clt_owner;
+
+    timeInGoal = 0.0f;
+    sandy->bossFlags &= ~0x80;
+
+    zEntEvent(sandy->headBoulder, eEventKill);
+
+    if (globals.player.carry.grabbed == sandy->headBoulder)
+    {
+        globals.player.carry.grabbed = NULL;
+    }
+
+    sandy->model->Flags |= 0x1;
+    sandy->model->Next->Flags |= 0x1;
+
+    sandy->boundList[1]->chkby = 0x10;
+    sandy->boundList[1]->penby = 0x10;
+
+    xVec3Init(&sandy->frame->vel, 0.0f, 0.0f, 0.0f);
+
+    if (sandy->bossFlags & 0x40)
+    {
+        sCurrHeight = sCurrHeight - globals.player.ent.model->Mat->pos.y;
+        sandy->bossFlags &= ~0x40;
+    }
+
+    return zNPCGoalCommon::Enter(dt, updCtxt);
 }
 
 S32 zNPCGoalBossSandyGetUp::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* scene)
@@ -1831,10 +3639,443 @@ S32 zNPCGoalBossSandyGetUp::Process(en_trantype* trantype, F32 dt, void* updCtxt
     return xGoal::Process(trantype, dt, updCtxt, scene);
 }
 
+S32 zNPCGoalBossSandyRunToRope::Enter(F32 dt, void* updCtxt)
+{
+    zNPCBSandy* sandy = (zNPCBSandy*)psyche->clt_owner;
+    S32 i;
+    S32 secondRope = 1;
+    F32 bestDot = 30.0f;
+    F32 bestDist = 0.0f;
+    F32 secondDot = bestDot;
+    F32 secondDist = bestDist;
+    F32 dist;
+    F32 side;
+    xVec3 toBounce;
+    xVec3 heading;
+
+    timeInGoal = 0.0f;
+
+    sandy->fromRope = 1;
+    sandy->toRope = 5;
+
+    xVec3Sub(&heading, (xVec3*)&sandy->model->Mat->pos,
+             (xVec3*)&globals.player.ent.model->Mat->pos);
+    xVec3Normalize(&heading, &heading);
+
+    for (i = 0; i < 8; i++)
+    {
+        if (i == 4)
+        {
+            continue;
+        }
+
+        if (i == 0)
+        {
+            continue;
+        }
+
+        xVec3Sub(&toBounce, &sandy->bouncePoint[i], (xVec3*)&sandy->model->Mat->pos);
+
+        if (xVec3Dot(&toBounce, &sandy->ropeNormal[i]) > 0.0f)
+        {
+            continue;
+        }
+
+        dist = xVec3Length(&toBounce);
+        if (dist < 1e-05f)
+        {
+            continue;
+        }
+
+        side = xVec3Dot(&heading, &toBounce) / dist;
+
+        if (side < bestDot && side > -bestDot)
+        {
+            secondRope = sandy->fromRope;
+            secondDot = bestDot;
+            sandy->fromRope = i;
+
+            if (side > 0.0f)
+            {
+                bestDot = side;
+            }
+            else
+            {
+                bestDot = -side;
+            }
+
+            secondDist = bestDist;
+            bestDist = dist;
+        }
+        else if (side < secondDot && side > -secondDot)
+        {
+            secondRope = i;
+
+            if (side > 0.0f)
+            {
+                secondDot = side;
+            }
+            else
+            {
+                secondDot = -side;
+            }
+
+            secondDist = dist;
+        }
+    }
+
+    if (secondDist < bestDist)
+    {
+        sandy->fromRope = secondRope;
+    }
+
+    sandy->toRope = sandy->fromRope + 4;
+    if (sandy->toRope >= 8)
+    {
+        sandy->toRope -= 8;
+    }
+
+    sandy->boundFlags[10] |= 0x10;
+    sandy->boundFlags[12] |= 0x10;
+
+    return zNPCGoalCommon::Enter(dt, updCtxt);
+}
+
+S32 zNPCGoalBossSandyRunToRope::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    zNPCBSandy* sandy = (zNPCBSandy*)psyche->clt_owner;
+    xVec3 newAt;
+
+    timeInGoal += dt;
+
+    xVec3Sub(&newAt, &sandy->bouncePoint[sandy->fromRope], (xVec3*)&sandy->model->Mat->pos);
+
+    newAt.y = 0.0f;
+    xVec3Normalize(&newAt, &newAt);
+
+    xVec3SMul(&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 0.9f);
+    xVec3AddScaled(&sandy->frame->mat.at, &newAt, 0.1f);
+
+    sandy->frame->mat.at.y = 0.0f;
+    xVec3Normalize(&sandy->frame->mat.at, &sandy->frame->mat.at);
+    xVec3Cross(&sandy->frame->mat.right, &sandy->frame->mat.up, &sandy->frame->mat.at);
+
+    sandy->frame->mat.pos.y = 0.0f;
+    xVec3SMul(&sandy->frame->vel, &sandy->frame->mat.at, 3.5f * sandy->cfg_npc->spd_moveMax);
+
+    return xGoal::Process(trantype, dt, updCtxt, xscn);
+}
+
 S32 zNPCGoalBossSandyRunToRope::Exit(F32 dt, void* updCtxt)
 {
     sChaseTimer = 0.0f;
     return xGoal::Exit(dt, updCtxt);
+}
+
+S32 zNPCGoalBossSandyClothesline::Enter(F32 dt, void* updCtxt)
+{
+    zNPCBSandy* sandy = (zNPCBSandy*)psyche->clt_owner;
+    S32 i;
+    xEnt* rope;
+    F32 animParam;
+
+    timeInGoal = 0.0f;
+    stage = 0;
+
+    sNumAttacks = sNumAttacks + 1;
+    sDidClothesline = 1;
+    playedAnimEarly = 0;
+
+    xVec3Init(&sandy->frame->vel, 0.0f, 0.0f, 0.0f);
+
+    xSndPlay3D(xStrHash("B101_ring1"), 0.77f, 0.0f, 0x0, 0x0, sandy, 80.0f, SND_CAT_GAME, 0.0f);
+    xSndPlay3D(xStrHash("B101_ring2"), 0.77f, 0.0f, 0x0, 0x0, sandy, 80.0f, SND_CAT_GAME, 1.75f);
+
+    animParam = 2.0f;
+
+    for (i = 0; i < 4; i++)
+    {
+        rope = sandy->ropeObject[sandy->fromRope][i];
+        zEntEvent(rope, eEventAnimPlay, &animParam);
+        rope->model->Flags |= 0x2;
+        xEntShow(rope);
+    }
+
+    xEntHide(sandy->ropeObjectLo[sandy->fromRope]);
+
+    xVec3Copy(&bounceStartPoint, &sandy->frame->mat.pos);
+
+    return zNPCGoalCommon::Enter(dt, updCtxt);
+}
+
+S32 zNPCGoalBossSandyClothesline::Process(en_trantype* trantype, F32 dt, void* updCtxt,
+                                         xScene* xscn)
+{
+    zNPCBSandy* sandy = (zNPCBSandy*)psyche->clt_owner;
+    S32 i;
+    U32 flip;
+    xEnt* rope;
+    F32 animParam;
+    F32 frac;
+    xVec3 newAt;
+
+    timeInGoal += dt;
+
+    if (stage == 0)
+    {
+        if (sandy->AnimTimeRemain(NULL) < 1.7000000476837158f * dt)
+        {
+            stage = 1;
+
+            if ((sandy->nfFlags & 0x20) == 0 || (xrand() & 0x300) == 0)
+            {
+                sandy->newsfish->SpeakStart(sNFSoundValue[19], 0, 0xFFFFFFFF);
+                sandy->nfFlags |= 0x20;
+            }
+
+            sandy->springSndID = xSndPlay3D(xStrHash("B101_SC_feet_loop"), 0.77f, 0.0f, 0x0, 0x0,
+                                            sandy, 30.0f, SND_CAT_GAME, 0.0f);
+
+            sandy->bossFlags |= 0x8;
+
+            if (sandy->round == 3)
+            {
+                sandy->bossFlags |= 0x10;
+            }
+
+            timeInGoal = 0.0f;
+            DoAutoAnim(NPC_GSPOT_START, FALSE);
+
+            xVec3Sub(&sandy->frame->mat.at, &sandy->bouncePoint[sandy->fromRope],
+                     &sandy->bouncePoint[sandy->toRope]);
+
+            sandy->frame->mat.at.y = 0.0f;
+            xVec3Normalize(&sandy->frame->mat.at, &sandy->frame->mat.at);
+            xVec3Cross(&sandy->frame->mat.right, &sandy->frame->mat.up, &sandy->frame->mat.at);
+
+            totalHoverTime = 2.0f * sRadiusOfRing / 10.0f;
+
+            sLeftLegSpring.bound = &sandy->boundList[9]->bound;
+            sRightLegSpring.bound = &sandy->boundList[11]->bound;
+
+            sLeftLegSpring.node1 = xurand();
+            sLeftLegSpring.node2 = xurand();
+            sRightLegSpring.node1 = xurand();
+            sRightLegSpring.node2 = xurand();
+
+            flip = xrand();
+
+            if (flip & 0x1)
+            {
+                sLeftLegSpring.vel1 = 0.05f;
+            }
+            else
+            {
+                sLeftLegSpring.vel1 = -0.05f;
+            }
+
+            if (flip & 0x2)
+            {
+                sLeftLegSpring.vel2 = 0.05f;
+            }
+            else
+            {
+                sLeftLegSpring.vel2 = -0.05f;
+            }
+
+            if (flip & 0x4)
+            {
+                sRightLegSpring.vel1 = 0.05f;
+            }
+            else
+            {
+                sRightLegSpring.vel1 = -0.05f;
+            }
+
+            if (flip & 0x8)
+            {
+                sRightLegSpring.vel2 = 0.05f;
+            }
+            else
+            {
+                sRightLegSpring.vel2 = -0.05f;
+            }
+
+            if (sandy->round == 3)
+            {
+                sLeftArmSpring.bound = &sandy->boundList[2]->bound;
+                sRightArmSpring.bound = &sandy->boundList[4]->bound;
+
+                sLeftArmSpring.node1 = xurand();
+                sLeftArmSpring.node2 = xurand();
+                sRightArmSpring.node1 = xurand();
+                sRightArmSpring.node2 = xurand();
+
+                if (flip & 0x10)
+                {
+                    sLeftArmSpring.vel1 = 0.05f;
+                }
+                else
+                {
+                    sLeftArmSpring.vel1 = -0.05f;
+                }
+
+                if (flip & 0x20)
+                {
+                    sLeftArmSpring.vel2 = 0.05f;
+                }
+                else
+                {
+                    sLeftArmSpring.vel2 = -0.05f;
+                }
+
+                if (flip & 0x40)
+                {
+                    sRightArmSpring.vel1 = 0.05f;
+                }
+                else
+                {
+                    sRightArmSpring.vel1 = -0.05f;
+                }
+
+                if (flip & 0x80)
+                {
+                    sRightArmSpring.vel2 = 0.05f;
+                }
+                else
+                {
+                    sRightArmSpring.vel2 = -0.05f;
+                }
+            }
+        }
+        else
+        {
+            xVec3Sub(&newAt, &sandy->bouncePoint[sandy->fromRope],
+                     &sandy->bouncePoint[sandy->toRope]);
+
+            newAt.y = 0.0f;
+            xVec3Normalize(&newAt, &newAt);
+
+            xVec3SMul(&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 0.9f);
+            xVec3AddScaled(&sandy->frame->mat.at, &newAt, 0.1f);
+
+            sandy->frame->mat.at.y = 0.0f;
+            xVec3Normalize(&sandy->frame->mat.at, &sandy->frame->mat.at);
+            xVec3Cross(&sandy->frame->mat.right, &sandy->frame->mat.up, &sandy->frame->mat.at);
+
+            if (timeInGoal < 1.0f)
+            {
+                xVec3SMul(&sandy->frame->mat.pos, &bounceStartPoint, 1.0f - timeInGoal);
+                xVec3AddScaled(&sandy->frame->mat.pos, &sandy->bouncePoint[sandy->fromRope],
+                               timeInGoal);
+            }
+            else
+            {
+                xVec3Copy(&sandy->frame->mat.pos, &sandy->bouncePoint[sandy->fromRope]);
+            }
+        }
+    }
+    else if (stage == 1)
+    {
+        if (timeInGoal > totalHoverTime)
+        {
+            stage = 2;
+
+            xSndPlay3D(xStrHash("B101_ring4"), 0.77f, 0.0f, 0x0, 0x0, sandy, 80.0f, SND_CAT_GAME,
+                       0.5f);
+
+            if (sandy->springSndID)
+            {
+                xSndStop(sandy->springSndID);
+                sandy->springSndID = 0;
+            }
+
+            sandy->bossFlags &= ~0x18;
+            timeInGoal = 0.0f;
+
+            if (playedAnimEarly == 0)
+            {
+                DoAutoAnim(NPC_GSPOT_START, FALSE);
+
+                animParam = 3.0f;
+
+                for (i = 0; i < 4; i++)
+                {
+                    rope = sandy->ropeObject[sandy->toRope][i];
+                    zEntEvent(rope, eEventAnimPlay, &animParam);
+                    rope->model->Flags |= 0x2;
+                    xEntShow(rope);
+                }
+
+                xEntHide(sandy->ropeObjectLo[sandy->toRope]);
+            }
+
+            playedAnimEarly = 0;
+
+            sLeftLegSpring.bound = NULL;
+            sRightLegSpring.bound = NULL;
+            sLeftArmSpring.bound = NULL;
+            sRightArmSpring.bound = NULL;
+
+            sandy->bossFlags &= ~0x18;
+        }
+        else
+        {
+            if (playedAnimEarly == 0 && timeInGoal > totalHoverTime - 0.3f)
+            {
+                playedAnimEarly = 1;
+
+                animParam = 3.0f;
+
+                for (i = 0; i < 4; i++)
+                {
+                    rope = sandy->ropeObject[sandy->toRope][i];
+                    zEntEvent(rope, eEventAnimPlay, &animParam);
+                    rope->model->Flags |= 0x2;
+                    xEntShow(rope);
+                }
+
+                xEntHide(sandy->ropeObjectLo[sandy->toRope]);
+
+                DoAutoAnim(NPC_GSPOT_START, FALSE);
+            }
+
+            frac = timeInGoal / totalHoverTime;
+
+            xVec3SMul(&sandy->frame->mat.pos, &sandy->bouncePoint[sandy->toRope], frac);
+            xVec3AddScaled(&sandy->frame->mat.pos, &sandy->bouncePoint[sandy->fromRope],
+                           1.0f - frac);
+            xVec3Length2(&sandy->frame->mat.pos);
+
+            sandy->boundFlags[9] |= 0x1;
+            sandy->boundFlags[10] |= 0x1;
+            sandy->boundFlags[11] |= 0x1;
+            sandy->boundFlags[12] |= 0x1;
+
+            if (sandy->round == 3)
+            {
+                sandy->boundFlags[2] |= 0x1;
+                sandy->boundFlags[3] |= 0x1;
+                sandy->boundFlags[4] |= 0x1;
+                sandy->boundFlags[5] |= 0x1;
+            }
+
+            sandy->bossFlags |= 0x1;
+            sandy->bossFlags |= 0x8;
+
+            if (sandy->round == 3)
+            {
+                sandy->bossFlags |= 0x10;
+            }
+        }
+    }
+    else if (timeInGoal > 0.5f)
+    {
+        sandy->boundFlags[10] |= 0x10;
+        sandy->boundFlags[12] |= 0x10;
+    }
+
+    return xGoal::Process(trantype, dt, updCtxt, xscn);
 }
 
 void xBinaryCamera::add_tweaks(char const*)
