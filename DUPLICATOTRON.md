@@ -596,6 +596,52 @@ Note `tools/solo.py` parses `build.ninja`, which has two rule layouts: the sourc
 file is on the same line as the `build` statement when it fits, on the next
 line when it does not. The parser handles both; if you extend it, keep that.
 
+## dwarf/ — the resource this project has been under-using
+
+`dwarf/` is **already tracked in the repo**: 231 files, 32 MB, essentially 1:1
+with the source tree (110 game `.cpp` against 110 in `src/SB/Game`, 89 against
+88 in `src/SB/Core/x`). It is DWARF-derived source from the **PS2** build, and
+until now it was referenced in this document exactly once, in passing, about
+rwsdk headers. It should be the second thing you open after the asm diff.
+
+For every function it gives the full signature, every local by name, and the
+register or stack slot each one occupied:
+
+```
+void CollideReview(class zNPCRobot * this /* r21 */) {
+        class zNPCGoalCommon * goal;   // r2
+        signed int goaldidit;          // r16
+        class xEntCollis * npccol;     // r20
+        class xVec3 vec_depen;         // r29+0x90
+        float goodep;                  // r29+0x9C
+```
+
+Three things transfer usefully to the GameCube build:
+
+- **Local declaration order**, which controls stack layout under CW as much as
+  under MW MIPS. Reordering three locals in `NPCMessage` from the DWARF order
+  took it 99.016% -> **100%**, and the same trick fixed `CornerOfArena` and
+  `zNPCSlick::AnimPick`.
+- **Signatures for functions declared nowhere in our tree.** This is the big
+  one: the zNPCTypeRobot pass stalled on 16 member functions with no
+  declaration anywhere, and DWARF has most of them (`VFXStarTrek`,
+  `NightLightUVStep`, `SnoreNZeez` matched the asm-derived signatures exactly).
+  Recovering a header declaration from DWARF beats guessing it.
+- **Local *names***, which make a reconstructed body readable and reviewable
+  instead of `iVar1`/`uVar5`.
+
+**It is the PS2 build, so cross-check before trusting it.** Register numbers are
+MIPS and do not transfer at all. Signatures can genuinely differ between
+platforms: DWARF shows `RepelBowlBall(zNPCSleepy* this)` and
+`ConeOfRange(zNPCSleepy* this)` with no parameters, where the GameCube asm
+clearly passes a `dt`. Treat DWARF as a strong prior that the asm overrides.
+
+**Best combination found so far**, and worth assembling up front for any future
+bulk pass: Ghidra output for control flow and call graph, plus a dump of the
+target's `.sdata2`/`.rodata` decoded as floats/RGBA to resolve `@NNNN` literals,
+plus `dwarf/` for local names and declaration order. Ghidra alone gets to
+roughly 85-90%; the last ten points came almost entirely from the other two.
+
 ## Bulk Ghidra: what it can and cannot do
 
 Measured, not estimated. `tools/ghidra/DumpFuncs.java` plus the local
