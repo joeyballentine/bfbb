@@ -13,6 +13,17 @@ Usage:
   solo.py <unit-fragment> <symbol-frag>   side-by-side diff for one function
   solo.py <unit-fragment> --missing       list target functions absent from ours
 
+Output-size flags (the full listings are large; these keep them out of an
+agent's context when it is iterating):
+  -q, --quiet        print only the summary header line, no per-function rows
+  --top N            print only the N worst-matching rows
+  -C N, --context N  in a symbol diff, print only differing rows plus N rows
+                     of context (default 3). A 99.8% function prints two rows
+                     instead of five hundred.
+  --full             in a symbol diff, print every row (the old behaviour)
+
+Truncation is always reported, never silent.
+
 A `|` in the left margin of a side-by-side diff marks a differing pair.
 
 The LEFT column is the TARGET (retail) and the RIGHT column is our build --
@@ -128,12 +139,35 @@ def cleanup(td):
         pass
 
 
+def opt_arg(flag):
+    """Value following `flag` on the command line, or None."""
+    if flag in sys.argv:
+        i = sys.argv.index(flag)
+        if i + 1 < len(sys.argv):
+            return sys.argv[i + 1]
+    return None
+
+
+def emit_rows(rows, limit, noun):
+    """Print `rows`, honouring `limit`, and say what was withheld."""
+    shown = rows if not limit else rows[:limit]
+    for r in shown:
+        print(r)
+    if len(shown) < len(rows):
+        print("  ... %d more %s (re-run without --top to see them)"
+              % (len(rows) - len(shown), noun))
+
+
 def main():
     if len(sys.argv) < 2:
         raise SystemExit(__doc__)
     frag = sys.argv[1]
     sym = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("-") else None
     missing = "--missing" in sys.argv
+    quiet = "-q" in sys.argv or "--quiet" in sys.argv
+    full = "--full" in sys.argv
+    top = int(opt_arg("--top") or 0)
+    ctx = int(opt_arg("-C") or opt_arg("--context") or 3)
     unit = find_unit(frag)
     td, obj = compile_unit(unit)
     try:
@@ -149,16 +183,19 @@ def main():
                     if n not in right]
             print("%s: %d target functions not in our object"
                   % (unit["name"], len(gone)))
-            for size, name in sorted(gone):
-                print("  %6db  %s" % (size, name))
+            if not quiet:
+                emit_rows(["  %6db  %s" % (size, name)
+                           for size, name in sorted(gone)], top, "absent")
             return
 
         if not sym:
             bad = [(n, s.get("match_percent", 0.0), int(s.get("size", 0)))
                    for n, s in left.items() if s.get("match_percent", 0.0) < 100.0]
             print("%s: %d non-matching of %d" % (unit["name"], len(bad), len(left)))
-            for name, pct, size in sorted(bad, key=lambda x: -x[1]):
-                print("  %7.3f%%  %6db  %s" % (pct, size, name))
+            if not quiet:
+                emit_rows(["  %7.3f%%  %6db  %s" % (pct, size, name)
+                           for name, pct, size in sorted(bad, key=lambda x: -x[1])],
+                          top, "non-matching")
             return
 
         for name in [n for n in left if sym in n]:
@@ -166,12 +203,34 @@ def main():
             print("\n=== %s  %.3f%% ===" % (name, a.get("match_percent", 0.0)))
             ai = a.get("instructions", [])
             bi = (b or {}).get("instructions", [])
+            rows = []
             for k in range(max(len(ai), len(bi))):
                 ea = ai[k] if k < len(ai) else {}
                 eb = bi[k] if k < len(bi) else {}
                 kind = ea.get("diff_kind") or eb.get("diff_kind") or ""
-                mark = " " if not kind or kind == "DIFF_NONE" else "|"
-                print(" %s %-46s %s" % (mark, text(ea), text(eb)))
+                differs = bool(kind) and kind != "DIFF_NONE"
+                rows.append((differs, " %s %-46s %s"
+                             % ("|" if differs else " ", text(ea), text(eb))))
+
+            if full:
+                keep = set(range(len(rows)))
+            else:
+                keep = set()
+                for k, (differs, _) in enumerate(rows):
+                    if differs:
+                        keep.update(range(max(0, k - ctx),
+                                          min(len(rows), k + ctx + 1)))
+
+            prev = None
+            for k in sorted(keep):
+                if prev is not None and k > prev + 1:
+                    print("      ... %d identical" % (k - prev - 1))
+                print(rows[k][1])
+                prev = k
+            hidden = len(rows) - len(keep)
+            if hidden and not full:
+                print("      (%d of %d rows identical and withheld; --full shows all)"
+                      % (hidden, len(rows)))
     finally:
         cleanup(td)
 

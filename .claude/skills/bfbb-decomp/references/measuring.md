@@ -11,6 +11,16 @@ Four measurements exist and they disagree on purpose. Quoting the wrong one is h
 
 **Never compare a solo.py number against a report.json number.** They count by different rules.
 
+## Keep solo.py's output small while you iterate
+
+The default listings are big — a unit list is 45–120 rows and a symbol diff is one row per instruction, so a 2 KB function prints ~500. Every one of those rows stays in context for the rest of the run, and you will run the tool dozens of times.
+
+- `-q` / `--quiet` — header line only. This is what you want between edits, when all you need is whether the non-matching count moved.
+- `--top N` — the N worst rows. Enough to pick the next target.
+- Symbol diffs now print **only differing rows plus 3 lines of context** by default, with `... N identical` markers. `-C 1` tightens it further, which is the right setting when a function is at 99.x% and every difference is an isolated relocation. `--full` restores the every-row output when you genuinely need to inspect instruction scheduling or ordering.
+
+Truncation always says what it withheld, so a short listing is never mistaken for a clean one. Take the full listing once at the start and once at the end — that is what you report — and stay in `-q` in between.
+
 **Beware stale objects when comparing solo.py against the built object.** `solo.py` always compiles fresh into a temp dir. `build/GQPE78/**.o` is only as current as the last successful `ninja`, and a build interrupted by an unrelated compile error leaves some objects untouched.
 
 This produced a convincing false alarm worth recognising. `check_hide_entities` measured **100% under solo.py and 91.047% in `build/`'s object**, with report.json agreeing with the stale object — which looked exactly like solo.py being unfaithful to the real build, in a unit nothing had touched. After a clean `ninja` all three agree at 100%. Nothing was ever wrong.
