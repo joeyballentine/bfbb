@@ -630,11 +630,32 @@ Three things transfer usefully to the GameCube build:
 - **Local *names***, which make a reconstructed body readable and reviewable
   instead of `iVar1`/`uVar5`.
 
-**It is the PS2 build, so cross-check before trusting it.** Register numbers are
-MIPS and do not transfer at all. Signatures can genuinely differ between
-platforms: DWARF shows `RepelBowlBall(zNPCSleepy* this)` and
-`ConeOfRange(zNPCSleepy* this)` with no parameters, where the GameCube asm
-clearly passes a `dt`. Treat DWARF as a strong prior that the asm overrides.
+**A DWARF definition omits parameters that were unnamed or unused, and this
+will silently corrupt a rename pass.** The same file carries both forms — the
+full declaration near the top, and the definition further down with only the
+named parameters:
+
+```
+line   12  signed int zGustEventCB(class xBase *, class xBase *, unsigned int, float *, class xBase *);
+line 1418  signed int zGustEventCB(class xBase * to /* r2 */, unsigned int toEvent /* r2 */) {
+```
+
+Our signature is `(xBase* from, xBase* to, U32 toEvent, const F32* toParam,
+xBase* b)` and the **declaration agrees with it exactly**. Match names against
+the *definition* positionally and you rename our `from` to `to` and our `to` to
+`toEvent`. Nothing downstream catches it: renames are byte-neutral, so
+`solo.py` stays identical and the DOL still hashes. **Always resolve a
+short parameter list against the declaration, never against the definition.**
+`tools/dwarfaudit.py` now refuses to compare across an arity mismatch and
+reports those functions under `ARITY` instead.
+
+The corollary is that most apparent "signature divergences" are not divergences
+at all — they are unused parameters being dropped. `RepelBowlBall` and
+`ConeOfRange` showing no parameters is this effect, not a PS2/GC difference.
+
+**Register numbers are MIPS and do not transfer at all.** Genuine PS2/GC
+divergence does exist, so the asm still overrides DWARF — but check the
+declaration before concluding you have found one.
 
 **Best combination found so far**, and worth assembling up front for any future
 bulk pass: Ghidra output for control flow and call graph, plus a dump of the

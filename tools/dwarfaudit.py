@@ -7,8 +7,11 @@ signatures can legitimately differ between the PS2 and GC builds, so a
 disagreement is a lead, not a verdict.
 
 Checks, per function present in both trees:
-  PARAM  our parameter names vs DWARF's, positionally
+  PARAM  our parameter names vs DWARF's, positionally (equal arity only)
   LOCAL  DWARF locals whose name appears nowhere in our function body
+  ARITY  DWARF named fewer parameters than we declare -- it omits unused ones,
+         so positional matching would assign wrong names. Resolve by hand
+         against the full declaration near the top of the DWARF file.
 
 Usage:
   dwarfaudit.py                 audit every changed file that has a dwarf peer
@@ -109,14 +112,21 @@ for f in files:
     if not (os.path.exists(dw) and os.path.exists(f)):
         continue
     D, O = dwarf_functions(dw), our_functions(f)
-    pmis, lmis, checked = [], [], 0
+    pmis, lmis, shortr, checked = [], [], [], 0
     for nm, (dp, dl) in D.items():
         if nm not in O:
             continue
         op, body = O[nm]
         checked += 1
         dp2 = [x for x in dp if x != "this"]
-        if len(dp2) == len(op) and dp2 != op:
+        # A dwarf DEFINITION lists only the parameters that were named and used;
+        # unused ones are dropped, which shifts every later position. Comparing
+        # positionally across a length mismatch renames things to the wrong
+        # name, and because renames are byte-neutral nothing downstream catches
+        # it. Only compare equal-length lists, and flag the rest for a human.
+        if len(dp2) != len(op):
+            shortr.append((nm, len(dp2), len(op)))
+        elif dp2 != op:
             bad = [(a, b) for a, b in zip(dp2, op) if a and b and a != b]
             if bad:
                 pmis.append((nm, bad))
@@ -124,19 +134,23 @@ for f in files:
                          if not re.search(r"\b" + re.escape(n) + r"\b", body))
         if missing:
             lmis.append((nm, missing))
-    if pmis or lmis:
-        rows.append((f, checked, pmis, lmis))
+    if pmis or lmis or shortr:
+        rows.append((f, checked, pmis, lmis, shortr))
     tot_p += len(pmis); tot_l += len(lmis); tot_f += checked
 
 rows.sort(key=lambda r: -(len(r[2]) * 10 + len(r[3])))
 print("audited %d files, %d functions matched to dwarf" % (len(files), tot_f))
 print("functions with differing PARAM names: %d" % tot_p)
 print("functions with dwarf LOCALs absent from our body: %d\n" % tot_l)
-print("%-46s %6s %6s %6s" % ("file", "fns", "param", "local"))
-for f, c, p, l in rows:
-    print("%-46s %6d %6d %6d" % (f[len("src/"):], c, len(p), len(l)))
+print("%-46s %6s %6s %6s %6s" % ("file", "fns", "param", "local", "arity"))
+for f, c, p, l, sh in rows:
+    print("%-46s %6d %6d %6d %6d" % (f[len("src/"):], c, len(p), len(l), len(sh)))
     if DETAIL:
         for nm, bad in p:
             print("    PARAM %s: " % nm + ", ".join("dwarf %s / ours %s" % b for b in bad))
         for nm, miss in l:
             print("    LOCAL %s: missing %s" % (nm, ", ".join(miss[:12])))
+        for nm, dn, on in sh:
+            print("    ARITY %s: dwarf names %d param(s), we declare %d -- dwarf omits"
+                  " unused params, so DO NOT match positionally; use the full"
+                  " declaration near the top of the dwarf file" % (nm, dn, on))
