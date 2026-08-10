@@ -21,6 +21,21 @@ The default listings are big — a unit list is 45–120 rows and a symbol diff 
 
 Truncation always says what it withheld, so a short listing is never mistaken for a clean one. Take the full listing once at the start and once at the end — that is what you report — and stay in `-q` in between.
 
+## Read one target function, not a whole object
+
+`dtk elf disasm` writes the entire object — 1.2 MB for a unit like `zNPCGoalRobo` — and greping around inside it costs context on every hit. `tools/tasm.py` disassembles once, caches under `build/.tasm-cache/` keyed by the object's mtime, and hands back only what you asked for. It always reads the **target** object, so it is ground truth; use `solo.py` to compare against ours.
+
+```
+tasm.py <unit-frag> <symbol-frag>   the function's disassembly
+tasm.py <unit-frag> --list          every function, name and size, largest first
+tasm.py <unit-frag> --pool          .sdata2 in slot order, with each slot's first user
+tasm.py <unit-frag> --order         .text definition order = literal interning order
+```
+
+The `/* addr off bytes */` prefixes are stripped unless you pass `--raw`; that alone is 62% of the bytes (a 3852-byte function goes 55,829 → 21,161 chars). Keep the prefixes only when you actually need addresses, e.g. resolving a branch target.
+
+`--pool` and `--order` together are the pool-permutation diagnostic from `codewarrior.md` in two commands. Run `--pool` on the unit and compare the slot order against ours; the first row that disagrees names the function that interned wrongly. `--list` is the right way to start on an unfamiliar unit — the largest absent functions are where the bytes are, and working alphabetically wastes a session.
+
 **Beware stale objects when comparing solo.py against the built object.** `solo.py` always compiles fresh into a temp dir. `build/GQPE78/**.o` is only as current as the last successful `ninja`, and a build interrupted by an unrelated compile error leaves some objects untouched.
 
 This produced a convincing false alarm worth recognising. `check_hide_entities` measured **100% under solo.py and 91.047% in `build/`'s object**, with report.json agreeing with the stale object — which looked exactly like solo.py being unfaithful to the real build, in a unit nothing had touched. After a clean `ninja` all three agree at 100%. Nothing was ever wrong.
