@@ -9,7 +9,13 @@ Four measurements exist and they disagree on purpose. Quoting the wrong one is h
 | `build/GQPE78/progress.json` | what the progress site shows: `matched_code` bytes | quoting external progress |
 | DOL sha1 | whether `Matching` units still link byte-identically | the only proof for a `Matching` unit |
 
-**Never compare a solo.py number against a report.json number.** They count by different rules and both are right. For `zNPCTypeRobot`, solo.py reports 129 non-matching where report.json reports 86; running objdiff directly on the object `ninja` built also gives 129. solo.py is faithful to the build; report.json counts by a different rule.
+**Never compare a solo.py number against a report.json number.** They count by different rules.
+
+**Open question — do not treat solo.py as identical to the real build.** An older note here claimed running objdiff on the object `ninja` built agrees with solo.py. Measured again, it does not always. For `zCutsceneMgr`, `check_hide_entities` is **100% under solo.py and 91.047% in the object ninja actually built**, and report.json agrees with ninja. Counts differ in both directions across units (ninja-object vs solo: zCutsceneMgr 5 vs 3, zNPCTypeRobot 111 vs 107, xFont 73 vs 71, but zNPCGoalRobo 91 vs 123).
+
+Some of that gap is just data symbols being counted or not. The `check_hide_entities` case is not — that is one named function disagreeing about its own percentage, which means solo.py's reconstructed compile is not always byte-identical to ninja's for that unit.
+
+Practical consequence until this is chased down: solo.py remains the right tool for **before/after within a unit**, because both sides of the comparison are built the same way. Do not use it to make an absolute claim that a specific function is at 100%. For that, and for anything touching a `Matching` unit, the real build and the DOL sha1 are authoritative.
 
 ## report.json credits near-misses
 
