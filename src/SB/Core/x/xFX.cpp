@@ -1430,12 +1430,11 @@ void xFXShineRender()
 static void RenderRotatedBillboard(xVec3* pos, _xFXAuraAngle* rot, U32 count, F32 width, F32 height,
                                    iColor_tag tint, U32 flipUV)
 {
+    U32 i;
     RxObjSpace3DVertex vert[384];
     xVec3 rtv;
     xVec3 upv;
     xVec3 v;
-    xVec3 myat;
-    U32 i;
     RxObjSpace3DVertex* vp;
     xMat4x3* cammat;
     xVec3* rt;
@@ -1443,6 +1442,7 @@ static void RenderRotatedBillboard(xVec3* pos, _xFXAuraAngle* rot, U32 count, F3
     F32 zero;
     F32 one;
     F32 nearclip;
+    xVec3 myat;
     F32 camdist;
     F32 at_offset;
     F32 scale;

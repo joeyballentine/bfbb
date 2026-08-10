@@ -1514,8 +1514,8 @@ void zNPCRobot::InflictPain(S32 numHitPoints, S32 giveCreditToPlayer)
 void zNPCRobot::TurnThemHeads()
 {
     xVec3 dir = {};
-    xMat3x3 mat = {};
     xMat3x3 back = {};
+    xMat3x3 mat = {};
 
     if (idx_neckBone >= 0)
     {

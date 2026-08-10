@@ -2082,7 +2082,6 @@ void NCIN_SpatGlow_Upd(const zCutsceneMgr* mgr, NCINEntry* e, S32 i)
 void NCIN_SpatGlow_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model, RwMatrixTag* animMat,
                       U32 animIndex, U32 dataIndex)
 {
-    iColor_tag color;
     S32 ifx = fxrec->pos_A[1].x;
 
     if (animIndex != ifx)
@@ -2091,6 +2090,7 @@ void NCIN_SpatGlow_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model, Rw
     }
 
     S32 boneIndex = fxrec->pos_A[1].y;
+    iColor_tag color;
 
     zShrapnel_CinematicInit(fxrec->fxdata.shrapdata.shrap, model, animMat, NULL, NULL);
 
@@ -2436,10 +2436,10 @@ void NCIN_SBBNode_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model,
                      RwMatrixTag* animMat, U32 animIndex, U32 dataIndex)
 {
     zNPCB_SB2* sb2;
-    RpSkin* skin;
     S32 bones;
-    S32 i;
+    RpSkin* skin;
     xMat3x3 imat;
+    S32 i;
 
     S32 ifx = fxrec->pos_A[1].x;
 

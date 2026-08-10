@@ -4892,8 +4892,8 @@ S32 zEntPlayer_Damage(xBase* src, U32 damage)
 
 S32 zEntPlayer_MoveInfo()
 {
-    U32 infoflags = 0;
     U32 animflags = globals.player.ent.model->Anim->Single->State->UserFlags & 0x1e;
+    U32 infoflags = 0;
     const char* nam_ast = globals.player.ent.model->Anim->Single->State->Name;
 
     if (animflags == 0 || globals.player.ent.model->Anim->Single->State->UserFlags & 1)

@@ -160,8 +160,8 @@ S32 HAZ_AvailablePool()
 
 void HAZ_Iterate(bool (*fp)(NPCHazard&, void*), void* context, S32 flag_filter)
 {
-    NPCHazard* end = &g_hazards[64];
     NPCHazard* haz = g_hazards;
+    NPCHazard* end = &g_hazards[64];
 
     while (haz != end)
     {
