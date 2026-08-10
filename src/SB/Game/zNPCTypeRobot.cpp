@@ -25,32 +25,10 @@
 #include "xutil.h"
 #include "zNPCGoalStd.h"
 #include "zNPCGoalCommon.h"
+#include "zParEmitter.h"
+#include "xParEmitter.h"
 
 #include <string.h>
-
-extern UVAModelInfo g_uvaShield;
-
-extern S32 g_cnt_fodbzzt;
-
-extern S32 g_cnt_sleepy;
-
-extern S32 g_needuvincr_tube;
-
-extern S32 g_needuvincr_bzzt;
-
-extern S32 g_needuvincr_nightlight;
-
-extern S32 g_needuvincr_slickshield;
-
-extern S32 cnt_alerthokey__11zNPCFodBzzt;
-
-extern S32 g_needMusician;
-
-extern F32 tmr_nexthokey__11zNPCFodBzzt;
-
-extern RwRaster* rast_discoLight__11zNPCFodBzzt;
-
-zNPCSlick* g_slick_slipfx_owner;
 
 U32 g_hash_roboanim[41] = { 0 };
 
@@ -66,25 +44,111 @@ char* g_strz_roboanim[41] = {
     "DodgeBCruise01"
 };
 
-U32 g_hash_ttsanim[2] = { 0, 0 };
+static U32 g_hash_ttsanim[2] = { 0, 0 };
 
-char* g_strz_ttsanim[2] = { "Unknown", "TarTar_Slosh01" };
+static char* g_strz_ttsanim[2] = { "Unknown", "TarTar_Slosh01" };
 
-U32 g_hash_cloudanim[3] = { 0, 0, 0 };
+static U32 g_hash_cloudanim[3] = { 0, 0, 0 };
 
-char* g_strz_cloudanim[3] = { "Unknown", "Cloud_Idle01", "Cloud_Attack01" };
+static char* g_strz_cloudanim[3] = { "Unknown", "Cloud_Idle01", "Cloud_Attack01" };
 
-U32 g_hash_nytlytanim[2] = { 0, 0 };
+static U32 g_hash_nytlytanim[2] = { 0, 0 };
 
-char* g_strz_nytlytanim[2] = { "Unknown", "Light_Idle01" };
+static char* g_strz_nytlytanim[2] = { "Unknown", "Light_Idle01" };
 
-U32 g_hash_flotanim[2] = { 0, 0 };
+static U32 g_hash_flotanim[2] = { 0, 0 };
 
-char* g_strz_flotanim[2] = { "Unknown", "Wiggle01" };
+static char* g_strz_flotanim[2] = { "Unknown", "Wiggle01" };
 
-U32 g_hash_shieldanim[2] = { 0, 0 };
+static U32 g_hash_shieldanim[2] = { 0, 0 };
 
-char* g_strz_shieldanim[2] = { "Unknown", "Shield_Idle01" };
+static char* g_strz_shieldanim[2] = { "Unknown", "Shield_Idle01" };
+
+static UVAModelInfo g_uvaShield;
+
+static S32 g_cnt_fodbzzt;
+
+static S32 g_cnt_sleepy;
+
+static S32 g_needuvincr_tube;
+
+static S32 g_needuvincr_bzzt;
+
+static S32 g_needuvincr_nightlight;
+
+static S32 g_needuvincr_slickshield;
+
+RwRaster* zNPCFodBomb::rast_blink;
+
+// NOTE: zNPCFodBzzt::tmr_nexthokey is not declared in the header yet, so it is
+// defined here under its mangled name.
+F32 tmr_nexthokey__11zNPCFodBzzt;
+
+F32 zNPCFodBzzt::tmr_hokeypokey;
+
+volatile S32 zNPCFodBzzt::cnt_alerthokey;
+
+NPCLaser zNPCFodBzzt::laser;
+
+// NOTE: zNPCFodBzzt::rast_discoLight / uv_slice_discoLight are not declared in
+// the header yet, so they are defined here under their mangled names.
+RwRaster* rast_discoLight__11zNPCFodBzzt;
+
+F32 uv_slice_discoLight__11zNPCFodBzzt[2] = { 1.0f, 1.0f };
+
+S32 g_needMusician = 1;
+
+RwRaster* zNPCSleepy::rast_killcone;
+
+RwRaster* zNPCSleepy::rast_detectcone;
+
+// NOTE: these four zNPCSleepy statics are not declared in the header yet.
+F32 uv_deathcone__10zNPCSleepy[2] = { 0.0f, 0.0f };
+
+F32 uv_nightlight__10zNPCSleepy[2] = { 0.0f, 0.0f };
+
+F32 uv_slice_nightlight__10zNPCSleepy[2] = { 0.25f, 0.25f };
+
+F32 uv_slice_deathcone__10zNPCSleepy[2] = { 0.25f, 0.25f };
+
+volatile F32 zNPCSleepy::hyt_NightLightCurrent;
+
+static S32 g_sleepy_NightLightStates[10] = { 'NGN0', 'NGN2', 'NGN1', 'NGN3', 'NGN4',
+                                             'NGR4', 'NGR=', 'NGR0', 'NGR1', 0 };
+
+static S32 g_sleepy_angryStates[5] = { 'NGR4', 'NGR0', 'NGRi', 'NGR=', 0 };
+
+static RxObjSpace3DVertex g_vert_list[34];
+
+RwRaster* zNPCArfDog::rast_blink;
+
+NPCLaser zNPCTubeSlave::laser;
+
+static zNPCSlick* g_slick_slipfx_owner;
+
+static zParEmitter* g_pemit_smoke;
+
+static zParEmitter* g_pemit_flame;
+
+static zParEmitter* g_pemit_trek;
+
+static zParEmitter* g_pemit_propwash;
+
+static zParEmitter* g_pemit_exhaust;
+
+static zParEmitter* g_pemit_steam;
+
+static xParEmitterCustomSettings g_parf_smoke;
+
+static xParEmitterCustomSettings g_parf_spark;
+
+static xParEmitterCustomSettings g_parf_trek;
+
+static xParEmitterCustomSettings g_parf_propwash;
+
+static xParEmitterCustomSettings g_parf_exhaust;
+
+static xParEmitterCustomSettings g_parf_steam;
 
 void zNPCFodBzzt_DoTheHokeyPokey(F32 dt);
 void ZNPC_Destroy_Robot(xFactoryInst* inst);
@@ -110,6 +174,8 @@ S32 TUBE_grul_alert(xGoal* goal, void*, en_trantype* trantype, float, void*);
 S32 SLCK_grul_alert(xGoal* goal, void*, en_trantype* trantype, float, void*);
 void ROBO_KillEffects();
 S32 zSurfaceGetDamageType(const xSurface* surf);
+void TellPlayerVillainIsNear(F32 visnear);
+xVec3* NPCC_upDir(xEnt* ent);
 
 void ZNPC_Robot_Startup()
 {
@@ -145,7 +211,6 @@ void ZNPC_Robot_Startup()
 
     PlayTheFiddle();
 }
-
 void PlayTheFiddle()
 {
 }
@@ -1062,6 +1127,50 @@ U32 zNPCRobot::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
     return da_anim;
 }
 
+S32 zNPCRobot::SysEvent(xBase* from, xBase* to, U32 toEvent, const F32* toParam,
+                        xBase* toParamWidget, S32* handled)
+{
+    static NPCMsg npcmsg;
+
+    S32 doother = 1;
+    xGoal* curgoal;
+    xGoal* recgoal;
+    xPsyche* psy;
+
+    memset(&npcmsg, 0, sizeof(npcmsg));
+
+    psy = this->psy_instinct;
+
+    if (psy)
+    {
+        curgoal = psy->GetCurGoal();
+
+        if (curgoal && (curgoal->GetFlags() & 0x10))
+        {
+            doother = curgoal->SysEvent(from, to, toEvent, toParam, toParamWidget, handled);
+
+            if (handled)
+            {
+                return doother;
+            }
+        }
+
+        recgoal = psy->GetPrevRecovery(0);
+
+        if (recgoal && recgoal != curgoal && (recgoal->GetFlags() & 0x10))
+        {
+            doother = recgoal->SysEvent(from, to, toEvent, toParam, toParamWidget, handled);
+
+            if (handled)
+            {
+                return doother;
+            }
+        }
+    }
+
+    return zNPCCommon::SysEvent(from, to, toEvent, toParam, toParamWidget, handled);
+}
+
 S32 zNPCRobot::NPCMessage(NPCMsg* mail)
 {
     xGoal* curgoal;
@@ -1108,6 +1217,125 @@ S32 zNPCRobot::NPCMessage(NPCMsg* mail)
     return handled;
 }
 
+S32 zNPCRobot::RoboHandleMail(NPCMsg* mail)
+{
+    xPsyche* psy = this->psy_instinct;
+    S32 handled = 1;
+
+    switch (mail->msgid)
+    {
+    case NPC_MID_BUNNYHOP:
+    {
+        BunnyHopSet(NULL);
+        break;
+    }
+    case NPC_MID_DAMAGE:
+    case NPC_MID_EXPLOSION:
+    {
+        if (psy->GIDOfPending() == 'NGRd')
+        {
+            handled = 1;
+            break;
+        }
+
+        zNPCGoalDamage* dmggoal = (zNPCGoalDamage*)psy->FindGoal('NGRd');
+
+        if (dmggoal)
+        {
+            dmggoal->InputInfo(&mail->dmgdata);
+            psy->GoalSet('NGRd', 0);
+            handled = 1;
+        }
+
+        break;
+    }
+    case NPC_MID_RESPAWN:
+    {
+        mail->spawning.spawnSuccess = 0;
+        break;
+    }
+    case NPC_MID_SCRIPTBEGIN:
+    {
+        psy->GoalSet('NGS0', 0);
+        break;
+    }
+    case NPC_MID_STUN:
+    {
+        if (!(flg_vuln & 0x10000000))
+        {
+            break;
+        }
+
+        if (psy->GIDOfPending() == 'NGRd')
+        {
+            handled = 1;
+            break;
+        }
+
+        if (psy->GIDInStack('NGRd'))
+        {
+            handled = 1;
+            break;
+        }
+
+        if (IsDead())
+        {
+            break;
+        }
+
+        zNPCGoalEvilPat* evilgoal = (zNPCGoalEvilPat*)psy->FindGoal('NGR`');
+
+        if (evilgoal)
+        {
+            evilgoal->InputStun(&mail->stundata);
+            psy->GoalSet('NGR`', 0);
+            handled = 1;
+        }
+
+        break;
+    }
+    case NPC_MID_SYSEVENT:
+    {
+        switch (mail->sysevent.toEvent)
+        {
+        case eEventNPCSetActiveOn:
+        case eEventNPCSetActiveOff:
+        {
+            if (npc_duplodude == NULL)
+            {
+                handled = 0;
+            }
+            else
+            {
+                handled = 1;
+            }
+
+            break;
+        }
+        default:
+        {
+            handled = 0;
+            break;
+        }
+        }
+
+        break;
+    }
+    case NPC_MID_SCRIPTEND:
+    case NPC_MID_SCRIPTHALT:
+    {
+        break;
+    }
+    default:
+    {
+        handled = 0;
+        break;
+    }
+    }
+
+    return handled;
+}
+
 void zNPCRobot::DuploOwner(zNPCCommon* duper)
 {
     zNPCCommon::DuploOwner(duper);
@@ -1120,6 +1348,119 @@ void zNPCRobot::DuploOwner(zNPCCommon* duper)
         goal->DieQuietly();
         psy->GoalSet('NGRj', 1);
     }
+}
+
+void zNPCRobot::DoAliveStuff(F32 dt)
+{
+    xPsyche* psy = this->psy_instinct;
+
+    if (drv_data && drv_data->driver)
+    {
+        F32 wid;
+        xBound* bnd = &drv_data->driver->bound;
+
+        switch (bnd->type)
+        {
+        case XBOUND_TYPE_SPHERE:
+            wid = bnd->sph.r;
+            break;
+        case XBOUND_TYPE_BOX:
+        {
+            F32 dx = bnd->box.box.upper.x - bnd->box.box.lower.x;
+            F32 dz = bnd->box.box.upper.z - bnd->box.box.lower.z;
+            wid = 0.5f * MIN(dx, dz);
+            break;
+        }
+        case XBOUND_TYPE_OBB:
+        {
+            F32 dx = bnd->box.box.upper.x - bnd->box.box.lower.x;
+            F32 dz = bnd->box.box.upper.z - bnd->box.box.lower.z;
+            wid = 0.5f * MIN(dx, dz);
+            break;
+        }
+        }
+
+        xVec3 pos_drvArena;
+        xVec3Copy(&pos_drvArena, xEntGetCenter(drv_data->driver));
+        pos_drvArena.y = model->Mat->pos.y;
+
+        arena.AdjustHome(this, &pos_drvArena, -1.0f);
+    }
+
+    if (flg_move & 0x2)
+    {
+        CheckFalling(dt);
+    }
+
+    colFreq = MIN(-1, colFreq);
+
+    DoFX_Motorboat(dt);
+
+    if (DBG_IsNormLog((en_npcdcat)12, 2))
+    {
+        arena.DBG_Draw(NULL);
+    }
+
+    if (globals.player.BadGuyNearTimer < 0.1f && globals.player.VictoryTimer < 0.1f &&
+        psy->GIDInStack('NGR4') && arena.IsReady() && arena.IncludesPlayer(0.0f, NULL))
+    {
+        TellPlayerVillainIsNear(0.5f);
+    }
+}
+
+void zNPCRobot::CheckFalling(F32 dt)
+{
+    static const S32 skipstates[] = { 'NGRi', 'NGRd', 'NGRg', 'NGRh', 'NGRf', 'NGRb', 'NGRc',
+                                      'NGR]', 'NGR^', 'NGR_', 'NGRj', 'NGRk', 0 };
+
+    if ((flg_move & 0x2) && !(frame->oldvel.y > -2.0f) && arena.IsReady())
+    {
+        S32 selftype = SelfType();
+
+        if (selftype != 'NTR:' && selftype != 'NTR6')
+        {
+            S32 i;
+            S32 inSkipList = 0;
+            S32 gid = psy_instinct->GIDOfActive();
+
+            for (i = 0; skipstates[i];)
+            {
+                if (gid == skipstates[i++])
+                {
+                    inSkipList = 1;
+                    break;
+                }
+            }
+
+            if (!inSkipList)
+            {
+                xVec3 vec;
+                XYZVecToPos(&vec, arena.Pos());
+
+                if (!(vec.y < 10.0f))
+                {
+                    Damage(DMGTYP_INSTAKILL, NULL, NULL);
+                }
+            }
+        }
+    }
+}
+
+void zNPCRobot::BunnyHopSet(xVec3* vel)
+{
+    static const xVec3 vel_dflt = { 0.0f, 5.0f, 0.0f };
+
+    if (vel)
+    {
+        xVec3Copy(&vel_bunnyhop, vel);
+    }
+    else
+    {
+        xVec3Copy(&vel_bunnyhop, &vel_dflt);
+    }
+
+    frame->vel.y = MAX(0.0f, frame->vel.y);
+    frame->dvel.y = MAX(0.0f, frame->dvel.y);
 }
 
 void zNPCRobot::AddLassoing(xPsyche* psyche, xGoalProcessCallback cb1, xGoalProcessCallback cb2,
@@ -1788,7 +2129,7 @@ void zNPCFodder::Stun(F32 stuntime)
 
 void zNPCFodBzzt_ResetDanceParty()
 {
-    cnt_alerthokey__11zNPCFodBzzt = 0;
+    zNPCFodBzzt::cnt_alerthokey = 0;
 }
 
 void zNPCFodder::Stun(F32 stuntime)
@@ -1950,6 +2291,38 @@ void zNPCFodBzzt::ParseINI()
     NPCS_SndTablePrepare(g_sndTrax_FodBzzt);
 }
 
+void zNPCFodBzzt::Setup()
+{
+    zNPCCommon::Setup();
+
+    xAnimState* astate = AnimFindState(g_hash_roboanim[14]);
+
+    if (astate)
+    {
+        astate->Flags &= ~0x20;
+        astate->Flags |= 0x10;
+    }
+
+    if (!laser.TextureGet())
+    {
+        RwRaster* rast = NPCC_FindRWRaster("fx_fodbzzt_deathray");
+        RwRGBA rgba_beg = { 0, 255, 0, 255 };
+        RwRGBA rgba_end = { 0, 204, 0, 0 };
+        F32 uv_scroll[2] = { 0.0f, 10.0f };
+        F32 radius[2] = { 0.01f, 0.3f };
+
+        laser.TextureSet(rast);
+        laser.ColorSet(&rgba_beg, &rgba_end);
+        laser.UVScrollSet(uv_scroll[0], uv_scroll[1]);
+        laser.RadiusSet(radius[0], radius[1]);
+    }
+
+    if (rast_discoLight__11zNPCFodBzzt == NULL)
+    {
+        rast_discoLight__11zNPCFodBzzt = NPCC_FindRWRaster("fx_fodbzzt_disco");
+    }
+}
+
 void zNPCFodBzzt::Reset()
 {
     zNPCRobot::Reset();
@@ -2064,6 +2437,53 @@ void zNPCFodBzzt::RenderExtra()
     }
 
     zNPCCommon::RenderExtra();
+}
+
+void zNPCFodBzzt_DoTheHokeyPokey(F32 dt)
+{
+    static S32 g_somebodyplay;
+    static S8 init;
+
+    if (globals.player.Health < 1 || globals.player.DamageTimer > 0.25f ||
+        (globals.player.ControlOff & 0xffffbeff) || zNPCFodBzzt::cnt_alerthokey < 1)
+    {
+        zNPCFodBzzt::tmr_hokeypokey = -1.0f;
+        tmr_nexthokey__11zNPCFodBzzt = 16.0f * (0.25f * (xurand() - 0.5f)) + 16.0f;
+    }
+    else
+    {
+        if (init == 0)
+        {
+            g_somebodyplay = 1;
+            init = 1;
+        }
+
+        if (!(zNPCFodBzzt::tmr_hokeypokey < 0.0f))
+        {
+            zNPCFodBzzt::tmr_hokeypokey = MAX(-1.0f, zNPCFodBzzt::tmr_hokeypokey - dt);
+            tmr_nexthokey__11zNPCFodBzzt = 16.0f * (0.25f * (xurand() - 0.5f)) + 16.0f;
+
+            if (zNPCFodBzzt::tmr_hokeypokey < 1.0f && !g_needMusician && !g_somebodyplay)
+            {
+                g_needMusician = 1;
+                g_somebodyplay = 1;
+            }
+            else if (zNPCFodBzzt::tmr_hokeypokey < 0.5f)
+            {
+                g_needMusician = 0;
+            }
+        }
+        else if (!(tmr_nexthokey__11zNPCFodBzzt < 0.0f))
+        {
+            tmr_nexthokey__11zNPCFodBzzt = MAX(-1.0f, tmr_nexthokey__11zNPCFodBzzt - dt);
+            g_somebodyplay = 0;
+        }
+        else
+        {
+            zNPCFodBzzt::tmr_hokeypokey = 5.0f * (0.25f * (xurand() - 0.5f)) + 5.0f;
+            g_somebodyplay = 0;
+        }
+    }
 }
 
 void zNPCFodBzzt::DiscoReset()
@@ -2815,6 +3235,47 @@ U32 zNPCSleepy::AnimPick(int gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
     return uVar1;
 }
 
+void zNPCSleepy::Process(xScene* xscn, F32 dt)
+{
+    zNPCRobot::Process(xscn, dt);
+
+    if (!IsDead())
+    {
+        S32 cnt_awake = 0;
+
+        if (globals.player.bubblebowl)
+        {
+            cnt_awake = RepelBowlBall(dt);
+        }
+
+        cnt_awake += RepelMissile(dt);
+
+        S32 gid = psy_instinct->GIDOfActive();
+
+        for (S32* state = g_sleepy_angryStates; *state; state++)
+        {
+            if (gid == *state)
+            {
+                cnt_awake++;
+                break;
+            }
+        }
+
+        ConeOfRange(dt, cnt_awake);
+
+        if (cnt_awake == 0)
+        {
+            SnoreNZeez(dt);
+        }
+
+        if (g_needuvincr_nightlight)
+        {
+            g_needuvincr_nightlight = 0;
+            NightLightUVStep(dt);
+        }
+    }
+}
+
 void zNPCSleepy::NewTime(xScene* sc, F32 dt)
 {
     if (!IsDead())
@@ -2835,6 +3296,60 @@ void zNPCSleepy::NightLightPos(xVec3* vec)
     vec->y += hyt_NightLightCurrent;
 }
 
+void zNPCSleepy::NightLightUVStep(F32 dt)
+{
+    static const F32 uv_scroll_nightlight[2] = { 0.0f, -0.2f };
+    static const F32 uv_scroll_deathcone[2] = { 0.0f, -1.55f };
+
+    uv_nightlight__10zNPCSleepy[0] += dt * uv_scroll_nightlight[0];
+    uv_nightlight__10zNPCSleepy[1] += dt * uv_scroll_nightlight[1];
+    RANGEWRAP(&uv_nightlight__10zNPCSleepy[0], 0.0f, 1.0f);
+    RANGEWRAP(&uv_nightlight__10zNPCSleepy[1], 0.0f, 1.0f);
+
+    uv_deathcone__10zNPCSleepy[0] += dt * uv_scroll_deathcone[0];
+    uv_deathcone__10zNPCSleepy[1] += dt * uv_scroll_deathcone[1];
+    RANGEWRAP(&uv_deathcone__10zNPCSleepy[0], 0.0f, 1.0f);
+    RANGEWRAP(&uv_deathcone__10zNPCSleepy[1], 0.0f, 1.0f);
+}
+
+void zNPCSleepy::SnoreNZeez(F32 dt)
+{
+    xVec3 dir_zeez;
+    xVec3 pos_zeez;
+
+    if (NPCC_ds2_toCam(Pos(), NULL) <= SQ(30.0f))
+    {
+        tmr_emitzeez = MAX(-1.0f, tmr_emitzeez - dt);
+
+        if (tmr_emitzeez < 0.0f)
+        {
+            cnt_grpzeez -= 1.0f;
+
+            if (0.0f <= cnt_grpzeez)
+            {
+                tmr_emitzeez = 0.4f;
+            }
+            else
+            {
+                cnt_grpzeez = 3.0f;
+                tmr_emitzeez = 3.0f;
+            }
+
+            xVec3Copy(&pos_zeez, (const xVec3*)BonePos(6));
+            xMat3x3RMulVec(&pos_zeez, (const xMat3x3*)BoneMat(0), &pos_zeez);
+            xVec3AddTo(&pos_zeez, Pos());
+            pos_zeez.y += 0.5f;
+
+            xVec3Inv(&dir_zeez, NPCC_faceDir(this));
+            dir_zeez += g_Y3;
+            dir_zeez.normalize();
+            dir_zeez *= 1.5f;
+
+            NPAR_EmitSleepyZeez(&pos_zeez, &dir_zeez);
+        }
+    }
+}
+
 S32 zNPCSleepy::RepelMissile(F32 dt)
 {
     tmr_nextPatriot = MAX(-1.0f, tmr_nextPatriot - dt);
@@ -2844,6 +3359,33 @@ S32 zNPCSleepy::RepelMissile(F32 dt)
     }
     haz_patriot = NULL;
     return 0;
+}
+
+void zNPCSleepy::ConeOfRange(F32 dt, S32 which)
+{
+    static const F32 rgb_peace[3] = { 1.0f, 1.0f, 0.63f };
+    static const F32 rgb_anger[3] = { 0.5f, 0.0f, 0.0f };
+
+    F32 rgb_current[3];
+    S32 i;
+
+    F32 rad2 = SQ(cfg_npc->rad_detect);
+    F32 dst2 = XZDstSqToPlayer(NULL, NULL);
+    F32 pct = 0.2f + (1.0f - dst2 / rad2);
+
+    pct = MAX(0.0f, MIN(pct, 1.0f));
+
+    for (i = 0; i < 3; i++)
+    {
+        rgb_current[i] = SMOOTH(pct, rgb_peace[i], rgb_anger[i]);
+    }
+
+    rgba_coneColor.red = (U8)(255.0f * rgb_current[0]);
+    rgba_coneColor.green = (U8)(255.0f * rgb_current[1]);
+    rgba_coneColor.blue = (U8)(255.0f * rgb_current[2]);
+    rgba_coneColor.alpha = 0;
+
+    flg_xtrarend |= 1;
 }
 
 void zNPCSleepy::RenderExtra()
@@ -3007,6 +3549,62 @@ void zNPCArfArf::SelfSetup()
     psy->BrainEnd();
 
     psy->SetSafety(NPC_GOAL_IDLE);
+}
+
+U32 zNPCArfArf::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
+{
+    U32 da_anim = 0;
+    S32 idx = -1;
+
+    switch (gid)
+    {
+    case 'NGRK':
+        idx = 16;
+        break;
+    case 'NGR>':
+        idx = 1;
+        break;
+    case 'NGRJ':
+        if (rawgoal->GetFlags() & 0x1)
+        {
+            idx = 14;
+        }
+        else if (rawgoal->GetFlags() & 0x2)
+        {
+            idx = 15;
+        }
+        else
+        {
+            idx = 14;
+        }
+        break;
+    case 'NGRi':
+        if (hitpoints < 2)
+        {
+            if (hitpoints == 1)
+            {
+                idx = 22;
+            }
+        }
+        else
+        {
+            idx = 20;
+        }
+        break;
+    case 'NGR[':
+        idx = 30;
+        break;
+    default:
+        da_anim = zNPCRobot::AnimPick(gid, gspot, rawgoal);
+        break;
+    }
+
+    if (idx >= 0)
+    {
+        da_anim = g_hash_roboanim[idx];
+    }
+
+    return da_anim;
 }
 
 void zNPCArfArf::DuploNotice(en_SM_NOTICES note, void* data)
@@ -3200,6 +3798,35 @@ void zNPCArfDog::Stun(F32 stuntime)
 
         SndPlayRandom(NPC_STYP_OUCH);
     }
+}
+
+void zNPCArfDog::Process(xScene* xscn, F32 dt)
+{
+    zNPCRobot::Process(xscn, dt);
+
+    if (IsDead())
+    {
+        return;
+    }
+
+    S32 gid = psy_instinct->GIDOfActive();
+    F32 ratio = 0.0f;
+
+    switch (gid)
+    {
+    case 'NGRW':
+        ratio += 0.3333f;
+    case 'NGRX':
+        ratio += 0.3333f;
+    case 'NGRY':
+        ratio += 0.3333f;
+    case 'NGRZ':
+        break;
+    default:
+        return;
+    }
+
+    BlinkUpdate(dt, ratio);
 }
 
 void zNPCArfDog::BlinkReset()
@@ -3493,6 +4120,28 @@ U32 zNPCTubelet::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
     return hashid;
 }
 
+void zNPCTubelet::Process(xScene* xscn, F32 dt)
+{
+    zNPCRobot::Process(xscn, dt);
+
+    if (!IsDead())
+    {
+        Chk_NonAlertBonk(dt);
+        Chk_IsBonked();
+    }
+
+    if (tubestat == TUBE_STAT_DYING && psy_instinct->GIDOfActive() != 'NGRN' &&
+        psy_instinct->GIDOfPending() != 'NGRN')
+    {
+        psy_instinct->GoalSet('NGRN', 0);
+    }
+    else if (tubestat == TUBE_STAT_DEAD && psy_instinct->GIDOfActive() != 'NGRj' &&
+             psy_instinct->GIDOfPending() != 'NGRj')
+    {
+        psy_instinct->GoalSet('NGRj', 0);
+    }
+}
+
 S32 zNPCTubelet::Respawn(const xVec3* pos, zMovePoint* mvptFirst, zMovePoint* mvptSpawnRef)
 {
     S32 rc = zNPCCommon::Respawn(pos, mvptFirst, mvptSpawnRef);
@@ -3512,6 +4161,62 @@ void zNPCTubelet::PrepTheBand()
     ModelAtomicHide(4, NULL);
     tub_paul->WeGotAGig();
     tub_mary->WeGotAGig();
+}
+
+S32 zNPCTubelet::RoboHandleMail(NPCMsg* mail)
+{
+    S32 handled = 0;
+
+    switch (mail->msgid)
+    {
+    case NPC_MID_SYSEVENT:
+    {
+        switch (mail->sysevent.toEvent)
+        {
+        case eEventNPCSetActiveOn:
+        case eEventNPCSetActiveOff:
+        {
+            NPCMsg msg = *mail;
+            zNPCTubeSlave* slave;
+
+            handled = 0;
+
+            slave = tub_paul;
+
+            if (slave)
+            {
+                msg.sendto = slave->id;
+                msg.sysevent.from = this;
+                slave->NPCMessage(&msg);
+            }
+
+            slave = tub_mary;
+
+            if (slave)
+            {
+                msg.sendto = slave->id;
+                msg.sysevent.from = this;
+                slave->NPCMessage(&msg);
+            }
+
+            break;
+        }
+        default:
+            handled = 0;
+            break;
+        }
+
+        break;
+    }
+    case NPC_MID_DAMAGE:
+    {
+        handled = 1;
+        Bonk();
+        break;
+    }
+    }
+
+    return handled;
 }
 
 void zNPCTubelet::LassoNotify(en_LASSO_EVENT event)
@@ -3752,6 +4457,24 @@ void zNPCTubeSlave::Init(xEntAsset* asset)
     xModelInstance* mdl = ModelAtomicFind(1, -1, NULL);
     mdl->Flags &= 0xffdf;
     mdl->Flags |= 8;
+}
+
+void zNPCTubeSlave::Setup()
+{
+    zNPCCommon::Setup();
+
+    if (!laser.TextureGet())
+    {
+        RwTexture* txtr = NPCC_FindRWTexture("energy_beam");
+        RwRaster* rast = (txtr != NULL) ? txtr->raster : NULL;
+        RwRGBA rgba_beg = { 255, 128, 255, 255 };
+        RwRGBA rgba_end = { 255, 128, 255, 255 };
+
+        laser.TextureSet(rast);
+        laser.UVScrollSet(0.1f, 0.0f);
+        laser.RadiusSet(0.1f, 0.0f);
+        laser.ColorSet(&rgba_beg, &rgba_end);
+    }
 }
 
 void zNPCTubeSlave::Reset()
@@ -4067,6 +4790,25 @@ U32 zNPCSlick::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
     return hashid;
 }
 
+void zNPCSlick::Process(xScene* xscn, F32 dt)
+{
+    if (!IsDead())
+    {
+        StuffToDoIfAlive(dt);
+    }
+
+    if (globals.player.ForceSlipperyTimer <= 0.0f)
+    {
+        g_slick_slipfx_owner = NULL;
+    }
+    else if (this == g_slick_slipfx_owner)
+    {
+        SlipSlidenAway(dt);
+    }
+
+    zNPCRobot::Process(xscn, dt);
+}
+
 void zNPCSlick::StuffToDoIfAlive(F32 dt)
 {
     tmr_invuln = MAX(-1.0f, tmr_invuln - dt);
@@ -4278,6 +5020,52 @@ zNPCSlick* zNPCSlick::YouOwnSlipFX()
     return g_slick_slipfx_owner = this;
 }
 
+void zNPCSlick::SlipSlidenAway(F32 dt)
+{
+    static S32 moreorless;
+    static S8 init;
+
+    if (init == 0)
+    {
+        moreorless = 0;
+        init = 1;
+    }
+
+    moreorless--;
+
+    if (moreorless < 0)
+    {
+        moreorless = 8;
+
+        F32 rad = 1.2f * globals.player.ent.bound.sph.r;
+
+        xVec3 pos_base;
+        xVec3* pos_plyr = xEntGetPos(&globals.player.ent);
+        pos_base.x = pos_plyr->x;
+        pos_base.z = pos_plyr->z;
+        pos_base.y = pos_plyr->y + 0.35f;
+
+        for (S32 i = 0; i < 4; i++)
+        {
+            xVec3 pos_emit;
+            xVec3 tmp;
+
+            tmp = *NPCC_upDir(&globals.player.ent) * (rad * (2.0f * (xurand() - 0.5f)));
+            pos_emit = tmp;
+
+            tmp = *NPCC_faceDir(&globals.player.ent) * (rad * (2.0f * (xurand() - 0.5f)));
+            pos_emit += tmp;
+
+            tmp = *NPCC_rightDir(&globals.player.ent) * (rad * (2.0f * (xurand() - 0.5f)));
+            pos_emit += tmp;
+
+            pos_emit += pos_base;
+
+            NPAR_EmitOilVapors(&pos_emit);
+        }
+    }
+}
+
 S32 DUMY_grul_returnToIdle(xGoal* goal, void*, en_trantype* trantype, F32, void*)
 {
     S32 nextgoal = 0;
@@ -4482,8 +5270,79 @@ S32 SLCK_grul_alert(xGoal* goal, void*, en_trantype* trantype, float, void*)
     return NPC_GOAL_ALERTSLICK;
 }
 
+void ROBO_InitEffects()
+{
+    g_pemit_smoke = zParEmitterFind("PAREMIT_ROBO_DMGSMOKE");
+    g_pemit_flame = zParEmitterFind("PAREMIT_ROBO_DMGSPARK");
+    g_pemit_trek = zParEmitterFind("PAREMIT_ROBO_TELEPORT");
+    g_pemit_propwash = zParEmitterFind("PAREMIT_ROBO_WAKE");
+    g_pemit_exhaust = zParEmitterFind("PAREMIT_ROHAM_EXHAUST");
+    g_pemit_steam = zParEmitterFind("PAREMIT_ROTUB_STEAM");
+
+    g_parf_smoke.custom_flags = 0x100;
+    xVec3Copy(&g_parf_smoke.pos, &g_O3);
+
+    g_parf_spark.custom_flags = 0x100;
+    xVec3Copy(&g_parf_spark.pos, &g_O3);
+
+    g_parf_trek.custom_flags = 0x300;
+    xVec3Copy(&g_parf_trek.pos, &g_O3);
+    g_parf_trek.vel.x = 0.0f;
+    g_parf_trek.vel.y = 0.3f;
+    g_parf_trek.vel.z = 0.0f;
+
+    g_parf_propwash.custom_flags = 0x300;
+    xVec3Copy(&g_parf_propwash.pos, &g_O3);
+    xVec3Copy(&g_parf_propwash.vel, &g_O3);
+
+    g_parf_exhaust.custom_flags = 0x300;
+    xVec3Copy(&g_parf_exhaust.pos, &g_O3);
+    xVec3Copy(&g_parf_exhaust.vel, &g_O3);
+    g_parf_exhaust.vel.y = 0.5f;
+
+    g_parf_steam.custom_flags = 0x302;
+    xVec3Copy(&g_parf_steam.pos, &g_O3);
+    xVec3Copy(&g_parf_steam.vel, &g_O3);
+
+    g_parf_steam.life.set(1.0f, 1.0f, 1.0f, 0);
+}
+
+
+
 void ROBO_KillEffects()
 {
+}
+
+void zNPCRobot::DoFX_Motorboat(F32 dt)
+{
+    xVec3 pos_emit = { 0.0f, 0.0f, 0.0f };
+
+    if (xEntIsVisible(this))
+    {
+        cnt_nextemit--;
+
+        if (cnt_nextemit < 5)
+        {
+            if (SQ(0.2f) < xVec3Length2(&frame->vel) && GetVertPos(NPC_MDLVERT_PROPEL, &pos_emit))
+            {
+                zFX_SpawnBubbleTrail(&pos_emit, 1);
+            }
+        }
+
+        if (cnt_nextemit < 0)
+        {
+            cnt_nextemit = 15;
+        }
+    }
+}
+
+void zNPCRobot::VFXStarTrek(F32 dt, xVec3* pos, xVec3* vel)
+{
+    g_parf_trek.vel.x = vel->x;
+    g_parf_trek.vel.y = vel->y;
+    g_parf_trek.vel.z = vel->z;
+    xVec3Copy(&g_parf_trek.pos, pos);
+    xParEmitterEmitCustom(g_pemit_trek, dt, &g_parf_trek);
 }
 
 S32 NPCArena::IncludesPos(xVec3* pos, F32 rad_thresh, xVec3* vec)
