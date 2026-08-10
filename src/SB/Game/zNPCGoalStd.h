@@ -770,7 +770,7 @@ public:
     void FXTurbulence();
     void FXWhirlwind();
     void CalcAttackVector();
-    void CheckHandBones();
+    S32 CheckHandBones();
     S32 CollReview(void*);
     F32 tmr_attack; // offset 0x4C, size 0x4
     F32 tmr_minAttack; // offset 0x50, size 0x4

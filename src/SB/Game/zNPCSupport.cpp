@@ -675,9 +675,9 @@ F32 NPCC_dir_toXZAng(const xVec3* dir)
     return xatan2(dir->x, dir->z);
 }
 
-void NPCC_aimMiss(xVec3* dir_aim, xVec3* pos_src, xVec3* pos_tgt, F32 dst_miss, xVec3* pos_miss)
+F32 NPCC_aimMiss(xVec3* dir_aim, xVec3* pos_src, xVec3* pos_tgt, F32 dst_miss, xVec3* pos_miss)
 {
-    NPCC_aimVary(dir_aim, pos_src, pos_tgt, dst_miss, 8, pos_miss);
+    return NPCC_aimVary(dir_aim, pos_src, pos_tgt, dst_miss, 8, pos_miss);
 }
 
 F32 NPCC_aimVary(xVec3* dir_aim, xVec3* pos_src, xVec3* pos_tgt, F32 dst_vary, S32 flg_vary,
@@ -1166,9 +1166,9 @@ S32 NPCC_HaveLOSToPos(xVec3* pos_src, xVec3* pos_tgt, F32 dst_max, xBase* tgt, x
     return result;
 }
 
-void NPCC_DstSqPlyrToPos(const xVec3* pos)
+F32 NPCC_DstSqPlyrToPos(const xVec3* pos)
 {
-    NPCC_DstSq(pos, xEntGetPos(&globals.player.ent), NULL);
+    return NPCC_DstSq(pos, xEntGetPos(&globals.player.ent), NULL);
 }
 
 F32 NPCC_ds2_toCam(const xVec3* pos_from, xVec3* delta)

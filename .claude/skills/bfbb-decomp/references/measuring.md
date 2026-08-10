@@ -17,6 +17,8 @@ This produced a convincing false alarm worth recognising. `check_hide_entities` 
 
 **Before concluding that two measurements disagree, re-run `ninja` to completion and re-measure.** A stale `.o` explains far more disagreements than a genuine tooling difference does.
 
+**Run `ninja` twice after a large multi-file change, and trust the second report.** This is reproducible, not superstition: after two agents' work landed together, the first build reported `zCutsceneMgr` at 14/18 with `check_hide_entities` at 91.047%, and an immediately following build — same sources, nothing edited in between — reported 15/18 and 100%. It happened twice, in the same unit, on unrelated changes. The first report can be assembled against objects the same run is still replacing. The DOL sha1 was correct both times; only the report was wrong.
+
 The residual difference is benign: counting non-matching symbols off the built object includes data symbols like `[.sdata2-0]`, which `solo.py` does not, so the built-object count runs a little higher on most units.
 
 ## report.json credits near-misses
