@@ -25,6 +25,11 @@
 #include "zRenderState.h"
 #include "zLightning.h"
 #include "zNPCTypeRobot.h"
+#include "zSurface.h"
+#include "zEntCruiseBubble.h"
+#include "zScene.h"
+#include "zEnv.h"
+#include "zNPCTypeVillager.h"
 #include <xMathInlines.h>
 
 #define ANIM_Unknown 0 //0x0
@@ -68,6 +73,12 @@
 
 U32 xSndPlay3DFade(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, const xVec3* pos,
                    F32 innerRadius, F32 outerRadius, sound_category category, F32 fade, F32 delay);
+F32 xSCurveInverse(F32 val);
+bool xSphereHitsBound(const xSphere& o, const xBound& b);
+U32 iModelTagSetup(xModelTagWithNormal* tag, RpAtomic* model, F32 x, F32 y, F32 z);
+void iModelTagEval(RpAtomic* model, const xModelTagWithNormal* tag, RwMatrixTag* mat, xVec3* dest,
+                   xVec3* normal);
+U8 xOBBHitsOBB(const xBox& a, const xMat4x3& amat, const xBox& b, const xMat4x3& bmat);
 
 zNPCB_SB2* zNPCB_SB2::_singleton;
 
@@ -90,14 +101,8 @@ namespace
         U32 nodes;
         U32 active_node;
 
-        void init(U32 values, const void* curve, U32 nodes, const char*, const char**,
-                  const tweak_callback*, void*)
-        {
-            this->values = values;
-            this->curve = (inode*)curve;
-            this->nodes = nodes;
-            this->active_node = 0;
-        }
+        void init(u32 values, const void* curve, u32 nodes, const char*, const char**,
+                  const tweak_callback*, void*);
 
         void eval_linear(F32 t, F32* value);
         void find_active_node(F32 t);
@@ -133,6 +138,27 @@ namespace
     struct platform_hook
     {
         char* name;
+    };
+
+    struct node_hook
+    {
+        char* name;
+        S32 model;
+        bool midpoint;
+        S32 points;
+        xVec3 pos[3];
+    };
+
+    struct hand_hook
+    {
+        xVec3 head[4];
+        xVec3 tail[4];
+    };
+
+    struct say_group
+    {
+        const zNPCNewsFish::say_enum* list;
+        U32 size;
     };
 
     static char* sound_asset_names[10][4];
@@ -260,10 +286,6 @@ namespace
         { 1.5f, 1.0f },
     };
 
-    static const bool dizzy_round[9] = {
-        false, true, false, false, false, true, false, false, true
-    };
-
     struct sequence_entry
     {
         S32 goal;
@@ -309,7 +331,122 @@ namespace
     };
     // clang-format on
 
-    static platform_hook platform_hooks[16];
+    static const bool dizzy_round[9] = {
+        false, true, false, false, false, true, false, false, true
+    };
+
+    static const node_hook node_hooks[9] = {
+        { "SB_NODE_05", 3, false, 3,
+          { { 3.167f, 7.652f, 2.051f }, { 2.423f, 7.988f, 2.058f }, { 3.555f, 8.631f, 2.058f } } },
+        { "SB_NODE_06", 3, true, 3,
+          { { 3.993f, 14.411f, 2.019f }, { 2.816f, 14.778f, 2.019f }, { 3.899f, 14.949f, 2.019f } } },
+        { "SB_NODE_07", 3, false, 2,
+          { { 4.377f, 10.433f, -0.135f }, { 4.542f, 11.823f, -0.267f }, { 0.0f, 0.0f, 0.0f } } },
+        { "SB_NODE_04", 1, false, 2,
+          { { 9.769f, 6.602f, 0.119f }, { 9.769f, 6.602f, 1.281f }, { 0.0f, 0.0f, 0.0f } } },
+        { "SB_NODE_01", 3, false, 3,
+          { { -3.102f, 7.363f, 2.051f }, { -3.304f, 8.16f, 2.055f }, { -2.493f, 7.565f, 2.051f } } },
+        { "SB_NODE_02", 3, true, 3,
+          { { -4.01f, 13.799f, 2.091f }, { -4.009f, 15.017f, 2.11f }, { -3.392f, 14.42f, 2.11f } } },
+        { "SB_NODE_03", 3, false, 2,
+          { { -4.486f, 10.148f, -0.174f }, { -4.486f, 11.007f, -0.109f }, { 0.0f, 0.0f, 0.0f } } },
+        { "SB_NODE_08", 2, false, 2,
+          { { -9.769f, 6.602f, 0.119f }, { -9.769f, 6.602f, 1.281f }, { 0.0f, 0.0f, 0.0f } } },
+        { "SB_NODE_09", 3, false, 2,
+          { { -0.002f, 11.142f, 4.366f }, { -0.002f, 11.616f, 4.203f }, { 0.0f, 0.0f, 0.0f } } },
+    };
+
+    static const hand_hook hand_hooks[2] = {
+        { { { 7.733f, 6.602f, -1.906f },
+            { 7.733f, 8.075f, -1.906f },
+            { 12.781f, 6.602f, -1.906f },
+            { 12.781f, 8.075f, -1.906f } },
+          { { 7.733f, 6.602f, 2.259f },
+            { 7.733f, 8.075f, 2.259f },
+            { 12.775f, 6.602f, 2.259f },
+            { 12.775f, 8.075f, 2.259f } } },
+        { { { -12.78f, 6.602f, -1.906f },
+            { -12.78f, 8.075f, -1.906f },
+            { -7.733f, 6.602f, -1.906f },
+            { -7.733f, 8.075f, -1.906f } },
+          { { -12.775f, 6.602f, 2.259f },
+            { -12.775f, 8.075f, 2.259f },
+            { -7.733f, 6.602f, 2.259f },
+            { -7.733f, 8.075f, 2.259f } } },
+    };
+
+    static const platform_hook platform_hooks[16] = {
+        { "PLAT_SB_FLIPPER_01" }, { "PLAT_SB_FLIPPER_02" }, { "PLAT_SB_FLIPPER_03" },
+        { "PLAT_SB_FLIPPER_04" }, { "PLAT_SB_FLIPPER_05" }, { "PLAT_SB_FLIPPER_06" },
+        { "PLAT_SB_FLIPPER_07" }, { "PLAT_SB_FLIPPER_08" }, { "PLAT_SB_FLIPPER_09" },
+        { "PLAT_SB_FLIPPER_10" }, { "PLAT_SB_FLIPPER_11" }, { "PLAT_SB_FLIPPER_12" },
+        { "PLAT_SB_FLIPPER_13" }, { "PLAT_SB_FLIPPER_14" }, { "PLAT_SB_FLIPPER_15" },
+        { "PLAT_SB_FLIPPER_16" },
+    };
+
+    static const platform_hook slug_hooks[3] = {
+        { "SB_SLUG_KAH" }, { "SB_SLUG_RAH" }, { "SB_SLUG_TAY" },
+    };
+
+    static const zNPCNewsFish::say_enum say_intro[1] = { zNPCNewsFish::SAY_B302_INTRO };
+
+    static const zNPCNewsFish::say_enum say_hit_player[6] = {
+        zNPCNewsFish::SAY_HIT_PLAYER_1, zNPCNewsFish::SAY_HIT_PLAYER_2,
+        zNPCNewsFish::SAY_HIT_PLAYER_3, zNPCNewsFish::SAY_HIT_PLAYER_4,
+        zNPCNewsFish::SAY_HIT_PLAYER_5, zNPCNewsFish::SAY_HIT_PLAYER_6,
+    };
+
+    static const zNPCNewsFish::say_enum say_hit_boss_1[4] = {
+        zNPCNewsFish::SAY_HIT_BOSS_1,
+        zNPCNewsFish::SAY_HIT_BOSS_2,
+        zNPCNewsFish::SAY_SB_HIT_BOSS_2,
+        zNPCNewsFish::SAY_SB_HIT_BOSS_3,
+    };
+
+    static const zNPCNewsFish::say_enum say_hit_boss_2[3] = {
+        zNPCNewsFish::SAY_HIT_BOSS_2,
+        zNPCNewsFish::SAY_SB_HIT_BOSS_3,
+        zNPCNewsFish::SAY_ROBOT_HIT,
+    };
+
+    static const zNPCNewsFish::say_enum say_hit_boss_3[1] = { zNPCNewsFish::SAY_SB_HIT_BOSS_1 };
+
+    static const zNPCNewsFish::say_enum say_hit_fail[1] = { zNPCNewsFish::SAY_ROBOT_HIT_FAIL };
+
+    static const zNPCNewsFish::say_enum say_hit_last[1] = { zNPCNewsFish::SAY_HIT_LAST };
+
+    static const zNPCNewsFish::say_enum say_spun[2] = {
+        zNPCNewsFish::SAY_SPIN,
+        zNPCNewsFish::SAY_SB_ROUGH_RIDE,
+    };
+
+    static const zNPCNewsFish::say_enum say_vuln[7] = {
+        zNPCNewsFish::SAY_SB_VULN_1,   zNPCNewsFish::SAY_SB_VULN_2,
+        zNPCNewsFish::SAY_SB_VULN_3,   zNPCNewsFish::SAY_SB_VULN_4,
+        zNPCNewsFish::SAY_SB_VULN_5,   zNPCNewsFish::SAY_ROBOT_VULN_1,
+        zNPCNewsFish::SAY_ROBOT_VULN_2,
+    };
+
+    static const zNPCNewsFish::say_enum say_stun[4] = {
+        zNPCNewsFish::SAY_ROBOT_DIZZY,
+        zNPCNewsFish::SAY_ROBOT_STUN_1,
+        zNPCNewsFish::SAY_ROBOT_STUN_2,
+        zNPCNewsFish::SAY_ROBOT_STUN_3,
+    };
+
+    static const zNPCNewsFish::say_enum say_return[1] = { zNPCNewsFish::SAY_SB_BACK };
+
+    static const zNPCNewsFish::say_enum say_tactics[1] = { zNPCNewsFish::SAY_ROBOT_TACTICS };
+
+    static const zNPCNewsFish::say_enum say_fall[1] = { zNPCNewsFish::SAY_SB_HIT_FAIL_2 };
+
+    static const say_group say_set[13] = {
+        { say_intro, 1 },      { say_hit_player, 6 }, { say_hit_boss_1, 4 },
+        { say_hit_boss_2, 3 }, { say_hit_boss_3, 1 }, { say_hit_fail, 1 },
+        { say_hit_last, 1 },   { say_spun, 2 },       { say_vuln, 7 },
+        { say_stun, 4 },       { say_return, 1 },     { say_tactics, 1 },
+        { say_fall, 1 },
+    };
 
     void set_alpha_blend(xModelInstance* model)
     {
@@ -317,14 +454,7 @@ namespace
         model->PipeFlags |= 0x6508;
     }
 
-    F32 max(F32 f0, F32 f1)
-    {
-        if (f0 > f1)
-        {
-            return f0;
-        }
-        return f1;
-    }
+    F32 max(F32 f0, F32 f1);
 
     static void init_sound()
     {
@@ -405,6 +535,87 @@ namespace
         }
 
         data.handle = 0;
+    }
+
+    void set_yaw_matrix(xMat3x3& mat, F32 yaw)
+    {
+        F32 s = isin(yaw);
+        F32 c = icos(yaw);
+
+        mat.right.assign(c, 0.0f, -s);
+        mat.up.assign(0.0f, 1.0f, 0.0f);
+        mat.at.assign(s, 0.0f, c);
+    }
+
+    void init_bound_entity(xEnt& ent, U32 id, xModelInstance* model, xMat4x3* mat)
+    {
+        memset(&ent, 0, sizeof(xEnt));
+
+        ent.id = id;
+        ent.baseType = 0xc;
+        ent.collType = XENT_COLLTYPE_STAT;
+        ent.chkby = XENT_COLLTYPE_PLYR;
+        ent.penby = XENT_COLLTYPE_PLYR;
+        ent.baseFlags = 0x21;
+        ent.moreFlags = 0;
+        ent.model = model;
+        ent.collModel = model;
+        ent.bound.type = XBOUND_TYPE_OBB;
+        ent.bound.mat = mat;
+
+        xGridBoundInit(&ent.gridb, &ent);
+    }
+
+    void parallelepiped_to_obb(xBound& bound, xVec3* p)
+    {
+        bound.type = XBOUND_TYPE_OBB;
+
+        xVec3 head = p[0] + p[1] + p[2] + p[3];
+        xVec3 tail = p[4] + p[5] + p[6] + p[7];
+
+        bound.box.center = (head + tail) * 0.125f;
+
+        p[0] -= bound.box.center;
+        p[1] -= bound.box.center;
+        p[2] -= bound.box.center;
+        p[3] -= bound.box.center;
+        p[4] -= bound.box.center;
+        p[5] -= bound.box.center;
+        p[6] -= bound.box.center;
+        p[7] -= bound.box.center;
+
+        xMat4x3& mat = *bound.mat;
+
+        mat.right = head - tail;
+        mat.at = p[0] + p[1] + p[4] + p[5];
+        mat.at -= p[2] + p[3] + p[6] + p[7];
+        mat.right.normalize();
+        mat.up = mat.at.cross(mat.right).normal();
+        mat.at = mat.right.cross(mat.up);
+        mat.pos = bound.box.center;
+
+        xVec3& ext = bound.box.box.upper;
+
+        ext.assign(mat.right.dot(p[0]), mat.up.dot(p[0]), mat.at.dot(p[0]));
+        ext.set_abs();
+
+        for (const xVec3* v = p + 1; v != p + 8; v++)
+        {
+            ext.x = max(ext.x, xabs(mat.right.dot(*v)));
+            ext.y = max(ext.y, xabs(mat.up.dot(*v)));
+            ext.z = max(ext.z, xabs(mat.at.dot(*v)));
+        }
+
+        bound.box.box.lower = -ext;
+    }
+
+    F32 max(F32 f0, F32 f1)
+    {
+        if (f0 > f1)
+        {
+            return f0;
+        }
+        return f1;
     }
 
     void tweak_group::load(xModelAssetParam* params, U32 size)
@@ -1164,49 +1375,6 @@ namespace
         }
     }
 
-    void response_curve::find_active_node(F32 t)
-    {
-        u32 size = values * sizeof(F32) + sizeof(node);
-        inode* n = get_node(active_node);
-
-        while (true)
-        {
-            while (t < n->t)
-            {
-                n = (inode*)((U8*)n - size);
-                active_node--;
-            }
-
-            if (t <= ((inode*)((U8*)n + size))->t)
-            {
-                return;
-            }
-
-            n = (inode*)((U8*)n + size);
-            active_node++;
-        }
-    }
-
-    F32 response_curve::clamp_t(F32 t) const
-    {
-        return range_limit(t, start_t(), end_t());
-    }
-
-    inode* response_curve::get_node(u32 index) const
-    {
-        return (inode*)((U8*)curve + index * (sizeof(node) + values * sizeof(F32)));
-    }
-
-    F32 response_curve::start_t() const
-    {
-        return get_node(0)->t;
-    }
-
-    F32 response_curve::end_t() const
-    {
-        return get_node(nodes - 1)->t;
-    }
-
 } // namespace
 
 xAnimTable* ZNPC_AnimTable_BossSB2()
@@ -1372,6 +1540,18 @@ void zNPCB_SB2::Init(xEntAsset* asset)
     this->init_slugs();
 }
 
+namespace
+{
+    void response_curve::init(u32 values, const void* curve, u32 nodes, const char*, const char**,
+                              const tweak_callback*, void*)
+    {
+        this->values = values;
+        this->curve = (inode*)curve;
+        this->nodes = nodes;
+        this->active_node = 0;
+    }
+} // namespace
+
 void zNPCB_SB2::ParseINI()
 {
     zNPCCommon::ParseINI();
@@ -1487,6 +1667,102 @@ void zNPCB_SB2::Destroy()
     zNPCCommon::Destroy();
 }
 
+U32 zNPCB_SB2::AnimPick(S32 animID, en_NPC_GOAL_SPOT gspot, xGoal* goal)
+{
+    static const S32 idle_table[8][2] = {
+        { ANIM_Dizzy01, ANIM_ReturnIdle01 },
+        { ANIM_KarateLoop, ANIM_KarateEnd },
+        { ANIM_ChopLeftLoop, ANIM_ChopLeftEnd },
+        { ANIM_ChopRightLoop, ANIM_ChopRightEnd },
+        { ANIM_SwipeLeftBegin, ANIM_SwipeLeftEnd },
+        { ANIM_SwipeRightBegin, ANIM_SwipeRightEnd },
+        { ANIM_SwipeLeftLoop, ANIM_SwipeLeftEnd },
+        { ANIM_SwipeRightLoop, ANIM_SwipeRightEnd },
+    };
+
+    S32 anim = ANIM_Idle01;
+
+    switch (animID)
+    {
+    case NPC_GOAL_BOSSSB2IDLE:
+    {
+        for (S32 i = 0; i < 8; i++)
+        {
+            if (g_hash_bossanim[idle_table[i][0]] == AnimCurStateID())
+            {
+                anim = idle_table[i][1];
+                break;
+            }
+        }
+        break;
+    }
+    case NPC_GOAL_BOSSSB2TAUNT:
+        anim = ANIM_Taunt01;
+        break;
+    case NPC_GOAL_BOSSSB2DIZZY:
+        anim = ANIM_Dizzy01;
+        break;
+    case NPC_GOAL_BOSSSB2HIT:
+        if (!flag.dizzy)
+        {
+            anim = ANIM_Hit01;
+            play_sound(SOUND_HIT_FLAIL, &sound_loc.body, 1.0f);
+        }
+        else if (g_hash_bossanim[ANIM_SwipeLeftLoop] == AnimCurStateID())
+        {
+            anim = ANIM_SmackLeft01;
+            play_sound(SOUND_HIT_SLAP, &sound_loc.hand[LEFT_HAND], 1.0f);
+        }
+        else if (g_hash_bossanim[ANIM_SwipeRightLoop] == AnimCurStateID())
+        {
+            anim = ANIM_SmackRight01;
+            play_sound(SOUND_HIT_SLAP, &sound_loc.hand[RIGHT_HAND], 1.0f);
+        }
+        else
+        {
+            anim = ANIM_Hit02;
+            play_sound(SOUND_HIT_FLAIL, &sound_loc.body, 1.0f);
+        }
+        break;
+    case NPC_GOAL_BOSSSB2HUNT:
+        if (!flag.dizzy)
+        {
+            for (S32 i = 0; i < 8; i++)
+            {
+                if (g_hash_bossanim[idle_table[i][0]] == AnimCurStateID())
+                {
+                    anim = idle_table[i][1];
+                    break;
+                }
+            }
+        }
+        else
+        {
+            anim = ANIM_Dizzy01;
+        }
+        break;
+    case NPC_GOAL_BOSSSB2SWIPE:
+        anim = ANIM_Idle01;
+        break;
+    case NPC_GOAL_BOSSSB2CHOP:
+        anim = ANIM_Idle01;
+        break;
+    case NPC_GOAL_BOSSSB2KARATE:
+        anim = ANIM_Idle01;
+        break;
+    default:
+        anim = ANIM_Idle01;
+        break;
+    }
+
+    if (anim < 0)
+    {
+        return 0;
+    }
+
+    return g_hash_bossanim[anim];
+}
+
 void zNPCB_SB2::Process(xScene* xscn, F32 dt)
 {
     if (this->flag.updated == FALSE)
@@ -1581,11 +1857,24 @@ void zNPCB_SB2::reset_speed()
     turn.max_vel = tweak.turn_max_vel;
 }
 
-S32 zNPCB_SB2::player_platform()
+zNPCB_SB2::platform_data* zNPCB_SB2::player_platform()
 {
-    if (((globals.player.ent.collis->colls->flags & 1) != 0))
+    xEntCollis* collis = globals.player.ent.collis;
+
+    if (collis->colls->flags & 1)
     {
-        return 1;
+        xEnt* ent = (xEnt*)collis->colls->optr;
+
+        if (ent != NULL && ent->baseType == eBaseTypePlatform)
+        {
+            for (platform_data* p = platforms; p != platforms + 16; p++)
+            {
+                if (p->ent == ent)
+                {
+                    return p;
+                }
+            }
+        }
     }
 
     return NULL;
@@ -1740,29 +2029,6 @@ S32 zNPCB_SB2::next_goal()
     return NPC_GOAL_BOSSSB2IDLE;
 }
 
-void zNPCB_SB2::update_delay_slug(zNPCB_SB2::slug_data& slug, F32 dt)
-{
-    if (slug.abandoned)
-    {
-        if (slug.sound_handle)
-        {
-            kill_sound(SOUND_KARATE_SLUG, slug.sound_handle);
-            slug.sound_handle = 0;
-        }
-
-        slug.stage = SLUG_DYING;
-    }
-    else
-    {
-        slug.stage_delay -= dt;
-
-        if (slug.stage_delay <= 0.0f)
-        {
-            slug.stage = SLUG_FIRE;
-        }
-    }
-}
-
 void zNPCB_SB2::reset_stage()
 {
     stage = -1;
@@ -1786,6 +2052,153 @@ void zNPCB_SB2::set_vulnerable(bool vulnerable)
 
 void zNPCB_SB2::decompose()
 {
+}
+
+void zNPCB_SB2::update_turn(F32 dt)
+{
+    if (flag.face_player)
+    {
+        const xVec3& ppos = (const xVec3&)globals.player.ent.model->Mat->pos;
+
+        turn.dir.assign(ppos.x - location().x, ppos.z - location().z);
+        turn.dir.normalize();
+    }
+
+    xVec3& loc = location();
+    F32 curx = model->Mat->at.x;
+    F32 curz = model->Mat->at.z;
+
+    if (!turning())
+    {
+        return;
+    }
+
+    F32 cur_yaw = xatan2(curx, curz);
+    F32 dyaw = xatan2(turn.dir.x, turn.dir.y) - cur_yaw;
+
+    if (dyaw > PI)
+    {
+        dyaw -= 2.0f * PI;
+    }
+    else if (dyaw < -PI)
+    {
+        dyaw += 2.0f * PI;
+    }
+
+    F32 yaw = cur_yaw;
+
+    xAccelMove(yaw, turn.vel, turn.accel, dt, cur_yaw + dyaw, turn.max_vel);
+    set_yaw_matrix(frame->mat, yaw);
+}
+
+void zNPCB_SB2::update_halt(F32 dt)
+{
+    F32 old_yaw = move.yaw;
+
+    F32 turn_accel = (move.yaw_vel >= 0.0f) ? -xabs(move.turn_accel) : xabs(move.turn_accel);
+    F32 accel = (move.vel >= 0.0f) ? -xabs(move.accel) : xabs(move.accel);
+
+    F32 dist = 0.0f;
+
+    xAccelStop(move.yaw, move.yaw_vel, turn_accel, dt);
+    xAccelStop(dist, move.vel, accel, dt);
+
+    if ((dist >= -1e-5f && dist <= 1e-5f) || xabs(old_yaw - move.yaw) <= 0.001f)
+    {
+        flag.move = MOVE_NONE;
+    }
+    else
+    {
+        xVec2 loc;
+        loc.x = location().x;
+        loc.y = location().z;
+        set_location(loc + move.dir * dist);
+    }
+}
+
+void zNPCB_SB2::update_follow(F32 dt)
+{
+    xVec2 loc;
+    loc.x = location().x;
+    loc.y = location().z;
+
+    xVec2 delta = move.dest - loc;
+    F32 dist = delta.length();
+    xVec2 dir;
+
+    if (dist < -1e-5f || 1e-5f < dist)
+    {
+        dir = delta * (1.0f / dist);
+    }
+    else
+    {
+        if (move.vel >= -1e-5f && move.vel <= 1e-5f)
+        {
+            flag.move = MOVE_NONE;
+            set_location(move.dest);
+            return;
+        }
+
+        dir = move.dir;
+    }
+
+    F32 dyaw = xatan2(dir.x, dir.y) - move.yaw;
+
+    if (dyaw > PI)
+    {
+        dyaw -= 2.0f * PI;
+    }
+    else if (dyaw < -PI)
+    {
+        dyaw += 2.0f * PI;
+    }
+
+    xAccelMove(move.yaw, move.yaw_vel, move.turn_accel, dt, move.yaw + dyaw, move.turn_max_vel);
+    move.yaw = xrmod(move.yaw);
+    move.dir.assign(isin(move.yaw), icos(move.yaw));
+
+    if (flag.face_follow)
+    {
+        turn.dir = move.dir;
+    }
+
+    if (dist < 1.0f)
+    {
+        move.dir = dir;
+    }
+
+    F32 target = move.dir.dot(delta);
+
+    if (target < 0.0f)
+    {
+        target = 0.0f;
+    }
+
+    F32 step = 0.0f;
+
+    xAccelMove(step, move.vel, move.accel, dt, target, move.max_vel);
+    set_location(loc + move.dir * step);
+}
+
+void zNPCB_SB2::update_ymove(F32 dt)
+{
+    xVec3 loc = location();
+
+    ymove.time += dt;
+
+    F32 t = ymove.time / ymove.end_time;
+
+    if (t < 1.0f)
+    {
+        loc.y = ymove.begin + xSCurve(t) * (ymove.end - ymove.begin);
+    }
+    else
+    {
+        loc.y = ymove.end;
+        flag.move = MOVE_NONE;
+    }
+
+    set_location(loc);
 }
 
 void zNPCB_SB2::update_move(F32 dt)
@@ -1814,6 +2227,64 @@ void zNPCB_SB2::update_camera(F32 dt)
     }
 }
 
+void zNPCB_SB2::update_nodes(F32 dt)
+{
+    node_pulse = xrmod(node_pulse + tweak.nodes.pulse_rate * dt);
+
+    F32 range = tweak.nodes.pulse_max - tweak.nodes.pulse_min;
+
+    set_glow_light_intensity(range * (0.5f * isin(node_pulse) + 0.5f) + tweak.nodes.pulse_min);
+
+    for (S32 i = 0; i < 9; i++)
+    {
+        zEntDestructObj* ent = nodes[i].ent;
+
+        if (ent == NULL)
+        {
+            continue;
+        }
+
+        if (zEntDestructObj_isDestroyed(ent))
+        {
+            xLightKit* kit = nodes[i].old_light_kit;
+
+            ent->model->LightKit = kit;
+            ent->lightKit = kit;
+        }
+        else
+        {
+            if (nodes[i].old_light_kit == NULL)
+            {
+                nodes[i].old_light_kit = ent->lightKit;
+            }
+
+            ent->model->LightKit = &glow_light.kit;
+            ent->lightKit = &glow_light.kit;
+        }
+    }
+}
+
+void zNPCB_SB2::init_nodes()
+{
+    for (S32 i = 0; i < 9; i++)
+    {
+        xBase* base = zSceneFindObject(xStrHash(node_hooks[i].name));
+
+        if (base == NULL || base->baseType != eBaseTypeDestructObj ||
+            ((zEntDestructObj*)base)->model == NULL)
+        {
+            nodes[i].ent = NULL;
+        }
+        else
+        {
+            nodes[i].ent = (zEntDestructObj*)base;
+            nodes[i].old_light_kit = NULL;
+        }
+    }
+
+    bind_nodes();
+}
+
 void zNPCB_SB2::show_nodes()
 {
     for (S32 i = 0; i < 9; i++)
@@ -1821,6 +2292,201 @@ void zNPCB_SB2::show_nodes()
         if (nodes[i].ent != NULL)
         {
             xEntShow(nodes[i].ent);
+        }
+    }
+}
+
+void zNPCB_SB2::move_nodes()
+{
+    for (S32 i = 0; i < 9; i++)
+    {
+        node_data& n = nodes[i];
+
+        if (n.ent == NULL)
+        {
+            continue;
+        }
+
+        xVec3 head;
+        xVec3 tail;
+        xVec3 normal;
+
+        if (node_hooks[i].points == 3)
+        {
+            xVec3 side;
+
+            iModelTagEval(n.skin_model, &n.v3.tag[0], n.skin_mat, &head);
+            iModelTagEval(n.skin_model, &n.v3.tag[1], n.skin_mat, &tail);
+            iModelTagEval(n.skin_model, &n.v3.tag[2], n.skin_mat, &side);
+
+            normal = (side - head).cross(tail - head);
+            normal.up_normalize();
+        }
+        else
+        {
+            iModelTagEval(n.skin_model, &n.v2n1.tag, n.skin_mat, &head, &normal);
+            iModelTagEval(n.skin_model, &n.v2n1.uptag, n.skin_mat, &tail);
+        }
+
+        xMat4x3 mat;
+
+        mat.up = tail - head;
+        mat.at = normal;
+        mat.right = mat.up.cross(mat.at).up_normalize();
+        mat.up = mat.at.cross(mat.right);
+
+        if (node_hooks[i].midpoint)
+        {
+            mat.pos = (head + tail) * 0.5f;
+        }
+        else
+        {
+            mat.pos = head;
+        }
+
+        xEntReposition(*n.ent, mat);
+    }
+}
+
+void zNPCB_SB2::render_nodes()
+{
+    xLightKit* old_kit = xLightKit_GetCurrent(globals.currWorld);
+
+    xLightKit_Enable(&glow_light.kit, globals.currWorld);
+
+    for (S32 i = 0; i < 9; i++)
+    {
+        zEntDestructObj* ent = nodes[i].ent;
+
+        if (ent != NULL && !iModelCull(ent->model->Data, ent->model->Mat))
+        {
+            iModelRender(ent->model->Data, ent->model->Mat);
+        }
+    }
+
+    xLightKit_Enable(old_kit, globals.currWorld);
+}
+
+void zNPCB_SB2::bind_nodes()
+{
+    flag.nodes_taken = false;
+
+    for (S32 i = 0; i < 9; i++)
+    {
+        if (nodes[i].ent == NULL)
+        {
+            nodes[i].skin_model = NULL;
+            nodes[i].skin_mat = NULL;
+        }
+        else
+        {
+            xModelInstance* model = models[node_hooks[i].model];
+
+            nodes[i].ent->baseFlags &= 0xfff7;
+            nodes[i].skin_model = model->Data;
+            nodes[i].skin_mat = model->Mat;
+        }
+    }
+
+    setup_node_tags();
+}
+
+void zNPCB_SB2::rebind_nodes(RpAtomic* model, RwMatrixTag* mat)
+{
+    RpAtomic* skin[4];
+
+    skin[0] = model;
+
+    for (S32 i = 1; i < 4; i++)
+    {
+        skin[i] = iModelFile_RWMultiAtomic(skin[i - 1]);
+
+        if (skin[i] == NULL)
+        {
+            return;
+        }
+    }
+
+    flag.nodes_taken = true;
+
+    for (S32 i = 0; i < 9; i++)
+    {
+        if (nodes[i].ent == NULL)
+        {
+            nodes[i].skin_model = NULL;
+            nodes[i].skin_mat = NULL;
+        }
+        else
+        {
+            RpAtomic* atomic = skin[node_hooks[i].model];
+
+            nodes[i].ent->baseFlags &= 0xfff7;
+            nodes[i].skin_model = atomic;
+            nodes[i].skin_mat = mat;
+        }
+    }
+
+    setup_node_tags();
+}
+
+void zNPCB_SB2::setup_node_tags()
+{
+    for (S32 i = 0; i < 9; i++)
+    {
+        RpAtomic* skin = nodes[i].skin_model;
+
+        if (skin == NULL)
+        {
+            continue;
+        }
+
+        if (node_hooks[i].points == 3)
+        {
+            for (S32 j = 0; j < 3; j++)
+            {
+                iModelTagSetup(&nodes[i].v3.tag[j], skin, node_hooks[i].pos[j].x,
+                               node_hooks[i].pos[j].y, node_hooks[i].pos[j].z);
+            }
+        }
+        else
+        {
+            xVec3 up = node_hooks[i].pos[1];
+
+            iModelTagSetup(&nodes[i].v2n1.tag, skin, node_hooks[i].pos[0].x,
+                           node_hooks[i].pos[0].y, node_hooks[i].pos[0].z);
+            iModelTagSetup(&nodes[i].v2n1.uptag, skin, up.x, up.y, up.z);
+        }
+    }
+}
+
+void zNPCB_SB2::check_life()
+{
+    S32 old_life = life;
+
+    life = 0;
+
+    for (S32 i = 0; i < 9; i++)
+    {
+        if (nodes[i].ent != NULL && !zEntDestructObj_isDestroyed(nodes[i].ent))
+        {
+            life++;
+        }
+    }
+
+    update_round();
+
+    if (life < old_life)
+    {
+        ouchie();
+
+        for (S32 i = life; i < old_life; i++)
+        {
+            zEntEvent(this, this, 0x1d7);
+        }
+
+        if (life < 1)
+        {
+            zEntEvent(this, this, 0x24);
         }
     }
 }
@@ -1851,6 +2517,691 @@ void zNPCB_SB2::update_round()
     }
 }
 
+xSurface& zNPCB_SB2::create_surface()
+{
+    xSurface* surf = (xSurface*)xMemAlloc(gActiveHeap, sizeof(xSurface), 0);
+    zSurfaceProps* props = (zSurfaceProps*)xMemAlloc(gActiveHeap, sizeof(zSurfaceProps), 0);
+    zSurfAssetBase* asset = (zSurfAssetBase*)xMemAlloc(gActiveHeap, sizeof(zSurfAssetBase), 0);
+
+    xSurface& def = zSurfaceGetDefault();
+
+    *surf = def;
+    *props = *(zSurfaceProps*)def.moprops;
+    *asset = *props->asset;
+
+    surf->moprops = props;
+    props->asset = asset;
+
+    return *surf;
+}
+
+void zNPCB_SB2::init_hands()
+{
+    static const S32 hand_model[2] = { 1, 2 };
+
+    for (S32 i = 0; i < 2; i++)
+    {
+        hand_data& hand = hands[i];
+
+        hand.hit_platforms = FALSE;
+        hand.hurt_player = FALSE;
+        hand.ent = &bounds[i].ent;
+
+        init_bound_entity(*hand.ent, i, models[hand_model[i]],
+                          (xMat4x3*)xMemAlloc(gActiveHeap, sizeof(xMat4x3), 0));
+
+        hand.ent->baseFlags |= 0x10;
+        hand.ent->moreFlags &= ~2;
+        hand.ent->flags |= 1;
+        hand.ent->pflags |= 0x40;
+
+        for (S32 j = 0; j < 4; j++)
+        {
+            const xVec3& head = hand_hooks[i].head[j];
+            const xVec3& tail = hand_hooks[i].tail[j];
+
+            iModelTagSetup(&hand.head_tag[j], hand.ent->model->Data, head.x, head.y, head.z);
+            iModelTagSetup(&hand.tail_tag[j], hand.ent->model->Data, tail.x, tail.y, tail.z);
+        }
+
+        if (hand.ent->model->Surf == NULL)
+        {
+            hand.ent->model->Surf = &create_surface();
+        }
+
+        ((zSurfaceProps*)hand.ent->model->Surf->moprops)->asset->game_damage_type = 0;
+    }
+}
+
+void zNPCB_SB2::move_hand(zNPCB_SB2::hand_data& hand, F32 dt)
+{
+    xVec3 head[4];
+    xVec3 tail[4];
+
+    for (S32 i = 0; i < 4; i++)
+    {
+        xModelInstance* model = hand.ent->model;
+
+        iModelTagEval(model->Data, &hand.head_tag[i], model->Mat, &head[i]);
+        iModelTagEval(model->Data, &hand.tail_tag[i], model->Mat, &tail[i]);
+    }
+
+    xEnt& ent = *hand.ent;
+    xVec3 old_center = ent.bound.mat->pos;
+
+    parallelepiped_to_obb(ent.bound, head);
+    xQuickCullForBound(&ent.bound.qcd, &ent.bound);
+    zGridUpdateEnt(hand.ent);
+
+    hand.radius = ent.bound.box.box.upper.length();
+
+    if (!hand.hurt_player)
+    {
+        return;
+    }
+
+    xVec3 step = ent.bound.mat->pos - old_center;
+    xVec3 to_player = (const xVec3&)globals.player.ent.model->Mat->pos - old_center;
+
+    if (step.dot(to_player) <= 0.0f ||
+        step.length2() / (dt * dt) < tweak.damage_speed * tweak.damage_speed)
+    {
+        ((zSurfaceProps*)hand.ent->model->Surf->moprops)->asset->game_damage_type = 0;
+        hand.ent->penby = 0x10;
+    }
+    else
+    {
+        ((zSurfaceProps*)hand.ent->model->Surf->moprops)->asset->game_damage_type =
+            player_damaged() ? 0 : 7;
+        hand.ent->penby = 0;
+
+        if (hand.hit_platforms)
+        {
+            check_platform_smack(hand);
+        }
+    }
+}
+
+void zNPCB_SB2::spin_platform(zNPCB_SB2::platform_data& p, const xVec3& axis, F32 max_vel,
+                              F32 accel)
+{
+    p.stopping = FALSE;
+    p.spin.axis = axis;
+    p.spin.ang = 0.0f;
+    p.spin.end_ang = 1e38f;
+    p.spin.max_vel = max_vel;
+    p.spin.accel = accel;
+
+    if (&p == player_platform())
+    {
+        say(7);
+    }
+}
+
+void zNPCB_SB2::check_platform_smack(zNPCB_SB2::hand_data& hand)
+{
+    for (platform_data* p = platforms; p != platforms + 16; p++)
+    {
+        if (p->ent == NULL || p->spin.accel > 0.0f)
+        {
+            continue;
+        }
+
+        xEnt& ent = *hand.ent;
+        xVec3 delta = p->ent->bound.sph.center - ent.bound.sph.center;
+        F32 range = hand.radius + p->radius;
+
+        if (delta.length2() <= range * range &&
+            xOBBHitsOBB(ent.bound.box.box, *ent.bound.mat, p->ent->bound.box.box,
+                        *p->ent->bound.mat))
+        {
+            xVec3 axis;
+
+            if (delta.x * delta.x + delta.z * delta.z <= tweak.spin.min_dist * tweak.spin.min_dist)
+            {
+                axis = p->mat.at;
+                axis.invert();
+            }
+            else
+            {
+                axis = p->mat.right;
+
+                if (p->mat.at.dot(delta) > 0.0f)
+                {
+                    axis.invert();
+                }
+            }
+
+            axis.normalize();
+
+            spin_platform(*p, axis, tweak.spin.vel, tweak.spin.accel);
+            play_sound(SOUND_CHOP_HIT, (const xVec3*)&p->ent->model->Mat->pos, 1.0f);
+        }
+    }
+}
+
+void zNPCB_SB2::update_platforms(F32 dt)
+{
+    platform_data* p = platforms;
+    platform_data* end = p + 16;
+
+    for (; p != end; p++)
+    {
+        if (p->ent == NULL || p->spin.accel <= 0.0f)
+        {
+            continue;
+        }
+
+        xAccelMove(p->spin.ang, p->spin.vel, p->spin.accel, dt, p->spin.end_ang, p->spin.max_vel);
+        p->spin.ang = xfmod(p->spin.ang, 1.0f);
+
+        if (p->spin.vel >= p->spin.max_vel)
+        {
+            p->stopping = TRUE;
+            p->spin.accel = tweak.spin.decel;
+        }
+
+        if (p->spin.vel >= tweak.spin.collide_vel)
+        {
+            p->ent->chkby &= 0xef;
+            p->ent->penby &= 0xef;
+        }
+        else
+        {
+            p->ent->chkby |= 0x10;
+            p->ent->penby |= 0x10;
+        }
+
+        xMat3x3& mat = *(xMat3x3*)p->ent->model->Mat;
+
+        if (p->stopping)
+        {
+            p->spin.end_ang = 0.5f * std::floorf(2.0f * p->spin.ang + 0.5f);
+
+            if (p->spin.vel >= -1e-5f && p->spin.vel <= 1e-5f &&
+                xabs(p->spin.ang - p->spin.end_ang) <= 0.001f)
+            {
+                p->spin.ang = 0.0f;
+                p->spin.vel = 0.0f;
+                p->spin.accel = 0.0f;
+                p->ent->chkby |= 0x10;
+                p->ent->penby |= 0x10;
+                continue;
+            }
+        }
+
+        xMat3x3 rot;
+
+        xMat3x3Rot(&rot, &p->spin.axis, 2.0f * PI * p->spin.ang);
+        xMat3x3Mul(&mat, &p->mat, &rot);
+    }
+}
+
+void zNPCB_SB2::init_bounds()
+{
+    for (S32 i = 2; i < 5; i++)
+    {
+        init_bound_entity(bounds[i].ent, i, model, &bounds[i].mat);
+    }
+}
+
+void zNPCB_SB2::reset_bounds()
+{
+    for (S32 i = 0; i < 3; i++)
+    {
+        bound_data& bound = bounds[i + 2];
+
+        if (tweak.bounds[i].bone >= (S32)model->BoneCount)
+        {
+            tweak.bounds[i].bone = model->BoneCount - 1;
+        }
+
+        if (tweak.bounds[i].is_sphere)
+        {
+            bound.ent.bound.type = XBOUND_TYPE_SPHERE;
+            bound.ent.bound.sph.r = tweak.bounds[i].radius;
+            bound.ent.bound.mat = NULL;
+        }
+        else
+        {
+            bound.ent.bound.type = XBOUND_TYPE_OBB;
+            bound.ent.bound.box.box.upper = tweak.bounds[i].extent;
+            bound.ent.bound.box.box.lower = -bound.ent.bound.box.box.upper;
+            bound.ent.bound.mat = &bound.mat;
+            xMat3x3Euler(&bound.rot_mat, tweak.bounds[i].yaw, tweak.bounds[i].pitch,
+                         tweak.bounds[i].roll);
+        }
+
+        if (tweak.bounds[i].damage_player)
+        {
+            bound.ent.penby = 0;
+            bound.ent.collModel = models[0];
+            bound.ent.model = models[0];
+        }
+        else
+        {
+            bound.ent.penby = 0x10;
+            bound.ent.collModel = models[3];
+            bound.ent.model = models[3];
+        }
+    }
+}
+
+void zNPCB_SB2::update_bounds()
+{
+    for (S32 i = 0; i < 3; i++)
+    {
+        bound_data& bound = bounds[i + 2];
+        xMat4x3 bonemat;
+        const xMat4x3* mat;
+
+        if (tweak.bounds[i].bone == 0)
+        {
+            mat = (const xMat4x3*)model->Mat;
+        }
+        else
+        {
+            const xMat4x3* skin = (const xMat4x3*)model->Mat;
+
+            xMat4x3Mul(&bonemat, &skin[tweak.bounds[i].bone], skin);
+            mat = &bonemat;
+        }
+
+        xVec3 offset;
+
+        xMat3x3RMulVec(&offset, mat, &tweak.bounds[i].offset);
+        bound.ent.bound.sph.center = mat->pos + offset;
+
+        if (!tweak.bounds[i].is_sphere)
+        {
+            xMat3x3Mul(bound.ent.bound.mat, &bound.rot_mat, mat);
+            bound.ent.bound.mat->pos = bound.ent.bound.sph.center;
+        }
+
+        if (tweak.bounds[i].damage_player)
+        {
+            bound.ent.penby = 0;
+            bound.ent.collModel = models[player_damaged() ? 3 : 0];
+            bound.ent.model = bound.ent.collModel;
+        }
+        else
+        {
+            bound.ent.penby = 0x10;
+            bound.ent.collModel = models[3];
+            bound.ent.model = models[3];
+        }
+
+        xQuickCullForBound(&bound.ent.bound.qcd, &bound.ent.bound);
+        zGridUpdateEnt(&bound.ent);
+    }
+}
+
+void zNPCB_SB2::init_slugs()
+{
+    for (S32 i = 0; i < 3; i++)
+    {
+        slug_data& slug = slugs[i];
+
+        slug.stage = SLUG_INACTIVE;
+        slug.ent = NULL;
+        slug.sound_handle = 0;
+
+        xBase* base = zSceneFindObject(xStrHash(slug_hooks[i].name));
+
+        if (base == NULL || !xEntValidType(base->baseType))
+        {
+            continue;
+        }
+
+        slug.ent = (xEnt*)base;
+        slug.ent->flags &= ~1;
+        slug.ent->penby = 0;
+
+        if (slug.ent->baseType == eBaseTypeStatic)
+        {
+            ((zEntSimpleObj*)slug.ent)->sflags |= 8;
+        }
+
+        if (slug.ent->model->Surf == NULL)
+        {
+            slug.ent->model->Surf = &create_surface();
+        }
+
+        ((zSurfaceProps*)slug.ent->model->Surf->moprops)->asset->game_damage_type = 7;
+    }
+}
+
+void zNPCB_SB2::update_aim_slug(zNPCB_SB2::slug_data& slug, F32 dt)
+{
+    const xMat4x3* skin = (const xMat4x3*)model->Mat;
+
+    xMat4x3Mul(&slug.mat, &skin[4], skin);
+
+    xVec3 offset;
+
+    xMat3x3RMulVec(&offset, &slug.mat, &tweak.karate.emit_offset);
+    slug.mat.pos += offset;
+
+    xVec3 dir;
+
+    xMat3x3RMulVec(&dir, &slug.mat, &slug.move_dir);
+
+    slug.stage_delay -= dt;
+
+    if (slug.stage_delay <= 0.0f)
+    {
+        slug.mat.pos += dir * tweak.karate.aim_dist;
+
+        if (slug.abandoned)
+        {
+            if (slug.sound_handle)
+            {
+                kill_sound(SOUND_KARATE_SLUG, slug.sound_handle);
+                slug.sound_handle = 0;
+            }
+
+            slug.stage = SLUG_DYING;
+        }
+    }
+    else
+    {
+        xAccelMove(slug.dist, slug.vel, slug.accel, dt, tweak.karate.aim_dist, slug.max_vel);
+        slug.mat.pos += dir * slug.dist;
+    }
+}
+
+void zNPCB_SB2::update_delay_slug(zNPCB_SB2::slug_data& slug, F32 dt)
+{
+    if (slug.abandoned)
+    {
+        if (slug.sound_handle)
+        {
+            kill_sound(SOUND_KARATE_SLUG, slug.sound_handle);
+            slug.sound_handle = 0;
+        }
+
+        slug.stage = SLUG_DYING;
+    }
+    else
+    {
+        slug.stage_delay -= dt;
+
+        if (slug.stage_delay <= 0.0f)
+        {
+            slug.stage = SLUG_FIRE;
+        }
+    }
+}
+void zNPCB_SB2::update_dying_slug(zNPCB_SB2::slug_data& slug, F32 dt)
+{
+    static F32 fade_time = 1.0f;
+
+    slug.ent->model->Alpha -= fade_time * dt;
+
+    if (slug.ent->model->Alpha <= 0.0f)
+    {
+        slug.stage = SLUG_INACTIVE;
+        slug.ent->flags &= ~1;
+        slug.ent->model->Alpha = 0.0f;
+
+        if (slug.sound_handle)
+        {
+            kill_sound(SOUND_KARATE_SLUG, slug.sound_handle);
+            slug.sound_handle = 0;
+        }
+    }
+}
+
+void zNPCB_SB2::update_fire_slug(zNPCB_SB2::slug_data& slug, F32 dt)
+{
+    xAccelMove(slug.dist, slug.vel, tweak.karate.fire_accel, dt, tweak.karate.fire_vel);
+    xAccelMove(slug.ydist, slug.yvel, tweak.karate.drop_accel, dt, slug.end_ydist,
+               tweak.karate.drop_vel);
+
+    xVec3 pos;
+
+    pos.x = 0.0f;
+    pos.y = slug.ydist;
+    pos.z = slug.dist;
+
+    xMat4x3Toworld(&pos, &slug.dmat, &pos);
+    slug.mat.pos = pos;
+
+    if (!slug.spun && slug.dist >= slug.end_dist)
+    {
+        spin_platform(*slug.target, slug.target->mat.at, tweak.spin.vel, tweak.spin.accel);
+        play_sound(SOUND_KARATE_HIT, (const xVec3*)&slug.target->ent->model->Mat->pos, 1.0f);
+        slug.spun = TRUE;
+    }
+
+    if (slug.dist > tweak.karate.kill_dist)
+    {
+        slug.stage = SLUG_INACTIVE;
+        slug.ent->flags &= ~1;
+        slug.ent->model->Alpha = 0.0f;
+
+        if (slug.sound_handle)
+        {
+            kill_sound(SOUND_KARATE_SLUG, slug.sound_handle);
+            slug.sound_handle = 0;
+        }
+    }
+    else if (slug.dist <= tweak.karate.fade_dist)
+    {
+        slug.ent->model->Alpha = 1.0f;
+    }
+    else
+    {
+        slug.ent->model->Alpha =
+            1.0f - (slug.dist - tweak.karate.fade_dist) /
+                       (tweak.karate.kill_dist - tweak.karate.fade_dist);
+    }
+}
+
+void zNPCB_SB2::slug_interp(F32 t, F32& value)
+{
+    static bool use_smooth = true;
+
+    F32 ct = rc_scale.clamp_t(t);
+
+    if (use_smooth)
+    {
+        rc_scale.eval_smooth(ct, &value);
+    }
+    else
+    {
+        rc_scale.eval_linear(ct, &value);
+    }
+}
+
+namespace
+{
+    void response_curve::eval_linear(F32 t, F32* value)
+    {
+        F32* end = value + values;
+
+        find_active_node(t);
+
+        inode* n0 = curve + active_node;
+        inode* n1 = curve + (active_node + 1);
+
+        F32 t0 = n0->t;
+        F32 dt = n1->t - t0;
+
+        if (-1e-5f <= dt && dt <= 1e-5f)
+        {
+            for (F32* a = n0->value; value != end; value++, a++)
+            {
+                *value = *a;
+            }
+        }
+        else
+        {
+            F32 s = (t - t0) / dt;
+
+            for (F32 *a = n0->value, *b = n1->value; value != end; value++, a++, b++)
+            {
+                *value = s * (*b - *a) + *a;
+            }
+        }
+    }
+
+    void response_curve::find_active_node(F32 t)
+    {
+        u32 size = values * sizeof(F32) + sizeof(node);
+        inode* n = (inode*)((U8*)curve + size * active_node);
+
+        while (true)
+        {
+            while (t < n->t)
+            {
+                n = (inode*)((U8*)n - size);
+                active_node--;
+            }
+
+            if (t <= ((inode*)((U8*)n + size))->t)
+            {
+                return;
+            }
+
+            n = (inode*)((U8*)n + size);
+            active_node++;
+        }
+    }
+
+    F32 response_curve::clamp_t(F32 t) const
+    {
+        return range_limit(t, start_t(), end_t());
+    }
+
+    inode* response_curve::get_node(u32 index) const
+    {
+        return (inode*)((U8*)curve + index * (sizeof(node) + values * sizeof(F32)));
+    }
+
+    F32 response_curve::start_t() const
+    {
+        return curve->t;
+    }
+
+    F32 response_curve::end_t() const
+    {
+        return get_node(nodes - 1)->t;
+    }
+
+    void response_curve::eval_smooth(F32 t, F32* value)
+    {
+        if (nodes == 2)
+        {
+            eval_linear(t, value);
+            return;
+        }
+
+        F32* end = value + values;
+
+        find_active_node(t);
+
+        U32 index = active_node;
+        inode* n0 = curve + index;
+        inode* n1 = curve + (index + 1);
+
+        F32 dt = n1->t - n0->t;
+
+        if (-1e-5f <= dt && dt <= 1e-5f)
+        {
+            for (F32* a = n0->value; value != end; value++, a++)
+            {
+                *value = *a;
+            }
+        }
+        else
+        {
+            F32 u = (t - n0->t) / dt;
+            F32 u2 = u * u;
+            F32 u3 = u2 * u;
+
+            F32 cm = -0.5f * u + -0.5f * u3 + u2;
+            F32 c0 = 1.0f + 1.5f * u3 + -2.5f * u2;
+            F32 c1 = 0.5f * u + -1.5f * u3 + 2.0f * u2;
+            F32 cp = 0.5f * u3 + -0.5f * u2;
+
+            if (index == 0 || nodes - 2 <= index)
+            {
+                if (index == 0)
+                {
+                    F32* p = curve[2].value;
+
+                    for (F32 *a = n0->value, *b = n1->value; value != end; value++, a++, b++, p++)
+                    {
+                        *value = cp * *p + (cm + c0) * *a + c1 * *b;
+                    }
+                }
+                else
+                {
+                    F32* p = curve[index - 1].value;
+
+                    for (F32 *a = n0->value, *b = n1->value; value != end; value++, a++, b++, p++)
+                    {
+                        *value = (c1 + cp) * *b + cm * *p + c0 * *a;
+                    }
+                }
+            }
+            else
+            {
+                F32* pm = curve[index - 1].value;
+                F32* pp = curve[index + 2].value;
+
+                for (F32 *a = n0->value, *b = n1->value; value != end;
+                     value++, a++, b++, pm++, pp++)
+                {
+                    *value = cp * *pp + c1 * *b + cm * *pm + c0 * *a;
+                }
+            }
+        }
+    }
+} // namespace
+
+void zNPCB_SB2::update_slugs(F32 dt)
+{
+    for (slug_data* slug = slugs; slug != slugs + MAX_SLUG; slug++)
+    {
+        switch (slug->stage)
+        {
+        case SLUG_AIM:
+            update_aim_slug(*slug, dt);
+            break;
+        case SLUG_DELAY:
+            update_delay_slug(*slug, dt);
+            break;
+        case SLUG_DYING:
+            update_dying_slug(*slug, dt);
+            break;
+        case SLUG_FIRE:
+            update_fire_slug(*slug, dt);
+            break;
+        default:
+            continue;
+        }
+
+        slug->time += dt;
+
+        F32 scale;
+
+        slug_interp(slug->time, scale);
+
+        if (scale <= 0.0f || slug->ent->model->Alpha <= 0.0f)
+        {
+            slug->ent->flags &= ~1;
+        }
+        else
+        {
+            slug->ent->flags |= 1;
+            slug->ent->model->Scale = scale;
+            xEntReposition(*slug->ent, slug->mat);
+        }
+    }
+}
+
 void zNPCB_SB2::scan_cronies()
 {
     st_XORDEREDARRAY* npclist = zNPCMgr_GetNPCList();
@@ -1869,6 +3220,116 @@ void zNPCB_SB2::scan_cronies()
     }
 }
 
+void zNPCB_SB2::check_hit_fail()
+{
+    F32 exploding = cruise_bubble::exploding();
+
+    if (exploding > 0.0f && !flag.cruise_exploding)
+    {
+        flag.cruise_exploding = true;
+        flag.cruise_hit_target = false;
+        flag.cruise_hit_body = false;
+    }
+
+    if (exploding <= 0.0f && flag.cruise_exploding)
+    {
+        if (!flag.cruise_hit_target && flag.cruise_hit_body)
+        {
+            say(5);
+        }
+
+        flag.cruise_exploding = false;
+    }
+    else if (flag.cruise_exploding)
+    {
+        if (!flag.cruise_hit_target)
+        {
+            S32 size;
+            xEnt** hits = cruise_bubble::get_explode_hits(size);
+
+            for (xEnt** hit = hits; hit != hits + size; hit++)
+            {
+                if (*hit == (xEnt*)plankton)
+                {
+                    flag.cruise_hit_target = true;
+                    break;
+                }
+
+                for (platform_data* p = platforms; p != platforms + 16; p++)
+                {
+                    if (*hit == p->ent)
+                    {
+                        flag.cruise_hit_target = true;
+                        break;
+                    }
+                }
+
+                if (flag.cruise_hit_target)
+                {
+                    break;
+                }
+            }
+        }
+
+        if (!flag.cruise_hit_target && !flag.cruise_hit_body)
+        {
+            xSphere sphere;
+
+            cruise_bubble::get_explode_sphere(sphere.center, sphere.r);
+
+            for (bound_data* bound = bounds; bound != bounds + 5; bound++)
+            {
+                if (xSphereHitsBound(sphere, bound->ent.bound))
+                {
+                    flag.cruise_hit_body = true;
+                    return;
+                }
+            }
+        }
+    }
+}
+
+void zNPCB_SB2::create_glow_light()
+{
+    memset(&glow_light, 0, sizeof(glow_light));
+
+    xLightKit* asset = NULL;
+    U32 id = globals.sceneCur->zen->easset->objectLightKit;
+
+    if (id != 0)
+    {
+        asset = (xLightKit*)xSTFindAsset(id, NULL);
+    }
+
+    glow_light.kit.lightCount = 1;
+    glow_light.kit.tagID = 'LKIT';
+    glow_light.kit.lightList = glow_light.light;
+    glow_light.light[0].type = 1;
+    glow_light.light[0].color.red = 1.0f;
+    glow_light.light[0].color.green = 1.0f;
+    glow_light.light[0].color.blue = 1.0f;
+    glow_light.light[0].color.alpha = 1.0f;
+
+    if (asset != NULL)
+    {
+        const xLightKitLight* src = asset->lightList;
+
+        for (U32 i = 0; i < asset->lightCount && glow_light.kit.lightCount < 8; i++, src++)
+        {
+            xLightKitLight& dst = glow_light.light[glow_light.kit.lightCount];
+
+            if (src->type != 1)
+            {
+                dst = *src;
+                dst.platLight = NULL;
+                glow_light.kit.lightCount++;
+            }
+        }
+    }
+
+    xLightKit_Prepare(&glow_light.kit);
+}
+
 void zNPCB_SB2::destroy_glow_light()
 {
     xLightKit_Destroy(&glow_light.kit);
@@ -1880,6 +3341,14 @@ void zNPCB_SB2::set_glow_light_intensity(F32 intensity)
     glow_light.light[0].color.green = intensity;
     glow_light.light[0].color.blue = intensity;
     RpLightSetColor(glow_light.light[0].platLight, &glow_light.light[0].color);
+}
+
+void zNPCB_SB2::say(int which)
+{
+    if (newsfish != NULL)
+    {
+        newsfish->say(say_set[which].list, say_set[which].size, 0, -1);
+    }
 }
 
 xFactoryInst* zNPCGoalBossSB2Intro::create(S32 who, RyzMemGrow* grow, void* info)
@@ -1930,6 +3399,37 @@ S32 zNPCGoalBossSB2Idle::Enter(F32 dt, void* updCtxt)
 S32 zNPCGoalBossSB2Idle::Exit(F32 dt, void* updCtxt)
 {
     return xGoal::Exit(dt, updCtxt);
+}
+
+S32 zNPCGoalBossSB2Idle::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    if (transitioning)
+    {
+        if (g_hash_bossanim[ANIM_Idle01] != owner.AnimCurStateID())
+        {
+            return 0;
+        }
+
+        transitioning = FALSE;
+        owner.flag.face_player = true;
+        owner.delay = 0.0f;
+    }
+
+    if (owner.player_on_ground())
+    {
+        *trantype = GOAL_TRAN_SET;
+        return NPC_GOAL_BOSSSB2HUNT;
+    }
+
+    if (owner.delay < owner.stage_delay)
+    {
+        return 0;
+    }
+
+    owner.stage_delay = 0.0f;
+    *trantype = GOAL_TRAN_SET;
+
+    return owner.next_goal();
 }
 
 xFactoryInst* zNPCGoalBossSB2Taunt::create(S32 who, RyzMemGrow* grow, void* info)
@@ -1993,6 +3493,24 @@ S32 zNPCGoalBossSB2Dizzy::Exit(F32 dt, void* updCtxt)
     return xGoal::Exit(dt, updCtxt);
 }
 
+S32 zNPCGoalBossSB2Dizzy::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    if (!owner.flag.dizzy)
+    {
+        *trantype = GOAL_TRAN_SET;
+        return owner.next_goal();
+    }
+
+    if (!owner.player_on_ground())
+    {
+        return 0;
+    }
+
+    *trantype = GOAL_TRAN_SET;
+
+    return NPC_GOAL_BOSSSB2HUNT;
+}
+
 xFactoryInst* zNPCGoalBossSB2Hit::create(S32 who, RyzMemGrow* grow, void* info)
 {
     return new (who, grow) zNPCGoalBossSB2Hit(who, (zNPCB_SB2&)*info);
@@ -2041,6 +3559,124 @@ xFactoryInst* zNPCGoalBossSB2Hunt::create(S32 who, RyzMemGrow* grow, void* info)
     return new (who, grow) zNPCGoalBossSB2Hunt(who, (zNPCB_SB2&)*info);
 }
 
+S32 zNPCGoalBossSB2Hit::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    if (owner.AnimTimeRemain(NULL) >= dt + 0.001f)
+    {
+        return 0;
+    }
+
+    if (owner.life < 1)
+    {
+        *trantype = GOAL_TRAN_SET;
+        return NPC_GOAL_BOSSSB2DEATH;
+    }
+
+    if (!owner.flag.dizzy)
+    {
+        *trantype = GOAL_TRAN_SET;
+        return owner.next_goal();
+    }
+
+    *trantype = GOAL_TRAN_SET;
+
+    return NPC_GOAL_BOSSSB2DIZZY;
+}
+
+S32 zNPCGoalBossSB2Hunt::Enter(F32 dt, void* updCtxt)
+{
+    owner.flag.face_player = true;
+    owner.reset_stage();
+    following = FALSE;
+    owner.delay = 0.0f;
+    owner.ymove.begin = owner.start_location().y;
+    owner.ymove.end = owner.ymove.begin + tweak.hunt.height;
+
+    F32 t = range_limit((owner.location().y - owner.ymove.begin) / tweak.hunt.height, 0.0f, 1.0f);
+
+    owner.ymove.end_time = tweak.hunt.move_time;
+    owner.ymove.time = owner.ymove.end_time * xSCurveInverse(t);
+    owner.flag.move = zNPCB_SB2::MOVE_Y;
+
+    return zNPCGoalCommon::Enter(dt, updCtxt);
+}
+
+F32 xSCurveInverse(F32 val)
+{
+    F32 half = 0.5f * val;
+
+    if (0.25f + half < 0.5f)
+    {
+        return xsqrt(half);
+    }
+
+    return 1.0f - xsqrt(0.5f * (1.0f - val));
+}
+
+S32 zNPCGoalBossSB2Hunt::Exit(F32 dt, void* updCtxt)
+{
+    owner.ymove.end = owner.start_location().y;
+    owner.ymove.begin = owner.ymove.begin + tweak.hunt.height;
+
+    F32 t = range_limit((owner.ymove.end - owner.location().y) / tweak.hunt.height, 0.0f, 1.0f);
+
+    owner.ymove.end_time = tweak.hunt.move_time;
+    owner.ymove.time = owner.ymove.end_time * xSCurveInverse(t);
+    owner.flag.move = zNPCB_SB2::MOVE_Y;
+
+    owner.plankton->here_boy();
+    owner.say(10);
+
+    return xGoal::Exit(dt, updCtxt);
+}
+
+S32 zNPCGoalBossSB2Hunt::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    if (!owner.flag.dizzy && owner.player_damaged())
+    {
+        *trantype = GOAL_TRAN_SET;
+        return NPC_GOAL_BOSSSB2TAUNT;
+    }
+
+    S32 on_ground = owner.player_on_ground();
+
+    if (!following)
+    {
+        if (!on_ground)
+        {
+            *trantype = GOAL_TRAN_SET;
+            return owner.next_goal();
+        }
+
+        if (owner.delay >= tweak.hunt.warm_up)
+        {
+            following = TRUE;
+            owner.plankton->sickum();
+            owner.delay = 0.0f;
+            owner.say(12);
+        }
+
+        return 0;
+    }
+
+    if (!on_ground)
+    {
+        if (owner.delay < tweak.hunt.cool_down)
+        {
+            return 0;
+        }
+
+        owner.plankton->here_boy();
+        *trantype = GOAL_TRAN_SET;
+
+        return owner.next_goal();
+    }
+
+    owner.delay = 0.0f;
+
+    return 0;
+}
+
 xFactoryInst* zNPCGoalBossSB2Swipe::create(S32 who, RyzMemGrow* grow, void* info)
 {
     return new (who, grow) zNPCGoalBossSB2Swipe(who, (zNPCB_SB2&)*info);
@@ -2078,11 +3714,67 @@ S32 zNPCGoalBossSB2Swipe::Exit(F32 dt, void* updCtxt)
     return xGoal::Exit(dt, updCtxt);
 }
 
+S32 zNPCGoalBossSB2Swipe::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    if (!started)
+    {
+        if (can_start())
+        {
+            started = TRUE;
+            owner.flag.face_player = false;
+            owner.activate_hand(owner.active_hand, FALSE);
+            owner.AnimStart(begin_anim, 0);
+            play_sound(SOUND_SWIPE, &owner.sound_loc.hand[owner.active_hand], 1.0f);
+        }
+
+        if (!owner.player_on_ground())
+        {
+            return 0;
+        }
+
+        *trantype = GOAL_TRAN_SET;
+
+        return NPC_GOAL_BOSSSB2HUNT;
+    }
+
+    if (!holding &&
+        (begin_anim != owner.AnimCurStateID() || owner.AnimTimeRemain(NULL) < dt + 0.001f))
+    {
+        owner.delay = 0.0f;
+        holding = TRUE;
+    }
+
+    if (holding && !said && owner.delay > tweak.help.delay_vuln)
+    {
+        if (!cruise_bubble::active())
+        {
+            owner.say(8);
+        }
+
+        said = TRUE;
+    }
+
+    if (!holding || !owner.player_on_ground())
+    {
+        if (!holding || owner.delay < tweak.swipe.hold_time)
+        {
+            return 0;
+        }
+
+        *trantype = GOAL_TRAN_SET;
+
+        return owner.next_goal();
+    }
+
+    *trantype = GOAL_TRAN_SET;
+
+    return NPC_GOAL_BOSSSB2HUNT;
+}
+
 S32 zNPCGoalBossSB2Swipe::can_start() const
 {
-    S32 tempStart;
-    tempStart = owner.player_platform();
-    return tempStart != 0;
+    zNPCB_SB2::platform_data* platform = owner.player_platform();
+    return platform != NULL;
 }
 
 xFactoryInst* zNPCGoalBossSB2Chop::create(S32 who, RyzMemGrow* grow, void* info)
@@ -2121,6 +3813,86 @@ S32 zNPCGoalBossSB2Chop::Exit(F32 dt, void* updCtxt)
     return xGoal::Exit(dt, updCtxt);
 }
 
+S32 zNPCGoalBossSB2Chop::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    if (!started)
+    {
+        if (owner.player_on_ground())
+        {
+            *trantype = GOAL_TRAN_SET;
+            return NPC_GOAL_BOSSSB2HUNT;
+        }
+
+        if (owner.player_damaged())
+        {
+            *trantype = GOAL_TRAN_SET;
+            return NPC_GOAL_BOSSSB2TAUNT;
+        }
+
+        if (!targetted)
+        {
+            if (can_start())
+            {
+                owner.flag.face_player = false;
+
+                if (g_hash_bossanim[ANIM_Idle01] == owner.AnimCurStateID())
+                {
+                    started = TRUE;
+                    owner.AnimStart(begin_anim, 0);
+                    play_sound(SOUND_CHOP_WINDUP, &owner.sound_loc.hand[owner.active_hand], 1.0f);
+                }
+                else
+                {
+                    targetted = TRUE;
+                    owner.delay = 0.0f;
+                }
+            }
+        }
+        else if (owner.delay >= tweak.chop.delay)
+        {
+            started = TRUE;
+            owner.AnimStart(loop_anim, 1);
+            play_sound(SOUND_CHOP_SWING, &owner.sound_loc.hand[owner.active_hand], 1.0f);
+        }
+
+        return 0;
+    }
+
+    if (loop_anim == owner.AnimCurStateID() && owner.AnimTimeRemain(NULL) < dt + 0.001f)
+    {
+        S32 goal = owner.next_goal();
+
+        if (goal != NPC_GOAL_BOSSSB2CHOP)
+        {
+            *trantype = GOAL_TRAN_SET;
+            return goal;
+        }
+
+        targetted = FALSE;
+        started = FALSE;
+        owner.flag.face_player = true;
+    }
+
+    return 0;
+}
+
+S32 zNPCGoalBossSB2Chop::can_start() const
+{
+    zNPCB_SB2::platform_data* platform = owner.player_platform();
+
+    if (platform == NULL)
+    {
+        return FALSE;
+    }
+
+    xVec3 delta = platform->ent->bound.mat->pos - owner.location();
+    xVec3& at = owner.facing();
+
+    F32 ang = xrmod(PI + (xatan2(at.x, at.z) - xatan2(delta.x, delta.z)));
+
+    return xabs(ang - PI) < 0.19634955f;
+}
+
 xFactoryInst* zNPCGoalBossSB2Karate::create(S32 who, RyzMemGrow* grow, void* info)
 {
     return new (who, grow) zNPCGoalBossSB2Karate(who, (zNPCB_SB2&)*info);
@@ -2137,11 +3909,102 @@ S32 zNPCGoalBossSB2Karate::Exit(F32 dt, void* updCtxt)
     return xGoal::Exit(dt, updCtxt);
 }
 
+S32 zNPCGoalBossSB2Karate::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    if (!started)
+    {
+        if (can_start())
+        {
+            started = TRUE;
+            owner.delay = 0.0f;
+
+            if (g_hash_bossanim[ANIM_Idle01] == owner.AnimCurStateID())
+            {
+                owner.AnimStart(g_hash_bossanim[ANIM_KarateStart], 0);
+            }
+        }
+
+        if (owner.player_on_ground())
+        {
+            *trantype = GOAL_TRAN_SET;
+            return NPC_GOAL_BOSSSB2HUNT;
+        }
+
+        if (!owner.player_damaged())
+        {
+            return 0;
+        }
+
+        *trantype = GOAL_TRAN_SET;
+
+        return NPC_GOAL_BOSSSB2TAUNT;
+    }
+
+    S32 count = 0;
+
+    for (S32 i = 0; i < 3; i++)
+    {
+        if (!emitted[i] && owner.delay >= tweak.karate.delay_emit[i])
+        {
+            owner.emit_slug((zNPCB_SB2::slug_enum)i);
+            emitted[i] = TRUE;
+        }
+
+        if (emitted[i])
+        {
+            count++;
+        }
+    }
+
+    if (owner.slugs_ready())
+    {
+        zNPCB_SB2::platform_data* platform = owner.player_platform();
+
+        if (platform != NULL)
+        {
+            S32 index = owner.platform_index(*platform);
+
+            owner.fire_slug(zNPCB_SB2::SLUG_KAH, owner.platforms[(index - 1) & 0xf]);
+            owner.fire_slug(zNPCB_SB2::SLUG_RAH, owner.platforms[index]);
+            owner.fire_slug(zNPCB_SB2::SLUG_TAY, owner.platforms[(index + 1) & 0xf]);
+            owner.flag.face_player = false;
+        }
+    }
+
+    if (owner.player_on_ground())
+    {
+        *trantype = GOAL_TRAN_SET;
+        return NPC_GOAL_BOSSSB2HUNT;
+    }
+
+    if (owner.player_damaged())
+    {
+        *trantype = GOAL_TRAN_SET;
+        return NPC_GOAL_BOSSSB2TAUNT;
+    }
+
+    if (count == 3 && owner.slugs_inactive())
+    {
+        S32 goal = owner.next_goal();
+
+        if (goal != NPC_GOAL_BOSSSB2KARATE)
+        {
+            *trantype = GOAL_TRAN_SET;
+            return goal;
+        }
+
+        started = FALSE;
+        owner.flag.face_player = true;
+        memset(emitted, 0, sizeof(emitted));
+    }
+
+    return 0;
+}
+
 S32 zNPCGoalBossSB2Karate::can_start() const
 {
-    S32 tempStart;
-    tempStart = owner.player_platform();
-    return tempStart != 0;
+    zNPCB_SB2::platform_data* platform = owner.player_platform();
+    return platform != NULL;
 }
 
 xFactoryInst* zNPCGoalBossSB2Death::create(S32 who, RyzMemGrow* grow, void* info)
@@ -2165,6 +4028,60 @@ S32 zNPCGoalBossSB2Death::Process(en_trantype*, F32, void*, xScene*)
     return 0;
 }
 
+namespace auto_tweak
+{
+    template <>
+    void load_param<S32, S32>(S32& value, S32 scale, S32 lo, S32 hi, xModelAssetParam* ap,
+                              U32 apsize, const char* name)
+    {
+        S32 v = zParamGetInt(ap, apsize, name, value);
+
+        if (v < lo)
+        {
+            v = lo;
+        }
+        else if (v > hi)
+        {
+            v = hi;
+        }
+
+        value = v * scale;
+    }
+
+    template <>
+    void load_param<bool, S32>(bool& value, S32, S32, S32, xModelAssetParam* ap, U32 apsize,
+                               const char* name)
+    {
+        value = zParamGetInt(ap, apsize, name, value) != 0;
+    }
+
+    template <>
+    void load_param<xVec3, S32>(xVec3& value, S32, S32, S32, xModelAssetParam* ap, U32 apsize,
+                                const char* name)
+    {
+        xVec3 def = value;
+        zParamGetVector(ap, apsize, name, def, &value);
+    }
+
+    template <>
+    void load_param<F32, F32>(F32& value, F32 scale, F32 lo, F32 hi, xModelAssetParam* ap,
+                              U32 apsize, const char* name)
+    {
+        value = zParamGetFloat(ap, apsize, name, value);
+
+        if (value < lo)
+        {
+            value = lo;
+        }
+        else if (value > hi)
+        {
+            value = hi;
+        }
+
+        value = value * scale;
+    }
+} // namespace auto_tweak
+
 void zNPCB_SB2::choose_hand()
 {
     S32 r = xrand();
@@ -2184,6 +4101,40 @@ void zNPCB_SB2::render_debug()
 xVec3& zNPCB_SB2::get_home() const
 {
     return reinterpret_cast<xVec3&>(this->asset->pos);
+}
+
+void zNPCB_SB2::set_location(const xVec2& loc)
+{
+    // The retail code assigns a scalar to the whole model position vector here;
+    // the y component is overwritten again from the entity frame every update.
+    frame->mat.pos.x = loc.x;
+    (xVec3&)model->Mat->pos = loc.x;
+    frame->mat.pos.z = loc.y;
+    (xVec3&)model->Mat->pos = loc.y;
+}
+
+bool zNPCB_SB2::turning() const
+{
+    bool result = FALSE;
+    xVec2 cur = {};
+
+    cur.x = model->Mat->at.x;
+    cur.y = model->Mat->at.z;
+
+    if (!(-1e-5f <= turn.vel && turn.vel <= 1e-5f) ||
+        (!(-1e-5f <= turn.accel && turn.accel <= 1e-5f) &&
+         (turn.dir.x <= turn.dir.y || xabs(turn.dir.x - cur.x) >= 0.001f) &&
+         (turn.dir.x >= turn.dir.y || xabs(turn.dir.y - cur.y) >= 0.001f)))
+    {
+        result = TRUE;
+    }
+
+    return result;
+}
+
+void zNPCB_SB2::set_location(const xVec3& loc)
+{
+    (xVec3&)model->Mat->pos = frame->mat.pos = loc;
 }
 
 xVec3& zNPCB_SB2::start_location() const

@@ -217,12 +217,16 @@ struct zNPCB_SB2 : zNPCBoss
     void Destroy();
     void Process(xScene* xscn, F32 dt);
     void NewTime(xScene*, F32);
+    U32 AnimPick(S32 animID, en_NPC_GOAL_SPOT gspot, xGoal* goal);
     void init_nodes();
     void move_nodes();
     void render_nodes();
     void bind_nodes();
     void rebind_nodes(RpAtomic*, RwMatrixTag*);
+    void setup_node_tags();
     void move_hand(zNPCB_SB2::hand_data&, F32);
+    void spin_platform(zNPCB_SB2::platform_data& p, const xVec3& axis, F32 max_vel, F32 accel);
+    void check_platform_smack(zNPCB_SB2::hand_data& hand);
     void update_bounds();
     void update_platforms(F32);
     void update_slugs(F32);
@@ -233,7 +237,11 @@ struct zNPCB_SB2 : zNPCBoss
     void update_follow(F32 dt);
     void update_ymove(F32 dt);
     void update_move(F32 dt);
+    void update_aim_slug(zNPCB_SB2::slug_data& slug, F32 dt);
     void update_delay_slug(zNPCB_SB2::slug_data& slug, F32 dt);
+    void update_dying_slug(zNPCB_SB2::slug_data& slug, F32 dt);
+    void update_fire_slug(zNPCB_SB2::slug_data& slug, F32 dt);
+    void slug_interp(F32 t, F32& value);
     void update_camera(F32 dt);
     void update_nodes(F32 dt);
     void show_nodes();
@@ -255,7 +263,7 @@ struct zNPCB_SB2 : zNPCBoss
     void HoldUpDude();
     void ThanksImDone();
     void reset_speed();
-    S32 player_platform();
+    zNPCB_SB2::platform_data* player_platform();
     void activate_hand(zNPCB_SB2::hand_enum, bool);
     void deactivate_hand(zNPCB_SB2::hand_enum);
     S32 player_on_ground() const;
@@ -271,6 +279,9 @@ struct zNPCB_SB2 : zNPCBoss
     void choose_hand();
     bool player_damaged() const;
     S32 platform_index(const zNPCB_SB2::platform_data& p) const;
+    void set_location(const xVec2& loc);
+    void set_location(const xVec3& loc);
+    bool turning() const;
     xVec3& location() const;
     xVec3& get_home() const;
     xVec3& start_location() const;
@@ -303,6 +314,7 @@ struct zNPCGoalBossSB2Idle : zNPCGoalCommon
     zNPCB_SB2& owner;
 
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
+    S32 Process(en_trantype*, F32, void*, xScene*);
     S32 Enter(F32, void*);
     S32 Exit(F32, void*);
 };
@@ -348,6 +360,7 @@ struct zNPCGoalBossSB2Hit : zNPCGoalCommon
     zNPCB_SB2& owner;
 
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
+    S32 Process(en_trantype*, F32, void*, xScene*);
     S32 Enter(F32, void*);
     S32 Exit(F32, void*);
 };
@@ -363,6 +376,9 @@ struct zNPCGoalBossSB2Hunt : zNPCGoalCommon
     zNPCB_SB2& owner;
 
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
+    S32 Process(en_trantype*, F32, void*, xScene*);
+    S32 Enter(F32, void*);
+    S32 Exit(F32, void*);
 };
 
 struct zNPCGoalBossSB2Swipe : zNPCGoalCommon
@@ -381,6 +397,7 @@ struct zNPCGoalBossSB2Swipe : zNPCGoalCommon
     zNPCB_SB2& owner;
 
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
+    S32 Process(en_trantype*, F32, void*, xScene*);
     S32 Enter(F32 dt, void* updCtxt);
     S32 Exit(F32 dt, void* updCtxt);
     S32 can_start() const;
@@ -401,8 +418,10 @@ struct zNPCGoalBossSB2Chop : zNPCGoalCommon
     zNPCB_SB2& owner;
 
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
+    S32 Process(en_trantype*, F32, void*, xScene*);
     S32 Enter(F32 dt, void* updCtxt);
     S32 Exit(F32 dt, void* updCtxt);
+    S32 can_start() const;
 };
 
 struct zNPCGoalBossSB2Karate : zNPCGoalCommon
@@ -417,6 +436,7 @@ struct zNPCGoalBossSB2Karate : zNPCGoalCommon
     zNPCB_SB2& owner;
 
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
+    S32 Process(en_trantype*, F32, void*, xScene*);
     S32 Enter(F32 dt, void* updCtxt);
     S32 Exit(F32, void*);
     S32 can_start() const;
