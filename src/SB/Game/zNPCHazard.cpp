@@ -214,13 +214,13 @@ void NPCHazard::Reconfigure(en_npchaz haztype)
 {
     HAZNotify* noter = this->cb_notify;
     zNPCCommon* npc_old = this->npc_owner;
-    xVec3 old_pos;
-    xVec3Copy(&old_pos, &this->pos_hazard);
+    xVec3 pos_old;
+    xVec3Copy(&pos_old, &this->pos_hazard);
     this->Cleanup();
     this->WipeIt();
     this->flg_hazard = 0x21;
     this->ConfigHelper(haztype);
-    this->PosSet(&old_pos);
+    this->PosSet(&pos_old);
     this->NotifyCBSet(noter);
     this->SetNPCOwner(npc_old);
     if (this->cb_notify != NULL)
@@ -243,38 +243,38 @@ UVAModelInfo* NPCHazard::GetUVAInfo(en_hazmodel which, F32 uvel, F32 vvel)
     return uva;
 }
 
-S32 NPCHazard::GrabModel(en_hazmodel which)
+S32 NPCHazard::GrabModel(en_hazmodel idx_model)
 {
-    xVec3 rot = { 0.0f, 0.0f, 0.0f };
-    xMat4x3 mat;
+    xVec3 ang_orient = { 0.0f, 0.0f, 0.0f };
+    xMat4x3 frame;
 
     if (this->mdl_hazard != NULL)
     {
         FreeModel();
     }
 
-    RpAtomic* raw = g_hazard_rawModel[which];
-    if (raw != NULL)
+    RpAtomic* raw_model = g_hazard_rawModel[idx_model];
+    if (raw_model != NULL)
     {
-        this->mdl_hazard = xModelInstanceAlloc(raw, NULL, 0, 0, NULL);
+        this->mdl_hazard = xModelInstanceAlloc(raw_model, NULL, 0, 0, NULL);
         if (this->mdl_hazard == NULL)
         {
             this->flg_hazard &= ~0x100;
         }
         else
         {
-            xMat3x3Euler(&mat, &rot);
-            xVec3Copy(&mat.pos, &g_O3);
-            mat.flags = 0;
-            xModelSetFrame(this->mdl_hazard, &mat);
+            xMat3x3Euler(&frame, &ang_orient);
+            xVec3Copy(&frame.pos, &g_O3);
+            frame.flags = 0;
+            xModelSetFrame(this->mdl_hazard, &frame);
             this->flg_hazard |= 0x100;
 
-            U32 pipeFlags = xModelGetPipeFlags(raw);
-            if (((pipeFlags >> 12) & 0xf) == 2)
+            U32 flg_pipespec = xModelGetPipeFlags(raw_model);
+            if (((flg_pipespec >> 12) & 0xf) == 2)
             {
                 this->flg_hazard |= 0x400;
             }
-            if ((pipeFlags & 0xc0) == 0x40)
+            if ((flg_pipespec & 0xc0) == 0x40)
             {
                 this->flg_hazard |= 0x800;
             }
@@ -1097,18 +1097,18 @@ void NPCHazard::TarTarSplash(const xVec3* dir_norm)
 {
     xVec3 up;
     xVec3 at;
-    xVec3 right;
+    xVec3 rt;
 
     if (dir_norm != NULL)
     {
         up = *dir_norm;
-        NPCC_MakeArbPlane(dir_norm, &at, &right);
+        NPCC_MakeArbPlane(dir_norm, &at, &rt);
     }
     else
     {
         up = *(xVec3*)Up();
         at = *(xVec3*)At();
-        right = *(xVec3*)Right();
+        rt = *(xVec3*)Right();
     }
 
     xVec3 pos_emit = pos_hazard;

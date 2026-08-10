@@ -421,11 +421,11 @@ zLightning* zLightningAdd(_tagLightningAdd* add)
     return new_lightning;
 }
 
-static void UpdateLightning(zLightning* l, F32 dt)
+static void UpdateLightning(zLightning* l, F32 seconds)
 {
     if (!(l->flags & 0x10))
     {
-        l->time_left -= dt;
+        l->time_left -= seconds;
     }
 
     if (l->time_left <= 0.0f)
@@ -448,7 +448,7 @@ static void UpdateLightning(zLightning* l, F32 dt)
         if (l->type == LYT_TYPE_LINE || l->type == LYT_TYPE_ZEUS)
         {
             S32 i;
-            F32 full = l->legacy.rand_radius * dt;
+            F32 full = l->legacy.rand_radius * seconds;
             F32 half = 0.5f * full;
             
             for (i = 1; i < l->legacy.total_points - 1; i++)
@@ -473,7 +473,7 @@ static void UpdateLightning(zLightning* l, F32 dt)
             xVec3Sub(&dir, &l->legacy.base_point[l->legacy.total_points - 1], &l->legacy.base_point[0]);
             xVec3Normalize(&dir, &dir);
 
-            F32 full = l->legacy.rand_radius * dt;
+            F32 full = l->legacy.rand_radius * seconds;
             F32 half = 0.5f * full;
             
             for (S32 i = 1; i < l->legacy.total_points - 1; i++)
@@ -500,12 +500,12 @@ static void UpdateLightning(zLightning* l, F32 dt)
             info.pos = l->legacy.point[(rand / l->legacy.total_points) * l->legacy.total_points - rand];
             xrand();
             
-            xParEmitterEmitCustom(sSparkEmitter, dt, &info);
+            xParEmitterEmitCustom(sSparkEmitter, seconds, &info);
         }
     }
     else
     {
-        l->func.endParam[0] += dt * (l->func.endVel[0] * sLFuncShift);
+        l->func.endParam[0] += seconds * (l->func.endVel[0] * sLFuncShift);
         while (l->func.endParam[0] > sLFuncEnd[9])
         {
             l->func.endParam[0] -= 10.0f;
@@ -516,7 +516,7 @@ static void UpdateLightning(zLightning* l, F32 dt)
             l->func.endParam[0] += 10.0f;
         }
 
-        l->func.endParam[1] += dt * (l->func.endVel[1] * sLFuncShift);
+        l->func.endParam[1] += seconds * (l->func.endVel[1] * sLFuncShift);
         while (l->func.endParam[1] > sLFuncEnd[9])
         {
             l->func.endParam[1] -= 10.0f;
@@ -539,24 +539,24 @@ static void lightningTweakStart(const tweak_info& t)
     zLightningAdd(&gLightningTweakAddInfo);
 }
 
-void zLightningUpdate(F32 dt)
+void zLightningUpdate(F32 seconds)
 {
     S32 i;
     for (i = 0; i < NUM_LIGHTNING; i++)
     {
         if (sLightning[i] != NULL && sLightning[i]->flags & 0x1)
         {
-            UpdateLightning(sLightning[i], dt);
+            UpdateLightning(sLightning[i], seconds);
         }
     }
 
-    sLFuncUVOffset = 1.0f * dt + sLFuncUVOffset;
+    sLFuncUVOffset = 1.0f * seconds + sLFuncUVOffset;
     if (sLFuncUVOffset > 1.0f)
     {
         sLFuncUVOffset -= 1.0f;
     }
 
-    sLFuncJerkTime += 20.0f * dt;
+    sLFuncJerkTime += 20.0f * seconds;
     if (!(sLFuncJerkTime > 1.0f))
     {
         return;
@@ -677,36 +677,36 @@ void zLightningModifyEndpoints(zLightning* l, xVec3* start, xVec3* end)
 
         xVec3Cross(&side, &l->legacy.arc_normal, &dir);
 
-        F32 param = 0.0f;
-        F32 dparam = 1.0f / (l->legacy.total_points - 1.0f);
-        S32 holding = 1;
+        F32 pos = 0.0f;
+        F32 inc = 1.0f / (l->legacy.total_points - 1.0f);
+        S32 zeusOnStraightPoint = 1;
 
         for (S32 i = 0; i < l->legacy.total_points; i++)
         {
             if (l->flags & 0x80)
             {
-                S32 k = i - (l->legacy.total_points - l->legacy.end_points);
+                S32 j = i - (l->legacy.total_points - l->legacy.end_points);
 
-                if (k < 0)
+                if (j < 0)
                 {
                     l->legacy.base_point[i] = start[i];
                 }
                 else
                 {
-                    l->legacy.base_point[i] = end[k];
+                    l->legacy.base_point[i] = end[j];
                 }
             }
             else
             {
-                xVec3Lerp(&l->legacy.base_point[i], start, end, param);
+                xVec3Lerp(&l->legacy.base_point[i], start, end, pos);
             }
 
             if (l->type == LYT_TYPE_ZEUS && i != 0 && i != l->legacy.total_points - 1)
             {
-                if (holding)
+                if (zeusOnStraightPoint)
                 {
                     xVec3Copy(&hold, &l->legacy.base_point[i]);
-                    holding = 0;
+                    zeusOnStraightPoint = 0;
                 }
                 else
                 {
@@ -715,13 +715,13 @@ void zLightningModifyEndpoints(zLightning* l, xVec3* start, xVec3* end)
                                    l->legacy.zeus.normal_offset);
                     xVec3AddScaled(&l->legacy.base_point[i], &dir, -l->legacy.zeus.back_offset);
                     xVec3AddScaled(&l->legacy.base_point[i], &side, -l->legacy.zeus.side_offset);
-                    holding = 1;
+                    zeusOnStraightPoint = 1;
                 }
             }
 
             if (l->flags & 0x20)
             {
-                F32 arc = -4.0f * (param * param) + 4.0f * param;
+                F32 arc = -4.0f * (pos * pos) + 4.0f * pos;
 
                 if (arc > 0.0f)
                 {
@@ -730,7 +730,7 @@ void zLightningModifyEndpoints(zLightning* l, xVec3* start, xVec3* end)
                 }
             }
 
-            param += dparam;
+            pos += inc;
         }
 
         l->legacy.point[0] = l->legacy.base_point[0];

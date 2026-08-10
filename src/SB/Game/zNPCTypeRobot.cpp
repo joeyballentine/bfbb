@@ -368,51 +368,51 @@ xAnimTable* ZNPC_AnimTable_Fodder()
     int ourAnims[16] = { 0x01, 0x03, 0x02, 0x04, 0x05, 0x22, 0x23, 0x24,
                          0x0e, 0x14, 0x16, 0x15, 0x25, 0x26, 0x06, 0x00 };
 
-    xAnimTable* pxVar1 = (xAnimTable*)xAnimTableNew("zNPCFodder", NULL, 0);
+    xAnimTable* table = (xAnimTable*)xAnimTableNew("zNPCFodder", NULL, 0);
 
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x01], 0x110, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x01], 0x110, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x03], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x03], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x02], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x02], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x04], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x04], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x05], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x05], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x22], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x22], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x23], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x23], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x24], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x24], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x0e], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x0e], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x14], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x14], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x16], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x16], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x15], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x15], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x25], 0x000, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x25], 0x000, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x26], 0x000, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x26], 0x000, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x06], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x06], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
 
-    NPCC_BuildStandardAnimTran(pxVar1, g_strz_roboanim, ourAnims, 1, 0.2f);
+    NPCC_BuildStandardAnimTran(table, g_strz_roboanim, ourAnims, 1, 0.2f);
 
-    xAnimTableNewTransition(pxVar1, g_strz_roboanim[0x14], g_strz_roboanim[0x25], NULL, NULL, 0x10,
+    xAnimTableNewTransition(table, g_strz_roboanim[0x14], g_strz_roboanim[0x25], NULL, NULL, 0x10,
                             0, 0.0f, 0.0f, 0, 0, 0.2f, NULL);
-    xAnimTableNewTransition(pxVar1, g_strz_roboanim[0x16], g_strz_roboanim[0x25], NULL, NULL, 0x10,
+    xAnimTableNewTransition(table, g_strz_roboanim[0x16], g_strz_roboanim[0x25], NULL, NULL, 0x10,
                             0, 0.0f, 0.0f, 0, 0, 0.2f, NULL);
-    xAnimTableNewTransition(pxVar1, g_strz_roboanim[0x15], g_strz_roboanim[0x25], NULL, NULL, 0x10,
+    xAnimTableNewTransition(table, g_strz_roboanim[0x15], g_strz_roboanim[0x25], NULL, NULL, 0x10,
                             0, 0.0f, 0.0f, 0, 0, 0.2f, NULL);
-    xAnimTableNewTransition(pxVar1, g_strz_roboanim[0x22], g_strz_roboanim[0x23], NULL, NULL, 0x10,
+    xAnimTableNewTransition(table, g_strz_roboanim[0x22], g_strz_roboanim[0x23], NULL, NULL, 0x10,
                             0, 0.0f, 0.0f, 0, 0, 0.2f, NULL);
 
-    return pxVar1;
+    return table;
 }
 
 xAnimTable* ZNPC_AnimTable_Hammer()
@@ -421,64 +421,64 @@ xAnimTable* ZNPC_AnimTable_Hammer()
         0x0e, 0x18, 0x19, 0x1a, 0x1b, 0x00,
     };
 
-    xAnimTable* pxVar1 = xAnimTableNew("zNPCHammer", NULL, 0);
-    ZNPC_AnimTable_RobotBase(pxVar1);
+    xAnimTable* table = xAnimTableNew("zNPCHammer", NULL, 0);
+    ZNPC_AnimTable_RobotBase(table);
 
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x0e], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x0e], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x18], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x18], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x19], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x19], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x1a], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x1a], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x1b], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x1b], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
 
-    NPCC_BuildStandardAnimTran(pxVar1, g_strz_roboanim, ourAnims, 1, 0.2f);
+    NPCC_BuildStandardAnimTran(table, g_strz_roboanim, ourAnims, 1, 0.2f);
 
-    xAnimTableNewTransition(pxVar1, g_strz_roboanim[0x18], g_strz_roboanim[0x19], NULL, NULL, 0x10,
+    xAnimTableNewTransition(table, g_strz_roboanim[0x18], g_strz_roboanim[0x19], NULL, NULL, 0x10,
                             0, 0.0f, 0.0f, 0, 0, 0.2f, NULL);
-    xAnimTableNewTransition(pxVar1, g_strz_roboanim[0x1a], g_strz_roboanim[0x1b], NULL, NULL, 0x10,
+    xAnimTableNewTransition(table, g_strz_roboanim[0x1a], g_strz_roboanim[0x1b], NULL, NULL, 0x10,
                             0, 0.0f, 0.0f, 0, 0, 0.2f, NULL);
 
-    return pxVar1;
+    return table;
 }
 
 xAnimTable* ZNPC_AnimTable_TarTar()
 {
     int ourAnims[4] = { 0x0c, 0x11, 0x0e, 0x00 };
 
-    xAnimTable* pxVar1 = xAnimTableNew("zNPCTarTar", NULL, 0);
-    ZNPC_AnimTable_RobotBase(pxVar1);
+    xAnimTable* table = xAnimTableNew("zNPCTarTar", NULL, 0);
+    ZNPC_AnimTable_RobotBase(table);
 
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x0c], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x0c], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x11], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x11], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x0e], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x0e], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
 
-    NPCC_BuildStandardAnimTran(pxVar1, g_strz_roboanim, ourAnims, 1, 0.2f);
+    NPCC_BuildStandardAnimTran(table, g_strz_roboanim, ourAnims, 1, 0.2f);
 
-    xAnimTableNewTransition(pxVar1, g_strz_roboanim[0x11], g_strz_roboanim[0x0e], NULL, NULL, 0x10,
+    xAnimTableNewTransition(table, g_strz_roboanim[0x11], g_strz_roboanim[0x0e], NULL, NULL, 0x10,
                             0, 0.0f, 0.0f, 0, 0, 0.2f, NULL);
-    xAnimTableNewTransition(pxVar1, g_strz_roboanim[0x0e], g_strz_roboanim[0x0c], NULL, NULL, 0x10,
+    xAnimTableNewTransition(table, g_strz_roboanim[0x0e], g_strz_roboanim[0x0c], NULL, NULL, 0x10,
                             0, 0.0f, 0.0f, 0, 0, 0.2f, NULL);
-    xAnimTableNewTransition(pxVar1, g_strz_roboanim[0x04], g_strz_roboanim[0x0c], NULL, NULL, 0x10,
+    xAnimTableNewTransition(table, g_strz_roboanim[0x04], g_strz_roboanim[0x0c], NULL, NULL, 0x10,
                             0, 0.0f, 0.0f, 0, 0, 0.2f, NULL);
 
-    return pxVar1;
+    return table;
 }
 
 xAnimTable* ZNPC_AnimTable_TTSauce()
 {
-    xAnimTable* pxVar1 = (xAnimTable*)xAnimTableNew("TarTarSauce", NULL, 0);
+    xAnimTable* table = (xAnimTable*)xAnimTableNew("TarTarSauce", NULL, 0);
 
-    xAnimTableNewState(pxVar1, g_strz_ttsanim[1], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_ttsanim[1], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
 
-    return pxVar1;
+    return table;
 }
 
 xAnimTable* ZNPC_AnimTable_GLove()
@@ -487,88 +487,88 @@ xAnimTable* ZNPC_AnimTable_GLove()
         0x18, 0x19, 0x1a, 0x1b, 0x11, 0x12, 0x13, 0x00,
     };
 
-    xAnimTable* pxVar1 = (xAnimTable*)xAnimTableNew("zNPCGlove", NULL, 0);
-    ZNPC_AnimTable_RobotBase(pxVar1);
+    xAnimTable* table = (xAnimTable*)xAnimTableNew("zNPCGlove", NULL, 0);
+    ZNPC_AnimTable_RobotBase(table);
 
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x11], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x11], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x12], 0x10, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x12], 0x10, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x13], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x13], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x18], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x18], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x19], 0x10, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x19], 0x10, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x1a], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x1a], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x1b], 0x10, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x1b], 0x10, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
 
-    NPCC_BuildStandardAnimTran(pxVar1, g_strz_roboanim, ourAnims, 1, 0.2f);
+    NPCC_BuildStandardAnimTran(table, g_strz_roboanim, ourAnims, 1, 0.2f);
 
-    xAnimTableNewTransition(pxVar1, g_strz_roboanim[0x1a], g_strz_roboanim[0x1b], NULL, NULL, 0x10,
+    xAnimTableNewTransition(table, g_strz_roboanim[0x1a], g_strz_roboanim[0x1b], NULL, NULL, 0x10,
                             0, 0.0f, 0.0f, 0, 0, 0.2f, NULL);
-    xAnimTableNewTransition(pxVar1, g_strz_roboanim[0x11], g_strz_roboanim[0x12], NULL, NULL, 0x10,
+    xAnimTableNewTransition(table, g_strz_roboanim[0x11], g_strz_roboanim[0x12], NULL, NULL, 0x10,
                             0, 0.0f, 0.0f, 0, 0, 0.2f, NULL);
-    xAnimTableNewTransition(pxVar1, g_strz_roboanim[0x18], g_strz_roboanim[0x19], NULL, NULL, 0x10,
+    xAnimTableNewTransition(table, g_strz_roboanim[0x18], g_strz_roboanim[0x19], NULL, NULL, 0x10,
                             0, 0.0f, 0.0f, 0, 0, 0.2f, NULL);
 
-    return pxVar1;
+    return table;
 }
 
 xAnimTable* ZNPC_AnimTable_Monsoon()
 {
     int ourAnims[5] = { 0x0c, 0x0d, 0x11, 0x12, 0x00 };
 
-    xAnimTable* pxVar1 = xAnimTableNew("zNPCMonsoon", NULL, 0);
-    ZNPC_AnimTable_RobotBase(pxVar1);
+    xAnimTable* table = xAnimTableNew("zNPCMonsoon", NULL, 0);
+    ZNPC_AnimTable_RobotBase(table);
 
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x0c], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x0c], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x0d], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x0d], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x11], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x11], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x12], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x12], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
 
-    NPCC_BuildStandardAnimTran(pxVar1, g_strz_roboanim, ourAnims, 1, 0.2f);
+    NPCC_BuildStandardAnimTran(table, g_strz_roboanim, ourAnims, 1, 0.2f);
 
-    xAnimTableNewTransition(pxVar1, g_strz_roboanim[0x11], g_strz_roboanim[0x12], NULL, NULL, 0x10,
+    xAnimTableNewTransition(table, g_strz_roboanim[0x11], g_strz_roboanim[0x12], NULL, NULL, 0x10,
                             0, 0.0f, 0.0f, 0, 0, 0.2f, NULL);
 
-    return pxVar1;
+    return table;
 }
 
 xAnimTable* ZNPC_AnimTable_ThunderCloud()
 {
     int ourAnims[3] = { 0x01, 0x02, 0x00 };
 
-    xAnimTable* pxVar1 = xAnimTableNew("ThunderCloud", NULL, 0);
+    xAnimTable* table = xAnimTableNew("ThunderCloud", NULL, 0);
 
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x01], 0x010, 1, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x01], 0x010, 1, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x02], 0x010, 1, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x02], 0x010, 1, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
 
-    NPCC_BuildStandardAnimTran(pxVar1, g_strz_roboanim, ourAnims, 1, 0.2f);
+    NPCC_BuildStandardAnimTran(table, g_strz_roboanim, ourAnims, 1, 0.2f);
 
-    return pxVar1;
+    return table;
 }
 
 xAnimTable* ZNPC_AnimTable_NightLight()
 {
     int ourAnims[2] = { 0x01, 0x00 };
 
-    xAnimTable* pxVar1 = xAnimTableNew("NightLight", NULL, 0);
+    xAnimTable* table = xAnimTableNew("NightLight", NULL, 0);
 
-    xAnimTableNewState(pxVar1, g_strz_nytlytanim[1], 0x010, 1, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_nytlytanim[1], 0x010, 1, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
 
-    NPCC_BuildStandardAnimTran(pxVar1, g_strz_nytlytanim, ourAnims, 1, 0.2f);
+    NPCC_BuildStandardAnimTran(table, g_strz_nytlytanim, ourAnims, 1, 0.2f);
 
-    return pxVar1;
+    return table;
 }
 
 // Regalloc
@@ -576,17 +576,17 @@ xAnimTable* ZNPC_AnimTable_SleepyTime()
 {
     int ourAnims[3] = { 0x0c, 0x0e, 0x00 };
 
-    xAnimTable* pxVar1 = xAnimTableNew("zNPCSleepy", NULL, 0);
-    ZNPC_AnimTable_RobotBase(pxVar1);
+    xAnimTable* table = xAnimTableNew("zNPCSleepy", NULL, 0);
+    ZNPC_AnimTable_RobotBase(table);
 
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x0c], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x0c], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x0e], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x0e], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
 
-    NPCC_BuildStandardAnimTran(pxVar1, g_strz_roboanim, ourAnims, 1, 0.2f);
+    NPCC_BuildStandardAnimTran(table, g_strz_roboanim, ourAnims, 1, 0.2f);
 
-    return pxVar1;
+    return table;
 }
 
 xAnimTable* ZNPC_AnimTable_ArfDog()
@@ -594,98 +594,98 @@ xAnimTable* ZNPC_AnimTable_ArfDog()
     int ourAnims[17] = { 0x01, 0x03, 0x02, 0x04, 0x05, 0x20, 0x21, 0x0c, 0x0d,
                          0x12, 0x14, 0x16, 0x15, 0x25, 0x26, 0x06, 0x00 };
 
-    xAnimTable* pxVar1 = (xAnimTable*)xAnimTableNew("zNPCArfDog", NULL, 0);
+    xAnimTable* table = (xAnimTable*)xAnimTableNew("zNPCArfDog", NULL, 0);
 
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x01], 0x110, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x01], 0x110, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x03], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x03], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x02], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x02], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x04], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x04], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x05], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x05], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x20], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x20], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x21], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x21], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x0c], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x0c], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x0d], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x0d], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x12], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x12], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x14], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x14], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x16], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x16], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x15], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x15], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x25], 0x000, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x25], 0x000, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x26], 0x000, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x26], 0x000, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x06], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x06], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
 
-    NPCC_BuildStandardAnimTran(pxVar1, g_strz_roboanim, ourAnims, 1, 0.2f);
+    NPCC_BuildStandardAnimTran(table, g_strz_roboanim, ourAnims, 1, 0.2f);
 
-    return pxVar1;
+    return table;
 }
 
 xAnimTable* ZNPC_AnimTable_ArfArf()
 {
     int ourAnims[7] = { 0x0e, 0x0f, 0x10, 0x1d, 0x1e, 0x1f, 0x00 };
 
-    xAnimTable* pxVar1 = xAnimTableNew("zNPCArfArf", NULL, 0);
-    ZNPC_AnimTable_RobotBase(pxVar1);
+    xAnimTable* table = xAnimTableNew("zNPCArfArf", NULL, 0);
+    ZNPC_AnimTable_RobotBase(table);
 
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x0e], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x0e], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x0f], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x0f], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x10], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x10], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x1d], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x1d], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x1e], 0x00, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x1e], 0x00, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x1f], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x1f], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
 
-    NPCC_BuildStandardAnimTran(pxVar1, g_strz_roboanim, ourAnims, 1, 0.2f);
+    NPCC_BuildStandardAnimTran(table, g_strz_roboanim, ourAnims, 1, 0.2f);
 
-    xAnimTableNewTransition(pxVar1, g_strz_roboanim[0x1d], g_strz_roboanim[0x1e], NULL, NULL, 0x10,
+    xAnimTableNewTransition(table, g_strz_roboanim[0x1d], g_strz_roboanim[0x1e], NULL, NULL, 0x10,
                             0, 0.0f, 0.0f, 0, 0, 0.2f, NULL);
 
-    return pxVar1;
+    return table;
 }
 
 xAnimTable* ZNPC_AnimTable_Chuck()
 {
     int ourAnims[4] = { 0x0c, 0x0d, 0x0e, 0x00 };
 
-    xAnimTable* pxVar1 = xAnimTableNew("zNPCChuck", NULL, 0);
-    ZNPC_AnimTable_RobotBase(pxVar1);
+    xAnimTable* table = xAnimTableNew("zNPCChuck", NULL, 0);
+    ZNPC_AnimTable_RobotBase(table);
 
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x0c], 0x110, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x0c], 0x110, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x0d], 0x110, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x0d], 0x110, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x0e], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x0e], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
 
-    NPCC_BuildStandardAnimTran(pxVar1, g_strz_roboanim, ourAnims, 1, 0.2f);
+    NPCC_BuildStandardAnimTran(table, g_strz_roboanim, ourAnims, 1, 0.2f);
 
-    xAnimTableNewTransition(pxVar1, g_strz_roboanim[0x0e], g_strz_roboanim[0x0c], NULL, NULL, 0x10,
+    xAnimTableNewTransition(table, g_strz_roboanim[0x0e], g_strz_roboanim[0x0c], NULL, NULL, 0x10,
                             0, 0.0f, 0.0f, 0, 0, 0.2f, NULL);
-    xAnimTableNewTransition(pxVar1, g_strz_roboanim[0x04], g_strz_roboanim[0x0c], NULL, NULL, 0x10,
+    xAnimTableNewTransition(table, g_strz_roboanim[0x04], g_strz_roboanim[0x0c], NULL, NULL, 0x10,
                             0, 0.0f, 0.0f, 0, 0, 0.2f, NULL);
-    xAnimTableNewTransition(pxVar1, g_strz_roboanim[0x04], g_strz_roboanim[0x0c], NULL, NULL, 0x10,
+    xAnimTableNewTransition(table, g_strz_roboanim[0x04], g_strz_roboanim[0x0c], NULL, NULL, 0x10,
                             0, 0.0f, 0.0f, 0, 0, 0.2f, NULL);
 
-    return pxVar1;
+    return table;
 }
 
 // Regalloc
@@ -693,55 +693,55 @@ xAnimTable* ZNPC_AnimTable_Tubelet()
 {
     int ourAnims[2] = { 0x0e, 0x00 };
 
-    xAnimTable* pxVar1 = xAnimTableNew("zNPCTubelet", NULL, 0);
-    ZNPC_AnimTable_RobotBase(pxVar1);
+    xAnimTable* table = xAnimTableNew("zNPCTubelet", NULL, 0);
+    ZNPC_AnimTable_RobotBase(table);
 
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x0e], 0x10, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x0e], 0x10, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    NPCC_BuildStandardAnimTran(pxVar1, g_strz_roboanim, ourAnims, 1, 0.2f);
+    NPCC_BuildStandardAnimTran(table, g_strz_roboanim, ourAnims, 1, 0.2f);
 
-    return pxVar1;
+    return table;
 }
 
 xAnimTable* ZNPC_AnimTable_FloatDevice()
 {
-    xAnimTable* pxVar1 = xAnimTableNew("TubeletFloatDevice", NULL, 0);
-    xAnimTableNewState(pxVar1, g_strz_flotanim[0x01], 0x10, 1, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTable* table = xAnimTableNew("TubeletFloatDevice", NULL, 0);
+    xAnimTableNewState(table, g_strz_flotanim[0x01], 0x10, 1, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
 
-    return pxVar1;
+    return table;
 }
 
 xAnimTable* ZNPC_AnimTable_SlickShield()
 {
-    xAnimTable* pxVar1 = xAnimTableNew("SlickBubbleShield", NULL, 0);
-    xAnimTableNewState(pxVar1, g_strz_shieldanim[0x01], 0x10, 1, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTable* table = xAnimTableNew("SlickBubbleShield", NULL, 0);
+    xAnimTableNewState(table, g_strz_shieldanim[0x01], 0x10, 1, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
 
-    return pxVar1;
+    return table;
 }
 
 xAnimTable* ZNPC_AnimTable_Slick()
 {
     int ourAnims[4] = { 0x11, 0x12, 0x13, 0x00 };
 
-    xAnimTable* pxVar1 = xAnimTableNew("zNPCSlick", NULL, 0);
+    xAnimTable* table = xAnimTableNew("zNPCSlick", NULL, 0);
 
-    ZNPC_AnimTable_RobotBase(pxVar1);
+    ZNPC_AnimTable_RobotBase(table);
 
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x11], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x11], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x12], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x12], 0x010, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(pxVar1, g_strz_roboanim[0x13], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_roboanim[0x13], 0x020, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
 
-    NPCC_BuildStandardAnimTran(pxVar1, g_strz_roboanim, ourAnims, 1, 0.2f);
+    NPCC_BuildStandardAnimTran(table, g_strz_roboanim, ourAnims, 1, 0.2f);
 
-    xAnimTableNewTransition(pxVar1, g_strz_roboanim[0x11], g_strz_roboanim[0x12], NULL, NULL, 0x10,
+    xAnimTableNewTransition(table, g_strz_roboanim[0x11], g_strz_roboanim[0x12], NULL, NULL, 0x10,
                             0, 0.0f, 0.0f, 0, 0, 0.2f, NULL);
 
-    return pxVar1;
+    return table;
 }
 
 U8 zNPCRobot::ColChkFlags() const
@@ -948,7 +948,7 @@ void zNPCRobot::SelfSetup()
 U32 zNPCRobot::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
 {
     S32 idx = -1;
-    U32 hashid = 0;
+    U32 da_anim = 0;
 
     switch (gid)
     {
@@ -1056,10 +1056,10 @@ U32 zNPCRobot::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
 
     if (idx >= 0)
     {
-        hashid = g_hash_roboanim[idx];
+        da_anim = g_hash_roboanim[idx];
     }
 
-    return hashid;
+    return da_anim;
 }
 
 S32 zNPCRobot::NPCMessage(NPCMsg* mail)
@@ -1074,10 +1074,10 @@ S32 zNPCRobot::NPCMessage(NPCMsg* mail)
 
         if (curgoal != NULL)
         {
-            S32 eaten = ((zNPCGoalCommon*)curgoal)->NPCMessage(mail);
-            if (eaten != 0)
+            S32 handled = ((zNPCGoalCommon*)curgoal)->NPCMessage(mail);
+            if (handled != 0)
             {
-                return eaten;
+                return handled;
             }
         }
 
@@ -1087,10 +1087,10 @@ S32 zNPCRobot::NPCMessage(NPCMsg* mail)
         {
             if (recgoal != curgoal)
             {
-                S32 eaten = ((zNPCGoalCommon*)recgoal)->NPCMessage(mail);
-                if (eaten != 0)
+                S32 handled = ((zNPCGoalCommon*)recgoal)->NPCMessage(mail);
+                if (handled != 0)
                 {
-                    return eaten;
+                    return handled;
                 }
             }
 
@@ -1098,27 +1098,27 @@ S32 zNPCRobot::NPCMessage(NPCMsg* mail)
         }
     }
 
-    S32 rc = RoboHandleMail(mail);
+    S32 handled = RoboHandleMail(mail);
 
-    if (rc == 0)
+    if (handled == 0)
     {
-        rc = zNPCCommon::NPCMessage(mail);
+        handled = zNPCCommon::NPCMessage(mail);
     }
 
-    return rc;
+    return handled;
 }
 
 void zNPCRobot::DuploOwner(zNPCCommon* duper)
 {
     zNPCCommon::DuploOwner(duper);
 
-    xPsyche* psyche = this->psy_instinct;
+    xPsyche* psy = this->psy_instinct;
 
-    if (psyche)
+    if (psy)
     {
-        zNPCGoalDead* dead = (zNPCGoalDead*)psyche->FindGoal('NGRj');
-        dead->DieQuietly();
-        psyche->GoalSet('NGRj', 1);
+        zNPCGoalDead* goal = (zNPCGoalDead*)psy->FindGoal('NGRj');
+        goal->DieQuietly();
+        psy->GoalSet('NGRj', 1);
     }
 }
 
@@ -1207,13 +1207,13 @@ void zNPCRobot::AddSpawning(xPsyche* psyche, xGoalProcessCallback cb1, xGoalProc
 
 S32 zNPCRobot::LassoSetup()
 {
-    S32 param1 = -1;
-    S32 param2 = -1;
+    S32 idx_grab = -1;
+    S32 idx_hold = -1;
 
-    LassoModelIndex(&param1, &param2);
-    if ((param1 >= 0) && (param2 >= 0))
+    LassoModelIndex(&idx_grab, &idx_hold);
+    if ((idx_grab >= 0) && (idx_hold >= 0))
     {
-        LassoUseGuides(param1, param2);
+        LassoUseGuides(idx_grab, idx_hold);
     }
     return zNPCCommon::LassoSetup();
 }
@@ -1260,7 +1260,7 @@ S32 zNPCRobot::IsWounded()
 
 S32 zNPCRobot::SetCarryState(en_NPC_CARRY_STATE stat)
 {
-    S32 rc = 0;
+    S32 result = 0;
 
     if (IsDead())
     {
@@ -1290,7 +1290,7 @@ S32 zNPCRobot::SetCarryState(en_NPC_CARRY_STATE stat)
         if (goal->GetID() == NPC_GOAL_STUNNED)
         {
             psy_instinct->GoalSwap(NPC_GOAL_PATCARRY, 0);
-            rc = 1;
+            result = 1;
         }
         break;
     case zNPCCARRY_THROW:
@@ -1302,12 +1302,12 @@ S32 zNPCRobot::SetCarryState(en_NPC_CARRY_STATE stat)
     case zNPCCARRY_ATTEMPTPICKUP:
         if ((flg_vuln & 0x20000000) && goal->GetID() == NPC_GOAL_STUNNED)
         {
-            rc = 1;
+            result = 1;
         }
         break;
     }
 
-    return rc;
+    return result;
 }
 
 void zNPCRobot::Stun(F32 stuntime)
@@ -1652,9 +1652,9 @@ F32 zNPCRobot::MoveTowardsArena(F32 dt, F32 speed)
 
 void zNPCRobot::ShowerConfetti(xVec3* pos)
 {
-    xVec3 pos_use = *(pos ? pos : xEntGetCenter(this));
+    xVec3 pos_emit = *(pos ? pos : xEntGetCenter(this));
 
-    zNPCRobot_TubeConfetti(&pos_use);
+    zNPCRobot_TubeConfetti(&pos_emit);
 }
 
 void zNPCRobot_TubeConfetti(const xVec3* pos_emit)
@@ -2916,12 +2916,12 @@ void zNPCArfArf::ParseLinks()
             xSceneID2Name(globals.sceneCur, id);
             xSceneID2Name(globals.sceneCur, lnk->dstAssetID);
 
-            xBase* child = zSceneFindObject(lnk->dstAssetID);
+            xBase* mychild = zSceneFindObject(lnk->dstAssetID);
 
-            if (child != NULL &&
-                (child->baseType == eBaseTypeNPC || child->baseType == eBaseTypeGroup))
+            if (mychild != NULL &&
+                (mychild->baseType == eBaseTypeNPC || mychild->baseType == eBaseTypeGroup))
             {
-                ParseChild(child);
+                ParseChild(mychild);
             }
         }
     }
@@ -2961,17 +2961,17 @@ void zNPCArfArf::ParseChild(xBase* child)
 
         for (S32 i = 0; i < (S32)cnt; i++)
         {
-            xBase* item = xGroupGetItemPtr((xGroup*)child, i);
+            xBase* grpitem = xGroupGetItemPtr((xGroup*)child, i);
 
-            if (item != NULL)
+            if (grpitem != NULL)
             {
-                if (item->baseType == eBaseTypeNPC)
+                if (grpitem->baseType == eBaseTypeNPC)
                 {
-                    ParseChild(item);
+                    ParseChild(grpitem);
                 }
-                else if (item->baseType == eBaseTypeGroup)
+                else if (grpitem->baseType == eBaseTypeGroup)
                 {
-                    ParseChild(item);
+                    ParseChild(grpitem);
                 }
             }
         }
@@ -3009,11 +3009,11 @@ void zNPCArfArf::SelfSetup()
     psy->SetSafety(NPC_GOAL_IDLE);
 }
 
-void zNPCArfArf::DuploNotice(en_SM_NOTICES notice, void* data)
+void zNPCArfArf::DuploNotice(en_SM_NOTICES note, void* data)
 {
     S32 i;
 
-    switch (notice)
+    switch (note)
     {
     case SM_NOTE_NPCALIVE:
         for (i = 0; i < 5; i++)
@@ -3371,11 +3371,11 @@ void zNPCTubelet::ParseLinks()
             xSceneID2Name(globals.sceneCur, id);
             xSceneID2Name(globals.sceneCur, lnk->dstAssetID);
 
-            xBase* child = zSceneFindObject(lnk->dstAssetID);
+            xBase* mychild = zSceneFindObject(lnk->dstAssetID);
 
-            if (child->baseType == eBaseTypeNPC || child->baseType == eBaseTypeGroup)
+            if (mychild->baseType == eBaseTypeNPC || mychild->baseType == eBaseTypeGroup)
             {
-                ParseChild(child);
+                ParseChild(mychild);
             }
         }
     }
@@ -3420,17 +3420,17 @@ void zNPCTubelet::ParseChild(xBase* child)
 
         for (S32 i = 0; i < (S32)cnt; i++)
         {
-            xBase* item = xGroupGetItemPtr((xGroup*)child, i);
+            xBase* grpitem = xGroupGetItemPtr((xGroup*)child, i);
 
-            if (item != NULL)
+            if (grpitem != NULL)
             {
-                if (item->baseType == eBaseTypeNPC)
+                if (grpitem->baseType == eBaseTypeNPC)
                 {
-                    ParseChild(item);
+                    ParseChild(grpitem);
                 }
-                else if (item->baseType == eBaseTypeGroup)
+                else if (grpitem->baseType == eBaseTypeGroup)
                 {
-                    ParseChild(item);
+                    ParseChild(grpitem);
                 }
             }
         }
@@ -3516,7 +3516,7 @@ void zNPCTubelet::PrepTheBand()
 
 void zNPCTubelet::LassoNotify(en_LASSO_EVENT event)
 {
-    zNPCLassoInfo* lassinfo = lassdata;
+    zNPCLassoInfo* lass = lassdata;
 
     if (IsDead())
     {
@@ -3535,7 +3535,7 @@ void zNPCTubelet::LassoNotify(en_LASSO_EVENT event)
         return;
     }
 
-    if ((lassinfo->stage == LASS_STAT_PENDING || lassinfo->stage == LASS_STAT_DONE) &&
+    if ((lass->stage == LASS_STAT_PENDING || lass->stage == LASS_STAT_DONE) &&
         tubestat == TUBE_STAT_LASSO && hitpoints >= 1)
     {
         PrepTheBand();
@@ -3593,46 +3593,46 @@ void zNPCTubelet::Unbonk()
 
 S32 zNPCTubelet::Chk_IsBonked()
 {
-    S32 rc;
+    S32 die;
 
     if (tubestat == TUBE_STAT_DYING)
     {
-        rc = 1;
+        die = 1;
     }
     else if (tubestat == TUBE_STAT_DEAD)
     {
-        rc = 1;
+        die = 1;
     }
     else
     {
-        S32 cnt_dead;
+        S32 cnt_hurt;
         zNPCTubeSlave* mary;
 
         bonkSpinRate = 0.0f;
 
-        cnt_dead = (hitpoints == 0);
+        cnt_hurt = (hitpoints == 0);
 
         if (tub_paul == NULL)
         {
-            cnt_dead++;
+            cnt_hurt++;
         }
         else if (tub_paul->hitpoints == 0)
         {
-            cnt_dead++;
+            cnt_hurt++;
         }
 
         mary = tub_mary;
 
         if (mary == NULL)
         {
-            cnt_dead++;
+            cnt_hurt++;
         }
         else if (mary->hitpoints == 0)
         {
-            cnt_dead++;
+            cnt_hurt++;
         }
 
-        if (cnt_dead == 3)
+        if (cnt_hurt == 3)
         {
             if (mary != NULL)
             {
@@ -3652,10 +3652,10 @@ S32 zNPCTubelet::Chk_IsBonked()
             Unbonk();
         }
 
-        rc = (hitpoints == 0);
+        die = (hitpoints == 0);
     }
 
-    return rc;
+    return die;
 }
 
 void zNPCTubelet::PainInTheBand()
@@ -3686,7 +3686,7 @@ S32 zNPCTubelet::Chk_NonAlertBonk(F32 dt)
 
 void TubeNotice::Notice(en_psynote note, xGoal* goal, void* data)
 {
-    zNPCTubelet* tube = (zNPCTubelet*)npc;
+    zNPCTubelet* pete = (zNPCTubelet*)npc;
 
     switch (note)
     {
@@ -3700,32 +3700,32 @@ void TubeNotice::Notice(en_psynote note, xGoal* goal, void* data)
     switch (goal->GetID())
     {
     case NPC_GOAL_ALERTTUBELET:
-        if (tube->tubestat != TUBE_STAT_LASSO)
+        if (pete->tubestat != TUBE_STAT_LASSO)
         {
-            tube->tubestat = TUBE_STAT_ATTACK;
+            pete->tubestat = TUBE_STAT_ATTACK;
         }
         return;
     case NPC_GOAL_DEFLATE:
     case NPC_GOAL_DAMAGE:
     case NPC_GOAL_KNOCK:
-        tube->tubestat = TUBE_STAT_DYING;
+        pete->tubestat = TUBE_STAT_DYING;
         return;
     case NPC_GOAL_LASSOBASE:
     case NPC_GOAL_LASSOGRAB:
     case NPC_GOAL_LASSOTHROW:
-        tube->tubestat = TUBE_STAT_LASSO;
+        pete->tubestat = TUBE_STAT_LASSO;
         return;
     case NPC_GOAL_AFTERLIFE:
-        tube->tubestat = TUBE_STAT_DEAD;
+        pete->tubestat = TUBE_STAT_DEAD;
         return;
     case NPC_GOAL_RESPAWN:
-        tube->tubestat = TUBE_STAT_BORN;
+        pete->tubestat = TUBE_STAT_BORN;
         return;
     }
 
-    if (tube->tubestat != TUBE_STAT_LASSO)
+    if (pete->tubestat != TUBE_STAT_LASSO)
     {
-        tube->tubestat = TUBE_STAT_DUCKLING;
+        pete->tubestat = TUBE_STAT_DUCKLING;
     }
 }
 
@@ -4135,27 +4135,27 @@ void zNPCSlick::ShieldUpdate(F32 dt)
 
     alf_shieldCurrent = CLAMP(alf_shieldCurrent, 0.0f, 0.392157f);
 
-    F32 rat = alf_shieldCurrent / 0.392157f;
+    F32 rat_shield = alf_shieldCurrent / 0.392157f;
 
-    rad_shield = SMOOTH(rat, 0.3f, 2.5f);
+    rad_shield = SMOOTH(rat_shield, 0.3f, 2.5f);
 
-    xModelInstance* mdl = ModelAtomicFind(1, -1, NULL);
+    xModelInstance* model = ModelAtomicFind(1, -1, NULL);
 
     if (alf_shieldCurrent < 0.01f)
     {
-        ModelAtomicHide(-1, mdl);
+        ModelAtomicHide(-1, model);
     }
     else
     {
-        ModelAtomicShow(-1, mdl);
+        ModelAtomicShow(-1, model);
 
-        mdl->Scale.x = MAX(0.01f, rat);
-        mdl->Scale.y = 1.0f;
-        mdl->Scale.z = mdl->Scale.x;
-        mdl->Flags |= 0x4000;
-        mdl->Alpha = alf_shieldCurrent;
-        mdl->PipeFlags &= 0xffff00ff;
-        mdl->PipeFlags |= 0x6521;
+        model->Scale.x = MAX(0.01f, rat_shield);
+        model->Scale.y = 1.0f;
+        model->Scale.z = model->Scale.x;
+        model->Flags |= 0x4000;
+        model->Alpha = alf_shieldCurrent;
+        model->PipeFlags &= 0xffff00ff;
+        model->PipeFlags |= 0x6521;
     }
 }
 
@@ -4280,15 +4280,15 @@ zNPCSlick* zNPCSlick::YouOwnSlipFX()
 
 S32 DUMY_grul_returnToIdle(xGoal* goal, void*, en_trantype* trantype, F32, void*)
 {
-    S32 gid = 0;
+    S32 nextgoal = 0;
 
     if (goal->GetPsyche()->TimerGet(XPSY_TYMR_CURGOAL) > 10.0f)
     {
         *trantype = GOAL_TRAN_SET;
-        gid = NPC_GOAL_IDLE;
+        nextgoal = NPC_GOAL_IDLE;
     }
 
-    return gid;
+    return nextgoal;
 }
 
 S32 ROBO_grul_goAlertMelee(xGoal* rawgoal, void*, en_trantype* trantype, F32, void*)
@@ -4311,13 +4311,13 @@ S32 ROBO_grul_goAlertMelee(xGoal* rawgoal, void*, en_trantype* trantype, F32, vo
         return 0;
     }
 
-    S32 need = arena->NeedToCycle(npc);
+    S32 rc = arena->NeedToCycle(npc);
 
-    if (need == 2)
+    if (rc == 2)
     {
         arena->Cycle(npc, 1);
     }
-    else if (need != 0)
+    else if (rc != 0)
     {
         arena->Cycle(npc, 0);
     }
@@ -4362,13 +4362,13 @@ S32 ROBO_grul_goAlertLobber(xGoal* rawgoal, void*, en_trantype* trantype, F32, v
         return 0;
     }
 
-    S32 need = arena->NeedToCycle(npc);
+    S32 rc = arena->NeedToCycle(npc);
 
-    if (need == 2)
+    if (rc == 2)
     {
         arena->Cycle(npc, 1);
     }
-    else if (need != 0)
+    else if (rc != 0)
     {
         arena->Cycle(npc, 0);
     }
@@ -4385,10 +4385,10 @@ S32 ROBO_grul_goAlertLobber(xGoal* rawgoal, void*, en_trantype* trantype, F32, v
 
     F32 dst_lob = MAX(npc->cfg_npc->rad_attack, 1.5f * arena->Radius(1.0f));
 
-    xVec3 vec_plyr;
-    F32 dsq = arena->DstSqFromHome(xEntGetPos(&globals.player.ent), &vec_plyr);
+    xVec3 delta;
+    F32 dsq = arena->DstSqFromHome(xEntGetPos(&globals.player.ent), &delta);
 
-    if (vec_plyr.y > 8.0f || dsq > SQ(0.8f * dst_lob))
+    if (delta.y > 8.0f || dsq > SQ(0.8f * dst_lob))
     {
         return 0;
     }

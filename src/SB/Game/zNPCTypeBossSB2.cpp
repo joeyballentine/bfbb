@@ -468,10 +468,10 @@ namespace
                 continue;
             }
 
-            S32& n = sound_asset_names_size[asset.group];
-            sound_asset_names[asset.group][n] = asset.name;
-            sound_asset_ids[asset.group][n] = i;
-            n++;
+            S32& total = sound_asset_names_size[asset.group];
+            sound_asset_names[asset.group][total] = asset.name;
+            sound_asset_ids[asset.group][total] = i;
+            total++;
         }
 
         memset(sound_data, 0, sizeof(sound_data));
@@ -566,47 +566,47 @@ namespace
         xGridBoundInit(&ent.gridb, &ent);
     }
 
-    void parallelepiped_to_obb(xBound& bound, xVec3* p)
+    void parallelepiped_to_obb(xBound& obb, xVec3* loc)
     {
-        bound.type = XBOUND_TYPE_OBB;
+        obb.type = XBOUND_TYPE_OBB;
 
-        xVec3 head = p[0] + p[1] + p[2] + p[3];
-        xVec3 tail = p[4] + p[5] + p[6] + p[7];
+        xVec3 head_sum = loc[0] + loc[1] + loc[2] + loc[3];
+        xVec3 tail_sum = loc[4] + loc[5] + loc[6] + loc[7];
 
-        bound.box.center = (head + tail) * 0.125f;
+        obb.box.center = (head_sum + tail_sum) * 0.125f;
 
-        p[0] -= bound.box.center;
-        p[1] -= bound.box.center;
-        p[2] -= bound.box.center;
-        p[3] -= bound.box.center;
-        p[4] -= bound.box.center;
-        p[5] -= bound.box.center;
-        p[6] -= bound.box.center;
-        p[7] -= bound.box.center;
+        loc[0] -= obb.box.center;
+        loc[1] -= obb.box.center;
+        loc[2] -= obb.box.center;
+        loc[3] -= obb.box.center;
+        loc[4] -= obb.box.center;
+        loc[5] -= obb.box.center;
+        loc[6] -= obb.box.center;
+        loc[7] -= obb.box.center;
 
-        xMat4x3& mat = *bound.mat;
+        xMat4x3& mat = *obb.mat;
 
-        mat.right = head - tail;
-        mat.at = p[0] + p[1] + p[4] + p[5];
-        mat.at -= p[2] + p[3] + p[6] + p[7];
+        mat.right = head_sum - tail_sum;
+        mat.at = loc[0] + loc[1] + loc[4] + loc[5];
+        mat.at -= loc[2] + loc[3] + loc[6] + loc[7];
         mat.right.normalize();
         mat.up = mat.at.cross(mat.right).normal();
         mat.at = mat.right.cross(mat.up);
-        mat.pos = bound.box.center;
+        mat.pos = obb.box.center;
 
-        xVec3& ext = bound.box.box.upper;
+        xVec3& ext = obb.box.box.upper;
 
-        ext.assign(mat.right.dot(p[0]), mat.up.dot(p[0]), mat.at.dot(p[0]));
+        ext.assign(mat.right.dot(loc[0]), mat.up.dot(loc[0]), mat.at.dot(loc[0]));
         ext.set_abs();
 
-        for (const xVec3* v = p + 1; v != p + 8; v++)
+        for (const xVec3* it = loc + 1; it != loc + 8; it++)
         {
-            ext.x = max(ext.x, xabs(mat.right.dot(*v)));
-            ext.y = max(ext.y, xabs(mat.up.dot(*v)));
-            ext.z = max(ext.z, xabs(mat.at.dot(*v)));
+            ext.x = max(ext.x, xabs(mat.right.dot(*it)));
+            ext.y = max(ext.y, xabs(mat.up.dot(*it)));
+            ext.z = max(ext.z, xabs(mat.at.dot(*it)));
         }
 
-        bound.box.box.lower = -ext;
+        obb.box.box.lower = -ext;
     }
 
     F32 max(F32 f0, F32 f1)
@@ -1680,7 +1680,7 @@ U32 zNPCB_SB2::AnimPick(S32 animID, en_NPC_GOAL_SPOT gspot, xGoal* goal)
         { ANIM_SwipeRightLoop, ANIM_SwipeRightEnd },
     };
 
-    S32 anim = ANIM_Idle01;
+    S32 index = ANIM_Idle01;
 
     switch (animID)
     {
@@ -1690,37 +1690,37 @@ U32 zNPCB_SB2::AnimPick(S32 animID, en_NPC_GOAL_SPOT gspot, xGoal* goal)
         {
             if (g_hash_bossanim[idle_table[i][0]] == AnimCurStateID())
             {
-                anim = idle_table[i][1];
+                index = idle_table[i][1];
                 break;
             }
         }
         break;
     }
     case NPC_GOAL_BOSSSB2TAUNT:
-        anim = ANIM_Taunt01;
+        index = ANIM_Taunt01;
         break;
     case NPC_GOAL_BOSSSB2DIZZY:
-        anim = ANIM_Dizzy01;
+        index = ANIM_Dizzy01;
         break;
     case NPC_GOAL_BOSSSB2HIT:
         if (!flag.dizzy)
         {
-            anim = ANIM_Hit01;
+            index = ANIM_Hit01;
             play_sound(SOUND_HIT_FLAIL, &sound_loc.body, 1.0f);
         }
         else if (g_hash_bossanim[ANIM_SwipeLeftLoop] == AnimCurStateID())
         {
-            anim = ANIM_SmackLeft01;
+            index = ANIM_SmackLeft01;
             play_sound(SOUND_HIT_SLAP, &sound_loc.hand[LEFT_HAND], 1.0f);
         }
         else if (g_hash_bossanim[ANIM_SwipeRightLoop] == AnimCurStateID())
         {
-            anim = ANIM_SmackRight01;
+            index = ANIM_SmackRight01;
             play_sound(SOUND_HIT_SLAP, &sound_loc.hand[RIGHT_HAND], 1.0f);
         }
         else
         {
-            anim = ANIM_Hit02;
+            index = ANIM_Hit02;
             play_sound(SOUND_HIT_FLAIL, &sound_loc.body, 1.0f);
         }
         break;
@@ -1731,36 +1731,36 @@ U32 zNPCB_SB2::AnimPick(S32 animID, en_NPC_GOAL_SPOT gspot, xGoal* goal)
             {
                 if (g_hash_bossanim[idle_table[i][0]] == AnimCurStateID())
                 {
-                    anim = idle_table[i][1];
+                    index = idle_table[i][1];
                     break;
                 }
             }
         }
         else
         {
-            anim = ANIM_Dizzy01;
+            index = ANIM_Dizzy01;
         }
         break;
     case NPC_GOAL_BOSSSB2SWIPE:
-        anim = ANIM_Idle01;
+        index = ANIM_Idle01;
         break;
     case NPC_GOAL_BOSSSB2CHOP:
-        anim = ANIM_Idle01;
+        index = ANIM_Idle01;
         break;
     case NPC_GOAL_BOSSSB2KARATE:
-        anim = ANIM_Idle01;
+        index = ANIM_Idle01;
         break;
     default:
-        anim = ANIM_Idle01;
+        index = ANIM_Idle01;
         break;
     }
 
-    if (anim < 0)
+    if (index < 0)
     {
         return 0;
     }
 
-    return g_hash_bossanim[anim];
+    return g_hash_bossanim[index];
 }
 
 void zNPCB_SB2::Process(xScene* xscn, F32 dt)
@@ -2058,9 +2058,9 @@ void zNPCB_SB2::update_turn(F32 dt)
 {
     if (flag.face_player)
     {
-        const xVec3& ppos = (const xVec3&)globals.player.ent.model->Mat->pos;
+        const xVec3& player_loc = (const xVec3&)globals.player.ent.model->Mat->pos;
 
-        turn.dir.assign(ppos.x - location().x, ppos.z - location().z);
+        turn.dir.assign(player_loc.x - location().x, player_loc.z - location().z);
         turn.dir.normalize();
     }
 
@@ -2073,21 +2073,21 @@ void zNPCB_SB2::update_turn(F32 dt)
         return;
     }
 
-    F32 cur_yaw = xatan2(curx, curz);
-    F32 dyaw = xatan2(turn.dir.x, turn.dir.y) - cur_yaw;
+    F32 start = xatan2(curx, curz);
+    F32 diff = xatan2(turn.dir.x, turn.dir.y) - start;
 
-    if (dyaw > PI)
+    if (diff > PI)
     {
-        dyaw -= 2.0f * PI;
+        diff -= 2.0f * PI;
     }
-    else if (dyaw < -PI)
+    else if (diff < -PI)
     {
-        dyaw += 2.0f * PI;
+        diff += 2.0f * PI;
     }
 
-    F32 yaw = cur_yaw;
+    F32 yaw = start;
 
-    xAccelMove(yaw, turn.vel, turn.accel, dt, cur_yaw + dyaw, turn.max_vel);
+    xAccelMove(yaw, turn.vel, turn.accel, dt, start + diff, turn.max_vel);
     set_yaw_matrix(frame->mat, yaw);
 }
 
@@ -2095,15 +2095,15 @@ void zNPCB_SB2::update_halt(F32 dt)
 {
     F32 old_yaw = move.yaw;
 
-    F32 turn_accel = (move.yaw_vel >= 0.0f) ? -xabs(move.turn_accel) : xabs(move.turn_accel);
+    F32 yaw_accel = (move.yaw_vel >= 0.0f) ? -xabs(move.turn_accel) : xabs(move.turn_accel);
     F32 accel = (move.vel >= 0.0f) ? -xabs(move.accel) : xabs(move.accel);
 
-    F32 dist = 0.0f;
+    F32 s = 0.0f;
 
-    xAccelStop(move.yaw, move.yaw_vel, turn_accel, dt);
-    xAccelStop(dist, move.vel, accel, dt);
+    xAccelStop(move.yaw, move.yaw_vel, yaw_accel, dt);
+    xAccelStop(s, move.vel, accel, dt);
 
-    if ((dist >= -1e-5f && dist <= 1e-5f) || xabs(old_yaw - move.yaw) <= 0.001f)
+    if ((s >= -1e-5f && s <= 1e-5f) || xabs(old_yaw - move.yaw) <= 0.001f)
     {
         flag.move = MOVE_NONE;
     }
@@ -2112,7 +2112,7 @@ void zNPCB_SB2::update_halt(F32 dt)
         xVec2 loc;
         loc.x = location().x;
         loc.y = location().z;
-        set_location(loc + move.dir * dist);
+        set_location(loc + move.dir * s);
     }
 }
 
@@ -2122,13 +2122,13 @@ void zNPCB_SB2::update_follow(F32 dt)
     loc.x = location().x;
     loc.y = location().z;
 
-    xVec2 delta = move.dest - loc;
-    F32 dist = delta.length();
+    xVec2 offset = move.dest - loc;
+    F32 dist = offset.length();
     xVec2 dir;
 
     if (dist < -1e-5f || 1e-5f < dist)
     {
-        dir = delta * (1.0f / dist);
+        dir = offset * (1.0f / dist);
     }
     else
     {
@@ -2167,17 +2167,17 @@ void zNPCB_SB2::update_follow(F32 dt)
         move.dir = dir;
     }
 
-    F32 target = move.dir.dot(delta);
+    F32 end_s = move.dir.dot(offset);
 
-    if (target < 0.0f)
+    if (end_s < 0.0f)
     {
-        target = 0.0f;
+        end_s = 0.0f;
     }
 
-    F32 step = 0.0f;
+    F32 s = 0.0f;
 
-    xAccelMove(step, move.vel, move.accel, dt, target, move.max_vel);
-    set_location(loc + move.dir * step);
+    xAccelMove(s, move.vel, move.accel, dt, end_s, move.max_vel);
+    set_location(loc + move.dir * s);
 }
 
 void zNPCB_SB2::update_ymove(F32 dt)
@@ -2307,41 +2307,41 @@ void zNPCB_SB2::move_nodes()
             continue;
         }
 
-        xVec3 head;
-        xVec3 tail;
-        xVec3 normal;
+        xVec3 loc;
+        xVec3 uploc;
+        xVec3 norm;
 
         if (node_hooks[i].points == 3)
         {
-            xVec3 side;
+            xVec3 rightloc;
 
-            iModelTagEval(n.skin_model, &n.v3.tag[0], n.skin_mat, &head);
-            iModelTagEval(n.skin_model, &n.v3.tag[1], n.skin_mat, &tail);
-            iModelTagEval(n.skin_model, &n.v3.tag[2], n.skin_mat, &side);
+            iModelTagEval(n.skin_model, &n.v3.tag[0], n.skin_mat, &loc);
+            iModelTagEval(n.skin_model, &n.v3.tag[1], n.skin_mat, &uploc);
+            iModelTagEval(n.skin_model, &n.v3.tag[2], n.skin_mat, &rightloc);
 
-            normal = (side - head).cross(tail - head);
-            normal.up_normalize();
+            norm = (rightloc - loc).cross(uploc - loc);
+            norm.up_normalize();
         }
         else
         {
-            iModelTagEval(n.skin_model, &n.v2n1.tag, n.skin_mat, &head, &normal);
-            iModelTagEval(n.skin_model, &n.v2n1.uptag, n.skin_mat, &tail);
+            iModelTagEval(n.skin_model, &n.v2n1.tag, n.skin_mat, &loc, &norm);
+            iModelTagEval(n.skin_model, &n.v2n1.uptag, n.skin_mat, &uploc);
         }
 
         xMat4x3 mat;
 
-        mat.up = tail - head;
-        mat.at = normal;
+        mat.up = uploc - loc;
+        mat.at = norm;
         mat.right = mat.up.cross(mat.at).up_normalize();
         mat.up = mat.at.cross(mat.right);
 
         if (node_hooks[i].midpoint)
         {
-            mat.pos = (head + tail) * 0.5f;
+            mat.pos = (loc + uploc) * 0.5f;
         }
         else
         {
-            mat.pos = head;
+            mat.pos = loc;
         }
 
         xEntReposition(*n.ent, mat);
@@ -2350,7 +2350,7 @@ void zNPCB_SB2::move_nodes()
 
 void zNPCB_SB2::render_nodes()
 {
-    xLightKit* old_kit = xLightKit_GetCurrent(globals.currWorld);
+    xLightKit* old_light = xLightKit_GetCurrent(globals.currWorld);
 
     xLightKit_Enable(&glow_light.kit, globals.currWorld);
 
@@ -2364,7 +2364,7 @@ void zNPCB_SB2::render_nodes()
         }
     }
 
-    xLightKit_Enable(old_kit, globals.currWorld);
+    xLightKit_Enable(old_light, globals.currWorld);
 }
 
 void zNPCB_SB2::bind_nodes()
@@ -2391,17 +2391,17 @@ void zNPCB_SB2::bind_nodes()
     setup_node_tags();
 }
 
-void zNPCB_SB2::rebind_nodes(RpAtomic* model, RwMatrixTag* mat)
+void zNPCB_SB2::rebind_nodes(RpAtomic* skin_model, RwMatrixTag* skin_mat)
 {
-    RpAtomic* skin[4];
+    RpAtomic* skin_models[4];
 
-    skin[0] = model;
+    skin_models[0] = skin_model;
 
     for (S32 i = 1; i < 4; i++)
     {
-        skin[i] = iModelFile_RWMultiAtomic(skin[i - 1]);
+        skin_models[i] = iModelFile_RWMultiAtomic(skin_models[i - 1]);
 
-        if (skin[i] == NULL)
+        if (skin_models[i] == NULL)
         {
             return;
         }
@@ -2418,11 +2418,11 @@ void zNPCB_SB2::rebind_nodes(RpAtomic* model, RwMatrixTag* mat)
         }
         else
         {
-            RpAtomic* atomic = skin[node_hooks[i].model];
+            RpAtomic* atomic = skin_models[node_hooks[i].model];
 
             nodes[i].ent->baseFlags &= 0xfff7;
             nodes[i].skin_model = atomic;
-            nodes[i].skin_mat = mat;
+            nodes[i].skin_mat = skin_mat;
         }
     }
 
@@ -2433,9 +2433,9 @@ void zNPCB_SB2::setup_node_tags()
 {
     for (S32 i = 0; i < 9; i++)
     {
-        RpAtomic* skin = nodes[i].skin_model;
+        RpAtomic* m = nodes[i].skin_model;
 
-        if (skin == NULL)
+        if (m == NULL)
         {
             continue;
         }
@@ -2444,17 +2444,17 @@ void zNPCB_SB2::setup_node_tags()
         {
             for (S32 j = 0; j < 3; j++)
             {
-                iModelTagSetup(&nodes[i].v3.tag[j], skin, node_hooks[i].pos[j].x,
+                iModelTagSetup(&nodes[i].v3.tag[j], m, node_hooks[i].pos[j].x,
                                node_hooks[i].pos[j].y, node_hooks[i].pos[j].z);
             }
         }
         else
         {
-            xVec3 up = node_hooks[i].pos[1];
+            xVec3 loc1 = node_hooks[i].pos[1];
 
-            iModelTagSetup(&nodes[i].v2n1.tag, skin, node_hooks[i].pos[0].x,
+            iModelTagSetup(&nodes[i].v2n1.tag, m, node_hooks[i].pos[0].x,
                            node_hooks[i].pos[0].y, node_hooks[i].pos[0].z);
-            iModelTagSetup(&nodes[i].v2n1.uptag, skin, up.x, up.y, up.z);
+            iModelTagSetup(&nodes[i].v2n1.uptag, m, loc1.x, loc1.y, loc1.z);
         }
     }
 }
@@ -2523,10 +2523,10 @@ xSurface& zNPCB_SB2::create_surface()
     zSurfaceProps* props = (zSurfaceProps*)xMemAlloc(gActiveHeap, sizeof(zSurfaceProps), 0);
     zSurfAssetBase* asset = (zSurfAssetBase*)xMemAlloc(gActiveHeap, sizeof(zSurfAssetBase), 0);
 
-    xSurface& def = zSurfaceGetDefault();
+    xSurface& defsurf = zSurfaceGetDefault();
 
-    *surf = def;
-    *props = *(zSurfaceProps*)def.moprops;
+    *surf = defsurf;
+    *props = *(zSurfaceProps*)defsurf.moprops;
     *asset = *props->asset;
 
     surf->moprops = props;
@@ -2537,7 +2537,7 @@ xSurface& zNPCB_SB2::create_surface()
 
 void zNPCB_SB2::init_hands()
 {
-    static const S32 hand_model[2] = { 1, 2 };
+    static const S32 model_lookup[2] = { 1, 2 };
 
     for (S32 i = 0; i < 2; i++)
     {
@@ -2547,7 +2547,7 @@ void zNPCB_SB2::init_hands()
         hand.hurt_player = FALSE;
         hand.ent = &bounds[i].ent;
 
-        init_bound_entity(*hand.ent, i, models[hand_model[i]],
+        init_bound_entity(*hand.ent, i, models[model_lookup[i]],
                           (xMat4x3*)xMemAlloc(gActiveHeap, sizeof(xMat4x3), 0));
 
         hand.ent->baseFlags |= 0x10;
@@ -2580,14 +2580,14 @@ void zNPCB_SB2::move_hand(zNPCB_SB2::hand_data& hand, F32 dt)
 
     for (S32 i = 0; i < 4; i++)
     {
-        xModelInstance* model = hand.ent->model;
+        xModelInstance* m = hand.ent->model;
 
-        iModelTagEval(model->Data, &hand.head_tag[i], model->Mat, &head[i]);
-        iModelTagEval(model->Data, &hand.tail_tag[i], model->Mat, &tail[i]);
+        iModelTagEval(m->Data, &hand.head_tag[i], m->Mat, &head[i]);
+        iModelTagEval(m->Data, &hand.tail_tag[i], m->Mat, &tail[i]);
     }
 
     xEnt& ent = *hand.ent;
-    xVec3 old_center = ent.bound.mat->pos;
+    xVec3 old_loc = ent.bound.mat->pos;
 
     parallelepiped_to_obb(ent.bound, head);
     xQuickCullForBound(&ent.bound.qcd, &ent.bound);
@@ -2600,11 +2600,11 @@ void zNPCB_SB2::move_hand(zNPCB_SB2::hand_data& hand, F32 dt)
         return;
     }
 
-    xVec3 step = ent.bound.mat->pos - old_center;
-    xVec3 to_player = (const xVec3&)globals.player.ent.model->Mat->pos - old_center;
+    xVec3 offset = ent.bound.mat->pos - old_loc;
+    xVec3 player_offset = (const xVec3&)globals.player.ent.model->Mat->pos - old_loc;
 
-    if (step.dot(to_player) <= 0.0f ||
-        step.length2() / (dt * dt) < tweak.damage_speed * tweak.damage_speed)
+    if (offset.dot(player_offset) <= 0.0f ||
+        offset.length2() / (dt * dt) < tweak.damage_speed * tweak.damage_speed)
     {
         ((zSurfaceProps*)hand.ent->model->Surf->moprops)->asset->game_damage_type = 0;
         hand.ent->penby = 0x10;
@@ -2640,33 +2640,33 @@ void zNPCB_SB2::spin_platform(zNPCB_SB2::platform_data& p, const xVec3& axis, F3
 
 void zNPCB_SB2::check_platform_smack(zNPCB_SB2::hand_data& hand)
 {
-    for (platform_data* p = platforms; p != platforms + 16; p++)
+    for (platform_data* it = platforms; it != platforms + 16; it++)
     {
-        if (p->ent == NULL || p->spin.accel > 0.0f)
+        if (it->ent == NULL || it->spin.accel > 0.0f)
         {
             continue;
         }
 
         xEnt& ent = *hand.ent;
-        xVec3 delta = p->ent->bound.sph.center - ent.bound.sph.center;
-        F32 range = hand.radius + p->radius;
+        xVec3 offset = it->ent->bound.sph.center - ent.bound.sph.center;
+        F32 max_dist = hand.radius + it->radius;
 
-        if (delta.length2() <= range * range &&
-            xOBBHitsOBB(ent.bound.box.box, *ent.bound.mat, p->ent->bound.box.box,
-                        *p->ent->bound.mat))
+        if (offset.length2() <= max_dist * max_dist &&
+            xOBBHitsOBB(ent.bound.box.box, *ent.bound.mat, it->ent->bound.box.box,
+                        *it->ent->bound.mat))
         {
             xVec3 axis;
 
-            if (delta.x * delta.x + delta.z * delta.z <= tweak.spin.min_dist * tweak.spin.min_dist)
+            if (offset.x * offset.x + offset.z * offset.z <= tweak.spin.min_dist * tweak.spin.min_dist)
             {
-                axis = p->mat.at;
+                axis = it->mat.at;
                 axis.invert();
             }
             else
             {
-                axis = p->mat.right;
+                axis = it->mat.right;
 
-                if (p->mat.at.dot(delta) > 0.0f)
+                if (it->mat.at.dot(offset) > 0.0f)
                 {
                     axis.invert();
                 }
@@ -2674,66 +2674,66 @@ void zNPCB_SB2::check_platform_smack(zNPCB_SB2::hand_data& hand)
 
             axis.normalize();
 
-            spin_platform(*p, axis, tweak.spin.vel, tweak.spin.accel);
-            play_sound(SOUND_CHOP_HIT, (const xVec3*)&p->ent->model->Mat->pos, 1.0f);
+            spin_platform(*it, axis, tweak.spin.vel, tweak.spin.accel);
+            play_sound(SOUND_CHOP_HIT, (const xVec3*)&it->ent->model->Mat->pos, 1.0f);
         }
     }
 }
 
 void zNPCB_SB2::update_platforms(F32 dt)
 {
-    platform_data* p = platforms;
-    platform_data* end = p + 16;
+    platform_data* it = platforms;
+    platform_data* end = it + 16;
 
-    for (; p != end; p++)
+    for (; it != end; it++)
     {
-        if (p->ent == NULL || p->spin.accel <= 0.0f)
+        if (it->ent == NULL || it->spin.accel <= 0.0f)
         {
             continue;
         }
 
-        xAccelMove(p->spin.ang, p->spin.vel, p->spin.accel, dt, p->spin.end_ang, p->spin.max_vel);
-        p->spin.ang = xfmod(p->spin.ang, 1.0f);
+        xAccelMove(it->spin.ang, it->spin.vel, it->spin.accel, dt, it->spin.end_ang, it->spin.max_vel);
+        it->spin.ang = xfmod(it->spin.ang, 1.0f);
 
-        if (p->spin.vel >= p->spin.max_vel)
+        if (it->spin.vel >= it->spin.max_vel)
         {
-            p->stopping = TRUE;
-            p->spin.accel = tweak.spin.decel;
+            it->stopping = TRUE;
+            it->spin.accel = tweak.spin.decel;
         }
 
-        if (p->spin.vel >= tweak.spin.collide_vel)
+        if (it->spin.vel >= tweak.spin.collide_vel)
         {
-            p->ent->chkby &= 0xef;
-            p->ent->penby &= 0xef;
+            it->ent->chkby &= 0xef;
+            it->ent->penby &= 0xef;
         }
         else
         {
-            p->ent->chkby |= 0x10;
-            p->ent->penby |= 0x10;
+            it->ent->chkby |= 0x10;
+            it->ent->penby |= 0x10;
         }
 
-        xMat3x3& mat = *(xMat3x3*)p->ent->model->Mat;
+        xMat3x3& mat = *(xMat3x3*)it->ent->model->Mat;
 
-        if (p->stopping)
+        if (it->stopping)
         {
-            p->spin.end_ang = 0.5f * std::floorf(2.0f * p->spin.ang + 0.5f);
+            it->spin.end_ang = 0.5f * std::floorf(2.0f * it->spin.ang + 0.5f);
 
-            if (p->spin.vel >= -1e-5f && p->spin.vel <= 1e-5f &&
-                xabs(p->spin.ang - p->spin.end_ang) <= 0.001f)
+            if (it->spin.vel >= -1e-5f && it->spin.vel <= 1e-5f &&
+                xabs(it->spin.ang - it->spin.end_ang) <= 0.001f)
             {
-                p->spin.ang = 0.0f;
-                p->spin.vel = 0.0f;
-                p->spin.accel = 0.0f;
-                p->ent->chkby |= 0x10;
-                p->ent->penby |= 0x10;
+                it->spin.ang = 0.0f;
+                it->spin.vel = 0.0f;
+                it->spin.accel = 0.0f;
+                it->ent->chkby |= 0x10;
+                it->ent->penby |= 0x10;
                 continue;
             }
         }
 
-        xMat3x3 rot;
+        xMat3x3 rot_mat;
 
-        xMat3x3Rot(&rot, &p->spin.axis, 2.0f * PI * p->spin.ang);
-        xMat3x3Mul(&mat, &p->mat, &rot);
+        xMat3x3Rot(&rot_mat, &it->spin.axis, 2.0f * PI * it->spin.ang);
+        xMat3x3Mul(&mat, &it->mat, &rot_mat);
     }
 }
 
@@ -2749,7 +2749,7 @@ void zNPCB_SB2::reset_bounds()
 {
     for (S32 i = 0; i < 3; i++)
     {
-        bound_data& bound = bounds[i + 2];
+        bound_data& it = bounds[i + 2];
 
         if (tweak.bounds[i].bone >= (S32)model->BoneCount)
         {
@@ -2758,31 +2758,31 @@ void zNPCB_SB2::reset_bounds()
 
         if (tweak.bounds[i].is_sphere)
         {
-            bound.ent.bound.type = XBOUND_TYPE_SPHERE;
-            bound.ent.bound.sph.r = tweak.bounds[i].radius;
-            bound.ent.bound.mat = NULL;
+            it.ent.bound.type = XBOUND_TYPE_SPHERE;
+            it.ent.bound.sph.r = tweak.bounds[i].radius;
+            it.ent.bound.mat = NULL;
         }
         else
         {
-            bound.ent.bound.type = XBOUND_TYPE_OBB;
-            bound.ent.bound.box.box.upper = tweak.bounds[i].extent;
-            bound.ent.bound.box.box.lower = -bound.ent.bound.box.box.upper;
-            bound.ent.bound.mat = &bound.mat;
-            xMat3x3Euler(&bound.rot_mat, tweak.bounds[i].yaw, tweak.bounds[i].pitch,
+            it.ent.bound.type = XBOUND_TYPE_OBB;
+            it.ent.bound.box.box.upper = tweak.bounds[i].extent;
+            it.ent.bound.box.box.lower = -it.ent.bound.box.box.upper;
+            it.ent.bound.mat = &it.mat;
+            xMat3x3Euler(&it.rot_mat, tweak.bounds[i].yaw, tweak.bounds[i].pitch,
                          tweak.bounds[i].roll);
         }
 
         if (tweak.bounds[i].damage_player)
         {
-            bound.ent.penby = 0;
-            bound.ent.collModel = models[0];
-            bound.ent.model = models[0];
+            it.ent.penby = 0;
+            it.ent.collModel = models[0];
+            it.ent.model = models[0];
         }
         else
         {
-            bound.ent.penby = 0x10;
-            bound.ent.collModel = models[3];
-            bound.ent.model = models[3];
+            it.ent.penby = 0x10;
+            it.ent.collModel = models[3];
+            it.ent.model = models[3];
         }
     }
 }
@@ -2791,48 +2791,48 @@ void zNPCB_SB2::update_bounds()
 {
     for (S32 i = 0; i < 3; i++)
     {
-        bound_data& bound = bounds[i + 2];
-        xMat4x3 bonemat;
-        const xMat4x3* mat;
+        bound_data& it = bounds[i + 2];
+        xMat4x3 buffer_mat;
+        const xMat4x3* bone_mat;
 
         if (tweak.bounds[i].bone == 0)
         {
-            mat = (const xMat4x3*)model->Mat;
+            bone_mat = (const xMat4x3*)model->Mat;
         }
         else
         {
             const xMat4x3* skin = (const xMat4x3*)model->Mat;
 
-            xMat4x3Mul(&bonemat, &skin[tweak.bounds[i].bone], skin);
-            mat = &bonemat;
+            xMat4x3Mul(&buffer_mat, &skin[tweak.bounds[i].bone], skin);
+            bone_mat = &buffer_mat;
         }
 
         xVec3 offset;
 
-        xMat3x3RMulVec(&offset, mat, &tweak.bounds[i].offset);
-        bound.ent.bound.sph.center = mat->pos + offset;
+        xMat3x3RMulVec(&offset, bone_mat, &tweak.bounds[i].offset);
+        it.ent.bound.sph.center = bone_mat->pos + offset;
 
         if (!tweak.bounds[i].is_sphere)
         {
-            xMat3x3Mul(bound.ent.bound.mat, &bound.rot_mat, mat);
-            bound.ent.bound.mat->pos = bound.ent.bound.sph.center;
+            xMat3x3Mul(it.ent.bound.mat, &it.rot_mat, bone_mat);
+            it.ent.bound.mat->pos = it.ent.bound.sph.center;
         }
 
         if (tweak.bounds[i].damage_player)
         {
-            bound.ent.penby = 0;
-            bound.ent.collModel = models[player_damaged() ? 3 : 0];
-            bound.ent.model = bound.ent.collModel;
+            it.ent.penby = 0;
+            it.ent.collModel = models[player_damaged() ? 3 : 0];
+            it.ent.model = it.ent.collModel;
         }
         else
         {
-            bound.ent.penby = 0x10;
-            bound.ent.collModel = models[3];
-            bound.ent.model = models[3];
+            it.ent.penby = 0x10;
+            it.ent.collModel = models[3];
+            it.ent.model = models[3];
         }
 
-        xQuickCullForBound(&bound.ent.bound.qcd, &bound.ent.bound);
-        zGridUpdateEnt(&bound.ent);
+        xQuickCullForBound(&it.ent.bound.qcd, &it.ent.bound);
+        zGridUpdateEnt(&it.ent);
     }
 }
 
@@ -2958,14 +2958,14 @@ void zNPCB_SB2::update_fire_slug(zNPCB_SB2::slug_data& slug, F32 dt)
     xAccelMove(slug.ydist, slug.yvel, tweak.karate.drop_accel, dt, slug.end_ydist,
                tweak.karate.drop_vel);
 
-    xVec3 pos;
+    xVec3 offset;
 
-    pos.x = 0.0f;
-    pos.y = slug.ydist;
-    pos.z = slug.dist;
+    offset.x = 0.0f;
+    offset.y = slug.ydist;
+    offset.z = slug.dist;
 
-    xMat4x3Toworld(&pos, &slug.dmat, &pos);
-    slug.mat.pos = pos;
+    xMat4x3Toworld(&offset, &slug.dmat, &offset);
+    slug.mat.pos = offset;
 
     if (!slug.spun && slug.dist >= slug.end_dist)
     {
@@ -2998,19 +2998,19 @@ void zNPCB_SB2::update_fire_slug(zNPCB_SB2::slug_data& slug, F32 dt)
     }
 }
 
-void zNPCB_SB2::slug_interp(F32 t, F32& value)
+void zNPCB_SB2::slug_interp(F32 time, F32& scale)
 {
     static bool use_smooth = true;
 
-    F32 ct = rc_scale.clamp_t(t);
+    F32 ct = rc_scale.clamp_t(time);
 
     if (use_smooth)
     {
-        rc_scale.eval_smooth(ct, &value);
+        rc_scale.eval_smooth(ct, &scale);
     }
     else
     {
-        rc_scale.eval_linear(ct, &value);
+        rc_scale.eval_linear(ct, &scale);
     }
 }
 
@@ -3022,49 +3022,49 @@ namespace
 
         find_active_node(t);
 
-        inode* n0 = curve + active_node;
-        inode* n1 = curve + (active_node + 1);
+        inode* n1 = curve + active_node;
+        inode* n2 = curve + (active_node + 1);
 
-        F32 t0 = n0->t;
-        F32 dt = n1->t - t0;
+        F32 t0 = n1->t;
+        F32 dt = n2->t - t0;
 
         if (-1e-5f <= dt && dt <= 1e-5f)
         {
-            for (F32* a = n0->value; value != end; value++, a++)
+            for (F32* v1 = n1->value; value != end; value++, v1++)
             {
-                *value = *a;
+                *value = *v1;
             }
         }
         else
         {
-            F32 s = (t - t0) / dt;
+            F32 u = (t - t0) / dt;
 
-            for (F32 *a = n0->value, *b = n1->value; value != end; value++, a++, b++)
+            for (F32 *v1 = n1->value, *v2 = n2->value; value != end; value++, v1++, v2++)
             {
-                *value = s * (*b - *a) + *a;
+                *value = u * (*v2 - *v1) + *v1;
             }
         }
     }
 
     void response_curve::find_active_node(F32 t)
     {
-        u32 size = values * sizeof(F32) + sizeof(node);
-        inode* n = (inode*)((U8*)curve + size * active_node);
+        u32 stride = values * sizeof(F32) + sizeof(node);
+        inode* it = (inode*)((U8*)curve + stride * active_node);
 
         while (true)
         {
-            while (t < n->t)
+            while (t < it->t)
             {
-                n = (inode*)((U8*)n - size);
+                it = (inode*)((U8*)it - stride);
                 active_node--;
             }
 
-            if (t <= ((inode*)((U8*)n + size))->t)
+            if (t <= ((inode*)((U8*)it + stride))->t)
             {
                 return;
             }
 
-            n = (inode*)((U8*)n + size);
+            it = (inode*)((U8*)it + stride);
             active_node++;
         }
     }
@@ -3163,41 +3163,41 @@ namespace
 
 void zNPCB_SB2::update_slugs(F32 dt)
 {
-    for (slug_data* slug = slugs; slug != slugs + MAX_SLUG; slug++)
+    for (slug_data* it = slugs; it != slugs + MAX_SLUG; it++)
     {
-        switch (slug->stage)
+        switch (it->stage)
         {
         case SLUG_AIM:
-            update_aim_slug(*slug, dt);
+            update_aim_slug(*it, dt);
             break;
         case SLUG_DELAY:
-            update_delay_slug(*slug, dt);
+            update_delay_slug(*it, dt);
             break;
         case SLUG_DYING:
-            update_dying_slug(*slug, dt);
+            update_dying_slug(*it, dt);
             break;
         case SLUG_FIRE:
-            update_fire_slug(*slug, dt);
+            update_fire_slug(*it, dt);
             break;
         default:
             continue;
         }
 
-        slug->time += dt;
+        it->time += dt;
 
         F32 scale;
 
-        slug_interp(slug->time, scale);
+        slug_interp(it->time, scale);
 
-        if (scale <= 0.0f || slug->ent->model->Alpha <= 0.0f)
+        if (scale <= 0.0f || it->ent->model->Alpha <= 0.0f)
         {
-            slug->ent->flags &= ~1;
+            it->ent->flags &= ~1;
         }
         else
         {
-            slug->ent->flags |= 1;
-            slug->ent->model->Scale = scale;
-            xEntReposition(*slug->ent, slug->mat);
+            it->ent->flags |= 1;
+            it->ent->model->Scale = scale;
+            xEntReposition(*it->ent, it->mat);
         }
     }
 }
@@ -3244,20 +3244,20 @@ void zNPCB_SB2::check_hit_fail()
     {
         if (!flag.cruise_hit_target)
         {
-            S32 size;
-            xEnt** hits = cruise_bubble::get_explode_hits(size);
+            S32 hits_size;
+            xEnt** hits = cruise_bubble::get_explode_hits(hits_size);
 
-            for (xEnt** hit = hits; hit != hits + size; hit++)
+            for (xEnt** it = hits; it != hits + hits_size; it++)
             {
-                if (*hit == (xEnt*)plankton)
+                if (*it == (xEnt*)plankton)
                 {
                     flag.cruise_hit_target = true;
                     break;
                 }
 
-                for (platform_data* p = platforms; p != platforms + 16; p++)
+                for (platform_data* itp = platforms; itp != platforms + 16; itp++)
                 {
-                    if (*hit == p->ent)
+                    if (*it == itp->ent)
                     {
                         flag.cruise_hit_target = true;
                         break;
@@ -3273,13 +3273,13 @@ void zNPCB_SB2::check_hit_fail()
 
         if (!flag.cruise_hit_target && !flag.cruise_hit_body)
         {
-            xSphere sphere;
+            xSphere o;
 
-            cruise_bubble::get_explode_sphere(sphere.center, sphere.r);
+            cruise_bubble::get_explode_sphere(o.center, o.r);
 
-            for (bound_data* bound = bounds; bound != bounds + 5; bound++)
+            for (bound_data* it = bounds; it != bounds + 5; it++)
             {
-                if (xSphereHitsBound(sphere, bound->ent.bound))
+                if (xSphereHitsBound(o, it->ent.bound))
                 {
                     flag.cruise_hit_body = true;
                     return;
@@ -3293,12 +3293,12 @@ void zNPCB_SB2::create_glow_light()
 {
     memset(&glow_light, 0, sizeof(glow_light));
 
-    xLightKit* asset = NULL;
+    xLightKit* dlk = NULL;
     U32 id = globals.sceneCur->zen->easset->objectLightKit;
 
     if (id != 0)
     {
-        asset = (xLightKit*)xSTFindAsset(id, NULL);
+        dlk = (xLightKit*)xSTFindAsset(id, NULL);
     }
 
     glow_light.kit.lightCount = 1;
@@ -3310,11 +3310,11 @@ void zNPCB_SB2::create_glow_light()
     glow_light.light[0].color.blue = 1.0f;
     glow_light.light[0].color.alpha = 1.0f;
 
-    if (asset != NULL)
+    if (dlk != NULL)
     {
-        const xLightKitLight* src = asset->lightList;
+        const xLightKitLight* src = dlk->lightList;
 
-        for (U32 i = 0; i < asset->lightCount && glow_light.kit.lightCount < 8; i++, src++)
+        for (U32 i = 0; i < dlk->lightCount && glow_light.kit.lightCount < 8; i++, src++)
         {
             xLightKitLight& dst = glow_light.light[glow_light.kit.lightCount];
 
@@ -3860,12 +3860,12 @@ S32 zNPCGoalBossSB2Chop::Process(en_trantype* trantype, F32 dt, void* updCtxt, x
 
     if (loop_anim == owner.AnimCurStateID() && owner.AnimTimeRemain(NULL) < dt + 0.001f)
     {
-        S32 goal = owner.next_goal();
+        S32 next = owner.next_goal();
 
-        if (goal != NPC_GOAL_BOSSSB2CHOP)
+        if (next != NPC_GOAL_BOSSSB2CHOP)
         {
             *trantype = GOAL_TRAN_SET;
-            return goal;
+            return next;
         }
 
         targetted = FALSE;
@@ -3878,17 +3878,17 @@ S32 zNPCGoalBossSB2Chop::Process(en_trantype* trantype, F32 dt, void* updCtxt, x
 
 S32 zNPCGoalBossSB2Chop::can_start() const
 {
-    zNPCB_SB2::platform_data* platform = owner.player_platform();
+    zNPCB_SB2::platform_data* target = owner.player_platform();
 
-    if (platform == NULL)
+    if (target == NULL)
     {
         return FALSE;
     }
 
-    xVec3 delta = platform->ent->bound.mat->pos - owner.location();
-    xVec3& at = owner.facing();
+    xVec3 offset = target->ent->bound.mat->pos - owner.location();
+    xVec3& facing = owner.facing();
 
-    F32 ang = xrmod(PI + (xatan2(at.x, at.z) - xatan2(delta.x, delta.z)));
+    F32 ang = xrmod(PI + (xatan2(facing.x, facing.z) - xatan2(offset.x, offset.z)));
 
     return xabs(ang - PI) < 0.19634955f;
 }
