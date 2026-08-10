@@ -32,9 +32,17 @@ args = sys.argv[1:]
 
 IDENT = r"[A-Za-z_~][A-Za-z_0-9]*"
 DW_FUNC = re.compile(r"^(?P<sig>[A-Za-z_].*?)\((?P<params>.*)\)\s*(?:const\s*)?\{\s*$", re.M)
+# Only genuine automatics. dwarf annotates each declaration with its storage:
+#   // r18          register local
+#   // r29+0x90     stack local
+#   // @ 0x005CB880 function-scope STATIC, listed in DESCENDING ADDRESS order
+# Statics are not declaration-ordered at all, so matching them is meaningless
+# and actively harmful: zEntCruiseBubble::init_states is twelve statics, and
+# "reordering to dwarf order" cost it 99.161% -> 94.699%. Compiler-generated
+# `@NNNN` init-guard names are excluded for the same reason.
 DW_LOCAL = re.compile(r"^\s+(?:class |struct |enum |union |signed |unsigned |static )*"
                       r"[A-Za-z_][A-Za-z_0-9:<>, ]*[ *&]+(?P<name>" + IDENT + r")"
-                      r"(?:\[[^\]]*\])?;\s*//", re.M)
+                      r"(?:\[[^\]]*\])?;\s*//\s*r(?:[0-9]+)", re.M)
 # our local: a declaration statement inside a body
 OUR_LOCAL = re.compile(r"^\s+(?:const\s+|static\s+|volatile\s+|struct\s+|class\s+|unsigned\s+|signed\s+)*"
                        r"[A-Za-z_][A-Za-z_0-9:<>]*\s*[*&]?\s+(?P<name>" + IDENT + r")"
