@@ -40,6 +40,12 @@ Anonymous literals (`@1234`) are numbered by a **file-global counter**, but numb
 - Constant folding can silently prevent a literal from being created at all. `2.0f * (PI * i) / 3.0f` with a locally-assigned `i = 0` folds to `0.0f` and never interns `2.0f`/`PI`/`3.0f`, shifting the whole file's pool by 12 bytes. Assigning the index in *both* arms of a branch blocks the front-end fold while the value stays 0.
 - Retail sometimes has **ghost literals** with no surviving reference — constants from code that was optimised away. You cannot reproduce those without fabricating dead code. Do not; report the ceiling instead.
 
+**Diagnosing a pool permutation.** Disassemble both objects, list `.sdata2` in slot order, and for each slot record the *first function that references it* in emission order. Compare the two lists side by side. If the values are the same multiset in a different order, it is ordering, not content, and the first row where they disagree names the culprit.
+
+The worked case is `zNPCGoalRobo`, and it is a ghost-literal ceiling, not a fixable defect. Slots 0–13 agree exactly. At slot 14 the target has `3.0f` and at 15 `1e-05f`, both interned *before* `FlankPlayer__19zNPCGoalAlertFodderFf` interns `6.0f` — yet their first use is `OrbitPlayer__20zNPCGoalAlertFodBzztFf` and `MoveChase__19zNPCGoalAlertHammerFf`, thirteen and twenty-eight functions later. Nothing between `CheckSpot` and `FlankPlayer` emits a load of either. Ours interns the same two values, correctly, at the point they are first used. The two-slot head start offsets every later slot, which is why ~100 functions in that unit sit at 99.x% each off by exactly one relocation — and why the unit reads well in `report.json` (99.x counts as matched) while being unable to reach complete coverage.
+
+Function **definition order** is worth checking at the same time, since it drives interning order: extract `.fn` order from both objects and take the longest increasing subsequence. `zNPCGoalRobo` scores 320 of 361 common symbols with 10 descents, so its source order is also genuinely wrong in places — but fixing that cannot realign a pool whose head is already displaced by ghosts.
+
 ## Things that are not your fault
 
 - **Scheduling residue.** Identical instruction multiset in a different order, often just two epilogue instructions swapped. Not reachable from source.
