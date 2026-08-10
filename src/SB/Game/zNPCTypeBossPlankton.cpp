@@ -39,6 +39,65 @@ U32 xSndPlay3DFade(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, const xV
 #define SOUND_BOLT_HIT 4
 #define SOUND_CHARGE 5
 
+template <> F32 range_limit<F32>(F32 v, F32 minv, F32 maxv)
+{
+    if (v <= minv)
+    {
+        return minv;
+    }
+
+    if (v >= maxv)
+    {
+        return maxv;
+    }
+
+    return v;
+}
+
+namespace auto_tweak
+{
+    template <>
+    void load_param<S32, S32>(S32& value, S32 scale, S32 lo, S32 hi, xModelAssetParam* ap,
+                              U32 apsize, const char* name)
+    {
+        S32 v = zParamGetInt(ap, apsize, name, value);
+        if (v < lo)
+        {
+            v = lo;
+        }
+        else if (v > hi)
+        {
+            v = hi;
+        }
+        v = v * scale;
+        value = v;
+    }
+
+    template <>
+    void load_param<xVec3, S32>(xVec3& value, S32, S32, S32, xModelAssetParam* ap, U32 apsize,
+                                const char* name)
+    {
+        xVec3 def = value;
+        zParamGetVector(ap, apsize, name, def, &value);
+    }
+
+    template <>
+    void load_param<F32, F32>(F32& value, F32 scale, F32 lo, F32 hi, xModelAssetParam* ap,
+                              U32 apsize, const char* name)
+    {
+        value = zParamGetFloat(ap, apsize, name, value);
+        if (value < lo)
+        {
+            value = lo;
+        }
+        else if (value > hi)
+        {
+            value = hi;
+        }
+        value = value * scale;
+    }
+}
+
 namespace
 {
     struct sound_data_type
@@ -1358,6 +1417,32 @@ void zNPCBPlankton::SelfSetup()
     psy->SetSafety(NPC_GOAL_BPLANKTONIDLE);
 }
 
+void zNPCBPlankton::Damage(en_NPC_DAMAGE_TYPE damtype, xBase* from, const xVec3* vec_hit)
+{
+    psy_instinct->GIDOfActive();
+
+    switch (damtype)
+    {
+    case DMGTYP_ABOVE:
+    case DMGTYP_BELOW:
+    case DMGTYP_SIDE:
+    case DMGTYP_HITBYTOSS:
+    case DMGTYP_ROPE:
+    case DMGTYP_CRUISEBUBBLE:
+    case DMGTYP_PROJECTILE:
+    case DMGTYP_BUBBOWL:
+    {
+        if (vec_hit != NULL)
+        {
+            xVec3 vel = *vec_hit * tweak.hit_vel;
+            impart_velocity(vel);
+        }
+        stun();
+        break;
+    }
+    }
+}
+
 U32 zNPCBPlankton::AnimPick(S32 rawgoal, en_NPC_GOAL_SPOT gspot, xGoal* goal)
 {
     U32 animId = 0;
@@ -1511,6 +1596,16 @@ namespace
     void update_move_orbit(xVec3& loc, zNPCBPlankton::move_info& move, const xVec3& center, F32 dt,
                            bool clamp);
 
+    void set_yaw_matrix(xMat3x3& mat, F32 yaw)
+    {
+        F32 s = isin(yaw);
+        F32 c = icos(yaw);
+
+        mat.right.assign(c, 0.0f, -s);
+        mat.up.assign(0.0f, 1.0f, 0.0f);
+        mat.at.assign(s, 0.0f, c);
+    }
+
     void update_move_accel(xVec3& loc, zNPCBPlankton::move_info& move, F32 dt)
     {
         xAccelMove(loc.x, move.vel.x, move.accel.x, dt, move.max_vel.x);
@@ -1525,7 +1620,87 @@ namespace
         xAccelStop(loc.z, move.vel.z, move.accel.z, dt);
     }
 
+    void update_move_orbit(xVec3& loc, zNPCBPlankton::move_info& move, const xVec3& center, F32 dt,
+                           bool clamp)
+    {
+        xVec3 loc_flat = xVec3::create(loc.x, center.y, loc.z) - center;
+        xVec3 dest_flat = xVec3::create(move.dest.x, center.y, move.dest.z) - center;
+
+        F32 loc_dist = loc_flat.length();
+        F32 dest_dist = dest_flat.length();
+        F32 loc_ang = xatan2(loc_flat.x, loc_flat.z);
+        F32 dest_ang = xatan2(dest_flat.x, dest_flat.z);
+        F32 dang = xrmod(PI + (dest_ang - loc_ang)) - PI;
+
+        F32 target_x = dang * dest_dist;
+        F32 target_y = move.dest.y - loc.y;
+        F32 target_z = dest_dist - loc_dist;
+
+        F32 disp_x = 0.0f;
+        F32 disp_y = 0.0f;
+        F32 disp_z = 0.0f;
+
+        if (!clamp)
+        {
+            xAccelMove(disp_x, move.vel.x, move.accel.x, dt, target_x, move.max_vel.x);
+        }
+        else
+        {
+            xAccelMove(disp_x, move.vel.x, move.accel.x, dt, move.max_vel.x);
+        }
+        xAccelMove(disp_y, move.vel.y, move.accel.y, dt, target_y, move.max_vel.y);
+        xAccelMove(disp_z, move.vel.z, move.accel.z, dt, target_z, move.max_vel.z);
+
+        xVec3 dir;
+        F32 ang = loc_ang;
+
+        if (loc_dist > 0.000001f)
+        {
+            F32 inv = 1.0f / loc_dist;
+            dir = loc_flat * inv;
+            ang = disp_x * inv + loc_ang;
+        }
+        else
+        {
+            dir = xVec3::create(1.0f, 0.0f, 0.0f);
+        }
+
+        loc.x = dir.x * disp_z + (loc_dist * isin(ang) + center.x);
+        loc.y = loc.y + disp_y;
+        loc.z = dir.z * disp_z + (loc_dist * icos(ang) + center.z);
+    }
+
 } // namespace
+
+void zNPCBPlankton::update_turn(F32 dt)
+{
+    location();
+
+    xVec2 at = xVec2::create(model->Mat->at.x, model->Mat->at.z);
+
+    if (turning())
+    {
+        F32 cur_yaw = xatan2(at.x, at.y);
+        F32 target_yaw = xatan2(turn.dir.x, turn.dir.y);
+        F32 diff = target_yaw - cur_yaw;
+
+        if (diff <= PI)
+        {
+            if (diff < -PI)
+            {
+                diff += 6.2831855f;
+            }
+        }
+        else
+        {
+            diff -= 6.2831855f;
+        }
+
+        F32 new_yaw = cur_yaw;
+        xAccelMove(new_yaw, turn.vel, turn.accel, dt, cur_yaw + diff, turn.max_vel);
+        set_yaw_matrix(frame->mat, new_yaw);
+    }
+}
 
 void zNPCBPlankton::update_move(F32 dt)
 {
@@ -1549,6 +1724,39 @@ void zNPCBPlankton::update_move(F32 dt)
     }
 }
 
+namespace
+{
+    xVec3 world_to_ring_vel(const xVec3& world_vel, const xVec3& loc, const xVec3& center)
+    {
+        xVec2 offset = { loc.x - center.x, loc.z - center.z };
+        xVec2 vel2 = { world_vel.x, world_vel.z };
+        F32 dist = offset.length();
+        xVec2 dir = offset / dist;
+        xVec2 perp = { -dir.y, dir.x };
+
+        F32 radial = vel2.dot(dir);
+        F32 tangential = vel2.dot(perp);
+
+        return xVec3::create(tangential, world_vel.y, radial);
+    }
+
+    xVec3 ring_to_world_vel(const xVec3& ring_vel, const xVec3& loc, const xVec3& center)
+    {
+        xVec2 offset = { loc.x - center.x, loc.z - center.z };
+        xVec2 dir = offset.normal();
+
+        F32 tangential = ring_vel.x;
+        F32 vertical = ring_vel.y;
+        F32 radial = ring_vel.z;
+
+        xVec3 out;
+        out.x = tangential * -dir.x + radial * dir.y;
+        out.y = vertical;
+        out.z = tangential * dir.y + radial * dir.x;
+        return out;
+    }
+} // namespace
+
 void zNPCBPlankton::reset_territories()
 {
     territory_data* t = territory;
@@ -1559,6 +1767,65 @@ void zNPCBPlankton::reset_territories()
         t->fuse_destroyed = 0;
         t->fuse_detected = 0;
         t->fuse_detect_time = 0.0f;
+    }
+}
+
+void zNPCBPlankton::update_dialog(F32 dt)
+{
+    if (mode != MODE_BUDDY)
+    {
+        if (old_player_health < globals.player.Health && globals.player.Health != 0)
+        {
+            say(7, 0, false);
+        }
+        old_player_health = globals.player.Health;
+
+        xVec3* player_loc = get_player_loc();
+
+        S32 start = active_territory - 1;
+        if (start < 0)
+        {
+            start = 0;
+        }
+
+        for (S32 i = start; i <= active_territory; i++)
+        {
+            territory_data& t = territory[i];
+
+            if (t.fuse != NULL && !t.fuse_destroyed && zEntDestructObj_isDestroyed(t.fuse))
+            {
+                say(2, 0, false);
+                t.fuse_destroyed = 1;
+                return;
+            }
+        }
+
+        for (S32 i = 0; i < territory_size; i++)
+        {
+            territory_data& t = territory[i];
+
+            if (t.crony_size > 0 && t.fuse != NULL && !t.fuse_detected &&
+                !zEntDestructObj_isDestroyed(t.fuse))
+            {
+                xVec3 diff = *player_loc - reinterpret_cast<xVec3&>(t.fuse->model->Mat->pos);
+
+                if (diff.length2() >= tweak.help.fuse_dist * tweak.help.fuse_dist)
+                {
+                    t.fuse_detect_time = 0.0f;
+                }
+                else
+                {
+                    t.fuse_detect_time = t.fuse_detect_time + dt;
+
+                    if (tweak.help.fuse_delay <= t.fuse_detect_time)
+                    {
+                        t.fuse_detected = 1;
+                        say(1, 0, false);
+                        return;
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1583,11 +1850,84 @@ void zNPCBPlankton::update_follow(F32 dt)
     }
 }
 
+void zNPCBPlankton::update_follow_player(F32 dt)
+{
+    follow.delay = follow.delay + dt;
+
+    if (follow.delay < follow.max_delay)
+    {
+        xVec3* player_loc = get_player_loc();
+        F32 offset = orbit_yaw_offset(move.dest, *player_loc);
+
+        if (xabs(offset) <= tweak.follow.max_ang)
+        {
+            return;
+        }
+    }
+
+    move.dest = player_orbit();
+    move.dest = random_orbit(move.dest, 0.0f, tweak.follow.min_ang);
+    follow.delay = 0.0f;
+    follow.max_delay = tweak.follow.min_delay + (tweak.follow.max_delay - tweak.follow.min_delay) * xurand();
+}
+
+void zNPCBPlankton::update_follow_camera(F32 dt)
+{
+    xVec3 target = orbit.center + globals.camera.mat.at * orbit.radius;
+
+    follow.delay = follow.delay + dt;
+
+    if (follow.delay < follow.max_delay)
+    {
+        F32 offset = orbit_yaw_offset(move.dest, target);
+
+        if (xabs(offset) <= tweak.follow.max_ang)
+        {
+            return;
+        }
+    }
+
+    move.dest = random_orbit(target, 0.0f, tweak.follow.min_ang);
+    follow.delay = 0.0f;
+    follow.max_delay = tweak.follow.min_delay + (tweak.follow.max_delay - tweak.follow.min_delay) * xurand();
+}
+
+void zNPCBPlankton::update_aim_gun(F32)
+{
+    if (flag.aim_gun)
+    {
+        xVec3 gun_loc = xModelGetBoneLocation(*model, 0x15);
+
+        xVec3* player_loc = get_player_loc();
+        xVec3 to_player = *player_loc - gun_loc;
+
+        F32 dist_xz = xsqrt(to_player.x * to_player.x + to_player.z * to_player.z);
+        F32 pitch = xatan2(to_player.y, dist_xz);
+        pitch = xrmod(PI + pitch) - PI;
+        pitch = range_limit<F32>(pitch, tweak.beam.gun_tilt_min, tweak.beam.gun_tilt_max);
+
+        xVec3 axis = xVec3::create(-1.0f, 0.0f, 0.0f);
+        xQuatFromAxisAngle(&gun_tilt, &axis, pitch);
+    }
+}
+
 S32 zNPCBPlankton::check_player_damage()
 {
     S32 damage = 0;
 
     return damage & !globals.player.cheat_mode;
+}
+
+F32 zNPCBPlankton::orbit_yaw_offset(const xVec3& p0, const xVec3& p1) const
+{
+    xVec2 v0 = { p0.x - orbit.center.x, p0.z - orbit.center.z };
+    xVec2 v1 = { p1.x - orbit.center.x, p1.z - orbit.center.z };
+
+    F32 cross = v0.y * v1.x - v0.x * v1.y;
+    F32 dot = v0.dot(v1);
+    F32 ang = xrmod(PI + xatan2(cross, dot)) - PI;
+
+    return ang;
 }
 
 void zNPCBPlankton::load_territory(S32 index, xBase& child)
@@ -1733,6 +2073,72 @@ void zNPCBPlankton::reappear()
     play_sound(0, (xVec3*)&bound.pad[3], 1.0f);
 }
 
+xVec3 zNPCBPlankton::random_orbit(const xVec3& loc, F32 min_ang, F32 max_ang) const
+{
+    xVec3 diff = loc - orbit.center;
+    F32 ang;
+
+    F32 d2 = diff.length2();
+    if (d2 > 0.000001f)
+    {
+        F32 dist = xsqrt(d2);
+        F32 inv = 1.0f / dist;
+        ang = xatan2(diff.x * inv, diff.z * inv);
+    }
+    else
+    {
+        ang = 0.0f;
+    }
+
+    if (max_ang > PI)
+    {
+        max_ang = PI;
+    }
+
+    F32 delta = (max_ang - min_ang) * xurand() + min_ang;
+    if (xrand() & 0x2000)
+    {
+        delta = -delta;
+    }
+
+    ang = ang + delta;
+
+    xVec3 out;
+    out.x = orbit.center.x + orbit.radius * isin(ang);
+    out.y = orbit.center.y;
+    out.z = orbit.center.z + orbit.radius * icos(ang);
+    return out;
+}
+
+xVec3 zNPCBPlankton::player_orbit() const
+{
+    xVec3* player_loc = get_player_loc();
+    xVec3& loc = location();
+    F32 offset = xabs(orbit_yaw_offset(loc, *player_loc));
+    F32 t = xAccelMoveTime(orbit.radius * offset, move.accel.x, 1.0f, move.max_vel.x);
+
+    xVec3 predicted;
+    zEntPlayer_PredictPos(&predicted, t, 1.0f, 1);
+
+    xVec2 diff = { predicted.x - orbit.center.x, predicted.z - orbit.center.z };
+    F32 d2 = diff.length2();
+
+    xVec3 out;
+    if (d2 > 0.0001f)
+    {
+        F32 dist = xsqrt(d2);
+        xVec2 dir = diff / dist;
+        xVec2 pos = dir * orbit.radius + xVec2::create(orbit.center.x, orbit.center.z);
+        out = xVec3::create(pos.x, orbit.center.y, pos.y);
+    }
+    else
+    {
+        out = location();
+    }
+
+    return out;
+}
+
 U8 zNPCBPlankton::crony_attacking() const
 {
     if (crony == NULL)
@@ -1741,6 +2147,62 @@ U8 zNPCBPlankton::crony_attacking() const
     }
 
     return crony->AttackTimeLeft() > 0.0f;
+}
+
+void zNPCBPlankton::stun()
+{
+    S32 gid = psy_instinct->GIDOfActive();
+
+    if (gid != NPC_GOAL_BPLANKTONSTUN && gid != NPC_GOAL_BPLANKTONDIZZY)
+    {
+        play_sound(SOUND_HIT, (xVec3*)&bound.pad[3], 1.0f);
+
+        if (mode == MODE_BUDDY)
+        {
+            psy_instinct->GoalSet(NPC_GOAL_BPLANKTONSTUN, 1);
+        }
+        else
+        {
+            if (territory[active_territory].timer != NULL)
+            {
+                zEntEvent(this, territory[active_territory].timer, 0x12);
+            }
+
+            psy_instinct->GoalSet(NPC_GOAL_BPLANKTONDIZZY, 1);
+
+            S32 count = 0;
+            for (S32 i = 0; i < territory_size; i++)
+            {
+                if (territory[i].fuse != NULL && !zEntDestructObj_isDestroyed(territory[i].fuse))
+                {
+                    count++;
+                }
+            }
+
+            if (count == 2)
+            {
+                say(5, 0, false);
+            }
+            else if (count < 2)
+            {
+                if (count > 0)
+                {
+                    say(6, 0, false);
+                    return;
+                }
+                say(3, 0, false);
+            }
+            else if (count < 4)
+            {
+                say(4, 0, false);
+                return;
+            }
+            else
+            {
+                say(3, 0, false);
+            }
+        }
+    }
 }
 
 S32 zNPCBPlankton::cronies_dead() const
@@ -1758,6 +2220,31 @@ S32 zNPCBPlankton::cronies_dead() const
     }
 
     return 1;
+}
+
+void zNPCBPlankton::impart_velocity(const xVec3& vel)
+{
+    if (flag.move == MOVE_ORBIT)
+    {
+        xVec3 ring_vel = world_to_ring_vel(vel, location(), orbit.center);
+
+        F32 radial = ring_vel.z;
+
+        xVec2 diff = { location().x - orbit.center.x, location().z - orbit.center.z };
+        F32 max_dist = orbit.radius + tweak.hit_max_dist;
+
+        if (max_dist * max_dist < diff.length2())
+        {
+            radial = 0.0f;
+        }
+
+        xVec3 add = xVec3::create(ring_vel.x, 0.0f, radial);
+        move.vel += add;
+    }
+    else
+    {
+        move.vel += vel;
+    }
 }
 
 void zNPCBPlankton::next_territory()
@@ -1885,6 +2372,53 @@ void zNPCBPlankton::reset_speed()
     }
 }
 
+void zNPCBPlankton::halt(F32 accel)
+{
+    flag.follow = FOLLOW_NONE;
+
+    if (flag.move == MOVE_ORBIT)
+    {
+        move.vel = ring_to_world_vel(move.vel, location(), orbit.center);
+    }
+
+    flag.move = MOVE_STOP;
+
+    F32 ax = accel;
+    if (move.vel.x >= 0.0f)
+    {
+        ax = -accel;
+    }
+    move.accel.x = ax;
+
+    F32 ay = accel;
+    if (move.vel.y >= 0.0f)
+    {
+        ay = -accel;
+    }
+    move.accel.y = ay;
+
+    F32 az = accel;
+    if (move.vel.z >= 0.0f)
+    {
+        az = -accel;
+    }
+    move.accel.z = az;
+}
+
+void zNPCBPlankton::fall(F32 accel, F32 max_vel)
+{
+    flag.follow = FOLLOW_NONE;
+
+    if (flag.move == MOVE_ORBIT)
+    {
+        move.vel = ring_to_world_vel(move.vel, location(), orbit.center);
+    }
+
+    flag.move = MOVE_ACCEL;
+    move.accel = xVec3::create(accel, -accel, accel);
+    move.max_vel = xVec3::create(0.0f, max_vel, 0.0f);
+}
+
 void zNPCBPlankton::aim_gun(xAnimPlay* play, xQuat* q, xVec3* v, S32 count)
 {
     zNPCBPlankton* npc = (zNPCBPlankton*)play->Object;
@@ -1943,6 +2477,35 @@ S32 zNPCGoalBPlanktonIdle::Exit(F32 dt, void* ctxt)
     return xGoal::Exit(dt, ctxt);
 }
 
+void zNPCGoalBPlanktonIdle::get_yaw(F32& optimal, F32& dist) const
+{
+    F32 player_yaw = owner.get_orbit_yaw(*get_player_loc());
+    F32 cur_yaw = owner.get_orbit_yaw(owner.location());
+    F32 wrapped = xrmod(PI + (cur_yaw - player_yaw)) - PI;
+
+    optimal = tweak.mode_buddy.obstruct_angle + tweak.follow.min_ang;
+    if (wrapped < 0.0f)
+    {
+        optimal = -optimal;
+    }
+    optimal = optimal + player_yaw;
+
+    dist = xrmod(PI + (optimal - cur_yaw)) - PI;
+}
+
+void zNPCGoalBPlanktonIdle::apply_yaw(F32 yaw)
+{
+    F32 y = yaw + tweak.follow.min_ang * (2.0f * xurand() - 1.0f);
+
+    owner.move.dest = owner.orbit.center;
+    owner.move.dest.x = owner.move.dest.x + owner.orbit.radius * isin(y);
+    owner.move.dest.z = owner.move.dest.z + owner.orbit.radius * icos(y);
+
+    owner.follow.delay = 0.0f;
+    owner.follow.max_delay =
+        tweak.follow.min_delay + (tweak.follow.max_delay - tweak.follow.min_delay) * xurand();
+}
+
 xFactoryInst* zNPCGoalBPlanktonAttack::create(S32 who, RyzMemGrow* grow, void* info)
 {
     return new (who, grow) zNPCGoalBPlanktonAttack(who, (zNPCBPlankton&)*info);
@@ -1998,9 +2561,51 @@ S32 zNPCGoalBPlanktonAmbush::Exit(F32 dt, void* ctxt)
     return xGoal::Exit(dt, ctxt);
 }
 
+S32 zNPCGoalBPlanktonAmbush::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    if (!owner.have_cronies())
+    {
+        owner.ambush_delay = owner.ambush_delay - dt;
+
+        if (owner.ambush_delay <= 0.0f && owner.move_to_player_territory())
+        {
+            owner.refresh_orbit();
+
+            xVec3* player_loc = get_player_loc();
+            xVec3 loc = owner.random_orbit(*player_loc, 0.0f, PI);
+            owner.set_location(loc);
+
+            *trantype = GOAL_TRAN_SET;
+            return NPC_GOAL_BPLANKTONIDLE;
+        }
+    }
+    else if (owner.cronies_dead())
+    {
+        *trantype = GOAL_TRAN_SET;
+        return NPC_GOAL_BPLANKTONIDLE;
+    }
+
+    return 0;
+}
+
 xFactoryInst* zNPCGoalBPlanktonFlank::create(S32 who, RyzMemGrow* grow, void* info)
 {
     return new (who, grow) zNPCGoalBPlanktonFlank(who, (zNPCBPlankton&)*info);
+}
+
+S32 zNPCGoalBPlanktonFlank::Enter(F32 dt, void* updCtxt)
+{
+    owner.reappear();
+    owner.flag.attacking = true;
+
+    xVec3 target = owner.orbit.center + globals.camera.mat.at * owner.orbit.radius;
+    xVec3 loc = owner.random_orbit(target, 0.0f, tweak.follow.min_ang);
+    owner.set_location(loc);
+
+    owner.refresh_orbit();
+    owner.follow_camera();
+    owner.reset_speed();
+    return zNPCGoalCommon::Enter(dt, updCtxt);
 }
 
 S32 zNPCGoalBPlanktonFlank::Exit(F32 dt, void* updCtxt)
@@ -2010,10 +2615,113 @@ S32 zNPCGoalBPlanktonFlank::Exit(F32 dt, void* updCtxt)
     return xGoal::Exit(dt, updCtxt);
 }
 
+S32 zNPCGoalBPlanktonFlank::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    xVec3& loc = owner.location();
+
+    if (xabs(loc.y - owner.orbit.center.y) > 0.1f)
+    {
+        return 0;
+    }
+
+    owner.beam_duration = tweak.beam.time_fire;
+    *trantype = GOAL_TRAN_SET;
+    return NPC_GOAL_BPLANKTONBEAM;
+}
+
 xFactoryInst* zNPCGoalBPlanktonEvade::create(S32 who, RyzMemGrow* grow, void* info)
 {
     return new (who, grow) zNPCGoalBPlanktonEvade(who, (zNPCBPlankton&)*info);
 }
+
+namespace
+{
+    xVec3 ring_to_world_loc(const xVec3& ring, const xVec3& center);
+    xVec3 world_to_ring_loc(const xVec3& loc, const xVec3& center);
+} // namespace
+
+S32 zNPCGoalBPlanktonEvade::Enter(F32 dt, void* updCtxt)
+{
+    owner.reappear();
+    owner.flag.attacking = true;
+    owner.reset_speed();
+    owner.face_player();
+    owner.flag.move = zNPCBPlankton::MOVE_ORBIT;
+    owner.flag.follow = zNPCBPlankton::FOLLOW_NONE;
+    owner.reset_speed();
+    owner.move.accel.x = tweak.evade.accel;
+    owner.move.max_vel.x = tweak.evade.max_vel;
+    owner.delay = 0.0f;
+    evade_delay = owner.delay + tweak.evade.move_delay_min +
+                  (tweak.evade.move_delay_max - tweak.evade.move_delay_min) * xurand();
+    return zNPCGoalCommon::Enter(dt, updCtxt);
+}
+
+S32 zNPCGoalBPlanktonEvade::Exit(F32 dt, void* updCtxt)
+{
+    owner.reset_speed();
+    owner.halt(1e38f);
+    return xGoal::Exit(dt, updCtxt);
+}
+
+S32 zNPCGoalBPlanktonEvade::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    if (owner.delay >= tweak.evade.duration)
+    {
+        owner.beam_duration = tweak.beam.time_fire;
+        *trantype = GOAL_TRAN_SET;
+        return NPC_GOAL_BPLANKTONBEAM;
+    }
+
+    if (evade_delay <= owner.delay)
+    {
+        xVec3 ring_loc = world_to_ring_loc(owner.location(), owner.orbit.center);
+        F32 x;
+
+        if (owner.move.vel.x >= 0.0f)
+        {
+            x = -(0.7f * ring_loc.z - ring_loc.x);
+        }
+        else
+        {
+            x = 0.7f * ring_loc.z + ring_loc.x;
+        }
+
+        xVec3 target = xVec3::create(x, 0.0f, owner.orbit.radius);
+        owner.move.dest = ring_to_world_loc(target, owner.orbit.center);
+
+        evade_delay = owner.delay + tweak.evade.move_delay_min +
+                      (tweak.evade.move_delay_max - tweak.evade.move_delay_min) * xurand();
+    }
+
+    return 0;
+}
+
+namespace
+{
+    xVec3 ring_to_world_loc(const xVec3& ring, const xVec3& center)
+    {
+        F32 z = ring.z;
+
+        if (z < -0.000001f || z > 0.000001f)
+        {
+            F32 ang = ring.x / z;
+
+            return xVec3::create(z * isin(ang) + center.x, ring.y + center.y, z * icos(ang) + center.z);
+        }
+
+        return xVec3::create(center.x, ring.y + center.y, center.z);
+    }
+
+    xVec3 world_to_ring_loc(const xVec3& loc, const xVec3& center)
+    {
+        xVec2 offset = { loc.x - center.x, loc.z - center.z };
+        F32 dist = offset.length();
+        F32 ang = xatan2(offset.x, offset.y);
+
+        return xVec3::create(dist * ang, loc.y - center.y, dist);
+    }
+} // namespace
 
 xFactoryInst* zNPCGoalBPlanktonHunt::create(S32 who, RyzMemGrow* grow, void* info)
 {
@@ -2036,6 +2744,39 @@ S32 zNPCGoalBPlanktonHunt::Exit(F32 dt, void* updCtxt)
 {
     owner.refresh_orbit();
     return xGoal::Exit(dt, updCtxt);
+}
+
+S32 zNPCGoalBPlanktonHunt::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    if (!owner.flag.hunt)
+    {
+        *trantype = GOAL_TRAN_SET;
+        return owner.next_goal();
+    }
+
+    owner.refresh_orbit();
+
+    xVec3& loc = owner.location();
+    xVec3* pl = get_player_loc();
+    xVec3 diff = *pl - loc;
+
+    if (diff.length2() >= tweak.hunt.beam_dist * tweak.hunt.beam_dist)
+    {
+        return 0;
+    }
+
+    xVec3* pl2 = get_player_loc();
+    xVec3 pdiff = *pl2 - player_loc;
+    player_loc = *pl2;
+
+    if (owner.delay < tweak.hunt.beam_interval && pdiff.length2() > 4.0f)
+    {
+        return 0;
+    }
+
+    owner.beam_duration = tweak.hunt.beam_duration;
+    *trantype = GOAL_TRAN_SET;
+    return NPC_GOAL_BPLANKTONBEAM;
 }
 
 xFactoryInst* zNPCGoalBPlanktonTaunt::create(S32 who, RyzMemGrow* grow, void* info)
@@ -2127,6 +2868,15 @@ S32 zNPCGoalBPlanktonStun::Process(en_trantype* trantype, F32 dt, void* updCtxt,
 xFactoryInst* zNPCGoalBPlanktonFall::create(S32 who, RyzMemGrow* grow, void* info)
 {
     return new (who, grow) zNPCGoalBPlanktonFall(who, (zNPCBPlankton&)*info);
+}
+
+S32 zNPCGoalBPlanktonFall::Enter(F32 dt, void* updCtxt)
+{
+    owner.reappear();
+    owner.delay = 0.0f;
+    owner.flag.follow = zNPCBPlankton::FOLLOW_NONE;
+    owner.fall(tweak.fall.accel, tweak.fall.max_vel);
+    return zNPCGoalCommon::Enter(dt, updCtxt);
 }
 
 S32 zNPCGoalBPlanktonFall::Exit(F32 dt, void* updCtxt)
@@ -2248,6 +2998,76 @@ S32 zNPCGoalBPlanktonBeam::Process(en_trantype* trantype, F32 dt, void* updCtxt,
     return 0;
 }
 
+S32 zNPCGoalBPlanktonBeam::update_warm_up(F32 dt)
+{
+    if (tweak.beam.time_warm_up <= owner.delay)
+    {
+        owner.delay = 0.0f;
+        substate = SS_FIRE;
+        owner.disable_emitter(*owner.beam_charge);
+    }
+
+    return 0;
+}
+
+S32 zNPCGoalBPlanktonBeam::update_fire(F32 dt)
+{
+    if (owner.beam_duration <= owner.delay || !owner.flag.attacking)
+    {
+        owner.AnimStart(g_hash_bossanim[ANIM_attack_beam_end], 0);
+        owner.flag.aim_gun = false;
+        substate = SS_COOL_DOWN;
+    }
+    else
+    {
+        xVec3& loc = owner.location();
+        xVec3* player_loc = get_player_loc();
+        xVec3 diff = *player_loc - loc;
+
+        if (diff.length2() >= tweak.beam.max_dist * tweak.beam.max_dist)
+        {
+            substate = SS_COOL_DOWN;
+        }
+        else
+        {
+            xVec3 origin = xModelGetBoneLocation(*owner.model, 0x16);
+
+            xVec3* player_loc2 = get_player_loc();
+            xVec3 to_player = *player_loc2 - origin;
+
+            xMat4x3 mat;
+            xMat3x3LookVec3(mat, to_player);
+
+            xVec3 emit_off = mat.at * tweak.beam.emit_dist;
+            origin += emit_off;
+
+            emitted = emitted + dt * tweak.beam.rate;
+            S32 count = (S32)emitted;
+            emitted = emitted - count;
+
+            for (S32 i = 0; i < count; i++)
+            {
+                owner.beam.emit(origin, to_player);
+                owner.beam_ring.emit(mat, -1);
+            }
+        }
+    }
+
+    return 0;
+}
+
+S32 zNPCGoalBPlanktonBeam::update_cool_down(F32 dt)
+{
+    xAnimState* state = owner.AnimCurState();
+
+    if (state->ID != g_hash_bossanim[ANIM_attack_beam_end] || owner.AnimTimeRemain(NULL) < f1658 + dt)
+    {
+        substate = SS_DONE;
+    }
+
+    return 0;
+}
+
 xFactoryInst* zNPCGoalBPlanktonWall::create(S32 who, RyzMemGrow* grow, void* info)
 {
     return new (who, grow) zNPCGoalBPlanktonWall(who, (zNPCBPlankton&)*info);
@@ -2320,6 +3140,20 @@ void zNPCBPlankton::face_player()
 
 void zNPCBPlankton::render_debug()
 {
+}
+
+S32 zNPCBPlankton::turning() const
+{
+    S32 result = 0;
+
+    if (xabs(turn.vel) > 0.000001f ||
+        (xabs(turn.accel) > 0.000001f &&
+         (xabs(turn.dir.x - model->Mat->at.x) >= 0.01f || xabs(turn.dir.y - model->Mat->at.z) >= 0.01f)))
+    {
+        result = 1;
+    }
+
+    return result;
 }
 
 void zNPCBPlankton::take_control()

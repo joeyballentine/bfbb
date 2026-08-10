@@ -164,6 +164,8 @@ struct zNPCBPlankton : zNPCBoss
     void fall(F32, F32);
     void refresh_orbit();
     F32 orbit_yaw_offset(const xVec3&, const xVec3&) const;
+    xVec3 random_orbit(const xVec3&, F32, F32) const;
+    xVec3 player_orbit() const;
     void load_territory(S32, xBase&);
 
     xVec3& location() const;
@@ -197,8 +199,8 @@ struct zNPCGoalBPlanktonIdle : zNPCGoalCommon
     S32 Exit(F32, void*);
     S32 Process(en_trantype*, F32, void*, xScene*);
 
-    S32 get_yaw(F32&, F32&) const;
-    S32 apply_yaw(F32);
+    void get_yaw(F32&, F32&) const;
+    void apply_yaw(F32);
 };
 
 struct zNPCGoalBPlanktonAttack : zNPCGoalCommon

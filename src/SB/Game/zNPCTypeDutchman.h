@@ -450,7 +450,9 @@ struct zNPCGoalDutchmanPostFlame : zNPCGoalCommon
     }
 
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
+    S32 Enter(F32 dt, void* updCtxt);
     S32 Exit(F32 dt, void* updCtxt);
+    S32 Process(en_trantype*, F32, void*, xScene*);
 };
 
 struct zNPCGoalDutchmanCaught : zNPCGoalCommon
@@ -464,6 +466,7 @@ struct zNPCGoalDutchmanCaught : zNPCGoalCommon
 
     S32 Enter(float, void*);
     S32 Exit(float, void*);
+    S32 Process(en_trantype*, F32, void*, xScene*);
 
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
 };
@@ -478,7 +481,9 @@ struct zNPCGoalDutchmanDamage : zNPCGoalCommon
     }
 
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);
+    S32 Enter(F32 dt, void* updCtxt);
     S32 Exit(F32 dt, void* updCtxt);
+    S32 Process(en_trantype*, F32, void*, xScene*);
 };
 
 struct delay_goal
