@@ -27,7 +27,13 @@ struct UVAModelInfo
     void SetColor(iColor_tag);
     void Update(F32, const xVec2*);
     void Refresh();
-    S32 Valid() const;
+    // Defined here rather than in the .cpp: the target emits this as a weak
+    // per-TU copy (Valid__12UVAModelInfoCFv, scope:weak), so it lived in a
+    // header originally.
+    S32 Valid() const
+    {
+        return model && uv;
+    }
     S32 Init(RpAtomic*, U32);
 };
 
