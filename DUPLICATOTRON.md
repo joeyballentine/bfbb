@@ -657,6 +657,61 @@ at all — they are unused parameters being dropped. `RepelBowlBall` and
 divergence does exist, so the asm still overrides DWARF — but check the
 declaration before concluding you have found one.
 
+### Reordering locals to dwarf order: tried, mostly does not work
+
+Worth recording as a negative result so nobody re-runs it. `tools/dwarforder.py`
+ranks candidates; two agent waves worked **39 functions** between them.
+
+Yield: **three real improvements** — `HAZ_Iterate` 98.636% -> 99.848%,
+`zThrownCollide_ThrowFruit` 97.342% -> 97.650%, `TurnThemHeads` 96.584% ->
+96.619% — plus about ten reorders kept at zero cost because they now match the
+original order without changing codegen. Everything else reverted or was
+unachievable, and several regressed hard: `ZNPC_AnimTable_Tubelet` 99.583 ->
+86.042, `render_closeup` 99.868 -> 90.198, `NCIN_OilHazard` 96.923 -> 89.650.
+
+Why it underperforms, in order of importance:
+
+1. **Scope, not order, is the real blocker.** dwarf flattens block-scoped
+   locals into one list per block, so reaching its order usually means hoisting
+   variables out of the `if`/`for` blocks they live in. That is a code change,
+   not a reorder, and it was the reason for most skips.
+2. **A near-100% function is usually wrong for some other reason**, and
+   disturbing a working stack layout makes it worse. Reordering is only
+   plausible when stack layout is the *last* remaining defect.
+3. **Statics are not declaration-ordered.** See below.
+
+The premise is still sound, which is why the failures are worth understanding
+rather than dismissing: of functions we already match byte-for-byte, **85%
+already agree with dwarf's order** (367 of 433). dwarf order really is the
+original source order. It just is not usually the thing standing between a
+function and 100%.
+
+### Function-scope statics are listed in DESCENDING address order
+
+Not declaration order. `zEntCruiseBubble::init_states` is twelve statics
+annotated `// @ 0x005CB880` and interleaved with compiler `@8149` init-guard
+flags; sorted ascending by address they come out in exactly the order our
+source already had. Reordering to dwarf's listing cost 99.161% -> 94.699%.
+
+`tools/dwarforder.py` therefore matches only entries annotated with a register
+or stack slot (`// r18`, `// r29+0x90`). That alone removed a third of the
+worklist, 50 candidates down to 32 at >=95%.
+
+Checking our static order against ascending-address order is *also* not a
+lever: 70% already agree, and the disagreements are mostly an artifact of
+comparing across sections (`.bss` at `0x50FExxx` versus `.data` at
+`0x5CBxxxx`), where relative address says nothing about declaration order.
+
+One case is worth knowing about because it looks like a missed win and is not.
+Reordering `DoWallJumpCheck`'s three statics to dwarf's *descending* listing
+flipped a neighbour, `PlayerCollCheckEnv`, to 100%. But ascending-address order
+for those three is `sAtdist, sSweptrad, sVerticalCos`, which is already exactly
+what our source has — so the reorder moved us *away* from the original source
+order and the flip was coincidental. Almost certainly it compensated for a
+`.bss` layout error elsewhere in the unit rather than fixing anything. Treat a
+percentage win from a change you know to be less faithful as a symptom, not a
+fix; the real bug is whatever made the compensation work.
+
 **Best combination found so far**, and worth assembling up front for any future
 bulk pass: Ghidra output for control flow and call graph, plus a dump of the
 target's `.sdata2`/`.rodata` decoded as floats/RGBA to resolve `@NNNN` literals,
