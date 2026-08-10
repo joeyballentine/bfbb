@@ -13,15 +13,6 @@ typedef struct zNPCRobot;
 extern char* g_strz_roboanim[41];
 extern U32 g_hash_roboanim[41];
 
-// NOTE(duplicatotron): this belongs in zMovePoint.h next to RadiusZone()/
-// Delay()/PosGet(); it lives here only because this agent may not touch shared
-// headers. Move it when integrating, along with the RadiusArena()/NodeByIndex()
-// declarations described in the hand-off notes.
-inline U32 zMovePoint::NumNodes()
-{
-    return asset->numPoints;
-}
-
 struct NPCArena
 {
     S32 flg_arena;
@@ -124,10 +115,13 @@ struct zNPCRobot : zNPCCommon
     void AddMiscTypical(xPsyche*, int (*)(xGoal*, void*, en_trantype*, float, void*),
                         int (*)(xGoal*, void*, en_trantype*, float, void*),
                         int (*)(xGoal*, void*, en_trantype*, float, void*));
-    void CheckFalling();
+    void CheckFalling(F32 dt);
     void DoAliveStuff(F32 dt);
     S32 IsWounded();
     S32 IsDead();
+    void BunnyHopSet(xVec3* vel);
+    void DoFX_Motorboat(F32 dt);
+    void VFXStarTrek(F32 dt, xVec3* pos, xVec3* vel);
 
     // vTable (xNPCBasic)
 
@@ -135,7 +129,7 @@ struct zNPCRobot : zNPCCommon
     void Reset();
     void Process(xScene* xscn, F32 dt);
     void NewTime(xScene* xscn, F32 dt);
-    S32 SysEvent(xBase* from, xBase* to, U32 toEvent, F32* toParam, xBase* toParamWidget,
+    S32 SysEvent(xBase* from, xBase* to, U32 toEvent, const F32* toParam, xBase* toParamWidget,
                  S32* handled);
     void CollideReview();
     U8 PhysicsFlags() const;
@@ -242,6 +236,9 @@ struct zNPCFodBzzt : zNPCRobot
     U32 AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal);
     void SelfSetup();
     void Stun(F32 stuntime);
+
+    void Setup();
+    void DiscoUpdate(F32 dt);
 };
 
 struct zNPCChomper : zNPCRobot
@@ -367,6 +364,12 @@ struct zNPCSleepy : zNPCRobot
     void RenderExtra();
     void LassoModelIndex(S32* idxgrab, S32* idxhold);
     void SelfSetup();
+
+    void Process(xScene* xscn, F32 dt);
+    void NightLightUVStep(F32 dt);
+    void SnoreNZeez(F32 dt);
+    void ConeOfRange(F32 dt, S32 which);
+    S32 RepelBowlBall(F32 dt);
 };
 
 struct zNPCArfDog : zNPCRobot
@@ -393,6 +396,8 @@ struct zNPCArfDog : zNPCRobot
     U32 AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal);
     void SelfSetup();
     void Stun(F32 stuntime);
+
+    void Process(xScene* xscn, F32 dt);
 };
 
 struct zNPCArfArf : zNPCRobot
@@ -414,6 +419,8 @@ struct zNPCArfArf : zNPCRobot
     void ParseLinks();
     void ParseChild(xBase* child);
     void SelfSetup();
+
+    U32 AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal);
 };
 
 struct zNPCChuck : zNPCRobot
@@ -543,6 +550,9 @@ struct zNPCTubelet : zNPCRobot
     void Bonk();
     S32 Chk_IsBonked();
     void SelfSetup();
+
+    void Process(xScene* xscn, F32 dt);
+    S32 RoboHandleMail(NPCMsg* mail);
 };
 
 enum en_tubespot
@@ -586,6 +596,8 @@ struct zNPCTubeSlave : zNPCRobot
     U32 AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal);
     void SelfSetup();
     void SetMaster(zNPCTubelet* pete, en_tubespot spot);
+
+    void Setup();
 };
 
 typedef struct zNPCSlick;
@@ -621,6 +633,8 @@ struct zNPCSlick : zNPCRobot
     void ShieldFX(F32 dt);
     void ShieldCollide(F32 dt);
     void StuffToDoIfAlive(F32 dt);
+
+    void SlipSlidenAway(F32 dt);
 };
 
 void PlayTheFiddle();
