@@ -42,9 +42,9 @@ void NCIN_Par_BPLANK_JET_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit
     {
         fxrec->fxdata.pardata.emitter = zParEmitterFind("PAREMIT_BPLANK_JET_1");
 
-        xParEmitterAsset* tasset = fxrec->fxdata.pardata.emitter->tasset;
+        xParEmitterAsset* a = fxrec->fxdata.pardata.emitter->tasset;
 
-        if (tasset == NULL || tasset->emit_type != 15)
+        if (a == NULL || a->emit_type != 15)
         {
             fxrec->fxdata.pardata.emitter = NULL;
         }
@@ -59,7 +59,7 @@ void NCIN_Par_BPLANK_JET_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit
 
         if (float_accum < 0.0f)
         {
-            float_accum = 0.1f + tasset->e_entbone.bone;
+            float_accum = 0.1f + a->e_entbone.bone;
         }
 
         fxrec->pos_B[0] = 1e9f;
@@ -78,9 +78,9 @@ void NCIN_Par_BPLANK_JET_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit
     {
         fxrec->fxdata.pardata.emitter = zParEmitterFind("PAREMIT_BPLANK_JET_2");
 
-        xParEmitterAsset* tasset = fxrec->fxdata.pardata.emitter->tasset;
+        xParEmitterAsset* a = fxrec->fxdata.pardata.emitter->tasset;
 
-        if (tasset == NULL || tasset->emit_type != 15)
+        if (a == NULL || a->emit_type != 15)
         {
             fxrec->fxdata.pardata.emitter = NULL;
         }
@@ -95,7 +95,7 @@ void NCIN_Par_BPLANK_JET_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit
 
         if (float_accum < 0.0f)
         {
-            float_accum = 0.1f + tasset->e_entbone.bone;
+            float_accum = 0.1f + a->e_entbone.bone;
         }
 
         fxrec->pos_B[0] = 1e9f;
@@ -114,9 +114,9 @@ void NCIN_Par_BPLANK_SBB_FLAMES_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32
     {
         fxrec->fxdata.pardata.emitter = zParEmitterFind("PAREMIT_SBB_FLAMES_1");
 
-        xParEmitterAsset* tasset = fxrec->fxdata.pardata.emitter->tasset;
+        xParEmitterAsset* a = fxrec->fxdata.pardata.emitter->tasset;
 
-        if (tasset == NULL || tasset->emit_type != 15)
+        if (a == NULL || a->emit_type != 15)
         {
             fxrec->fxdata.pardata.emitter = NULL;
         }
@@ -131,7 +131,7 @@ void NCIN_Par_BPLANK_SBB_FLAMES_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32
 
         if (float_accum < 0.0f)
         {
-            float_accum = 0.1f + tasset->e_entbone.bone;
+            float_accum = 0.1f + a->e_entbone.bone;
         }
 
         fxrec->pos_B[0] = 1e9f;
@@ -150,9 +150,9 @@ void NCIN_Par_BPLANK_SBB_FLAMES_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32
     {
         fxrec->fxdata.pardata.emitter = zParEmitterFind("PAREMIT_SBB_FLAMES_2");
 
-        xParEmitterAsset* tasset = fxrec->fxdata.pardata.emitter->tasset;
+        xParEmitterAsset* a = fxrec->fxdata.pardata.emitter->tasset;
 
-        if (tasset == NULL || tasset->emit_type != 15)
+        if (a == NULL || a->emit_type != 15)
         {
             fxrec->fxdata.pardata.emitter = NULL;
         }
@@ -167,7 +167,7 @@ void NCIN_Par_BPLANK_SBB_FLAMES_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32
 
         if (float_accum < 0.0f)
         {
-            float_accum = 0.1f + tasset->e_entbone.bone;
+            float_accum = 0.1f + a->e_entbone.bone;
         }
 
         fxrec->pos_B[0] = 1e9f;
@@ -186,9 +186,9 @@ void NCIN_Par_BPLANK_SBB_JET_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 ki
     {
         fxrec->fxdata.pardata.emitter = zParEmitterFind("PAREMIT_SBB_JET_1");
 
-        xParEmitterAsset* tasset = fxrec->fxdata.pardata.emitter->tasset;
+        xParEmitterAsset* a = fxrec->fxdata.pardata.emitter->tasset;
 
-        if (tasset == NULL || tasset->emit_type != 15)
+        if (a == NULL || a->emit_type != 15)
         {
             fxrec->fxdata.pardata.emitter = NULL;
         }
@@ -203,7 +203,7 @@ void NCIN_Par_BPLANK_SBB_JET_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 ki
 
         if (float_accum < 0.0f)
         {
-            float_accum = 0.1f + tasset->e_entbone.bone;
+            float_accum = 0.1f + a->e_entbone.bone;
         }
 
         fxrec->pos_B[0] = 1e9f;
@@ -222,9 +222,9 @@ void NCIN_Par_BPLANK_SBB_JET_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 ki
     {
         fxrec->fxdata.pardata.emitter = zParEmitterFind("PAREMIT_SBB_JET_2");
 
-        xParEmitterAsset* tasset = fxrec->fxdata.pardata.emitter->tasset;
+        xParEmitterAsset* a = fxrec->fxdata.pardata.emitter->tasset;
 
-        if (tasset == NULL || tasset->emit_type != 15)
+        if (a == NULL || a->emit_type != 15)
         {
             fxrec->fxdata.pardata.emitter = NULL;
         }
@@ -239,7 +239,7 @@ void NCIN_Par_BPLANK_SBB_JET_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 ki
 
         if (float_accum < 0.0f)
         {
-            float_accum = 0.1f + tasset->e_entbone.bone;
+            float_accum = 0.1f + a->e_entbone.bone;
         }
 
         fxrec->pos_B[0] = 1e9f;
@@ -258,9 +258,9 @@ void NCIN_Par_BPLANK_SBB_SMOKE_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 
     {
         fxrec->fxdata.pardata.emitter = zParEmitterFind("PAREMIT_SBB_SMOKE_1");
 
-        xParEmitterAsset* tasset = fxrec->fxdata.pardata.emitter->tasset;
+        xParEmitterAsset* a = fxrec->fxdata.pardata.emitter->tasset;
 
-        if (tasset == NULL || tasset->emit_type != 15)
+        if (a == NULL || a->emit_type != 15)
         {
             fxrec->fxdata.pardata.emitter = NULL;
         }
@@ -275,7 +275,7 @@ void NCIN_Par_BPLANK_SBB_SMOKE_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 
 
         if (float_accum < 0.0f)
         {
-            float_accum = 0.1f + tasset->e_entbone.bone;
+            float_accum = 0.1f + a->e_entbone.bone;
         }
 
         fxrec->pos_B[0] = 1e9f;
@@ -294,9 +294,9 @@ void NCIN_Par_BPLANK_SBB_SMOKE_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 
     {
         fxrec->fxdata.pardata.emitter = zParEmitterFind("PAREMIT_SBB_SMOKE_2");
 
-        xParEmitterAsset* tasset = fxrec->fxdata.pardata.emitter->tasset;
+        xParEmitterAsset* a = fxrec->fxdata.pardata.emitter->tasset;
 
-        if (tasset == NULL || tasset->emit_type != 15)
+        if (a == NULL || a->emit_type != 15)
         {
             fxrec->fxdata.pardata.emitter = NULL;
         }
@@ -311,7 +311,7 @@ void NCIN_Par_BPLANK_SBB_SMOKE_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 
 
         if (float_accum < 0.0f)
         {
-            float_accum = 0.1f + tasset->e_entbone.bone;
+            float_accum = 0.1f + a->e_entbone.bone;
         }
 
         fxrec->pos_B[0] = 1e9f;
@@ -330,9 +330,9 @@ void NCIN_Par_CIN_BIGDUP_SMOKE_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 ki
     {
         fxrec->fxdata.pardata.emitter = zParEmitterFind("PAREMIT_CIN_BIGUP_SMOKE");
 
-        xParEmitterAsset* tasset = fxrec->fxdata.pardata.emitter->tasset;
+        xParEmitterAsset* a = fxrec->fxdata.pardata.emitter->tasset;
 
-        if (tasset == NULL || tasset->emit_type != 15)
+        if (a == NULL || a->emit_type != 15)
         {
             fxrec->fxdata.pardata.emitter = NULL;
         }
@@ -347,7 +347,7 @@ void NCIN_Par_CIN_BIGDUP_SMOKE_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 ki
 
         if (float_accum < 0.0f)
         {
-            float_accum = 0.1f + tasset->e_entbone.bone;
+            float_accum = 0.1f + a->e_entbone.bone;
         }
 
         fxrec->pos_B[0] = 1e9f;
@@ -366,9 +366,9 @@ void NCIN_Par_CIN_BIGDUP_SPAWN_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 ki
     {
         fxrec->fxdata.pardata.emitter = zParEmitterFind("PAREMIT_CIN_BIGUP_SPAWN");
 
-        xParEmitterAsset* tasset = fxrec->fxdata.pardata.emitter->tasset;
+        xParEmitterAsset* a = fxrec->fxdata.pardata.emitter->tasset;
 
-        if (tasset == NULL || tasset->emit_type != 15)
+        if (a == NULL || a->emit_type != 15)
         {
             fxrec->fxdata.pardata.emitter = NULL;
         }
@@ -383,7 +383,7 @@ void NCIN_Par_CIN_BIGDUP_SPAWN_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 ki
 
         if (float_accum < 0.0f)
         {
-            float_accum = 0.1f + tasset->e_entbone.bone;
+            float_accum = 0.1f + a->e_entbone.bone;
         }
 
         fxrec->pos_B[0] = 1e9f;
@@ -402,9 +402,9 @@ void NCIN_Par_CIN_PLATFORM_JETS_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 k
     {
         fxrec->fxdata.pardata.emitter = zParEmitterFind("PAREMIT_CIN_PLATFORM_JETS");
 
-        xParEmitterAsset* tasset = fxrec->fxdata.pardata.emitter->tasset;
+        xParEmitterAsset* a = fxrec->fxdata.pardata.emitter->tasset;
 
-        if (tasset == NULL || tasset->emit_type != 15)
+        if (a == NULL || a->emit_type != 15)
         {
             fxrec->fxdata.pardata.emitter = NULL;
         }
@@ -419,7 +419,7 @@ void NCIN_Par_CIN_PLATFORM_JETS_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 k
 
         if (float_accum < 0.0f)
         {
-            float_accum = 0.1f + tasset->e_entbone.bone;
+            float_accum = 0.1f + a->e_entbone.bone;
         }
 
         fxrec->pos_B[0] = 1e9f;
@@ -826,21 +826,21 @@ void NCIN_BubTrailBone_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMa
                           U32 num_1, U32 num_2)
 {
     S32 ifx = fxrec->pos_A[1].x;
-    S32 ify = fxrec->pos_A[1].y;
+    S32 idx_boneInterest = fxrec->pos_A[1].y;
 
     if (num_1 != ifx)
     {
         return;
     }
 
-    xVec3 pos = *(const xVec3*)&animMat->pos;
+    xVec3 pos_emit = *(const xVec3*)&animMat->pos;
 
-    if (ify > 0)
+    if (idx_boneInterest > 0)
     {
-        pos += *(const xVec3*)&animMat[ify].pos;
+        pos_emit += *(const xVec3*)&animMat[idx_boneInterest].pos;
     }
 
-    zFX_SpawnBubbleTrail(&pos, 1);
+    zFX_SpawnBubbleTrail(&pos_emit, 1);
 }
 
 void NCIN_BubHit(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
@@ -984,15 +984,15 @@ void NCIN_HazProjShoot(const zCutsceneMgr* mgr, NCINEntry* fxrec, S32 param)
     if (fxrec->flg_stat & 2)
     {
         S32 type = fxrec->fxdata.hazdata.npchaz->typ_hazard;
-        S32 haztype = 10;
+        S32 use_haztyp = 10;
 
         if (type == 11)
         {
-            haztype = 18;
+            use_haztyp = 18;
         }
         else if (type >= 10 && type < 13)
         {
-            haztype = (type == 12) ? 16 : 10;
+            use_haztyp = (type == 12) ? 16 : 10;
         }
 
         NPCHazard* haz = HAZ_Acquire();
@@ -1002,7 +1002,7 @@ void NCIN_HazProjShoot(const zCutsceneMgr* mgr, NCINEntry* fxrec, S32 param)
             return;
         }
 
-        if (!haz->ConfigHelper((en_npchaz)haztype))
+        if (!haz->ConfigHelper((en_npchaz)use_haztyp))
         {
             return;
         }
@@ -1011,18 +1011,18 @@ void NCIN_HazProjShoot(const zCutsceneMgr* mgr, NCINEntry* fxrec, S32 param)
         fxrec->fxdata.hazdata.npchaz = haz;
         haz->flg_hazard &= ~128;
 
-        xVec3 delta = fxrec->pos_B[0] - fxrec->pos_A[0];
-        F32 len = delta.length();
+        xVec3 diff = fxrec->pos_B[0] - fxrec->pos_A[0];
+        F32 len = diff.length();
 
-        F32 height = fxrec->tym_beg - fxrec->tym_end;
+        F32 tym = fxrec->tym_beg - fxrec->tym_end;
 
-        if (height < 0.01f)
+        if (tym < 0.01f)
         {
-            height = 1.0f;
+            tym = 1.0f;
         }
 
-        haz->pos_hazard = delta;
-        haz->Start(&fxrec->pos_A[0], height);
+        haz->pos_hazard = diff;
+        haz->Start(&fxrec->pos_A[0], tym);
     }
 
     if (fxrec->fxdata.hazdata.npchaz)
@@ -1484,7 +1484,7 @@ void NCIN_FodProd_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixT
 
     static const xVec3 vec_offset = { 0.2f, 0.0f, 0.5f };
 
-    const xMat4x3* bone = (const xMat4x3*)&animMat[5];
+    const xMat4x3* mat_bone = (const xMat4x3*)&animMat[5];
     NPCHazard* haz = fxrec->fxdata.hazdata.npchaz;
 
     if (haz == NULL)
@@ -1492,14 +1492,14 @@ void NCIN_FodProd_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixT
         return;
     }
 
-    xVec3 pos = bone->pos;
+    xVec3 pos_poke = mat_bone->pos;
 
-    pos += bone->right * vec_offset.x;
-    pos += bone->up * vec_offset.y;
-    pos += bone->at * vec_offset.z;
-    pos += *(const xVec3*)&animMat->pos;
+    pos_poke += mat_bone->right * vec_offset.x;
+    pos_poke += mat_bone->up * vec_offset.y;
+    pos_poke += mat_bone->at * vec_offset.z;
+    pos_poke += *(const xVec3*)&animMat->pos;
 
-    haz->PosSet(&pos);
+    haz->PosSet(&pos_poke);
 }
 
 void NCIN_FodProdBone_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
@@ -1607,16 +1607,16 @@ void NCIN_MidFish_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixT
     {
         for (S32 i = 0; i < 24; i += 2)
         {
-            xVec3 pos = *(const xVec3*)&animMat[i].pos + *(const xVec3*)&animMat->pos;
-            zFX_SpawnBubbleTrail(&pos, 1);
+            xVec3 pos_emit = *(const xVec3*)&animMat[i].pos + *(const xVec3*)&animMat->pos;
+            zFX_SpawnBubbleTrail(&pos_emit, 1);
         }
     }
     else if (animIndex == 2 || animIndex == 3)
     {
         for (idx = g_idx_handbone; *idx >= 0; idx++)
         {
-            xVec3 pos = *(const xVec3*)&animMat[*idx].pos + *(const xVec3*)&animMat->pos;
-            zFX_SpawnBubbleTrail(&pos, 1);
+            xVec3 pos_emit = *(const xVec3*)&animMat[*idx].pos + *(const xVec3*)&animMat->pos;
+            zFX_SpawnBubbleTrail(&pos_emit, 1);
         }
     }
 }
@@ -1665,39 +1665,39 @@ void NCIN_HookRecoil_AR(const zCutsceneMgr* csnmgr, NCINEntry*, RpAtomic* model,
                         RwMatrixTag* animMat, U32 animIndex, U32 dataIndex)
 {
     F32 tym = csnmgr->csn->Time;
-    S32 idx;
+    S32 idx_anim;
 
     if (tym < 7.3666672f)
     {
-        idx = 5;
+        idx_anim = 5;
     }
     else if (tym < 12.8f)
     {
-        idx = 1;
+        idx_anim = 1;
     }
     else
     {
-        idx = 2;
+        idx_anim = 2;
     }
 
-    if (animIndex != idx)
+    if (animIndex != idx_anim)
     {
         return;
     }
 
-    U32 nbones = iModelNumBones(model);
+    U32 num_bones = iModelNumBones(model);
 
-    for (U32 i = 1; i < nbones; i++)
+    for (U32 i = 1; i < num_bones; i++)
     {
-        xVec3 pos = *(const xVec3*)&animMat[i].pos + *(const xVec3*)&animMat->pos;
-        zFX_SpawnBubbleTrail(&pos, 1);
+        xVec3 pos_emit = *(const xVec3*)&animMat[i].pos + *(const xVec3*)&animMat->pos;
+        zFX_SpawnBubbleTrail(&pos_emit, 1);
     }
 }
 
 void NCIN_Lightnin2Bones_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
-    _tagLightningAdd lyt;
-    xVec3 pos;
+    _tagLightningAdd addInfo;
+    xVec3 pnt;
 
     if (killit != 0)
     {
@@ -1715,20 +1715,20 @@ void NCIN_Lightnin2Bones_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
         return;
     }
 
-    xVec3Init(&pos, 0.0f, 0.0f, 0.0f);
+    xVec3Init(&pnt, 0.0f, 0.0f, 0.0f);
 
-    lyt.type = 3;
-    lyt.thickness = 1.0f;
-    lyt.flags = 0x10;
-    lyt.color.r = 200;
-    lyt.color.g = 200;
-    lyt.color.b = 200;
-    lyt.color.a = 255;
-    lyt.time = 1.0f;
-    lyt.start = &pos;
-    lyt.end = &pos;
+    addInfo.type = 3;
+    addInfo.thickness = 1.0f;
+    addInfo.flags = 0x10;
+    addInfo.color.r = 200;
+    addInfo.color.g = 200;
+    addInfo.color.b = 200;
+    addInfo.color.a = 255;
+    addInfo.time = 1.0f;
+    addInfo.start = &pnt;
+    addInfo.end = &pnt;
 
-    fxrec->fxdata.arcdata.lightning = zLightningAdd(&lyt);
+    fxrec->fxdata.arcdata.lightning = zLightningAdd(&addInfo);
 }
 
 void NCIN_Lightnin2Bones_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
@@ -1736,9 +1736,9 @@ void NCIN_Lightnin2Bones_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, Rw
 {
     xVec3 begpos;
     xVec3 endpos;
-    zLightning* lyt = fxrec->fxdata.arcdata.lightning;
+    zLightning* light = fxrec->fxdata.arcdata.lightning;
 
-    if (lyt == NULL)
+    if (light == NULL)
     {
         return;
     }
@@ -1747,44 +1747,44 @@ void NCIN_Lightnin2Bones_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, Rw
 
     if (animIndex == ifx)
     {
-        S32 ify = fxrec->pos_A[1].y;
-        const xMat3x3* bone = (const xMat3x3*)&animMat[ify];
+        S32 boneIndex = fxrec->pos_A[1].y;
+        const xMat3x3* bone = (const xMat3x3*)&animMat[boneIndex];
 
         xMat3x3RMulVec(&begpos, bone, &fxrec->pos_A[0]);
-        xVec3AddTo(&begpos, (const xVec3*)&animMat[ify].pos);
+        xVec3AddTo(&begpos, (const xVec3*)&animMat[boneIndex].pos);
 
-        if (ify != 0)
+        if (boneIndex != 0)
         {
             xVec3AddTo(&begpos, (const xVec3*)&animMat->pos);
         }
 
-        zLightningModifyEndpoints(lyt, &begpos, &lyt->func.endPoint[1]);
+        zLightningModifyEndpoints(light, &begpos, &light->func.endPoint[1]);
     }
 
     S32 ifx2 = fxrec->pos_B[1].x;
 
     if (animIndex == ifx2)
     {
-        S32 ify2 = fxrec->pos_B[1].y;
-        const xMat3x3* bone = (const xMat3x3*)&animMat[ify2];
+        S32 boneIndex = fxrec->pos_B[1].y;
+        const xMat3x3* bone = (const xMat3x3*)&animMat[boneIndex];
 
         xMat3x3RMulVec(&endpos, bone, &fxrec->pos_B[0]);
-        xVec3AddTo(&endpos, (const xVec3*)&animMat[ify2].pos);
+        xVec3AddTo(&endpos, (const xVec3*)&animMat[boneIndex].pos);
 
-        if (ify2 != 0)
+        if (boneIndex != 0)
         {
             xVec3AddTo(&endpos, (const xVec3*)&animMat->pos);
         }
 
-        zLightningModifyEndpoints(lyt, &lyt->func.endPoint[0], &endpos);
+        zLightningModifyEndpoints(light, &light->func.endPoint[0], &endpos);
     }
 }
 
 void NCIN_LightninBone_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
-    _tagLightningAdd lyt;
-    xVec3 pos;
-    zLightning* lightning;
+    _tagLightningAdd addInfo;
+    xVec3 pnt;
+    zLightning* light;
 
     if (killit != 0)
     {
@@ -1799,34 +1799,34 @@ void NCIN_LightninBone_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 
     if (fxrec->flg_stat & 2)
     {
-        xVec3Init(&pos, 0.0f, 0.0f, 0.0f);
+        xVec3Init(&pnt, 0.0f, 0.0f, 0.0f);
 
-        lyt.type = 3;
-        lyt.thickness = 1.0f;
-        lyt.flags = 0x100;
-        lyt.color.r = 200;
-        lyt.color.g = 200;
-        lyt.color.b = 200;
-        lyt.color.a = 255;
-        lyt.start = &pos;
-        lyt.end = &pos;
-        lyt.time = 0.25f * xurand() + 0.05f;
+        addInfo.type = 3;
+        addInfo.thickness = 1.0f;
+        addInfo.flags = 0x100;
+        addInfo.color.r = 200;
+        addInfo.color.g = 200;
+        addInfo.color.b = 200;
+        addInfo.color.a = 255;
+        addInfo.start = &pnt;
+        addInfo.end = &pnt;
+        addInfo.time = 0.25f * xurand() + 0.05f;
 
-        fxrec->fxdata.arcdata.lightning = zLightningAdd(&lyt);
+        fxrec->fxdata.arcdata.lightning = zLightningAdd(&addInfo);
 
         fxrec->fxdata.arcdata.endPos.x = fxrec->pos_B[0].x * xurand() + fxrec->pos_B[1].x;
         fxrec->fxdata.arcdata.endPos.y = fxrec->pos_B[0].y * xurand() + fxrec->pos_B[1].y;
         fxrec->fxdata.arcdata.endPos.z = fxrec->pos_B[0].z * xurand() + fxrec->pos_B[1].z;
     }
 
-    lightning = fxrec->fxdata.arcdata.lightning;
+    light = fxrec->fxdata.arcdata.lightning;
 
-    if (lightning == NULL)
+    if (light == NULL)
     {
         return;
     }
 
-    if (lightning->flags & 0x40)
+    if (light->flags & 0x40)
     {
         return;
     }
@@ -1835,17 +1835,17 @@ void NCIN_LightninBone_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     fxrec->fxdata.arcdata.endPos.y = fxrec->pos_B[0].y * xurand() + fxrec->pos_B[1].y;
     fxrec->fxdata.arcdata.endPos.z = fxrec->pos_B[0].z * xurand() + fxrec->pos_B[1].z;
 
-    lightning->time_total = 0.25f * xurand() + 0.05f;
-    lightning->time_left = lightning->time_total;
+    light->time_total = 0.25f * xurand() + 0.05f;
+    light->time_left = light->time_total;
 
-    zLightningShow(lightning, 1);
+    zLightningShow(light, 1);
 }
 
 void NCIN_LightninBone_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
                           U32 animIndex, U32 dataIndex)
 {
-    xVec3 begpos;
-    xVec3 endpos;
+    xVec3 pnt1;
+    xVec3 pnt2;
     S32 ifx = fxrec->pos_A[1].x;
 
     if (animIndex != ifx)
@@ -1853,20 +1853,20 @@ void NCIN_LightninBone_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMa
         return;
     }
 
-    S32 ify = fxrec->pos_A[1].y;
-    const xMat3x3* bone = (const xMat3x3*)&animMat[ify];
+    S32 boneIndex = fxrec->pos_A[1].y;
+    const xMat3x3* bone = (const xMat3x3*)&animMat[boneIndex];
 
-    xMat3x3RMulVec(&begpos, bone, &fxrec->pos_A[0]);
-    xVec3AddTo(&begpos, (const xVec3*)&animMat[ify].pos);
+    xMat3x3RMulVec(&pnt1, bone, &fxrec->pos_A[0]);
+    xVec3AddTo(&pnt1, (const xVec3*)&animMat[boneIndex].pos);
 
-    if (ify != 0)
+    if (boneIndex != 0)
     {
-        xVec3AddTo(&begpos, (const xVec3*)&animMat->pos);
+        xVec3AddTo(&pnt1, (const xVec3*)&animMat->pos);
     }
 
-    xMat3x3RMulVec(&endpos, bone, &fxrec->fxdata.arcdata.endPos);
-    xVec3AddTo(&endpos, &begpos);
-    zLightningModifyEndpoints(fxrec->fxdata.arcdata.lightning, &begpos, &endpos);
+    xMat3x3RMulVec(&pnt2, bone, &fxrec->fxdata.arcdata.endPos);
+    xVec3AddTo(&pnt2, &pnt1);
+    zLightningModifyEndpoints(fxrec->fxdata.arcdata.lightning, &pnt1, &pnt2);
 }
 
 void NCIN_B101Shockwave_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
@@ -1928,8 +1928,8 @@ void NCIN_FreezeBreath_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 void NCIN_FreezeBreath_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpAtomic*,
                           RwMatrixTag* animMat, U32 animIndex, U32 dataIndex)
 {
-    xVec3 pos_emit;
-    xVec3 dir_emit;
+    xVec3 pnt1;
+    xVec3 pnt2;
 
     S32 ifx = fxrec->pos_A[1].x;
 
@@ -1938,20 +1938,20 @@ void NCIN_FreezeBreath_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpAtomic
         return;
     }
 
-    S32 ify = fxrec->pos_A[1].y;
-    const xMat3x3* bone = (const xMat3x3*)&animMat[ify];
+    S32 boneIndex = fxrec->pos_A[1].y;
+    const xMat3x3* bone = (const xMat3x3*)&animMat[boneIndex];
 
-    xMat3x3RMulVec(&pos_emit, bone, &fxrec->pos_A[0]);
-    xVec3AddTo(&pos_emit, (const xVec3*)&animMat[ify].pos);
+    xMat3x3RMulVec(&pnt1, bone, &fxrec->pos_A[0]);
+    xVec3AddTo(&pnt1, (const xVec3*)&animMat[boneIndex].pos);
 
-    if (ify != 0)
+    if (boneIndex != 0)
     {
-        xVec3AddTo(&pos_emit, (const xVec3*)&animMat->pos);
+        xVec3AddTo(&pnt1, (const xVec3*)&animMat->pos);
     }
 
-    xMat3x3RMulVec(&dir_emit, bone, &fxrec->pos_B[0]);
+    xMat3x3RMulVec(&pnt2, bone, &fxrec->pos_B[0]);
 
-    EmitFreezeBreath(&pos_emit, &dir_emit, globals.update_dt,
+    EmitFreezeBreath(&pnt1, &pnt2, globals.update_dt,
                      csnmgr->csn->Time - fxrec->tym_beg, fxrec->tym_end - fxrec->tym_beg);
 }
 
@@ -2022,16 +2022,16 @@ void NCIN_GooLever_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrix
     }
 
     S32 ify = fxrec->pos_A[1].y;
-    F32 amt = 400.0f * -animMat[ify].at.y;
+    F32 fudgeRate = 400.0f * -animMat[ify].at.y;
 
-    if (amt < 0.0f)
+    if (fudgeRate < 0.0f)
     {
-        amt = 0.0f;
+        fudgeRate = 0.0f;
     }
 
     if (fxrec->fxdata.pardata.emitter != NULL)
     {
-        fxrec->fxdata.pardata.emitter->prop->rate.val[0] = amt;
+        fxrec->fxdata.pardata.emitter->prop->rate.val[0] = fudgeRate;
     }
 }
 
@@ -2043,15 +2043,15 @@ void NCIN_PatBossShrapnel_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
     else if (fxrec->flg_stat & 2)
     {
-        zShrapnelAsset* shrap = (zShrapnelAsset*)xSTFindAsset(xStrHash("boss_pa_shrapnel"), NULL);
+        zShrapnelAsset* sasset = (zShrapnelAsset*)xSTFindAsset(xStrHash("boss_pa_shrapnel"), NULL);
 
-        if (shrap == NULL)
+        if (sasset == NULL)
         {
             fxrec->flg_stat |= 4;
         }
         else
         {
-            fxrec->fxdata.shrapdata.shrap = shrap;
+            fxrec->fxdata.shrapdata.shrap = sasset;
         }
     }
     else
@@ -2090,7 +2090,7 @@ void NCIN_SpatGlow_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model, Rw
         return;
     }
 
-    S32 ify = fxrec->pos_A[1].y;
+    S32 boneIndex = fxrec->pos_A[1].y;
 
     zShrapnel_CinematicInit(fxrec->fxdata.shrapdata.shrap, model, animMat, NULL, NULL);
 
@@ -2099,7 +2099,7 @@ void NCIN_SpatGlow_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model, Rw
     color.b = (U8)(S32)fxrec->pos_B[0].z;
     color.a = (U8)(S32)fxrec->pos_B[1].x;
 
-    xFXAuraAdd(fxrec, (xVec3*)&animMat[ify].pos, &color, fxrec->pos_B[1].y);
+    xFXAuraAdd(fxrec, (xVec3*)&animMat[boneIndex].pos, &color, fxrec->pos_B[1].y);
 }
 
 void NCIN_GloveShrapnel_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
@@ -2110,15 +2110,15 @@ void NCIN_GloveShrapnel_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
     else if (fxrec->flg_stat & 2)
     {
-        zShrapnelAsset* shrap = (zShrapnelAsset*)xSTFindAsset(xStrHash("g-love_shrapnel"), NULL);
+        zShrapnelAsset* sasset = (zShrapnelAsset*)xSTFindAsset(xStrHash("g-love_shrapnel"), NULL);
 
-        if (shrap == NULL)
+        if (sasset == NULL)
         {
             fxrec->flg_stat |= 4;
         }
         else
         {
-            fxrec->fxdata.shrapdata.shrap = shrap;
+            fxrec->fxdata.shrapdata.shrap = sasset;
         }
     }
     else
@@ -2437,9 +2437,9 @@ void NCIN_SBBNode_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model,
 {
     zNPCB_SB2* sb2;
     RpSkin* skin;
-    S32 numBones;
+    S32 bones;
     S32 i;
-    xMat3x3 mat_inv;
+    xMat3x3 imat;
 
     S32 ifx = fxrec->pos_A[1].x;
 
@@ -2455,7 +2455,7 @@ void NCIN_SBBNode_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model,
         return;
     }
 
-    numBones = 0;
+    bones = 0;
 
     if (model->geometry != NULL)
     {
@@ -2463,22 +2463,22 @@ void NCIN_SBBNode_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model,
 
         if (skin != NULL)
         {
-            numBones = RpSkinGetNumBones(skin);
+            bones = RpSkinGetNumBones(skin);
         }
     }
 
     if (fxrec->flg_stat & 8)
     {
-        fxrec->fxdata.matdata.mat = (RwMatrixTag*)xMemPushTemp((numBones + 1) * sizeof(RwMatrixTag));
+        fxrec->fxdata.matdata.mat = (RwMatrixTag*)xMemPushTemp((bones + 1) * sizeof(RwMatrixTag));
     }
 
     sb2->rebind_nodes(model, fxrec->fxdata.matdata.mat);
 
-    xMat3x3Transpose(&mat_inv, (const xMat3x3*)animMat);
+    xMat3x3Transpose(&imat, (const xMat3x3*)animMat);
 
-    for (i = 1; i < numBones; i++)
+    for (i = 1; i < bones; i++)
     {
-        xMat3x3Mul((xMat3x3*)&fxrec->fxdata.matdata.mat[i], (const xMat3x3*)&animMat[i], &mat_inv);
+        xMat3x3Mul((xMat3x3*)&fxrec->fxdata.matdata.mat[i], (const xMat3x3*)&animMat[i], &imat);
         fxrec->fxdata.matdata.mat[i].pos = animMat[i].pos;
     }
 

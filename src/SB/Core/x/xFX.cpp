@@ -595,16 +595,16 @@ static RpAtomic* AtomicSetEnvMap(RpAtomic* atomic, void* data)
     return atomic;
 }
 
-RpAtomic* xFXAtomicEnvMapSetup(RpAtomic* atomic, U32 aid, F32 shininess)
+RpAtomic* xFXAtomicEnvMapSetup(RpAtomic* atomic, U32 envmapID, F32 shininess)
 {
-    void* asset = xSTFindAsset(aid, NULL);
-    if (asset)
+    void* env = xSTFindAsset(envmapID, NULL);
+    if (env)
     {
-        AtomicSetEnvMap(atomic, asset);
-        F32 oldShininess = EnvMapShininess;
+        AtomicSetEnvMap(atomic, env);
+        F32 tmp = EnvMapShininess;
         EnvMapShininess = shininess;
         AtomicSetShininess(atomic, NULL);
-        EnvMapShininess = oldShininess;
+        EnvMapShininess = tmp;
         RpSkin* skin = RpSkinGeometryGetSkin(atomic->geometry);
         if (skin)
         {
@@ -904,9 +904,9 @@ void xFXSceneFinish()
     gAuraTex = NULL;
 }
 
-void xFXanimUV2PSetTexture(RwTexture* tex)
+void xFXanimUV2PSetTexture(RwTexture* texture)
 {
-    xFXanimUV2PTexture = tex;
+    xFXanimUV2PTexture = texture;
 }
 
 void xFXanimUVSetAngle(F32 angle)
@@ -931,10 +931,10 @@ void xFXanimUVSetScale(const xVec3* scale)
     xFXanimUVScale[1] = scale->y;
 }
 
-void xFXanimUVSetTranslation(const xVec3* translation)
+void xFXanimUVSetTranslation(const xVec3* trans)
 {
-    xFXanimUVTrans[0] = translation->x;
-    xFXanimUVTrans[1] = translation->y;
+    xFXanimUVTrans[0] = trans->x;
+    xFXanimUVTrans[1] = trans->y;
 }
 
 void xFXStreakUpdate(U32 id, const xVec3* a, const xVec3* b)
@@ -1037,14 +1037,14 @@ U32 xFXStreakStart(F32 frequency, F32 alphaFadeRate, F32 alphaStart, U32 texture
     return 10;
 }
 
-void xFXStreakStop(U32 streakID)
+void xFXStreakStop(U32 id)
 {
-    if (streakID == 10)
+    if (id == 10)
     {
         return;
     }
 
-    U32 flags = sStreakList[streakID].flags;
+    U32 flags = sStreakList[id].flags;
     if (!flags)
     {
         return;
@@ -1052,10 +1052,10 @@ void xFXStreakStop(U32 streakID)
 
     if (flags & 0x1)
     {
-        sStreakList[streakID].flags = flags ^ 0x1;
+        sStreakList[id].flags = flags ^ 0x1;
     }
 
-    sStreakList[streakID].flags |= 0x2;
+    sStreakList[id].flags |= 0x2;
 }
 
 void xFXStreakUpdate(F32 dt)
@@ -1635,14 +1635,15 @@ void xFXAuraRender()
     }
 }
 
-void xFXFireworksInit(const char* trailEmit, const char* emit1, const char* emit2,
-                      const char* mainSound, const char* launchSound)
+void xFXFireworksInit(const char* fireworksTrailEmitter, const char* fireworksEmitter1,
+                      const char* fireworksEmitter2, const char* fireworksSound,
+                      const char* fireworksLaunchSound)
 {
-    sFireworkTrailEmit = zParEmitterFind(trailEmit);
-    sFirework1Emit = zParEmitterFind(emit1);
-    sFirework2Emit = zParEmitterFind(emit2);
-    sFireworkSoundID = xStrHash(mainSound);
-    sFireworkLaunchSoundID = xStrHash(launchSound);
+    sFireworkTrailEmit = zParEmitterFind(fireworksTrailEmitter);
+    sFirework1Emit = zParEmitterFind(fireworksEmitter1);
+    sFirework2Emit = zParEmitterFind(fireworksEmitter2);
+    sFireworkSoundID = xStrHash(fireworksSound);
+    sFireworkLaunchSoundID = xStrHash(fireworksLaunchSound);
     memset(sFirework, 0, sizeof(sFirework));
     for (U32 i = 0; i < FIREWORK_COUNT; ++i)
     {
@@ -1650,7 +1651,7 @@ void xFXFireworksInit(const char* trailEmit, const char* emit1, const char* emit
     }
 }
 
-void xFXFireworksLaunch(F32 time, const xVec3* pos, F32 fuel)
+void xFXFireworksLaunch(F32 countdownTime, const xVec3* pos, F32 fuelTime)
 {
     U32 counter = FIREWORK_COUNT;
     _tagFirework* candidate = sFirework;
@@ -1659,9 +1660,9 @@ void xFXFireworksLaunch(F32 time, const xVec3* pos, F32 fuel)
         if (candidate->state == 0)
         {
             candidate->state = 1;
-            candidate->timer = time;
+            candidate->timer = countdownTime;
             candidate->pos = *pos;
-            candidate->fuel = fuel;
+            candidate->fuel = fuelTime;
             return;
         }
         --counter;
@@ -1708,39 +1709,39 @@ void xFXFireworksUpdate(F32 dt)
             {
                 sFirework[i].vel.y += 15.0f * dt;
             }
-            xParEmitterCustomSettings settings;
-            settings.custom_flags = 0x100;
+            xParEmitterCustomSettings trail_info;
+            trail_info.custom_flags = 0x100;
             sFirework[i].pos.x += sFirework[i].vel.x * dt;
             sFirework[i].pos.y += sFirework[i].vel.y * dt;
             sFirework[i].pos.z += sFirework[i].vel.z * dt;
-            settings.pos = sFirework[i].pos;
-            xParEmitterEmitCustom(sFireworkTrailEmit, dt, &settings);
+            trail_info.pos = sFirework[i].pos;
+            xParEmitterEmitCustom(sFireworkTrailEmit, dt, &trail_info);
 
             if (sFirework[i].fuel <= 0.0f)
             {
                 sFirework[i].state = 0;
                 sFirework[i].timer = 0.0f;
 
-                zParEmitter* emit = sFirework1Emit;
+                zParEmitter* femit = sFirework1Emit;
                 if (xurand() < 0.75f)
                 {
-                    emit = sFirework2Emit;
+                    femit = sFirework2Emit;
                 }
 
-                xParEmitterCustomSettings settings2;
-                settings2.custom_flags = 0xD00;
-                settings2.pos = sFirework[i].pos;
+                xParEmitterCustomSettings xplo_info;
+                xplo_info.custom_flags = 0xD00;
+                xplo_info.pos = sFirework[i].pos;
 
-                if (emit != NULL)
+                if (femit != NULL)
                 {
-                    settings2.color_birth[0].set(127.0f * xurand() + 128.0f, 75.0f, 0.0f, 0);
-                    settings2.color_birth[1].set(127.0f * xurand() + 128.0f, 75.0f, 0.0f, 0);
-                    settings2.color_birth[2].set(127.0f * xurand() + 128.0f, 75.0f, 0.0f, 0);
-                    settings2.color_birth[3].set(255.0f, 0.0f, 1.0f, 0);
-                    memcpy(settings2.color_death, &settings2.color_birth,
-                           sizeof(settings2.color_birth));
-                    settings2.color_death[3].set(0.0f, 0.0f, 1.0f, 0);
-                    xParEmitterEmitCustom(emit, dt, &settings2);
+                    xplo_info.color_birth[0].set(127.0f * xurand() + 128.0f, 75.0f, 0.0f, 0);
+                    xplo_info.color_birth[1].set(127.0f * xurand() + 128.0f, 75.0f, 0.0f, 0);
+                    xplo_info.color_birth[2].set(127.0f * xurand() + 128.0f, 75.0f, 0.0f, 0);
+                    xplo_info.color_birth[3].set(255.0f, 0.0f, 1.0f, 0);
+                    memcpy(xplo_info.color_death, &xplo_info.color_birth,
+                           sizeof(xplo_info.color_birth));
+                    xplo_info.color_death[3].set(0.0f, 0.0f, 1.0f, 0);
+                    xParEmitterEmitCustom(femit, dt, &xplo_info);
                 }
 
                 F32 a = 0.4f * xurand() + 0.1f;
@@ -1897,7 +1898,7 @@ RpAtomic* xFXanimUVAtomicSetup(RpAtomic* atomic)
     return atomic;
 }
 
-void xFXRenderProximityFade(const xModelInstance&, F32, F32)
+void xFXRenderProximityFade(const xModelInstance&, F32 near_dist, F32 far_dist)
 {
 }
 

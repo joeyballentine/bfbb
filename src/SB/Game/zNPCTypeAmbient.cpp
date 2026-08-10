@@ -96,7 +96,7 @@ xAnimTable* ZNPC_AnimTable_Jelly()
 {
     xAnimTable* table = (xAnimTable*)xAnimTableNew("zNPCJelly", NULL, 0);
 
-    S32 local_887[] = {
+    S32 ourAnims[] = {
         1, 7, 4, 8, 11, 0,
     };
 
@@ -114,14 +114,14 @@ xAnimTable* ZNPC_AnimTable_Jelly()
     xAnimTableNewState(table, g_strz_ambianim[11], 0x10, 1, f882, 0, 0, f883, 0, 0,
                        xAnimDefaultBeforeEnter, 0x0, 0x0);
 
-    NPCC_BuildStandardAnimTran(table, g_strz_ambianim, local_887, 1, 0.2f);
+    NPCC_BuildStandardAnimTran(table, g_strz_ambianim, ourAnims, 1, 0.2f);
 
     return table;
 }
 
 xAnimTable* ZNPC_AnimTable_Neptune()
 {
-    S32 local_48[] = {
+    S32 ourAnims[] = {
         1, 2, 3, 4, 5, 6, 0,
     };
 
@@ -141,7 +141,7 @@ xAnimTable* ZNPC_AnimTable_Neptune()
                        xAnimDefaultBeforeEnter, 0x0, 0x0);
     xAnimTableNewState(table, g_strz_ambianim[6], 0x20, 0, f882, 0, 0, f883, 0, 0,
                        xAnimDefaultBeforeEnter, 0x0, 0x0);
-    NPCC_BuildStandardAnimTran(table, g_strz_ambianim, local_48, 1, f903);
+    NPCC_BuildStandardAnimTran(table, g_strz_ambianim, ourAnims, 1, f903);
 
     xAnimTableNewTransition(table, g_strz_ambianim[4], g_strz_ambianim[1], 0x0, 0x0, 0x10, 0, f883,
                             f883, 0, 0, f903, 0x0);
@@ -197,7 +197,7 @@ void zNPCAmbient::SelfSetup()
 U32 zNPCAmbient::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
 {
     S32 idx;
-    U32 anim = 0;
+    U32 da_anim = 0;
 
     switch (gid)
     {
@@ -213,10 +213,10 @@ U32 zNPCAmbient::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
 
     if (idx >= 0)
     {
-        anim = g_hash_ambianim[idx];
+        da_anim = g_hash_ambianim[idx];
     }
 
-    return anim;
+    return da_anim;
 }
 
 S32 zNPCAmbient::NPCMessage(NPCMsg* mail)
@@ -319,62 +319,62 @@ void zNPCJelly::JellyKill()
     }
 }
 
-U32 zNPCJelly::AnimPick(S32 animID, en_NPC_GOAL_SPOT gspot, xGoal* goal)
+U32 zNPCJelly::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* goal)
 {
-    U32 r8 = 0;
-    S32 r31 = -1;
+    U32 da_anim = 0;
+    S32 idx = -1;
 
-    switch (animID)
+    switch (gid)
     {
     case 'NGN0': // 8c
     {
-        r31 = 1;
+        idx = 1;
         break;
     }
     case 'NGN3': // 94
     {
-        r31 = 4;
+        idx = 4;
         break;
     }
     case 'NGN1': // 9c
     case 'NGN2': // 9c
     {
-        r31 = 7;
+        idx = 7;
         break;
     }
     case 'NGN5': // a4
     {
-        r31 = 1;
+        idx = 1;
         break;
     }
     case 'NGJ2': // ac
     {
-        r31 = 1;
+        idx = 1;
         break;
     }
     case 'NGJ1': // b4
     {
-        r31 = 8;
+        idx = 8;
         break;
     }
     case 'NGJ0': // bc
     {
-        r31 = 11;
+        idx = 11;
         break;
     }
     default: // c4
     {
-        r8 = this->zNPCAmbient::AnimPick(animID, gspot, goal);
+        da_anim = this->zNPCAmbient::AnimPick(gid, gspot, goal);
         break;
     }
     }
 
-    if (r31 >= 0)
+    if (idx >= 0)
     {
-        r8 = g_hash_ambianim[r31];
+        da_anim = g_hash_ambianim[idx];
     }
 
-    return r8;
+    return da_anim;
 }
 
 // Non-match
@@ -471,18 +471,18 @@ void zNPCJelly::Process(xScene* xscn, F32 dt)
     }
 }
 
-S32 zNPCJelly::AmbiHandleMail(NPCMsg* msg)
+S32 zNPCJelly::AmbiHandleMail(NPCMsg* mail)
 {
     S32 handled = 1;
     xPsyche* psy = this->psy_instinct;
 
-    switch (msg->msgid)
+    switch (mail->msgid)
     {
     case NPC_MID_DAMAGE:
     {
         if (psy && hitpoints >= 1)
         {
-            if (msg->dmgdata.dmg_type == DMGTYP_CRUISEBUBBLE)
+            if (mail->dmgdata.dmg_type == DMGTYP_CRUISEBUBBLE)
             {
                 this->hitpoints = this->hitpoints < 1 ? this->hitpoints : 1;
             }
@@ -527,14 +527,14 @@ void zNPCJelly::PlayWithAlpha(F32 dt)
     this->SetAlpha(LERP(MAX(0.0f, MIN((F32)__fabs(isin(x)), 1.0f)), 0.7f, 0.95f));
 }
 
-void zNPCJelly::SetAlpha(F32 alpha)
+void zNPCJelly::SetAlpha(F32 alf)
 {
-    xModelInstance* model = this->model;
+    xModelInstance* minst = this->model;
 
-    for (model; model != NULL; model = model->Next)
+    for (minst; minst != NULL; minst = minst->Next)
     {
-        model->Flags |= 0x4000;
-        model->Alpha = alpha;
+        minst->Flags |= 0x4000;
+        minst->Alpha = alf;
     }
 }
 
@@ -607,11 +607,11 @@ void zNPCJelly::JellyBoneWorldPos(xVec3* pos, S32 idx_request) const
 void zNPCJelly::PlayWithLightnin()
 {
     _tagLightningAdd info;
-    xVec3 start;
+    xVec3 pos_bone;
 
-    this->JellyBoneWorldPos(&start, -1);
+    this->JellyBoneWorldPos(&pos_bone, -1);
 
-    xVec3 end = start;
+    xVec3 pos_place = pos_bone;
 
     memset(&info, 0, sizeof(info));
 
@@ -625,8 +625,8 @@ void zNPCJelly::PlayWithLightnin()
     }
 
     info.time = 0.1f;
-    info.start = &start;
-    info.end = &end;
+    info.start = &pos_bone;
+    info.end = &pos_place;
 
     for (S32 i = 0; i < 2; i++)
     {
@@ -637,20 +637,20 @@ void zNPCJelly::PlayWithLightnin()
 U32 zNPCNeptune::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
 {
     S32 idx;
-    U32 anim = 0;
+    U32 da_anim = 0;
 
     switch (gid)
     {
     case 'NGN0':
     {
-        const S32 anims[3] = { 1, 2, 3 };
-        idx = xUtil_choose<S32>(anims, 3, NULL);
+        const S32 choices[3] = { 1, 2, 3 };
+        idx = xUtil_choose<S32>(choices, 3, NULL);
         break;
     }
     case 'NGN3':
     {
-        const S32 anims[3] = { 4, 5, 6 };
-        idx = xUtil_choose<S32>(anims, 3, NULL);
+        const S32 choices[3] = { 4, 5, 6 };
+        idx = xUtil_choose<S32>(choices, 3, NULL);
         break;
     }
     default:
@@ -660,16 +660,16 @@ U32 zNPCNeptune::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
 
     if (idx >= 0)
     {
-        anim = g_hash_ambianim[idx];
+        da_anim = g_hash_ambianim[idx];
     }
 
-    return anim;
+    return da_anim;
 }
 
 U32 zNPCMimeFish::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
 {
     S32 idx;
-    U32 anim = 0;
+    U32 da_anim = 0;
 
     switch (gid)
     {
@@ -686,10 +686,10 @@ U32 zNPCMimeFish::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
 
     if (idx >= 0)
     {
-        anim = g_hash_ambianim[idx];
+        da_anim = g_hash_ambianim[idx];
     }
 
-    return anim;
+    return da_anim;
 }
 
 void zNPCMimeFish::Process(xScene* xscn, F32 dt)

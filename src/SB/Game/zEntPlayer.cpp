@@ -2423,9 +2423,9 @@ static U32 DblJumpCB(xAnimTransition*, xAnimSingle*, void*)
 }
 
 // equivalent: sda relocation optimization
-static U32 TongueDblJumpCB(xAnimTransition* tran, xAnimSingle* anim, void* data)
+static U32 TongueDblJumpCB(xAnimTransition* tran, xAnimSingle* anim, void* object)
 {
-    DblJumpCB(tran, anim, data);
+    DblJumpCB(tran, anim, object);
     sTongueDblSpeedMult =
         (1.1f * (2.0f * anim->State->Data->Duration - anim->Time)) / anim->State->Data->Duration;
     anim->CurrentSpeed *= sTongueDblSpeedMult;
@@ -3380,10 +3380,10 @@ static U32 MeleeStopCB(xAnimTransition*, xAnimSingle*, void*)
     return 0;
 }
 
-static U32 SpatulaMeleeStopCB(xAnimTransition* tran, xAnimSingle* anim, void* data)
+static U32 SpatulaMeleeStopCB(xAnimTransition* tran, xAnimSingle* anim, void* object)
 {
-    MeleeStopCB(tran, anim, data);
-    SpatulaGrabCB(tran, anim, data);
+    MeleeStopCB(tran, anim, object);
+    SpatulaGrabCB(tran, anim, object);
     return 0;
 }
 
@@ -3543,39 +3543,39 @@ static U32 LassoSwingReleaseCB(xAnimTransition* tran, xAnimSingle* anim, void* o
     return 0;
 }
 
-static U8 StunBubbleTrail(xAnimSingle* anim)
+static U8 StunBubbleTrail(xAnimSingle* single)
 {
     S32 ret = 0;
-    xAnimState* state = anim->State;
-    if ((strcmp(state->Name, "StunFall") == 0) ||
-        ((strcmp(state->Name, "StunJump") == 0) && (anim->Time >= 0.6f) && (anim->Time <= 1.0f)))
+    xAnimState* astate = single->State;
+    if ((strcmp(astate->Name, "StunFall") == 0) ||
+        ((strcmp(astate->Name, "StunJump") == 0) && (single->Time >= 0.6f) && (single->Time <= 1.0f)))
     {
         ret = 1;
     }
     return ret;
 }
 
-static U8 BubbleBashContrails(xAnimSingle* anim)
+static U8 BubbleBashContrails(xAnimSingle* single)
 {
     S32 ret = 0;
-    xAnimState* state = anim->State;
-    if (((strcmp(state->Name, "BbashStart01") == 0) && (anim->Time >= 0.6f)) ||
-        (strcmp(state->Name, "BbashAttack01") == 0) ||
-        (strcmp(state->Name, "BbashMiss01") == 0) && (anim->Time <= 0.125f))
+    xAnimState* astate = single->State;
+    if (((strcmp(astate->Name, "BbashStart01") == 0) && (single->Time >= 0.6f)) ||
+        (strcmp(astate->Name, "BbashAttack01") == 0) ||
+        (strcmp(astate->Name, "BbashMiss01") == 0) && (single->Time <= 0.125f))
     {
         ret = 1;
     }
     return ret;
 }
 
-static U8 BubbleBounceContrails(xAnimSingle* anim)
+static U8 BubbleBounceContrails(xAnimSingle* single)
 {
     S32 ret = 0;
-    xAnimState* state = anim->State;
+    xAnimState* astate = single->State;
     if (
 
-        ((strcmp(state->Name, "BbounceStart01") == 0) && (anim->Time >= 0.9f)) ||
-        (strcmp(state->Name, "BbounceAttack01") == 0))
+        ((strcmp(astate->Name, "BbounceStart01") == 0) && (single->Time >= 0.9f)) ||
+        (strcmp(astate->Name, "BbounceAttack01") == 0))
     {
         ret = 1;
     }
@@ -3617,13 +3617,13 @@ static U32 StunRadiusCB(xAnimTransition*, xAnimSingle*, void*)
     return 0;
 }
 
-static S32 MeleeAttackBoundCollide(xEnt* ent, zScene* zscn, xBound* meleeB)
+static S32 MeleeAttackBoundCollide(xEnt* ent, zScene* zsc, xBound* meleeB)
 {
     Melee_cbData cbdata;
     xVec3 pos;
 
     cbdata.ent = ent;
-    cbdata.zsc = zscn;
+    cbdata.zsc = zsc;
     cbdata.meleeB = meleeB;
     cbdata.hitsomething = 0;
     xVec3Copy(&pos, xBoundCenter(meleeB));
@@ -3637,68 +3637,68 @@ static S32 MeleeAttackBoundCollide(xEnt* ent, zScene* zscn, xBound* meleeB)
 
 void xEntBoulder_AddForce(xEntBoulder* ent, xVec3* force);
 
-static S32 CheckObjectAgainstMeleeBound(xEnt* ent, void* data)
+static S32 CheckObjectAgainstMeleeBound(xEnt* cbent, void* cbdata)
 {
-    Melee_cbData* cbd = (Melee_cbData*)data;
-    S32 hit = cbd->hitsomething;
-    xEnt* pent = cbd->ent;
-    xBound* meleeB = cbd->meleeB;
-    xCollis coll;
-    xRay3 ray;
+    Melee_cbData* data = (Melee_cbData*)cbdata;
+    S32 hitsomething = data->hitsomething;
+    xEnt* ent = data->ent;
+    xBound* meleeB = data->meleeB;
+    xCollis meleeColl;
+    xRay3 tempray;
     xVec3 dir;
     xVec3 tmp;
     S32 worldSpaceNorm;
 
-    if (!(ent->baseFlags & 0x20) ||
-        (!(ent->moreFlags & 0x10) && ent->baseType != eBaseTypeStatic) ||
-        !(ent->flags & 1) || ent->model == NULL)
+    if (!(cbent->baseFlags & 0x20) ||
+        (!(cbent->moreFlags & 0x10) && cbent->baseType != eBaseTypeStatic) ||
+        !(cbent->flags & 1) || cbent->model == NULL)
     {
         return 1;
     }
 
-    if (ent->baseType == eBaseTypeStatic)
+    if (cbent->baseType == eBaseTypeStatic)
     {
-        if (zThrown_IsFruit(ent, NULL))
+        if (zThrown_IsFruit(cbent, NULL))
         {
-            zThrown_AddFruit(ent);
-            zThrown_KillFruit(ent);
+            zThrown_AddFruit(cbent);
+            zThrown_KillFruit(cbent);
         }
-        else if (!(ent->moreFlags & 0x10))
+        else if (!(cbent->moreFlags & 0x10))
         {
             return 1;
         }
     }
 
-    xBoundHitsBound(meleeB, &ent->bound, &coll);
+    xBoundHitsBound(meleeB, &cbent->bound, &meleeColl);
 
-    if (!(coll.flags & 1))
+    if (!(meleeColl.flags & 1))
     {
         return 1;
     }
 
-    if (ent->baseType != eBaseTypeNPC)
+    if (cbent->baseType != eBaseTypeNPC)
     {
-        xFXShineStart((xVec3*)&ent->model->Mat->pos, 1.0f, 0.3f, 0.01f, 0.1f, 0, NULL, NULL, 0.1f,
+        xFXShineStart((xVec3*)&cbent->model->Mat->pos, 1.0f, 0.3f, 0.01f, 0.1f, 0, NULL, NULL, 0.1f,
                       0);
-        zEntEvent(ent, 0x163);
+        zEntEvent(cbent, 0x163);
     }
 
-    if (ent->baseType == eBaseTypeNPC)
+    if (cbent->baseType == eBaseTypeNPC)
     {
-        zNPCCommon* npc = (zNPCCommon*)ent;
+        zNPCCommon* npc = (zNPCCommon*)cbent;
 
-        if ((((xNPCBasic*)ent)->SelfType() & 0xffffff00) == 'NTR\0')
+        if ((((xNPCBasic*)cbent)->SelfType() & 0xffffff00) == 'NTR\0')
         {
-            iColor_tag col1;
-            iColor_tag col2;
+            iColor_tag c_inside;
+            iColor_tag c_outside;
 
-            col1.r = 255;
-            col1.g = 255;
-            col1.b = 255;
-            col2.r = 255;
-            col2.g = 255;
-            col2.b = 0;
-            xFXShineStart((xVec3*)&ent->model->Mat->pos, 1.0f, 0.5f, 0.01f, 0.1f, 0, &col1, &col2,
+            c_inside.r = 255;
+            c_inside.g = 255;
+            c_inside.b = 255;
+            c_outside.r = 255;
+            c_outside.g = 255;
+            c_outside.b = 0;
+            xFXShineStart((xVec3*)&cbent->model->Mat->pos, 1.0f, 0.5f, 0.01f, 0.1f, 0, &c_inside, &c_outside,
                           0.1f, 0);
         }
 
@@ -3711,108 +3711,108 @@ static S32 CheckObjectAgainstMeleeBound(xEnt* ent, void* data)
             npc->Damage(DMGTYP_SIDE, &globals.player.ent, NULL);
         }
 
-        hit = 1;
+        hitsomething = 1;
     }
-    else if (ent->baseType == eBaseTypeBoulder)
+    else if (cbent->baseType == eBaseTypeBoulder)
     {
-        xEntBoulder* boul = (xEntBoulder*)ent;
+        xEntBoulder* boul = (xEntBoulder*)cbent;
 
         if (boul->basset->flags & 0x100)
         {
-            zEntEvent(ent, 0x3a);
+            zEntEvent(cbent, 0x3a);
         }
 
-        xVec3Sub(&dir, (xVec3*)&boul->model->Mat->pos, (xVec3*)&pent->model->Mat->pos);
+        xVec3Sub(&dir, (xVec3*)&boul->model->Mat->pos, (xVec3*)&ent->model->Mat->pos);
         xVec3Normalize(&dir, &dir);
         xVec3SMulBy(&dir, 10.0f);
         xEntBoulder_AddForce(boul, &dir);
-        hit = 1;
+        hitsomething = 1;
     }
-    else if (ent->baseType == eBaseTypeButton)
+    else if (cbent->baseType == eBaseTypeButton)
     {
         if (gCurrentPlayer == eCurrentPlayerSpongeBob)
         {
-            zEntButton_Press((_zEntButton*)ent, 1);
+            zEntButton_Press((_zEntButton*)cbent, 1);
         }
 
         if (gCurrentPlayer == eCurrentPlayerSandy)
         {
-            zEntButton_Press((_zEntButton*)ent, 0x4000);
+            zEntButton_Press((_zEntButton*)cbent, 0x4000);
         }
 
         if (gCurrentPlayer == eCurrentPlayerPatrick)
         {
-            zEntButton_Press((_zEntButton*)ent, 0x8000);
+            zEntButton_Press((_zEntButton*)cbent, 0x8000);
         }
 
-        hit = 1;
+        hitsomething = 1;
     }
-    else if (ent->baseType == eBaseTypeDestructObj)
+    else if (cbent->baseType == eBaseTypeDestructObj)
     {
-        zEntDestructObj_Hit((zEntDestructObj*)ent, 0x1000);
-        hit = 1;
+        zEntDestructObj_Hit((zEntDestructObj*)cbent, 0x1000);
+        hitsomething = 1;
     }
-    else if (ent->baseType == eBaseTypePlatform && ent->subType == ZPLATFORM_SUBTYPE_PADDLE)
+    else if (cbent->baseType == eBaseTypePlatform && cbent->subType == ZPLATFORM_SUBTYPE_PADDLE)
     {
         {
-            U32 pflags = ((zPlatform*)ent)->passet->paddle.paddleFlags;
+            U32 paddleFlags = ((zPlatform*)cbent)->passet->paddle.paddleFlags;
 
-            if ((gCurrentPlayer == eCurrentPlayerSpongeBob && (pflags & 0x8)) ||
-                (gCurrentPlayer == eCurrentPlayerPatrick && (pflags & 0x80)) ||
-                (gCurrentPlayer == eCurrentPlayerSandy && (pflags & 0x40)))
+            if ((gCurrentPlayer == eCurrentPlayerSpongeBob && (paddleFlags & 0x8)) ||
+                (gCurrentPlayer == eCurrentPlayerPatrick && (paddleFlags & 0x80)) ||
+                (gCurrentPlayer == eCurrentPlayerSandy && (paddleFlags & 0x40)))
             {
                 worldSpaceNorm = 0;
 
                 if (gCurrentPlayer == eCurrentPlayerSpongeBob)
                 {
-                    ray.origin.x = pent->model->Mat->pos.x;
-                    ray.origin.y = pent->model->Mat->pos.y + pent->bound.sph.r;
-                    ray.origin.z = pent->model->Mat->pos.z;
-                    ray.dir.x = meleeB->sph.center.x - ray.origin.x;
-                    ray.dir.y = meleeB->sph.center.y - ray.origin.y;
-                    ray.dir.z = meleeB->sph.center.z - ray.origin.z;
-                    ray.min_t = 0.0f;
-                    ray.max_t = meleeB->sph.r + xVec3Normalize(&ray.dir, &ray.dir);
+                    tempray.origin.x = ent->model->Mat->pos.x;
+                    tempray.origin.y = ent->model->Mat->pos.y + ent->bound.sph.r;
+                    tempray.origin.z = ent->model->Mat->pos.z;
+                    tempray.dir.x = meleeB->sph.center.x - tempray.origin.x;
+                    tempray.dir.y = meleeB->sph.center.y - tempray.origin.y;
+                    tempray.dir.z = meleeB->sph.center.z - tempray.origin.z;
+                    tempray.min_t = 0.0f;
+                    tempray.max_t = meleeB->sph.r + xVec3Normalize(&tempray.dir, &tempray.dir);
                 }
                 else
                 {
-                    ray.dir = *(xVec3*)&pent->model->Mat->at;
-                    ray.origin.x = meleeB->sph.center.x;
-                    ray.origin.y = meleeB->sph.center.y;
-                    ray.origin.z = meleeB->sph.center.z;
-                    tmp.x = pent->model->Mat->pos.x - ray.origin.x;
-                    tmp.y = pent->model->Mat->pos.y - ray.origin.y;
-                    tmp.z = pent->model->Mat->pos.z - ray.origin.z;
-                    ray.min_t = xVec3Dot(&tmp, &ray.dir);
-                    ray.max_t = 0.0f;
+                    tempray.dir = *(xVec3*)&ent->model->Mat->at;
+                    tempray.origin.x = meleeB->sph.center.x;
+                    tempray.origin.y = meleeB->sph.center.y;
+                    tempray.origin.z = meleeB->sph.center.z;
+                    tmp.x = ent->model->Mat->pos.x - tempray.origin.x;
+                    tmp.y = ent->model->Mat->pos.y - tempray.origin.y;
+                    tmp.z = ent->model->Mat->pos.z - tempray.origin.z;
+                    tempray.min_t = xVec3Dot(&tmp, &tempray.dir);
+                    tempray.max_t = 0.0f;
 
-                    if (ray.min_t > 0.0f)
+                    if (tempray.min_t > 0.0f)
                     {
-                        ray.min_t = -meleeB->sph.r;
+                        tempray.min_t = -meleeB->sph.r;
                     }
                 }
 
-                ray.flags = 0xc00;
-                coll.flags = 0x200;
-                iRayHitsModel(&ray, ent->model, &coll);
+                tempray.flags = 0xc00;
+                meleeColl.flags = 0x200;
+                iRayHitsModel(&tempray, cbent->model, &meleeColl);
                 xDrawSetColor(0xff, 0x00, 0xff, 0xff);
-                xDrawLine(&ray.origin, &meleeB->sph.center);
+                xDrawLine(&tempray.origin, &meleeB->sph.center);
 
-                if (!(coll.flags & 1))
+                if (!(meleeColl.flags & 1))
                 {
-                    coll.flags = 0x200;
+                    meleeColl.flags = 0x200;
                     worldSpaceNorm = 1;
-                    xSphereHitsModel(&meleeB->sph, ent->model, &coll);
+                    xSphereHitsModel(&meleeB->sph, cbent->model, &meleeColl);
                 }
 
-                if (coll.flags & 1)
+                if (meleeColl.flags & 1)
                 {
-                    coll.optr = ent;
+                    meleeColl.optr = cbent;
 
-                    if (zPlatform_PaddleCollide(&coll, (xVec3*)&pent->model->Mat->pos, &ray.dir,
+                    if (zPlatform_PaddleCollide(&meleeColl, (xVec3*)&ent->model->Mat->pos, &tempray.dir,
                                                 worldSpaceNorm))
                     {
-                        hit = 1;
+                        hitsomething = 1;
                     }
                 }
             }
@@ -3820,16 +3820,16 @@ static S32 CheckObjectAgainstMeleeBound(xEnt* ent, void* data)
     }
     else
     {
-        zEntEvent(ent, 0x3a);
-        hit = 1;
+        zEntEvent(cbent, 0x3a);
+        hitsomething = 1;
     }
 
-    if (hit)
+    if (hitsomething)
     {
         zFX_SpawnBubbleHit(&meleeB->sph.center, 10);
     }
 
-    cbd->hitsomething = hit;
+    data->hitsomething = hitsomething;
 
     return 1;
 }
@@ -4892,57 +4892,57 @@ S32 zEntPlayer_Damage(xBase* src, U32 damage)
 
 S32 zEntPlayer_MoveInfo()
 {
-    U32 flags = 0;
-    U32 userFlags1e = globals.player.ent.model->Anim->Single->State->UserFlags & 0x1e;
-    const char* animName = globals.player.ent.model->Anim->Single->State->Name;
+    U32 infoflags = 0;
+    U32 animflags = globals.player.ent.model->Anim->Single->State->UserFlags & 0x1e;
+    const char* nam_ast = globals.player.ent.model->Anim->Single->State->Name;
 
-    if (userFlags1e == 0 || globals.player.ent.model->Anim->Single->State->UserFlags & 1)
+    if (animflags == 0 || globals.player.ent.model->Anim->Single->State->UserFlags & 1)
     {
-        flags |= 1;
+        infoflags |= 1;
     }
 
-    if (userFlags1e == 4)
+    if (animflags == 4)
     {
-        flags |= 2;
+        infoflags |= 2;
     }
 
-    if ((userFlags1e == 6) || (userFlags1e == 8))
+    if ((animflags == 6) || (animflags == 8))
     {
-        flags |= 4;
+        infoflags |= 4;
     }
 
-    if (globals.player.IsBubbleSpinning || strcmp(animName, "Bspin01") == 0)
+    if (globals.player.IsBubbleSpinning || strcmp(nam_ast, "Bspin01") == 0)
     {
-        flags |= 0x20;
+        infoflags |= 0x20;
     }
 
-    if (strcmp(animName, "BbashStart01") == 0)
+    if (strcmp(nam_ast, "BbashStart01") == 0)
     {
-        flags |= 8;
+        infoflags |= 8;
     }
 
-    if ((strcmp(animName, "BbounceStrike01") == 0) || (strcmp(animName, "BbounceStart01") == 0) ||
-        (strcmp(animName, "BbounceAttack01") == 0))
+    if ((strcmp(nam_ast, "BbounceStrike01") == 0) || (strcmp(nam_ast, "BbounceStart01") == 0) ||
+        (strcmp(nam_ast, "BbounceAttack01") == 0))
     {
-        flags |= 0x10;
+        infoflags |= 0x10;
     }
 
-    if (userFlags1e == 0xe)
+    if (animflags == 0xe)
     {
-        flags |= 0x10;
+        infoflags |= 0x10;
     }
 
-    if (userFlags1e == 0xc)
+    if (animflags == 0xc)
     {
-        flags |= 0x20;
+        infoflags |= 0x20;
     }
 
-    if (userFlags1e == 2 || flags & 1 || flags & 2)
+    if (animflags == 2 || infoflags & 1 || infoflags & 2)
     {
-        flags |= 0x40;
+        infoflags |= 0x40;
     }
 
-    return flags;
+    return infoflags;
 }
 
 void zEntPlayer_GiveHealth(S32 quantity)
@@ -5047,10 +5047,10 @@ void zEntPlayer_GiveLevelPickupCurrentLevel(S32 quantity)
 
 static F32 CalcJumpImpulse_Smooth(F32 g, F32 j, F32 h, F32 Tgc, F32 Tgs)
 {
-    F32 t[3];
-    U32 n;
+    F32 Tm[3];
+    U32 solcnt;
     U32 i;
-    F32 best;
+    F32 Tmfound;
 
     F32 b0 = 0.0f;
     F32 b1 = 0.0f;
@@ -5064,15 +5064,15 @@ static F32 CalcJumpImpulse_Smooth(F32 g, F32 j, F32 h, F32 Tgc, F32 Tgs)
     F32 Tgc2 = Tgc * Tgc;
     F32 T12 = T1 * T1;
 
-    F32 C = -(A3 * Tgc2 + j * Tgc + B2 * Tgc);
-    F32 D = b2 * Tgc2 - A * (Tgc * Tgc2) - B * Tgc2 - C * Tgc;
+    F32 Kc = -(A3 * Tgc2 + j * Tgc + B2 * Tgc);
+    F32 D = b2 * Tgc2 - A * (Tgc * Tgc2) - B * Tgc2 - Kc * Tgc;
     F32 v1 = A3 * T12 + B2 * T1 + g * T1;
     F32 c0 = D + (A * (T1 * T12) + B * T12) - c2 * T12 - v1 * T1;
 
     F32 t1 = xsqrt((b0 - h) / b2);
     F32 t2 = xsqrt((c0 - h) / c2);
 
-    n = xMathSolveCubic(-2.0f * A, -B, 0.0f, D - h, &t[0], &t[1], &t[2]);
+    solcnt = xMathSolveCubic(-2.0f * A, -B, 0.0f, D - h, &Tm[0], &Tm[1], &Tm[2]);
 
     if (t1 <= Tgc && t1 >= 0.0f)
     {
@@ -5081,25 +5081,25 @@ static F32 CalcJumpImpulse_Smooth(F32 g, F32 j, F32 h, F32 Tgc, F32 Tgs)
 
     if (t2 >= T1)
     {
-        return -(v1 + C) - 2.0f * c2 * t2;
+        return -(v1 + Kc) - 2.0f * c2 * t2;
     }
 
-    best = -1.0f;
+    Tmfound = -1.0f;
 
-    for (i = 0; i < n; i++)
+    for (i = 0; i < solcnt; i++)
     {
-        if (t[i] >= Tgc && t[i] <= T1)
+        if (Tm[i] >= Tgc && Tm[i] <= T1)
         {
-            if (best < 0.0f || t[i] < best)
+            if (Tmfound < 0.0f || Tm[i] < Tmfound)
             {
-                best = t[i];
+                Tmfound = Tm[i];
             }
         }
     }
 
-    if (best != -1.0f)
+    if (Tmfound != -1.0f)
     {
-        return -C - B2 * best - A3 * best * best;
+        return -Kc - B2 * Tmfound - A3 * Tmfound * Tmfound;
     }
 
     return 1.0f;
@@ -5297,10 +5297,10 @@ static U32 PlayerDepenQuery(xEnt* ent, xEnt* other, xScene* scene, F32 dt, xColl
         xSurface* surf = zSurfaceGetSurface(coll);
         if (surf && !surf->state)
         {
-            zSurfaceProps* props = (zSurfaceProps*)surf->moprops;
-            if (props && props->asset)
+            zSurfaceProps* prop = (zSurfaceProps*)surf->moprops;
+            if (prop && prop->asset)
             {
-                switch (props->asset->game_damage_type)
+                switch (prop->asset->game_damage_type)
                 {
                 case 0:
                     return 1;
@@ -5310,7 +5310,7 @@ static U32 PlayerDepenQuery(xEnt* ent, xEnt* other, xScene* scene, F32 dt, xColl
                 case 4:
                 case 5:
                 case 6:
-                    if (props->asset->game_damage_flags & 1)
+                    if (prop->asset->game_damage_flags & 1)
                     {
                         return 0;
                     }
@@ -5439,32 +5439,32 @@ static void PlayerCollisBuildFromDepen(xCollis* coll)
     xVec3SMul(&coll->tohit, &coll->hdng, coll->dist);
 }
 
-static void PlayerCollisTranslate(xCollis* coll, F32 x, F32 y, F32 z)
+static void PlayerCollisTranslate(xCollis* c, F32 x, F32 y, F32 z)
 {
-    if (coll->depen.x != 0.0f || coll->depen.y != 0.0f || coll->depen.z != 0.0f)
+    if (c->depen.x != 0.0f || c->depen.y != 0.0f || c->depen.z != 0.0f)
     {
-        F32 dx = coll->tohit.x - x;
-        F32 dy = coll->tohit.y - y;
-        F32 dz = coll->tohit.z - z;
+        F32 dx = c->tohit.x - x;
+        F32 dy = c->tohit.y - y;
+        F32 dz = c->tohit.z - z;
 
-        coll->tohit.x = dx;
-        coll->tohit.y = dy;
-        coll->tohit.z = dz;
+        c->tohit.x = dx;
+        c->tohit.y = dy;
+        c->tohit.z = dz;
 
-        F32 d = xsqrt(dz * dz + (dx * dx + dy * dy));
-        coll->dist = d;
+        F32 dist2 = xsqrt(dz * dz + (dx * dx + dy * dy));
+        c->dist = dist2;
 
-        F32 inv = 1.0f / d;
+        F32 s = 1.0f / dist2;
 
-        coll->hdng.x = dx * inv;
-        coll->hdng.y = dy * inv;
-        coll->hdng.z = dz * inv;
+        c->hdng.x = dx * s;
+        c->hdng.y = dy * s;
+        c->hdng.z = dz * s;
 
-        F32 amt = MIN(0.0f, inv * (d - 0.5f));
+        F32 amt = MIN(0.0f, s * (dist2 - 0.5f));
 
-        coll->depen.x = dx * amt;
-        coll->depen.y = dy * amt;
-        coll->depen.z = dz * amt;
+        c->depen.x = dx * amt;
+        c->depen.y = dy * amt;
+        c->depen.z = dz * amt;
     }
 }
 
@@ -5542,44 +5542,44 @@ F32 ComputeFudge(F32 a, F32 b)
     return MIN(a, 1.0f);
 }
 
-static void CalcCombinedDepen(F32& ox, F32& oy, F32 ax, F32 ay, F32 bx, F32 by, F32 blend)
+static void CalcCombinedDepen(F32& dx, F32& dz, F32 ax, F32 az, F32 bx, F32 bz, F32 fudge)
 {
-    F32 la = xsqrt(ax * ax + ay * ay);
-    F32 lb = xsqrt(bx * bx + by * by);
+    F32 la = xsqrt(ax * ax + az * az);
+    F32 lb = xsqrt(bx * bx + bz * bz);
 
     if (la < 1e-5f || lb < 1e-5f)
     {
-        ox = 0.5f * (ax + bx);
-        oy = 0.5f * (ay + by);
+        dx = 0.5f * (ax + bx);
+        dz = 0.5f * (az + bz);
     }
     else
     {
-        F32 uax = ax / la;
-        F32 nay = -ay / la;
+        F32 normX = ax / la;
+        F32 normZ = -az / la;
         F32 ubx = bx / lb;
-        F32 dot = nay * ubx + uax * (by / lb);
-        F32 say = uax;
+        F32 nddot = normZ * ubx + normX * (bz / lb);
+        F32 say = normX;
 
-        if (dot < 0.0f)
+        if (nddot < 0.0f)
         {
-            dot = -dot;
-            nay = -nay;
-            say = -uax;
+            nddot = -nddot;
+            normZ = -normZ;
+            say = -normX;
         }
 
-        if (dot < 0.0001f)
+        if (nddot < 0.0001f)
         {
-            ox = 0.5f * (ax + bx);
-            oy = 0.5f * (ay + by);
+            dx = 0.5f * (ax + bx);
+            dz = 0.5f * (az + bz);
         }
         else
         {
-            F32 d = MAX(dot, 0.25f);
-            ox = (lb * nay) / d;
-            oy = (lb * say) / d;
+            F32 d = MAX(nddot, 0.25f);
+            dx = (lb * normZ) / d;
+            dz = (lb * say) / d;
 
-            F32 nby = -by / lb;
-            F32 dot2 = nby * uax + ubx * (ay / la);
+            F32 nby = -bz / lb;
+            F32 dot2 = nby * normX + ubx * (az / la);
 
             if (dot2 < 0.0f)
             {
@@ -5590,15 +5590,15 @@ static void CalcCombinedDepen(F32& ox, F32& oy, F32 ax, F32 ay, F32 bx, F32 by, 
 
             if (dot2 < 0.0001f)
             {
-                ox = 0.5f * (ax + bx);
-                oy = 0.5f * (ay + by);
+                dx = 0.5f * (ax + bx);
+                dz = 0.5f * (az + bz);
             }
 
             dot2 = MAX(dot2, 0.25f);
-            ox = ox + (la * nby) / dot2;
-            oy = oy + (la * ubx) / dot2;
-            ox = ox * blend + 0.5f * (ax + bx) * (1.0f - blend);
-            oy = oy * blend + 0.5f * (ay + by) * (1.0f - blend);
+            dx = dx + (la * nby) / dot2;
+            dz = dz + (la * ubx) / dot2;
+            dx = dx * fudge + 0.5f * (ax + bx) * (1.0f - fudge);
+            dz = dz * fudge + 0.5f * (az + bz) * (1.0f - fudge);
         }
     }
 }
@@ -5634,13 +5634,13 @@ void zEntPlayerCollide(xEnt* ent, xScene* sc, F32 dt)
         PlayerCollsSelectDepen(ent, sc, dt);
 
         xCollis* colls = ent->collis->colls;
-        xCollis* it = &colls[k_XCOLLS_IDX_FRONT];
-        xCollis* end = &colls[ent->collis->idx];
-        for (; it < end; it++)
+        xCollis* c = &colls[k_XCOLLS_IDX_FRONT];
+        xCollis* cend = &colls[ent->collis->idx];
+        for (; c < cend; c++)
         {
-            if (it->dist > 0.5f)
+            if (c->dist > 0.5f)
             {
-                it->flags &= ~k_HIT_IT;
+                c->flags &= ~k_HIT_IT;
             }
         }
     }

@@ -875,33 +875,33 @@ void zFX_SpawnBubbleHit(const xVec3* pos, U32 num, const xVec3* pos_rnd, const x
         vel_rnd = &bubblehit_vel_rnd;
     }
 
-    xVec3* buffer = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
-    xVec3* vbuf = buffer + num;
-    if (buffer == NULL)
+    xVec3* posbuf = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
+    xVec3* velbuf = posbuf + num;
+    if (posbuf == NULL)
     {
         return;
     }
 
-    xVec3* p = buffer;
-    xVec3* v = vbuf;
-    for (S32 i = 0; i < (S32)num; i++, p++, v++)
+    xVec3* pp = posbuf;
+    xVec3* vp = velbuf;
+    for (S32 j = 0; j < (S32)num; j++, pp++, vp++)
     {
-        *p = *pos;
-        p->x = pos_rnd->x * (xurand() - 0.5f) + p->x;
-        p->y = pos_rnd->y * (xurand() - 0.5f) + p->y;
-        p->z = pos_rnd->z * (xurand() - 0.5f) + p->z;
-        v->x = xurand() - 0.5f;
-        v->y = xurand() - 0.5f;
-        v->z = xurand() - 0.5f;
-        xVec3NormalizeFast(v, v);
-        xVec3ScaleC(v, v, vel_scale, vel_scale, vel_scale);
-        v->x = vel_rnd->x * (xurand() - 0.5f) + v->x;
-        v->y = vel_rnd->y * (xurand() - 0.5f) + v->y;
-        v->z = vel_rnd->z * (xurand() - 0.5f) + v->z;
+        *pp = *pos;
+        pp->x = pos_rnd->x * (xurand() - 0.5f) + pp->x;
+        pp->y = pos_rnd->y * (xurand() - 0.5f) + pp->y;
+        pp->z = pos_rnd->z * (xurand() - 0.5f) + pp->z;
+        vp->x = xurand() - 0.5f;
+        vp->y = xurand() - 0.5f;
+        vp->z = xurand() - 0.5f;
+        xVec3NormalizeFast(vp, vp);
+        xVec3ScaleC(vp, vp, vel_scale, vel_scale, vel_scale);
+        vp->x = vel_rnd->x * (xurand() - 0.5f) + vp->x;
+        vp->y = vel_rnd->y * (xurand() - 0.5f) + vp->y;
+        vp->z = vel_rnd->z * (xurand() - 0.5f) + vp->z;
     }
 
-    zParPTankSpawnBubbles(buffer, vbuf, num, 1.0f);
-    xMemPopTemp(buffer);
+    zParPTankSpawnBubbles(posbuf, velbuf, num, 1.0f);
+    xMemPopTemp(posbuf);
 }
 
 void zFX_SpawnBubbleTrail(const xVec3* pos, U32 num)
@@ -924,28 +924,28 @@ void zFX_SpawnBubbleTrail(const xVec3* pos, U32 num, const xVec3* pos_rnd, const
         vel_rnd = &bubbletrail_vel_rnd;
     }
 
-    xVec3* buffer = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
-    xVec3* vbuf = buffer + num;
-    if (buffer == NULL)
+    xVec3* posbuf = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
+    xVec3* velbuf = posbuf + num;
+    if (posbuf == NULL)
     {
         return;
     }
 
-    xVec3* p = buffer;
-    xVec3* v = vbuf;
-    for (S32 i = 0; i < (S32)num; i++, p++, v++)
+    xVec3* pp = posbuf;
+    xVec3* vp = velbuf;
+    for (S32 j = 0; j < (S32)num; j++, pp++, vp++)
     {
-        *p = *pos;
-        p->x = pos_rnd->x * (xurand() - 0.5f) + p->x;
-        p->y = pos_rnd->y * (xurand() - 0.5f) + p->y;
-        p->z = pos_rnd->z * (xurand() - 0.5f) + p->z;
-        v->x = vel_rnd->x * (xurand() - 0.5f);
-        v->y = vel_rnd->y * (xurand() - 0.5f);
-        v->z = vel_rnd->z * (xurand() - 0.5f);
+        *pp = *pos;
+        pp->x = pos_rnd->x * (xurand() - 0.5f) + pp->x;
+        pp->y = pos_rnd->y * (xurand() - 0.5f) + pp->y;
+        pp->z = pos_rnd->z * (xurand() - 0.5f) + pp->z;
+        vp->x = vel_rnd->x * (xurand() - 0.5f);
+        vp->y = vel_rnd->y * (xurand() - 0.5f);
+        vp->z = vel_rnd->z * (xurand() - 0.5f);
     }
 
-    zParPTankSpawnBubbles(buffer, vbuf, num, 1.0f);
-    xMemPopTemp(buffer);
+    zParPTankSpawnBubbles(posbuf, velbuf, num, 1.0f);
+    xMemPopTemp(posbuf);
 }
 
 void zFX_SpawnBubbleTrailNoNegRandVel(const xVec3* pos, U32 num, const xVec3* pos_rnd,
@@ -960,28 +960,28 @@ void zFX_SpawnBubbleTrailNoNegRandVel(const xVec3* pos, U32 num, const xVec3* po
         vel_rnd = &bubbletrail_vel_rnd;
     }
 
-    xVec3* buffer = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
-    xVec3* vbuf = buffer + num;
-    if (buffer == NULL)
+    xVec3* posbuf = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
+    xVec3* velbuf = posbuf + num;
+    if (posbuf == NULL)
     {
         return;
     }
 
-    xVec3* p = buffer;
-    xVec3* v = vbuf;
-    for (S32 i = 0; i < (S32)num; i++, p++, v++)
+    xVec3* pp = posbuf;
+    xVec3* vp = velbuf;
+    for (S32 j = 0; j < (S32)num; j++, pp++, vp++)
     {
-        *p = *pos;
-        p->x = pos_rnd->x * (xurand() - 0.5f) + p->x;
-        p->y = pos_rnd->y * (xurand() - 0.5f) + p->y;
-        p->z = pos_rnd->z * (xurand() - 0.5f) + p->z;
-        v->x = vel_rnd->x * xurand();
-        v->y = vel_rnd->y * xurand();
-        v->z = vel_rnd->z * xurand();
+        *pp = *pos;
+        pp->x = pos_rnd->x * (xurand() - 0.5f) + pp->x;
+        pp->y = pos_rnd->y * (xurand() - 0.5f) + pp->y;
+        pp->z = pos_rnd->z * (xurand() - 0.5f) + pp->z;
+        vp->x = vel_rnd->x * xurand();
+        vp->y = vel_rnd->y * xurand();
+        vp->z = vel_rnd->z * xurand();
     }
 
-    zParPTankSpawnBubbles(buffer, vbuf, num, 1.0f);
-    xMemPopTemp(buffer);
+    zParPTankSpawnBubbles(posbuf, velbuf, num, 1.0f);
+    xMemPopTemp(posbuf);
 }
 
 void zFX_SpawnBubbleTrail(const xVec3* pos_beg, const xVec3* pos_end, U32 num, const xVec3* pos_rnd,
@@ -996,30 +996,30 @@ void zFX_SpawnBubbleTrail(const xVec3* pos_beg, const xVec3* pos_end, U32 num, c
         vel_rnd = &bubbletrail_vel_rnd;
     }
 
-    xVec3* buffer = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
-    xVec3* vbuf = buffer + num;
-    if (buffer == NULL)
+    xVec3* posbuf = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
+    xVec3* velbuf = posbuf + num;
+    if (posbuf == NULL)
     {
         return;
     }
 
-    xVec3 delta = *pos_end - *pos_beg;
+    xVec3 offset = *pos_end - *pos_beg;
 
-    xVec3* p = buffer;
-    xVec3* v = vbuf;
-    for (S32 i = 0; i < (S32)num; i++, p++, v++)
+    xVec3* pp = posbuf;
+    xVec3* vp = velbuf;
+    for (S32 j = 0; j < (S32)num; j++, pp++, vp++)
     {
-        *p = *pos_beg + delta * xurand();
-        p->x = pos_rnd->x * (xurand() - 0.5f) + p->x;
-        p->y = pos_rnd->y * (xurand() - 0.5f) + p->y;
-        p->z = pos_rnd->z * (xurand() - 0.5f) + p->z;
-        v->x = vel_rnd->x * (xurand() - 0.5f);
-        v->y = vel_rnd->y * (xurand() - 0.5f);
-        v->z = vel_rnd->z * (xurand() - 0.5f);
+        *pp = *pos_beg + offset * xurand();
+        pp->x = pos_rnd->x * (xurand() - 0.5f) + pp->x;
+        pp->y = pos_rnd->y * (xurand() - 0.5f) + pp->y;
+        pp->z = pos_rnd->z * (xurand() - 0.5f) + pp->z;
+        vp->x = vel_rnd->x * (xurand() - 0.5f);
+        vp->y = vel_rnd->y * (xurand() - 0.5f);
+        vp->z = vel_rnd->z * (xurand() - 0.5f);
     }
 
-    zParPTankSpawnBubbles(buffer, vbuf, num, 1.0f);
-    xMemPopTemp(buffer);
+    zParPTankSpawnBubbles(posbuf, velbuf, num, 1.0f);
+    xMemPopTemp(posbuf);
 }
 
 void zFX_SpawnBubbleTrail(const xVec3* pos_beg, const xVec3* pos_end, const xVec3* vel_beg,
@@ -1035,33 +1035,33 @@ void zFX_SpawnBubbleTrail(const xVec3* pos_beg, const xVec3* pos_end, const xVec
         vel_rnd = &bubbletrail_vel_rnd;
     }
 
-    xVec3* buffer = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
-    xVec3* vbuf = buffer + num;
-    if (buffer == NULL)
+    xVec3* posbuf = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
+    xVec3* velbuf = posbuf + num;
+    if (posbuf == NULL)
     {
         return;
     }
 
-    xVec3 pos_delta = *pos_end - *pos_beg;
-    xVec3 vel_delta = *vel_end - *vel_beg;
+    xVec3 offset = *pos_end - *pos_beg;
+    xVec3 vel_offset = *vel_end - *vel_beg;
 
-    xVec3* p = buffer;
-    xVec3* v = vbuf;
-    for (S32 i = 0; i < (S32)num; i++, p++, v++)
+    xVec3* pp = posbuf;
+    xVec3* vp = velbuf;
+    for (S32 j = 0; j < (S32)num; j++, pp++, vp++)
     {
         F32 t = xurand();
-        *p = *pos_beg + pos_delta * t;
-        *v = *vel_beg + vel_delta * t;
-        p->x = pos_rnd->x * (xurand() - 0.5f) + p->x;
-        p->y = pos_rnd->y * (xurand() - 0.5f) + p->y;
-        p->z = pos_rnd->z * (xurand() - 0.5f) + p->z;
-        v->x = vel_rnd->x * (xurand() - 0.5f) + v->x;
-        v->y = vel_rnd->y * (xurand() - 0.5f) + v->y;
-        v->z = vel_rnd->z * (xurand() - 0.5f) + v->z;
+        *pp = *pos_beg + offset * t;
+        *vp = *vel_beg + vel_offset * t;
+        pp->x = pos_rnd->x * (xurand() - 0.5f) + pp->x;
+        pp->y = pos_rnd->y * (xurand() - 0.5f) + pp->y;
+        pp->z = pos_rnd->z * (xurand() - 0.5f) + pp->z;
+        vp->x = vel_rnd->x * (xurand() - 0.5f) + vp->x;
+        vp->y = vel_rnd->y * (xurand() - 0.5f) + vp->y;
+        vp->z = vel_rnd->z * (xurand() - 0.5f) + vp->z;
     }
 
-    zParPTankSpawnBubbles(buffer, vbuf, num, size);
-    xMemPopTemp(buffer);
+    zParPTankSpawnBubbles(posbuf, velbuf, num, size);
+    xMemPopTemp(posbuf);
 }
 
 void zFX_SpawnBubbleMenuTrail(const xVec3* pos, U32 num, const xVec3* pos_rnd, const xVec3* vel_rnd)
@@ -1075,63 +1075,63 @@ void zFX_SpawnBubbleMenuTrail(const xVec3* pos, U32 num, const xVec3* pos_rnd, c
         vel_rnd = &bubbletrail_vel_rnd;
     }
 
-    xVec3* buffer = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
-    xVec3* vbuf = buffer + num;
-    if (buffer == NULL)
+    xVec3* posbuf = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
+    xVec3* velbuf = posbuf + num;
+    if (posbuf == NULL)
     {
         return;
     }
 
-    xVec3* p = buffer;
-    xVec3* v = vbuf;
-    for (S32 i = 0; i < (S32)num; i++, p++, v++)
+    xVec3* pp = posbuf;
+    xVec3* vp = velbuf;
+    for (S32 j = 0; j < (S32)num; j++, pp++, vp++)
     {
-        *p = *pos;
-        p->x = pos_rnd->x * (xurand() - 0.5f) + p->x;
-        p->y = pos_rnd->y * (xurand() - 0.5f) + p->y;
-        p->z = pos_rnd->z * (xurand() - 0.5f) + p->z;
-        v->x = vel_rnd->x * (xurand() - 0.5f);
-        v->y = vel_rnd->y * (xurand() - 0.5f);
-        v->z = vel_rnd->z * (xurand() - 0.5f);
+        *pp = *pos;
+        pp->x = pos_rnd->x * (xurand() - 0.5f) + pp->x;
+        pp->y = pos_rnd->y * (xurand() - 0.5f) + pp->y;
+        pp->z = pos_rnd->z * (xurand() - 0.5f) + pp->z;
+        vp->x = vel_rnd->x * (xurand() - 0.5f);
+        vp->y = vel_rnd->y * (xurand() - 0.5f);
+        vp->z = vel_rnd->z * (xurand() - 0.5f);
     }
 
-    zParPTankSpawnMenuBubbles(buffer, vbuf, num);
-    xMemPopTemp(buffer);
+    zParPTankSpawnMenuBubbles(posbuf, velbuf, num);
+    xMemPopTemp(posbuf);
 }
 
 void zFX_SpawnBubbleSlam(const xVec3* pos, U32 num, F32 rang, F32 bvel, F32 rvel)
 {
-    xVec3* buffer = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
-    xVec3* vbuf = buffer + num;
-    if (buffer == NULL)
+    xVec3* posbuf = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
+    xVec3* velbuf = posbuf + num;
+    if (posbuf == NULL)
     {
         return;
     }
 
     F32 yvel = 0.25f * rvel;
 
-    xVec3* p = buffer;
-    xVec3* v = buffer + num;
-    for (U32 i = 0; i < num; i++)
+    xVec3* pp = posbuf;
+    xVec3* vp = posbuf + num;
+    for (U32 j = 0; j < num; j++)
     {
-        *p = *pos;
-        p->y += 0.2f;
+        *pp = *pos;
+        pp->y += 0.2f;
 
-        F32 ang = (2 * PI * i) / num;
+        F32 ang = (2 * PI * j) / num;
         ang = rang * (xurand() - 0.5f) + ang;
-        v->x = bvel * icos(ang);
-        v->y = 0.0f;
-        v->z = bvel * isin(ang);
-        v->x = rvel * (xurand() - 0.5f) + v->x;
-        v->y = yvel * (xurand() - 0.5f) + v->y;
-        v->z = rvel * (xurand() - 0.5f) + v->z;
+        vp->x = bvel * icos(ang);
+        vp->y = 0.0f;
+        vp->z = bvel * isin(ang);
+        vp->x = rvel * (xurand() - 0.5f) + vp->x;
+        vp->y = yvel * (xurand() - 0.5f) + vp->y;
+        vp->z = rvel * (xurand() - 0.5f) + vp->z;
     }
 
-    zParPTankSpawnBubbles(buffer, vbuf, num, 1.0f);
-    xMemPopTemp(buffer);
+    zParPTankSpawnBubbles(posbuf, velbuf, num, 1.0f);
+    xMemPopTemp(posbuf);
 }
 
-void zFX_SpawnBubbleBlast(const xVec3* pos, U32 num, F32 rad, F32 bvel, F32 rvel)
+void zFX_SpawnBubbleBlast(const xVec3* pos, U32 num, F32 radius, F32 blast_vel, F32 rand_vel)
 {
     xVec3* buffer = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
     xVec3* vbuf = buffer + num;
@@ -1141,22 +1141,22 @@ void zFX_SpawnBubbleBlast(const xVec3* pos, U32 num, F32 rad, F32 bvel, F32 rvel
     }
 
     xVec3* end = buffer + num;
-    xVec3* v = end;
-    for (xVec3* p = buffer; p != end; p++)
+    xVec3* itv = end;
+    for (xVec3* itl = buffer; itl != end; itl++)
     {
         F32 ang = 2 * PI * xurand();
-        F32 z = 2.0f * xurand() - 1.0f;
-        F32 r = xsqrt(-(z * z - 1.0f));
-        v->assign(r * icos(ang), r * isin(ang), z);
-        *p = *pos + *v * rad;
-        *v *= bvel;
+        F32 uz = 2.0f * xurand() - 1.0f;
+        F32 r = xsqrt(-(uz * uz - 1.0f));
+        itv->assign(r * icos(ang), r * isin(ang), uz);
+        *itl = *pos + *itv * radius;
+        *itv *= blast_vel;
 
-        xVec3 rnd;
-        rnd.x = xurand() - 0.5f;
-        rnd.y = xurand() - 0.5f;
-        rnd.z = xurand() - 0.5f;
-        *v += rnd * rvel;
-        v++;
+        xVec3 rvel;
+        rvel.x = xurand() - 0.5f;
+        rvel.y = xurand() - 0.5f;
+        rvel.z = xurand() - 0.5f;
+        *itv += rvel * rand_vel;
+        itv++;
     }
 
     zParPTankSpawnBubbles(buffer, end, num, 1.0f);
@@ -1220,16 +1220,16 @@ namespace
     void add_entrail_tweaks();
     bool validate_popper(const xEnt& ent);
     F32 get_triangle_area(const xVec3& a, const xVec3& b, const xVec3& c);
-    void eval_tri(xVec3* dst_verts, xVec3* dst_normals, const xMat4x3* mat, const RpGeometry* geom,
+    void eval_tri(xVec3* vert, xVec3* norm, const xMat4x3* mat, const RpGeometry* geom,
                   const RpTriangle* tri);
     void SkinXformVertAndNormal(xVec3* dst_verts, xVec3* dst_normals, const xVec3* verts,
                                 const xVec3* normals, const xMat4x3* mat, const xMat4x3* bone_mats,
                                 const F32* weights, const U32* bone_idx, const U16* idx, U32 count);
-    void random_point_on_triangle(xVec3& pos, xVec3& nrm, const xVec3* verts, const xVec3* normals);
-    void emit_popper_bubbles(popper_data& data, S32 count, F32 size, F32 vel);
+    void random_point_on_triangle(xVec3& loc, xVec3& norm, const xVec3* v, const xVec3* n);
+    void emit_popper_bubbles(popper_data& popper, S32 emit, F32 scale, F32 vel_add);
     void set_popper_alpha(popper_data& data, F32 alpha);
     void destroy_popper(popper_data& data);
-    void update_popper(popper_data& data, F32 dt);
+    void update_popper(popper_data& popper, F32 dt);
 
     bool model_is_preinstanced(RpAtomic* atomic)
     {
@@ -1242,47 +1242,47 @@ namespace
         return !(geom->morphTarget != NULL && geom->morphTarget->verts != NULL);
     }
 
-    bool setup_popper_emitter(popper_data& data)
+    bool setup_popper_emitter(popper_data& popper)
     {
-        data.faces = count_faces(data.ent->model);
-        if (data.faces <= 0)
+        popper.faces = count_faces(popper.ent->model);
+        if (popper.faces <= 0)
         {
             return FALSE;
         }
-        if (data.faces > 768)
+        if (popper.faces > 768)
         {
             return FALSE;
         }
 
-        F32* w = data.weight;
-        data.area = 0.0f;
-        data.atomic_size = 0;
+        F32* w = popper.weight;
+        popper.area = 0.0f;
+        popper.atomic_size = 0;
 
-        for (xModelInstance* mdl = data.ent->model; mdl != NULL; mdl = mdl->Next)
+        for (xModelInstance* mdl = popper.ent->model; mdl != NULL; mdl = mdl->Next)
         {
-            if (data.atomic_size >= 4)
+            if (popper.atomic_size >= 4)
             {
                 break;
             }
 
-            data.atomic[data.atomic_size] = mdl->Data;
+            popper.atomic[popper.atomic_size] = mdl->Data;
 
             RpGeometry* geom = mdl->Data->geometry;
-            const xVec3* verts = (const xVec3*)geom->morphTarget->verts;
+            const xVec3* vert = (const xVec3*)geom->morphTarget->verts;
             const RpTriangle* tri = geom->triangles;
             F32* end = w + geom->numTriangles;
             for (; w != end; w++)
             {
-                data.area += get_triangle_area(verts[tri->vertIndex[0]], verts[tri->vertIndex[1]],
-                                               verts[tri->vertIndex[2]]);
+                popper.area += get_triangle_area(vert[tri->vertIndex[0]], vert[tri->vertIndex[1]],
+                                               vert[tri->vertIndex[2]]);
                 tri++;
-                *w = data.area;
+                *w = popper.area;
             }
 
-            data.atomic_size++;
+            popper.atomic_size++;
         }
 
-        if (data.atomic_size == 0)
+        if (popper.atomic_size == 0)
         {
             return FALSE;
         }
@@ -1320,33 +1320,33 @@ namespace
         return i;
     }
 
-    void eval_tri(xVec3* dst_verts, xVec3* dst_normals, const xMat4x3* mat, const RpGeometry* geom,
+    void eval_tri(xVec3* vert, xVec3* norm, const xMat4x3* mat, const RpGeometry* geom,
                   const RpTriangle* tri)
     {
         RpSkin* skin = RpSkinGeometryGetSkin((RpGeometry*)geom);
-        const xVec3* verts = (const xVec3*)geom->morphTarget->verts;
-        const xVec3* normals = (const xVec3*)geom->morphTarget->normals;
+        const xVec3* in_vert = (const xVec3*)geom->morphTarget->verts;
+        const xVec3* in_norm = (const xVec3*)geom->morphTarget->normals;
 
         if (skin != NULL)
         {
-            const xMat4x3* bone_mats = (const xMat4x3*)RpSkinGetSkinToBoneMatrices(skin);
-            const F32* weights = (const F32*)RpSkinGetVertexBoneWeights(skin);
-            const U32* bone_idx = RpSkinGetVertexBoneIndices(skin);
+            const xMat4x3* skinmat = (const xMat4x3*)RpSkinGetSkinToBoneMatrices(skin);
+            const F32* vert_bone_weight = (const F32*)RpSkinGetVertexBoneWeights(skin);
+            const U32* vert_bone_index = RpSkinGetVertexBoneIndices(skin);
 
-            SkinXformVertAndNormal(dst_verts, dst_normals, verts, normals, mat, bone_mats, weights,
-                                   bone_idx, tri->vertIndex, 3);
+            SkinXformVertAndNormal(vert, norm, in_vert, in_norm, mat, skinmat, vert_bone_weight,
+                                   vert_bone_index, tri->vertIndex, 3);
             return;
         }
 
-        xMat4x3Toworld(&dst_verts[0], mat, &verts[tri->vertIndex[0]]);
-        xMat4x3Toworld(&dst_verts[1], mat, &verts[tri->vertIndex[1]]);
-        xMat4x3Toworld(&dst_verts[2], mat, &verts[tri->vertIndex[2]]);
-        xMat3x3RMulVec(&dst_normals[0], mat, &normals[tri->vertIndex[0]]);
-        dst_normals[0].up_normalize();
-        xMat3x3RMulVec(&dst_normals[1], mat, &normals[tri->vertIndex[1]]);
-        dst_normals[1].up_normalize();
-        xMat3x3RMulVec(&dst_normals[2], mat, &normals[tri->vertIndex[2]]);
-        dst_normals[2].up_normalize();
+        xMat4x3Toworld(&vert[0], mat, &in_vert[tri->vertIndex[0]]);
+        xMat4x3Toworld(&vert[1], mat, &in_vert[tri->vertIndex[1]]);
+        xMat4x3Toworld(&vert[2], mat, &in_vert[tri->vertIndex[2]]);
+        xMat3x3RMulVec(&norm[0], mat, &in_norm[tri->vertIndex[0]]);
+        norm[0].up_normalize();
+        xMat3x3RMulVec(&norm[1], mat, &in_norm[tri->vertIndex[1]]);
+        norm[1].up_normalize();
+        xMat3x3RMulVec(&norm[2], mat, &in_norm[tri->vertIndex[2]]);
+        norm[2].up_normalize();
     }
 
     void SkinXformVertAndNormal(xVec3* dst_verts, xVec3* dst_normals, const xVec3* verts,
@@ -1413,51 +1413,51 @@ namespace
         }
     }
 
-    void random_point_on_triangle(xVec3& pos, xVec3& nrm, const xVec3* verts, const xVec3* normals)
+    void random_point_on_triangle(xVec3& loc, xVec3& norm, const xVec3* v, const xVec3* n)
     {
-        F32 a = xurand();
-        F32 b = xurand();
-        if (a + b > 1.0f)
+        F32 s = xurand();
+        F32 t = xurand();
+        if (s + t > 1.0f)
         {
-            a = 1.0f - a;
-            b = 1.0f - b;
+            s = 1.0f - s;
+            t = 1.0f - t;
         }
 
-        pos.x = verts[0].x + a * (verts[1].x - verts[0].x) + b * (verts[2].x - verts[0].x);
-        pos.y = verts[0].y + a * (verts[1].y - verts[0].y) + b * (verts[2].y - verts[0].y);
-        pos.z = verts[0].z + a * (verts[1].z - verts[0].z) + b * (verts[2].z - verts[0].z);
-        nrm.x =
-            normals[0].x + a * (normals[1].x - normals[0].x) + b * (normals[2].x - normals[0].x);
-        nrm.y =
-            normals[0].y + a * (normals[1].y - normals[0].y) + b * (normals[2].y - normals[0].y);
-        nrm.z =
-            normals[0].z + a * (normals[1].z - normals[0].z) + b * (normals[2].z - normals[0].z);
-        nrm.up_normalize();
+        loc.x = v[0].x + s * (v[1].x - v[0].x) + t * (v[2].x - v[0].x);
+        loc.y = v[0].y + s * (v[1].y - v[0].y) + t * (v[2].y - v[0].y);
+        loc.z = v[0].z + s * (v[1].z - v[0].z) + t * (v[2].z - v[0].z);
+        norm.x =
+            n[0].x + s * (n[1].x - n[0].x) + t * (n[2].x - n[0].x);
+        norm.y =
+            n[0].y + s * (n[1].y - n[0].y) + t * (n[2].y - n[0].y);
+        norm.z =
+            n[0].z + s * (n[1].z - n[0].z) + t * (n[2].z - n[0].z);
+        norm.up_normalize();
     }
 
-    void random_surface_point(xVec3& pos, xVec3& nrm, const popper_data& data)
+    void random_surface_point(xVec3& loc, xVec3& norm, const popper_data& popper)
     {
-        const xMat4x3* mat = (const xMat4x3*)data.ent->model->Mat;
+        const xMat4x3* mat = (const xMat4x3*)popper.ent->model->Mat;
 
-        S32 idx = data.find_weight(data.area * xurand());
+        S32 which = popper.find_weight(popper.area * xurand());
 
         RpGeometry* geom;
-        RpAtomic* const* a = data.atomic;
-        RpAtomic* const* end = a + data.atomic_size;
+        RpAtomic* const* a = popper.atomic;
+        RpAtomic* const* end = a + popper.atomic_size;
         for (; a != end; a++)
         {
             geom = (*a)->geometry;
-            if (idx < geom->numTriangles)
+            if (which < geom->numTriangles)
             {
                 break;
             }
-            idx -= geom->numTriangles;
+            which -= geom->numTriangles;
         }
 
-        xVec3 verts[3];
-        xVec3 normals[3];
-        eval_tri(verts, normals, mat, geom, &geom->triangles[idx]);
-        random_point_on_triangle(pos, nrm, verts, normals);
+        xVec3 v[3];
+        xVec3 n[3];
+        eval_tri(v, n, mat, geom, &geom->triangles[which]);
+        random_point_on_triangle(loc, norm, v, n);
     }
 
     S32 popper_data::find_weight(F32 w) const
@@ -1512,60 +1512,60 @@ namespace
         return found;
     }
 
-    void emit_popper_bubbles(popper_data& data, S32 count, F32 size, F32 vel)
+    void emit_popper_bubbles(popper_data& popper, S32 emit, F32 scale, F32 vel_add)
     {
-        if (data.ent == NULL && data.ent->model == NULL)
+        if (popper.ent == NULL && popper.ent->model == NULL)
         {
             return;
         }
 
-        S32 avail = zParPTankBubblesAvailable();
-        if (avail <= 0)
+        S32 max_emit = zParPTankBubblesAvailable();
+        if (max_emit <= 0)
         {
             return;
         }
-        if (count > avail)
+        if (emit > max_emit)
         {
-            count = avail;
+            emit = max_emit;
         }
 
-        xVec3* buffer = (xVec3*)xMemPushTemp(2 * sizeof(xVec3) * count);
+        xVec3* buffer = (xVec3*)xMemPushTemp(2 * sizeof(xVec3) * emit);
         if (buffer == NULL)
         {
             return;
         }
 
-        xModelInstance* mdl = data.ent->model;
-        xVec3* vbuf = buffer + count;
-        xVec3* p = buffer;
+        xModelInstance* model = popper.ent->model;
+        xVec3* vbuf = buffer + emit;
+        xVec3* loc = buffer;
         xVec3* v = vbuf;
 
-        xMat3x3 saved;
-        if (mdl->Scale.x != 0.0f)
+        xMat3x3 oldmat;
+        if (model->Scale.x != 0.0f)
         {
-            xMat3x3* m = (xMat3x3*)mdl->Mat;
-            saved = *m;
-            m->right *= mdl->Scale.x;
-            m->up *= mdl->Scale.y;
-            m->at *= mdl->Scale.z;
+            xMat3x3* mat = (xMat3x3*)model->Mat;
+            oldmat = *mat;
+            mat->right *= model->Scale.x;
+            mat->up *= model->Scale.y;
+            mat->at *= model->Scale.z;
         }
 
-        F32 vscale = data.vel * size + vel;
-        F32 rloc = data.rloc * size;
-        F32 rvel = data.rvel * size;
+        F32 svel = popper.vel * scale + vel_add;
+        F32 rloc = popper.rloc * scale;
+        F32 rvel = popper.rvel * scale;
 
-        for (; p != vbuf; p++)
+        for (; loc != vbuf; loc++)
         {
-            random_surface_point(*p, *v, data);
-            *v *= vscale;
+            random_surface_point(*loc, *v, popper);
+            *v *= svel;
 
-            if (data.rloc != 0.0f)
+            if (popper.rloc != 0.0f)
             {
-                p->x = rloc * (xurand() - 0.5f) + p->x;
-                p->y = rloc * (xurand() - 0.5f) + p->y;
-                p->z = rloc * (xurand() - 0.5f) + p->z;
+                loc->x = rloc * (xurand() - 0.5f) + loc->x;
+                loc->y = rloc * (xurand() - 0.5f) + loc->y;
+                loc->z = rloc * (xurand() - 0.5f) + loc->z;
             }
-            if (data.rvel != 0.0f)
+            if (popper.rvel != 0.0f)
             {
                 v->x = rvel * (xurand() - 0.5f) + v->x;
                 v->y = rvel * (xurand() - 0.5f) + v->y;
@@ -1574,12 +1574,12 @@ namespace
             v++;
         }
 
-        if (mdl->Scale.x != 0.0f)
+        if (model->Scale.x != 0.0f)
         {
-            *(xMat3x3*)mdl->Mat = saved;
+            *(xMat3x3*)model->Mat = oldmat;
         }
 
-        zParPTankSpawnBubbles(buffer, vbuf, count, size);
+        zParPTankSpawnBubbles(buffer, vbuf, emit, scale);
         xMemPopTemp(buffer);
     }
 
@@ -1602,42 +1602,42 @@ namespace
         }
     }
 
-    void update_popper(popper_data& data, F32 dt)
+    void update_popper(popper_data& popper, F32 dt)
     {
-        data.time += dt;
-        if (data.time > data.end_time)
+        popper.time += dt;
+        if (popper.time > popper.end_time)
         {
-            dt = data.time - data.end_time;
-            data.time = data.end_time;
+            dt = popper.time - popper.end_time;
+            popper.time = popper.end_time;
         }
 
-        F32 area = data.area;
-        F32 vel = 0.0f;
-        F32 rate = data.rate;
+        F32 area = popper.area;
+        F32 vel_add = 0.0f;
+        F32 rate = popper.rate;
 
-        switch (data.state)
+        switch (popper.state)
         {
         case STATE_ON:
         {
             F32 p, v, a;
-            xSCurve(p, v, a, data.time / data.end_time);
-            vel = v * data.radius;
+            xSCurve(p, v, a, popper.time / popper.end_time);
+            vel_add = v * popper.radius;
             area = area * p;
             xVec3 scale;
-            if (data.model_scale.x == 0.0f)
+            if (popper.model_scale.x == 0.0f)
             {
                 scale = p;
             }
             else
             {
-                scale = data.model_scale * p;
+                scale = popper.model_scale * p;
             }
-            xModelSetScale(data.ent->model, scale);
+            xModelSetScale(popper.ent->model, scale);
             break;
         }
         case STATE_OFF:
         {
-            set_popper_alpha(data, xSCurve(1.0f - data.time / data.end_time));
+            set_popper_alpha(popper, xSCurve(1.0f - popper.time / popper.end_time));
             break;
         }
         }
@@ -1655,12 +1655,12 @@ namespace
             size = 1.0f;
         }
 
-        data.emitted += emit * dt;
-        if (data.emitted >= 1.0f)
+        popper.emitted += emit * dt;
+        if (popper.emitted >= 1.0f)
         {
-            S32 n = data.emitted;
-            data.emitted -= n;
-            emit_popper_bubbles(data, n, size, vel);
+            S32 n = popper.emitted;
+            popper.emitted -= n;
+            emit_popper_bubbles(popper, n, size, vel_add);
         }
     }
 
@@ -1795,8 +1795,8 @@ void zFXPopOn(xEnt& ent, F32 rate, F32 time)
         return;
     }
 
-    popper_data* data = grab_popper(ent);
-    if (data == NULL)
+    popper_data* popper = grab_popper(ent);
+    if (popper == NULL)
     {
         return;
     }
@@ -1816,28 +1816,28 @@ void zFXPopOn(xEnt& ent, F32 rate, F32 time)
 
     if (time <= 0.0f)
     {
-        data->state = STATE_ON;
-        emit_popper_bubbles_immediate(*data);
-        data->state = STATE_NONE;
+        popper->state = STATE_ON;
+        emit_popper_bubbles_immediate(*popper);
+        popper->state = STATE_NONE;
         xEntShow(&ent);
     }
     else
     {
-        xSphere sph;
-        xBoundGetSphere(sph, ent.bound);
-        data->radius = sph.r;
-        data->state = STATE_ON;
-        data->time = 0.0f;
-        data->end_time = time;
-        data->rate = rate;
-        data->vel = 0.0f;
-        data->rloc = 0.5f;
-        data->rvel = 1.0f;
-        data->emitted = 0.0f;
-        data->model_scale = ent.model->Scale;
+        xSphere o;
+        xBoundGetSphere(o, ent.bound);
+        popper->radius = o.r;
+        popper->state = STATE_ON;
+        popper->time = 0.0f;
+        popper->end_time = time;
+        popper->rate = rate;
+        popper->vel = 0.0f;
+        popper->rloc = 0.5f;
+        popper->rvel = 1.0f;
+        popper->emitted = 0.0f;
+        popper->model_scale = ent.model->Scale;
 
         xVec3 tiny = { 0.001f, 0.001f, 0.001f };
-        xModelSetScale(data->ent->model, tiny);
+        xModelSetScale(popper->ent->model, tiny);
     }
 }
 
@@ -1876,8 +1876,8 @@ void zFXPopOff(xEnt& ent, F32 rate, F32 time)
         return;
     }
 
-    popper_data* data = grab_popper(ent);
-    if (data == NULL)
+    popper_data* popper = grab_popper(ent);
+    if (popper == NULL)
     {
         return;
     }
@@ -1897,27 +1897,27 @@ void zFXPopOff(xEnt& ent, F32 rate, F32 time)
 
     if (time <= 0.0f)
     {
-        data->state = STATE_OFF;
-        emit_popper_bubbles_immediate(*data);
-        data->state = STATE_NONE;
+        popper->state = STATE_OFF;
+        emit_popper_bubbles_immediate(*popper);
+        popper->state = STATE_NONE;
         xEntHide(&ent);
     }
     else
     {
-        xSphere sph;
-        xBoundGetSphere(sph, ent.bound);
-        data->radius = sph.r;
-        data->state = STATE_OFF;
-        data->time = 0.0f;
-        data->end_time = time;
-        data->rate = rate;
-        data->vel = 0.0f;
-        data->rloc = 0.0f;
-        data->rvel = 0.25f;
-        data->emitted = 0.0f;
-        data->pipe_flags = ent.model->PipeFlags & 0xc;
+        xSphere o;
+        xBoundGetSphere(o, ent.bound);
+        popper->radius = o.r;
+        popper->state = STATE_OFF;
+        popper->time = 0.0f;
+        popper->end_time = time;
+        popper->rate = rate;
+        popper->vel = 0.0f;
+        popper->rloc = 0.0f;
+        popper->rvel = 0.25f;
+        popper->emitted = 0.0f;
+        popper->pipe_flags = ent.model->PipeFlags & 0xc;
 
-        set_popper_alpha(*data, 0.0f);
+        set_popper_alpha(*popper, 0.0f);
     }
 }
 
@@ -1947,13 +1947,13 @@ namespace
     }
 } // namespace
 
-void update_entrails(F32 val)
+void update_entrails(F32 dt)
 {
-    entrail_data* pData;
-    entrail_data* pEnd = &entrails[entrails_size];
-    for (pData = entrails; pData != pEnd; pData++)
+    entrail_data* it;
+    entrail_data* end = &entrails[entrails_size];
+    for (it = entrails; it != end; it++)
     {
-        pData->update(val);
+        it->update(dt);
     }
 }
 

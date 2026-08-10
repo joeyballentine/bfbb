@@ -120,10 +120,10 @@ namespace
             }
 
             S32 cat = sound_assets[i].category;
-            S32& n = sound_asset_names_size[cat];
-            sound_asset_names[cat][n] = sound_assets[i].name;
-            sound_asset_ids[cat][n] = i;
-            n++;
+            S32& total = sound_asset_names_size[cat];
+            sound_asset_names[cat][total] = sound_assets[i].name;
+            sound_asset_ids[cat][total] = i;
+            total++;
         }
 
         memset(sound_data, 0, sizeof(sound_data));
@@ -271,22 +271,22 @@ void aqua_beam::render()
     }
 }
 
-bool aqua_beam::hits_sphere(const xSphere& sphere) const
+bool aqua_beam::hits_sphere(const xSphere& o) const
 {
-    xVec3 center = sphere.center - cfg.ring.hit_offset;
+    xVec3 center = o.center - cfg.ring.hit_offset;
 
-    fixed_queue<aqua_beam::ring_segment, 31>::iterator entry = ring.queue.begin();
-    while (entry != ring.queue.end())
+    fixed_queue<aqua_beam::ring_segment, 31>::iterator it = ring.queue.begin();
+    while (it != ring.queue.end())
     {
-        aqua_beam::ring_segment& segment = *entry;
-        F32 radius = cfg.ring.hit_radius * (cfg.ring.grow * segment.dist + 1.0f) + sphere.r;
-        xVec3 delta = center - *(xVec3*)&segment.model->Mat->pos;
+        aqua_beam::ring_segment& ring = *it;
+        F32 maxdist = cfg.ring.hit_radius * (cfg.ring.grow * ring.dist + 1.0f) + o.r;
+        xVec3 delta = center - *(xVec3*)&ring.model->Mat->pos;
 
-        if (delta.length2() <= radius * radius && FABS(delta.dot(segment.mat.at)) < radius)
+        if (delta.length2() <= maxdist * maxdist && FABS(delta.dot(ring.mat.at)) < maxdist)
         {
             return true;
         }
-        ++entry;
+        ++it;
     }
     return false;
 }
@@ -305,11 +305,11 @@ void aqua_beam::update_rings(F32 dt)
             emit_ring();
         }
 
-        fixed_queue<aqua_beam::ring_segment, 31>::iterator entry = ring.queue.begin();
-        while (entry != ring.queue.end())
+        fixed_queue<aqua_beam::ring_segment, 31>::iterator it = ring.queue.begin();
+        while (it != ring.queue.end())
         {
-            update_ring(entry, dt);
-            ++entry;
+            update_ring(it, dt);
+            ++it;
         }
 
         while (!ring.queue.empty() && FABS(ring.queue.back().dist) >= cfg.ring.kill_dist)
@@ -370,34 +370,34 @@ void aqua_beam::update_ring(fixed_queue<aqua_beam::ring_segment, 31>::iterator e
     segment.mat.pos = segment.origin + segment.mat.at * segment.dist;
 }
 
-void aqua_beam::render_ring(aqua_beam::ring_segment& segment)
+void aqua_beam::render_ring(aqua_beam::ring_segment& r)
 {
-    xMat4x3* mat = (xMat4x3*)segment.model->Mat;
-    F32 scale = segment.dist * cfg.ring.grow + cfg.ring.size;
+    xMat4x3* mat = (xMat4x3*)r.model->Mat;
+    F32 size = r.dist * cfg.ring.grow + cfg.ring.size;
 
-    *mat = segment.mat;
-    mat->right *= scale;
-    mat->up *= scale;
-    mat->at *= scale;
+    *mat = r.mat;
+    mat->right *= size;
+    mat->up *= size;
+    mat->at *= size;
 
-    xModelInstance* model = segment.model;
+    xModelInstance* model = r.model;
     model->Alpha = cfg.ring.alpha;
 
-    F32 dist = FABS(segment.dist) - cfg.ring.fade_dist;
-    if (dist > 0.0f)
+    F32 fade_dist = FABS(r.dist) - cfg.ring.fade_dist;
+    if (fade_dist > 0.0f)
     {
-        F32 range = cfg.ring.kill_dist - cfg.ring.fade_dist;
-        if (dist >= range)
+        F32 max_fade_dist = cfg.ring.kill_dist - cfg.ring.fade_dist;
+        if (fade_dist >= max_fade_dist)
         {
             model->Alpha = 0.0f;
         }
         else
         {
-            model->Alpha *= 1.0f - dist / range;
+            model->Alpha *= 1.0f - fade_dist / max_fade_dist;
         }
     }
 
-    xModelRender(segment.model);
+    xModelRender(r.model);
 }
 
 xAnimTable* ZNPC_AnimTable_Prawn()
@@ -502,11 +502,11 @@ namespace
     void mulat(xVec3&, const xMat3x3&, const xMat3x3&);
 } // namespace
 
-void zNPCPrawn::Init(xEntAsset* a)
+void zNPCPrawn::Init(xEntAsset* asset)
 {
     boss_cam.init();
     init_sound();
-    zNPCCommon::Init(a);
+    zNPCCommon::Init(asset);
     memset(&this->flag, 0, 1);
     this->flg_move = 1;
     this->flg_vuln = 0x11;
@@ -605,11 +605,11 @@ namespace
         }
         if (cam != NULL)
         {
-            RwFrame* cam_frame = (RwFrame*)cam->object.object.parent;
-            if (cam_frame != NULL)
+            RwFrame* tmpframe = (RwFrame*)cam->object.object.parent;
+            if (tmpframe != NULL)
             {
                 _rwObjectHasFrameSetFrame(cam, NULL);
-                RwFrameDestroy(cam_frame);
+                RwFrameDestroy(tmpframe);
             }
             RpWorldRemoveCamera(world, cam);
             RwCameraDestroy(cam);
@@ -1049,14 +1049,14 @@ void zNPCPrawn::ParseLinks()
 {
     zNPCCommon::ParseLinks();
 
-    xLinkAsset* link = this->link;
-    xLinkAsset* end = link + this->linkCount;
+    xLinkAsset* it = this->link;
+    xLinkAsset* end = it + this->linkCount;
 
-    for (; link != end; link++)
+    for (; it != end; it++)
     {
-        if (link->dstEvent == 0x133)
+        if (it->dstEvent == 0x133)
         {
-            add_child(*zSceneFindObject(link->dstAssetID), (S32)link->param[0]);
+            add_child(*zSceneFindObject(it->dstAssetID), (S32)it->param[0]);
         }
     }
 }
@@ -1082,12 +1082,12 @@ void zNPCPrawn::SelfSetup()
 
 void zNPCPrawn::Damage(en_NPC_DAMAGE_TYPE damage_type, xBase* base, const xVec3* vec)
 {
-    S32 active_id = this->psy_instinct->GIDOfActive();
+    S32 state = this->psy_instinct->GIDOfActive();
     switch (damage_type)
     {
     case DMGTYP_BOULDER:
     case DMGTYP_BUBBOWL:
-        if (active_id == NPC_GOAL_PRAWNBOWL)
+        if (state == NPC_GOAL_PRAWNBOWL)
         {
             set_life(this->life - 1);
         }
@@ -1111,34 +1111,34 @@ void zNPCPrawn::DuploNotice(en_SM_NOTICES note, void* data)
 
 U32 zNPCPrawn::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* goal)
 {
-    U32 hash = 0;
-    S32 anim;
+    U32 animID = 0;
+    S32 index;
 
     switch (gid)
     {
     case NPC_GOAL_PRAWNIDLE:
     case NPC_GOAL_PRAWNBOWL:
-        anim = ANIM_Idle01;
+        index = ANIM_Idle01;
         break;
     case NPC_GOAL_PRAWNBEAM:
-        anim = ANIM_AttackWindup01;
+        index = ANIM_AttackWindup01;
         break;
     case NPC_GOAL_PRAWNDAMAGE:
-        anim = ANIM_Damage01;
+        index = ANIM_Damage01;
         break;
     case NPC_GOAL_PRAWNDEATH:
-        anim = -1;
+        index = -1;
         break;
     default:
-        anim = ANIM_Idle01;
+        index = ANIM_Idle01;
         break;
     }
 
-    if (anim > -1)
+    if (index > -1)
     {
-        hash = g_hash_subbanim[anim];
+        animID = g_hash_subbanim[index];
     }
-    return hash;
+    return animID;
 }
 
 void zNPCPrawn::Render()
@@ -1215,24 +1215,24 @@ zNPCSpawner* zNPCPrawn::make_spawner(S32 i)
     return this->spawner[i];
 }
 
-void zNPCPrawn::add_child(xBase& child, S32 which)
+void zNPCPrawn::add_child(xBase& child, S32 wave)
 {
     switch (child.baseType)
     {
     case eBaseTypeNPC:
-        make_spawner(which)->AddSpawnNPC((zNPCCommon*)&child);
+        make_spawner(wave)->AddSpawnNPC((zNPCCommon*)&child);
         break;
     case eBaseTypeMovePoint:
-        make_spawner(which)->AddSpawnPoint((zMovePoint*)&child);
+        make_spawner(wave)->AddSpawnPoint((zMovePoint*)&child);
         break;
     case eBaseTypeGroup:
     {
         U32 i = 0;
-        U32 count = xGroupGetCount((xGroup*)&child);
-        for (; i < count; i++)
+        U32 size = xGroupGetCount((xGroup*)&child);
+        for (; i < size; i++)
         {
-            xBase* item = xGroupGetItemPtr((xGroup*)&child, i);
-            add_child(*item, which);
+            xBase* entry = xGroupGetItemPtr((xGroup*)&child, i);
+            add_child(*entry, wave);
         }
         break;
     }
@@ -1347,28 +1347,28 @@ void zNPCPrawn::update_turn(F32 dt)
 
 void zNPCPrawn::update_animation(F32 dt)
 {
-    U32 idle_id = g_hash_subbanim[ANIM_Idle01];
-    U32 attack_id = g_hash_subbanim[ANIM_AttackLoop01];
+    U32 idle_hash = g_hash_subbanim[ANIM_Idle01];
+    U32 attack_hash = g_hash_subbanim[ANIM_AttackLoop01];
 
     U32 id = AnimCurStateID();
-    if (id != idle_id && id != attack_id)
+    if (id != idle_hash && id != attack_hash)
     {
         return;
     }
 
-    F32 amount;
+    F32 maxv;
     if (this->turn.max_vel < 0.001f)
     {
-        amount = 0.0f;
+        maxv = 0.0f;
     }
     else
     {
-        amount = this->turn.vel / this->turn.max_vel;
+        maxv = this->turn.vel / this->turn.max_vel;
     }
 
-    range_limit<F32>(amount, -1.0f, 1.0f);
+    range_limit<F32>(maxv, -1.0f, 1.0f);
 
-    xAnimSingle* single = this->model->Anim->Single;
+    xAnimSingle* xas = this->model->Anim->Single;
 
     static bool registered = false;
     static F32 lerp = 1.0f;
@@ -1379,7 +1379,7 @@ void zNPCPrawn::update_animation(F32 dt)
         xDebugAddTweak("Temp|Prawn Anim Lerp", &lerp, 0.0f, 2.0f, NULL, NULL, 0);
     }
 
-    single->BilinearLerp[0] = lerp;
+    xas->BilinearLerp[0] = lerp;
 }
 
 void zNPCPrawn::update_floor(F32 dt)
@@ -1402,13 +1402,13 @@ void zNPCPrawn::update_floor(F32 dt)
 
 void zNPCPrawn::update_beam(F32 dt)
 {
-    xMat4x3* mat = (xMat4x3*)this->model->Mat;
-    xMat4x3& bone = ((xMat4x3*)mat)[tweak.beam.fire.emit_bone];
+    xMat4x3* rootmat = (xMat4x3*)this->model->Mat;
+    xMat4x3& bonemat = ((xMat4x3*)rootmat)[tweak.beam.fire.emit_bone];
 
-    xVec3 loc = mat->pos + bone.pos + tweak.beam.fire.offset;
+    xVec3 loc = rootmat->pos + bonemat.pos + tweak.beam.fire.offset;
 
     xVec3 dir;
-    mulat(dir, *(xMat3x3*)mat, *(xMat3x3*)&bone);
+    mulat(dir, *(xMat3x3*)rootmat, *(xMat3x3*)&bonemat);
     dir.y = -this->precomp.sin_pitch;
 
     F32 yaw = xatan2(dir.x, dir.z) + tweak.beam.fire.yaw;
@@ -1462,10 +1462,10 @@ void zNPCPrawn::start_fight()
     }
 }
 
-void zNPCPrawn::get_floor_info(zNPCPrawn::floor_state_enum state, zNPCPrawn::range_type& pattern,
+void zNPCPrawn::get_floor_info(zNPCPrawn::floor_state_enum s, zNPCPrawn::range_type& pattern,
                                F32& transition_delay, F32& state_delay)
 {
-    switch (state)
+    switch (s)
     {
     case FS_SAFE:
         pattern = *(zNPCPrawn::range_type*)&tweak.safe.pattern;
@@ -1516,12 +1516,12 @@ void zNPCPrawn::apply_pending()
     disco->set_state_delay(pending.state_delay);
 }
 
-void zNPCPrawn::set_floor_state(zNPCPrawn::floor_state_enum state, bool immediate, bool force)
+void zNPCPrawn::set_floor_state(zNPCPrawn::floor_state_enum s, bool immediate, bool force)
 {
-    if (state != this->floor_state || force)
+    if (s != this->floor_state || force)
     {
-        this->pending.floor_state = state;
-        get_floor_info(state, this->pending.pattern, this->pending.transition_delay,
+        this->pending.floor_state = s;
+        get_floor_info(s, this->pending.pattern, this->pending.transition_delay,
                        this->pending.state_delay);
 
         if (immediate)
@@ -1707,14 +1707,14 @@ namespace
     }
 } // namespace
 
-void zNPCPrawn::set_life(S32 amount)
+void zNPCPrawn::set_life(S32 life)
 {
-    S32 old_life = this->life;
+    S32 oldlife = this->life;
 
-    this->life = range_limit<S32>(amount, 0, this->cfg_npc->pts_damage);
+    this->life = range_limit<S32>(life, 0, this->cfg_npc->pts_damage);
 
-    S32 gid = this->psy_instinct->GIDOfActive();
-    if (gid == NPC_GOAL_PRAWNDAMAGE || gid == NPC_GOAL_PRAWNDEATH || old_life <= this->life)
+    S32 state = this->psy_instinct->GIDOfActive();
+    if (state == NPC_GOAL_PRAWNDAMAGE || state == NPC_GOAL_PRAWNDEATH || oldlife <= this->life)
     {
         update_round();
     }
@@ -1723,7 +1723,7 @@ void zNPCPrawn::set_life(S32 amount)
         this->psy_instinct->GoalSet(NPC_GOAL_PRAWNDAMAGE, 1);
         play_sound(0, &this->bound.sph.center, 1.0f);
 
-        for (S32 i = this->life; i < old_life; i++)
+        for (S32 i = this->life; i < oldlife; i++)
         {
             zEntEvent((xBase*)this, (xBase*)this, 0x1d7);
         }
@@ -1747,8 +1747,8 @@ bool zNPCPrawn::check_player_damage()
         return false;
     }
 
-    xVec3 knock = get_away() * tweak.beam.knock_back;
-    zEntPlayer_Damage((xBase*)this, 1, &knock);
+    xVec3 knock_vel = get_away() * tweak.beam.knock_back;
+    zEntPlayer_Damage((xBase*)this, 1, &knock_vel);
     return true;
 }
 
@@ -1782,26 +1782,26 @@ void zNPCPrawn::repel_player() const
     }
 
     xVec3 center = get_center();
-    xVec3* vel = &globals.player.ent.frame->vel;
-    xVec3* pos = (xVec3*)&globals.player.ent.model->Mat->pos;
+    xVec3* player_vel = &globals.player.ent.frame->vel;
+    xVec3* player_loc = (xVec3*)&globals.player.ent.model->Mat->pos;
 
-    xVec3 away = *pos - center;
-    away.y = 0.0f;
+    xVec3 offset = *player_loc - center;
+    offset.y = 0.0f;
 
-    F32 dist2 = away.length2();
+    F32 dist2 = offset.length2();
     if ((dist2 < -1.0e-05f || 1.0e-05f < dist2) && dist2 < tweak.repel_radius * tweak.repel_radius)
     {
         F32 dist = xsqrt(dist2);
-        xVec3 dir = away;
+        xVec3 dir = offset;
         dir *= 1.0f / dist;
 
-        F32 into = vel->dot(dir);
+        F32 into = player_vel->dot(dir);
         if (into < 0.0f)
         {
-            *vel -= dir * into;
+            *player_vel -= dir * into;
         }
 
-        *pos += dir * (tweak.repel_radius - dist);
+        *player_loc += dir * (tweak.repel_radius - dist);
     }
 }
 

@@ -189,18 +189,18 @@ namespace
         F32 scale;
     };
 
-    F32 look_at(xMat3x3& mat, const xVec3& dir)
+    F32 look_at(xMat3x3& mat, const xVec3& at)
     {
-        F32 len = dir.length();
+        F32 mag = at.length();
 
-        if (xfeq0(len))
+        if (xfeq0(mag))
         {
             mat = g_I3;
             return 0.0f;
         }
 
-        mat.at = dir;
-        mat.at *= 1.0f / len;
+        mat.at = at;
+        mat.at *= 1.0f / mag;
 
         F32 ax = xabs(mat.at.x);
         F32 ay = xabs(mat.at.y);
@@ -222,7 +222,7 @@ namespace
         mat.right.normalize();
         mat.up = mat.right.cross(mat.at);
 
-        return len;
+        return mag;
     }
 
     // clang-format off
@@ -1440,7 +1440,7 @@ void zNPCDutchman::Damage(en_NPC_DAMAGE_TYPE, xBase*, const xVec3*)
 U32 zNPCDutchman::AnimPick(S32 rawgoal, en_NPC_GOAL_SPOT gspot, xGoal* goal)
 {
     S32 index = -1;
-    U32 animId = 0;
+    U32 animID = 0;
 
     switch (rawgoal)
     {
@@ -1485,10 +1485,10 @@ U32 zNPCDutchman::AnimPick(S32 rawgoal, en_NPC_GOAL_SPOT gspot, xGoal* goal)
 
     if (index > -1)
     {
-        animId = g_hash_subbanim[index];
+        animID = g_hash_subbanim[index];
     }
 
-    return animId;
+    return animID;
 }
 
 void zNPCDutchman::LassoNotify(en_LASSO_EVENT event)
@@ -1582,19 +1582,19 @@ namespace
 
     void update_move_follow(xVec3& loc, zNPCDutchman::move_info& move, const xMat3x3& mat, F32 dt)
     {
-        xVec3 local = move.dest - loc;
+        xVec3 offset = move.dest - loc;
 
-        xMat3x3LMulVec(&local, &mat, &local);
+        xMat3x3LMulVec(&offset, &mat, &offset);
 
-        xVec3 delta = { 0.0f, 0.0f, 0.0f };
+        xVec3 dloc = { 0.0f, 0.0f, 0.0f };
 
-        xAccelMove(delta.x, move.vel.x, move.accel.x, dt, local.x, move.max_vel.x);
-        xAccelMove(delta.y, move.vel.y, move.accel.y, dt, local.y, move.max_vel.y);
-        xAccelMove(delta.z, move.vel.z, move.accel.z, dt, local.z, move.max_vel.z);
+        xAccelMove(dloc.x, move.vel.x, move.accel.x, dt, offset.x, move.max_vel.x);
+        xAccelMove(dloc.y, move.vel.y, move.accel.y, dt, offset.y, move.max_vel.y);
+        xAccelMove(dloc.z, move.vel.z, move.accel.z, dt, offset.z, move.max_vel.z);
 
-        xMat3x3RMulVec(&delta, &mat, &delta);
+        xMat3x3RMulVec(&dloc, &mat, &dloc);
 
-        loc += delta;
+        loc += dloc;
     }
 
     void update_move_accel(xVec3& loc, zNPCDutchman::move_info& move, F32 dt)
@@ -1907,9 +1907,9 @@ void zNPCDutchman::add_slime(const xVec3& loc, F32 dt)
     {
         slime_slice& first = slime.slices.front();
         F32 dist2 = (loc - slime.origin).length2();
-        F32 next = 0.5f + first.dist;
+        F32 max_dist = 0.5f + first.dist;
 
-        if (next * next <= dist2)
+        if (max_dist * max_dist <= dist2)
         {
             if (slime.slices.full())
             {
@@ -1942,12 +1942,12 @@ void zNPCDutchman::update_flames(F32 dt)
 
         if (wave.dist >= tweak.ground_radius)
         {
-            static_queue<wave_data>::iterator dead = it;
+            static_queue<wave_data>::iterator itp = it;
 
-            while (dead != waves.end())
+            while (itp != waves.end())
             {
-                kill_wave(*dead);
-                ++dead;
+                kill_wave(*itp);
+                ++itp;
             }
 
             waves.erase(it, waves.end());
@@ -1962,47 +1962,38 @@ void zNPCDutchman::update_flames(F32 dt)
         flames.time += dt;
 
         const xVec3& facing = get_facing();
-        xVec3 nose = get_nose_loc();
+        xVec3 nose_loc = get_nose_loc();
 
-        add_spray(nose, dt);
+        add_spray(nose_loc, dt);
 
-        xVec3 splash;
+        xVec3 ground_loc;
 
-        splash.x = facing.x * tweak.flame.lead_dist + nose.x;
-        splash.y = tweak.ground_y;
-        splash.z = facing.z * tweak.flame.lead_dist + nose.z;
+        ground_loc.x = facing.x * tweak.flame.lead_dist + nose_loc.x;
+        ground_loc.y = tweak.ground_y;
+        ground_loc.z = facing.z * tweak.flame.lead_dist + nose_loc.z;
 
         const xVec3& orbit = get_orbit();
-        xVec2 delta;
+        xVec2 orbit_offset;
 
-        delta.x = splash.x - orbit.x;
-        delta.y = splash.z - orbit.z;
+        orbit_offset.x = ground_loc.x - orbit.x;
+        orbit_offset.y = ground_loc.z - orbit.z;
 
-        if (delta.length2() <= tweak.ground_radius * tweak.ground_radius)
+        if (orbit_offset.length2() <= tweak.ground_radius * tweak.ground_radius)
         {
-            add_slime(splash, dt);
-            add_splash(splash, dt);
+            add_slime(ground_loc, dt);
+            add_splash(ground_loc, dt);
 
-            S32 emitted = (S32)(flames.time * tweak.flame.wave_rate) + 1;
+            S32 emit = (S32)(flames.time * tweak.flame.wave_rate) + 1;
 
-            if (flames.emitted < emitted)
+            if (flames.emitted < emit)
             {
-                flames.emitted = emitted;
+                flames.emitted = emit;
 
-                xVec3 dir;
+                xVec3 tan;
 
-                dir.x = facing.z;
-                dir.y = 0.0f;
-                dir.z = -facing.x;
-
-                if (waves.full())
-                {
-                    kill_wave(waves.back());
-                    waves.pop_back();
-                }
-
-                waves.push_front();
-                init_wave(waves.front(), splash, dir);
+                tan.x = facing.z;
+                tan.y = 0.0f;
+                tan.z = -facing.x;
 
                 if (waves.full())
                 {
@@ -2011,7 +2002,16 @@ void zNPCDutchman::update_flames(F32 dt)
                 }
 
                 waves.push_front();
-                init_wave(waves.front(), splash, -dir);
+                init_wave(waves.front(), ground_loc, tan);
+
+                if (waves.full())
+                {
+                    kill_wave(waves.back());
+                    waves.pop_back();
+                }
+
+                waves.push_front();
+                init_wave(waves.front(), ground_loc, -tan);
             }
         }
     }
@@ -2283,10 +2283,10 @@ void zNPCDutchman::update_eye_glow(F32 dt)
 
     for (S32 i = 0; i < 2; i++)
     {
-        xParEmitterAsset* tasset = eyeglow_emitter[i]->tasset;
+        xParEmitterAsset* ea = eyeglow_emitter[i]->tasset;
         xParEmitterPropsAsset* prop = eyeglow_emitter[i]->prop;
 
-        tasset->pos = get_eye_loc(i) + offset;
+        ea->pos = get_eye_loc(i) + offset;
 
         F32 birth0 = prop->size_birth.val[0];
         F32 birth1 = prop->size_birth.val[1];
@@ -2545,13 +2545,13 @@ S32 zNPCGoalDutchmanBeam::Process(en_trantype* trantype, F32 dt, void* updCtxt, 
     return xGoal::Process(trantype, dt, updCtxt, xscn);
 }
 
-void zNPCGoalDutchmanBeam::refresh_beam(S32 index)
+void zNPCGoalDutchmanBeam::refresh_beam(S32 which)
 {
     xVec2 loc;
 
-    calc_beam_loc(loc, beam[index].dist, beam[index]);
+    calc_beam_loc(loc, beam[which].dist, beam[which]);
 
-    beam[index].loc.assign(loc.x, tweak.ground_y, loc.y);
+    beam[which].loc.assign(loc.x, tweak.ground_y, loc.y);
 }
 
 xFactoryInst* zNPCGoalDutchmanFlame::create(S32 who, RyzMemGrow* grow, void* info)
@@ -2604,14 +2604,14 @@ S32 zNPCGoalDutchmanFlame::Process(en_trantype* trantype, F32 dt, void* updCtxt,
 
 void zNPCGoalDutchmanFlame::update_stop(F32 dt)
 {
-    U8 done = FALSE;
+    U8 anim_done = FALSE;
 
     if (owner.AnimCurState()->ID != g_hash_subbanim[18] || owner.AnimTimeRemain(NULL) < dt)
     {
-        done = TRUE;
+        anim_done = TRUE;
     }
 
-    if (done && !owner.turning(0.1f) && (owner.move.dest - owner.get_center()).length2() < 0.01f)
+    if (anim_done && !owner.turning(0.1f) && (owner.move.dest - owner.get_center()).length2() < 0.01f)
     {
         substate = SS_DONE;
         owner.flag.face_player = false;
