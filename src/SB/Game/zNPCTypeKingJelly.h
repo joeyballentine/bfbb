@@ -20,7 +20,7 @@ struct unit_type
 {
     F32 radius_offset;
     F32 height_offset;
-    U8 line;
+    bool line;
     F32 thickness;
     iColor_tag color;
     F32 rot_radius;
@@ -82,6 +82,7 @@ struct lightning_ring
     void destroy();
     static void destroy(S32);
     void refresh();
+    zLightning* create_arc(xVec3* start, xVec3* end, int points, int end_points);
     void update(F32 dt);
 };
 
@@ -161,7 +162,7 @@ struct zNPCKingJelly : zNPCSubBoss
     U32 children_size; //0x88C
     F32 last_tentacle_shock;
     zLightning* tentacle_lightning[7]; //0x894 [0]
-    xVec3 tentacle_points[13][7];
+    xVec3 tentacle_points[7][13];
     lightning_ring ambient_rings[3];
     lightning_ring wave_rings[4];
     U8 disable_tentacle_damage; // 0x1090
@@ -172,6 +173,7 @@ struct zNPCKingJelly : zNPCSubBoss
     U8 first_update; //0x10B4
 
     zNPCKingJelly(S32 myType);
+    void Process(xScene* xscn, F32 dt);
     void Setup();
     void Reset();
     void Destroy();
@@ -234,6 +236,14 @@ struct zNPCKingJelly : zNPCSubBoss
     void generate_thump_particles();
     void create_wave_rings();
     void create_ambient_rings();
+    void repel_player();
+    void update_rings(F32 dt);
+    void update_tentacle_lightning(F32 dt);
+    void update_spawn_particles(F32 dt);
+    zLightning* new_tentacle_lightning(xVec3* loc);
+    void generate_zap_particles(const zLightning& zap, F32 amount, F32 dt);
+    void generate_ring_particles(const lightning_ring& ring, F32 dt);
+    void move_to_spawn_position(zNPCCommon& npc, F32 t);
 };
 
 struct zNPCGoalKJIdle : zNPCGoalCommon
@@ -247,8 +257,8 @@ struct zNPCGoalKJIdle : zNPCGoalCommon
     S32 Enter(float, void*);
     S32 Exit(float, void*);
     S32 Process(en_trantype*, float, void*, xScene*);
-    S32 rotate(float);
-    S32 move(float);
+    void rotate(float);
+    void move(float);
 };
 
 struct zNPCGoalKJBored : zNPCGoalCommon
@@ -276,6 +286,7 @@ struct zNPCGoalKJSpawnKids : zNPCGoalCommon
     }
     S32 Enter(float, void*);
     S32 Exit(float, void*);
+    S32 Process(en_trantype*, float, void*, xScene*);
 };
 
 struct zNPCGoalKJTaunt : zNPCGoalCommon

@@ -49,6 +49,14 @@ Scratch tooling for this (paths vary by session, rebuild if absent):
 
 **3. Raw `mwcc` output is not comparable to the target object.** A tool that compiled a unit and byte-compared it against `objdiff.json`'s target reported *every* unit as differing, including ones known byte-exact. dtk post-processes the extracted objects. Always run a control on a known-good unit before trusting a new measurement tool.
 
+## Weak inline symbols appear in only one target object
+
+An `inline` function that CW also emits out-of-line produces a **weak** symbol in every TU that uses it. The linker keeps one. dtk extracts target objects from the *linked* DOL, so the survivor shows up in exactly one object and is absent from all the others.
+
+So "our object defines a weak symbol the target object does not" is the expected state, not a bug. `xDrawLine__FPC5xVec3PC5xVec3` is the worked example: `.text:0x8001F430`, `size:0x4`, `scope:weak`, landing in `xEntMotion.o` — the first TU in link order that calls it — while the five other calling TUs show it only on our side. The empty `inline` in `xDraw.h` is correct; the 4 bytes are the `blr`.
+
+Check `config/GQPE78/symbols.txt` for the mangled name before concluding a symbol is spurious. `scope:weak` there means the source shape is already right.
+
 ## Before touching a shared header
 
 Find the real blast radius, which is wider than a filename grep suggests — headers reach far more TUs transitively. What matters is whether any of them is `Matching`, because a `Matching` unit must stay byte-identical or the DOL breaks.
