@@ -654,7 +654,7 @@ U32 NPCC_StreakCreate(en_npcstreak styp)
     return xFXStreakStart(&info);
 }
 
-void NPCC_BurstBubble(en_npcburst typ_burst, xVec3* pos)
+void NPCC_BurstBubble(en_npcburst burst, xVec3* pos_base)
 {
     S32 i;
     S32 j;
@@ -663,24 +663,24 @@ void NPCC_BurstBubble(en_npcburst typ_burst, xVec3* pos)
     {
         F32 rad_max = 3.0f;
         F32 hyt = 0.375f * i;
-        F32 rad = rad_max * ARCH3(0.5f * hyt / rad_max);
+        F32 rad_cur = rad_max * ARCH3(0.5f * hyt / rad_max);
 
         for (j = 0; j < 20; j++)
         {
-            F32 ang = 0.31415927f * xurand() + 0.31415927f * j;
-            ang = CLAMP(ang, 0.0f, 6.2831855f);
+            F32 curang = 0.31415927f * xurand() + 0.31415927f * j;
+            curang = CLAMP(curang, 0.0f, 6.2831855f);
 
-            F32 sn = isin(ang);
-            F32 cs = icos(ang);
+            F32 fs = isin(curang);
+            F32 fc = icos(curang);
 
             xVec3 pos_emit;
-            pos_emit.x = rad * sn + 0.1f * (2.0f * (xurand() - 0.5f));
+            pos_emit.x = rad_cur * fs + 0.1f * (2.0f * (xurand() - 0.5f));
             pos_emit.y = 0.1f * (2.0f * (xurand() - 0.5f)) + hyt;
-            pos_emit.z = rad * cs + 0.1f * (2.0f * (xurand() - 0.5f));
+            pos_emit.z = rad_cur * fc + 0.1f * (2.0f * (xurand() - 0.5f));
 
-            xVec3AddTo(&pos_emit, pos);
+            xVec3AddTo(&pos_emit, pos_base);
 
-            if (typ_burst == NPC_BURST_SHIELD)
+            if (burst == NPC_BURST_SHIELD)
             {
                 NPAR_EmitOilShieldPop(&pos_emit);
             }
@@ -750,11 +750,11 @@ void NPCC_RenderProjTexture(RwRaster* rast, F32 factor, xMat4x3* mat, F32 radius
 
     for (U32 i = 0; i < cache->entCount; i++)
     {
-        xEnt* other = cache->ent[i];
+        xEnt* ep = cache->ent[i];
 
-        if (other != ent && other->baseType != eBaseTypeNPC && xShadowReceiveShadowSetup(other))
+        if (ep != ent && ep->baseType != eBaseTypeNPC && xShadowReceiveShadowSetup(ep))
         {
-            xShadowReceiveShadow(other, factor, 1, (RwMatrixTag*)mat, rast);
+            xShadowReceiveShadow(ep, factor, 1, (RwMatrixTag*)mat, rast);
         }
     }
 }
@@ -762,32 +762,32 @@ void NPCC_RenderProjTexture(RwRaster* rast, F32 factor, xMat4x3* mat, F32 radius
 void NPCC_RenderProjTextureFaceCamera(RwRaster* rast, F32 factor, xVec3* pos, F32 radius,
                                       F32 height, xShadowCache* cache, S32 fillCache, xEnt* ent)
 {
-    xMat4x3 mat;
+    xMat4x3 matrix;
 
-    xVec3Copy(&mat.pos, pos);
-    xVec3Copy(&mat.right, &globals.camera.mat.right);
+    xVec3Copy(&matrix.pos, pos);
+    xVec3Copy(&matrix.right, &globals.camera.mat.right);
 
-    if (mat.right.y < -0.0001f || mat.right.y > 0.0001f)
+    if (matrix.right.y < -0.0001f || matrix.right.y > 0.0001f)
     {
-        mat.right.y = 0.0f;
+        matrix.right.y = 0.0f;
 
-        F32 len = xVec3Length(&mat.right);
+        F32 len = xVec3Length(&matrix.right);
         if (len < 0.0001f)
         {
-            xVec3Init(&mat.right, 1.0f, 0.0f, 0.0f);
+            xVec3Init(&matrix.right, 1.0f, 0.0f, 0.0f);
         }
         else
         {
-            xVec3SMulBy(&mat.right, 1.0f / len);
+            xVec3SMulBy(&matrix.right, 1.0f / len);
         }
     }
 
-    xVec3Init(&mat.at, 0.0f, -1.0f, 0.0f);
-    xVec3Init(&mat.up, -mat.right.z, 0.0f, mat.right.x);
+    xVec3Init(&matrix.at, 0.0f, -1.0f, 0.0f);
+    xVec3Init(&matrix.up, -matrix.right.z, 0.0f, matrix.right.x);
 
-    RwMatrixUpdate((RwMatrixTag*)&mat);
+    RwMatrixUpdate((RwMatrixTag*)&matrix);
 
-    NPCC_RenderProjTexture(rast, factor, &mat, radius, height, cache, fillCache, ent);
+    NPCC_RenderProjTexture(rast, factor, &matrix, radius, height, cache, fillCache, ent);
 }
 
 void NPAR_Upd_OilBubble(NPARMgmt* mgmt, F32 dt)
@@ -802,34 +802,34 @@ void NPAR_Upd_OilBubble(NPARMgmt* mgmt, F32 dt)
 
     for (S32 i = 0; i < mgmt->cnt_active; i++)
     {
-        NPARData* par = &mgmt->par_buf[i];
+        NPARData* npdata = &mgmt->par_buf[i];
 
-        par->tmr_remain -= dt;
+        npdata->tmr_remain -= dt;
 
-        const NPARParmOilBub* parm = &g_parm_oilbub[par->nparmode];
-        F32 pct = MAX(0.0f, par->tmr_remain) / par->tym_exist;
+        const NPARParmOilBub* npparm = &g_parm_oilbub[npdata->nparmode];
+        F32 rat = MAX(0.0f, npdata->tmr_remain) / npdata->tym_exist;
 
-        par->pos += par->vel * dt;
-        par->vel += parm->acc_oilBubble * dt;
-        par->vel *= 0.9f;
+        npdata->pos += npdata->vel * dt;
+        npdata->vel += npparm->acc_oilBubble * dt;
+        npdata->vel *= 0.9f;
 
-        F32 fac = ARCH(1.0f - pct);
+        F32 arch = ARCH(1.0f - rat);
 
-        F32 siz;
-        if (par->nparmode == 1)
+        F32 dim;
+        if (npdata->nparmode == 1)
         {
-            siz = SMOOTH(pct, parm->siz_base[0], parm->siz_base[1]);
+            dim = SMOOTH(rat, npparm->siz_base[0], npparm->siz_base[1]);
         }
         else
         {
-            siz = LERP(fac, parm->siz_base[0], parm->siz_base[1]);
+            dim = LERP(arch, npparm->siz_base[0], npparm->siz_base[1]);
         }
 
-        par->xy_size[0] = siz;
-        par->xy_size[1] = siz;
-        par->color.alpha = fac * parm->colr_base.alpha;
+        npdata->xy_size[0] = dim;
+        npdata->xy_size[1] = dim;
+        npdata->color.alpha = arch * npparm->colr_base.alpha;
 
-        if (par->tmr_remain < 0.0f)
+        if (npdata->tmr_remain < 0.0f)
         {
             mgmt->PromoteTail(i);
             i--;
@@ -839,8 +839,8 @@ void NPAR_Upd_OilBubble(NPARMgmt* mgmt, F32 dt)
             if (g_doNPARCull)
             {
                 RwSphere testSphere;
-                testSphere.center = *(RwV3d*)&par->pos;
-                testSphere.radius = par->xy_size[0];
+                testSphere.center = *(RwV3d*)&npdata->pos;
+                testSphere.radius = npdata->xy_size[0];
 
                 if (!RwCameraFrustumTestSphere(globals.camera.lo_cam, &testSphere))
                 {
@@ -852,7 +852,7 @@ void NPAR_Upd_OilBubble(NPARMgmt* mgmt, F32 dt)
 
             if (pool.valid())
             {
-                NPAR_CopyNPARToPTPool(par, &pool);
+                NPAR_CopyNPARToPTPool(npdata, &pool);
             }
         }
     }
@@ -1332,14 +1332,14 @@ void NPAR_EmitOilBubble(en_nparmode pmod, const xVec3* pos, const xVec3* vel)
 
 
 // Equivalent: weird unnecessary use of mulli to index into g_parm_tubespiral.
-void NPAR_EmitTubeSpiral(const xVec3* pos, const xVec3* vel, F32 dt)
+void NPAR_EmitTubeSpiral(const xVec3* pos, const xVec3* vel, F32 lifespan)
 {
     NPARData* par;
     NPARMgmt* mgmt = NPAR_FindParty(NPAR_TYP_TUBESPIRAL);
     if ((mgmt != NULL) && (par = mgmt->NextAvail(), par != NULL))
     {
         en_nparmode pmod = NPAR_MODE_SPIRALNORM;
-        g_parm_tubespiral[pmod].ConfigPar(par, pmod, pos, vel, dt);
+        g_parm_tubespiral[pmod].ConfigPar(par, pmod, pos, vel, lifespan);
     }
 }
 
@@ -1757,14 +1757,14 @@ void NPARParmTubeSpiral::ConfigPar(NPARData* par, en_nparmode pmod, const xVec3*
 }
 
 // Equivalent: weird unnecessary use of mulli to index into g_parm_tubespiral.
-void NPAR_EmitTubeSpiralCin(const xVec3* pos, const xVec3* vel, float dt)
+void NPAR_EmitTubeSpiralCin(const xVec3* pos, const xVec3* vel, float lifespan)
 {
     NPARData* par;
     NPARMgmt* mgmt = NPAR_FindParty(NPAR_TYP_TUBESPIRAL);
     if ((mgmt != NULL) && (par = mgmt->NextAvail(), par != NULL))
     {
         en_nparmode pmod = NPAR_MODE_SPIRALCINE;
-        g_parm_tubespiral[pmod].ConfigPar(par, pmod, pos, vel, dt);
+        g_parm_tubespiral[pmod].ConfigPar(par, pmod, pos, vel, lifespan);
     }
 }
 
@@ -1818,27 +1818,27 @@ static void NPCC_ShadowCacheReset()
 
 xShadowCache* NPCC_ShadowCacheReserve()
 {
-    xShadowCache* shadcache = NULL;
+    xShadowCache* da_cache = NULL;
 
     for (S32 i = 0; i < 16; i++)
     {
         if (g_shadCachesInUseFlags[i] == 0)
         {
             g_shadCachesInUseFlags[i] = 1;
-            shadcache = &g_shadCaches[i];
+            da_cache = &g_shadCaches[i];
             break;
         }
     }
 
-    if (shadcache != NULL)
+    if (da_cache != NULL)
     {
-        shadcache->entCount = 0;
-        shadcache->polyCount = 0;
-        shadcache->castOnEnt = 0;
-        shadcache->castOnPoly = 0;
+        da_cache->entCount = 0;
+        da_cache->polyCount = 0;
+        da_cache->castOnEnt = 0;
+        da_cache->castOnPoly = 0;
     }
 
-    return shadcache;
+    return da_cache;
 }
 
 void NPCC_ShadowCacheRelease(xShadowCache* shadcache)

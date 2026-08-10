@@ -176,7 +176,7 @@ S32 NPCWidget::Unlock(const zNPCCommon* npc)
     return 1;
 }
 
-S32 NPCWidget::NPCIsTheLocker(const zNPCCommon* npc)
+S32 NPCWidget::NPCIsTheLocker(const zNPCCommon* npc_lock)
 {
     if ((S32)IsLocked() == 0)
     {
@@ -184,7 +184,7 @@ S32 NPCWidget::NPCIsTheLocker(const zNPCCommon* npc)
     }
     else
     {
-        return npc == npc_ownerlock ? 1 : 0;
+        return npc_lock == npc_ownerlock ? 1 : 0;
     }
 }
 
@@ -670,9 +670,9 @@ void NPCC_ang_toXZDir(F32 angle, xVec3* dir)
     dir->z = icos(angle);
 }
 
-F32 NPCC_dir_toXZAng(const xVec3* vec)
+F32 NPCC_dir_toXZAng(const xVec3* dir)
 {
-    return xatan2(vec->x, vec->z);
+    return xatan2(dir->x, dir->z);
 }
 
 void NPCC_aimMiss(xVec3* dir_aim, xVec3* pos_src, xVec3* pos_tgt, F32 dst_miss, xVec3* pos_miss)
@@ -954,7 +954,7 @@ void zNPC_SNDStop(_tageNPCSnd snd)
     sNPCSndID[snd] = 0;
 }
 
-U32 NPCC_LineHitsBound(xVec3* param_1, xVec3* param_2, xBound* param_3, xCollis* param_4)
+U32 NPCC_LineHitsBound(xVec3* a, xVec3* b, xBound* bnd, xCollis* callers_colrec)
 {
     xRay3 ray;
     xVec3 vec;
@@ -962,24 +962,24 @@ U32 NPCC_LineHitsBound(xVec3* param_1, xVec3* param_2, xBound* param_3, xCollis*
     xCollis* colrec = &local_colrec;
     F32 len;
 
-    if (param_4 != NULL)
+    if (callers_colrec != NULL)
     {
-        colrec = (xCollis*)param_4;
+        colrec = (xCollis*)callers_colrec;
     }
-    xVec3Sub(&vec, param_2, param_1);
+    xVec3Sub(&vec, b, a);
     len = xVec3Length(&vec);
     if (len < 0.001f)
     {
         len = 0.001f;
     }
-    xVec3Copy(&ray.origin, param_1);
+    xVec3Copy(&ray.origin, a);
     xVec3SMul(&ray.dir, &vec, (1.0f / len));
 
     ray.max_t = len;
     ray.min_t = 0.1f;
     ray.flags = 3072;
 
-    xRayHitsBound(&ray, param_3, colrec);
+    xRayHitsBound(&ray, bnd, colrec);
     return colrec->flags & 1;
 }
 
@@ -1022,7 +1022,7 @@ S32 NPCC_bnd_ofBase(xBase* tgt, xBound* bnd)
 S32 NPCC_pos_ofBase(xBase* tgt, xVec3* pos)
 {
     xVec3* pxVar1;
-    S32 retval = 1;
+    S32 known = 1;
 
     switch (tgt->baseType)
     {
@@ -1030,7 +1030,7 @@ S32 NPCC_pos_ofBase(xBase* tgt, xVec3* pos)
         xVec3Copy(pos, &globals.camera.mat.pos);
         break;
     case eBaseTypeCruiseBubble:
-        retval = 0;
+        known = 0;
         break;
     case eBaseTypePlayer:
     case eBaseTypePickup:
@@ -1050,13 +1050,13 @@ S32 NPCC_pos_ofBase(xBase* tgt, xVec3* pos)
     case eBaseTypeDoor:
     case eBaseTypeVolume:
     case eBaseTypeEGenerator:
-        retval = 0;
+        known = 0;
         break;
     default:
-        retval = 0;
+        known = 0;
         break;
     }
-    return retval;
+    return known;
 }
 
 void NPCTarget::PosGet(xVec3* pos)

@@ -216,14 +216,14 @@ void zGustUpdateEnt(xEnt* ent, xScene* sc, float dt, void* gdata)
     }
 }
 
-void zGustSave(zGust* g, xSerial* s)
+void zGustSave(zGust* ent, xSerial* s)
 {
-    xBaseSave(g, s);
+    xBaseSave(ent, s);
 }
 
-void zGustLoad(zGust* g, xSerial* s)
+void zGustLoad(zGust* ent, xSerial* s)
 {
-    xBaseLoad(g, s);
+    xBaseLoad(ent, s);
 }
 
 void zGustReset(zGust* g)
