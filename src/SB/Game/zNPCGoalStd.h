@@ -885,6 +885,7 @@ public:
     S32 Enter(F32 dt, void* updCtxt);
     S32 Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn);
     S32 SpitCloud();
+    S32 SpitCloud(F32 dt);
     S32 idx_launch; // offset 0x54, size 0x4
 };
 
@@ -925,6 +926,8 @@ public:
     void FXStreakPrep();
     void FXStreakDone();
     S32 PlayerTests(xVec3* pos_vert, F32 dt);
+    S32 ShockwaveTests(xVec3* pos_vert, F32 dt);
+    void FXStreakUpdate(xVec3* pos);
     void ChkPrelimTran(en_trantype* trantype, S32* nextgoal);
     S32 flg_attack; // offset 0x54, size 0x4
     xVec3 pos_lastVert; // offset 0x58, size 0xC

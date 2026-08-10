@@ -11,11 +11,13 @@ Four measurements exist and they disagree on purpose. Quoting the wrong one is h
 
 **Never compare a solo.py number against a report.json number.** They count by different rules.
 
-**Open question — do not treat solo.py as identical to the real build.** An older note here claimed running objdiff on the object `ninja` built agrees with solo.py. Measured again, it does not always. For `zCutsceneMgr`, `check_hide_entities` is **100% under solo.py and 91.047% in the object ninja actually built**, and report.json agrees with ninja. Counts differ in both directions across units (ninja-object vs solo: zCutsceneMgr 5 vs 3, zNPCTypeRobot 111 vs 107, xFont 73 vs 71, but zNPCGoalRobo 91 vs 123).
+**Beware stale objects when comparing solo.py against the built object.** `solo.py` always compiles fresh into a temp dir. `build/GQPE78/**.o` is only as current as the last successful `ninja`, and a build interrupted by an unrelated compile error leaves some objects untouched.
 
-Some of that gap is just data symbols being counted or not. The `check_hide_entities` case is not — that is one named function disagreeing about its own percentage, which means solo.py's reconstructed compile is not always byte-identical to ninja's for that unit.
+This produced a convincing false alarm worth recognising. `check_hide_entities` measured **100% under solo.py and 91.047% in `build/`'s object**, with report.json agreeing with the stale object — which looked exactly like solo.py being unfaithful to the real build, in a unit nothing had touched. After a clean `ninja` all three agree at 100%. Nothing was ever wrong.
 
-Practical consequence until this is chased down: solo.py remains the right tool for **before/after within a unit**, because both sides of the comparison are built the same way. Do not use it to make an absolute claim that a specific function is at 100%. For that, and for anything touching a `Matching` unit, the real build and the DOL sha1 are authoritative.
+**Before concluding that two measurements disagree, re-run `ninja` to completion and re-measure.** A stale `.o` explains far more disagreements than a genuine tooling difference does.
+
+The residual difference is benign: counting non-matching symbols off the built object includes data symbols like `[.sdata2-0]`, which `solo.py` does not, so the built-object count runs a little higher on most units.
 
 ## report.json credits near-misses
 

@@ -80,9 +80,7 @@ static S32 g_needuvincr_slickshield;
 
 RwRaster* zNPCFodBomb::rast_blink;
 
-// NOTE: zNPCFodBzzt::tmr_nexthokey is not declared in the header yet, so it is
-// defined here under its mangled name.
-F32 tmr_nexthokey__11zNPCFodBzzt;
+F32 zNPCFodBzzt::tmr_nexthokey;
 
 F32 zNPCFodBzzt::tmr_hokeypokey;
 
@@ -90,11 +88,9 @@ volatile S32 zNPCFodBzzt::cnt_alerthokey;
 
 NPCLaser zNPCFodBzzt::laser;
 
-// NOTE: zNPCFodBzzt::rast_discoLight / uv_slice_discoLight are not declared in
-// the header yet, so they are defined here under their mangled names.
-RwRaster* rast_discoLight__11zNPCFodBzzt;
+RwRaster* zNPCFodBzzt::rast_discoLight;
 
-F32 uv_slice_discoLight__11zNPCFodBzzt[2] = { 1.0f, 1.0f };
+F32 zNPCFodBzzt::uv_slice_discoLight[2] = { 1.0f, 1.0f };
 
 S32 g_needMusician = 1;
 
@@ -102,14 +98,13 @@ RwRaster* zNPCSleepy::rast_killcone;
 
 RwRaster* zNPCSleepy::rast_detectcone;
 
-// NOTE: these four zNPCSleepy statics are not declared in the header yet.
-F32 uv_deathcone__10zNPCSleepy[2] = { 0.0f, 0.0f };
+F32 zNPCSleepy::uv_deathcone[2] = { 0.0f, 0.0f };
 
-F32 uv_nightlight__10zNPCSleepy[2] = { 0.0f, 0.0f };
+F32 zNPCSleepy::uv_nightlight[2] = { 0.0f, 0.0f };
 
-F32 uv_slice_nightlight__10zNPCSleepy[2] = { 0.25f, 0.25f };
+F32 zNPCSleepy::uv_slice_nightlight[2] = { 0.25f, 0.25f };
 
-F32 uv_slice_deathcone__10zNPCSleepy[2] = { 0.25f, 0.25f };
+F32 zNPCSleepy::uv_slice_deathcone[2] = { 0.25f, 0.25f };
 
 volatile F32 zNPCSleepy::hyt_NightLightCurrent;
 
@@ -2280,8 +2275,8 @@ void zNPCFodBzzt::Init(xEntAsset* asset)
 
     tmr_hokeypokey = -1.0f;
     g_needMusician = 0;
-    tmr_nexthokey__11zNPCFodBzzt = -1.0f;
-    rast_discoLight__11zNPCFodBzzt = NULL;
+    zNPCFodBzzt::tmr_nexthokey = -1.0f;
+    zNPCFodBzzt::rast_discoLight = NULL;
 }
 
 void zNPCFodBzzt::ParseINI()
@@ -2317,9 +2312,9 @@ void zNPCFodBzzt::Setup()
         laser.RadiusSet(radius[0], radius[1]);
     }
 
-    if (rast_discoLight__11zNPCFodBzzt == NULL)
+    if (zNPCFodBzzt::rast_discoLight == NULL)
     {
-        rast_discoLight__11zNPCFodBzzt = NPCC_FindRWRaster("fx_fodbzzt_disco");
+        zNPCFodBzzt::rast_discoLight = NPCC_FindRWRaster("fx_fodbzzt_disco");
     }
 }
 
@@ -2448,7 +2443,7 @@ void zNPCFodBzzt_DoTheHokeyPokey(F32 dt)
         (globals.player.ControlOff & 0xffffbeff) || zNPCFodBzzt::cnt_alerthokey < 1)
     {
         zNPCFodBzzt::tmr_hokeypokey = -1.0f;
-        tmr_nexthokey__11zNPCFodBzzt = 16.0f * (0.25f * (xurand() - 0.5f)) + 16.0f;
+        zNPCFodBzzt::tmr_nexthokey = 16.0f * (0.25f * (xurand() - 0.5f)) + 16.0f;
     }
     else
     {
@@ -2461,7 +2456,7 @@ void zNPCFodBzzt_DoTheHokeyPokey(F32 dt)
         if (!(zNPCFodBzzt::tmr_hokeypokey < 0.0f))
         {
             zNPCFodBzzt::tmr_hokeypokey = MAX(-1.0f, zNPCFodBzzt::tmr_hokeypokey - dt);
-            tmr_nexthokey__11zNPCFodBzzt = 16.0f * (0.25f * (xurand() - 0.5f)) + 16.0f;
+            zNPCFodBzzt::tmr_nexthokey = 16.0f * (0.25f * (xurand() - 0.5f)) + 16.0f;
 
             if (zNPCFodBzzt::tmr_hokeypokey < 1.0f && !g_needMusician && !g_somebodyplay)
             {
@@ -2473,9 +2468,9 @@ void zNPCFodBzzt_DoTheHokeyPokey(F32 dt)
                 g_needMusician = 0;
             }
         }
-        else if (!(tmr_nexthokey__11zNPCFodBzzt < 0.0f))
+        else if (!(zNPCFodBzzt::tmr_nexthokey < 0.0f))
         {
-            tmr_nexthokey__11zNPCFodBzzt = MAX(-1.0f, tmr_nexthokey__11zNPCFodBzzt - dt);
+            zNPCFodBzzt::tmr_nexthokey = MAX(-1.0f, zNPCFodBzzt::tmr_nexthokey - dt);
             g_somebodyplay = 0;
         }
         else
@@ -3301,15 +3296,15 @@ void zNPCSleepy::NightLightUVStep(F32 dt)
     static const F32 uv_scroll_nightlight[2] = { 0.0f, -0.2f };
     static const F32 uv_scroll_deathcone[2] = { 0.0f, -1.55f };
 
-    uv_nightlight__10zNPCSleepy[0] += dt * uv_scroll_nightlight[0];
-    uv_nightlight__10zNPCSleepy[1] += dt * uv_scroll_nightlight[1];
-    RANGEWRAP(&uv_nightlight__10zNPCSleepy[0], 0.0f, 1.0f);
-    RANGEWRAP(&uv_nightlight__10zNPCSleepy[1], 0.0f, 1.0f);
+    zNPCSleepy::uv_nightlight[0] += dt * uv_scroll_nightlight[0];
+    zNPCSleepy::uv_nightlight[1] += dt * uv_scroll_nightlight[1];
+    RANGEWRAP(&zNPCSleepy::uv_nightlight[0], 0.0f, 1.0f);
+    RANGEWRAP(&zNPCSleepy::uv_nightlight[1], 0.0f, 1.0f);
 
-    uv_deathcone__10zNPCSleepy[0] += dt * uv_scroll_deathcone[0];
-    uv_deathcone__10zNPCSleepy[1] += dt * uv_scroll_deathcone[1];
-    RANGEWRAP(&uv_deathcone__10zNPCSleepy[0], 0.0f, 1.0f);
-    RANGEWRAP(&uv_deathcone__10zNPCSleepy[1], 0.0f, 1.0f);
+    zNPCSleepy::uv_deathcone[0] += dt * uv_scroll_deathcone[0];
+    zNPCSleepy::uv_deathcone[1] += dt * uv_scroll_deathcone[1];
+    RANGEWRAP(&zNPCSleepy::uv_deathcone[0], 0.0f, 1.0f);
+    RANGEWRAP(&zNPCSleepy::uv_deathcone[1], 0.0f, 1.0f);
 }
 
 void zNPCSleepy::SnoreNZeez(F32 dt)

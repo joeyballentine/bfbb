@@ -86,6 +86,7 @@ struct NPCBlinker
     void Reset();
     void IndexToUVCoord(int param_1, float* param_2, float* param_3);
     void Update(F32 dt, F32 ratio, F32 tym_slow, F32 tym_fast);
+    void Render(const xVec3* pos_blink, F32 rad_blink, const RwRaster* rast_blink);
 };
 
 struct NPCWidget

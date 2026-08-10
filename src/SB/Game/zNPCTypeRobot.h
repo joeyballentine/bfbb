@@ -213,6 +213,9 @@ struct zNPCFodBzzt : zNPCRobot
 {
     volatile static S32 cnt_alerthokey;
     static F32 tmr_hokeypokey;
+    static F32 tmr_nexthokey;
+    static RwRaster* rast_discoLight;
+    static F32 uv_slice_discoLight[2];
     static NPCLaser laser;
 
     RwRGBA rgba_discoLight;
@@ -339,6 +342,10 @@ struct zNPCSleepy : zNPCRobot
     static RwRaster* rast_detectcone;
     static RwRaster* rast_killcone;
     volatile static F32 hyt_NightLightCurrent;
+    static F32 uv_deathcone[2];
+    static F32 uv_nightlight[2];
+    static F32 uv_slice_nightlight[2];
+    static F32 uv_slice_deathcone[2];
 
     S32 flg_sleepy;
     NPCHazard* haz_patriot;
