@@ -131,6 +131,18 @@ namespace cruise_bubble
         {
             F32 hit_time;
 
+            // Only the field offsets are recoverable; the names are guesses.
+            struct quadrant_zone
+            {
+                U32 index;
+                U32 mask;
+                U32 count;
+                F32 dz;
+                F32 da;
+            };
+
+            static quadrant_zone qzone;
+
             struct cb_damage_ent
             {
                 F32 radius;
@@ -149,9 +161,9 @@ namespace cruise_bubble
             F32 get_radius() const;
             void start_effects();
             static void cb_droplet(zFrag* frag, zFragAsset* fa);
-            void perturb_direction(const xVec3&, F32, F32, F32, F32);
+            static xVec3 perturb_direction(const xVec3&, F32, F32, F32, F32);
             static void get_next_quadrant(F32&, F32&, F32&, F32&);
-            void reset_quadrants(U32 size, F32 ring);
+            static void reset_quadrants(U32 size, F32 ring);
             void apply_damage(F32 radius);
             void apply_damage_hazards(F32);
             static bool hazard_check(NPCHazard& haz, void* context);
