@@ -53,6 +53,23 @@ Do not revert a wave on a −1 in `report.json` alone.
 
 The residual difference is benign: counting non-matching symbols off the built object includes data symbols like `[.sdata2-0]`, which `solo.py` does not, so the built-object count runs a little higher on most units.
 
+## A whole-function percentage is not a verdict on the hunk you changed
+
+The percentage measures alignment across the entire function. A *correct* local fix can lower it, because fixing one region shifts everything after it and misaligns a tail that happened to line up before. Judge a hunk by diffing the instructions in the region you touched, not by the headline number.
+
+This cost a real lead. `get_next_quadrant` needed two independent changes, and the numbers in isolation are actively misleading:
+
+| form | % |
+|---|---|
+| original source | 85.154 |
+| loop fix alone | **79.135** |
+| `%` instead of `- row * count` alone | 86.308 |
+| **both together** | **99.712** |
+
+An earlier pass applied the loop fix, watched 85 → 79, reverted it, and concluded the function needed a *compiler patch* to reproduce a supposed CSE-across-store bug. The loop body was already byte-exact at 79.135%; only the tail had moved. The premise was then refuted outright by a control experiment — feed the compiler the semantically-correct form and it emits `stw` before `slw`, so it uses the new value when the source asks for the new value. There was never any wrong code to reproduce.
+
+Two habits follow. When a plausible fix makes the number worse, **look at whether the region you changed now matches** before reverting. And before concluding that the compiler is at fault, **compile the alternative and look** — a control experiment is cheap next to a compiler patch, and "the compiler has a bug" should be the last hypothesis standing, not the first.
+
 ## report.json credits near-misses
 
 It counts functions at 99.x% as matched. Consequences:
