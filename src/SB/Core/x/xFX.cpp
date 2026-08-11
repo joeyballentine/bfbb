@@ -638,6 +638,9 @@ namespace
     struct tri_data
     {
         vert_data vert[3];
+
+        void init(const xVec3* loc, const xVec3* norm, const RwTexCoords* uv, const F32* depth,
+                  const U16* index);
     };
 
     // TODO: Check all lerp return types. Only the first is in dwarf
@@ -647,6 +650,403 @@ namespace
     void lerp(RwRGBA& unk0, F32 unk1, RwRGBA unk2, RwRGBA unk3);
     void lerp(U8& unk0, F32 unk1, U8 unk2, U8 unk3);
     void lerp(xVec3& unk0, F32 unk1, const xVec3& unk2, const xVec3& unk3);
+
+    void set_vert(RxObjSpace3DVertex& vert, const vert_data& vd);
+    void set_vert(RxObjSpace3DVertex& vert, const xVec3& loc, const xVec3& norm,
+                  const RwTexCoords& uv, U8 alpha);
+    void push_triangle(RxObjSpace3DVertex*& vert, const tri_data& tri);
+    S32 clip_triangle(tri_data* out, const tri_data& in, F32 depth);
+    void refresh_vert_buffer(RxObjSpace3DVertex*& vert, bool flush);
+    U32 count_alpha_triangles(const RpTriangle* tri, const F32* depth, u32 size);
+    void depth_sort(U16* index, const tri_data* tri, u32 size);
+
+#define ALPHA_COUNT 300
+
+    U8 alpha_count0[ALPHA_COUNT];
+    U8 alpha_count1[ALPHA_COUNT];
+
+    void depth_sort(U16* index, const tri_data* tri, u32 size)
+    {
+        for (U32 i = 0; i < size; i++)
+        {
+            U16& e0 = index[i];
+            F32 d0 = tri[e0].vert[0].depth;
+
+            for (U32 j = i + 1; j < size; j++)
+            {
+                if (tri[index[j]].vert[0].depth > d0)
+                {
+                    U16 temp = e0;
+
+                    e0 = index[j];
+                    index[j] = temp;
+                }
+            }
+        }
+    }
+} // namespace
+
+// Defined in iModel.cpp but declared in no header.
+U32 iModelNormalEval(xVec3* out, const RpAtomic& m, const RwMatrixTag* mat, size_t index, S32 size,
+                     const xVec3* in);
+
+void xFXRenderProximityFade(const xModelInstance& model, F32 near_dist, F32 far_dist)
+{
+    RpGeometry* geom;
+    RwRaster* raster;
+    RpTriangle* tri;
+    RwFrame* frame;
+    RwTexCoords* uv;
+    S32 vert_total;
+    xVec3* vert;
+    xVec3* normal;
+    U8* alpha;
+    F32* depth;
+    xMat4x3* cm;
+    xVec3 ov;
+    F32 zfrac;
+    S32 i;
+    F32 a;
+    RxObjSpace3DVertex* out_vert;
+    S32 tri_total;
+    U16* alpha_tri_index;
+    tri_data* alpha_tri;
+    U32 alpha_tri_total;
+    U32 alpha_tri_used;
+    tri_data tri_buffer[2][3];
+    tri_data cur_tri;
+    RpTriangle* end;
+    S32 tri_index;
+
+    memset(alpha_count0, 0, sizeof(alpha_count0));
+    memset(alpha_count1, 0, sizeof(alpha_count1));
+
+    geom = model.Data->geometry;
+    raster = geom->matList.materials[0]->texture->raster;
+    tri = geom->triangles;
+    frame = RwCameraGetFrame(RwCameraGetCurrentCamera());
+    uv = geom->texCoords[0];
+    vert_total = geom->numVertices;
+
+    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+    RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)raster);
+    RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+
+    vert = (xVec3*)xMemPushTemp(vert_total * sizeof(xVec3));
+    normal = (xVec3*)xMemPushTemp(vert_total * sizeof(xVec3));
+
+    iModelVertEval(model.Data, 0, vert_total, model.Mat, NULL, vert);
+    iModelNormalEval(normal, *model.Data, model.Mat, 0, -1, NULL);
+
+    alpha = (U8*)xMemPushTemp(vert_total * sizeof(U8));
+    depth = (F32*)xMemPushTemp(vert_total * sizeof(F32));
+
+    cm = (xMat4x3*)RwFrameGetLTM(frame);
+
+    if (near_dist >= far_dist)
+    {
+        zfrac = 1.0f;
+    }
+    else
+    {
+        zfrac = 1.0f / (far_dist - near_dist);
+    }
+
+    for (i = 0; i < vert_total; i++)
+    {
+        xMat4x3Tolocal(&ov, cm, &vert[i]);
+
+        depth[i] = zfrac * (ov.z - near_dist);
+
+        a = 255.0f * depth[i];
+
+        if (a < 0.0f)
+        {
+            alpha[i] = 0;
+        }
+        else if (a >= 255.0f)
+        {
+            alpha[i] = 255;
+        }
+        else
+        {
+            alpha[i] = 0.5f + a;
+        }
+    }
+
+    out_vert = gRenderBuffer.m_vertex;
+
+    alpha_tri_index = NULL;
+    alpha_tri = NULL;
+    alpha_tri_used = 0;
+
+    tri_total = geom->numTriangles;
+
+    alpha_tri_total = count_alpha_triangles(tri, depth, tri_total);
+
+    if (alpha_tri_total == 0)
+    {
+        // Retail as-is: vert_total is never negative, so this early-out is dead code.
+        if (vert_total < 0 && depth[0] < 0.0f)
+        {
+            goto cleanup;
+        }
+    }
+    else
+    {
+        alpha_tri_index = (U16*)xMemPushTemp(alpha_tri_total * sizeof(U16));
+        alpha_tri = (tri_data*)xMemPushTemp(alpha_tri_total * sizeof(tri_data));
+    }
+
+    end = tri + tri_total;
+    tri_index = 0;
+
+    while (tri != end)
+    {
+        U16 vi[3];
+        F32 d0;
+        F32 d1;
+        F32 d2;
+        U32 flags;
+        S32 j;
+        S32 size1;
+        S32 k;
+        S32 size2;
+
+        refresh_vert_buffer(out_vert, false);
+
+        vi[0] = tri->vertIndex[0];
+        vi[1] = tri->vertIndex[1];
+        vi[2] = tri->vertIndex[2];
+
+        flags = 0;
+
+        d0 = depth[vi[0]];
+        d1 = depth[vi[1]];
+        d2 = depth[vi[2]];
+
+        if (d0 < 0.0f)
+        {
+            flags |= 0x1;
+        }
+        else if (d0 > 1.0f)
+        {
+            flags |= 0x40;
+        }
+        else
+        {
+            flags |= 0x8;
+        }
+
+        if (d1 < 0.0f)
+        {
+            flags |= 0x2;
+        }
+        else if (d1 > 1.0f)
+        {
+            flags |= 0x80;
+        }
+        else
+        {
+            flags |= 0x10;
+        }
+
+        if (d2 < 0.0f)
+        {
+            flags |= 0x4;
+        }
+        else if (d2 > 1.0f)
+        {
+            flags |= 0x100;
+        }
+        else
+        {
+            flags |= 0x20;
+        }
+
+        if ((flags & 0x38) == 0x38 || (flags & 0x1c0) == 0x1c0)
+        {
+            if (alpha[vi[0]])
+            {
+                set_vert(*out_vert++, vert[vi[0]], normal[vi[0]], uv[vi[0]], alpha[vi[0]]);
+                set_vert(*out_vert++, vert[vi[1]], normal[vi[1]], uv[vi[1]], alpha[vi[1]]);
+                set_vert(*out_vert++, vert[vi[2]], normal[vi[2]], uv[vi[2]], alpha[vi[2]]);
+            }
+        }
+        else if ((flags & 0x7) != 0x7)
+        {
+            cur_tri.init(vert, normal, uv, depth, vi);
+
+            size1 = clip_triangle(tri_buffer[0], cur_tri, 0.0f);
+
+            for (j = 0; j < size1; j++)
+            {
+                if (tri_buffer[0][j].vert[0].depth <= 0.0f &&
+                    tri_buffer[0][j].vert[1].depth <= 0.0f &&
+                    tri_buffer[0][j].vert[2].depth <= 0.0f)
+                {
+                    continue;
+                }
+
+                size2 = clip_triangle(tri_buffer[1], tri_buffer[0][j], 1.0f);
+
+                for (k = 0; k < size2; k++)
+                {
+                    if (tri_buffer[1][k].vert[0].depth >= 1.0f &&
+                        tri_buffer[1][k].vert[1].depth >= 1.0f &&
+                        tri_buffer[1][k].vert[2].depth >= 1.0f)
+                    {
+                        push_triangle(out_vert, tri_buffer[1][k]);
+                    }
+                    else
+                    {
+                        alpha_count1[tri_index]++;
+
+                        alpha_tri_index[alpha_tri_used] = alpha_tri_used;
+                        alpha_tri[alpha_tri_used] = tri_buffer[1][k];
+                        alpha_tri_used++;
+                    }
+                }
+            }
+        }
+
+        tri++;
+        tri_index++;
+    }
+
+    depth_sort(alpha_tri_index, alpha_tri, alpha_tri_used);
+
+    {
+        U32 n;
+
+        for (n = 0; n < alpha_tri_used; n++)
+        {
+            refresh_vert_buffer(out_vert, false);
+            push_triangle(out_vert, alpha_tri[alpha_tri_index[n]]);
+        }
+    }
+
+    refresh_vert_buffer(out_vert, true);
+
+    if (alpha_tri_total)
+    {
+        xMemPopTemp(alpha_tri);
+        xMemPopTemp(alpha_tri_index);
+    }
+
+cleanup:
+    xMemPopTemp(depth);
+    xMemPopTemp(alpha);
+    xMemPopTemp(normal);
+    xMemPopTemp(vert);
+}
+
+namespace
+{
+    void push_triangle(RxObjSpace3DVertex*& vert, const tri_data& tri)
+    {
+        for (S32 i = 0; i < 3; i++)
+        {
+            set_vert(*vert, tri.vert[i]);
+            vert++;
+        }
+    }
+
+    void set_vert(RxObjSpace3DVertex& vert, const vert_data& vd)
+    {
+        U8 alpha;
+        F32 a;
+
+        a = 255.0f * vd.depth;
+
+        if (a < 0.0f)
+        {
+            alpha = 0;
+        }
+        else if (a >= 255.0f)
+        {
+            alpha = 255;
+        }
+        else
+        {
+            alpha = 0.5f + a;
+        }
+
+        RwIm3DVertexSetPos(&vert, vd.loc.x, vd.loc.y, vd.loc.z);
+        RwIm3DVertexSetNormal(&vert, vd.norm.x, vd.norm.y, vd.norm.z);
+        RwIm3DVertexSetRGBA(&vert, 255, 255, 255, alpha);
+        RwIm3DVertexSetUV(&vert, vd.uv.u, vd.uv.v);
+    }
+
+    S32 clip_triangle(tri_data* out, const tri_data& in, F32 depth)
+    {
+        U16 flags;
+        U8 i0;
+        U8 i1;
+        U8 i2;
+
+        flags = 0;
+
+        flags |= (in.vert[0].depth < depth) ? 0x1 : 0x8;
+        flags |= (in.vert[1].depth < depth) ? 0x2 : 0x10;
+        flags |= (in.vert[2].depth < depth) ? 0x4 : 0x20;
+
+        if ((in.vert[0].depth == depth && (flags & 0x6)) ||
+            (in.vert[1].depth == depth && (flags & 0x5)) ||
+            (in.vert[2].depth == depth && (flags & 0x3)))
+        {
+            out[0] = in;
+            return 1;
+        }
+
+        switch (flags)
+        {
+        case 0x0e:
+        case 0x31:
+            i0 = 0;
+            i1 = 1;
+            i2 = 2;
+            break;
+        case 0x15:
+        case 0x2a:
+            i0 = 1;
+            i1 = 2;
+            i2 = 0;
+            break;
+        case 0x1c:
+        case 0x23:
+            i0 = 2;
+            i1 = 0;
+            i2 = 1;
+            break;
+        default:
+            out[0] = in;
+            return 1;
+        }
+
+        F32 d0 = in.vert[i0].depth;
+        F32 d1 = in.vert[i1].depth;
+        F32 d2 = in.vert[i2].depth;
+
+        out[0].vert[0] = in.vert[i0];
+
+        lerp(out[0].vert[1], (depth - d0) / (d1 - d0), in.vert[i0], in.vert[i1]);
+        lerp(out[0].vert[2], (depth - d0) / (d2 - d0), in.vert[i0], in.vert[i2]);
+
+        out[0].vert[2].depth = depth;
+        out[0].vert[1].depth = depth;
+
+        out[1].vert[0] = out[0].vert[1];
+        out[1].vert[1] = in.vert[i1];
+        out[1].vert[2] = in.vert[i2];
+
+        out[2].vert[0] = in.vert[i2];
+        out[2].vert[1] = out[0].vert[2];
+        out[2].vert[2] = out[0].vert[1];
+
+        return 3;
+    }
 
     void lerp(vert_data& v, F32 frac, const vert_data& v0, const vert_data& v1)
     // Yes, These are the actual parameter names for this function from the dwarf
@@ -688,27 +1088,121 @@ namespace
         lerp(unk0.z, unk1, unk2.z, unk3.z);
     }
 
+    void tri_data::init(const xVec3* loc, const xVec3* norm, const RwTexCoords* uv,
+                        const F32* depth, const U16* index)
+    {
+        for (S32 i = 0; i < 3; i++)
+        {
+            vert_data& v = vert[i];
+            U16 vi = index[i];
+
+            v.loc = loc[vi];
+            v.norm = norm[vi];
+            v.color.red = v.color.green = v.color.blue = v.color.alpha = 255;
+            v.uv = uv[vi];
+            v.depth = depth[vi];
+        }
+    }
+
+    void set_vert(RxObjSpace3DVertex& vert, const xVec3& loc, const xVec3& norm,
+                  const RwTexCoords& uv, U8 alpha)
+    {
+        RwIm3DVertexSetPos(&vert, loc.x, loc.y, loc.z);
+        RwIm3DVertexSetNormal(&vert, norm.x, norm.y, norm.z);
+        RwIm3DVertexSetRGBA(&vert, 255, 255, 255, alpha);
+        RwIm3DVertexSetUV(&vert, uv.u, uv.v);
+    }
+
+    void refresh_vert_buffer(RxObjSpace3DVertex*& vert, bool flush)
+    {
+        S32 count = vert - gRenderBuffer.m_vertex;
+
+        if (!flush && count < 492)
+        {
+            return;
+        }
+
+        if (count == 0)
+        {
+            return;
+        }
+
+        vert = gRenderBuffer.m_vertex;
+
+        if (RwIm3DTransform(vert, count, NULL,
+                            rwIM3D_VERTEXUV | rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA))
+        {
+            RwIm3DRenderPrimitive(rwPRIMTYPETRILIST);
+            RwIm3DEnd();
+        }
+    }
+
+    U32 count_alpha_triangles(const RpTriangle* tri, const F32* depth, u32 size)
+    {
+        static const U8 segments[43] = { 0, 1, 3, 0, 1, 2, 4, 0, 3, 4, 3, 0, 0, 0, 0,
+                                         0, 1, 2, 4, 0, 2, 1, 2, 0, 4, 2, 1, 0, 0, 0,
+                                         0, 0, 3, 4, 3, 0, 4, 2, 1, 0, 3, 1, 0 };
+
+        u32 i = 0;
+        U32 total = 0;
+        const RpTriangle* end = tri + size;
+
+        while (tri != end)
+        {
+            U32 flags = 0;
+            F32 d0 = depth[tri->vertIndex[0]];
+            F32 d1 = depth[tri->vertIndex[1]];
+            F32 d2 = depth[tri->vertIndex[2]];
+            U8 n;
+
+            if (d0 < 0.0f)
+            {
+            }
+            else if (d0 > 1.0f)
+            {
+                flags |= 0x2;
+            }
+            else
+            {
+                flags |= 0x1;
+            }
+
+            if (d1 < 0.0f)
+            {
+            }
+            else if (d1 > 1.0f)
+            {
+                flags |= 0x8;
+            }
+            else
+            {
+                flags |= 0x4;
+            }
+
+            if (d2 < 0.0f)
+            {
+            }
+            else if (d2 > 1.0f)
+            {
+                flags |= 0x20;
+            }
+            else
+            {
+                flags |= 0x10;
+            }
+
+            n = segments[flags];
+
+            alpha_count0[i] = n;
+            total += n;
+
+            i++;
+            tri++;
+        }
+
+        return total;
+    }
 } // namespace
-
-namespace
-{
-#define ALPHA_COUNT 300
-
-    U8 alpha_count0[ALPHA_COUNT];
-    U8 alpha_count1[ALPHA_COUNT];
-} // namespace
-
-// clip_triangle jumptable
-static U32 _1933[] = { 0x80028610, 0x80028640, 0x80028640, 0x80028640, 0x80028640, 0x80028640,
-                       0x80028640, 0x80028620, 0x80028640, 0x80028640, 0x80028640, 0x80028640,
-                       0x80028640, 0x80028640, 0x80028630, 0x80028640, 0x80028640, 0x80028640,
-                       0x80028640, 0x80028640, 0x80028640, 0x80028630, 0x80028640, 0x80028640,
-                       0x80028640, 0x80028640, 0x80028640, 0x80028640, 0x80028620, 0x80028640,
-                       0x80028640, 0x80028640, 0x80028640, 0x80028640, 0x80028640, 0x80028610 };
-
-static const U8 segments_1637[43] = { 0, 1, 3, 0, 1, 2, 4, 0, 3, 4, 3, 0, 0, 0, 0,
-                                      0, 1, 2, 4, 0, 2, 1, 2, 0, 4, 2, 1, 0, 0, 0,
-                                      0, 0, 3, 4, 3, 0, 4, 2, 1, 0, 3, 1, 0 };
 
 struct _tagFirework
 {
@@ -968,53 +1462,56 @@ void xFXStreakUpdate(U32 id, const xVec3* a, const xVec3* b)
 U32 xFXStreakStart(F32 frequency, F32 alphaFadeRate, F32 alphaStart, U32 textureID,
                    const iColor_tag* edge_a, const iColor_tag* edge_b, S32 taper)
 {
-    for (U32 i = 0; i < 10; i++)
+    xFXStreak* s;
+    U32 i;
+
+    for (s = sStreakList, i = 0; i < 10; s++, i++)
     {
-        if (sStreakList[i].flags == 0x0)
+        if (s->flags == 0x0)
         {
-            sStreakList[i].flags = 0x1;
+            s->flags = 0x1;
 
             if (taper != 0)
             {
-                sStreakList[i].flags |= 0x4;
+                s->flags |= 0x4;
             }
 
-            sStreakList[i].frequency = frequency;
-            sStreakList[i].alphaFadeRate = alphaFadeRate;
-            sStreakList[i].alphaStart = alphaStart;
-            sStreakList[i].head = 0;
-            sStreakList[i].elapsed = 0.0f;
-            sStreakList[i].lifetime = 0.0f;
-            sStreakList[i].textureRasterPtr = NULL;
-            sStreakList[i].texturePtr = NULL;
+            s->frequency = frequency;
+            s->alphaFadeRate = alphaFadeRate;
+            s->alphaStart = alphaStart;
+            s->head = 0;
+            s->elapsed = 0.0f;
+            s->lifetime = 0.0f;
+            s->textureRasterPtr = NULL;
+            s->texturePtr = NULL;
 
             for (S32 j = 0; j < 50; j++)
             {
-                sStreakList[i].elem[j].flag = 0x0;
+                s->elem[j].flag = 0x0;
             }
 
             if (edge_a != NULL)
             {
-                sStreakList[i].color_a = *edge_a;
+                s->color_a = *edge_a;
             }
             else
             {
-                sStreakList[i].color_a.a = 255;
-                sStreakList[i].color_a.b = 255;
-                sStreakList[i].color_a.g = 255;
-                sStreakList[i].color_a.r = 255;
+                s->color_a.a = 255;
+                s->color_a.b = 255;
+                s->color_a.g = 255;
+                s->color_a.r = 255;
             }
 
             if (edge_b != NULL)
             {
-                sStreakList[i].color_b = *edge_a;
+                s->color_b = *edge_b;
             }
             else
             {
-                sStreakList[i].color_b.a = 255;
-                sStreakList[i].color_b.b = 255;
-                sStreakList[i].color_b.g = 255;
-                sStreakList[i].color_b.r = 255;
+                s->color_b.a = 255;
+                s->color_b.b = 255;
+                s->color_b.g = 255;
+                s->color_b.r = 255;
             }
 
             if (textureID == 0)
@@ -1022,15 +1519,14 @@ U32 xFXStreakStart(F32 frequency, F32 alphaFadeRate, F32 alphaStart, U32 texture
                 textureID = xStrHash("fx_streak1");
             }
 
-            sStreakList[i].texturePtr = (RwTexture*)xSTFindAsset(textureID, NULL);
-            if (sStreakList[i].texturePtr != NULL)
+            s->texturePtr = (RwTexture*)xSTFindAsset(textureID, NULL);
+
+            if (s->texturePtr != NULL)
             {
-                sStreakList[i].textureRasterPtr = RwTextureGetRaster(sStreakList[i].texturePtr);
+                s->textureRasterPtr = RwTextureGetRaster(s->texturePtr);
             }
-            else
-            {
-                return 0;
-            }
+
+            return i;
         }
     }
 
@@ -1843,8 +2339,9 @@ RpMaterial* MaterialSetEnvMap2(RpMaterial* material, void* data)
 {
     if (material->texture != NULL)
     {
+        RwTexture* texture = (RwTexture*)data;
         RwFrame* frame;
-        if (RwEngineInstance->stringFuncs.vecStrcmp(((RwTexture*)data)->name, "spec3") == 0)
+        if (RwEngineInstance->stringFuncs.vecStrcmp(texture->name, "spec3") == 0)
         {
             frame = (RwFrame*)globals.camera.lo_cam->object.object.parent;
         }
@@ -1853,7 +2350,7 @@ RpMaterial* MaterialSetEnvMap2(RpMaterial* material, void* data)
             frame = (RwFrame*)MainLight->object.object.parent;
         }
         RpMatFXMaterialSetEffects(material, rpMATFXEFFECTENVMAP);
-        RpMatFXMaterialSetupEnvMap(material, (RwTexture*)data, frame, FALSE, EnvMapShininess);
+        RpMatFXMaterialSetupEnvMap(material, texture, frame, FALSE, EnvMapShininess);
     }
     return material;
 }
@@ -1896,10 +2393,6 @@ RpAtomic* xFXanimUVAtomicSetup(RpAtomic* atomic)
     }
     atomic->pipeline = xFXanimUVPipeline;
     return atomic;
-}
-
-void xFXRenderProximityFade(const xModelInstance&, F32 near_dist, F32 far_dist)
-{
 }
 
 void xFXanimUV2PSetAngle(F32 angle)
