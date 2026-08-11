@@ -4660,6 +4660,104 @@ static S32 zEntPlayerKnockToSafety(xEnt* ent)
     return 0;
 }
 
+static xEnt* zEntPlayer_FindGrabEnt(xEnt* ent, zScene* zsc, S32* failed)
+{
+    U32 i;
+
+    for (i = 0; i < zsc->num_ents; i++)
+    {
+        xEnt* e = (xEnt*)zsc->ents[i];
+
+        if (!(e->baseFlags & 0x20))
+        {
+            continue;
+        }
+
+        if (!(e->flags & 0x1))
+        {
+            continue;
+        }
+
+        if (!e->model)
+        {
+            continue;
+        }
+
+        if (!(e->chkby & 0x10))
+        {
+            continue;
+        }
+
+        F32 dx, dy, dz;
+
+        if (e->baseType != 0x2f)
+        {
+            dx = e->model->Mat->pos.x - ent->model->Mat->pos.x;
+            dy = e->model->Mat->pos.y - ent->model->Mat->pos.y;
+            dz = e->model->Mat->pos.z - ent->model->Mat->pos.z;
+        }
+        else
+        {
+            dx = e->bound.sph.center.x - ent->model->Mat->pos.x;
+            dy = (e->bound.sph.center.y - e->bound.sph.r) - ent->model->Mat->pos.y;
+            dz = e->bound.sph.center.z - ent->model->Mat->pos.z;
+        }
+
+        F32 dist2 = dx * dx + dz * dz;
+
+        if (dist2 >= globals.player.carry.maxDist * globals.player.carry.maxDist ||
+            dy >= globals.player.carry.maxHeight || dy <= globals.player.carry.minHeight ||
+            dist2 <= globals.player.carry.minDist * globals.player.carry.minDist)
+        {
+            continue;
+        }
+
+        F32 dist = xsqrt(dist2);
+
+        if ((dx * ent->model->Mat->at.x + dz * ent->model->Mat->at.z) / dist <
+            globals.player.carry.maxCosAngle)
+        {
+            continue;
+        }
+
+        if (e->model->Scale.x)
+        {
+            continue;
+        }
+
+        if (zThrown_IsStacked(e))
+        {
+            continue;
+        }
+
+        if (e->baseType == 0x2b && !((zNPCCommon*)e)->SetCarryState(zNPCCARRY_ATTEMPTPICKUP))
+        {
+            continue;
+        }
+
+        if (!((e->moreFlags & 0x8) || e->baseType == 0x2b) ||
+            !(e->baseType == 0xb || e->baseType == 0x2b || e->baseType == 0x2f ||
+              e->baseType == 0x1b))
+        {
+            if (failed)
+            {
+                *failed = 1;
+            }
+        }
+        else
+        {
+            if (failed)
+            {
+                *failed = 0;
+            }
+
+            return e;
+        }
+    }
+
+    return NULL;
+}
+
 static const U8 SBBBashBones[8] = { 22, 30, 38, 42 };
 static const U8 SBBBounceBones[8] = { 22, 30, 38, 42 };
 
@@ -7128,7 +7226,262 @@ static void zEntPlayer_BubbleBowlLaneRender(zEnt* ent)
     }
 }
 
-void zEntPlayerUpdateModelSB();
+struct zNPCDutchman;
+
+extern zNPCDutchman* dutchman_reticle_ent;
+extern xVec3 dutchman_reticle_center;
+extern F32 dutchman_reticle_radius;
+
+xVec3* NPCC_rightDir(xEnt* ent);
+xVec3* NPCC_faceDir(xEnt* ent);
+xVec3* NPCC_upDir(xEnt* ent);
+
+inline void get_reticle_bound(xVec3& center, F32& radius);
+
+static void zEntPlayer_ReticleRender(zEnt* ent)
+{
+    if (gReticleTarget && sReticleModel && sReticleAlpha >= 0.00392157f)
+    {
+        iModelSetMaterialAlpha(sReticleModel, 255.0f * sReticleAlpha);
+
+        F32 scale = 4.0f * (1.0f - sReticleAlpha) + 1.0f;
+
+        xVec3 tocam;
+        xVec3Sub(&tocam, &globals.camera.mat.pos, (xVec3*)&gReticleTarget->model->Mat->pos);
+
+        scale = scale * (0.2f * xVec3Length(&tocam));
+
+        if (scale < 1.0f)
+        {
+            scale = 1.0f;
+        }
+
+        sReticleMat.up.y = scale;
+
+        F32 bob = 0.3f * isin(sReticleRot);
+
+        if (bob < 0.0f)
+        {
+            bob = -bob;
+        }
+
+        sReticleMat.at.x = -globals.camera.mat.right.z;
+        sReticleMat.at.y = 0.0f;
+        sReticleMat.at.z = globals.camera.mat.right.x;
+
+        xVec3SMulBy(&sReticleMat.at, scale / xVec3Length(&sReticleMat.at));
+
+        sReticleMat.right.x = sReticleMat.at.z;
+        sReticleMat.right.y = 0.0f;
+        sReticleMat.right.z = -sReticleMat.at.x;
+
+        F32 radius;
+        get_reticle_bound(sReticleMat.pos, radius);
+
+        sReticleMat.pos.y = sReticleMat.pos.y + (radius + bob);
+
+        if (!iModelCull(sReticleModel, (RwMatrixTag*)&sReticleMat))
+        {
+            iModelRender(sReticleModel, (RwMatrixTag*)&sReticleMat);
+        }
+
+        sReticleMat.up.y = -scale;
+        sReticleMat.right.z = -sReticleMat.right.z;
+        sReticleMat.right.x = -sReticleMat.right.x;
+        sReticleMat.pos.y -= 2.0f * (radius + bob);
+
+        if (!iModelCull(sReticleModel, (RwMatrixTag*)&sReticleMat))
+        {
+            iModelRender(sReticleModel, (RwMatrixTag*)&sReticleMat);
+        }
+
+        sReticleMat.up.y = 1.0f;
+    }
+}
+
+inline void get_reticle_bound(xVec3& center, F32& radius)
+{
+    if (gReticleTarget == (xEnt*)dutchman_reticle_ent)
+    {
+        center = dutchman_reticle_center;
+        radius = dutchman_reticle_radius;
+    }
+    else if (gReticleTarget->baseType == 0x2b)
+    {
+        zNPCCommon* npc = (zNPCCommon*)gReticleTarget;
+        S32 type = npc->SelfType();
+
+        if (type == NPC_TYPE_SLEEPY)
+        {
+            xBox* box = &npc->bound.box.box;
+
+            center = npc->bound.box.center;
+            radius = box->upper.y - box->lower.y;
+            radius = radius * 0.5f;
+        }
+        else if (type == NPC_TYPE_CHUCK)
+        {
+            static const xVec3 offsetChuck = { 0.3f, -0.55f, 0.5f };
+
+            radius = 1.2f * npc->bound.sph.r;
+            center = npc->bound.sph.center;
+
+            center += *NPCC_rightDir(npc) * offsetChuck.x;
+            center += *NPCC_upDir(npc) * offsetChuck.y;
+            center += *NPCC_faceDir(npc) * offsetChuck.z;
+        }
+        else
+        {
+            center = *(xVec3*)&gReticleTarget->model->Mat->pos;
+            center.y = center.y + gReticleTarget->model->Data->boundingSphere.center.y;
+            radius = gReticleTarget->model->Data->boundingSphere.radius;
+            radius = radius * xVec3Length((xVec3*)&gReticleTarget->model->Mat->up);
+        }
+    }
+    else
+    {
+        center = *(xVec3*)&gReticleTarget->model->Mat->pos;
+        center.y = center.y + gReticleTarget->model->Data->boundingSphere.center.y;
+        radius = gReticleTarget->model->Data->boundingSphere.radius;
+        radius = radius * xVec3Length((xVec3*)&gReticleTarget->model->Mat->up);
+    }
+}
+
+void zEntPlayerUpdateModelSB()
+{
+    xAnimSingle* single = globals.player.ent.model->Anim->Single;
+    xModelInstance* m;
+    S32 i;
+
+    m = globals.player.sb_models[0];
+    m->Flags |= 3;
+    *m->Mat = *globals.player.ent.model->Mat;
+
+    m = globals.player.sb_models[1];
+    m->Flags |= 3;
+    *m->Mat = *globals.player.ent.model->Mat;
+
+    m = globals.player.sb_models[2];
+    m->Flags |= 3;
+    *m->Mat = *globals.player.ent.model->Mat;
+
+    m = globals.player.sb_models[3];
+
+    if (zGameExtras_CheatFlags() & 0x10000000)
+    {
+        m->Flags |= 3;
+    }
+    else
+    {
+        m->Flags &= 0xfffc;
+    }
+
+    m = globals.player.sb_models[4];
+    m->Flags &= 0xfffc;
+
+    m = globals.player.sb_models[5];
+
+    if (globals.player.IsBubbleSpinning || strcmp(single->State->Name, "BbashStart01") == 0 ||
+        strcmp(single->State->Name, "BbounceStrike01") == 0 ||
+        strcmp(single->State->Name, "BbounceStart01") == 0 ||
+        strcmp(single->State->Name, "BbounceAttack01") == 0)
+    {
+        m->Flags |= 1;
+    }
+    else
+    {
+        m->Flags &= 0xfffe;
+    }
+
+    m = globals.player.sb_models[6];
+
+    xAnimState* state = xAnimTableGetState(m->Anim->Table, single->State->Name);
+
+    if (state)
+    {
+        m->Flags = 1;
+        m->Anim->Single->State = state;
+        m->Anim->Single->Time = single->Time;
+
+        if (m->Anim->Single->State->Data->NumAnims[0] == 3)
+        {
+            m->Anim->Single->BilinearLerp[0] = 1.0f + globals.player.SlideTrackLean;
+        }
+
+        xAnimPlayUpdate(m->Anim, 0.0f);
+        xAnimPlayEval(m->Anim);
+
+        xMat4x3Mul((xMat4x3*)m->Mat, (xMat4x3*)&globals.player.ent.model->Mat[3],
+                   (xMat4x3*)globals.player.ent.model->Mat);
+    }
+    else
+    {
+        m->Flags = 0;
+    }
+
+    m = globals.player.sb_models[7];
+
+    if ((strcmp(single->State->Name, "BbashStart01") == 0 && single->Time >= 0.1f) ||
+        strcmp(single->State->Name, "BbashAttack01") == 0)
+    {
+        xMat4x3Mul((xMat4x3*)m->Mat, (xMat4x3*)&globals.player.ent.model->Mat[5],
+                   (xMat4x3*)globals.player.ent.model->Mat);
+
+        RpAtomicSetRenderCallBack(m->Data, xFXBubbleRender);
+
+        if (m->Flags & 2)
+        {
+            m->Flags |= 1;
+            globals.player.IsBubbleBashing = 1;
+        }
+        else
+        {
+            m->Flags |= 2;
+        }
+    }
+    else
+    {
+        m->Flags &= 0xfffe;
+    }
+
+    S32 bone_index[2] = { 38, 42 };
+    xModelInstance* model_index[2] = { globals.player.sb_models[8], globals.player.sb_models[9] };
+
+    for (i = 0; i < 2; i++)
+    {
+        F32 startTime = 0.075f * i + 0.4f;
+        F32 strikeTime = 0.04f * i + 0.4f;
+        S32 bone = bone_index[i];
+
+        m = model_index[i];
+
+        if ((strcmp(single->State->Name, "BbounceStart01") == 0 &&
+             single->Time >= startTime) ||
+            strcmp(single->State->Name, "BbounceAttack01") == 0 ||
+            (strcmp(single->State->Name, "BbounceStrike01") == 0 &&
+             single->Time <= strikeTime))
+        {
+            xMat4x3Mul((xMat4x3*)m->Mat, (xMat4x3*)&globals.player.ent.model->Mat[bone],
+                       (xMat4x3*)globals.player.ent.model->Mat);
+
+            RpAtomicSetRenderCallBack(m->Data, xFXBubbleRender);
+
+            if (m->Flags & 2)
+            {
+                m->Flags |= 1;
+                globals.player.IsBubbleBouncing = 1;
+            }
+            else
+            {
+                m->Flags |= 2;
+            }
+        }
+        else
+        {
+            m->Flags &= 0xfffe;
+        }
+    }
+}
 
 void zEntPlayerUpdateModel()
 {
@@ -7427,6 +7780,103 @@ void zEntPlayer_Render(zEnt* ent)
     if (globals.player.IsBubbleBowling)
     {
         zEntPlayer_BubbleBowlLaneRender(ent);
+    }
+}
+
+static void dampen_velocity(xVec3& v1, const xVec3& v2, F32 f);
+
+static void zEntPlayer_Move(xEnt* ent, xScene*, F32 dt, xEntFrame* frame)
+{
+    frame->mode = 0;
+    frame->mode &= ~0x400;
+    frame->mode &= ~0x800;
+
+    if (globals.player.Health)
+    {
+        _tagxPad* pad = globals.pad0;
+        S32 xval = -pad->analog1.x;
+        S32 yval = -pad->analog1.y;
+
+        if (!globals.player.g.CheatPlayerSwitch)
+        {
+            if (pad->on & XPAD_BUTTON_LEFT)
+            {
+                xval = globals.player.g.AnalogMax;
+            }
+            else if (pad->on & XPAD_BUTTON_RIGHT)
+            {
+                xval = -globals.player.g.AnalogMax;
+            }
+
+            if (pad->on & XPAD_BUTTON_UP)
+            {
+                yval = globals.player.g.AnalogMax;
+            }
+            else if (pad->on & XPAD_BUTTON_DOWN)
+            {
+                yval = -globals.player.g.AnalogMax;
+            }
+        }
+
+        PlayerAbsControl(ent, xval, yval, dt);
+    }
+
+    if (globals.player.cheat_mode)
+    {
+        if (!globals.player.ControlOff && (globals.pad0->on & XPAD_BUTTON_SQUARE))
+        {
+            frame->dpos.y +=
+                dt * (7.0f * ((globals.pad0->on & (XPAD_BUTTON_L1 | XPAD_BUTTON_L2 |
+                                                   XPAD_BUTTON_R1 | XPAD_BUTTON_R2)) ?
+                                  4.68f :
+                                  1.56f));
+            frame->mode |= 0x2;
+        }
+        else if (!globals.player.ControlOff && (globals.pad0->on & XPAD_BUTTON_TRIANGLE))
+        {
+            frame->dpos.y -=
+                dt * (7.0f * ((globals.pad0->on & (XPAD_BUTTON_L1 | XPAD_BUTTON_L2 |
+                                                   XPAD_BUTTON_R1 | XPAD_BUTTON_R2)) ?
+                                  4.68f :
+                                  1.56f));
+            frame->mode |= 0x2;
+        }
+    }
+
+    if (globals.player.WallJumpState == k_WALLJUMP_LAUNCH)
+    {
+        xVec3 wallnorm;
+
+        frame->mode |= 0x10000;
+
+        xVec3Inv(&wallnorm, &sWallNormal);
+        TurnToFace(ent, &wallnorm, 10.0f, dt);
+    }
+
+    if (!globals.player.JumpState)
+    {
+        sPlayerAttackInAir = 0;
+    }
+
+    if (sPlayerAttackInAir > 1)
+    {
+        return;
+    }
+
+    if (surfSlickRatio)
+    {
+        return;
+    }
+
+    if (globals.player.IsBubbleSpinning ||
+        strcmp(ent->model->Anim->Single->State->Name, "Melee01") == 0 ||
+        strcmp(ent->model->Anim->Single->State->Name, "JumpMelee01") == 0)
+    {
+        xVec3 damp = { globals.player.sb.spin_damp_xz, globals.player.sb.spin_damp_y,
+                       globals.player.sb.spin_damp_xz };
+
+        dampen_velocity(ent->frame->vel, damp, dt);
+        dampen_velocity(ent->frame->dpos, damp, dt);
     }
 }
 
@@ -8312,13 +8762,273 @@ static void zEntPlayerVelUpdate(xEnt* ent, xScene* sc, F32 dt)
     }
 }
 
+struct TrackPolyData
+{
+    xVec3 center;
+    xMat4x3* mat;
+    xEnt* testEnt;
+    S32 triIndex;
+    xVec3 vert[3];
+    F32 neardist;
+    xVec3 nearpt;
+    S32 nearvert;
+    S32 nearedge;
+    xEnt* foundEnt;
+};
+
+static RpCollisionTriangle* nearestTrackCB(RpIntersection*, RpCollisionTriangle* collTriangle,
+                                           RwReal, void* data)
+{
+    TrackPolyData* tpd = (TrackPolyData*)data;
+    F32 currnear = tpd->neardist;
+    xVec3 currpt;
+    S32 currvert, curredge;
+    xVec3 xformVert[4], xformNorm;
+    S32 i;
+    F32 pdx[3], pdz[3];
+    F32 numer, denom, t, testdist2;
+    xVec3 edgevec, centvec, testpt;
+
+    xMat4x3Toworld(&xformVert[0], tpd->mat, (xVec3*)collTriangle->vertices[0]);
+    xMat4x3Toworld(&xformVert[1], tpd->mat, (xVec3*)collTriangle->vertices[1]);
+    xMat4x3Toworld(&xformVert[2], tpd->mat, (xVec3*)collTriangle->vertices[2]);
+    xMat3x3RMulVec(&xformNorm, tpd->mat, (xVec3*)&collTriangle->normal);
+
+    for (i = 0; i < 3; i++)
+    {
+        pdx[i] = tpd->center.x - xformVert[i].x;
+        pdz[i] = tpd->center.z - xformVert[i].z;
+    }
+
+    F32 f3 = pdx[0] * pdz[1] - pdz[0] * pdx[1];
+    F32 f2 = pdx[1] * pdz[2] - pdz[1] * pdx[2];
+    F32 f1 = pdx[2] * pdz[0] - pdz[2] * pdx[0];
+
+    if ((f3 >= 0.0f && f2 >= 0.0f && f1 >= 0.0f) || (f3 <= 0.0f && f2 <= 0.0f && f1 <= 0.0f))
+    {
+        tpd->neardist = 0.0f;
+        tpd->vert[0] = xformVert[0];
+        tpd->vert[1] = xformVert[1];
+        tpd->vert[2] = xformVert[2];
+        tpd->triIndex = collTriangle->index;
+        tpd->foundEnt = tpd->testEnt;
+
+        return NULL;
+    }
+
+    xformVert[3] = xformVert[0];
+
+    for (i = 0; i < 3; i++)
+    {
+        edgevec.x = xformVert[i + 1].x - xformVert[i].x;
+        edgevec.y = xformVert[i + 1].y - xformVert[i].y;
+        edgevec.z = xformVert[i + 1].z - xformVert[i].z;
+        centvec.x = tpd->center.x - xformVert[i].x;
+        centvec.y = tpd->center.y - xformVert[i].y;
+        centvec.z = tpd->center.z - xformVert[i].z;
+
+        numer = centvec.x * edgevec.x + centvec.y * edgevec.y + centvec.z * edgevec.z;
+        denom = edgevec.x * edgevec.x + edgevec.y * edgevec.y + edgevec.z * edgevec.z;
+
+        if (denom < 0.000001f)
+        {
+            return collTriangle;
+        }
+
+        if (numer <= 0.0f)
+        {
+            testdist2 = SQR(centvec.x) + SQR(centvec.y) + SQR(centvec.z);
+            if (testdist2 < currnear)
+            {
+                currnear = testdist2;
+                currpt = xformVert[i];
+                currvert = i;
+                curredge = -1;
+            }
+        }
+        else if (numer < denom)
+        {
+            t = numer / denom;
+            testpt.x = t * edgevec.x + xformVert[i].x;
+            testpt.y = t * edgevec.y + xformVert[i].y;
+            testpt.z = t * edgevec.z + xformVert[i].z;
+            testdist2 = SQR(tpd->center.x - testpt.x) + SQR(tpd->center.y - testpt.y) +
+                        SQR(tpd->center.z - testpt.z);
+
+            if (testdist2 < currnear)
+            {
+                currnear = testdist2;
+                currpt = testpt;
+                currvert = -1;
+                curredge = i;
+            }
+        }
+    }
+
+    if (currnear != tpd->neardist)
+    {
+        tpd->vert[0] = xformVert[0];
+        tpd->vert[1] = xformVert[1];
+        tpd->vert[2] = xformVert[2];
+        tpd->neardist = currnear;
+        tpd->nearpt = currpt;
+        tpd->nearvert = currvert;
+        tpd->nearedge = curredge;
+        tpd->triIndex = collTriangle->index;
+        tpd->foundEnt = tpd->testEnt;
+    }
+
+    return collTriangle;
+}
+
 F32 det3x3top1(F32 a, F32 b, F32 c, F32 d, F32 e, F32 f)
 {
     F32 ret = -((a * f) - ((b * f) - (e * c)));
     return -((d * b) - ((a * e) + ((d * c) + ret)));
 }
 
-static void SlideTrackUpdate(xEnt* ent);
+void xQuickCullForSphere(xQCData* q, const xSphere* s);
+
+static void SlideTrackUpdate(xEnt* ent)
+{
+    xQCData qcd;
+    RpIntersection isx;
+    xSphere sph;
+    xCollis coll;
+    TrackPolyData tpd;
+    U32 i;
+
+    sph.center = *(xVec3*)&ent->model->Mat->pos;
+    sph.r = 2.0f * ent->bound.sph.r;
+    xQuickCullForSphere(&qcd, &sph);
+
+    S32 triIndex = -1;
+
+    tpd.neardist = HUGE;
+    tpd.triIndex = -1;
+    tpd.center = *(xVec3*)&ent->model->Mat->pos;
+
+    isx.type = rpINTERSECTSPHERE;
+    isx.t.sphere.center = ent->model->Mat->pos;
+    isx.t.sphere.radius = 2.0f * ent->bound.sph.r;
+
+    for (i = 0; i < globals.player.SlideTrackCount; i++)
+    {
+        xEnt* tent = globals.player.SlideTrackEnt[i];
+
+        if (!xQuickCullIsects(&qcd, &tent->bound.qcd))
+        {
+            continue;
+        }
+
+        coll.flags = 0;
+        xSphereHitsBound(&sph, &tent->bound, &coll);
+
+        if (!(coll.flags & k_HIT_IT))
+        {
+            continue;
+        }
+
+        RpAtomicGetFrame(tent->model->Data)->ltm = *tent->model->Mat;
+
+        tpd.mat = (xMat4x3*)tent->model->Mat;
+        tpd.testEnt = tent;
+
+        RpAtomicForAllIntersections(tent->model->Data, &isx, nearestTrackCB, &tpd);
+    }
+
+    if (tpd.neardist < 1.1f * ent->bound.sph.r)
+    {
+        triIndex = tpd.triIndex;
+    }
+
+    if (triIndex == -1)
+    {
+        return;
+    }
+
+    if (globals.player.JumpState)
+    {
+        return;
+    }
+
+    if (!globals.player.JumpState && globals.player.LastJumpState)
+    {
+        globals.player.SlideTrackLand = 1.0f;
+        return;
+    }
+
+    RpGeometry* geom = tpd.foundEnt->model->Data->geometry;
+    RpTriangle* tri = &geom->triangles[triIndex];
+    RwTexCoords* uvs = geom->texCoords[0];
+    RwV3d* verts = geom->morphTarget->verts;
+
+    F32 det = det3x3top1(verts[tri->vertIndex[0]].x, verts[tri->vertIndex[1]].x,
+                         verts[tri->vertIndex[2]].x, verts[tri->vertIndex[0]].z,
+                         verts[tri->vertIndex[1]].z, verts[tri->vertIndex[2]].z);
+
+    if (xabs(det) < 1e-5f)
+    {
+        return;
+    }
+
+    F32 val = (-uvs[tri->vertIndex[0]].v *
+                   det3x3top1(isx.t.sphere.center.x, verts[tri->vertIndex[1]].x,
+                              verts[tri->vertIndex[2]].x, isx.t.sphere.center.z,
+                              verts[tri->vertIndex[1]].z, verts[tri->vertIndex[2]].z) +
+               -uvs[tri->vertIndex[1]].v *
+                   det3x3top1(verts[tri->vertIndex[0]].x, isx.t.sphere.center.x,
+                              verts[tri->vertIndex[2]].x, verts[tri->vertIndex[0]].z,
+                              isx.t.sphere.center.z, verts[tri->vertIndex[2]].z) +
+               -uvs[tri->vertIndex[2]].v *
+                   det3x3top1(verts[tri->vertIndex[0]].x, verts[tri->vertIndex[1]].x,
+                              isx.t.sphere.center.x, verts[tri->vertIndex[0]].z,
+                              verts[tri->vertIndex[1]].z, isx.t.sphere.center.z)) /
+              det;
+
+    F32 valx = (-uvs[tri->vertIndex[0]].v *
+                    det3x3top1(1.0f + isx.t.sphere.center.x, verts[tri->vertIndex[1]].x,
+                               verts[tri->vertIndex[2]].x, isx.t.sphere.center.z,
+                               verts[tri->vertIndex[1]].z, verts[tri->vertIndex[2]].z) +
+                -uvs[tri->vertIndex[1]].v *
+                    det3x3top1(verts[tri->vertIndex[0]].x, 1.0f + isx.t.sphere.center.x,
+                               verts[tri->vertIndex[2]].x, verts[tri->vertIndex[0]].z,
+                               isx.t.sphere.center.z, verts[tri->vertIndex[2]].z) +
+                -uvs[tri->vertIndex[2]].v *
+                    det3x3top1(verts[tri->vertIndex[0]].x, verts[tri->vertIndex[1]].x,
+                               1.0f + isx.t.sphere.center.x, verts[tri->vertIndex[0]].z,
+                               verts[tri->vertIndex[1]].z, isx.t.sphere.center.z)) /
+               det;
+
+    F32 valz = (-uvs[tri->vertIndex[0]].v *
+                    det3x3top1(isx.t.sphere.center.x, verts[tri->vertIndex[1]].x,
+                               verts[tri->vertIndex[2]].x, 1.0f + isx.t.sphere.center.z,
+                               verts[tri->vertIndex[1]].z, verts[tri->vertIndex[2]].z) +
+                -uvs[tri->vertIndex[1]].v *
+                    det3x3top1(verts[tri->vertIndex[0]].x, isx.t.sphere.center.x,
+                               verts[tri->vertIndex[2]].x, verts[tri->vertIndex[0]].z,
+                               1.0f + isx.t.sphere.center.z, verts[tri->vertIndex[2]].z) +
+                -uvs[tri->vertIndex[2]].v *
+                    det3x3top1(verts[tri->vertIndex[0]].x, verts[tri->vertIndex[1]].x,
+                               isx.t.sphere.center.x, verts[tri->vertIndex[0]].z,
+                               verts[tri->vertIndex[1]].z, 1.0f + isx.t.sphere.center.z)) /
+               det;
+
+    valx -= val;
+    valz -= val;
+
+    F32 len = xsqrt(valx * valx + valz * valz);
+
+    if (len < 1e-5f)
+    {
+        return;
+    }
+
+    globals.player.SlideTrackDir.x = valx / len;
+    globals.player.SlideTrackDir.z = valz / len;
+    globals.player.SlideTrackSliding |= 1;
+    globals.player.SlideNotGroundedSinceSlide = 1;
+}
 
 static void zEntPlayerTSlideUpdate(xEnt* ent, xScene* sc, F32 dt)
 {
@@ -14860,6 +15570,103 @@ void zEntPlayer_UnloadSounds()
 void dont_move(xEnt* ent, xScene* scene, F32 dt, xEntFrame* frame)
 {
     PlayerAbsControl(ent, 0.0, 0.0, dt);
+}
+
+U8 zEntPlayer_MinimalUpdate(xEnt* ent, xScene* sc, F32 dt, xVec3& drive_motion)
+{
+    U8 hit_goo = 0;
+
+    if (oob_state::update(*sc, dt))
+    {
+        return 1;
+    }
+
+    zEntPickup_CheckAllPickupsAgainstPlayer(sc, dt);
+    xEntBeginUpdate(ent, sc, dt);
+    zGooCollsBegin();
+
+    xVec3 oldpos = ent->frame->mat.pos;
+
+    xEntApplyPhysics(ent, sc, dt);
+
+    xEntMoveCallback oldmove = ent->move;
+    ent->move = dont_move;
+
+    xEntMove(ent, sc, dt);
+
+    ent->move = oldmove;
+
+    xVec3 req_motion = ent->frame->dpos;
+    xVec3 predrive_pos = ent->frame->mat.pos;
+
+    xEntDriveUpdate(&globals.player.drv, sc, dt, NULL);
+
+    drive_motion = ent->frame->mat.pos - predrive_pos;
+
+    xVec3 motion;
+    xVec3Sub(&motion, &ent->frame->mat.pos, &oldpos);
+
+    if ((globals.player.JumpState == 0 || globals.player.JumpState == 1) &&
+        !globals.player.FallDeathTimer)
+    {
+        F32 sink = 0.5f * dt;
+
+        ent->frame->mat.pos.y -= sink;
+
+        F32 ndotm = globals.player.floor_norm.x * motion.x +
+                    globals.player.floor_norm.z * motion.z;
+
+        if (ndotm > 0.0f && (req_motion.x != 0.0f || req_motion.z != 0.0f || surfSlickRatio))
+        {
+            globals.player.slope = -1;
+            ent->frame->mat.pos.y -= xsqrt(ndotm);
+        }
+        else if (ndotm < 0.0f)
+        {
+            globals.player.slope = 1;
+        }
+        else
+        {
+            globals.player.slope = 0;
+        }
+    }
+
+    zEntPlayerCollide(ent, sc, dt);
+    zEntPlayer_CheckCritterContact(ent, dt);
+    xEntBoulder_ApplyForces(ent->collis);
+    zGooCollsEnd();
+
+    xEntCollis* fcoll = ent->collis;
+
+    if (fcoll->colls[0].flags & 1)
+    {
+        xBase* b = (xBase*)fcoll->colls[0].optr;
+
+        if (b && b->baseType == 0x18)
+        {
+            zEntButton_Hold((_zEntButton*)b, 0x400);
+        }
+    }
+
+    if (fcoll->colls[0].flags & 1)
+    {
+        xBase* b = (xBase*)fcoll->colls[0].optr;
+
+        if (b && zGooIs((xEnt*)b))
+        {
+            hit_goo = 1;
+        }
+    }
+
+    zEntPlayerFloorUpdate(ent, sc, dt);
+    zEntPlayerSurfDamageUpdate(ent, sc, dt);
+    zEntPlayerDriveUpdate(ent, sc, dt);
+    zEntPlayerJumpUpdate(ent, sc, dt);
+    zEntPlayerCollTrigger(ent, sc);
+    zEntPlayerVelUpdate(ent, sc, dt);
+    xEntEndUpdate(ent, sc, dt);
+
+    return hit_goo;
 }
 
 void zEntPlayer_MinimalRender(zEnt* ent)
