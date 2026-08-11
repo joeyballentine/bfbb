@@ -20,48 +20,14 @@ extern F32 gShadowObjectRadius;
 void xShadowVertical_FillCache(xShadowCache* cache, xVec3* pos, F32 radius, F32 height, F32 slop);
 void xShadowVertical_DrawCache(xShadowCache* cache, F32 factor, F32 alpha, S32 flags,
                                RwMatrixTag* mat, RwRaster* rast);
+// MSL's <cmath> is not reachable from here; the target calls floorf__3stdFf.
+namespace std
+{
+    float floorf(float x);
+}
+
 U32 xShadowReceiveShadowSetup(xEnt* ent);
 void xShadowReceiveShadow(xEnt* ent, F32 factor, S32 flags, RwMatrixTag* mat, RwRaster* rast);
-
-static xShadowCache g_shadCaches[16];
-static NPARMgmt g_npar_mgmt[12];
-
-static NPARInfo g_npar_info[12] = {
-    {},
-    {
-        NPAR_Upd_OilBubble, 128, "fx_oil_bubble", 0x2
-    },
-    {
-        NPAR_Upd_TubeSpiral, 256, "fx_tubelet_flame", 0x2
-    },
-    {
-        NPAR_Upd_TubeConfetti, 64, "fx_tubelet_confetti_sep", 0x2
-    },
-    {
-        NPAR_Upd_GloveDust, 64, "fx_glove_dust", 0x2
-    },
-    {
-        NPAR_Upd_MonsoonRain, 64, "fx_monsoon_rain", 0x2
-    },
-    {
-        NPAR_Upd_SleepyZeez, 32, "fx_sleepy_zeez", 0x2
-    },
-    {
-        NPAR_Upd_ChuckSplash, 128, "fx_chuck_dripdrop", 0x2
-    },
-    {
-        NPAR_Upd_TarTarGunk, 256, "fx_tartar_gunk", 0x2
-    },
-    {
-        NPAR_Upd_DogBreath, 64, "fx_chomper_breath", 0x2
-    },
-    {
-        NPAR_Upd_VisSplash, 32, "fx_vissplash_sep", 0x2
-    },
-    {
-        NPAR_Upd_Fireworks, 128, "fx_firework", 0x0
-    }
-};
 
 static const NPARParmOilBub g_parm_oilbub[4] = {
     {
@@ -341,14 +307,14 @@ static const NPARParmFahrwerkz g_parm_fahrwerkz[4] = {
     },
 };
 
-extern S32 g_gameExtrasFlags;
-extern S32 g_mon; // month
-extern S32 g_day; // day
-extern S32 g_isSpecialDay;
-static S8 g_shadCachesInUseFlags[16];
+static S32 g_gameExtrasFlags;
+static S32 g_isSpecialDay;
+static S32 g_mon; // month
+static S32 g_day; // day
 static S32 g_doNPARCull = 1;
 
 void NPAR_CopyNPARToPTPool(NPARData* param_1, ptank_pool__pos_color_size_uv2* param_2);
+static void NPAR_TubeSpiralMagic(RwRGBA* color, int unused, F32 pam);
 
 void NPCSupplement_Startup()
 {
@@ -654,16 +620,62 @@ U32 NPCC_StreakCreate(en_npcstreak styp)
     return xFXStreakStart(&info);
 }
 
+// .bss and .data ordering put these here in retail: info$NNNN from
+// NPCC_StreakCreate is the first .bss object, and g_npar_info follows both
+// switch tables in .data.
+static NPARMgmt g_npar_mgmt[12];
+static xShadowCache g_shadCaches[16];
+static S8 g_shadCachesInUseFlags[16];
+
+static NPARInfo g_npar_info[12] = {
+    {},
+    {
+        NPAR_Upd_OilBubble, 128, "fx_oil_bubble", 0x2
+    },
+    {
+        NPAR_Upd_TubeSpiral, 256, "fx_tubelet_flame", 0x2
+    },
+    {
+        NPAR_Upd_TubeConfetti, 64, "fx_tubelet_confetti_sep", 0x2
+    },
+    {
+        NPAR_Upd_GloveDust, 64, "fx_glove_dust", 0x2
+    },
+    {
+        NPAR_Upd_MonsoonRain, 64, "fx_monsoon_rain", 0x2
+    },
+    {
+        NPAR_Upd_SleepyZeez, 32, "fx_sleepy_zeez", 0x2
+    },
+    {
+        NPAR_Upd_ChuckSplash, 128, "fx_chuck_dripdrop", 0x2
+    },
+    {
+        NPAR_Upd_TarTarGunk, 256, "fx_tartar_gunk", 0x2
+    },
+    {
+        NPAR_Upd_DogBreath, 64, "fx_chomper_breath", 0x2
+    },
+    {
+        NPAR_Upd_VisSplash, 32, "fx_vissplash_sep", 0x2
+    },
+    {
+        NPAR_Upd_Fireworks, 128, "fx_firework", 0x0
+    }
+};
+
 void NPCC_BurstBubble(en_npcburst burst, xVec3* pos_base)
 {
-    S32 i;
     S32 j;
+    S32 i;
 
     for (i = 0; i < 16; i++)
     {
-        F32 rad_max = 3.0f;
         F32 hyt = 0.375f * i;
-        F32 rad_cur = rad_max * ARCH3(0.5f * hyt / rad_max);
+        F32 rat_hyt = 0.5f * hyt / 3.0f;
+        F32 rad_cur = 3.0f;
+
+        rad_cur *= ARCH3(rat_hyt);
 
         for (j = 0; j < 20; j++)
         {
@@ -694,19 +706,19 @@ void NPCC_BurstBubble(en_npcburst burst, xVec3* pos_base)
 
 void NPCC_MakeASplash(const xVec3* pos, F32 radius)
 {
+    F32 rad_splash = radius;
     F32 tym_splash = 0.35f;
 
-    if (radius < 0.0f)
+    if (rad_splash < 0.0f)
     {
-        radius = 1.5f;
+        rad_splash = 1.5f;
     }
     else
     {
-        F32 pct = (radius - 1.5f) / 8.5f;
-        tym_splash = LERP(CLAMP(pct, 0.0f, 1.0f), 0.25f, 1.15f);
-        if (1.5f > radius)
+        tym_splash = LERP(CLAMP((rad_splash - 1.5f) / 8.5f, 0.0f, 1.0f), 0.25f, 1.15f);
+        if (1.5f > rad_splash)
         {
-            radius = 1.5f;
+            rad_splash = 1.5f;
         }
     }
 
@@ -720,7 +732,7 @@ void NPCC_MakeASplash(const xVec3* pos, F32 radius)
         else
         {
             haz->SetNPCOwner(NULL);
-            haz->custdata.typical.rad_max = radius;
+            haz->custdata.typical.rad_max = rad_splash;
             haz->Start(pos, tym_splash);
         }
     }
@@ -804,9 +816,10 @@ void NPAR_Upd_OilBubble(NPARMgmt* mgmt, F32 dt)
     {
         NPARData* npdata = &mgmt->par_buf[i];
 
+        const NPARParmOilBub* npparm = &g_parm_oilbub[npdata->nparmode];
+
         npdata->tmr_remain -= dt;
 
-        const NPARParmOilBub* npparm = &g_parm_oilbub[npdata->nparmode];
         F32 rat = MAX(0.0f, npdata->tmr_remain) / npdata->tym_exist;
 
         npdata->pos += npdata->vel * dt;
@@ -942,7 +955,7 @@ NPARMgmt* NPAR_FindParty(en_nparptyp parType)
 
 void NPARMgmt::Init(en_nparptyp parType, void** userData, NPARXtraData* xtraData)
 {
-    S32 amt = g_npar_info[parType].num_maxParticles;
+    U32 amt = g_npar_info[parType].num_maxParticles;
     NPARInfo* info = &g_npar_info[parType];
 
     void* mem = xMemAlloc(gActiveHeap, amt * sizeof(NPARData), 0x10);
@@ -999,62 +1012,134 @@ void NPAR_CopyNPARToPTPool(NPARData* param_1, ptank_pool__pos_color_size_uv2* pa
     param_2->uv[1].y = param_1->uv_br[1];
 }
 
-// Matches, it just defines new data that won't match until that stuff can be redefined.
-// It also loads a bunch of byte stuff at the end for some reason
-// For the record it also matches when using the static colors. Externing zanyArray does not work.
-void NPAR_TubeSpiralMagic(RwRGBA* color, int unused, F32 pam)
+void NPAR_Upd_TubeSpiral(NPARMgmt* mgmt, F32 dt)
 {
-    // There may be a better way to define these but this seemed like the cleanest.
-    // static RwRGBA colr_pinkRyanz = { 0xcc, 0x60, 0xcc, 0xff };
-    // static RwRGBA colr_lavender = { 0xc6, 0x09, 0xe9, 0xff };
-    // static RwRGBA colr_blue = { 0x00, 0x00, 0xff, 0xff };
-    // static RwRGBA colr_green = { 0x00, 0xff, 0x00, 0xff };
-    // static RwRGBA colr_orange = { 0xff, 0xa5, 0x00, 0xff };
-    // static RwRGBA colr_red = { 0xff, 0x00, 0x00, 0xff };
-    // static RwRGBA colr_indigo = { 0x19, 0x19, 0x70, 0xff };
-    // static RwRGBA colr_julyblue = { 0x00, 0x00, 0xdd, 0xff };
-    // static RwRGBA colr_julywhite = { 0xcc, 0xcc, 0xcc, 0xff };
-    // static RwRGBA colr_julyred = { 0xdd, 0x00, 0x00, 0xff };
-    // static RwRGBA colr_maroon = { 0x80, 0x00, 0x00, 0xff };
-    // static RwRGBA colr_pimp_gold = { 0xd7, 0xdc, 0x13, 0xff };
-    // static RwRGBA colr_kellygreen = { 0x0a, 0x7f, 0x03, 0xff };
+    static const F32 useFixedTimestepForSpiral = 1.0f / 60.0f;
+    static const F32 seg_allowCollide[2] = { 0.0f, 0.9f };
 
-    // static RwRGBA colr_cyan = { 0x00, 0xff, 0xff, 0xff };
-    // static RwRGBA colr_khaki = { 0xf0, 0xe6, 0x8c, 0xff };
-    // static RwRGBA colr_seagreen = { 0x80, 0xcc, 0x99, 0xff };
-    // static RwRGBA colr_peach = { 0xf0, 0x80, 0x80, 0xff };
-    // static RwRGBA colr_fuschia = { 0xbc, 0x40, 0x99, 0xff };
-    // static RwRGBA colr_neon_blue = { 0x20, 0x20, 0xff, 0xff };
-    // static RwRGBA colr_neon_green = { 0x20, 0xff, 0x00, 0xff };
-    // static RwRGBA colr_yellow = { 0xff, 0xff, 0x00, 0xff };
-    // static RwRGBA colr_neon_red = { 0xff, 0x20, 0x00, 0xff };
+    ptank_pool__pos_color_size_uv2 pool;
 
-    extern RwRGBA colr_pinkRyanz;
-    extern RwRGBA colr_lavender;
-    extern RwRGBA colr_blue;
-    extern RwRGBA colr_green;
-    extern RwRGBA colr_orange;
-    extern RwRGBA colr_red;
-    extern RwRGBA colr_indigo;
-    extern RwRGBA colr_julyblue;
-    extern RwRGBA colr_julywhite;
-    extern RwRGBA colr_julyred;
-    extern RwRGBA colr_maroon;
-    extern RwRGBA colr_pimp_gold;
-    extern RwRGBA colr_kellygreen;
-    extern RwRGBA colr_cyan;
-    extern RwRGBA colr_khaki;
-    extern RwRGBA colr_seagreen;
-    extern RwRGBA colr_peach;
-    extern RwRGBA colr_fuschia;
-    extern RwRGBA colr_neon_blue;
-    extern RwRGBA colr_neon_green;
-    extern RwRGBA colr_yellow;
-    extern RwRGBA colr_neon_red;
+    pool.rs.texture = mgmt->txtr;
+    pool.rs.src_blend = 5;
+    pool.rs.dst_blend = 2;
+    pool.rs.flags = 0;
+    pool.reset();
 
-    static RwRGBA zanyArray[10] = { colr_cyan,   colr_khaki,   colr_seagreen,  colr_maroon,
-                                    colr_peach,  colr_fuschia, colr_neon_blue, colr_neon_green,
-                                    colr_yellow, colr_neon_red };
+    xVec3 pos_plyr = *xEntGetCenter(&globals.player.ent);
+
+    for (S32 i = 0; i < mgmt->cnt_active; i++)
+    {
+        NPARData* npdata = &mgmt->par_buf[i];
+
+        const NPARParmTubeSpiral* npparm = &g_parm_tubespiral[npdata->nparmode];
+
+        npdata->tmr_remain -= useFixedTimestepForSpiral;
+
+        F32 rat = MAX(0.0f, npdata->tmr_remain) / npdata->tym_exist;
+        F32 rat_rev = 1.0f - rat;
+
+        npdata->pos += npdata->vel * useFixedTimestepForSpiral;
+
+        F32 arch = ARCH(rat_rev);
+
+        F32 dim;
+        if (rat_rev < 0.2f)
+        {
+            dim = SMOOTH(rat_rev / 0.2f, npparm->siz_base[0], npparm->siz_base[1]);
+        }
+        else
+        {
+            dim = npparm->siz_base[1];
+        }
+
+        npdata->xy_size[0] = 2.5f * dim;
+        npdata->xy_size[1] = dim;
+
+        if (g_isSpecialDay)
+        {
+            NPAR_TubeSpiralMagic(&npdata->color, g_isSpecialDay, rat_rev);
+            npdata->color.alpha = rat * npparm->colr_base.alpha;
+        }
+        else
+        {
+            npdata->color.alpha = rat * npparm->colr_base.alpha;
+        }
+
+        if (npdata->tmr_remain < 0.0f)
+        {
+            mgmt->PromoteTail(i);
+            i--;
+        }
+        else
+        {
+            if (!(globals.player.DamageTimer > 0.0f) && globals.player.Health &&
+                rat_rev > seg_allowCollide[0] && rat_rev < seg_allowCollide[1] &&
+                npdata->color.alpha > 0x20)
+            {
+                F32 ds2_plyr = NPCC_DstSq(&npdata->pos, &pos_plyr, NULL);
+                if (ds2_plyr < 0.5f)
+                {
+                    zEntPlayer_DamageNPCKnockBack(NULL, 1, &npdata->pos);
+                }
+
+                static S32 howfreq = 0;
+            }
+
+            if (g_doNPARCull)
+            {
+                RwSphere testSphere;
+                testSphere.center = *(RwV3d*)&npdata->pos;
+                testSphere.radius = npdata->xy_size[0];
+
+                if (!RwCameraFrustumTestSphere(globals.camera.lo_cam, &testSphere))
+                {
+                    continue;
+                }
+            }
+
+            pool.next();
+
+            if (pool.valid())
+            {
+                NPAR_CopyNPARToPTPool(npdata, &pool);
+            }
+        }
+    }
+
+    pool.flush();
+}
+
+// The colour statics are declared in the order retail laid them out in .sdata2;
+// the anonymous-counter gaps in the target ($1467, $1471-3, $1482, $1484) are
+// statics that no longer survive, and only the layout order is reproducible.
+static void NPAR_TubeSpiralMagic(RwRGBA* color, int unused, F32 pam)
+{
+    static const RwRGBA colr_julyred = { 0xdd, 0x00, 0x00, 0xff };
+    static const RwRGBA colr_julywhite = { 0xcc, 0xcc, 0xcc, 0xff };
+    static const RwRGBA colr_julyblue = { 0x00, 0x00, 0xdd, 0xff };
+    static const RwRGBA colr_red = { 0xff, 0x00, 0x00, 0xff };
+    static const RwRGBA colr_orange = { 0xff, 0xa5, 0x00, 0xff };
+    static const RwRGBA colr_yellow = { 0xff, 0xff, 0x00, 0xff };
+    static const RwRGBA colr_green = { 0x00, 0xff, 0x00, 0xff };
+    static const RwRGBA colr_blue = { 0x00, 0x00, 0xff, 0xff };
+    static const RwRGBA colr_indigo = { 0x19, 0x19, 0x70, 0xff };
+    static const RwRGBA colr_lavender = { 0xc6, 0x09, 0xe9, 0xff };
+    static const RwRGBA colr_kellygreen = { 0x0a, 0x7f, 0x03, 0xff };
+    static const RwRGBA colr_pinkRyanz = { 0xcc, 0x60, 0xcc, 0xff };
+    static const RwRGBA colr_fuschia = { 0xbc, 0x40, 0x99, 0xff };
+    static const RwRGBA colr_neon_red = { 0xff, 0x20, 0x00, 0xff };
+    static const RwRGBA colr_neon_green = { 0x20, 0xff, 0x00, 0xff };
+    static const RwRGBA colr_neon_blue = { 0x20, 0x20, 0xff, 0xff };
+    static const RwRGBA colr_peach = { 0xf0, 0x80, 0x80, 0xff };
+    static const RwRGBA colr_maroon = { 0x80, 0x00, 0x00, 0xff };
+    static const RwRGBA colr_seagreen = { 0x80, 0xcc, 0x99, 0xff };
+    static const RwRGBA colr_khaki = { 0xf0, 0xe6, 0x8c, 0xff };
+    static const RwRGBA colr_cyan = { 0x00, 0xff, 0xff, 0xff };
+    static const RwRGBA colr_pimp_gold = { 0xd7, 0xdc, 0x13, 0xff };
+
+    static RwRGBA zanyArray[10] = { colr_neon_red, colr_yellow,   colr_neon_green, colr_neon_blue,
+                                    colr_fuschia,  colr_peach,    colr_maroon,     colr_seagreen,
+                                    colr_khaki,    colr_cyan };
 
     // Lots of different dates
     if (g_isSpecialDay & 0b100000001)
@@ -1419,6 +1504,796 @@ void NPARParmTubeConfetti::ConfigPar(NPARData* par, en_nparmode pmod, const xVec
     }
 
     par->nparmode = pmod;
+}
+
+void NPAR_Upd_TubeConfetti(NPARMgmt* mgmt, F32 dt)
+{
+    ptank_pool__pos_color_size_uv2 pool;
+
+    pool.rs.texture = mgmt->txtr;
+    pool.rs.src_blend = 5;
+    pool.rs.dst_blend = 6;
+    pool.rs.flags = 0;
+    pool.reset();
+
+    for (S32 i = 0; i < mgmt->cnt_active; i++)
+    {
+        NPARData* npdata = &mgmt->par_buf[i];
+
+        const NPARParmTubeConfetti* npparm = &g_parm_tubeconfetti[npdata->nparmode];
+
+        npdata->tmr_remain -= dt;
+
+        F32 rat = MAX(0.0f, npdata->tmr_remain) / npdata->tym_exist;
+        F32 rat_rev = 1.0f - rat;
+        F32 beans = dt * npdata->fac_abuse;
+        F32 fac_keep = MAX(0.0f, MIN(0.01f * npparm->pct_keep, 100.0f));
+
+        npdata->pos += npdata->vel * dt;
+        npdata->vel *= fac_keep;
+        npdata->vel += npparm->acc_base * beans;
+
+        if (npdata->nparmode == 0)
+        {
+            npdata->vel.x += beans * (6.0f * ((xrand() & 0x800000) ? 1.0f : -1.0f));
+            npdata->vel.z += beans * (6.0f * ((xrand() & 0x800000) ? 1.0f : -1.0f));
+        }
+
+        F32 arch = ARCH(rat_rev);
+        F32 dim = LERP(arch, npparm->siz_base[0], npparm->siz_base[1]);
+
+        npdata->xy_size[0] = dim;
+        npdata->xy_size[1] = dim;
+        npdata->color.alpha = rat * npparm->colr_base.alpha;
+
+        F32 uv_du = npparm->uv_scroll[0];
+        F32 uv_dv = npparm->uv_scroll[1];
+
+        S32 popts = npdata->flg_popts;
+
+        if (npdata->nparmode && !(popts & 2))
+        {
+            if (popts & 1)
+            {
+                S32 r = npparm->num_uvcell[0] * xurand();
+                S32 c = npparm->num_uvcell[1] * xurand();
+
+                npdata->uv_tl[0] = c * uv_du;
+                npdata->uv_tl[1] = (npparm->row_uvstart + r) * uv_dv;
+                npdata->uv_br[0] = npdata->uv_tl[0] + uv_du;
+                npdata->uv_br[1] = npdata->uv_tl[1] + uv_dv;
+            }
+            else
+            {
+                S32 num_cells = npparm->num_uvcell[0] * npparm->num_uvcell[1];
+                S32 cell = std::floorf(rat_rev * num_cells);
+                S32 col = cell % npparm->num_uvcell[0];
+                S32 row = (cell - col) / npparm->num_uvcell[0];
+
+                npdata->uv_tl[0] = col * uv_du;
+                npdata->uv_tl[1] = (npparm->row_uvstart + row) * uv_dv;
+                npdata->uv_br[0] = npdata->uv_tl[0] + uv_du;
+                npdata->uv_br[1] = npdata->uv_tl[1] + uv_dv;
+            }
+        }
+
+        if (npdata->tmr_remain < 0.0f)
+        {
+            mgmt->PromoteTail(i);
+            i--;
+        }
+        else
+        {
+            if (g_doNPARCull)
+            {
+                RwSphere testSphere;
+                testSphere.center = *(RwV3d*)&npdata->pos;
+                testSphere.radius = npdata->xy_size[0];
+
+                if (!RwCameraFrustumTestSphere(globals.camera.lo_cam, &testSphere))
+                {
+                    continue;
+                }
+            }
+
+            pool.next();
+
+            if (pool.valid())
+            {
+                NPAR_CopyNPARToPTPool(npdata, &pool);
+            }
+        }
+    }
+
+    pool.flush();
+}
+
+void NPAR_Upd_GloveDust(NPARMgmt* mgmt, F32 dt)
+{
+    const NPARParmGloveDust* npparm = &g_parm_glovedust[0];
+    ptank_pool__pos_color_size_uv2 pool;
+
+    pool.rs.texture = mgmt->txtr;
+    pool.rs.src_blend = 5;
+    pool.rs.dst_blend = 6;
+    pool.rs.flags = 0;
+    pool.reset();
+
+    for (S32 i = 0; i < mgmt->cnt_active; i++)
+    {
+        NPARData* npdata = &mgmt->par_buf[i];
+
+        npdata->tmr_remain -= dt;
+
+        F32 rat_rev = 1.0f - MAX(0.0f, npdata->tmr_remain) / npdata->tym_exist;
+
+        npdata->pos += npdata->vel * dt;
+
+        F32 arch = ARCH(rat_rev);
+
+        F32 dim;
+        if (rat_rev < 0.2f)
+        {
+            dim = SMOOTH(rat_rev / 0.2f, npparm->siz_base[0], npparm->siz_base[1]);
+        }
+        else
+        {
+            dim = npparm->siz_base[1];
+        }
+
+        npdata->xy_size[0] = 2.5f * dim;
+        npdata->xy_size[1] = dim;
+        npdata->color.alpha = (1.0f - rat_rev) * npparm->colr_base.alpha;
+
+        if (npdata->tmr_remain < 0.0f)
+        {
+            mgmt->PromoteTail(i);
+            i--;
+        }
+        else
+        {
+            if (g_doNPARCull)
+            {
+                RwSphere testSphere;
+                testSphere.center = *(RwV3d*)&npdata->pos;
+                testSphere.radius = npdata->xy_size[0];
+
+                if (!RwCameraFrustumTestSphere(globals.camera.lo_cam, &testSphere))
+                {
+                    continue;
+                }
+            }
+
+            pool.next();
+
+            if (pool.valid())
+            {
+                NPAR_CopyNPARToPTPool(npdata, &pool);
+            }
+        }
+    }
+
+    pool.flush();
+}
+
+void NPAR_Upd_MonsoonRain(NPARMgmt* mgmt, F32 dt)
+{
+    const NPARParmMonsoonRain* npparm = &g_parm_monsoonrain;
+    ptank_pool__pos_color_size_uv2 pool;
+
+    pool.rs.texture = mgmt->txtr;
+    pool.rs.src_blend = 5;
+    pool.rs.dst_blend = 6;
+    pool.rs.flags = 0;
+    pool.reset();
+
+    for (S32 i = 0; i < mgmt->cnt_active; i++)
+    {
+        NPARData* npdata = &mgmt->par_buf[i];
+
+        npdata->tmr_remain -= dt;
+
+        F32 rat_rev = 1.0f - MAX(0.0f, npdata->tmr_remain) / npdata->tym_exist;
+
+        npdata->pos += npdata->vel * dt;
+
+        F32 arch = ARCH(rat_rev);
+
+        F32 dim;
+        if (rat_rev < 0.2f)
+        {
+            dim = SMOOTH(rat_rev / 0.2f, npparm->siz_base[0], npparm->siz_base[1]);
+        }
+        else
+        {
+            dim = npparm->siz_base[1];
+        }
+
+        npdata->xy_size[0] = 2.5f * dim;
+        npdata->xy_size[1] = dim;
+        npdata->color.alpha = (1.0f - rat_rev) * npparm->colr_base.alpha;
+
+        if (npdata->tmr_remain < 0.0f)
+        {
+            mgmt->PromoteTail(i);
+            i--;
+        }
+        else
+        {
+            if (g_doNPARCull)
+            {
+                RwSphere testSphere;
+                testSphere.center = *(RwV3d*)&npdata->pos;
+                testSphere.radius = npdata->xy_size[0];
+
+                if (!RwCameraFrustumTestSphere(globals.camera.lo_cam, &testSphere))
+                {
+                    continue;
+                }
+            }
+
+            pool.next();
+
+            if (pool.valid())
+            {
+                NPAR_CopyNPARToPTPool(npdata, &pool);
+            }
+        }
+    }
+
+    pool.flush();
+}
+
+void NPAR_Upd_SleepyZeez(NPARMgmt* mgmt, F32 dt)
+{
+    ptank_pool__pos_color_size_uv2 pool;
+
+    pool.rs.texture = mgmt->txtr;
+    pool.rs.src_blend = 5;
+    pool.rs.dst_blend = 2;
+    pool.rs.flags = 0;
+    pool.reset();
+
+    for (S32 i = 0; i < mgmt->cnt_active; i++)
+    {
+        NPARData* npdata = &mgmt->par_buf[i];
+
+        const NPARParmSleepyZeez* npparm = &g_parm_sleepyzeez[npdata->nparmode];
+
+        npdata->tmr_remain -= dt;
+
+        F32 rat = MAX(0.0f, npdata->tmr_remain) / npdata->tym_exist;
+        F32 rat_rev = 1.0f - rat;
+        F32 beans = dt * npdata->fac_abuse;
+        F32 fac_keep = MAX(0.0f, MIN(0.01f * npparm->pct_keep, 100.0f));
+
+        npdata->pos += npdata->vel * dt;
+        npdata->vel *= fac_keep;
+        npdata->vel += npparm->acc_base * beans;
+
+        if (npdata->nparmode == 0)
+        {
+            npdata->vel.x += beans * (6.0f * ((xrand() & 0x800000) ? 1.0f : -1.0f));
+            npdata->vel.z += beans * (6.0f * ((xrand() & 0x800000) ? 1.0f : -1.0f));
+        }
+
+        F32 arch = ARCH(rat_rev);
+        F32 dim = LERP(arch, npparm->siz_base[0], npparm->siz_base[1]);
+
+        npdata->xy_size[0] = dim;
+        npdata->xy_size[1] = dim;
+        npdata->color.alpha = rat * npparm->colr_base.alpha;
+
+        F32 uv_du = npparm->uv_scroll[0];
+        F32 uv_dv = npparm->uv_scroll[1];
+
+        S32 popts = npdata->flg_popts;
+
+        if (npdata->nparmode && !(popts & 2))
+        {
+            if (popts & 1)
+            {
+                S32 r = npparm->num_uvcell[0] * xurand();
+                S32 c = npparm->num_uvcell[1] * xurand();
+
+                npdata->uv_tl[0] = c * uv_du;
+                npdata->uv_tl[1] = (npparm->row_uvstart + r) * uv_dv;
+                npdata->uv_br[0] = npdata->uv_tl[0] + uv_du;
+                npdata->uv_br[1] = npdata->uv_tl[1] + uv_dv;
+            }
+            else
+            {
+                S32 num_cells = npparm->num_uvcell[0] * npparm->num_uvcell[1];
+                S32 cell = std::floorf(rat_rev * num_cells);
+                S32 col = cell % npparm->num_uvcell[0];
+                S32 row = (cell - col) / npparm->num_uvcell[0];
+
+                npdata->uv_tl[0] = col * uv_du;
+                npdata->uv_tl[1] = (npparm->row_uvstart + row) * uv_dv;
+                npdata->uv_br[0] = npdata->uv_tl[0] + uv_du;
+                npdata->uv_br[1] = npdata->uv_tl[1] + uv_dv;
+            }
+        }
+
+        if (npdata->tmr_remain < 0.0f)
+        {
+            mgmt->PromoteTail(i);
+            i--;
+        }
+        else
+        {
+            if (g_doNPARCull)
+            {
+                RwSphere testSphere;
+                testSphere.center = *(RwV3d*)&npdata->pos;
+                testSphere.radius = npdata->xy_size[0];
+
+                if (!RwCameraFrustumTestSphere(globals.camera.lo_cam, &testSphere))
+                {
+                    continue;
+                }
+            }
+
+            pool.next();
+
+            if (pool.valid())
+            {
+                NPAR_CopyNPARToPTPool(npdata, &pool);
+            }
+        }
+    }
+
+    pool.flush();
+}
+
+void NPAR_Upd_ChuckSplash(NPARMgmt* mgmt, F32 dt)
+{
+    ptank_pool__pos_color_size_uv2 pool;
+
+    pool.rs.texture = mgmt->txtr;
+    pool.rs.src_blend = 5;
+    pool.rs.dst_blend = 2;
+    pool.rs.flags = 0;
+    pool.reset();
+
+    for (S32 i = 0; i < mgmt->cnt_active; i++)
+    {
+        NPARData* npdata = &mgmt->par_buf[i];
+
+        const NPARParmChuckSplash* npparm = &g_parm_chucksplash[npdata->nparmode];
+
+        npdata->tmr_remain -= dt;
+
+        F32 rat = MAX(0.0f, npdata->tmr_remain) / npdata->tym_exist;
+        F32 rat_rev = 1.0f - rat;
+        F32 beans = dt * npdata->fac_abuse;
+        F32 fac_keep = MAX(0.0f, MIN(0.01f * npparm->pct_keep, 100.0f));
+
+        npdata->pos += npdata->vel * dt;
+        npdata->vel *= fac_keep;
+        npdata->vel += npparm->acc_base * beans;
+
+        if (npdata->nparmode == 0)
+        {
+            npdata->vel.x += beans * (6.0f * ((xrand() & 0x800000) ? 1.0f : -1.0f));
+            npdata->vel.z += beans * (6.0f * ((xrand() & 0x800000) ? 1.0f : -1.0f));
+        }
+
+        if (npdata->nparmode == 3)
+        {
+            F32 dim = LERP(xurand(), npparm->siz_base[0], npparm->siz_base[1]);
+
+            npdata->xy_size[0] = dim;
+            npdata->xy_size[1] = dim;
+        }
+        else
+        {
+            F32 arch = ARCH(rat_rev);
+            F32 dim = LERP(arch, npparm->siz_base[0], npparm->siz_base[1]);
+
+            npdata->xy_size[0] = dim;
+            npdata->xy_size[1] = dim;
+        }
+
+        npdata->color.alpha = rat * npparm->colr_base.alpha;
+
+        if (npdata->tmr_remain < 0.0f)
+        {
+            mgmt->PromoteTail(i);
+            i--;
+        }
+        else
+        {
+            if (g_doNPARCull)
+            {
+                RwSphere testSphere;
+                testSphere.center = *(RwV3d*)&npdata->pos;
+                testSphere.radius = npdata->xy_size[0];
+
+                if (!RwCameraFrustumTestSphere(globals.camera.lo_cam, &testSphere))
+                {
+                    continue;
+                }
+            }
+
+            pool.next();
+
+            if (pool.valid())
+            {
+                NPAR_CopyNPARToPTPool(npdata, &pool);
+            }
+        }
+    }
+
+    pool.flush();
+}
+
+void NPAR_Upd_VisSplash(NPARMgmt* mgmt, F32 dt)
+{
+    ptank_pool__pos_color_size_uv2 pool;
+
+    pool.rs.texture = mgmt->txtr;
+    pool.rs.src_blend = 5;
+    pool.rs.dst_blend = 2;
+    pool.rs.flags = 0;
+    pool.reset();
+
+    for (S32 i = 0; i < mgmt->cnt_active; i++)
+    {
+        NPARData* npdata = &mgmt->par_buf[i];
+
+        const NPARParmVisSplash* npparm = &g_parm_vissplash[npdata->nparmode];
+
+        npdata->tmr_remain -= dt;
+
+        F32 rat = MAX(0.0f, npdata->tmr_remain) / npdata->tym_exist;
+        F32 rat_rev = 1.0f - rat;
+        F32 beans = dt * npdata->fac_abuse;
+        F32 fac_keep = MAX(0.0f, MIN(0.01f * npparm->pct_keep, 100.0f));
+
+        npdata->pos += npdata->vel * dt;
+        npdata->vel *= fac_keep;
+        npdata->vel += npparm->acc_base * beans;
+
+        if (npdata->nparmode == 0)
+        {
+            npdata->vel.x += beans * (6.0f * ((xrand() & 0x800000) ? 1.0f : -1.0f));
+            npdata->vel.z += beans * (6.0f * ((xrand() & 0x800000) ? 1.0f : -1.0f));
+        }
+
+        if (npdata->nparmode == 0)
+        {
+            F32 dim = LERP(xurand(), npparm->siz_base[0], npparm->siz_base[1]);
+
+            npdata->xy_size[0] = dim;
+            npdata->xy_size[1] = dim;
+        }
+        else
+        {
+            F32 arch = ARCH(rat_rev);
+            F32 dim = LERP(arch, npparm->siz_base[0], npparm->siz_base[1]);
+
+            npdata->xy_size[0] = dim;
+            npdata->xy_size[1] = dim;
+        }
+
+        npdata->color.alpha = rat * npparm->colr_base.alpha;
+
+        if (npdata->tmr_remain < 0.0f)
+        {
+            mgmt->PromoteTail(i);
+            i--;
+        }
+        else
+        {
+            if (g_doNPARCull)
+            {
+                RwSphere testSphere;
+                testSphere.center = *(RwV3d*)&npdata->pos;
+                testSphere.radius = npdata->xy_size[0];
+
+                if (!RwCameraFrustumTestSphere(globals.camera.lo_cam, &testSphere))
+                {
+                    continue;
+                }
+            }
+
+            pool.next();
+
+            if (pool.valid())
+            {
+                NPAR_CopyNPARToPTPool(npdata, &pool);
+            }
+        }
+    }
+
+    pool.flush();
+}
+
+void NPAR_Upd_TarTarGunk(NPARMgmt* mgmt, F32 dt)
+{
+    ptank_pool__pos_color_size_uv2 pool;
+
+    pool.rs.texture = mgmt->txtr;
+    pool.rs.src_blend = 5;
+    pool.rs.dst_blend = 6;
+    pool.rs.flags = 0;
+    pool.reset();
+
+    for (S32 i = 0; i < mgmt->cnt_active; i++)
+    {
+        NPARData* npdata = &mgmt->par_buf[i];
+
+        const NPARParmTarTarGunk* npparm = &g_parm_tartargunk[npdata->nparmode];
+
+        npdata->tmr_remain -= dt;
+
+        F32 rat = MAX(0.0f, npdata->tmr_remain) / npdata->tym_exist;
+        F32 rat_rev = 1.0f - rat;
+        F32 beans = dt * npdata->fac_abuse;
+        F32 fac_keep = MAX(0.0f, MIN(0.01f * npparm->pct_keep, 100.0f));
+
+        npdata->pos += npdata->vel * dt;
+        npdata->vel *= fac_keep;
+        npdata->vel += npparm->acc_base * beans;
+
+        if (npdata->nparmode == 0)
+        {
+            npdata->vel.x += beans * (6.0f * ((xrand() & 0x800000) ? 1.0f : -1.0f));
+            npdata->vel.z += beans * (6.0f * ((xrand() & 0x800000) ? 1.0f : -1.0f));
+        }
+
+        F32 arch = ARCH(rat_rev);
+        F32 dim = LERP(arch, npparm->siz_base[0], npparm->siz_base[1]);
+
+        npdata->xy_size[0] = dim;
+        npdata->xy_size[1] = dim;
+        npdata->color.alpha = rat * npparm->colr_base.alpha;
+
+        F32 uv_du = npparm->uv_scroll[0];
+        F32 uv_dv = npparm->uv_scroll[1];
+
+        S32 popts = npdata->flg_popts;
+
+        if (npdata->nparmode && !(popts & 2))
+        {
+            if (popts & 1)
+            {
+                S32 r = npparm->num_uvcell[0] * xurand();
+                S32 c = npparm->num_uvcell[1] * xurand();
+
+                npdata->uv_tl[0] = c * uv_du;
+                npdata->uv_tl[1] = (npparm->row_uvstart + r) * uv_dv;
+                npdata->uv_br[0] = npdata->uv_tl[0] + uv_du;
+                npdata->uv_br[1] = npdata->uv_tl[1] + uv_dv;
+            }
+            else
+            {
+                S32 num_cells = npparm->num_uvcell[0] * npparm->num_uvcell[1];
+                S32 cell = std::floorf(rat_rev * num_cells);
+                S32 col = cell % npparm->num_uvcell[0];
+                S32 row = (cell - col) / npparm->num_uvcell[0];
+
+                npdata->uv_tl[0] = col * uv_du;
+                npdata->uv_tl[1] = (npparm->row_uvstart + row) * uv_dv;
+                npdata->uv_br[0] = npdata->uv_tl[0] + uv_du;
+                npdata->uv_br[1] = npdata->uv_tl[1] + uv_dv;
+            }
+        }
+
+        if (npdata->tmr_remain < 0.0f)
+        {
+            mgmt->PromoteTail(i);
+            i--;
+        }
+        else
+        {
+            if (g_doNPARCull)
+            {
+                RwSphere testSphere;
+                testSphere.center = *(RwV3d*)&npdata->pos;
+                testSphere.radius = npdata->xy_size[0];
+
+                if (!RwCameraFrustumTestSphere(globals.camera.lo_cam, &testSphere))
+                {
+                    continue;
+                }
+            }
+
+            pool.next();
+
+            if (pool.valid())
+            {
+                NPAR_CopyNPARToPTPool(npdata, &pool);
+            }
+        }
+    }
+
+    pool.flush();
+}
+
+void NPAR_Upd_DogBreath(NPARMgmt* mgmt, F32 dt)
+{
+    static const F32 seg_allowCollide[2] = { 0.0f, 1.0f };
+
+    ptank_pool__pos_color_size_uv2 pool;
+
+    pool.rs.texture = mgmt->txtr;
+    pool.rs.src_blend = 5;
+    pool.rs.dst_blend = 6;
+    pool.rs.flags = 0;
+    pool.reset();
+
+    xVec3 pos_plyr = *xEntGetCenter(&globals.player.ent);
+
+    for (S32 i = 0; i < mgmt->cnt_active; i++)
+    {
+        NPARData* npdata = &mgmt->par_buf[i];
+
+        const NPARParmDogBreath* npparm = &g_parm_dogbreath[npdata->nparmode];
+
+        npdata->tmr_remain -= dt;
+
+        F32 rat = MAX(0.0f, npdata->tmr_remain) / npdata->tym_exist;
+        F32 rat_rev = 1.0f - rat;
+        F32 beans = dt * npdata->fac_abuse;
+        F32 fac_keep = MAX(0.0f, MIN(0.01f * npparm->pct_keep, 100.0f));
+
+        npdata->pos += npdata->vel * dt;
+        npdata->vel *= fac_keep;
+        npdata->vel += npparm->acc_base * beans;
+
+        F32 arch = ARCH(rat_rev);
+        F32 dim = LERP(arch, npparm->siz_base[0], npparm->siz_base[1]);
+
+        npdata->xy_size[0] = dim;
+        npdata->xy_size[1] = dim;
+        npdata->color.alpha = arch * npparm->colr_base.alpha;
+
+        if (npdata->tmr_remain < 0.0f)
+        {
+            mgmt->PromoteTail(i);
+            i--;
+        }
+        else
+        {
+            if (g_doNPARCull)
+            {
+                RwSphere testSphere;
+                testSphere.center = *(RwV3d*)&npdata->pos;
+                testSphere.radius = npdata->xy_size[0];
+
+                if (!RwCameraFrustumTestSphere(globals.camera.lo_cam, &testSphere))
+                {
+                    continue;
+                }
+            }
+
+            if (npdata->nparmode != 1 && !(globals.player.DamageTimer > 0.0f) &&
+                globals.player.Health && rat_rev > seg_allowCollide[0] &&
+                rat_rev < seg_allowCollide[1] && npdata->color.alpha > 0x20)
+            {
+                F32 ds2_plyr = NPCC_DstSq(&npdata->pos, &pos_plyr, NULL);
+                if (ds2_plyr < SQ(0.5f))
+                {
+                    zEntPlayer_DamageNPCKnockBack(NULL, 1, &npdata->pos);
+                }
+
+                static S32 howfreq = 0;
+            }
+
+            pool.next();
+
+            if (pool.valid())
+            {
+                NPAR_CopyNPARToPTPool(npdata, &pool);
+            }
+        }
+    }
+
+    pool.flush();
+}
+
+void NPAR_Upd_Fireworks(NPARMgmt* mgmt, F32 dt)
+{
+    ptank_pool__pos_color_size_uv2 pool;
+
+    pool.rs.texture = mgmt->txtr;
+    pool.rs.src_blend = 5;
+    pool.rs.dst_blend = 2;
+    pool.rs.flags = 0;
+    pool.reset();
+
+    for (S32 i = 0; i < mgmt->cnt_active; i++)
+    {
+        NPARData* npdata = &mgmt->par_buf[i];
+
+        const NPARParmFahrwerkz* npparm = &g_parm_fahrwerkz[npdata->nparmode];
+
+        npdata->tmr_remain -= dt;
+
+        F32 rat = MAX(0.0f, npdata->tmr_remain) / npdata->tym_exist;
+        F32 rat_rev = 1.0f - rat;
+        F32 beans = dt * npdata->fac_abuse;
+        F32 fac_keep = MAX(0.0f, MIN(0.01f * npparm->pct_keep, 100.0f));
+
+        npdata->pos += npdata->vel * dt;
+        npdata->vel *= fac_keep;
+        npdata->vel += npparm->acc_base * beans;
+
+        if (npdata->nparmode == 0)
+        {
+            npdata->vel.x += beans * (6.0f * ((xrand() & 0x800000) ? 1.0f : -1.0f));
+            npdata->vel.z += beans * (6.0f * ((xrand() & 0x800000) ? 1.0f : -1.0f));
+        }
+
+        F32 arch = ARCH(rat_rev);
+        F32 dim = LERP(arch, npparm->siz_base[0], npparm->siz_base[1]);
+
+        npdata->xy_size[0] = dim;
+        npdata->xy_size[1] = dim;
+        npdata->color.alpha = rat * npparm->colr_base.alpha;
+
+        F32 uv_du = npparm->uv_scroll[0];
+        F32 uv_dv = npparm->uv_scroll[1];
+
+        S32 popts = npdata->flg_popts;
+
+        if (npdata->nparmode && !(popts & 2))
+        {
+            if (popts & 1)
+            {
+                S32 r = npparm->num_uvcell[0] * xurand();
+                S32 c = npparm->num_uvcell[1] * xurand();
+
+                npdata->uv_tl[0] = c * uv_du;
+                npdata->uv_tl[1] = (npparm->row_uvstart + r) * uv_dv;
+                npdata->uv_br[0] = npdata->uv_tl[0] + uv_du;
+                npdata->uv_br[1] = npdata->uv_tl[1] + uv_dv;
+            }
+            else
+            {
+                S32 num_cells = npparm->num_uvcell[0] * npparm->num_uvcell[1];
+                S32 cell = std::floorf(rat_rev * num_cells);
+                S32 col = cell % npparm->num_uvcell[0];
+                S32 row = (cell - col) / npparm->num_uvcell[0];
+
+                npdata->uv_tl[0] = col * uv_du;
+                npdata->uv_tl[1] = (npparm->row_uvstart + row) * uv_dv;
+                npdata->uv_br[0] = npdata->uv_tl[0] + uv_du;
+                npdata->uv_br[1] = npdata->uv_tl[1] + uv_dv;
+            }
+        }
+
+        if (npdata->tmr_remain < 0.0f)
+        {
+            mgmt->PromoteTail(i);
+            i--;
+        }
+        else
+        {
+            if (g_doNPARCull)
+            {
+                RwSphere testSphere;
+                testSphere.center = *(RwV3d*)&npdata->pos;
+                testSphere.radius = npdata->xy_size[0];
+
+                if (!RwCameraFrustumTestSphere(globals.camera.lo_cam, &testSphere))
+                {
+                    continue;
+                }
+            }
+
+            pool.next();
+
+            if (pool.valid())
+            {
+                NPAR_CopyNPARToPTPool(npdata, &pool);
+            }
+        }
+    }
+
+    pool.flush();
 }
 
 // Equivalent: operands of single fmuls instruction swapped.
