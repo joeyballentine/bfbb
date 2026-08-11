@@ -883,12 +883,14 @@ static RpCollisionTriangle* nearestFloorCB(RpIntersection*, RpCollisionTriangle*
         return collTriangle;
     }
 
-    pdx[0] = nfpoly->center.x - xformVert[0].x;
-    pdx[1] = nfpoly->center.x - xformVert[1].x;
-    pdx[2] = nfpoly->center.x - xformVert[2].x;
-    pdz[0] = nfpoly->center.z - xformVert[0].z;
-    pdz[1] = nfpoly->center.z - xformVert[1].z;
-    pdz[2] = nfpoly->center.z - xformVert[2].z;
+    // Keep this as a loop. CW unrolls it into the target's straight line but
+    // still allocates pdx/pdz; writing the six fills out by hand lets it
+    // scalarise both arrays away, costing 0x10 of frame and the dead stores.
+    for (i = 0; i < 3; i++)
+    {
+        pdx[i] = nfpoly->center.x - xformVert[i].x;
+        pdz[i] = nfpoly->center.z - xformVert[i].z;
+    }
 
     F32 f3 = pdx[0] * pdz[1] - pdz[0] * pdx[1];
     F32 f2 = pdx[1] * pdz[2] - pdz[1] * pdx[2];
