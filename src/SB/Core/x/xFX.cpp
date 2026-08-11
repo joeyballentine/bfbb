@@ -586,6 +586,145 @@ static RpAtomic* AtomicSetShininess(RpAtomic* atomic, void* data)
     return atomic;
 }
 
+RpMaterial* MaterialSetEnvMap(RpMaterial* material, void* data)
+{
+    // Matching but with mr. instead of cmplwi
+    if (data == NULL)
+    {
+        return NULL;
+    }
+    if (material->texture)
+    {
+        RwTexture* texture = (RwTexture*)data;
+
+        if (texture)
+        {
+            RwFrame* frame = NULL;
+            if ((gFXSurfaceFlags & 0x10) != 0)
+            {
+                if (globals.camera.lo_cam)
+                {
+                    frame = (RwFrame*)globals.camera.lo_cam->object.object.parent;
+                }
+                else
+                {
+                    frame = (RwFrame*)MainLight->object.object.parent;
+                }
+            }
+            else
+            {
+                frame = (RwFrame*)MainLight->object.object.parent;
+            }
+            RpMatFXMaterialSetEffects(material, rpMATFXEFFECTENVMAP);
+            RpMatFXMaterialSetupEnvMap(material, texture, frame, FALSE, 1.0f);
+        }
+        else
+        {
+            RpMatFXMaterialSetEffects(material, rpMATFXEFFECTNULL);
+        }
+    }
+    return material;
+}
+
+RpMaterial* MaterialSetEnvMap2(RpMaterial* material, void* data)
+{
+    if (material->texture != NULL)
+    {
+        RwTexture* texture = (RwTexture*)data;
+        RwFrame* frame;
+        if (RwEngineInstance->stringFuncs.vecStrcmp(texture->name, "spec3") == 0)
+        {
+            frame = (RwFrame*)globals.camera.lo_cam->object.object.parent;
+        }
+        else
+        {
+            frame = (RwFrame*)MainLight->object.object.parent;
+        }
+        RpMatFXMaterialSetEffects(material, rpMATFXEFFECTENVMAP);
+        RpMatFXMaterialSetupEnvMap(material, texture, frame, FALSE, EnvMapShininess);
+    }
+    return material;
+}
+
+RpAtomic* xFXBubbleRender(RpAtomic* atomic)
+{
+    RwCullMode cmode;
+    xFXBubbleParams* bp;
+
+    bp = BFX + bfx_curr * 1; // Why multiply by 1? Probably needs rewritten differently
+
+    RwRenderStateGet(rwRENDERSTATECULLMODE, NULL);
+    RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLBACK);
+    iDrawSetFBMSK(bp->pass1_fbmsk);
+    iModelSetMaterialAlpha(atomic, bp->pass1_alpha);
+
+    if (((char)bp->pass1))
+    {
+        AtomicDisableMatFX(atomic);
+        (*gAtomicRenderCallBack)(atomic);
+    }
+
+    iDrawSetFBMSK(0);
+    iModelSetMaterialAlpha(atomic, bp->pass2_alpha);
+
+    if (((char)bp->pass2) != 0)
+    {
+        gFXSurfaceFlags = 0x10;
+        xFXAtomicEnvMapSetup(atomic, bp->fresnel_map, bp->fresnel_map_coeff);
+        gFXSurfaceFlags = 0;
+        (*gAtomicRenderCallBack)(atomic);
+    }
+
+    iModelSetMaterialAlpha(atomic, bp->pass3_alpha);
+
+    if (((char)bp->pass3) != 0)
+    {
+        AtomicDisableMatFX(atomic);
+        gFXSurfaceFlags = 0x10;
+        xFXAtomicEnvMapSetup(atomic, bp->env_map, bp->env_map_coeff);
+        gFXSurfaceFlags = 0;
+        (*gAtomicRenderCallBack)(atomic);
+    }
+
+    RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)0x8);
+
+    return atomic;
+}
+
+RpAtomic* xFXShinyRender(RpAtomic* atomic)
+{
+    RwCullMode cmode;
+
+    if (sTweaked == 0)
+    {
+        sEnvMap = xStrHash("default_env_map.RW3");
+        sFresnelMap = xStrHash("gloss_edge");
+        sTweaked = 1;
+    }
+
+    RwRenderStateGet(rwRENDERSTATECULLMODE, NULL);
+    RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLBACK);
+    iDrawSetFBMSK(-1);
+    iModelSetMaterialAlpha(atomic, rwCULLMODEFORCEENUMSIZEINT);
+    AtomicDisableMatFX(atomic);
+    (*gAtomicRenderCallBack)(atomic);
+    iDrawSetFBMSK(0);
+    iModelSetMaterialAlpha(atomic, 0);
+    gFXSurfaceFlags = 0x10;
+    xFXAtomicEnvMapSetup(atomic, sFresnelMap, 1.0f);
+    gFXSurfaceFlags = 0;
+    (*gAtomicRenderCallBack)(atomic);
+    iModelSetMaterialAlpha(atomic, 0xff);
+    AtomicDisableMatFX(atomic);
+    gFXSurfaceFlags = 0x10;
+    xFXAtomicEnvMapSetup(atomic, sEnvMap, 1.0f);
+    gFXSurfaceFlags = 0;
+    (*gAtomicRenderCallBack)(atomic);
+    RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)0x8); // TODO: Fix Magic Number
+
+    return atomic;
+}
+
 static RpAtomic* AtomicSetEnvMap(RpAtomic* atomic, void* data)
 {
     RpMatFXAtomicEnableEffects(atomic);
@@ -614,6 +753,119 @@ RpAtomic* xFXAtomicEnvMapSetup(RpAtomic* atomic, U32 envmapID, F32 shininess)
         return atomic;
     }
     return NULL;
+}
+
+RpMaterial* MaterialSetBumpMap(RpMaterial* material, void* data)
+{
+    if (data == NULL)
+    {
+        return NULL;
+    }
+    else if (material->texture)
+    {
+        RwTexture* texture = (RwTexture*)data;
+
+        if (texture)
+        {
+            RwFrame* frame = (RwFrame*)MainLight->object.object.parent;
+            RpMatFXMaterialSetEffects(material, rpMATFXEFFECTBUMPMAP);
+            RpMatFXMaterialSetupBumpMap(material, texture, frame, 1.0f);
+        }
+        else
+        {
+            RpMatFXMaterialSetEffects(material, rpMATFXEFFECTNULL);
+        }
+    }
+    return material;
+}
+
+RpMaterial* MaterialSetBumpEnvMap(RpMaterial* material, RwTexture* envMap, F32 envCooef,
+                                  RwTexture* bumpMap, F32 bumpCooef)
+{
+    if (envMap == NULL || bumpMap == NULL)
+    {
+        return NULL;
+    }
+    else
+    {
+        RwFrame* frame;
+        RpMatFXMaterialSetEffects(material, rpMATFXEFFECTBUMPENVMAP);
+        if ((gFXSurfaceFlags & 0x10) != 0)
+        {
+            frame = (RwFrame*)globals.camera.lo_cam->object.object.parent;
+        }
+        else
+        {
+            frame = (RwFrame*)MainLight->object.object.parent;
+        }
+        RpMatFXMaterialSetupEnvMap(material, envMap, frame, TRUE, envCooef);
+        RpMatFXMaterialSetupBumpMap(material, bumpMap, (RwFrame*)MainLight->object.object.parent,
+                                    bumpCooef);
+    }
+    return material;
+}
+
+void xFXanimUVSetTranslation(const xVec3* trans)
+{
+    xFXanimUVTrans[0] = trans->x;
+    xFXanimUVTrans[1] = trans->y;
+}
+
+void xFXanimUVSetScale(const xVec3* scale)
+{
+    xFXanimUVScale[0] = scale->x;
+    xFXanimUVScale[1] = scale->y;
+}
+
+void xFXanimUVSetAngle(F32 angle)
+{
+    F32 sin = isin(angle);
+    F32 cos = icos(angle);
+    xFXanimUVRotMat0[0] = cos;
+    xFXanimUVRotMat0[1] = -sin;
+    xFXanimUVRotMat1[0] = sin;
+    xFXanimUVRotMat1[1] = cos;
+}
+
+void xFXanimUV2PSetTranslation(const xVec3* trans)
+{
+    xFXanimUV2PTrans[0] = trans->x;
+    xFXanimUV2PTrans[1] = trans->y;
+}
+
+void xFXanimUV2PSetScale(const xVec3* scale)
+{
+    xFXanimUV2PScale[0] = scale->x;
+    xFXanimUV2PScale[1] = scale->y;
+}
+
+void xFXanimUV2PSetAngle(F32 angle)
+{
+    F32 sin = isin(angle);
+    F32 cos = icos(angle);
+    xFXanimUV2PRotMat0[0] = cos;
+    xFXanimUV2PRotMat0[1] = -sin;
+    xFXanimUV2PRotMat1[0] = sin;
+    xFXanimUV2PRotMat1[1] = cos;
+}
+
+void xFXanimUV2PSetTexture(RwTexture* texture)
+{
+    xFXanimUV2PTexture = texture;
+}
+
+RpAtomic* xFXanimUVAtomicSetup(RpAtomic* atomic)
+{
+    if (atomic == 0)
+    {
+        return atomic;
+    }
+    if (xFXanimUVPipeline == 0)
+    {
+        return atomic;
+    }
+    atomic->pipeline = xFXanimUVPipeline;
+    return atomic;
 }
 
 U32 xFXanimUVCreate()
@@ -1257,203 +1509,302 @@ static _xFXAuraAngle sAuraAngle[2];
 static _xFXAura sAura[AURA_COUNT];
 static RwTexture* gAuraTex = NULL;
 
-void xFXAuraInit()
+void xFXFireworksInit(const char* fireworksTrailEmitter, const char* fireworksEmitter1,
+                      const char* fireworksEmitter2, const char* fireworksSound,
+                      const char* fireworksLaunchSound)
 {
-    if (gAuraTex == NULL)
+    sFireworkTrailEmit = zParEmitterFind(fireworksTrailEmitter);
+    sFirework1Emit = zParEmitterFind(fireworksEmitter1);
+    sFirework2Emit = zParEmitterFind(fireworksEmitter2);
+    sFireworkSoundID = xStrHash(fireworksSound);
+    sFireworkLaunchSoundID = xStrHash(fireworksLaunchSound);
+    memset(sFirework, 0, sizeof(sFirework));
+    for (U32 i = 0; i < FIREWORK_COUNT; ++i)
     {
-        gAuraTex = (RwTexture*)xSTFindAsset(0x8074A95F, NULL);
+        sFirework[i].state = 0;
     }
-
-    memset(sAura, 0, sizeof(sAura));
 }
 
-void xFXAuraSetup()
+void xFXFireworksLaunch(F32 countdownTime, const xVec3* pos, F32 fuelTime)
 {
-    gAuraTex = (RwTexture*)xSTFindAsset(0x8074A95F, NULL);
-}
-
-void xFXAuraAdd(void* parent, xVec3* pos, iColor_tag* color, F32 size)
-{
-    S32 i;
-    _xFXAura* ap;
-
-    ap = sAura;
-
-    for (i = 0; i < AURA_COUNT; i++)
+    U32 counter = FIREWORK_COUNT;
+    _tagFirework* candidate = sFirework;
+    while (counter)
     {
-        if (ap->parent == parent)
+        if (candidate->state == 0)
         {
-            ap->frame = gFrameCount;
-            ap->pos = *pos;
-            ap->color = *color;
-            ap->size = size;
+            candidate->state = 1;
+            candidate->timer = countdownTime;
+            candidate->pos = *pos;
+            candidate->fuel = fuelTime;
             return;
         }
-        ap++;
-    }
-
-    ap = sAura;
-
-    for (i = 0; i < AURA_COUNT; i++)
-    {
-        if (ap->parent == NULL)
-        {
-            ap->frame = gFrameCount;
-            ap->parent = parent;
-            ap->pos = *pos;
-            ap->color = *color;
-            ap->size = size;
-            ap->dangle[0] = 0.5f;
-            ap->dangle[1] = -0.5f;
-            return;
-        }
-        ap++;
+        --counter;
+        ++candidate;
     }
 }
 
-void xFXAuraUpdate(F32 dt)
+void xFXFireworksUpdate(F32 dt)
 {
-    _xFXAura* ap;
+    for (S32 i = 0; i < FIREWORK_COUNT; ++i)
+    {
+        if (sFirework[i].state == 0)
+        {
+            continue;
+        }
+        if (sFirework[i].state == 1)
+        {
+            sFirework[i].timer -= dt;
+            if (sFirework[i].timer <= 0.0f)
+            {
+                sFirework[i].vel.x = 13.0f * xurand() + 6.5f;
+                sFirework[i].vel.y = 0.0f;
+                sFirework[i].vel.z = 13.0f * xurand() + 6.5f;
+                sFirework[i].state = 2;
+
+                if (sFireworkLaunchSoundID != 0)
+                {
+                    xSndPlay3D(sFireworkLaunchSoundID,
+                               0.308f, // Volume
+                               0.0f, // Pitch
+                               0x80, // Priority
+                               0, // Flags
+                               &sFirework[i].pos,
+                               20.0f, // Radius
+                               5.0f, SND_CAT_GAME,
+                               0.0f); // Delay
+                }
+            }
+        }
+        else
+        {
+            sFirework[i].fuel -= dt;
+            if (sFirework[i].fuel > 0.0f)
+            {
+                sFirework[i].vel.y += 15.0f * dt;
+            }
+            xParEmitterCustomSettings trail_info;
+            trail_info.custom_flags = 0x100;
+            sFirework[i].pos.x += sFirework[i].vel.x * dt;
+            sFirework[i].pos.y += sFirework[i].vel.y * dt;
+            sFirework[i].pos.z += sFirework[i].vel.z * dt;
+            trail_info.pos = sFirework[i].pos;
+            xParEmitterEmitCustom(sFireworkTrailEmit, dt, &trail_info);
+
+            if (sFirework[i].fuel <= 0.0f)
+            {
+                sFirework[i].state = 0;
+                sFirework[i].timer = 0.0f;
+
+                zParEmitter* femit = sFirework1Emit;
+                if (xurand() < 0.75f)
+                {
+                    femit = sFirework2Emit;
+                }
+
+                xParEmitterCustomSettings xplo_info;
+                xplo_info.custom_flags = 0xD00;
+                xplo_info.pos = sFirework[i].pos;
+
+                if (femit != NULL)
+                {
+                    xplo_info.color_birth[0].set(127.0f * xurand() + 128.0f, 75.0f, 0.0f, 0);
+                    xplo_info.color_birth[1].set(127.0f * xurand() + 128.0f, 75.0f, 0.0f, 0);
+                    xplo_info.color_birth[2].set(127.0f * xurand() + 128.0f, 75.0f, 0.0f, 0);
+                    xplo_info.color_birth[3].set(255.0f, 0.0f, 1.0f, 0);
+                    memcpy(xplo_info.color_death, &xplo_info.color_birth,
+                           sizeof(xplo_info.color_birth));
+                    xplo_info.color_death[3].set(0.0f, 0.0f, 1.0f, 0);
+                    xParEmitterEmitCustom(femit, dt, &xplo_info);
+                }
+
+                F32 a = 0.4f * xurand() + 0.1f;
+                F32 b = 0.5f * xurand() + 0.5f;
+                F32 g = 0.5f * xurand() + 0.5f;
+                F32 r = 0.5f * xurand() + 0.5f;
+                F32 size = 5.0f * xurand() + 2.0f;
+                F32 intensity = 0.3f * xurand() + 0.1f;
+                F32 life = 0.5f * xurand() + 0.5f;
+                xScrFXGlareAdd(&sFirework[i].pos, life, intensity, size, r, g, b, a, NULL);
+
+                xVec3 diff;
+                xVec3Sub(&diff, xEntGetPos(&globals.player.ent), &sFirework[i].pos);
+                zRumbleStartDistance(globals.currentActivePad, diff.x * diff.x + diff.z * diff.z,
+                                     48.0f, eRumble_Medium, 0.35f);
+                sFirework[i].pos.y = xEntGetPos(&globals.player.ent)->y;
+                if (sFireworkSoundID != 0)
+                {
+                    xSndPlay3D(sFireworkSoundID,
+                               0.77f, // Volume
+                               0.0f, // Pitch
+                               0x80, // Priority
+                               0, // Flags
+                               &sFirework[i].pos,
+                               20.0f, // Radius
+                               5.0f, SND_CAT_GAME,
+                               0.0f); // Delay
+                }
+            }
+        }
+    }
+}
+
+void xFXStreakInit()
+{
+    xFXStreak* streak = sStreakList;
+
+    for (S32 i = 0; i < 10; i++)
+    {
+        memset(streak, 0, sizeof(xFXStreak));
+        streak->flags = 0;
+        streak->head = 0;
+        streak++;
+    }
+}
+
+void xFXStreakUpdate(F32 dt)
+{
+    xFXStreak* s = sStreakList;
     S32 i;
 
-    if (gAuraTex == NULL)
+    for (i = 0; i < 10; i++, s++)
     {
-        return;
-    }
-
-    sAuraPulseAng[0] += 2.0f * dt;
-    sAuraPulseAng[1] += 2.3f * dt;
-
-    if (sAuraPulseAng[0] > 6.2831855f)
-    {
-        sAuraPulseAng[0] -= 6.2831855f;
-    }
-
-    if (sAuraPulseAng[1] > 6.2831855f)
-    {
-        sAuraPulseAng[1] -= 6.2831855f;
-    }
-
-    sAuraPulse[0] = 0.1f * isin(sAuraPulseAng[0]);
-    sAuraPulse[1] = 0.1f * isin(sAuraPulseAng[1]);
-
-    sAuraAngle[0].angle += 0.5f * dt;
-
-    if (sAuraAngle[0].angle > 3.1415927f)
-    {
-        sAuraAngle[0].angle -= 6.2831855f;
-    }
-
-    sAuraAngle[0].cc = icos(sAuraAngle[0].angle);
-    sAuraAngle[0].ss = isin(sAuraAngle[0].angle);
-
-    sAuraAngle[1].angle = -sAuraAngle[0].angle;
-    sAuraAngle[1].cc = sAuraAngle[0].cc;
-    sAuraAngle[1].ss = -sAuraAngle[0].ss;
-
-    ap = sAura;
-
-    for (i = 0; i < AURA_COUNT; i++)
-    {
-        if (ap->frame != gFrameCount)
+        if (s->flags == 0)
         {
-            ap->parent = NULL;
+            continue;
         }
-        ap++;
+
+        s->elapsed += dt;
+        s->lifetime += dt;
+
+        S32 j;
+        xFXStreakElem* e;
+
+        for (j = 0; j < 50; j++)
+        {
+            e = &s->elem[j];
+
+            if (s->flags & 0x4)
+            {
+                xVec3 diff = e->p[0] - e->p[1];
+
+                diff *= 0.5f * (s->alphaFadeRate * dt);
+
+                e->p[0] -= diff;
+                e->p[1] += diff;
+            }
+
+            e->a -= s->alphaFadeRate * dt;
+
+            if (e->a < 0.01f)
+            {
+                e->a = 0.0f;
+                e->flag = 0;
+            }
+        }
+
+        if (s->flags & 0x2)
+        {
+            S32 done = 1;
+            S32 k;
+
+            for (k = 0; k < 50; k++)
+            {
+                if (s->elem[k].flag == 1)
+                {
+                    done = 0;
+                    break;
+                }
+            }
+
+            if (done)
+            {
+                s->flags = 0;
+            }
+        }
     }
 }
 
-void xFXStartup()
+void xFXStreakRender()
 {
-}
-
-void xFXShutdown()
-{
-}
-
-void xFXSceneInit()
-{
-}
-
-void xFXSceneSetup()
-{
-    DrawRingSetup();
-    xFXAuraSetup();
-}
-
-void xFXSceneReset()
-{
-}
-
-void xFXScenePrepare()
-{
-}
-
-void xFXSceneFinish()
-{
-    DrawRingSceneExit();
-    gAuraTex = NULL;
-}
-
-void xFXanimUV2PSetTexture(RwTexture* texture)
-{
-    xFXanimUV2PTexture = texture;
-}
-
-void xFXanimUVSetAngle(F32 angle)
-{
-    F32 sin = isin(angle);
-    F32 cos = icos(angle);
-    xFXanimUVRotMat0[0] = cos;
-    xFXanimUVRotMat0[1] = -sin;
-    xFXanimUVRotMat1[0] = sin;
-    xFXanimUVRotMat1[1] = cos;
-}
-
-void xFXanimUV2PSetScale(const xVec3* scale)
-{
-    xFXanimUV2PScale[0] = scale->x;
-    xFXanimUV2PScale[1] = scale->y;
-}
-
-void xFXanimUVSetScale(const xVec3* scale)
-{
-    xFXanimUVScale[0] = scale->x;
-    xFXanimUVScale[1] = scale->y;
-}
-
-void xFXanimUVSetTranslation(const xVec3* trans)
-{
-    xFXanimUVTrans[0] = trans->x;
-    xFXanimUVTrans[1] = trans->y;
-}
-
-void xFXStreakUpdate(U32 id, const xVec3* a, const xVec3* b)
-{
+    xFXStreakElem* e1;
+    S32 streak;
     xFXStreak* s;
+    S32 count;
+    S32 j;
+    xFXStreakElem* e;
 
-    if (id == 10)
+    s = sStreakList;
+
+    for (streak = 0; streak < 10; streak++, s++)
     {
-        return;
-    }
-
-    s = &sStreakList[id];
-
-    if (s->elapsed > s->frequency)
-    {
-        s->elapsed -= s->frequency;
-        s->head = s->head + 1;
-
-        if (s->head >= 50)
+        if (s->flags == 0)
         {
-            s->head = 0;
+            continue;
+        }
+
+        count = s->head;
+
+        for (j = 49; j > 0; j--)
+        {
+            e = &s->elem[count];
+
+            if (count - 1 > 0)
+            {
+                e1 = &s->elem[count - 1];
+            }
+            else
+            {
+                e1 = &s->elem[49];
+            }
+
+            if (e->flag == 0)
+            {
+                break;
+            }
+
+            if (e1->flag == 0)
+            {
+                break;
+            }
+
+            RwIm3DVertexSetPos(&sStripVert_2188[0], e->p[0].x, e->p[0].y, e->p[0].z);
+            RwIm3DVertexSetUV(&sStripVert_2188[0], 0.0f, 0.0f);
+            RwIm3DVertexSetRGBA(&sStripVert_2188[0], s->color_a.r, s->color_a.g, s->color_a.b,
+                                (U8)(255.0f * e->a));
+
+            RwIm3DVertexSetPos(&sStripVert_2188[1], e->p[1].x, e->p[1].y, e->p[1].z);
+            RwIm3DVertexSetUV(&sStripVert_2188[1], 0.0f, 1.0f);
+            RwIm3DVertexSetRGBA(&sStripVert_2188[1], s->color_b.r, s->color_b.g, s->color_b.b,
+                                (U8)(255.0f * e->a));
+
+            RwIm3DVertexSetPos(&sStripVert_2188[2], e1->p[0].x, e1->p[0].y, e1->p[0].z);
+            RwIm3DVertexSetUV(&sStripVert_2188[2], 1.0f, 0.0f);
+            RwIm3DVertexSetRGBA(&sStripVert_2188[2], s->color_a.r, s->color_a.g, s->color_a.b,
+                                (U8)(255.0f * e1->a));
+
+            RwIm3DVertexSetPos(&sStripVert_2188[3], e1->p[1].x, e1->p[1].y, e1->p[1].z);
+            RwIm3DVertexSetUV(&sStripVert_2188[3], 1.0f, 1.0f);
+            RwIm3DVertexSetRGBA(&sStripVert_2188[3], s->color_b.r, s->color_b.g, s->color_b.b,
+                                (U8)(255.0f * e1->a));
+
+            RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)s->textureRasterPtr);
+
+            if (RwIm3DTransform(sStripVert_2188, 4, NULL,
+                                rwIM3D_VERTEXUV | rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA))
+            {
+                RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
+                RwIm3DEnd();
+            }
+
+            count--;
+
+            if (count < 0)
+            {
+                count = 49;
+            }
         }
     }
-
-    s->elem[s->head].p[0] = *a;
-    s->elem[s->head].p[1] = *b;
-    s->elem[s->head].flag = 1;
-    s->elem[s->head].a = s->alphaStart;
 }
 
 U32 xFXStreakStart(F32 frequency, F32 alphaFadeRate, F32 alphaStart, U32 textureID,
@@ -1551,83 +1902,32 @@ void xFXStreakStop(U32 id)
     sStreakList[id].flags |= 0x2;
 }
 
-void xFXStreakUpdate(F32 dt)
+void xFXStreakUpdate(U32 id, const xVec3* a, const xVec3* b)
 {
-    xFXStreak* s = sStreakList;
-    S32 i;
+    xFXStreak* s;
 
-    for (i = 0; i < 10; i++, s++)
+    if (id == 10)
     {
-        if (s->flags == 0)
+        return;
+    }
+
+    s = &sStreakList[id];
+
+    if (s->elapsed > s->frequency)
+    {
+        s->elapsed -= s->frequency;
+        s->head = s->head + 1;
+
+        if (s->head >= 50)
         {
-            continue;
-        }
-
-        s->elapsed += dt;
-        s->lifetime += dt;
-
-        S32 j;
-        xFXStreakElem* e;
-
-        for (j = 0; j < 50; j++)
-        {
-            e = &s->elem[j];
-
-            if (s->flags & 0x4)
-            {
-                xVec3 diff = e->p[0] - e->p[1];
-
-                diff *= 0.5f * (s->alphaFadeRate * dt);
-
-                e->p[0] -= diff;
-                e->p[1] += diff;
-            }
-
-            e->a -= s->alphaFadeRate * dt;
-
-            if (e->a < 0.01f)
-            {
-                e->a = 0.0f;
-                e->flag = 0;
-            }
-        }
-
-        if (s->flags & 0x2)
-        {
-            S32 done = 1;
-            S32 k;
-
-            for (k = 0; k < 50; k++)
-            {
-                if (s->elem[k].flag == 1)
-                {
-                    done = 0;
-                    break;
-                }
-            }
-
-            if (done)
-            {
-                s->flags = 0;
-            }
+            s->head = 0;
         }
     }
-}
 
-void xParInterp::set(F32 value1, F32 value2, F32 freq, U32 interp)
-{
-    this->val[0] = value1;
-    this->val[1] = value2;
-    this->freq = freq;
-    if (freq != 0.0f)
-    {
-        this->oofreq = 1.0f / freq;
-    }
-    else
-    {
-        this->oofreq = 0.0f;
-    }
-    this->interp = interp;
+    s->elem[s->head].p[0] = *a;
+    s->elem[s->head].p[1] = *b;
+    s->elem[s->head].flag = 1;
+    s->elem[s->head].a = s->alphaStart;
 }
 
 void xFXShineInit()
@@ -1641,77 +1941,6 @@ void xFXShineInit()
         shine++;
     }
 }
-
-U32 xFXShineStart(const xVec3*, F32, F32, F32, F32, U32, const iColor_tag*, const iColor_tag*, F32,
-                  S32)
-{
-    return 2;
-}
-
-namespace
-{
-    S32 compare_ribbons(const void* e1, const void* e2)
-    {
-        if (e1 == e2)
-        {
-            return 0;
-        }
-
-        if (e1 == NULL)
-        {
-            return 1;
-        }
-
-        if (e2 == NULL)
-        {
-            return -1;
-        }
-
-        return (*(const xFXRibbon* const*)e1)->render_compare(**(const xFXRibbon* const*)e2);
-    }
-
-    void sort_ribbons()
-    {
-        if (ribbons_dirty)
-        {
-            if (active_ribbons_size)
-            {
-                qsort(active_ribbons, active_ribbons_size, sizeof(xFXRibbon*), compare_ribbons);
-                ribbons_dirty = false;
-            }
-        }
-    }
-
-    void activate_ribbon(xFXRibbon* ribbon)
-    {
-        if (active_ribbons_size >= RIBBON_COUNT)
-        {
-            return;
-        }
-
-        active_ribbons[active_ribbons_size] = ribbon;
-        active_ribbons_size = active_ribbons_size + 1;
-        ribbons_dirty = true;
-    }
-
-    void deactivate_ribbon(xFXRibbon* ribbon)
-    {
-        xFXRibbon** it = active_ribbons;
-        xFXRibbon** end = active_ribbons + active_ribbons_size;
-
-        while (it != end)
-        {
-            if (*it == ribbon)
-            {
-                active_ribbons_size--;
-                memmove(it, it + 1, (end - it - 1) * sizeof(xFXRibbon*));
-                return;
-            }
-
-            it++;
-        }
-    }
-} // namespace
 
 void xFXShineUpdate(F32 dt)
 {
@@ -1917,6 +2146,616 @@ void xFXShineRender()
                 RwIm3DEnd();
             }
         }
+    }
+}
+
+U32 xFXShineStart(const xVec3*, F32, F32, F32, F32, U32, const iColor_tag*, const iColor_tag*, F32,
+                  S32)
+{
+    return 2;
+}
+
+namespace
+{
+    S32 compare_ribbons(const void* e1, const void* e2)
+    {
+        if (e1 == e2)
+        {
+            return 0;
+        }
+
+        if (e1 == NULL)
+        {
+            return 1;
+        }
+
+        if (e2 == NULL)
+        {
+            return -1;
+        }
+
+        return (*(const xFXRibbon* const*)e1)->render_compare(**(const xFXRibbon* const*)e2);
+    }
+
+    void sort_ribbons()
+    {
+        if (ribbons_dirty)
+        {
+            if (active_ribbons_size)
+            {
+                qsort(active_ribbons, active_ribbons_size, sizeof(xFXRibbon*), compare_ribbons);
+                ribbons_dirty = false;
+            }
+        }
+    }
+
+    void activate_ribbon(xFXRibbon* ribbon)
+    {
+        if (active_ribbons_size >= RIBBON_COUNT)
+        {
+            return;
+        }
+
+        active_ribbons[active_ribbons_size] = ribbon;
+        active_ribbons_size = active_ribbons_size + 1;
+        ribbons_dirty = true;
+    }
+
+    void deactivate_ribbon(xFXRibbon* ribbon)
+    {
+        xFXRibbon** it = active_ribbons;
+        xFXRibbon** end = active_ribbons + active_ribbons_size;
+
+        while (it != end)
+        {
+            if (*it == ribbon)
+            {
+                active_ribbons_size--;
+                memmove(it, it + 1, (end - it - 1) * sizeof(xFXRibbon*));
+                return;
+            }
+
+            it++;
+        }
+    }
+} // namespace
+
+U8 tier_queue_allocator::alloc_block()
+{
+    U8 block = head;
+    block_data& data = blocks[block];
+
+    head = data.next;
+    blocks[data.prev].next = data.next;
+    blocks[data.next].prev = data.prev;
+
+    if (data.data == NULL)
+    {
+        data.data = alloc_block_data();
+    }
+
+    return block;
+}
+
+void tier_queue_allocator::free_block(U8 block)
+{
+    block_data& data = blocks[block];
+
+    data.next = head;
+    data.prev = blocks[head].prev;
+    blocks[data.prev].next = block;
+    blocks[data.next].prev = block;
+
+    head = block;
+}
+
+void xFXRibbon::init(const char* group, const char* name)
+{
+    activated = false;
+    mtime = 0;
+
+    joints.init(joint_alloc);
+
+    if (cfg.life_time <= 0.0f)
+    {
+        set_default_config();
+    }
+
+    debug_init(group, name);
+}
+
+void tier_queue<xFXRibbon::joint_data>::clear()
+{
+    u32 block = get_block(first);
+    u32 last = wrap_block(block + get_block(_size + alloc->block_size() - 1));
+
+    while (block != last)
+    {
+        alloc->free_block(blocks[block]);
+        block = wrap_block(block + 1);
+    }
+
+    _size = 0;
+    first = 0;
+}
+
+void xFXRibbon::set_default_config()
+{
+    cfg.life_time = 1.0f;
+    cfg.blend_src = 5;
+    cfg.blend_dst = 6;
+    cfg.pivot = 0.5f;
+    refresh_config();
+}
+
+void xFXRibbon::refresh_config()
+{
+    ilife = 1.0f / cfg.life_time;
+    mlife = 1000.0f * cfg.life_time;
+    if (activated)
+    {
+        ribbons_dirty = true;
+    }
+}
+
+void xFXRibbon::set_curve(const curve_node* curve, size_t size)
+{
+    curve_size = size;
+    (this->curve) = ((curve_node*)curve);
+    xFXRibbon::debug_update_curve();
+    xFXRibbon::update_curve_tweaks();
+}
+
+void xFXRibbon::insert(const xVec3& loc, const xVec3& norm, F32 scale, F32 alpha, U32 flags)
+{
+    while (joints.front_full() && !joints.empty())
+    {
+        joints.pop_back();
+    }
+
+    if (!joints.front_full())
+    {
+        joints.push_front();
+
+        joint_data& joint = joints.front();
+
+        joint.flags = flags & 1;
+        joint.loc = loc;
+        joint.norm = norm;
+        joint.born = mtime;
+        joint.scale = scale;
+        joint.alpha = alpha;
+
+        activate();
+    }
+}
+
+void xFXRibbon::insert(const xVec3& loc, F32 orient, F32 scale, F32 alpha, U32 flags)
+{
+    while (joints.front_full() && !joints.empty())
+    {
+        joints.pop_back();
+    }
+
+    if (!joints.front_full())
+    {
+        joints.push_front();
+
+        joint_data& joint = joints.front();
+
+        joint.flags = (flags & 1) | 0x30000;
+        joint.loc = loc;
+        joint.orient = orient;
+        joint.born = mtime;
+        joint.scale = scale;
+        joint.alpha = alpha;
+
+        activate();
+    }
+}
+
+void xFXRibbon::activate()
+{
+    if (activated == 0)
+    {
+        activate_ribbon(this);
+        activated = 1;
+    }
+}
+
+void xFXRibbon::deactivate()
+{
+    if (activated != 0)
+    {
+        deactivate_ribbon(this);
+        activated = 0;
+    }
+}
+
+void xFXRibbon::start_render()
+{
+    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)cfg.blend_src);
+    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)cfg.blend_dst);
+    RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)raster);
+}
+
+void xFXRibbon::render()
+{
+    RxObjSpace3DVertex* verts = gRenderBuffer.m_vertex;
+
+    curve_index = curve_size - 2;
+
+    S32 it = joints.size();
+
+    while (it > 1)
+    {
+        S32 subsize = (it > 240) ? 240 : it;
+        S32 next_it = it - subsize + 1;
+        S32 break_it = it - 1;
+
+        while (break_it >= next_it)
+        {
+            break_it--;
+
+            if (joints[break_it].flags & 1)
+            {
+                next_it = break_it + 1;
+                subsize = it - next_it;
+                break;
+            }
+        }
+
+        if (subsize > 1)
+        {
+            render_strip(verts, joints.begin() + it, subsize);
+        }
+
+        it = next_it;
+    }
+}
+
+void xFXRibbon::set_raster(RwRaster* rast)
+{
+    this->raster = rast;
+    if (activated <= 0)
+    {
+        return;
+    }
+    ribbons_dirty = true;
+}
+
+void xFXRibbon::set_texture(RwTexture* texture)
+{
+    set_raster((texture == NULL) ? NULL : texture->raster);
+}
+
+void xFXRibbon::set_texture(U32 id)
+{
+    set_texture((id == 0) ? NULL : (RwTexture*)xSTFindAsset(id, NULL));
+}
+
+void xFXRibbon::set_texture(const char* name)
+{
+    set_texture(xStrHash(name));
+}
+
+void xFXRibbon::get_normal(xVec3& norm, const xVec3& dir, F32 orient)
+{
+    F32 a = isin(orient);
+    F32 b = icos(orient);
+    F32 ax = xabs(dir.x);
+    F32 ay = xabs(dir.y);
+    F32 az = xabs(dir.z);
+
+    if (ax < ay && ax < az)
+    {
+        // Retail bug, reproduced: each arm builds cos * cross(dir, axis) +
+        // sin * cross(dir, cross(dir, axis)) for the axis dir is least aligned
+        // with, so norm.y here should be `dir.y * (a * dir.x)`. The x-axis arm
+        // repeats the z-axis arm's `dir.z * (a * dir.y)` instead, which is what
+        // the target object computes.
+        norm.x = -a * (dir.y * dir.y + dir.z * dir.z);
+        norm.y = dir.z * (a * dir.y) + b * dir.z;
+        norm.z = dir.z * (a * dir.x) - b * dir.y;
+        norm *= 1.0f / xsqrt(dir.y * dir.y + dir.z * dir.z);
+    }
+    else if (ay < az)
+    {
+        norm.x = dir.y * (a * dir.x) - b * dir.z;
+        norm.y = -a * (dir.x * dir.x + dir.z * dir.z);
+        norm.z = dir.z * (a * dir.y) + b * dir.x;
+        norm *= 1.0f / xsqrt(dir.x * dir.x + dir.z * dir.z);
+    }
+    else
+    {
+        norm.x = dir.z * (a * dir.x) + b * dir.y;
+        norm.y = dir.z * (a * dir.y) - b * dir.x;
+        norm.z = -a * (dir.x * dir.x + dir.y * dir.y);
+        norm *= 1.0f / xsqrt(dir.x * dir.x + dir.y * dir.y);
+    }
+}
+
+void xFXRibbon::refresh_joint(joint_data& joint, const tier_queue<joint_data>::iterator& it)
+{
+    if (joint.flags & 0x20000)
+    {
+        joint.flags &= ~0x20000;
+
+        const xVec3& prev = (it == joints.begin()) ? joint.loc : (it - 1)->loc;
+        const xVec3& next = (it + 1 == joints.end()) ? joint.loc : (it + 1)->loc;
+        xVec3 dir = prev - next;
+        F32 len2 = dir.length2();
+
+        if (xfeq0(len2))
+        {
+            joint.norm.x = icos(joint.orient);
+            joint.norm.y = isin(joint.orient);
+            joint.norm.z = 0.0f;
+        }
+        else
+        {
+            xVec3 offset = dir * (1.0f / xsqrt(len2));
+
+            get_normal(joint.norm, offset, joint.orient);
+        }
+    }
+}
+
+void xFXRibbon::eval_joint(const joint_data& joint, iColor_tag& color, F32& width)
+{
+    F32 frac = get_age(joint) * ilife;
+
+    if (frac > 1.0f)
+    {
+        frac = 1.0f;
+    }
+
+    while (curve_index != 0)
+    {
+        if (frac >= curve[curve_index].time && frac <= curve[curve_index + 1].time)
+        {
+            break;
+        }
+
+        curve_index--;
+    }
+
+    curve_node& node0 = curve[curve_index];
+    curve_node& node1 = curve[curve_index + 1];
+    F32 subfrac = (1.0f / (node1.time - node0.time)) * (frac - node0.time);
+
+    lerp(color.r, subfrac, node0.color.r, node1.color.r);
+    lerp(color.g, subfrac, node0.color.g, node1.color.g);
+    lerp(color.b, subfrac, node0.color.b, node1.color.b);
+
+    F32 alpha = 0.0f;
+
+    lerp(alpha, subfrac, node0.color.a, node1.color.a);
+
+    color.a = (U8)(alpha * joint.alpha + 0.5f);
+
+    lerp(width, subfrac, node0.scale, node1.scale);
+
+    width *= joint.scale;
+}
+
+namespace
+{
+    void set_vert(RxObjSpace3DVertex& vert, const xVec3& loc, F32 u, F32 v, iColor_tag color);
+}
+
+void xFXRibbon::render_strip(RxObjSpace3DVertex* verts, tier_queue<joint_data>::iterator first,
+                             u32 size)
+{
+    RxObjSpace3DVertex* v = verts;
+    S32 back = first.global_index() & 1;
+    F32 ulookup[2] = { 0.0f, 1.0f };
+    tier_queue<joint_data>::iterator last = first - size;
+
+    while (first != last)
+    {
+        --first;
+
+        joint_data& joint = *first;
+
+        refresh_joint(joint, first);
+
+        iColor_tag color;
+        F32 width;
+
+        color.r = 0;
+        color.g = 0;
+        color.b = 0;
+        color.a = 0;
+        width = 0.0f;
+
+        eval_joint(joint, color, width);
+
+        F32 offset1 = cfg.pivot * width;
+        F32 offset2 = (cfg.pivot - 1.0f) * width;
+        F32 u = ulookup[back];
+
+        xVec3 loc1 = joint.loc + joint.norm * offset1;
+
+        set_vert(*v, loc1, u, 0.0f, color);
+
+        xVec3 loc2 = joint.loc + joint.norm * offset2;
+
+        set_vert(v[1], loc2, u, 1.0f, color);
+
+        back ^= 1;
+        v += 2;
+    }
+
+    RwIm3DTransform(verts, v - verts, NULL,
+                    rwIM3D_VERTEXUV | rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA);
+    RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
+    RwIm3DEnd();
+}
+
+namespace
+{
+    void set_vert(RxObjSpace3DVertex& vert, const xVec3& loc, F32 u, F32 v, iColor_tag color)
+    {
+        RwIm3DVertexSetPos(&vert, loc.x, loc.y, loc.z);
+        RwIm3DVertexSetUV(&vert, u, v);
+        U8 r = color.r;
+        U8 g = color.g;
+        U8 b = color.b;
+        U8 a = color.a;
+
+        RwIm3DVertexSetRGBA(&vert, r, g, b, a);
+    }
+} // namespace
+
+void xFXRibbonSceneEnter()
+{
+    xDebugRemoveTweak("FX|Ribbon");
+
+    xFXRibbon::joint_alloc.init(sizeof(xFXRibbon::joint_data), 32, 128);
+
+    active_ribbons_size = 0;
+}
+
+void xFXRibbonUpdate(F32 dt)
+{
+    for (U32 i = 0; i < active_ribbons_size; i++)
+    {
+        active_ribbons[i]->update(dt);
+    }
+}
+
+void xFXRibbonRender()
+{
+    sort_ribbons();
+
+    RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)0x0);
+    RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)0x1);
+    RwRenderStateSet(rwRENDERSTATESHADEMODE, (void*)0x2);
+    RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)0x1);
+
+    xFXRibbon* prev = NULL;
+
+    for (U32 i = 0; i < active_ribbons_size; i++)
+    {
+        xFXRibbon* ribbon = active_ribbons[i];
+
+        if (ribbon->visible())
+        {
+            if (prev == NULL || ribbon->render_compare(*prev))
+            {
+                ribbon->start_render();
+                prev = ribbon;
+            }
+
+            ribbon->render();
+        }
+    }
+}
+
+void xFXAuraInit()
+{
+    if (gAuraTex == NULL)
+    {
+        gAuraTex = (RwTexture*)xSTFindAsset(0x8074A95F, NULL);
+    }
+
+    memset(sAura, 0, sizeof(sAura));
+}
+
+void xFXAuraSetup()
+{
+    gAuraTex = (RwTexture*)xSTFindAsset(0x8074A95F, NULL);
+}
+
+void xFXAuraAdd(void* parent, xVec3* pos, iColor_tag* color, F32 size)
+{
+    S32 i;
+    _xFXAura* ap;
+
+    ap = sAura;
+
+    for (i = 0; i < AURA_COUNT; i++)
+    {
+        if (ap->parent == parent)
+        {
+            ap->frame = gFrameCount;
+            ap->pos = *pos;
+            ap->color = *color;
+            ap->size = size;
+            return;
+        }
+        ap++;
+    }
+
+    ap = sAura;
+
+    for (i = 0; i < AURA_COUNT; i++)
+    {
+        if (ap->parent == NULL)
+        {
+            ap->frame = gFrameCount;
+            ap->parent = parent;
+            ap->pos = *pos;
+            ap->color = *color;
+            ap->size = size;
+            ap->dangle[0] = 0.5f;
+            ap->dangle[1] = -0.5f;
+            return;
+        }
+        ap++;
+    }
+}
+
+void xFXAuraUpdate(F32 dt)
+{
+    _xFXAura* ap;
+    S32 i;
+
+    if (gAuraTex == NULL)
+    {
+        return;
+    }
+
+    sAuraPulseAng[0] += 2.0f * dt;
+    sAuraPulseAng[1] += 2.3f * dt;
+
+    if (sAuraPulseAng[0] > 6.2831855f)
+    {
+        sAuraPulseAng[0] -= 6.2831855f;
+    }
+
+    if (sAuraPulseAng[1] > 6.2831855f)
+    {
+        sAuraPulseAng[1] -= 6.2831855f;
+    }
+
+    sAuraPulse[0] = 0.1f * isin(sAuraPulseAng[0]);
+    sAuraPulse[1] = 0.1f * isin(sAuraPulseAng[1]);
+
+    sAuraAngle[0].angle += 0.5f * dt;
+
+    if (sAuraAngle[0].angle > 3.1415927f)
+    {
+        sAuraAngle[0].angle -= 6.2831855f;
+    }
+
+    sAuraAngle[0].cc = icos(sAuraAngle[0].angle);
+    sAuraAngle[0].ss = isin(sAuraAngle[0].angle);
+
+    sAuraAngle[1].angle = -sAuraAngle[0].angle;
+    sAuraAngle[1].cc = sAuraAngle[0].cc;
+    sAuraAngle[1].ss = -sAuraAngle[0].ss;
+
+    ap = sAura;
+
+    for (i = 0; i < AURA_COUNT; i++)
+    {
+        if (ap->frame != gFrameCount)
+        {
+            ap->parent = NULL;
+        }
+        ap++;
     }
 }
 
@@ -2128,898 +2967,59 @@ void xFXAuraRender()
     }
 }
 
-void xFXFireworksInit(const char* fireworksTrailEmitter, const char* fireworksEmitter1,
-                      const char* fireworksEmitter2, const char* fireworksSound,
-                      const char* fireworksLaunchSound)
+void xFXStartup()
 {
-    sFireworkTrailEmit = zParEmitterFind(fireworksTrailEmitter);
-    sFirework1Emit = zParEmitterFind(fireworksEmitter1);
-    sFirework2Emit = zParEmitterFind(fireworksEmitter2);
-    sFireworkSoundID = xStrHash(fireworksSound);
-    sFireworkLaunchSoundID = xStrHash(fireworksLaunchSound);
-    memset(sFirework, 0, sizeof(sFirework));
-    for (U32 i = 0; i < FIREWORK_COUNT; ++i)
-    {
-        sFirework[i].state = 0;
-    }
 }
 
-void xFXFireworksLaunch(F32 countdownTime, const xVec3* pos, F32 fuelTime)
+void xFXShutdown()
 {
-    U32 counter = FIREWORK_COUNT;
-    _tagFirework* candidate = sFirework;
-    while (counter)
-    {
-        if (candidate->state == 0)
-        {
-            candidate->state = 1;
-            candidate->timer = countdownTime;
-            candidate->pos = *pos;
-            candidate->fuel = fuelTime;
-            return;
-        }
-        --counter;
-        ++candidate;
-    }
 }
 
-void xFXFireworksUpdate(F32 dt)
+void xFXSceneInit()
 {
-    for (S32 i = 0; i < FIREWORK_COUNT; ++i)
-    {
-        if (sFirework[i].state == 0)
-        {
-            continue;
-        }
-        if (sFirework[i].state == 1)
-        {
-            sFirework[i].timer -= dt;
-            if (sFirework[i].timer <= 0.0f)
-            {
-                sFirework[i].vel.x = 13.0f * xurand() + 6.5f;
-                sFirework[i].vel.y = 0.0f;
-                sFirework[i].vel.z = 13.0f * xurand() + 6.5f;
-                sFirework[i].state = 2;
-
-                if (sFireworkLaunchSoundID != 0)
-                {
-                    xSndPlay3D(sFireworkLaunchSoundID,
-                               0.308f, // Volume
-                               0.0f, // Pitch
-                               0x80, // Priority
-                               0, // Flags
-                               &sFirework[i].pos,
-                               20.0f, // Radius
-                               5.0f, SND_CAT_GAME,
-                               0.0f); // Delay
-                }
-            }
-        }
-        else
-        {
-            sFirework[i].fuel -= dt;
-            if (sFirework[i].fuel > 0.0f)
-            {
-                sFirework[i].vel.y += 15.0f * dt;
-            }
-            xParEmitterCustomSettings trail_info;
-            trail_info.custom_flags = 0x100;
-            sFirework[i].pos.x += sFirework[i].vel.x * dt;
-            sFirework[i].pos.y += sFirework[i].vel.y * dt;
-            sFirework[i].pos.z += sFirework[i].vel.z * dt;
-            trail_info.pos = sFirework[i].pos;
-            xParEmitterEmitCustom(sFireworkTrailEmit, dt, &trail_info);
-
-            if (sFirework[i].fuel <= 0.0f)
-            {
-                sFirework[i].state = 0;
-                sFirework[i].timer = 0.0f;
-
-                zParEmitter* femit = sFirework1Emit;
-                if (xurand() < 0.75f)
-                {
-                    femit = sFirework2Emit;
-                }
-
-                xParEmitterCustomSettings xplo_info;
-                xplo_info.custom_flags = 0xD00;
-                xplo_info.pos = sFirework[i].pos;
-
-                if (femit != NULL)
-                {
-                    xplo_info.color_birth[0].set(127.0f * xurand() + 128.0f, 75.0f, 0.0f, 0);
-                    xplo_info.color_birth[1].set(127.0f * xurand() + 128.0f, 75.0f, 0.0f, 0);
-                    xplo_info.color_birth[2].set(127.0f * xurand() + 128.0f, 75.0f, 0.0f, 0);
-                    xplo_info.color_birth[3].set(255.0f, 0.0f, 1.0f, 0);
-                    memcpy(xplo_info.color_death, &xplo_info.color_birth,
-                           sizeof(xplo_info.color_birth));
-                    xplo_info.color_death[3].set(0.0f, 0.0f, 1.0f, 0);
-                    xParEmitterEmitCustom(femit, dt, &xplo_info);
-                }
-
-                F32 a = 0.4f * xurand() + 0.1f;
-                F32 b = 0.5f * xurand() + 0.5f;
-                F32 g = 0.5f * xurand() + 0.5f;
-                F32 r = 0.5f * xurand() + 0.5f;
-                F32 size = 5.0f * xurand() + 2.0f;
-                F32 intensity = 0.3f * xurand() + 0.1f;
-                F32 life = 0.5f * xurand() + 0.5f;
-                xScrFXGlareAdd(&sFirework[i].pos, life, intensity, size, r, g, b, a, NULL);
-
-                xVec3 diff;
-                xVec3Sub(&diff, xEntGetPos(&globals.player.ent), &sFirework[i].pos);
-                zRumbleStartDistance(globals.currentActivePad, diff.x * diff.x + diff.z * diff.z,
-                                     48.0f, eRumble_Medium, 0.35f);
-                sFirework[i].pos.y = xEntGetPos(&globals.player.ent)->y;
-                if (sFireworkSoundID != 0)
-                {
-                    xSndPlay3D(sFireworkSoundID,
-                               0.77f, // Volume
-                               0.0f, // Pitch
-                               0x80, // Priority
-                               0, // Flags
-                               &sFirework[i].pos,
-                               20.0f, // Radius
-                               5.0f, SND_CAT_GAME,
-                               0.0f); // Delay
-                }
-            }
-        }
-    }
 }
 
-RpMaterial* MaterialSetBumpMap(RpMaterial* material, void* data)
+void xFXSceneSetup()
 {
-    if (data == NULL)
-    {
-        return NULL;
-    }
-    else if (material->texture)
-    {
-        RwTexture* texture = (RwTexture*)data;
-
-        if (texture)
-        {
-            RwFrame* frame = (RwFrame*)MainLight->object.object.parent;
-            RpMatFXMaterialSetEffects(material, rpMATFXEFFECTBUMPMAP);
-            RpMatFXMaterialSetupBumpMap(material, texture, frame, 1.0f);
-        }
-        else
-        {
-            RpMatFXMaterialSetEffects(material, rpMATFXEFFECTNULL);
-        }
-    }
-    return material;
+    DrawRingSetup();
+    xFXAuraSetup();
 }
 
-RpMaterial* MaterialSetEnvMap(RpMaterial* material, void* data)
+void xFXSceneReset()
 {
-    // Matching but with mr. instead of cmplwi
-    if (data == NULL)
-    {
-        return NULL;
-    }
-    if (material->texture)
-    {
-        RwTexture* texture = (RwTexture*)data;
-
-        if (texture)
-        {
-            RwFrame* frame = NULL;
-            if ((gFXSurfaceFlags & 0x10) != 0)
-            {
-                if (globals.camera.lo_cam)
-                {
-                    frame = (RwFrame*)globals.camera.lo_cam->object.object.parent;
-                }
-                else
-                {
-                    frame = (RwFrame*)MainLight->object.object.parent;
-                }
-            }
-            else
-            {
-                frame = (RwFrame*)MainLight->object.object.parent;
-            }
-            RpMatFXMaterialSetEffects(material, rpMATFXEFFECTENVMAP);
-            RpMatFXMaterialSetupEnvMap(material, texture, frame, FALSE, 1.0f);
-        }
-        else
-        {
-            RpMatFXMaterialSetEffects(material, rpMATFXEFFECTNULL);
-        }
-    }
-    return material;
 }
 
-RpMaterial* MaterialSetEnvMap2(RpMaterial* material, void* data)
+void xFXScenePrepare()
 {
-    if (material->texture != NULL)
-    {
-        RwTexture* texture = (RwTexture*)data;
-        RwFrame* frame;
-        if (RwEngineInstance->stringFuncs.vecStrcmp(texture->name, "spec3") == 0)
-        {
-            frame = (RwFrame*)globals.camera.lo_cam->object.object.parent;
-        }
-        else
-        {
-            frame = (RwFrame*)MainLight->object.object.parent;
-        }
-        RpMatFXMaterialSetEffects(material, rpMATFXEFFECTENVMAP);
-        RpMatFXMaterialSetupEnvMap(material, texture, frame, FALSE, EnvMapShininess);
-    }
-    return material;
 }
 
-RpMaterial* MaterialSetBumpEnvMap(RpMaterial* material, RwTexture* envMap, F32 envCooef,
-                                  RwTexture* bumpMap, F32 bumpCooef)
+void xFXSceneFinish()
 {
-    if (envMap == NULL || bumpMap == NULL)
+    DrawRingSceneExit();
+    gAuraTex = NULL;
+}
+
+void xParInterp::set(F32 value1, F32 value2, F32 freq, U32 interp)
+{
+    this->val[0] = value1;
+    this->val[1] = value2;
+    this->freq = freq;
+    if (freq != 0.0f)
     {
-        return NULL;
+        this->oofreq = 1.0f / freq;
     }
     else
     {
-        RwFrame* frame;
-        RpMatFXMaterialSetEffects(material, rpMATFXEFFECTBUMPENVMAP);
-        if ((gFXSurfaceFlags & 0x10) != 0)
-        {
-            frame = (RwFrame*)globals.camera.lo_cam->object.object.parent;
-        }
-        else
-        {
-            frame = (RwFrame*)MainLight->object.object.parent;
-        }
-        RpMatFXMaterialSetupEnvMap(material, envMap, frame, TRUE, envCooef);
-        RpMatFXMaterialSetupBumpMap(material, bumpMap, (RwFrame*)MainLight->object.object.parent,
-                                    bumpCooef);
+        this->oofreq = 0.0f;
     }
-    return material;
-}
-
-RpAtomic* xFXanimUVAtomicSetup(RpAtomic* atomic)
-{
-    if (atomic == 0)
-    {
-        return atomic;
-    }
-    if (xFXanimUVPipeline == 0)
-    {
-        return atomic;
-    }
-    atomic->pipeline = xFXanimUVPipeline;
-    return atomic;
-}
-
-void xFXanimUV2PSetAngle(F32 angle)
-{
-    F32 sin = isin(angle);
-    F32 cos = icos(angle);
-    xFXanimUV2PRotMat0[0] = cos;
-    xFXanimUV2PRotMat0[1] = -sin;
-    xFXanimUV2PRotMat1[0] = sin;
-    xFXanimUV2PRotMat1[1] = cos;
-}
-
-void xFXanimUV2PSetTranslation(const xVec3* trans)
-{
-    xFXanimUV2PTrans[0] = trans->x;
-    xFXanimUV2PTrans[1] = trans->y;
-}
-
-RpAtomic* xFXShinyRender(RpAtomic* atomic)
-{
-    RwCullMode cmode;
-
-    if (sTweaked == 0)
-    {
-        sEnvMap = xStrHash("default_env_map.RW3");
-        sFresnelMap = xStrHash("gloss_edge");
-        sTweaked = 1;
-    }
-
-    RwRenderStateGet(rwRENDERSTATECULLMODE, NULL);
-    RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLBACK);
-    iDrawSetFBMSK(-1);
-    iModelSetMaterialAlpha(atomic, rwCULLMODEFORCEENUMSIZEINT);
-    AtomicDisableMatFX(atomic);
-    (*gAtomicRenderCallBack)(atomic);
-    iDrawSetFBMSK(0);
-    iModelSetMaterialAlpha(atomic, 0);
-    gFXSurfaceFlags = 0x10;
-    xFXAtomicEnvMapSetup(atomic, sFresnelMap, 1.0f);
-    gFXSurfaceFlags = 0;
-    (*gAtomicRenderCallBack)(atomic);
-    iModelSetMaterialAlpha(atomic, 0xff);
-    AtomicDisableMatFX(atomic);
-    gFXSurfaceFlags = 0x10;
-    xFXAtomicEnvMapSetup(atomic, sEnvMap, 1.0f);
-    gFXSurfaceFlags = 0;
-    (*gAtomicRenderCallBack)(atomic);
-    RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)0x8); // TODO: Fix Magic Number
-
-    return atomic;
-}
-
-RpAtomic* xFXBubbleRender(RpAtomic* atomic)
-{
-    RwCullMode cmode;
-    xFXBubbleParams* bp;
-
-    bp = BFX + bfx_curr * 1; // Why multiply by 1? Probably needs rewritten differently
-
-    RwRenderStateGet(rwRENDERSTATECULLMODE, NULL);
-    RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLBACK);
-    iDrawSetFBMSK(bp->pass1_fbmsk);
-    iModelSetMaterialAlpha(atomic, bp->pass1_alpha);
-
-    if (((char)bp->pass1))
-    {
-        AtomicDisableMatFX(atomic);
-        (*gAtomicRenderCallBack)(atomic);
-    }
-
-    iDrawSetFBMSK(0);
-    iModelSetMaterialAlpha(atomic, bp->pass2_alpha);
-
-    if (((char)bp->pass2) != 0)
-    {
-        gFXSurfaceFlags = 0x10;
-        xFXAtomicEnvMapSetup(atomic, bp->fresnel_map, bp->fresnel_map_coeff);
-        gFXSurfaceFlags = 0;
-        (*gAtomicRenderCallBack)(atomic);
-    }
-
-    iModelSetMaterialAlpha(atomic, bp->pass3_alpha);
-
-    if (((char)bp->pass3) != 0)
-    {
-        AtomicDisableMatFX(atomic);
-        gFXSurfaceFlags = 0x10;
-        xFXAtomicEnvMapSetup(atomic, bp->env_map, bp->env_map_coeff);
-        gFXSurfaceFlags = 0;
-        (*gAtomicRenderCallBack)(atomic);
-    }
-
-    RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)0x8);
-
-    return atomic;
-}
-
-void xFXRibbonRender()
-{
-    sort_ribbons();
-
-    RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)0x0);
-    RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)0x1);
-    RwRenderStateSet(rwRENDERSTATESHADEMODE, (void*)0x2);
-    RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)0x1);
-
-    xFXRibbon* prev = NULL;
-
-    for (U32 i = 0; i < active_ribbons_size; i++)
-    {
-        xFXRibbon* ribbon = active_ribbons[i];
-
-        if (ribbon->visible())
-        {
-            if (prev == NULL || ribbon->render_compare(*prev))
-            {
-                ribbon->start_render();
-                prev = ribbon;
-            }
-
-            ribbon->render();
-        }
-    }
-}
-
-void xFXStreakInit()
-{
-    xFXStreak* streak = sStreakList;
-
-    for (S32 i = 0; i < 10; i++)
-    {
-        memset(streak, 0, sizeof(xFXStreak));
-        streak->flags = 0;
-        streak->head = 0;
-        streak++;
-    }
-}
-
-void xFXStreakRender()
-{
-    xFXStreakElem* e1;
-    S32 streak;
-    xFXStreak* s;
-    S32 count;
-    S32 j;
-    xFXStreakElem* e;
-
-    s = sStreakList;
-
-    for (streak = 0; streak < 10; streak++, s++)
-    {
-        if (s->flags == 0)
-        {
-            continue;
-        }
-
-        count = s->head;
-
-        for (j = 49; j > 0; j--)
-        {
-            e = &s->elem[count];
-
-            if (count - 1 > 0)
-            {
-                e1 = &s->elem[count - 1];
-            }
-            else
-            {
-                e1 = &s->elem[49];
-            }
-
-            if (e->flag == 0)
-            {
-                break;
-            }
-
-            if (e1->flag == 0)
-            {
-                break;
-            }
-
-            RwIm3DVertexSetPos(&sStripVert_2188[0], e->p[0].x, e->p[0].y, e->p[0].z);
-            RwIm3DVertexSetUV(&sStripVert_2188[0], 0.0f, 0.0f);
-            RwIm3DVertexSetRGBA(&sStripVert_2188[0], s->color_a.r, s->color_a.g, s->color_a.b,
-                                (U8)(255.0f * e->a));
-
-            RwIm3DVertexSetPos(&sStripVert_2188[1], e->p[1].x, e->p[1].y, e->p[1].z);
-            RwIm3DVertexSetUV(&sStripVert_2188[1], 0.0f, 1.0f);
-            RwIm3DVertexSetRGBA(&sStripVert_2188[1], s->color_b.r, s->color_b.g, s->color_b.b,
-                                (U8)(255.0f * e->a));
-
-            RwIm3DVertexSetPos(&sStripVert_2188[2], e1->p[0].x, e1->p[0].y, e1->p[0].z);
-            RwIm3DVertexSetUV(&sStripVert_2188[2], 1.0f, 0.0f);
-            RwIm3DVertexSetRGBA(&sStripVert_2188[2], s->color_a.r, s->color_a.g, s->color_a.b,
-                                (U8)(255.0f * e1->a));
-
-            RwIm3DVertexSetPos(&sStripVert_2188[3], e1->p[1].x, e1->p[1].y, e1->p[1].z);
-            RwIm3DVertexSetUV(&sStripVert_2188[3], 1.0f, 1.0f);
-            RwIm3DVertexSetRGBA(&sStripVert_2188[3], s->color_b.r, s->color_b.g, s->color_b.b,
-                                (U8)(255.0f * e1->a));
-
-            RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)s->textureRasterPtr);
-
-            if (RwIm3DTransform(sStripVert_2188, 4, NULL,
-                                rwIM3D_VERTEXUV | rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA))
-            {
-                RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
-                RwIm3DEnd();
-            }
-
-            count--;
-
-            if (count < 0)
-            {
-                count = 49;
-            }
-        }
-    }
-}
-
-U8 tier_queue_allocator::alloc_block()
-{
-    U8 block = head;
-    block_data& data = blocks[block];
-
-    head = data.next;
-    blocks[data.prev].next = data.next;
-    blocks[data.next].prev = data.prev;
-
-    if (data.data == NULL)
-    {
-        data.data = alloc_block_data();
-    }
-
-    return block;
-}
-
-void tier_queue_allocator::free_block(U8 block)
-{
-    block_data& data = blocks[block];
-
-    data.next = head;
-    data.prev = blocks[head].prev;
-    blocks[data.prev].next = block;
-    blocks[data.next].prev = block;
-
-    head = block;
-}
-
-void xFXRibbonSceneEnter()
-{
-    xDebugRemoveTweak("FX|Ribbon");
-
-    xFXRibbon::joint_alloc.init(sizeof(xFXRibbon::joint_data), 32, 128);
-
-    active_ribbons_size = 0;
-}
-
-void xFXRibbonUpdate(F32 dt)
-{
-    for (U32 i = 0; i < active_ribbons_size; i++)
-    {
-        active_ribbons[i]->update(dt);
-    }
-}
-
-void xFXRibbon::init(const char* group, const char* name)
-{
-    activated = false;
-    mtime = 0;
-
-    joints.init(joint_alloc);
-
-    if (cfg.life_time <= 0.0f)
-    {
-        set_default_config();
-    }
-
-    debug_init(group, name);
-}
-
-void tier_queue<xFXRibbon::joint_data>::clear()
-{
-    u32 block = get_block(first);
-    u32 last = wrap_block(block + get_block(_size + alloc->block_size() - 1));
-
-    while (block != last)
-    {
-        alloc->free_block(blocks[block]);
-        block = wrap_block(block + 1);
-    }
-
-    _size = 0;
-    first = 0;
-}
-
-void xFXRibbon::insert(const xVec3& loc, const xVec3& norm, F32 scale, F32 alpha, U32 flags)
-{
-    while (joints.front_full() && !joints.empty())
-    {
-        joints.pop_back();
-    }
-
-    if (!joints.front_full())
-    {
-        joints.push_front();
-
-        joint_data& joint = joints.front();
-
-        joint.flags = flags & 1;
-        joint.loc = loc;
-        joint.norm = norm;
-        joint.born = mtime;
-        joint.scale = scale;
-        joint.alpha = alpha;
-
-        activate();
-    }
-}
-
-void xFXRibbon::insert(const xVec3& loc, F32 orient, F32 scale, F32 alpha, U32 flags)
-{
-    while (joints.front_full() && !joints.empty())
-    {
-        joints.pop_back();
-    }
-
-    if (!joints.front_full())
-    {
-        joints.push_front();
-
-        joint_data& joint = joints.front();
-
-        joint.flags = (flags & 1) | 0x30000;
-        joint.loc = loc;
-        joint.orient = orient;
-        joint.born = mtime;
-        joint.scale = scale;
-        joint.alpha = alpha;
-
-        activate();
-    }
-}
-
-void xFXRibbon::set_default_config()
-{
-    cfg.life_time = 1.0f;
-    cfg.blend_src = 5;
-    cfg.blend_dst = 6;
-    cfg.pivot = 0.5f;
-    refresh_config();
-}
-
-void xFXRibbon::refresh_config()
-{
-    ilife = 1.0f / cfg.life_time;
-    mlife = 1000.0f * cfg.life_time;
-    if (activated)
-    {
-        ribbons_dirty = true;
-    }
-}
-
-void xFXRibbon::set_raster(RwRaster* rast)
-{
-    this->raster = rast;
-    if (activated <= 0)
-    {
-        return;
-    }
-    ribbons_dirty = true;
-}
-
-void xFXRibbon::set_texture(RwTexture* texture)
-{
-    set_raster((texture == NULL) ? NULL : texture->raster);
-}
-
-void xFXRibbon::set_texture(U32 id)
-{
-    set_texture((id == 0) ? NULL : (RwTexture*)xSTFindAsset(id, NULL));
-}
-
-void xFXRibbon::set_texture(const char* name)
-{
-    set_texture(xStrHash(name));
-}
-
-void xFXRibbon::set_curve(const curve_node* curve, size_t size)
-{
-    curve_size = size;
-    (this->curve) = ((curve_node*)curve);
-    xFXRibbon::debug_update_curve();
-    xFXRibbon::update_curve_tweaks();
-}
-
-void xFXRibbon::activate()
-{
-    if (activated == 0)
-    {
-        activate_ribbon(this);
-        activated = 1;
-    }
-}
-
-void xFXRibbon::deactivate()
-{
-    if (activated != 0)
-    {
-        deactivate_ribbon(this);
-        activated = 0;
-    }
-}
-
-void xFXRibbon::start_render()
-{
-    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)cfg.blend_src);
-    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)cfg.blend_dst);
-    RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)raster);
-}
-
-void xFXRibbon::render()
-{
-    RxObjSpace3DVertex* verts = gRenderBuffer.m_vertex;
-
-    curve_index = curve_size - 2;
-
-    S32 it = joints.size();
-
-    while (it > 1)
-    {
-        S32 subsize = (it > 240) ? 240 : it;
-        S32 next_it = it - subsize + 1;
-        S32 break_it = it - 1;
-
-        while (break_it >= next_it)
-        {
-            break_it--;
-
-            if (joints[break_it].flags & 1)
-            {
-                next_it = break_it + 1;
-                subsize = it - next_it;
-                break;
-            }
-        }
-
-        if (subsize > 1)
-        {
-            render_strip(verts, joints.begin() + it, subsize);
-        }
-
-        it = next_it;
-    }
-}
-
-void xFXRibbon::get_normal(xVec3& norm, const xVec3& dir, F32 orient)
-{
-    F32 a = isin(orient);
-    F32 b = icos(orient);
-    F32 ax = xabs(dir.x);
-    F32 ay = xabs(dir.y);
-    F32 az = xabs(dir.z);
-
-    if (ax < ay && ax < az)
-    {
-        // Retail bug, reproduced: each arm builds cos * cross(dir, axis) +
-        // sin * cross(dir, cross(dir, axis)) for the axis dir is least aligned
-        // with, so norm.y here should be `dir.y * (a * dir.x)`. The x-axis arm
-        // repeats the z-axis arm's `dir.z * (a * dir.y)` instead, which is what
-        // the target object computes.
-        norm.x = -a * (dir.y * dir.y + dir.z * dir.z);
-        norm.y = dir.z * (a * dir.y) + b * dir.z;
-        norm.z = dir.z * (a * dir.x) - b * dir.y;
-        norm *= 1.0f / xsqrt(dir.y * dir.y + dir.z * dir.z);
-    }
-    else if (ay < az)
-    {
-        norm.x = dir.y * (a * dir.x) - b * dir.z;
-        norm.y = -a * (dir.x * dir.x + dir.z * dir.z);
-        norm.z = dir.z * (a * dir.y) + b * dir.x;
-        norm *= 1.0f / xsqrt(dir.x * dir.x + dir.z * dir.z);
-    }
-    else
-    {
-        norm.x = dir.z * (a * dir.x) + b * dir.y;
-        norm.y = dir.z * (a * dir.y) - b * dir.x;
-        norm.z = -a * (dir.x * dir.x + dir.y * dir.y);
-        norm *= 1.0f / xsqrt(dir.x * dir.x + dir.y * dir.y);
-    }
-}
-
-void xFXRibbon::refresh_joint(joint_data& joint, const tier_queue<joint_data>::iterator& it)
-{
-    if (joint.flags & 0x20000)
-    {
-        joint.flags &= ~0x20000;
-
-        const xVec3& prev = (it == joints.begin()) ? joint.loc : (it - 1)->loc;
-        const xVec3& next = (it + 1 == joints.end()) ? joint.loc : (it + 1)->loc;
-        xVec3 dir = prev - next;
-        F32 len2 = dir.length2();
-
-        if (xfeq0(len2))
-        {
-            joint.norm.x = icos(joint.orient);
-            joint.norm.y = isin(joint.orient);
-            joint.norm.z = 0.0f;
-        }
-        else
-        {
-            xVec3 offset = dir * (1.0f / xsqrt(len2));
-
-            get_normal(joint.norm, offset, joint.orient);
-        }
-    }
-}
-
-void xFXRibbon::eval_joint(const joint_data& joint, iColor_tag& color, F32& width)
-{
-    F32 frac = get_age(joint) * ilife;
-
-    if (frac > 1.0f)
-    {
-        frac = 1.0f;
-    }
-
-    while (curve_index != 0)
-    {
-        if (frac >= curve[curve_index].time && frac <= curve[curve_index + 1].time)
-        {
-            break;
-        }
-
-        curve_index--;
-    }
-
-    curve_node& node0 = curve[curve_index];
-    curve_node& node1 = curve[curve_index + 1];
-    F32 subfrac = (1.0f / (node1.time - node0.time)) * (frac - node0.time);
-
-    lerp(color.r, subfrac, node0.color.r, node1.color.r);
-    lerp(color.g, subfrac, node0.color.g, node1.color.g);
-    lerp(color.b, subfrac, node0.color.b, node1.color.b);
-
-    F32 alpha = 0.0f;
-
-    lerp(alpha, subfrac, node0.color.a, node1.color.a);
-
-    color.a = (U8)(alpha * joint.alpha + 0.5f);
-
-    lerp(width, subfrac, node0.scale, node1.scale);
-
-    width *= joint.scale;
-}
-
-namespace
-{
-    void set_vert(RxObjSpace3DVertex& vert, const xVec3& loc, F32 u, F32 v, iColor_tag color);
-}
-
-void xFXRibbon::render_strip(RxObjSpace3DVertex* verts, tier_queue<joint_data>::iterator first,
-                             u32 size)
-{
-    RxObjSpace3DVertex* v = verts;
-    S32 back = first.global_index() & 1;
-    F32 ulookup[2] = { 0.0f, 1.0f };
-    tier_queue<joint_data>::iterator last = first - size;
-
-    while (first != last)
-    {
-        --first;
-
-        joint_data& joint = *first;
-
-        refresh_joint(joint, first);
-
-        iColor_tag color;
-        F32 width;
-
-        color.r = 0;
-        color.g = 0;
-        color.b = 0;
-        color.a = 0;
-        width = 0.0f;
-
-        eval_joint(joint, color, width);
-
-        F32 offset1 = cfg.pivot * width;
-        F32 offset2 = (cfg.pivot - 1.0f) * width;
-        F32 u = ulookup[back];
-
-        xVec3 loc1 = joint.loc + joint.norm * offset1;
-
-        set_vert(*v, loc1, u, 0.0f, color);
-
-        xVec3 loc2 = joint.loc + joint.norm * offset2;
-
-        set_vert(v[1], loc2, u, 1.0f, color);
-
-        back ^= 1;
-        v += 2;
-    }
-
-    RwIm3DTransform(verts, v - verts, NULL,
-                    rwIM3D_VERTEXUV | rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA);
-    RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
-    RwIm3DEnd();
-}
-
-namespace
-{
-    void set_vert(RxObjSpace3DVertex& vert, const xVec3& loc, F32 u, F32 v, iColor_tag color)
-    {
-        RwIm3DVertexSetPos(&vert, loc.x, loc.y, loc.z);
-        RwIm3DVertexSetUV(&vert, u, v);
-        U8 r = color.r;
-        U8 g = color.g;
-        U8 b = color.b;
-        U8 a = color.a;
-
-        RwIm3DVertexSetRGBA(&vert, r, g, b, a);
-    }
-} // namespace
-
-void xFXRibbon::update_curve_tweaks()
-{
+    this->interp = interp;
 }
 
 void xFXRibbon::debug_init(const char*, const char*)
+{
+}
+
+void xFXRibbon::update_curve_tweaks()
 {
 }
 
