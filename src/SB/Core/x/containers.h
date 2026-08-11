@@ -400,9 +400,12 @@ template <class T> struct static_queue
     {
         if (it._it == _first)
         {
-            U32 orig_size = _size;
+            // One temp, not two: the target keeps _first in the register the
+            // cmplw loaded it into and adds _size straight onto it. Caching
+            // _first and _size separately reads 98.103%.
+            U32 last = _first + _size;
             _first = other._it;
-            _size = mod_max_size((it._it + orig_size) - _first);
+            _size = mod_max_size(last - _first);
         }
         else
         {

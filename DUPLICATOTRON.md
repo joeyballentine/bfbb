@@ -962,19 +962,29 @@ Agents may not edit shared headers, so they report them instead. Outstanding:
   already uses. The header version is **unvalidated** — nobody has measured
   the collateral on everything that includes `xDebug.h`.
 
-- **`containers.h` — `static_queue<T>::iterator::operator-=` returns by value,
-  not by pointer.** Two agents asked for this independently with the same
-  evidence: the target's `__ami__` ends `bl operator+=; mr r4,r3;
-  lwz r3,0(r3); lwz r4,4(r4); blr`, dereferencing and returning the 8-byte
-  iterator in the r3/r4 pair. Ours returns the pointer and stops. Currently
-  75%.
-- **`containers.h` — `static_queue<T>::size()` is `(_last + (N + 1) - _first)
-  & N`,** not `_last - _first`. Target: `addi r0,_last,0x20; subf r0,_first,r0;
-  clrlwi r3,r0,27`. Currently 63.8%.
-- **`containers.h` — `erase` should reuse `it._it` rather than caching
-  `_first`.** REGS-class: identical instruction multiset, different registers,
-  because the target's `add r4, r6, r4` reuses the register already holding
-  `it._it` from the `cmplw`.
+- ~~**`containers.h` — three container fixes.**~~ **ALL DONE.** The first two
+  landed in `65afa1ba` on 2026-08-04 and sat in this queue for a week after
+  they had shipped; `operator-=` and the wrap-`size()` both measure 100% today.
+  Note the size() one was **`fixed_queue`, not `static_queue`** —
+  `static_queue::size()` is an 8-byte `lwz`/`blr` and was never the subject.
+
+  **The third was landed on a misreading, and the misreading is the lesson.**
+  The evidence recorded here said the target's `add r4, r6, r4` "reuses the
+  register already holding `it._it`". It does not: for
+  `erase(const iterator&, const iterator&)` the argument mapping is
+  `r3=this, r4=&it, r5=&other`, so `lwz r6, 0x0(r3)` loads `this->_first`
+  (offset 0), and the `add` sums **`_first`**, not `it._it`. `65afa1ba`
+  rewrote the source to `it._it` on that basis and recorded "no measured
+  gain" — the two spellings are value-equivalent inside the
+  `it._it == _first` branch, so nothing caught it. Corrected to `_first` and
+  written with **one** temp rather than two (the target keeps exactly one
+  value live across the `stw`), `erase` is now **100%** in all three
+  instantiations, 97.759% → 100%.
+
+  Two habits follow. **Re-verify a queued item against the tree before
+  working it** — half this queue had already shipped. And **"no measured
+  gain" on a change made for a stated reason means the reason is probably
+  wrong**, not that the change is free.
 - **`xSnd.h` — declare `xSndPlay3DFade`.** Two units declare it locally. The
   signature is forced by the mangled name
   `xSndPlay3DFade__FUiffUiUiPC5xVec3ff14sound_categoryff`, though the meaning
