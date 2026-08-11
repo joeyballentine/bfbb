@@ -64,6 +64,12 @@ bool xhud::font_meter_widget::is(U32 id) const
 void xhud::font_meter_widget::update(F32 dt)
 
 {
+    // Not right yet, and the last 16% of this function is here. Only [0] is
+    // ever written, yet sprintf indexes this with counter_mode (0..2), so the
+    // other two entries are read uninitialised -- retail must have had a real
+    // table of format strings. The target's frame is 0x10 larger than ours and
+    // it does not emit this store, so recovering the strings out of the target
+    // object's .data (as was done for zMain's g_xser_sizeinfo) should close it.
     char* format_text[3];
     format_text[0] = 0;
 
@@ -84,45 +90,37 @@ void xhud::font_meter_widget::update(F32 dt)
     this->font.h = a;
     this->xf.height = a;
 
-    a = this->rc.a * (F32)this->start_font.c.a + 0.5;
-    if (a <= 0.0)
+    a = this->rc.a * (F32)this->start_font.c.a + 0.5f;
+    if (a <= 0.0f)
     {
         flag_1 = 0;
     }
-    else if (a >= 255.0)
+    else if (a >= 255.0f)
     {
         flag_1 = 255;
     }
-    else if (a < 2.1474836e+09)
-    {
-        flag_1 = (U8)(S32)a;
-    }
     else
     {
-        flag_1 = (U8)(S32)(a - 2.1474836e+09);
+        flag_1 = (U8)(S32)a;
     }
     this->font.c.a = flag_1;
 
-    a = this->rc.a * (F32)this->start_font.drop_c.a + 0.5;
-    if (a <= 0.0)
+    a = this->rc.a * (F32)this->start_font.drop_c.a + 0.5f;
+    if (a <= 0.0f)
     {
         flag_1 = 0;
     }
-    else if (a >= 255.0)
+    else if (a >= 255.0f)
     {
         flag_1 = 255;
     }
-    else if (a < 2.1474836e+09)
+    else
     {
         flag_1 = (U8)(S32)a;
     }
-    else
-    {
-        flag_1 = (U8)(S32)(a - 2.1474836e+09);
-    }
     this->font.drop_c.a = flag_1;
 
-    new_value = (S32)(this->value + 0.5);
+    new_value = (S32)(this->value + 0.5f);
     if (this->last_value != new_value)
     {
         this->last_value = new_value;
@@ -135,7 +133,7 @@ void xhud::font_meter_widget::update(F32 dt)
         {
             flag_2 = ((font_meter_asset*)(this->a))->counter_mode;
         }
-        sprintf(this->buffer, format_text[flag_2], new_value, (S32)(a + 0.5));
+        sprintf(this->buffer, format_text[flag_2], new_value, (S32)(a + 0.5f));
         bounds = this->xf.bounds(this->buffer);
         this->offset.x = -bounds.x;
         this->offset.y = -bounds.y;
