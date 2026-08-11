@@ -5,6 +5,7 @@
 #include "iMath.h"
 
 #include "xDebug.h"
+#include "xMathInlines.h"
 #include "xstransvc.h"
 #include "xScrFx.h"
 
@@ -1732,7 +1733,7 @@ void xFXShineUpdate(F32 dt)
         s->lifetime += dt;
         s->rotateZ += s->rotateSpeed * dt;
 
-        if (s->lifetimeMax != 0.0f && !(s->flags & 0x2) && s->lifetime > s->lifetimeMax)
+        if (s->lifetimeMax && !(s->flags & 0x2) && s->lifetime > s->lifetimeMax)
         {
             s->flags |= 0x2;
         }
@@ -2642,6 +2643,8 @@ void xFXRibbonSceneEnter()
 {
     xDebugRemoveTweak("FX|Ribbon");
 
+    xFXRibbon::joint_alloc.init(sizeof(xFXRibbon::joint_data), 32, 128);
+
     active_ribbons_size = 0;
 }
 
@@ -2671,7 +2674,7 @@ void xFXRibbon::init(const char* group, const char* name)
 void tier_queue<xFXRibbon::joint_data>::clear()
 {
     u32 block = get_block(first);
-    U8 last = wrap_block(block + get_block(_size + alloc->block_size() - 1));
+    u32 last = wrap_block(block + get_block(_size + alloc->block_size() - 1));
 
     while (block != last)
     {
@@ -2808,6 +2811,210 @@ void xFXRibbon::start_render()
     RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)raster);
 }
 
+void xFXRibbon::render()
+{
+    RxObjSpace3DVertex* verts = gRenderBuffer.m_vertex;
+
+    curve_index = curve_size - 2;
+
+    S32 it = joints.size();
+
+    while (it > 1)
+    {
+        S32 subsize = (it > 240) ? 240 : it;
+        S32 next_it = it - subsize + 1;
+        S32 break_it = it - 1;
+
+        while (break_it >= next_it)
+        {
+            break_it--;
+
+            if (joints[break_it].flags & 1)
+            {
+                next_it = break_it + 1;
+                subsize = it - next_it;
+                break;
+            }
+        }
+
+        if (subsize > 1)
+        {
+            render_strip(verts, joints.begin() + it, subsize);
+        }
+
+        it = next_it;
+    }
+}
+
+void xFXRibbon::get_normal(xVec3& norm, const xVec3& dir, F32 orient)
+{
+    F32 a = isin(orient);
+    F32 b = icos(orient);
+    F32 ax = xabs(dir.x);
+    F32 ay = xabs(dir.y);
+    F32 az = xabs(dir.z);
+
+    if (ax < ay && ax < az)
+    {
+        // Retail bug, reproduced: each arm builds cos * cross(dir, axis) +
+        // sin * cross(dir, cross(dir, axis)) for the axis dir is least aligned
+        // with, so norm.y here should be `dir.y * (a * dir.x)`. The x-axis arm
+        // repeats the z-axis arm's `dir.z * (a * dir.y)` instead, which is what
+        // the target object computes.
+        norm.x = -a * (dir.y * dir.y + dir.z * dir.z);
+        norm.y = dir.z * (a * dir.y) + b * dir.z;
+        norm.z = dir.z * (a * dir.x) - b * dir.y;
+        norm *= 1.0f / xsqrt(dir.y * dir.y + dir.z * dir.z);
+    }
+    else if (ay < az)
+    {
+        norm.x = dir.y * (a * dir.x) - b * dir.z;
+        norm.y = -a * (dir.x * dir.x + dir.z * dir.z);
+        norm.z = dir.z * (a * dir.y) + b * dir.x;
+        norm *= 1.0f / xsqrt(dir.x * dir.x + dir.z * dir.z);
+    }
+    else
+    {
+        norm.x = dir.z * (a * dir.x) + b * dir.y;
+        norm.y = dir.z * (a * dir.y) - b * dir.x;
+        norm.z = -a * (dir.x * dir.x + dir.y * dir.y);
+        norm *= 1.0f / xsqrt(dir.x * dir.x + dir.y * dir.y);
+    }
+}
+
+void xFXRibbon::refresh_joint(joint_data& joint, const tier_queue<joint_data>::iterator& it)
+{
+    if (joint.flags & 0x20000)
+    {
+        joint.flags &= ~0x20000;
+
+        const xVec3& prev = (it == joints.begin()) ? joint.loc : (it - 1)->loc;
+        const xVec3& next = (it + 1 == joints.end()) ? joint.loc : (it + 1)->loc;
+        xVec3 dir = prev - next;
+        F32 len2 = dir.length2();
+
+        if (xfeq0(len2))
+        {
+            joint.norm.x = icos(joint.orient);
+            joint.norm.y = isin(joint.orient);
+            joint.norm.z = 0.0f;
+        }
+        else
+        {
+            xVec3 offset = dir * (1.0f / xsqrt(len2));
+
+            get_normal(joint.norm, offset, joint.orient);
+        }
+    }
+}
+
+void xFXRibbon::eval_joint(const joint_data& joint, iColor_tag& color, F32& width)
+{
+    F32 frac = get_age(joint) * ilife;
+
+    if (frac > 1.0f)
+    {
+        frac = 1.0f;
+    }
+
+    while (curve_index != 0)
+    {
+        if (frac >= curve[curve_index].time && frac <= curve[curve_index + 1].time)
+        {
+            break;
+        }
+
+        curve_index--;
+    }
+
+    curve_node& node0 = curve[curve_index];
+    curve_node& node1 = curve[curve_index + 1];
+    F32 subfrac = (1.0f / (node1.time - node0.time)) * (frac - node0.time);
+
+    lerp(color.r, subfrac, node0.color.r, node1.color.r);
+    lerp(color.g, subfrac, node0.color.g, node1.color.g);
+    lerp(color.b, subfrac, node0.color.b, node1.color.b);
+
+    F32 alpha = 0.0f;
+
+    lerp(alpha, subfrac, node0.color.a, node1.color.a);
+
+    color.a = (U8)(alpha * joint.alpha + 0.5f);
+
+    lerp(width, subfrac, node0.scale, node1.scale);
+
+    width *= joint.scale;
+}
+
+namespace
+{
+    void set_vert(RxObjSpace3DVertex& vert, const xVec3& loc, F32 u, F32 v, iColor_tag color);
+}
+
+void xFXRibbon::render_strip(RxObjSpace3DVertex* verts, tier_queue<joint_data>::iterator first,
+                             u32 size)
+{
+    RxObjSpace3DVertex* v = verts;
+    S32 back = first.global_index() & 1;
+    F32 ulookup[2] = { 0.0f, 1.0f };
+    tier_queue<joint_data>::iterator last = first - size;
+
+    while (first != last)
+    {
+        --first;
+
+        joint_data& joint = *first;
+
+        refresh_joint(joint, first);
+
+        iColor_tag color;
+        F32 width;
+
+        color.r = 0;
+        color.g = 0;
+        color.b = 0;
+        color.a = 0;
+        width = 0.0f;
+
+        eval_joint(joint, color, width);
+
+        F32 offset1 = cfg.pivot * width;
+        F32 offset2 = (cfg.pivot - 1.0f) * width;
+        F32 u = ulookup[back];
+
+        xVec3 loc1 = joint.loc + joint.norm * offset1;
+
+        set_vert(*v, loc1, u, 0.0f, color);
+
+        xVec3 loc2 = joint.loc + joint.norm * offset2;
+
+        set_vert(v[1], loc2, u, 1.0f, color);
+
+        back ^= 1;
+        v += 2;
+    }
+
+    RwIm3DTransform(verts, v - verts, NULL,
+                    rwIM3D_VERTEXUV | rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA);
+    RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
+    RwIm3DEnd();
+}
+
+namespace
+{
+    void set_vert(RxObjSpace3DVertex& vert, const xVec3& loc, F32 u, F32 v, iColor_tag color)
+    {
+        RwIm3DVertexSetPos(&vert, loc.x, loc.y, loc.z);
+        RwIm3DVertexSetUV(&vert, u, v);
+        U8 r = color.r;
+        U8 g = color.g;
+        U8 b = color.b;
+        U8 a = color.a;
+
+        RwIm3DVertexSetRGBA(&vert, r, g, b, a);
+    }
+} // namespace
+
 void xFXRibbon::update_curve_tweaks()
 {
 }
@@ -2822,4 +3029,54 @@ void xFXRibbon::debug_update_curve()
 
 void xFXRibbon::debug_update(F32)
 {
+}
+
+// These four are inline members of the containers in containers.h; they are
+// weak in the target object. containers.h is shared with 75 TUs, so the bodies
+// live here (marked inline, which reproduces the weak scope) rather than there.
+inline xFXRibbon::joint_data& tier_queue<xFXRibbon::joint_data>::operator[](S32 index)
+{
+    return get_at(wrap_index(first + index));
+}
+
+inline tier_queue<xFXRibbon::joint_data>::iterator*
+tier_queue<xFXRibbon::joint_data>::iterator::operator--()
+{
+    *this -= 1;
+    return this;
+}
+
+inline void tier_queue_allocator::init(u32 unit_size, u32 block_size, u32 max_blocks)
+{
+    _unit_size = (unit_size + 3) & ~3;
+    _block_size_shift = log2_ceil(block_size);
+    _block_size = 1 << _block_size_shift;
+    _max_blocks_shift = log2_ceil(max_blocks);
+    _max_blocks = 1 << _max_blocks_shift;
+    blocks = (block_data*)xMemAlloc(gActiveHeap, sizeof(block_data) * _max_blocks, 0);
+
+    u32 i;
+    u32 count = _max_blocks;
+
+    for (i = 0; i < count; i++)
+    {
+        blocks[i].data = NULL;
+    }
+
+    clear();
+}
+
+inline void tier_queue_allocator::clear()
+{
+    head = 0;
+
+    u32 mask = _max_blocks - 1;
+    u32 count = _max_blocks;
+    u32 i;
+
+    for (i = 0; i < count; i++)
+    {
+        blocks[i].prev = (i - 1) & mask;
+        blocks[i].next = (i + 1) & mask;
+    }
 }
