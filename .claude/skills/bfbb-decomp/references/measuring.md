@@ -73,6 +73,18 @@ Scratch tooling for this (paths vary by session, rebuild if absent):
 - `vs_head.py <unit-frag> <src-path> ...` — swaps in HEAD's version of a file, measures, swaps back, and reports which functions changed. The honest way to prove a change caused no collateral damage.
 - `snapshot.py <out.json> <src>...` then `snapshot.py --cmp <before> <after>` — same idea across many units, for evaluating a shared-header change.
 
+**A snapshot tool that cannot fail loudly is worse than no tool.** Three separate bugs in one session each produced a confident, wrong `CLEAN`:
+
+- `solo.py` reports `COMPILE FAILED` and ambiguous-unit errors through `SystemExit`, which prints to **stderr**. A tool reading only stdout turns every failed compile into an empty result, and an empty result compares clean against anything.
+- Unit lists written by Windows Python arrive with trailing `\r`. `find_unit` matches on a substring, so every lookup misses. In practice only the *last* line worked, because it alone had no `\r` — which looks like a mass compile failure rather than a quoting bug.
+- **Success is the presence of the summary header line, not the presence of rows.** A fully-matching unit legitimately prints zero rows. Treating "no rows" as failure silently drops exactly the units already at 100% — the ones a shared-header change is most likely to break.
+
+Assert the expected unit count and a non-trivial total row count, and exit non-zero when any unit fails to measure.
+
+**Two agents sharing a scratchpad will overwrite each other.** Fixed filenames like `baseline.txt` get clobbered mid-run, and the resulting comparison is nonsense in a way that looks like a real regression. Give every concurrent agent a unique filename prefix.
+
+**Do not swap a shared header underneath a running agent.** The measurement needs HEAD's header in the tree for one pass, and any agent compiling a TU that includes it during that window gets numbers that silently belong to the wrong tree. Either wait for the agent to finish, or have it compile against a shadow copy of the header directory (prepend `-i <shadow>` to the real cflags) so the real tree is never touched.
+
 ## Three ways this project has fooled itself
 
 **1. objdiff is blind to definition order.** It pairs symbols by name. Deleting a function from a `.cpp` and letting a header inline provide it relocated the symbol inside `zEnt.o`; objdiff still reported the unit at 38/38 while the object was no longer byte-identical, and the DOL sha1 failed. **A unit reading 100% in objdiff is not proof its object is byte-exact.**
