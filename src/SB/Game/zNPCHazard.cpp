@@ -255,7 +255,7 @@ void zNPCHazard_InitEffects()
 
     for (S32 i = 0; i < 30; i++)
     {
-        char* namez = g_strz_hazshad[i];
+        const char* namez = g_strz_hazshad[i];
 
         g_rast_hazshad[i] = NULL;
         if (namez != NULL && namez[0] != '\0')
@@ -1178,9 +1178,10 @@ void NPCHazard::Timestep(F32 dt)
 void NPCHazard::Render()
 {
     xMat4x3 mat;
+    en_npchaz typ = this->typ_hazard;
     xVec3 scale = { 1.0f, 1.0f, 1.0f };
 
-    switch (this->typ_hazard)
+    switch (typ)
     {
     case NPC_HAZ_EXPLODE:
     case NPC_HAZ_EXPLODE_INNER:
@@ -1242,10 +1243,11 @@ void NPCHazard::Render()
     case NPC_HAZ_DUPLOBOOM:
         if (this->mdl_hazard != NULL)
         {
-            xVec3 tallish = { 1.0f, 2.0f, 1.0f };
+            F32 alpha = 0.2f * (1.0f - this->pam_interp);
             F32 scaleit = 2.0f * this->custdata.typical.rad_cur;
+            xVec3 tallish = { 1.0f, 2.0f, 1.0f };
 
-            this->SetAlpha(0.2f * (1.0f - this->pam_interp));
+            this->SetAlpha(alpha);
             xVec3SMul(&this->mdl_hazard->Scale, &tallish, scaleit);
             xModelRender(this->mdl_hazard);
         }
@@ -1264,7 +1266,6 @@ void NPCHazard::Render()
     case NPC_HAZ_MONCLOUD:
         if (this->mdl_hazard != NULL)
         {
-            static S32 skipfill = 0;
             F32 alpha = 1.0f;
             F32 ds2 = NPCC_ds2_toCam(&this->pos_hazard, NULL);
             F32 pam;
@@ -1292,7 +1293,9 @@ void NPCHazard::Render()
             }
             else if (ds2 < SQ(6.0f))
             {
-                alpha = SMOOTH((ds2 - SQ(4.0f)) / (SQ(6.0f) - SQ(4.0f)), 0.7f, alpha);
+                F32 num = ds2 - SQ(4.0f);
+
+                alpha = SMOOTH(num / (SQ(6.0f) - SQ(4.0f)), 0.7f, alpha);
             }
 
             if (this->pam_interp < 0.15f)
@@ -1330,12 +1333,16 @@ void NPCHazard::Render()
             ds2 = NPCC_ds2_toCam(&this->pos_hazard, NULL);
             if (ds2 < SQ(20.0f))
             {
-                alpha = CLAMP(0.3f + (1.0f - ds2 / SQ(20.0f)), 0.0f, 1.0f);
+                F32 alfa = 0.3f + (1.0f - ds2 / SQ(20.0f));
+
+                alpha = CLAMP(alfa, 0.0f, 1.0f);
 
                 mat.right = *(xVec3*)this->Right();
                 mat.at = g_NY3;
                 mat.up = *(xVec3*)this->At();
                 mat.pos = this->pos_hazard;
+
+                static S32 skipfill = 0;
 
                 NPCC_RenderProjTexture(rast, alpha, &mat, 1.2f, 10.0f, this->shadowCache,
                                        !skipfill, NULL);
@@ -1380,10 +1387,10 @@ void NPCHazard::Render()
     case NPC_HAZ_TARTARSTINK:
         if (this->mdl_hazard != NULL)
         {
+            F32 scaleit = 2.0f * this->custdata.typical.rad_cur;
             xVec3 squat = { 0.75f, 0.5f, 0.75f };
 
-            xVec3SMul(&this->mdl_hazard->Scale, &squat,
-                      2.0f * this->custdata.typical.rad_cur);
+            xVec3SMul(&this->mdl_hazard->Scale, &squat, scaleit);
             xModelRender(this->mdl_hazard);
         }
         break;
@@ -1429,23 +1436,18 @@ void NPCHazard::Render()
     case NPC_HAZ_OILBURST:
         if (this->mdl_hazard != NULL)
         {
+            this->SetAlpha(0.75f * (1.0f - this->pam_interp));
+
+            F32 scaleit = 2.0f * this->custdata.typical.rad_cur;
             xVec3 uni = { 1.0f, 1.0f, 1.0f };
 
-            this->SetAlpha(0.75f * (1.0f - this->pam_interp));
-            xVec3SMul(&this->mdl_hazard->Scale, &uni,
-                      2.0f * this->custdata.typical.rad_cur);
+            xVec3SMul(&this->mdl_hazard->Scale, &uni, scaleit);
             xModelRender(this->mdl_hazard);
         }
         break;
     case NPC_HAZ_OILGLOB:
         if (this->mdl_hazard != NULL)
         {
-            xVec3 scl_a = { 0.75f, 0.1f, 0.5f };
-            xVec3 scl_b = { 0.25f, 1.5f, 0.25f };
-            xVec3 scl_c = { 1.5f, 0.75f, 1.5f };
-            xVec3 scl_now;
-            F32 scaleit;
-
             if (this->tmr_remain > 0.35f)
             {
                 this->SetAlpha(0.75f);
@@ -1455,15 +1457,20 @@ void NPCHazard::Render()
                 this->SetAlpha(0.75f * MAX(0.0f, this->tmr_remain / 0.35f));
             }
 
-            scaleit = 2.0f * this->custdata.typical.rad_cur;
+            F32 pam = this->pam_interp;
+            F32 scaleit = 2.0f * this->custdata.typical.rad_cur;
+            xVec3 scl_a = { 0.75f, 0.1f, 0.5f };
+            xVec3 scl_b = { 0.25f, 1.5f, 0.25f };
+            xVec3 scl_c = { 1.5f, 0.75f, 1.5f };
+            xVec3 scl_now;
 
-            if (this->pam_interp <= 0.25f)
+            if (pam <= 0.25f)
             {
-                SMOOTH(this->pam_interp / 0.25f, &scl_now, &scl_a, &scl_b);
+                SMOOTH(pam / 0.25f, &scl_now, &scl_a, &scl_b);
             }
             else
             {
-                SMOOTH((this->pam_interp - 0.25f) / 0.75f, &scl_now, &scl_b, &scl_c);
+                SMOOTH((pam - 0.25f) / 0.75f, &scl_now, &scl_b, &scl_c);
             }
 
             xVec3SMul(&this->mdl_hazard->Scale, &scl_now, scaleit);
@@ -1505,8 +1512,10 @@ void NPCHazard::Render()
                 pam = 1.0f - (this->pam_interp - 0.15f) / 0.85f;
             }
 
+            pam = EASE(pam);
+
             xVec3 ripple = { 1.0f, 0.0f, 1.0f };
-            ripple.y = 3.75f * EASE(pam);
+            ripple.y = 3.75f * pam;
             xVec3SMul(&this->mdl_hazard->Scale, &ripple, rad);
             xModelRender(this->mdl_hazard);
         }
@@ -1570,8 +1579,10 @@ void NPCHazard::Render()
                 pam = 1.0f - (this->pam_interp - 0.15f) / 0.85f;
             }
 
+            pam = EASE(pam);
+
             xVec3 ripple = { 1.0f, 0.0f, 1.0f };
-            ripple.y = 3.75f * EASE(pam);
+            ripple.y = 3.75f * pam;
             xVec3SMul(&this->mdl_hazard->Scale, &ripple, rad);
             xModelRender(this->mdl_hazard);
         }
@@ -1689,14 +1700,16 @@ S32 NPCHazard::ColTestCyl(const xBound* bnd_tgt, F32 rad, F32 hyt)
     xVec3 delta = bnd_tgt->cyl.center - this->pos_hazard;
     F32 hyt_top = 0.5f * hyt;
     F32 rad_sum = rad + bnd_tgt->cyl.r;
+    F32 hyt_bot;
 
     hyt_top = hyt + hyt_top;
+    hyt_bot = hyt_top - hyt;
 
     if (delta.y > hyt_top)
     {
         hit = 0;
     }
-    else if (delta.y < hyt_top - hyt)
+    else if (delta.y < hyt_bot)
     {
         hit = 0;
     }
@@ -2645,8 +2658,10 @@ void NPCHazard::TarTarSplash(const xVec3* dir_norm)
 void NPCHazard::TarTarLinger()
 {
     HAZBall* ball = &this->custdata.ball;
+    S32 nxt = --this->cnt_nextemit;
     xVec3 vel_emit = g_Y3;
-    if (--this->cnt_nextemit >= 0)
+
+    if (nxt >= 0)
     {
         return;
     }
@@ -3020,8 +3035,10 @@ void NPCHazard::Upd_ChuckBloosh(F32 dt)
 
     this->cnt_nextemit = 5;
 
+    F32 rad_back = 0.5f * tartar->rad_cur;
     xVec3 pos_emit = this->pos_hazard;
-    pos_emit -= tartar->vel * (0.5f * tartar->rad_cur);
+
+    pos_emit -= tartar->vel * rad_back;
     NPAR_EmitH2OTrail(&pos_emit);
 }
 
