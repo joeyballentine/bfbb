@@ -75,6 +75,7 @@ U32 xSndPlay3DFade(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, const xV
                    F32 innerRadius, F32 outerRadius, sound_category category, F32 fade, F32 delay);
 F32 xSCurveInverse(F32 val);
 bool xSphereHitsBound(const xSphere& o, const xBound& b);
+void xBoundGetSphere(xSphere& o, const xBound& bound);
 U32 iModelTagSetup(xModelTagWithNormal* tag, RpAtomic* model, F32 x, F32 y, F32 z);
 void iModelTagEval(RpAtomic* model, const xModelTagWithNormal* tag, RwMatrixTag* mat, xVec3* dest,
                    xVec3* normal);
@@ -1569,29 +1570,43 @@ void zNPCB_SB2::Setup()
 
     for (S32 i = 0; i < 16; i++)
     {
-        this->platforms[i].ent = 0;
-        zSceneFindObject(xStrHash(platform_hooks[i].name));
+        platforms[i].ent = NULL;
+
+        ent = (xEnt*)zSceneFindObject(xStrHash(platform_hooks[i].name));
+
+        if (ent == NULL || !xEntValidType(ent->baseType))
+        {
+            continue;
+        }
+
+        platforms[i].ent = ent;
+        platforms[i].mat = *(xMat3x3*)ent->model->Mat;
+
+        xBoundGetSphere(o, ent->bound);
+
+        platforms[i].radius = o.r;
     }
 
-    if (this->models[3]->Surf == NULL)
+    if (models[3]->Surf == NULL)
     {
-        this->models[3]->Surf = &create_surface();
+        models[3]->Surf = &create_surface();
     }
 
-    if (this->models[0]->Surf == NULL)
+    if (models[0]->Surf == NULL)
     {
-        this->models[0]->Surf = &create_surface();
+        models[0]->Surf = &create_surface();
     }
 
-    // models[3]->Surf->moprops = 0;
-    // models[0]->Surf->moprops = 7;
+    ((zSurfaceProps*)models[3]->Surf->moprops)->asset->game_damage_type = 0;
+    ((zSurfaceProps*)models[0]->Surf->moprops)->asset->game_damage_type = 7;
 
-    this->scan_cronies();
-    (xBase*)&this->newsfish->id = zSceneFindObject(xStrHash("NPC_NEWSCASTER"));
-    
-    if (this->newsfish->id != NULL)
+    scan_cronies();
+
+    newsfish = (zNPCNewsFish*)zSceneFindObject(xStrHash("NPC_NEWSCASTER"));
+
+    if (newsfish != NULL)
     {
-        this->newsfish->TalkOnScreen(1);
+        newsfish->TalkOnScreen(1);
     }
 }
 
@@ -1680,13 +1695,15 @@ U32 zNPCB_SB2::AnimPick(S32 animID, en_NPC_GOAL_SPOT gspot, xGoal* goal)
         { ANIM_SwipeRightLoop, ANIM_SwipeRightEnd },
     };
 
-    S32 index = ANIM_Idle01;
+    S32 index;
 
     switch (animID)
     {
     case NPC_GOAL_BOSSSB2IDLE:
     {
-        for (S32 i = 0; i < 8; i++)
+        index = ANIM_Idle01;
+
+        for (U32 i = 0; i < 8; i++)
         {
             if (g_hash_bossanim[idle_table[i][0]] == AnimCurStateID())
             {
@@ -1698,6 +1715,31 @@ U32 zNPCB_SB2::AnimPick(S32 animID, en_NPC_GOAL_SPOT gspot, xGoal* goal)
     }
     case NPC_GOAL_BOSSSB2TAUNT:
         index = ANIM_Taunt01;
+        break;
+    case NPC_GOAL_BOSSSB2HUNT:
+        if (flag.dizzy)
+        {
+            index = ANIM_Dizzy01;
+        }
+        else
+        {
+            index = ANIM_Idle01;
+
+            for (U32 i = 0; i < 8; i++)
+            {
+                if (g_hash_bossanim[idle_table[i][0]] == AnimCurStateID())
+                {
+                    index = idle_table[i][1];
+                    break;
+                }
+            }
+        }
+        break;
+    case NPC_GOAL_BOSSSB2SWIPE:
+        index = ANIM_Idle01;
+        break;
+    case NPC_GOAL_BOSSSB2CHOP:
+        index = ANIM_Idle01;
         break;
     case NPC_GOAL_BOSSSB2DIZZY:
         index = ANIM_Dizzy01;
@@ -1724,29 +1766,6 @@ U32 zNPCB_SB2::AnimPick(S32 animID, en_NPC_GOAL_SPOT gspot, xGoal* goal)
             play_sound(SOUND_HIT_FLAIL, &sound_loc.body, 1.0f);
         }
         break;
-    case NPC_GOAL_BOSSSB2HUNT:
-        if (!flag.dizzy)
-        {
-            for (S32 i = 0; i < 8; i++)
-            {
-                if (g_hash_bossanim[idle_table[i][0]] == AnimCurStateID())
-                {
-                    index = idle_table[i][1];
-                    break;
-                }
-            }
-        }
-        else
-        {
-            index = ANIM_Dizzy01;
-        }
-        break;
-    case NPC_GOAL_BOSSSB2SWIPE:
-        index = ANIM_Idle01;
-        break;
-    case NPC_GOAL_BOSSSB2CHOP:
-        index = ANIM_Idle01;
-        break;
     case NPC_GOAL_BOSSSB2KARATE:
         index = ANIM_Idle01;
         break;
@@ -1755,12 +1774,12 @@ U32 zNPCB_SB2::AnimPick(S32 animID, en_NPC_GOAL_SPOT gspot, xGoal* goal)
         break;
     }
 
-    if (index < 0)
+    if (index > -1)
     {
-        return 0;
+        return g_hash_bossanim[index];
     }
 
-    return g_hash_bossanim[index];
+    return 0;
 }
 
 void zNPCB_SB2::Process(xScene* xscn, F32 dt)
@@ -1861,40 +1880,47 @@ zNPCB_SB2::platform_data* zNPCB_SB2::player_platform()
 {
     xEntCollis* collis = globals.player.ent.collis;
 
-    if (collis->colls->flags & 1)
+    if (!(collis->colls->flags & 1))
     {
-        xEnt* ent = (xEnt*)collis->colls->optr;
+        return NULL;
+    }
 
-        if (ent != NULL && ent->baseType == eBaseTypePlatform)
+    xEnt* ent = (xEnt*)collis->colls->optr;
+
+    if (ent == NULL || ent->baseType != eBaseTypePlatform)
+    {
+        return NULL;
+    }
+
+    platform_data* pCurPlat = platforms;
+    platform_data* pLastPlat = &pCurPlat[16];
+
+    for (; pCurPlat != pLastPlat; pCurPlat++)
+    {
+        if (pCurPlat->ent == ent)
         {
-            for (platform_data* p = platforms; p != platforms + 16; p++)
-            {
-                if (p->ent == ent)
-                {
-                    return p;
-                }
-            }
+            return pCurPlat;
         }
     }
 
     return NULL;
 }
 
-void zNPCB_SB2::activate_hand(zNPCB_SB2::hand_enum hand, bool)
+void zNPCB_SB2::activate_hand(zNPCB_SB2::hand_enum hand, bool hit_platforms)
 {
-   hands[0].hurt_player = 1;
-   hands[0].hit_platforms = 0x10;
-   hands[0].ent->penby = 0x10;
+    hands[hand].hurt_player = TRUE;
+    hands[hand].hit_platforms = hit_platforms;
+    hands[hand].ent->penby = 0x10;
 }
 
 void zNPCB_SB2::deactivate_hand(zNPCB_SB2::hand_enum hand)
 {
-   hands[0].hit_platforms = 0;
-   hands[0].hurt_player = 0x10;
-   hands[0].ent->penby = 0;
+    hands[hand].hit_platforms = FALSE;
+    hands[hand].hurt_player = FALSE;
+    hands[hand].ent->penby = 0x10;
 }
 
-S32 zNPCB_SB2::player_on_ground() const
+bool zNPCB_SB2::player_on_ground() const
 {
     const xVec3& loc = (const xVec3&)globals.player.ent.model->Mat->pos;
 
@@ -1923,28 +1949,58 @@ S32 zNPCB_SB2::player_on_ground() const
 void zNPCB_SB2::emit_slug(zNPCB_SB2::slug_enum which)
 {
     slug_data& slug = slugs[which];
-    F32 launch_ang; 
-    F32 accel_time;
-    
-    if (slug.ent->id != 0)
+
+    if (slug.ent != NULL)
     {
-        slug.stage = (zNPCB_SB2::slug_stage)1;
+        slug.stage = SLUG_AIM;
         slug.time = 0.0f;
         slug.stage_delay = tweak.karate.aim_time;
-        slug.vel = 0.0f;
-        slug.dist = 0.0f;
+        slug.dist = slug.vel = 0.0f;
         slug.abandoned = 0;
 
-        xMat4x3Mul((xMat4x3*)model->Mat, 0 , 0);
-        xMat3x3RMulVec(&tweak.karate.emit_offset, 0, 0);
+        const xMat4x3* skin = (const xMat4x3*)model->Mat;
+
+        xMat4x3Mul(&slug.mat, &skin[4], skin);
+
+        xVec3 offset;
+
+        xMat3x3RMulVec(&offset, &slug.mat, &tweak.karate.emit_offset);
+        slug.mat.pos += offset;
+
+        F32 launch_ang = which - 1.0f;
+
+        launch_ang *= tweak.karate.emit_arc;
+
+        slug.move_dir.assign(isin(launch_ang), icos(launch_ang), 0.0f);
+
+        F32 accel_time = tweak.karate.aim_accel_time;
+
+        slug.accel = tweak.karate.aim_dist /
+                     (accel_time * (tweak.karate.aim_time - 2.0f * accel_time + 0.5f * accel_time));
+        slug.max_vel = slug.accel * accel_time;
+
+        slug.ent->flags |= 1;
+        slug.ent->model->Alpha = 1.0f;
+
+        play_sound(SOUND_KARATE, &sound_loc.mouth, 1.0f);
+
+        if (slug.sound_handle)
+        {
+            kill_sound(SOUND_KARATE_SLUG, slug.sound_handle);
+        }
+
+        slug.sound_handle = play_sound(SOUND_KARATE_SLUG, &slug.mat.pos, 1.0f);
     }
 }
 
 S32 zNPCB_SB2::slugs_ready() const
 {
-    for (const slug_data* slug = slugs; slug != slugs + MAX_SLUG; slug++)
+    const slug_data* pCurSlug = slugs;
+    const slug_data* pLastSlug = &pCurSlug[MAX_SLUG];
+
+    for (; pCurSlug != pLastSlug; pCurSlug++)
     {
-        if (slug->stage != SLUG_AIM || slug->stage_delay > 0.0f)
+        if (pCurSlug->stage != SLUG_AIM || pCurSlug->stage_delay > 0.0f)
         {
             return 0;
         }
@@ -1955,9 +2011,12 @@ S32 zNPCB_SB2::slugs_ready() const
 
 S32 zNPCB_SB2::slugs_inactive() const
 {
-    for (const slug_data* slug = slugs; slug != slugs + MAX_SLUG; slug++)
+    const slug_data* pCurSlug = slugs;
+    const slug_data* pLastSlug = &pCurSlug[MAX_SLUG];
+
+    for (; pCurSlug != pLastSlug; pCurSlug++)
     {
-        if (slug->stage != SLUG_INACTIVE)
+        if (pCurSlug->stage != SLUG_INACTIVE)
         {
             return 0;
         }
@@ -1968,11 +2027,31 @@ S32 zNPCB_SB2::slugs_inactive() const
 
 void zNPCB_SB2::fire_slug(zNPCB_SB2::slug_enum which, zNPCB_SB2::platform_data& target)
 {
-    slug_data& slug = slugs[which]; 
-    xVec3 offset; 
-    F32 idist;
+    slug_data& slug = slugs[which];
 
     slug.stage = SLUG_DELAY;
+    slug.spun = 0;
+    slug.target = &target;
+    slug.stage_delay = tweak.karate.delay_fire[which];
+    slug.dist = slug.vel = 0.0f;
+    slug.accel = tweak.karate.fire_accel;
+    slug.max_vel = tweak.karate.fire_vel;
+
+    xVec3 offset = (const xVec3&)target.ent->model->Mat->pos - slug.mat.pos;
+    offset.y += tweak.karate.target_yoffset;
+
+    slug.end_dist = xsqrt(offset.x * offset.x + offset.z * offset.z);
+
+    F32 idist = 1.0f / slug.end_dist;
+
+    slug.dmat.at.assign(offset.x * idist, 0.0f, offset.z * idist);
+    slug.dmat.up.assign(0.0f, 1.0f, 0.0f);
+    slug.dmat.right.assign(slug.dmat.at.z, 0.0f, -slug.dmat.at.x);
+    slug.dmat.pos = slug.mat.pos;
+
+    slug.ydist = 0.0f;
+    slug.yvel = 0.0f;
+    slug.end_ydist = offset.y;
 }
 
 void zNPCB_SB2::abandon_slugs()
@@ -2037,16 +2116,21 @@ void zNPCB_SB2::reset_stage()
 
 void zNPCB_SB2::set_vulnerable(bool vulnerable)
 {
-    if (flag.vulnerable == vulnerable)
+    if (vulnerable == flag.vulnerable)
     {
         return;
     }
 
     flag.vulnerable = vulnerable;
 
-    for (node_data* n = nodes; n != nodes + 9; n++)
+    S32 dflags = vulnerable ? 0x1F000 : 0;
+
+    node_data* pCurNode = nodes;
+    node_data* pLastNode = &pCurNode[9];
+
+    for (; pCurNode != pLastNode; pCurNode++)
     {
-        n->ent->dasset->dflags = vulnerable ? 0x1F000 : 0;
+        pCurNode->ent->dasset->dflags = dflags;
     }
 }
 
@@ -2575,8 +2659,8 @@ void zNPCB_SB2::init_hands()
 
 void zNPCB_SB2::move_hand(zNPCB_SB2::hand_data& hand, F32 dt)
 {
-    xVec3 head[4];
     xVec3 tail[4];
+    xVec3 head[4];
 
     for (S32 i = 0; i < 4; i++)
     {
@@ -2586,39 +2670,46 @@ void zNPCB_SB2::move_hand(zNPCB_SB2::hand_data& hand, F32 dt)
         iModelTagEval(m->Data, &hand.tail_tag[i], m->Mat, &tail[i]);
     }
 
-    xEnt& ent = *hand.ent;
-    xVec3 old_loc = ent.bound.mat->pos;
+    xBound& bound = hand.ent->bound;
+    xVec3 old_loc = bound.mat->pos;
 
-    parallelepiped_to_obb(ent.bound, head);
-    xQuickCullForBound(&ent.bound.qcd, &ent.bound);
+    parallelepiped_to_obb(bound, head);
+    xQuickCullForBound(&bound.qcd, &bound);
     zGridUpdateEnt(hand.ent);
 
-    hand.radius = ent.bound.box.box.upper.length();
+    hand.radius = bound.box.box.upper.length();
 
     if (!hand.hurt_player)
     {
         return;
     }
 
-    xVec3 offset = ent.bound.mat->pos - old_loc;
+    xVec3 offset = bound.mat->pos - old_loc;
     xVec3 player_offset = (const xVec3&)globals.player.ent.model->Mat->pos - old_loc;
 
-    if (offset.dot(player_offset) <= 0.0f ||
-        offset.length2() / (dt * dt) < tweak.damage_speed * tweak.damage_speed)
+    if (offset.dot(player_offset) > 0.0f &&
+        offset.length2() / (dt * dt) >= tweak.damage_speed * tweak.damage_speed)
     {
-        ((zSurfaceProps*)hand.ent->model->Surf->moprops)->asset->game_damage_type = 0;
-        hand.ent->penby = 0x10;
-    }
-    else
-    {
-        ((zSurfaceProps*)hand.ent->model->Surf->moprops)->asset->game_damage_type =
-            player_damaged() ? 0 : 7;
+        bool damaged = player_damaged();
+        S32 damage_type = 7;
+
+        if (damaged)
+        {
+            damage_type = 0;
+        }
+
+        ((zSurfaceProps*)hand.ent->model->Surf->moprops)->asset->game_damage_type = damage_type;
         hand.ent->penby = 0;
 
         if (hand.hit_platforms)
         {
             check_platform_smack(hand);
         }
+    }
+    else
+    {
+        ((zSurfaceProps*)hand.ent->model->Surf->moprops)->asset->game_damage_type = 0;
+        hand.ent->penby = 0x10;
     }
 }
 
@@ -2958,18 +3049,14 @@ void zNPCB_SB2::update_fire_slug(zNPCB_SB2::slug_data& slug, F32 dt)
     xAccelMove(slug.ydist, slug.yvel, tweak.karate.drop_accel, dt, slug.end_ydist,
                tweak.karate.drop_vel);
 
-    xVec3 offset;
-
-    offset.x = 0.0f;
-    offset.y = slug.ydist;
-    offset.z = slug.dist;
+    xVec3 offset = { 0.0f, slug.ydist, slug.dist };
 
     xMat4x3Toworld(&offset, &slug.dmat, &offset);
     slug.mat.pos = offset;
 
     if (!slug.spun && slug.dist >= slug.end_dist)
     {
-        spin_platform(*slug.target, slug.target->mat.at, tweak.spin.vel, tweak.spin.accel);
+        spin_platform(*slug.target, slug.target->mat.at, tweak.spin.accel, tweak.spin.vel);
         play_sound(SOUND_KARATE_HIT, (const xVec3*)&slug.target->ent->model->Mat->pos, 1.0f);
         slug.spun = TRUE;
     }
@@ -2986,15 +3073,15 @@ void zNPCB_SB2::update_fire_slug(zNPCB_SB2::slug_data& slug, F32 dt)
             slug.sound_handle = 0;
         }
     }
-    else if (slug.dist <= tweak.karate.fade_dist)
-    {
-        slug.ent->model->Alpha = 1.0f;
-    }
-    else
+    else if (slug.dist > tweak.karate.fade_dist)
     {
         slug.ent->model->Alpha =
             1.0f - (slug.dist - tweak.karate.fade_dist) /
                        (tweak.karate.kill_dist - tweak.karate.fade_dist);
+    }
+    else
+    {
+        slug.ent->model->Alpha = 1.0f;
     }
 }
 
@@ -3049,23 +3136,25 @@ namespace
     void response_curve::find_active_node(F32 t)
     {
         u32 stride = values * sizeof(F32) + sizeof(node);
-        inode* it = (inode*)((U8*)curve + stride * active_node);
+        U8* it = (U8*)curve + stride * active_node;
 
         while (true)
         {
-            while (t < it->t)
+            if (t < ((inode*)it)->t)
             {
-                it = (inode*)((U8*)it - stride);
+                it -= stride;
                 active_node--;
+                continue;
             }
 
-            if (t <= ((inode*)((U8*)it + stride))->t)
+            if (t > ((inode*)(it + stride))->t)
             {
-                return;
+                it += stride;
+                active_node++;
+                continue;
             }
 
-            it = (inode*)((U8*)it + stride);
-            active_node++;
+            return;
         }
     }
 
@@ -3222,16 +3311,16 @@ void zNPCB_SB2::scan_cronies()
 
 void zNPCB_SB2::check_hit_fail()
 {
-    F32 exploding = cruise_bubble::exploding();
+    bool exploding = cruise_bubble::exploding() > 0.0f;
 
-    if (exploding > 0.0f && !flag.cruise_exploding)
+    if (exploding && !flag.cruise_exploding)
     {
         flag.cruise_exploding = true;
         flag.cruise_hit_target = false;
         flag.cruise_hit_body = false;
     }
 
-    if (exploding <= 0.0f && flag.cruise_exploding)
+    if (!exploding && flag.cruise_exploding)
     {
         if (!flag.cruise_hit_target && flag.cruise_hit_body)
         {
@@ -3247,17 +3336,25 @@ void zNPCB_SB2::check_hit_fail()
             S32 hits_size;
             xEnt** hits = cruise_bubble::get_explode_hits(hits_size);
 
-            for (xEnt** it = hits; it != hits + hits_size; it++)
+            xEnt** pCurHit = hits;
+            xEnt** pLastHit = &pCurHit[hits_size];
+
+            for (; pCurHit != pLastHit; pCurHit++)
             {
-                if (*it == (xEnt*)plankton)
+                xEnt* hit = *pCurHit;
+
+                if (hit == (xEnt*)plankton)
                 {
                     flag.cruise_hit_target = true;
                     break;
                 }
 
-                for (platform_data* itp = platforms; itp != platforms + 16; itp++)
+                platform_data* pCurPlat = platforms;
+                platform_data* pLastPlat = &pCurPlat[16];
+
+                for (; pCurPlat != pLastPlat; pCurPlat++)
                 {
-                    if (*it == itp->ent)
+                    if (hit == pCurPlat->ent)
                     {
                         flag.cruise_hit_target = true;
                         break;
@@ -3277,9 +3374,12 @@ void zNPCB_SB2::check_hit_fail()
 
             cruise_bubble::get_explode_sphere(o.center, o.r);
 
-            for (bound_data* it = bounds; it != bounds + 5; it++)
+            bound_data* pCurBound = bounds;
+            bound_data* pLastBound = &pCurBound[5];
+
+            for (; pCurBound != pLastBound; pCurBound++)
             {
-                if (xSphereHitsBound(o, it->ent.bound))
+                if (xSphereHitsBound(o, pCurBound->ent.bound))
                 {
                     flag.cruise_hit_body = true;
                     return;
@@ -3638,38 +3738,39 @@ S32 zNPCGoalBossSB2Hunt::Process(en_trantype* trantype, F32 dt, void* updCtxt, x
         return NPC_GOAL_BOSSSB2TAUNT;
     }
 
-    S32 on_ground = owner.player_on_ground();
+    bool on_ground = owner.player_on_ground();
 
     if (!following)
     {
-        if (!on_ground)
+        if (on_ground)
         {
-            *trantype = GOAL_TRAN_SET;
-            return owner.next_goal();
+            if (owner.delay >= tweak.hunt.warm_up)
+            {
+                following = TRUE;
+                owner.plankton->sickum();
+                owner.delay = 0.0f;
+                owner.say(12);
+            }
+
+            return 0;
         }
 
-        if (owner.delay >= tweak.hunt.warm_up)
-        {
-            following = TRUE;
-            owner.plankton->sickum();
-            owner.delay = 0.0f;
-            owner.say(12);
-        }
+        *trantype = GOAL_TRAN_SET;
 
-        return 0;
+        return owner.next_goal();
     }
 
     if (!on_ground)
     {
-        if (owner.delay < tweak.hunt.cool_down)
+        if (owner.delay >= tweak.hunt.cool_down)
         {
-            return 0;
+            owner.plankton->here_boy();
+            *trantype = GOAL_TRAN_SET;
+
+            return owner.next_goal();
         }
 
-        owner.plankton->here_boy();
-        *trantype = GOAL_TRAN_SET;
-
-        return owner.next_goal();
+        return 0;
     }
 
     owner.delay = 0.0f;
@@ -3829,30 +3930,30 @@ S32 zNPCGoalBossSB2Chop::Process(en_trantype* trantype, F32 dt, void* updCtxt, x
             return NPC_GOAL_BOSSSB2TAUNT;
         }
 
-        if (!targetted)
+        if (targetted)
         {
-            if (can_start())
+            if (owner.delay >= tweak.chop.delay)
             {
-                owner.flag.face_player = false;
-
-                if (g_hash_bossanim[ANIM_Idle01] == owner.AnimCurStateID())
-                {
-                    started = TRUE;
-                    owner.AnimStart(begin_anim, 0);
-                    play_sound(SOUND_CHOP_WINDUP, &owner.sound_loc.hand[owner.active_hand], 1.0f);
-                }
-                else
-                {
-                    targetted = TRUE;
-                    owner.delay = 0.0f;
-                }
+                started = TRUE;
+                owner.AnimStart(loop_anim, 1);
+                play_sound(SOUND_CHOP_SWING, &owner.sound_loc.hand[owner.active_hand], 1.0f);
             }
         }
-        else if (owner.delay >= tweak.chop.delay)
+        else if (can_start())
         {
-            started = TRUE;
-            owner.AnimStart(loop_anim, 1);
-            play_sound(SOUND_CHOP_SWING, &owner.sound_loc.hand[owner.active_hand], 1.0f);
+            owner.flag.face_player = false;
+
+            if (g_hash_bossanim[ANIM_Idle01] == owner.AnimCurStateID())
+            {
+                started = TRUE;
+                owner.AnimStart(begin_anim, 0);
+                play_sound(SOUND_CHOP_WINDUP, &owner.sound_loc.hand[owner.active_hand], 1.0f);
+            }
+            else
+            {
+                targetted = TRUE;
+                owner.delay = 0.0f;
+            }
         }
 
         return 0;
@@ -3876,7 +3977,7 @@ S32 zNPCGoalBossSB2Chop::Process(en_trantype* trantype, F32 dt, void* updCtxt, x
     return 0;
 }
 
-S32 zNPCGoalBossSB2Chop::can_start() const
+bool zNPCGoalBossSB2Chop::can_start() const
 {
     zNPCB_SB2::platform_data* target = owner.player_platform();
 
@@ -3900,6 +4001,17 @@ xFactoryInst* zNPCGoalBossSB2Karate::create(S32 who, RyzMemGrow* grow, void* inf
 
 S32 zNPCGoalBossSB2Karate::Enter(F32 dt, void* updCtxt)
 {
+    started = FALSE;
+    owner.flag.face_player = TRUE;
+
+    U8* pCurEmitted = emitted;
+    U8* pLastEmitted = &pCurEmitted[zNPCB_SB2::MAX_SLUG];
+
+    for (; pCurEmitted != pLastEmitted; pCurEmitted++)
+    {
+        *pCurEmitted = FALSE;
+    }
+
     return zNPCGoalCommon::Enter(dt, updCtxt);
 }
 

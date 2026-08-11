@@ -266,7 +266,7 @@ struct zNPCB_SB2 : zNPCBoss
     zNPCB_SB2::platform_data* player_platform();
     void activate_hand(zNPCB_SB2::hand_enum, bool);
     void deactivate_hand(zNPCB_SB2::hand_enum);
-    S32 player_on_ground() const;
+    bool player_on_ground() const;
     void emit_slug(zNPCB_SB2::slug_enum which);
     S32 slugs_ready() const;
     S32 slugs_inactive() const;
@@ -421,7 +421,7 @@ struct zNPCGoalBossSB2Chop : zNPCGoalCommon
     S32 Process(en_trantype*, F32, void*, xScene*);
     S32 Enter(F32 dt, void* updCtxt);
     S32 Exit(F32 dt, void* updCtxt);
-    S32 can_start() const;
+    bool can_start() const;
 };
 
 struct zNPCGoalBossSB2Karate : zNPCGoalCommon
