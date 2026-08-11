@@ -61,6 +61,32 @@ This work also feeds a planned PC port, where semantic correctness matters and b
 
 **Never write a body you believe is wrong to make the diff happier.** No placeholder that returns a constant, no dead code to shift the literal pool, no `#if 0`. If you cannot recover a function, leave it and say so — an honest gap is recoverable, a plausible lie is not.
 
+### The one sanctioned exception: `__deadstripped_<unit>()`
+
+Some target objects open `.rodata` with anonymous all-zero templates that **nothing in the object references** — literals left behind by functions the retail link deadstripped. They are real bytes in the real object, and every later relocation is offset by their size, so they can hold a dozen functions hostage at 99.x%.
+
+This repo reproduces them with a never-called function holding zero-filled locals. **15 files already do this, two of them `Matching` units**; `src/SB/Game/zVar.cpp` is the reference implementation. Follow its shape exactly, including the comment:
+
+```cpp
+// These structs were used in deadstripped functions.
+// This function is here to force the symbols to be linked.
+void __deadstripped_zVar()
+{
+    const char _449[0x0C] = {};
+    ...
+}
+```
+
+This is **not** the pool-padding hack the rule forbids, and the distinction is the whole point: you are reproducing data the target object demonstrably contains, not inventing code to nudge a number. Three conditions, all required:
+
+1. The objects are **present in the target** and referenced by nothing. Verify it; do not infer it from a percentage.
+2. The sizes and anonymous indices come from the target, not from trial and error.
+3. You **measure** the before/after and report it. If it does not move the number, remove it.
+
+Name it `__deadstripped_<unit>` and place it where parse order puts the objects at the right point in the pool — usually straight after the includes.
+
+Everything else in this section still stands. A probe function that exists to shift a pool, a stub returning a constant, an unused string — those are still forbidden, and the fact that this one exception exists is not licence to invent others.
+
 ## Two things that decide the last 10%
 
 **Branch shape.** Whether the original wrote `if (a < b) {X} else {Y}` or `if (a >= b) {Y} else {X}` is encoded in the emitted branch. Swapping the arms of one `if` has been worth 9–12 points. No decompiler tells you this; only the asm diff does.
@@ -68,5 +94,7 @@ This work also feeds a planned PC port, where semantic correctness matters and b
 **Literal pool layout.** objdiff compares relocations by target **offset**, not symbol name, so `.sdata2` layout is part of matching. A large unwritten function early in a file shifts every offset after it. Write the biggest, earliest function first — filling small ones around it just reshuffles a pool that will move again.
 
 For CodeWarrior source-shape patterns (`x *= k`, inlining rules, switch-vs-if-chain, declaration order), see [references/codewarrior.md](references/codewarrior.md).
+
+When the question is the other direction — **you are staring at target asm and cannot tell what source produced it** — see [references/gekko-asm.md](references/gekko-asm.md). Loop trip counts (the immediate is often not the iteration count), the float/int conversion sequences, which magic constant means which divisor, `/ 8` vs `>> 3`, struct-copy and by-value-argument shapes, the exact `switch` jump-table threshold, and a list of instructions that carry no source information at all so you stop chasing them.
 
 To recover a function that does not exist in our source at all, use the **bfbb-recovering-source** skill.
