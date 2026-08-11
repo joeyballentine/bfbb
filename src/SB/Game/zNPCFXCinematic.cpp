@@ -19,6 +19,28 @@
 #include <stdio.h>
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\cmath>
 
+// These structs were used in deadstripped functions.
+// This function is here to force the symbols to be linked.
+//
+// The target opens .rodata with 11 unreferenced all-zero
+// templates (0x148 total) that offset every later .rodata
+// relocation. Same idiom as zVar.cpp.
+void __deadstripped_zNPCFXCinematic()
+{
+    const char _405[0x0C] = {};
+    const char _406[0x0C] = {};
+    const char _410[0x0C] = {};
+    const char _441[0x0C] = {};
+
+    const char _612[0x28] = {};
+    const char _613[0x28] = {};
+    const char _614[0x28] = {};
+    const char _615[0x28] = {};
+    const char _616[0x28] = {};
+    const char _617[0x28] = {};
+    const char _618[0x28] = {};
+}
+
 static NCINBeNosey* g_noz_ncin;
 
 void get_bone_matrix(xMat4x3& mat, const NCINEntry* fxrec, const RwMatrixTag* animMat);

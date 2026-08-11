@@ -8,6 +8,20 @@
 #include "xMath.h" // icos and isin
 #include "xClimate.h" // xMat3x3Identity
 #include "xMathInlines.h" // xasin, xatan2
+
+// These structs were used in deadstripped functions.
+// This function is here to force the symbols to be linked.
+//
+// The target opens .rodata with 4 unreferenced all-zero
+// templates (0x30 total) that offset every later .rodata
+// relocation. Same idiom as zVar.cpp.
+void __deadstripped_xMath3()
+{
+    const char _405[0x0C] = {};
+    const char _406[0x0C] = {};
+    const char _410[0x0C] = {};
+    const char _441[0x0C] = {};
+}
 //#include "xVec3Inlines.h" // xVec3Init, imported, realized xClimate has a declaration as well though.
 
 const xVec3 g_O3 = { 0, 0, 0 };

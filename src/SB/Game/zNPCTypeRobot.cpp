@@ -34,6 +34,28 @@
 
 #include <string.h>
 
+// These structs were used in deadstripped functions.
+// This function is here to force the symbols to be linked.
+//
+// The target opens .rodata with the same eleven unreferenced all-zero
+// templates as zVar.cpp and xParEmitterType.cpp -- four of 0x0C and seven of
+// 0x28, 0x148 in total -- which offsets every later .rodata relocation.
+void __deadstripped_zNPCTypeRobot()
+{
+    const char _405[0x0C] = {};
+    const char _406[0x0C] = {};
+    const char _410[0x0C] = {};
+    const char _441[0x0C] = {};
+
+    const char _607[0x28] = {};
+    const char _608[0x28] = {};
+    const char _609[0x28] = {};
+    const char _610[0x28] = {};
+    const char _611[0x28] = {};
+    const char _612[0x28] = {};
+    const char _613[0x28] = {};
+}
+
 U32 g_hash_roboanim[41] = { 0 };
 
 char* g_strz_roboanim[41] = {
