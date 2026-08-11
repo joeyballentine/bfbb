@@ -42,7 +42,14 @@ This produced a convincing false alarm worth recognising. `check_hide_entities` 
 
 **Before concluding that two measurements disagree, re-run `ninja` to completion and re-measure.** A stale `.o` explains far more disagreements than a genuine tooling difference does.
 
-**Run `ninja` twice after a large multi-file change, and trust the second report.** This is reproducible, not superstition: after two agents' work landed together, the first build reported `zCutsceneMgr` at 14/18 with `check_hide_entities` at 91.047%, and an immediately following build — same sources, nothing edited in between — reported 15/18 and 100%. It happened twice, in the same unit, on unrelated changes. The first report can be assembled against objects the same run is still replacing. The DOL sha1 was correct both times; only the report was wrong.
+**Run `ninja` twice after a large multi-file change, and trust the second report.** This is reproducible, not superstition: after two agents' work landed together, the first build reported `zCutsceneMgr` at 14/18 with `check_hide_entities` at 91.047%, and an immediately following build — same sources, nothing edited in between — reported 15/18 and 100%. It has now happened three times, always in the same unit, always on unrelated changes. The first report can be assembled against objects the same run is still replacing. The DOL sha1 was correct every time; only the report was wrong.
+
+**The flake can present as `matched_functions` going *down*, which reads exactly like a regression.** On the `zEntPlayer_Update` wave the headline went 7641 → 7640 while `fuzzy_match_percent` went *up*. A controlled rebuild against HEAD showed the real deltas were `zEntPlayer +2` and `zCutsceneMgr -1`, and one further `ninja` on identical sources put `zCutsceneMgr` back. Two checks disambiguate this in about a minute, and both are worth doing before you believe a −1:
+
+- **Ask whether the change could even reach that unit.** Only `zEntPlayer.cpp` had been edited — no shared header, and `zCutsceneMgr` does not include it. A unit that cannot see your change cannot have regressed from it.
+- **Re-measure the accused unit with `solo.py`,** which compiles into a private temp dir and is deterministic. It put `check_hide_entities` at 100% while the built object still claimed otherwise.
+
+Do not revert a wave on a −1 in `report.json` alone.
 
 The residual difference is benign: counting non-matching symbols off the built object includes data symbols like `[.sdata2-0]`, which `solo.py` does not, so the built-object count runs a little higher on most units.
 
