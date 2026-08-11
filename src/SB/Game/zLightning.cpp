@@ -4,6 +4,7 @@
 #include "zGlobals.h"
 #include "xstransvc.h"
 #include "xParEmitter.h"
+#include "iParMgr.h"
 
 #include <types.h>
 #include <rwcore.h>
@@ -49,8 +50,6 @@ static F32 sLFuncSpanPerLength = 1.5f;
 static F32 sLFuncSlopeRange = 2.0f;
 static F32 sLFuncUVSpeed = 1.0f;
 
-static void lightningTweakStart(const tweak_info& t);
-
 void lightningTweakChangeType(const tweak_info& t)
 {
     xDebugRemoveTweak("Lightning|\x01Type Info");
@@ -81,6 +80,16 @@ void lightningTweakChangeType(const tweak_info& t)
     }
 }
 
+static void lightningTweakStart(const tweak_info& t)
+{
+    xVec3 s, e;
+    xVec3Add(&s, (xVec3*)&globals.player.ent.model->Mat->pos, &sTweakStart);
+    xVec3Add(&e, (xVec3*)&globals.player.ent.model->Mat->pos, &sTweakEnd);
+    gLightningTweakAddInfo.start = &s;
+    gLightningTweakAddInfo.end = &e;
+    zLightningAdd(&gLightningTweakAddInfo);
+}
+
 void zLightningInit()
 {
     for (S32 i = 0; i < NUM_LIGHTNING; i++)
@@ -98,8 +107,8 @@ void zLightningInit()
     for (S32 i = 0; i < 9; i++)
     {
         sLFuncX[i].next = &sLFuncX[i + 1];
-        sLFuncY[i].next = &sLFuncY[i + 2];
-        sLFuncZ[i].next = &sLFuncZ[i + 3];
+        sLFuncY[i].next = &sLFuncY[i + 1];
+        sLFuncZ[i].next = &sLFuncZ[i + 1];
     }
 
     sLFuncX[9].next = NULL;
@@ -131,9 +140,9 @@ void zLightningInit()
             prevEnd = sLFuncEnd[j];
         }
 
-        xFuncPiece_EndPoints(&sLFuncX[i], prevEnd, sLFuncEnd[i], sLFuncVal[i].x, sLFuncVal[j].x);
-        xFuncPiece_EndPoints(&sLFuncY[i], prevEnd, sLFuncEnd[i], sLFuncVal[i].y, sLFuncVal[j].y);
-        xFuncPiece_EndPoints(&sLFuncZ[i], prevEnd, sLFuncEnd[i], sLFuncVal[i].z, sLFuncVal[j].z);
+        xFuncPiece_EndPoints(&sLFuncX[i], prevEnd, sLFuncEnd[i], sLFuncVal[j].x, sLFuncVal[i].x);
+        xFuncPiece_EndPoints(&sLFuncY[i], prevEnd, sLFuncEnd[i], sLFuncVal[j].y, sLFuncVal[i].y);
+        xFuncPiece_EndPoints(&sLFuncZ[i], prevEnd, sLFuncEnd[i], sLFuncVal[j].z, sLFuncVal[i].z);
     }
 
     sLFuncJerkTime = 0.0f;
@@ -443,52 +452,82 @@ static void UpdateLightning(zLightning* l, F32 seconds)
 
     if (l->type != LYT_TYPE_FUNC)
     {
-        
-        
         if (l->type == LYT_TYPE_LINE || l->type == LYT_TYPE_ZEUS)
         {
             S32 i;
             F32 full = l->legacy.rand_radius * seconds;
             F32 half = 0.5f * full;
-            
+
             for (i = 1; i < l->legacy.total_points - 1; i++)
             {
-                l->legacy.point[i].x = (full * xurand() + -half) + l->legacy.base_point[i].x;
-                l->legacy.point[i].y = (full * xurand() + -half) + l->legacy.base_point[i].y;
-                l->legacy.point[i].z = (full * xurand() + -half) + l->legacy.base_point[i].z;
-                
+                l->legacy.point[i].x = l->legacy.base_point[i].x + (full * xurand() + -half);
+                l->legacy.point[i].y = l->legacy.base_point[i].y + (full * xurand() + -half);
+                l->legacy.point[i].z = l->legacy.base_point[i].z + (full * xurand() + -half);
+
                 if (l->flags & 0x20)
                 {
-                    // TODO: Fix float op order and grouping
-                    F32 sc1 = ((F32)i / (F32)l->legacy.total_points);
-                    sc1 = (4.0f * sc1 + -4.0f * sc1 * sc1) * l->legacy.arc_height;
+                    F32 sc1 = (F32)i / (F32)l->legacy.total_points;
 
-                    xVec3AddScaled(&l->legacy.point[i], &l->legacy.arc_normal, sc1);
+                    xVec3AddScaled(&l->legacy.point[i], &l->legacy.arc_normal,
+                                   (4.0f * sc1 + -4.0f * (sc1 * sc1)) * l->legacy.arc_height);
                 }
             }
         }
         else if (l->type == LYT_TYPE_ROTATING)
         {
             xVec3 dir;
-            xVec3Sub(&dir, &l->legacy.base_point[l->legacy.total_points - 1], &l->legacy.base_point[0]);
+            xVec3Sub(&dir, &l->legacy.base_point[l->legacy.total_points - 1],
+                     &l->legacy.base_point[0]);
             xVec3Normalize(&dir, &dir);
 
             F32 full = l->legacy.rand_radius * seconds;
             F32 half = 0.5f * full;
-            
+
             for (S32 i = 1; i < l->legacy.total_points - 1; i++)
             {
                 xMat3x3 mat3;
-                xMat3x3Rot(&mat3, &dir, PI * l->legacy.rot.deg[i] * 180.0f);
+                xMat3x3Rot(&mat3, &dir, PI * l->legacy.rot.deg[i] / 180.0f);
 
                 xVec3 vec;
                 xVec3Copy(&vec, &l->legacy.arc_normal);
 
-                F32 sc2;
+                F32 sc2 = 1.0f;
+                if (l->flags & 0x28)
+                {
+                    F32 sc1 = (F32)i / (F32)l->legacy.total_points;
+                    sc2 = 4.0f * sc1 + -4.0f * (sc1 * sc1);
+
+                    if (l->flags & 0x8)
+                    {
+                        xVec3SMulBy(&vec, l->legacy.rot.height * sc2);
+                    }
+                }
+
+                xMat3x3LMulVec(&vec, &mat3, &vec);
+
+                l->legacy.rot.deg[i] += l->legacy.rot.degrees * seconds;
+
+                if (l->legacy.rot.deg[i] > 180.0f)
+                {
+                    l->legacy.rot.deg[i] -= 360.0f;
+                }
+                else if (l->legacy.rot.deg[i] < -180.0f)
+                {
+                    l->legacy.rot.deg[i] += 360.0f;
+                }
+
+                l->legacy.point[i].x = l->legacy.base_point[i].x + (full * xurand() + -half);
+                l->legacy.point[i].y = l->legacy.base_point[i].y + (full * xurand() + -half);
+                l->legacy.point[i].z = l->legacy.base_point[i].z + (full * xurand() + -half);
+
+                xVec3AddTo(&l->legacy.point[i], &vec);
+
+                if (l->flags & 0x20)
+                {
+                    xVec3AddScaled(&l->legacy.point[i], &l->legacy.arc_normal,
+                                   sc2 * l->legacy.arc_height);
+                }
             }
-            
-            F32 sc1;
-            // S32 i;
         }
 
         if ((l->flags & 0x2) && sSparkEmitter != NULL && (xrand() & 0x3))
@@ -497,9 +536,9 @@ static void UpdateLightning(zLightning* l, F32 seconds)
             info.custom_flags = 0xD00;
 
             U32 rand = xrand();
-            info.pos = l->legacy.point[(rand / l->legacy.total_points) * l->legacy.total_points - rand];
+            info.pos = l->legacy.point[rand % l->legacy.total_points];
             xrand();
-            
+
             xParEmitterEmitCustom(sSparkEmitter, seconds, &info);
         }
     }
@@ -529,15 +568,6 @@ static void UpdateLightning(zLightning* l, F32 seconds)
     }
 }
 
-static void lightningTweakStart(const tweak_info& t)
-{
-    xVec3 s, e;
-    xVec3Add(&s, (xVec3*)&globals.player.ent.model->Mat->pos, &sTweakStart);
-    xVec3Add(&e, (xVec3*)&globals.player.ent.model->Mat->pos, &sTweakEnd);
-    gLightningTweakAddInfo.start = &s;
-    gLightningTweakAddInfo.end = &e;
-    zLightningAdd(&gLightningTweakAddInfo);
-}
 
 void zLightningUpdate(F32 seconds)
 {
@@ -550,13 +580,13 @@ void zLightningUpdate(F32 seconds)
         }
     }
 
-    sLFuncUVOffset = 1.0f * seconds + sLFuncUVOffset;
+    sLFuncUVOffset += sLFuncUVSpeed * seconds;
     if (sLFuncUVOffset > 1.0f)
     {
         sLFuncUVOffset -= 1.0f;
     }
 
-    sLFuncJerkTime += 20.0f * seconds;
+    sLFuncJerkTime = sLFuncJerkFreq * seconds + sLFuncJerkTime;
     if (!(sLFuncJerkTime > 1.0f))
     {
         return;
@@ -573,31 +603,588 @@ void zLightningUpdate(F32 seconds)
     }
 
     xVec3Init(&sLFuncVal[picker], 2.0f * (xurand() - 0.5f), 2.0f * (xurand() - 0.5f), 2.0f * (xurand() - 0.5f));
-    xVec3Init(&sLFuncSlope[picker][0], 2.0f * (xurand() - 0.5f), 2.0f * (xurand() - 0.5f), 2.0f * (xurand() - 0.5f));
-    xVec3Init(&sLFuncSlope[picker][1], 2.0f * (xurand() - 0.5f), 2.0f * (xurand() - 0.5f), 2.0f * (xurand() - 0.5f));
+    xVec3Init(&sLFuncSlope[picker][0], 4.0f * (xurand() - 0.5f), 4.0f * (xurand() - 0.5f), 4.0f * (xurand() - 0.5f));
+    xVec3Init(&sLFuncSlope[picker][1], 4.0f * (xurand() - 0.5f), 4.0f * (xurand() - 0.5f), 4.0f * (xurand() - 0.5f));
 
-    sLFuncEnd[picker] = 0.25f * (xurand() * 0.5f) + (picker + 1);
+    sLFuncEnd[picker] = 0.25f * (xurand() - 0.5f) + (picker + 1);
 
-    for (S32 j = 0; j <= picker + 1; j++)
+    for (i = picker; i <= picker + 1; i++)
     {
+        S32 k;
         F32 prevEnd;
-        if (picker == 0)
+        if (i == 0)
         {
-            i = 9;
+            k = 9;
             prevEnd = 0.0f;
         }
         else
         {
-            i = picker - 1;
-            prevEnd = sLFuncEnd[i];
+            k = i - 1;
+            prevEnd = sLFuncEnd[k];
         }
 
-        xFuncPiece_EndPoints(&sLFuncX[j], prevEnd, sLFuncEnd[j], sLFuncVal[j].x, sLFuncVal[i].x);
-        xFuncPiece_EndPoints(&sLFuncY[j], prevEnd, sLFuncEnd[j], sLFuncVal[j].y, sLFuncVal[i].y);
-        xFuncPiece_EndPoints(&sLFuncZ[j], prevEnd, sLFuncEnd[j], sLFuncVal[j].z, sLFuncVal[i].z);
+        xFuncPiece_EndPoints(&sLFuncX[i], prevEnd, sLFuncEnd[i], sLFuncVal[k].x, sLFuncVal[i].x);
+        xFuncPiece_EndPoints(&sLFuncY[i], prevEnd, sLFuncEnd[i], sLFuncVal[k].y, sLFuncVal[i].y);
+        xFuncPiece_EndPoints(&sLFuncZ[i], prevEnd, sLFuncEnd[i], sLFuncVal[k].z, sLFuncVal[i].z);
     }
 
     sLFuncJerkTime = 0.0f;
+}
+
+void zLightningFunc_Render(zLightning* l)
+{
+    xVec3 funcVal[2];
+    xVec3 side[2];
+    xVec3 lastPos;
+    xVec3 pos;
+    xVec3 vpos;
+    F32 param[2];
+    xFuncPiece* pieceX[2];
+    xFuncPiece* pieceY[2];
+    xFuncPiece* pieceZ[2];
+    RwIm3DVertex* vert[2];
+
+    F32 t = 0.0f;
+    F32 pstep = 1.0f;
+
+    if (l->func.length > 0.00001f)
+    {
+        pstep = 1.0f / (10.0f * l->func.length);
+    }
+
+    if (pstep > sLFuncMaxPStep)
+    {
+        pstep = sLFuncMaxPStep;
+    }
+
+    if (pstep < sLFuncMinPStep)
+    {
+        pstep = sLFuncMinPStep;
+    }
+
+    for (S32 i = 0; i < 2; i++)
+    {
+        pieceX[i] = sLFuncX;
+        pieceY[i] = sLFuncY;
+        pieceZ[i] = sLFuncZ;
+        param[i] = l->func.endParam[i];
+    }
+
+    vert[0] = gRenderArr.m_vertex;
+    vert[1] = vert[0] + 240;
+
+    if (l->func.length > 0.00001f)
+    {
+        side[0].x = l->func.direction.y - l->func.direction.z;
+        side[0].y = l->func.direction.z - l->func.direction.x;
+        side[0].z = l->func.direction.x - l->func.direction.y;
+
+        xVec3Normalize(&side[0], &side[0]);
+        xVec3Cross(&side[1], &side[0], &l->func.direction);
+    }
+    else
+    {
+        xVec3Init(&side[0], 1.0f, 0.0f, 0.0f);
+        xVec3Init(&side[1], 0.0f, 0.0f, 1.0f);
+    }
+
+    xVec3Copy(&lastPos, &l->func.endPoint[0]);
+
+    U8 alpha = xrand();
+    S32 tex = 0;
+
+    for (S32 i = 0; i < 2; i++)
+    {
+        xVec3Copy(&vpos, &lastPos);
+
+        F32 vx = vpos.x;
+        F32 vy = vpos.y;
+        F32 vz = vpos.z;
+        RwIm3DVertexSetPos(&vert[i][0], vx, vy, vz);
+        U8 cr = l->color.r;
+        U8 cg = l->color.g;
+        U8 cb = l->color.b;
+        RwIm3DVertexSetRGBA(&vert[i][0], cr, cg, cb, alpha);
+        RwIm3DVertexSetUV(&vert[i][0], tex + sLFuncUVOffset, 0.0f);
+
+        vx = vpos.x;
+        vy = vpos.y;
+        vz = vpos.z;
+        RwIm3DVertexSetPos(&vert[i][1], vx, vy, vz);
+        cr = l->color.r;
+        cg = l->color.g;
+        cb = l->color.b;
+        RwIm3DVertexSetRGBA(&vert[i][1], cr, cg, cb, alpha);
+        RwIm3DVertexSetUV(&vert[i][1], tex + sLFuncUVOffset, 1.0f);
+    }
+
+    S32 nvert = 2;
+    tex = 1;
+
+    while (t < 1.0f)
+    {
+        t += pstep;
+        if (t > 1.0f)
+        {
+            t = 1.0f;
+        }
+
+        xVec3SMul(&pos, &l->func.endPoint[0], 1.0f - t);
+        xVec3AddScaled(&pos, &l->func.endPoint[1], t);
+
+        for (S32 i = 0; i < 2; i++)
+        {
+            F32 p = l->func.endParam[i] + t * l->func.paramSpan[i];
+
+            if (p >= sLFuncEnd[9])
+            {
+                p -= 10 * (S32)(p / 10.0f);
+
+                if (p < param[i])
+                {
+                    pieceX[i] = sLFuncX;
+                    pieceY[i] = sLFuncY;
+                    pieceZ[i] = sLFuncZ;
+                }
+            }
+
+            param[i] = p;
+
+            funcVal[i].x = xFuncPiece_Eval(pieceX[i], param[i], &pieceX[i]);
+            funcVal[i].y = xFuncPiece_Eval(pieceY[i], param[i], &pieceY[i]);
+            funcVal[i].z = xFuncPiece_Eval(pieceZ[i], param[i], &pieceZ[i]);
+        }
+
+        F32 t2 = t * t;
+        F32 t3 = t2 * t;
+        F32 scalar1 = 4.0f * (t + (t3 - 2.0f * t2));
+        F32 scalar2 = 4.0f * (-t3 + t2);
+
+        xVec3AddScaled(&pos, &funcVal[0], scalar1 * l->func.scale);
+        xVec3AddScaled(&pos, &funcVal[1], scalar2 * l->func.scale);
+
+        if (l->flags & 0x20)
+        {
+            F32 arc = 4.0f * (t - t2);
+            if (arc > 0.0f)
+            {
+                xVec3AddScaled(&pos, &l->func.arc_normal, arc * l->func.arc_height);
+            }
+        }
+
+        alpha = xrand();
+
+        for (S32 i = 0; i < 2; i++)
+        {
+            xVec3Copy(&vpos, &pos);
+            xVec3AddScaled(&vpos, &side[i],
+                           l->func.width * (l->func.scale * (scalar1 + scalar2)));
+
+            F32 vx = vpos.x;
+            F32 vy = vpos.y;
+            F32 vz = vpos.z;
+            RwIm3DVertexSetPos(&vert[i][nvert], vx, vy, vz);
+            U8 cr = l->color.r;
+            U8 cg = l->color.g;
+            U8 cb = l->color.b;
+            RwIm3DVertexSetRGBA(&vert[i][nvert], cr, cg, cb, alpha);
+            RwIm3DVertexSetUV(&vert[i][nvert], tex + sLFuncUVOffset, 0.0f);
+
+            xVec3AddScaled(&vpos, &side[i],
+                           (scalar1 + scalar2) * (-2.0f * l->func.scale * l->func.width));
+
+            vx = vpos.x;
+            vy = vpos.y;
+            vz = vpos.z;
+            RwIm3DVertexSetPos(&vert[i][nvert + 1], vx, vy, vz);
+            cr = l->color.r;
+            cg = l->color.g;
+            cb = l->color.b;
+            RwIm3DVertexSetRGBA(&vert[i][nvert + 1], cr, cg, cb, alpha);
+            RwIm3DVertexSetUV(&vert[i][nvert + 1], tex + sLFuncUVOffset, 1.0f);
+        }
+
+        tex = 1 - tex;
+        nvert += 2;
+
+        xVec3Copy(&lastPos, &pos);
+    }
+
+    RwIm3DTransform(vert[0], nvert, (RwMatrix*)&g_I3,
+                    rwIM3D_VERTEXUV | rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA);
+    RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
+    RwIm3DEnd();
+
+    RwIm3DTransform(vert[1], nvert, (RwMatrix*)&g_I3,
+                    rwIM3D_VERTEXUV | rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA);
+    RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
+    RwIm3DEnd();
+}
+
+void RenderLightning(zLightning* l)
+{
+    static RwIm3DVertex sStripVert[128];
+
+    xCamera* cam = &globals.camera;
+
+    xVec3 up;
+    xVec3 dir;
+    xVec3 lastdir;
+    xVec3 tmp;
+    xVec3 pt1;
+    xVec3 pt2;
+
+    if (l->type != LYT_TYPE_FUNC)
+    {
+        F32 fade;
+        if (l->flags & 0x1000)
+        {
+            fade = l->color.a;
+        }
+        else
+        {
+            fade = (l->time_left / l->time_total) * l->color.a;
+        }
+
+        S32 alpha = 0.5f + fade;
+        S32 i;
+        U32 nvert = 2;
+        U8 cr;
+        U8 cg;
+        U8 cb;
+        S32 last;
+
+        if (l->flags & 0x200)
+        {
+            last = l->legacy.total_points;
+            xVec3Init(&up, 0.0f, 1.0f, 0.0f);
+        }
+        else
+        {
+            last = l->legacy.total_points - 1;
+            xVec3Copy(&up, &cam->mat.at);
+            xVec3Sub(&tmp, &l->legacy.point[1], &l->legacy.point[0]);
+            xVec3AddScaled(&tmp, &cam->mat.at,
+                           -xVec3Dot(&tmp, &cam->mat.at));
+            if (xVec3Normalize(&dir, &tmp) > 0.00001f)
+            {
+                xVec3Cross(&up, &dir, &cam->mat.at);
+            }
+        }
+
+        xVec3Copy(&pt1, &l->legacy.point[0]);
+        xVec3AddScaled(&pt1, &up, l->legacy.thickness[0]);
+        xVec3Copy(&pt2, &l->legacy.point[0]);
+        xVec3AddScaled(&pt2, &up, -l->legacy.thickness[0]);
+
+        RwIm3DVertexSetPos(&sStripVert[0], pt1.x, pt1.y, pt1.z);
+        RwIm3DVertexSetUV(&sStripVert[0], 0.0f, 0.0f);
+        cr = l->color.r;
+        cg = l->color.g;
+        cb = l->color.b;
+        RwIm3DVertexSetRGBA(&sStripVert[0], cr, cg, cb, alpha);
+        RwIm3DVertexSetPos(&sStripVert[1], pt2.x, pt2.y, pt2.z);
+        RwIm3DVertexSetUV(&sStripVert[1], 0.0f, 1.0f);
+        RwIm3DVertexSetRGBA(&sStripVert[1], cr, cg, cb, alpha);
+
+        for (i = 1; i < last; i++)
+        {
+            if (!(l->flags & 0x200))
+            {
+                xVec3Copy(&lastdir, &dir);
+                xVec3Sub(&tmp, &l->legacy.point[i + 1], &l->legacy.point[i]);
+                xVec3AddScaled(&tmp, &cam->mat.at,
+                               -xVec3Dot(&tmp, &cam->mat.at));
+                if (xVec3Normalize(&dir, &tmp) > 0.00001f)
+                {
+                    xVec3Cross(&up, &dir, &cam->mat.at);
+                }
+            }
+            else
+            {
+                lastdir = dir = up;
+            }
+
+            xVec3Copy(&pt1, &l->legacy.point[i]);
+            xVec3AddScaled(&pt1, &up, l->legacy.thickness[i]);
+            xVec3Copy(&pt2, &l->legacy.point[i]);
+            xVec3AddScaled(&pt2, &up, -l->legacy.thickness[i]);
+
+            S32 flip = xVec3Dot(&lastdir, &dir) < 0.0f;
+
+            if (flip)
+            {
+                RwIm3DVertexSetPos(&sStripVert[nvert], pt2.x, pt2.y, pt2.z);
+            }
+            else
+            {
+                RwIm3DVertexSetPos(&sStripVert[nvert], pt1.x, pt1.y, pt1.z);
+            }
+
+            if (i & 1)
+            {
+                sStripVert[nvert].u = 1.0f;
+            }
+            else
+            {
+                sStripVert[nvert].u = 0.0f;
+            }
+
+            sStripVert[nvert].v = 0.0f;
+            cr = l->color.r;
+            cg = l->color.g;
+            cb = l->color.b;
+            RwIm3DVertexSetRGBA(&sStripVert[nvert], cr, cg, cb, alpha);
+
+            if (flip)
+            {
+                RwIm3DVertexSetPos(&sStripVert[nvert + 1], pt1.x, pt1.y, pt1.z);
+            }
+            else
+            {
+                RwIm3DVertexSetPos(&sStripVert[nvert + 1], pt2.x, pt2.y, pt2.z);
+            }
+
+            if (i & 1)
+            {
+                sStripVert[nvert + 1].u = 1.0f;
+            }
+            else
+            {
+                sStripVert[nvert + 1].u = 0.0f;
+            }
+
+            sStripVert[nvert + 1].v = 1.0f;
+            cr = l->color.r;
+            cg = l->color.g;
+            cb = l->color.b;
+            RwIm3DVertexSetRGBA(&sStripVert[nvert + 1], cr, cg, cb, alpha);
+
+            nvert += 2;
+            if (nvert >= 128)
+            {
+                nvert = 128;
+                goto render;
+            }
+        }
+
+        if (!(l->flags & 0x200))
+        {
+            xVec3Copy(&pt1, &l->legacy.point[last]);
+            xVec3AddScaled(&pt1, &up, l->legacy.thickness[last]);
+            xVec3Copy(&pt2, &l->legacy.point[last]);
+            xVec3AddScaled(&pt2, &up, -l->legacy.thickness[last]);
+
+            RwIm3DVertexSetPos(&sStripVert[nvert], pt1.x, pt1.y, pt1.z);
+
+            if (i & 1)
+            {
+                sStripVert[nvert].u = 1.0f;
+            }
+            else
+            {
+                sStripVert[nvert].u = 0.0f;
+            }
+
+            sStripVert[nvert].v = 0.0f;
+            cr = l->color.r;
+            cg = l->color.g;
+            cb = l->color.b;
+            RwIm3DVertexSetRGBA(&sStripVert[nvert], cr, cg, cb, alpha);
+
+            RwIm3DVertexSetPos(&sStripVert[nvert + 1], pt2.x, pt2.y, pt2.z);
+
+            if (i & 1)
+            {
+                sStripVert[nvert + 1].u = 1.0f;
+            }
+            else
+            {
+                sStripVert[nvert + 1].u = 0.0f;
+            }
+
+            sStripVert[nvert + 1].v = 1.0f;
+            cr = l->color.r;
+            cg = l->color.g;
+            cb = l->color.b;
+            RwIm3DVertexSetRGBA(&sStripVert[nvert + 1], cr, cg, cb, alpha);
+
+            nvert += 2;
+        }
+
+    render:
+        if (RwIm3DTransform(sStripVert, nvert, NULL,
+                            rwIM3D_VERTEXUV | rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA))
+        {
+            RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
+            RwIm3DEnd();
+        }
+
+        fade = (l->time_left / l->time_total) * (0.5f * l->color.a);
+        alpha = 0.5f + fade;
+        nvert = 2;
+
+        F32 width = 1.5f + xurand();
+
+        if (!(l->flags & 0x200))
+        {
+            xVec3Copy(&up, &cam->mat.at);
+            xVec3Sub(&tmp, &l->legacy.point[1], &l->legacy.point[0]);
+            xVec3AddScaled(&tmp, &cam->mat.at,
+                           -xVec3Dot(&tmp, &cam->mat.at));
+            if (xVec3Normalize(&dir, &tmp) > 0.00001f)
+            {
+                xVec3Cross(&up, &dir, &cam->mat.at);
+            }
+        }
+
+        xVec3Copy(&pt1, &l->legacy.point[0]);
+        xVec3AddScaled(&pt1, &up, width * l->legacy.thickness[0]);
+        xVec3Copy(&pt2, &l->legacy.point[0]);
+        xVec3AddScaled(&pt2, &up, -width * l->legacy.thickness[0]);
+
+        RwIm3DVertexSetPos(&sStripVert[0], pt1.x, pt1.y, pt1.z);
+        RwIm3DVertexSetUV(&sStripVert[0], 0.0f, 0.0f);
+        cr = l->color.r;
+        cg = l->color.g;
+        cb = l->color.b;
+        RwIm3DVertexSetRGBA(&sStripVert[0], cr, cg, cb, alpha);
+        RwIm3DVertexSetPos(&sStripVert[1], pt2.x, pt2.y, pt2.z);
+        RwIm3DVertexSetUV(&sStripVert[1], 0.0f, 1.0f);
+        RwIm3DVertexSetRGBA(&sStripVert[1], cr, cg, cb, alpha);
+
+        for (i = 1; i < last; i++)
+        {
+            if (!(l->flags & 0x200))
+            {
+                xVec3Copy(&lastdir, &dir);
+                xVec3Sub(&tmp, &l->legacy.point[i + 1], &l->legacy.point[i]);
+                xVec3AddScaled(&tmp, &cam->mat.at,
+                               -xVec3Dot(&tmp, &cam->mat.at));
+                if (xVec3Normalize(&dir, &tmp) > 0.00001f)
+                {
+                    xVec3Cross(&up, &dir, &cam->mat.at);
+                }
+            }
+
+            xVec3Copy(&pt1, &l->legacy.point[i]);
+            xVec3AddScaled(&pt1, &up, width * l->legacy.thickness[i]);
+            xVec3Copy(&pt2, &l->legacy.point[i]);
+            xVec3AddScaled(&pt2, &up, -width * l->legacy.thickness[i]);
+
+            S32 flip = xVec3Dot(&lastdir, &dir) < 0.0f;
+
+            if (flip)
+            {
+                RwIm3DVertexSetPos(&sStripVert[nvert], pt2.x, pt2.y, pt2.z);
+            }
+            else
+            {
+                RwIm3DVertexSetPos(&sStripVert[nvert], pt1.x, pt1.y, pt1.z);
+            }
+
+            if (i & 1)
+            {
+                sStripVert[nvert].u = 1.0f;
+            }
+            else
+            {
+                sStripVert[nvert].u = 0.0f;
+            }
+
+            sStripVert[nvert].v = 0.0f;
+            cr = l->color.r;
+            cg = l->color.g;
+            cb = l->color.b;
+            RwIm3DVertexSetRGBA(&sStripVert[nvert], cr, cg, cb, alpha);
+
+            if (flip)
+            {
+                RwIm3DVertexSetPos(&sStripVert[nvert + 1], pt1.x, pt1.y, pt1.z);
+            }
+            else
+            {
+                RwIm3DVertexSetPos(&sStripVert[nvert + 1], pt2.x, pt2.y, pt2.z);
+            }
+
+            if (i & 1)
+            {
+                sStripVert[nvert + 1].u = 1.0f;
+            }
+            else
+            {
+                sStripVert[nvert + 1].u = 0.0f;
+            }
+
+            sStripVert[nvert + 1].v = 1.0f;
+            cr = l->color.r;
+            cg = l->color.g;
+            cb = l->color.b;
+            RwIm3DVertexSetRGBA(&sStripVert[nvert + 1], cr, cg, cb, alpha);
+
+            nvert += 2;
+            if (nvert >= 128)
+            {
+                nvert = 128;
+                goto render;
+            }
+        }
+
+        if (!(l->flags & 0x200))
+        {
+            xVec3Copy(&pt1, &l->legacy.point[last]);
+            xVec3AddScaled(&pt1, &up, width * l->legacy.thickness[last]);
+            xVec3Copy(&pt2, &l->legacy.point[last]);
+            xVec3AddScaled(&pt2, &up, -width * l->legacy.thickness[last]);
+
+            RwIm3DVertexSetPos(&sStripVert[nvert], pt1.x, pt1.y, pt1.z);
+
+            if (i & 1)
+            {
+                sStripVert[nvert].u = 1.0f;
+            }
+            else
+            {
+                sStripVert[nvert].u = 0.0f;
+            }
+
+            sStripVert[nvert].v = 0.0f;
+            cr = l->color.r;
+            cg = l->color.g;
+            cb = l->color.b;
+            RwIm3DVertexSetRGBA(&sStripVert[nvert], cr, cg, cb, alpha);
+
+            RwIm3DVertexSetPos(&sStripVert[nvert + 1], pt2.x, pt2.y, pt2.z);
+
+            if (i & 1)
+            {
+                sStripVert[nvert + 1].u = 1.0f;
+            }
+            else
+            {
+                sStripVert[nvert + 1].u = 0.0f;
+            }
+
+            sStripVert[nvert + 1].v = 1.0f;
+            cr = l->color.r;
+            cg = l->color.g;
+            cb = l->color.b;
+            RwIm3DVertexSetRGBA(&sStripVert[nvert + 1], cr, cg, cb, alpha);
+
+            nvert += 2;
+        }
+
+        if (RwIm3DTransform(sStripVert, nvert, NULL,
+                            rwIM3D_VERTEXUV | rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA))
+        {
+            RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
+            RwIm3DEnd();
+        }
+    }
+    else
+    {
+        zLightningFunc_Render(l);
+    }
 }
 
 void zLightningRender()
