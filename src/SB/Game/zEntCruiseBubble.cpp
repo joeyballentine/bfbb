@@ -3249,12 +3249,12 @@ namespace cruise_bubble
         {
             tweak_group* tweak = current_tweak;
 
+            F32 ybound = tweak->missle.fly.turn.ybound;
             F32 xdelta = -tweak->missle.fly.turn.xdelta;
             F32 ydelta = -tweak->missle.fly.turn.ydelta;
             F32 roll_frac = -tweak->missle.fly.turn.roll_frac;
             F32 xdecay = tweak->missle.fly.turn.xdecay;
             F32 ydecay = tweak->missle.fly.turn.ydecay;
-            F32 ybound = tweak->missle.fly.turn.ybound;
 
             xVec2 d0, d1, v0, v1, a0, a1;
 
@@ -3465,20 +3465,21 @@ namespace cruise_bubble
             for (U32 i = 0; i < total - size; i++)
             {
                 U32 k = (xrand() >> 13) % (total - i);
+                U32 j = 0;
                 U32 seen = 0;
 
-                for (U32 j = 0;; j++)
+                for (;; j++)
                 {
                     if (qzone.mask & (1 << j))
                     {
-                        if (seen < k)
-                        {
-                            seen++;
-                        }
-                        else
+                        if (seen >= k)
                         {
                             qzone.mask &= ~(1 << j);
                             break;
+                        }
+                        else
+                        {
+                            seen++;
                         }
                     }
                 }
@@ -3930,6 +3931,40 @@ namespace cruise_bubble
             xCameraRotate(&globals.camera, dir, roll, 0.0f, 0.0f, 0.0f);
         }
 
+        void cruise_bubble::state_camera_survey::eval_missle_path(F32 dist, xVec3& loc,
+                                                                  F32& roll) const
+        {
+            S32 index = this->find_nearest(dist);
+
+            if (index <= 0)
+            {
+                index++;
+            }
+            else if (index >= (S32)missle_record.size())
+            {
+                index = missle_record.size() - 1;
+            }
+
+            const missle_record_data& rec0 = missle_record[index - 1];
+            const missle_record_data& rec1 = missle_record[index];
+
+            F32 d0 = this->path_distance[index - 1];
+            F32 d1 = this->path_distance[index];
+
+            if (xabs(d0 - d1) <= 0.0001f)
+            {
+                loc = rec0.loc;
+                roll = rec0.roll;
+            }
+            else
+            {
+                F32 t = (dist - d0) / (d1 - d0);
+
+                this->lerp(loc, t, rec0.loc, rec1.loc);
+                this->lerp(roll, t, rec0.roll, rec1.roll);
+            }
+        }
+
         void cruise_bubble::state_camera_survey::lerp(F32& a, F32 b, F32 c, F32 d) const
         {
             a = (b * (d - c)) + c;
@@ -3950,12 +3985,14 @@ namespace cruise_bubble
             fixed_queue<missle_record_data, 127>::iterator it = missle_record.begin();
             fixed_queue<missle_record_data, 127>::iterator end = missle_record.end();
 
-            xVec3 last = (*it).loc;
+            xVec3 last = it->loc;
             F32* d = this->path_distance;
 
             while (it != end)
             {
-                const missle_record_data& rec = *it;
+                // retail binds this through operator-> (a bl to __rf__), not
+                // operator*; `*it` emits a bl to __ml__ and loses the match.
+                const missle_record_data& rec = *it.operator->();
 
                 *d = dist + (rec.loc - last).length();
                 dist = *d;
