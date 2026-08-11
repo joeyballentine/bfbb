@@ -3433,13 +3433,24 @@ namespace cruise_bubble
         void cruise_bubble::state_missle_explode::get_next_quadrant(F32& zmin, F32& zmax, F32& amin,
                                                                     F32& amax)
         {
-            while (!(qzone.mask & (1 << qzone.index)))
+            // Faithful to retail, and it ships a bug: `bit` is computed from the
+            // PRE-increment index, so once this loop actually iterates it tests
+            // the first bit twice and exits with index == found + 1. row/col then
+            // describe the quadrant after the one whose mask bit was set --
+            // sometimes one reset_quadrants deliberately cleared. Droplet
+            // quadrants get skipped. Do not "fix" it.
+            U32 bit = 1 << qzone.index;
+
+            while (!(qzone.mask & bit))
             {
-                qzone.index++;
+                bit = 1 << qzone.index++;
             }
 
             U32 row = qzone.index / qzone.count;
-            U32 col = qzone.index - row * qzone.count;
+            // `%` and `- row * qzone.count` emit the same mullw/subf pair, but %
+            // shifts register allocation just enough that CW stops fusing the
+            // addi/lwz into an lwzu. That one instruction is the whole tail delta.
+            U32 col = qzone.index % qzone.count;
 
             zmax = 1.0f - row * qzone.dz;
             zmin = zmax - qzone.dz;
