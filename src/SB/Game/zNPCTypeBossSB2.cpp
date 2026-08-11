@@ -449,12 +449,6 @@ namespace
         { say_fall, 1 },
     };
 
-    void set_alpha_blend(xModelInstance* model)
-    {
-        model->PipeFlags &= ~0xFF0C;
-        model->PipeFlags |= 0x6508;
-    }
-
     F32 max(F32 f0, F32 f1);
 
     static void init_sound()
@@ -548,6 +542,12 @@ namespace
         mat.at.assign(s, 0.0f, c);
     }
 
+    void set_alpha_blend(xModelInstance* model)
+    {
+        model->PipeFlags &= ~0xFF0C;
+        model->PipeFlags |= 0x6508;
+    }
+
     void init_bound_entity(xEnt& ent, U32 id, xModelInstance* model, xMat4x3* mat)
     {
         memset(&ent, 0, sizeof(xEnt));
@@ -569,33 +569,37 @@ namespace
 
     void parallelepiped_to_obb(xBound& obb, xVec3* loc)
     {
+        xVec3* tail = loc + 4;
+
         obb.type = XBOUND_TYPE_OBB;
 
         xVec3 head_sum = loc[0] + loc[1] + loc[2] + loc[3];
-        xVec3 tail_sum = loc[4] + loc[5] + loc[6] + loc[7];
+        xVec3 tail_sum = tail[0] + tail[1] + tail[2] + tail[3];
+        xVec3& center = obb.box.center;
 
-        obb.box.center = (head_sum + tail_sum) * 0.125f;
+        center = (head_sum + tail_sum) * 0.125f;
 
-        loc[0] -= obb.box.center;
-        loc[1] -= obb.box.center;
-        loc[2] -= obb.box.center;
-        loc[3] -= obb.box.center;
-        loc[4] -= obb.box.center;
-        loc[5] -= obb.box.center;
-        loc[6] -= obb.box.center;
-        loc[7] -= obb.box.center;
+        loc[0] -= center;
+        loc[1] -= center;
+        loc[2] -= center;
+        loc[3] -= center;
+        tail[0] -= center;
+        tail[1] -= center;
+        tail[2] -= center;
+        tail[3] -= center;
 
         xMat4x3& mat = *obb.mat;
 
         mat.right = head_sum - tail_sum;
-        mat.at = loc[0] + loc[1] + loc[4] + loc[5];
-        mat.at -= loc[2] + loc[3] + loc[6] + loc[7];
+        mat.at = loc[0] + loc[1] + tail[0] + tail[1];
+        mat.at -= loc[2] + loc[3] + tail[2] + tail[3];
         mat.right.normalize();
         mat.up = mat.at.cross(mat.right).normal();
         mat.at = mat.right.cross(mat.up);
-        mat.pos = obb.box.center;
+        mat.pos = center;
 
         xVec3& ext = obb.box.box.upper;
+        xVec3& lower = obb.box.box.lower;
 
         ext.assign(mat.right.dot(loc[0]), mat.up.dot(loc[0]), mat.at.dot(loc[0]));
         ext.set_abs();
@@ -607,7 +611,7 @@ namespace
             ext.z = max(ext.z, xabs(mat.at.dot(*it)));
         }
 
-        obb.box.box.lower = -ext;
+        lower = -ext;
     }
 
     F32 max(F32 f0, F32 f1)
@@ -619,6 +623,191 @@ namespace
         return f1;
     }
 
+
+} // namespace
+
+xAnimTable* ZNPC_AnimTable_BossSB2()
+{
+    xAnimTable* table = xAnimTableNew("zNPCB_SB2_Karate", NULL, 0);
+    S32 anim_list[32];
+    S32 n = 0;
+
+    anim_list[n++] = ANIM_Idle01;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_Idle01], 0x10, 0, 1, NULL, NULL, 0, NULL, NULL,
+                       xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_Idle02;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_Idle02], 0, 0, 1, NULL, NULL, 0, NULL, NULL,
+                       xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_Taunt01;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_Taunt01], 0, 0, 1, NULL, NULL, 0, NULL, NULL,
+                       xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_SmackLeft01;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_SmackLeft01], 0x20, 0, 1, NULL, NULL, 0, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_SmackRight01;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_SmackRight01], 0x20, 0, 1, NULL, NULL, 0, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_ChopLeftBegin;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_ChopLeftBegin], 0x20, 0, 1, NULL, NULL, 0, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_ChopLeftLoop;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_ChopLeftLoop], 0, 0, 1, NULL, NULL, 0, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_ChopLeftEnd;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_ChopLeftEnd], 0x20, 0, 1, NULL, NULL, 0, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_ChopRightBegin;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_ChopRightBegin], 0x20, 0, 1, NULL, NULL, 0, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_ChopRightLoop;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_ChopRightLoop], 0, 0, 1, NULL, NULL, 0, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_ChopRightEnd;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_ChopRightEnd], 0x20, 0, 1, NULL, NULL, 0, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_SwipeLeftBegin;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_SwipeLeftBegin], 0x20, 0, 1, NULL, NULL, 0, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_SwipeLeftLoop;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_SwipeLeftLoop], 0x10, 0, 1, NULL, NULL, 0, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_SwipeLeftEnd;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_SwipeLeftEnd], 0x20, 0, 1, NULL, NULL, 0, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_SwipeRightBegin;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_SwipeRightBegin], 0x20, 0, 1, NULL, NULL, 0,
+                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_SwipeRightLoop;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_SwipeRightLoop], 0x10, 0, 1, NULL, NULL, 0, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_SwipeRightEnd;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_SwipeRightEnd], 0x20, 0, 1, NULL, NULL, 0, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_Dizzy01;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_Dizzy01], 0x10, 0, 1, NULL, NULL, 0, NULL, NULL,
+                       xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_Hit01;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_Hit01], 0, 0, 1, NULL, NULL, 0, NULL, NULL,
+                       xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_Hit02;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_Hit02], 0, 0, 1, NULL, NULL, 0, NULL, NULL,
+                       xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_ReturnIdle01;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_ReturnIdle01], 0x20, 0, 1, NULL, NULL, 0, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_KarateStart;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_KarateStart], 0x20, 0, 1, NULL, NULL, 0, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_KarateLoop;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_KarateLoop], 0x10, 0, 1, NULL, NULL, 0, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    anim_list[n++] = ANIM_KarateEnd;
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_KarateEnd], 0x20, 0, 1, NULL, NULL, 0, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+
+    anim_list[n++] = 0;
+
+    NPCC_BuildStandardAnimTran(table, g_strz_bossanim, anim_list, 1, 0.2);
+
+    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_SmackLeft01], g_strz_bossanim[ANIM_Dizzy01],
+                            0, 0, 0x10, 0, 0, 0, 0, 0, 0.1, 0);
+    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_SmackRight01],
+                            g_strz_bossanim[ANIM_Dizzy01], 0, 0, 0x10, 0, 0, 0, 0, 0, 0.1, 0);
+    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_ReturnIdle01], g_strz_bossanim[ANIM_Idle01],
+                            0, 0, 0x10, 0, 0, 0, 0, 0, 0.1, 0);
+    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_KarateStart],
+                            g_strz_bossanim[ANIM_KarateLoop], 0, 0, 0x10, 0, 0, 0, 0, 0, 0.1, 0);
+    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_KarateEnd], g_strz_bossanim[ANIM_Idle01], 0,
+                            0, 0x10, 0, 0, 0, 0, 0, 0.1, 0);
+    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_ChopLeftBegin],
+                            g_strz_bossanim[ANIM_ChopLeftLoop], 0, 0, 0x10, 0, 0, 0, 0, 0, 0.1, 0);
+    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_ChopLeftLoop],
+                            g_strz_bossanim[ANIM_ChopLeftEnd], 0, 0, 0, 0, 0, 0, 0, 0, 0.1, 0);
+    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_ChopRightBegin],
+                            g_strz_bossanim[ANIM_ChopRightLoop], 0, 0, 0x10, 0, 0, 0, 0, 0, 0.1, 0);
+    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_ChopRightLoop],
+                            g_strz_bossanim[ANIM_ChopRightEnd], 0, 0, 0, 0, 0, 0, 0, 0, 0.1, 0);
+    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_SwipeLeftBegin],
+                            g_strz_bossanim[ANIM_SwipeLeftLoop], 0, 0, 0x10, 0, 0, 0, 0, 0, 0.1, 0);
+    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_SwipeLeftLoop],
+                            g_strz_bossanim[ANIM_SwipeLeftEnd], 0, 0, 0, 0, 0, 0, 0, 0, 0.1, 0);
+    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_SwipeRightBegin],
+                            g_strz_bossanim[ANIM_SwipeRightLoop], 0, 0, 0x10, 0, 0, 0, 0, 0, 0.1,
+                            0);
+    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_SwipeRightLoop],
+                            g_strz_bossanim[ANIM_SwipeRightEnd], 0, 0, 0, 0, 0, 0, 0, 0, 0.1, 0);
+    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_Hit01], g_strz_bossanim[ANIM_Idle01], 0, 0,
+                            0x10, 0, 0, 0, 0, 0, 0.1, 0);
+    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_Hit02], g_strz_bossanim[ANIM_Dizzy01], 0, 0,
+                            0x10, 0, 0, 0, 0, 0, 0.1, 0);
+
+    return table;
+}
+
+void zNPCB_SB2::Init(xEntAsset* asset)
+{
+    xModelInstance * m;
+
+    _singleton = this;
+    boss_cam.init();
+    init_sound();
+    zNPCCommon::Init(asset);
+    this->cfg_npc->dst_castShadow = 30.0f;
+    memset(&this->flag.face_player, 0, 0x10);
+    this->said_intro = 0;
+
+    m = this->model;
+    this->models[0] = m;
+
+    m = m->Next;
+    this->models[1] = m;
+
+    m = m->Next;
+    this->models[2] = m;
+
+    this->models[3] = m->Next;
+
+    this->models[0]->Data->boundingSphere.radius = 100.0f;
+    this->models[1]->Data->boundingSphere.radius = 100.0f;
+    this->models[2]->Data->boundingSphere.radius = 100.0f;
+    this->models[3]->Data->boundingSphere.radius = 100.0f;
+
+    set_alpha_blend(this->models[0]);
+    this->init_hands();
+    this->init_bounds();
+    this->reset_bounds();
+
+    this->penby = FALSE;
+    this->bupdate = 0;
+    this->bound.type = TRUE;
+    this->bound.sph.center.y = 1e38f;
+    this->bound.sph.r = 0.0f;
+
+    rc_scale.init(1, scale_curve, 4, NULL, NULL, NULL, NULL);
+
+    this->init_slugs();
+}
+
+namespace
+{
+    void response_curve::init(u32 values, const void* curve, u32 nodes, const char*, const char**,
+                              const tweak_callback*, void*)
+    {
+        this->values = values;
+        this->curve = (inode*)curve;
+        this->nodes = nodes;
+        this->active_node = 0;
+    }
+} // namespace
+
+void zNPCB_SB2::ParseINI()
+{
+    zNPCCommon::ParseINI();
+    tweak.load(this->parmdata, this->pdatsize);
+}
+
+namespace
+{
     void tweak_group::load(xModelAssetParam* params, U32 size)
     {
         tweak_group::register_tweaks(true, params, size, NULL);
@@ -1378,187 +1567,6 @@ namespace
 
 } // namespace
 
-xAnimTable* ZNPC_AnimTable_BossSB2()
-{
-    // clang-format off
-    S32 anim_list[27] = {
-
-    ANIM_Idle01,
-    ANIM_Idle02,
-    ANIM_Taunt01,
-    ANIM_Hit01,
-    ANIM_Hit02,
-    ANIM_SmashHitLeft,
-    ANIM_SmashHitRight,
-    ANIM_SmackLeft01,
-    ANIM_SmackRight01,
-    ANIM_ChopLeftBegin,
-    ANIM_ChopLeftLoop,
-    ANIM_ChopLeftEnd,
-    ANIM_ChopRightBegin,            
-    ANIM_ChopRightLoop,             
-    ANIM_ChopRightEnd,               
-    ANIM_SwipeLeftBegin,
-    ANIM_SwipeLeftLoop,
-    ANIM_SwipeLeftEnd,
-    ANIM_SwipeRightBegin,
-    ANIM_SwipeRightLoop,
-    ANIM_SwipeRightEnd,
-    ANIM_ReturnIdle01,
-    ANIM_KarateStart,
-    ANIM_KarateLoop,
-    ANIM_KarateEnd,
-    ANIM_Dizzy01,  
-    };
-    
-
-    xAnimTable* table = xAnimTableNew("zNPCB_SB2_Karate", NULL, 0);
-    //24 new state
-    //15  new transition
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_Idle01], 0x10, 0, 1, NULL, NULL, 0, NULL, NULL,
-                       xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_Idle02], 0, 0, 1, NULL, NULL, 0, NULL, NULL,
-                       xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_Taunt01], 0, 0, 1, NULL, NULL, 0, NULL, NULL,
-                       xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_SmackLeft01], 0x20, 0, 1, NULL, NULL, 0, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_SmackRight01], 0x20, 0, 1, NULL, NULL, 0, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_ChopLeftBegin], 0x20, 0, 1, NULL, NULL, 0, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_ChopLeftLoop], 0, 0, 1, NULL, NULL, 0, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_ChopLeftEnd], 0x20, 0, 1, NULL, NULL, 0, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_ChopRightBegin], 0x20, 0, 1, NULL, NULL, 0, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_ChopRightLoop], 0, 0, 1, NULL, NULL, 0, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_ChopRightEnd], 0x20, 0, 1, NULL, NULL, 0, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_SwipeLeftBegin], 0x20, 0, 1, NULL, NULL, 0, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_SwipeLeftLoop], 0x10, 0, 1, NULL, NULL, 0, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_SwipeLeftEnd], 0x20, 0, 1, NULL, NULL, 0, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_SwipeRightBegin], 0x20, 0, 1, NULL, NULL, 0,
-                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_SwipeRightLoop], 0x10, 0, 1, NULL, NULL, 0, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_SwipeRightEnd], 0x20, 0, 1, NULL, NULL, 0, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_Dizzy01], 0x10, 0, 1, NULL, NULL, 0, NULL, NULL,
-                       xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_Hit01], 0, 0, 1, NULL, NULL, 0, NULL, NULL,
-                       xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_Hit02], 0, 0, 1, NULL, NULL, 0, NULL, NULL,
-                       xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_ReturnIdle01], 0x20, 0, 1, NULL, NULL, 0, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_KarateStart], 0x20, 0, 1, NULL, NULL, 0, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_KarateLoop], 0x10, 0, 1, NULL, NULL, 0, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_KarateEnd], 0x20, 0, 1, NULL, NULL, 0, NULL,
-                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-
-    NPCC_BuildStandardAnimTran(table, g_strz_bossanim, 0, 1, 0.2);
-
-    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_SmackLeft01], g_strz_bossanim[ANIM_Dizzy01],
-                            0, 0, 0x10, 0, 0, 0, 0, 0, 0.1, 0);
-    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_SmackRight01],
-                            g_strz_bossanim[ANIM_Dizzy01], 0, 0, 0x10, 0, 0, 0, 0, 0, 0.1, 0);
-    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_ReturnIdle01], g_strz_bossanim[ANIM_Idle01],
-                            0, 0, 0x10, 0, 0, 0, 0, 0, 0.1, 0);
-    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_KarateStart],
-                            g_strz_bossanim[ANIM_KarateLoop], 0, 0, 0x10, 0, 0, 0, 0, 0, 0.1, 0);
-    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_KarateEnd], g_strz_bossanim[ANIM_Idle01], 0,
-                            0, 0x10, 0, 0, 0, 0, 0, 0.1, 0);
-    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_ChopLeftBegin],
-                            g_strz_bossanim[ANIM_ChopLeftLoop], 0, 0, 0x10, 0, 0, 0, 0, 0, 0.1, 0);
-    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_ChopLeftLoop],
-                            g_strz_bossanim[ANIM_ChopLeftEnd], 0, 0, 0, 0, 0, 0, 0, 0, 0.1, 0);
-    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_ChopRightBegin],
-                            g_strz_bossanim[ANIM_ChopRightLoop], 0, 0, 0x10, 0, 0, 0, 0, 0, 0.1, 0);
-    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_ChopRightLoop],
-                            g_strz_bossanim[ANIM_ChopRightEnd], 0, 0, 0, 0, 0, 0, 0, 0, 0.1, 0);
-    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_SwipeLeftBegin],
-                            g_strz_bossanim[ANIM_SwipeLeftLoop], 0, 0, 0x10, 0, 0, 0, 0, 0, 0.1, 0);
-    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_SwipeLeftLoop],
-                            g_strz_bossanim[ANIM_SwipeLeftEnd], 0, 0, 0, 0, 0, 0, 0, 0, 0.1, 0);
-    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_SwipeRightBegin],
-                            g_strz_bossanim[ANIM_SwipeRightLoop], 0, 0, 0x10, 0, 0, 0, 0, 0, 0.1,
-                            0);
-    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_SwipeRightLoop],
-                            g_strz_bossanim[ANIM_SwipeRightEnd], 0, 0, 0, 0, 0, 0, 0, 0, 0.1, 0);
-    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_Hit01], g_strz_bossanim[ANIM_Idle01], 0, 0,
-                            0x10, 0, 0, 0, 0, 0, 0.1, 0);
-    xAnimTableNewTransition(table, g_strz_bossanim[ANIM_Hit02], g_strz_bossanim[ANIM_Dizzy01], 0, 0,
-                            0x10, 0, 0, 0, 0, 0, 0.1, 0);
-
-    return table;
-}
-
-void zNPCB_SB2::Init(xEntAsset* asset)
-{
-    xModelInstance * m;
-
-    _singleton = this;
-    boss_cam.init();
-    init_sound();
-    zNPCCommon::Init(asset);
-    this->cfg_npc->dst_castShadow = 30.0f;
-    memset(&this->flag.face_player, 0, 0x10);
-    this->said_intro = 0;
-
-    m = this->model;
-    this->models[0] = this->model;
-
-    this->models[1] = this->models[0]->Next;
-    this->models[2] = this->models[1]->Next;
-    this->models[3] = this->models[2]->Next;
-
-    this->models[0]->Data->boundingSphere.radius = 100.0f;
-    this->models[1]->Data->boundingSphere.radius = 100.0f;
-    this->models[2]->Data->boundingSphere.radius = 100.0f;
-    this->models[3]->Data->boundingSphere.radius = 100.0f;
-
-    set_alpha_blend(this->models[0]);
-    this->init_hands();
-    this->init_bounds();
-    this->reset_bounds();
-
-    this->penby = FALSE;
-    this->bupdate = 0;
-    this->bound.type = TRUE;
-    this->bound.sph.center.y = 1e38f;
-    this->bound.sph.r = 0.0f;
-
-    rc_scale.init(1, scale_curve, 4, NULL, NULL, NULL, NULL);
-
-    this->init_slugs();
-}
-
-namespace
-{
-    void response_curve::init(u32 values, const void* curve, u32 nodes, const char*, const char**,
-                              const tweak_callback*, void*)
-    {
-        this->values = values;
-        this->curve = (inode*)curve;
-        this->nodes = nodes;
-        this->active_node = 0;
-    }
-} // namespace
-
-void zNPCB_SB2::ParseINI()
-{
-    zNPCCommon::ParseINI();
-    tweak.load(this->parmdata, this->pdatsize);
-}
-
 void zNPCB_SB2::Setup()
 {
     xEnt* ent; 
@@ -1880,14 +1888,10 @@ zNPCB_SB2::platform_data* zNPCB_SB2::player_platform()
 {
     xEntCollis* collis = globals.player.ent.collis;
 
-    if (!(collis->colls->flags & 1))
-    {
-        return NULL;
-    }
+    xEnt* ent;
 
-    xEnt* ent = (xEnt*)collis->colls->optr;
-
-    if (ent == NULL || ent->baseType != eBaseTypePlatform)
+    if (!(collis->colls->flags & 1) || (ent = (xEnt*)collis->colls->optr) == NULL ||
+        ent->baseType != eBaseTypePlatform)
     {
         return NULL;
     }
@@ -2091,21 +2095,21 @@ S32 zNPCB_SB2::next_goal()
         return NPC_GOAL_BOSSSB2TAUNT;
     }
 
-    if (stage_delay <= 0.0f)
+    if (stage_delay > 0.0f)
     {
-        stage++;
-
-        if (sequence[round][stage].goal == 0)
-        {
-            stage = 0;
-        }
-
-        stage_delay = sequence[round][stage].delay;
-
-        return sequence[round][stage].goal;
+        return NPC_GOAL_BOSSSB2IDLE;
     }
 
-    return NPC_GOAL_BOSSSB2IDLE;
+    stage++;
+
+    if (sequence[round][stage].goal == 0)
+    {
+        stage = 0;
+    }
+
+    stage_delay = sequence[round][stage].delay;
+
+    return sequence[round][stage].goal;
 }
 
 void zNPCB_SB2::reset_stage()
@@ -2143,21 +2147,21 @@ void zNPCB_SB2::update_turn(F32 dt)
     if (flag.face_player)
     {
         const xVec3& player_loc = (const xVec3&)globals.player.ent.model->Mat->pos;
+        const xVec3& loc = location();
 
-        turn.dir.assign(player_loc.x - location().x, player_loc.z - location().z);
+        turn.dir.assign(player_loc.x - loc.x, player_loc.z - loc.z);
         turn.dir.normalize();
     }
 
     xVec3& loc = location();
-    F32 curx = model->Mat->at.x;
-    F32 curz = model->Mat->at.z;
+    xVec2 cur = { model->Mat->at.x, model->Mat->at.z };
 
     if (!turning())
     {
         return;
     }
 
-    F32 start = xatan2(curx, curz);
+    F32 start = xatan2(cur.x, cur.y);
     F32 diff = xatan2(turn.dir.x, turn.dir.y) - start;
 
     if (diff > PI)
@@ -2177,53 +2181,48 @@ void zNPCB_SB2::update_turn(F32 dt)
 
 void zNPCB_SB2::update_halt(F32 dt)
 {
+    // NOTE: retail really does leave `s` uninitialised here; xAccelStop takes it by
+    // reference and reads it. Reproduced as-is.
+    F32 s;
     F32 old_yaw = move.yaw;
-
-    F32 yaw_accel = (move.yaw_vel >= 0.0f) ? -xabs(move.turn_accel) : xabs(move.turn_accel);
-    F32 accel = (move.vel >= 0.0f) ? -xabs(move.accel) : xabs(move.accel);
-
-    F32 s = 0.0f;
+    F32 yaw_accel = (move.yaw_vel < 0.0f) ? xabs(move.turn_accel) : -xabs(move.turn_accel);
+    F32 accel = (move.vel < 0.0f) ? xabs(move.accel) : -xabs(move.accel);
 
     xAccelStop(move.yaw, move.yaw_vel, yaw_accel, dt);
     xAccelStop(s, move.vel, accel, dt);
 
-    if ((s >= -1e-5f && s <= 1e-5f) || xabs(old_yaw - move.yaw) <= 0.001f)
+    if (xfeq0(s) || xabs(old_yaw - move.yaw) <= 0.001f)
     {
         flag.move = MOVE_NONE;
     }
     else
     {
-        xVec2 loc;
-        loc.x = location().x;
-        loc.y = location().z;
+        xVec2 loc = { location().x, location().z };
+
         set_location(loc + move.dir * s);
     }
 }
 
 void zNPCB_SB2::update_follow(F32 dt)
 {
-    xVec2 loc;
-    loc.x = location().x;
-    loc.y = location().z;
-
+    xVec2 loc = { location().x, location().z };
     xVec2 offset = move.dest - loc;
     F32 dist = offset.length();
     xVec2 dir;
 
-    if (dist < -1e-5f || 1e-5f < dist)
+    if (!xfeq0(dist))
     {
         dir = offset * (1.0f / dist);
     }
+    else if (!xfeq0(move.vel))
+    {
+        dir = move.dir;
+    }
     else
     {
-        if (move.vel >= -1e-5f && move.vel <= 1e-5f)
-        {
-            flag.move = MOVE_NONE;
-            set_location(move.dest);
-            return;
-        }
-
-        dir = move.dir;
+        flag.move = MOVE_NONE;
+        set_location(move.dest);
+        return;
     }
 
     F32 dyaw = xatan2(dir.x, dir.y) - move.yaw;
@@ -2272,14 +2271,15 @@ void zNPCB_SB2::update_ymove(F32 dt)
 
     F32 t = ymove.time / ymove.end_time;
 
-    if (t < 1.0f)
-    {
-        loc.y = ymove.begin + xSCurve(t) * (ymove.end - ymove.begin);
-    }
-    else
+    if (t >= 1.0f)
     {
         loc.y = ymove.end;
         flag.move = MOVE_NONE;
+    }
+    else
+    {
+        F32 s = xSCurve(t);
+        loc.y = ymove.begin + s * (ymove.end - ymove.begin);
     }
 
     set_location(loc);
@@ -2392,24 +2392,26 @@ void zNPCB_SB2::move_nodes()
         }
 
         xVec3 loc;
-        xVec3 uploc;
         xVec3 norm;
+        xVec3 uploc;
+        RpAtomic* m = n.skin_model;
+        RwMatrixTag* skin_mat = n.skin_mat;
 
         if (node_hooks[i].points == 3)
         {
             xVec3 rightloc;
 
-            iModelTagEval(n.skin_model, &n.v3.tag[0], n.skin_mat, &loc);
-            iModelTagEval(n.skin_model, &n.v3.tag[1], n.skin_mat, &uploc);
-            iModelTagEval(n.skin_model, &n.v3.tag[2], n.skin_mat, &rightloc);
+            iModelTagEval(m, &n.v3.tag[0], skin_mat, &loc);
+            iModelTagEval(m, &n.v3.tag[1], skin_mat, &uploc);
+            iModelTagEval(m, &n.v3.tag[2], skin_mat, &rightloc);
 
             norm = (rightloc - loc).cross(uploc - loc);
             norm.up_normalize();
         }
         else
         {
-            iModelTagEval(n.skin_model, &n.v2n1.tag, n.skin_mat, &loc, &norm);
-            iModelTagEval(n.skin_model, &n.v2n1.uptag, n.skin_mat, &uploc);
+            iModelTagEval(m, &n.v2n1.tag, skin_mat, &loc, &norm);
+            iModelTagEval(m, &n.v2n1.uptag, skin_mat, &uploc);
         }
 
         xMat4x3 mat;
@@ -2457,7 +2459,9 @@ void zNPCB_SB2::bind_nodes()
 
     for (S32 i = 0; i < 9; i++)
     {
-        if (nodes[i].ent == NULL)
+        zEntDestructObj* ent = nodes[i].ent;
+
+        if (ent == NULL)
         {
             nodes[i].skin_model = NULL;
             nodes[i].skin_mat = NULL;
@@ -2466,7 +2470,7 @@ void zNPCB_SB2::bind_nodes()
         {
             xModelInstance* model = models[node_hooks[i].model];
 
-            nodes[i].ent->baseFlags &= 0xfff7;
+            ent->baseFlags &= 0xfff7;
             nodes[i].skin_model = model->Data;
             nodes[i].skin_mat = model->Mat;
         }
@@ -2495,17 +2499,17 @@ void zNPCB_SB2::rebind_nodes(RpAtomic* skin_model, RwMatrixTag* skin_mat)
 
     for (S32 i = 0; i < 9; i++)
     {
-        if (nodes[i].ent == NULL)
+        zEntDestructObj* ent = nodes[i].ent;
+
+        if (ent == NULL)
         {
             nodes[i].skin_model = NULL;
             nodes[i].skin_mat = NULL;
         }
         else
         {
-            RpAtomic* atomic = skin_models[node_hooks[i].model];
-
-            nodes[i].ent->baseFlags &= 0xfff7;
-            nodes[i].skin_model = atomic;
+            ent->baseFlags &= 0xfff7;
+            nodes[i].skin_model = skin_models[node_hooks[i].model];
             nodes[i].skin_mat = skin_mat;
         }
     }
@@ -2621,70 +2625,70 @@ xSurface& zNPCB_SB2::create_surface()
 
 void zNPCB_SB2::init_hands()
 {
-    static const S32 model_lookup[2] = { 1, 2 };
+    S32 model_lookup[2] = { 1, 2 };
 
     for (S32 i = 0; i < 2; i++)
     {
-        hand_data& hand = hands[i];
+        hands[i].hit_platforms = FALSE;
+        hands[i].hurt_player = FALSE;
+        hands[i].ent = &bounds[i].ent;
 
-        hand.hit_platforms = FALSE;
-        hand.hurt_player = FALSE;
-        hand.ent = &bounds[i].ent;
-
-        init_bound_entity(*hand.ent, i, models[model_lookup[i]],
+        init_bound_entity(*hands[i].ent, i, models[model_lookup[i]],
                           (xMat4x3*)xMemAlloc(gActiveHeap, sizeof(xMat4x3), 0));
 
-        hand.ent->baseFlags |= 0x10;
-        hand.ent->moreFlags &= ~2;
-        hand.ent->flags |= 1;
-        hand.ent->pflags |= 0x40;
+        hands[i].ent->baseFlags |= 0x10;
+        hands[i].ent->moreFlags &= 0xfd;
+        hands[i].ent->flags |= 1;
+        hands[i].ent->pflags |= 0x40;
 
         for (S32 j = 0; j < 4; j++)
         {
-            const xVec3& head = hand_hooks[i].head[j];
-            const xVec3& tail = hand_hooks[i].tail[j];
+            xVec3 t = hand_hooks[i].tail[j];
 
-            iModelTagSetup(&hand.head_tag[j], hand.ent->model->Data, head.x, head.y, head.z);
-            iModelTagSetup(&hand.tail_tag[j], hand.ent->model->Data, tail.x, tail.y, tail.z);
+            iModelTagSetup(&hands[i].head_tag[j], hands[i].ent->model->Data,
+                           hand_hooks[i].head[j].x, hand_hooks[i].head[j].y,
+                           hand_hooks[i].head[j].z);
+            iModelTagSetup(&hands[i].tail_tag[j], hands[i].ent->model->Data, t.x, t.y, t.z);
         }
 
-        if (hand.ent->model->Surf == NULL)
+        if (hands[i].ent->model->Surf == NULL)
         {
-            hand.ent->model->Surf = &create_surface();
+            hands[i].ent->model->Surf = &create_surface();
         }
 
-        ((zSurfaceProps*)hand.ent->model->Surf->moprops)->asset->game_damage_type = 0;
+        ((zSurfaceProps*)hands[i].ent->model->Surf->moprops)->asset->game_damage_type = 0;
     }
 }
 
 void zNPCB_SB2::move_hand(zNPCB_SB2::hand_data& hand, F32 dt)
 {
-    xVec3 tail[4];
-    xVec3 head[4];
+    xVec3 loc[8];
+    xVec3* head_loc = loc;
+    xVec3* tail_loc = loc + 4;
 
     for (S32 i = 0; i < 4; i++)
     {
-        xModelInstance* m = hand.ent->model;
+        xModelInstance& m = *hand.ent->model;
 
-        iModelTagEval(m->Data, &hand.head_tag[i], m->Mat, &head[i]);
-        iModelTagEval(m->Data, &hand.tail_tag[i], m->Mat, &tail[i]);
+        iModelTagEval(m.Data, &hand.head_tag[i], m.Mat, &head_loc[i]);
+        iModelTagEval(m.Data, &hand.tail_tag[i], m.Mat, &tail_loc[i]);
     }
 
-    xBound& bound = hand.ent->bound;
-    xVec3 old_loc = bound.mat->pos;
+    xBound& obb = hand.ent->bound;
+    xVec3 old_loc = obb.mat->pos;
 
-    parallelepiped_to_obb(bound, head);
-    xQuickCullForBound(&bound.qcd, &bound);
+    parallelepiped_to_obb(obb, loc);
+    xQuickCullForBound(&obb.qcd, &obb);
     zGridUpdateEnt(hand.ent);
 
-    hand.radius = bound.box.box.upper.length();
+    hand.radius = obb.box.box.upper.length();
 
     if (!hand.hurt_player)
     {
         return;
     }
 
-    xVec3 offset = bound.mat->pos - old_loc;
+    xVec3 offset = obb.mat->pos - old_loc;
     xVec3 player_offset = (const xVec3&)globals.player.ent.model->Mat->pos - old_loc;
 
     if (offset.dot(player_offset) > 0.0f &&
@@ -2713,8 +2717,8 @@ void zNPCB_SB2::move_hand(zNPCB_SB2::hand_data& hand, F32 dt)
     }
 }
 
-void zNPCB_SB2::spin_platform(zNPCB_SB2::platform_data& p, const xVec3& axis, F32 max_vel,
-                              F32 accel)
+void zNPCB_SB2::spin_platform(zNPCB_SB2::platform_data& p, const xVec3& axis, F32 accel,
+                              F32 max_vel)
 {
     p.stopping = FALSE;
     p.spin.axis = axis;
@@ -2733,41 +2737,47 @@ void zNPCB_SB2::check_platform_smack(zNPCB_SB2::hand_data& hand)
 {
     for (platform_data* it = platforms; it != platforms + 16; it++)
     {
-        if (it->ent == NULL || it->spin.accel > 0.0f)
+        xEnt* pent = it->ent;
+
+        if (pent == NULL || it->spin.accel > 0.0f)
         {
             continue;
         }
 
         xEnt& ent = *hand.ent;
-        xVec3 offset = it->ent->bound.sph.center - ent.bound.sph.center;
-        F32 max_dist = hand.radius + it->radius;
+        xVec3 offset = pent->bound.sph.center - ent.bound.sph.center;
 
-        if (offset.length2() <= max_dist * max_dist &&
-            xOBBHitsOBB(ent.bound.box.box, *ent.bound.mat, it->ent->bound.box.box,
-                        *it->ent->bound.mat))
+        if (offset.length2() > (hand.radius + it->radius) * (hand.radius + it->radius))
         {
-            xVec3 axis;
+            continue;
+        }
 
-            if (offset.x * offset.x + offset.z * offset.z <= tweak.spin.min_dist * tweak.spin.min_dist)
+        if (!xOBBHitsOBB(ent.bound.box.box, *ent.bound.mat, pent->bound.box.box, *pent->bound.mat))
+        {
+            continue;
+        }
+
+        xVec3 axis;
+
+        if (offset.x * offset.x + offset.z * offset.z > tweak.spin.min_dist * tweak.spin.min_dist)
+        {
+            axis = it->mat.right;
+
+            if (it->mat.at.dot(offset) > 0.0f)
             {
-                axis = it->mat.at;
                 axis.invert();
             }
-            else
-            {
-                axis = it->mat.right;
-
-                if (it->mat.at.dot(offset) > 0.0f)
-                {
-                    axis.invert();
-                }
-            }
-
-            axis.normalize();
-
-            spin_platform(*it, axis, tweak.spin.vel, tweak.spin.accel);
-            play_sound(SOUND_CHOP_HIT, (const xVec3*)&it->ent->model->Mat->pos, 1.0f);
         }
+        else
+        {
+            axis = it->mat.at;
+            axis.invert();
+        }
+
+        axis.normalize();
+
+        spin_platform(*it, axis, tweak.spin.accel, tweak.spin.vel);
+        play_sound(SOUND_CHOP_HIT, (const xVec3*)&it->ent->model->Mat->pos, 1.0f);
     }
 }
 
@@ -2838,9 +2848,11 @@ void zNPCB_SB2::init_bounds()
 
 void zNPCB_SB2::reset_bounds()
 {
-    for (S32 i = 0; i < 3; i++)
+    bound_data* it = &bounds[2];
+
+    for (S32 i = 0; i < 3; i++, it++)
     {
-        bound_data& it = bounds[i + 2];
+        xBound& bound = it->ent.bound;
 
         if (tweak.bounds[i].bone >= (S32)model->BoneCount)
         {
@@ -2849,44 +2861,45 @@ void zNPCB_SB2::reset_bounds()
 
         if (tweak.bounds[i].is_sphere)
         {
-            it.ent.bound.type = XBOUND_TYPE_SPHERE;
-            it.ent.bound.sph.r = tweak.bounds[i].radius;
-            it.ent.bound.mat = NULL;
+            bound.type = XBOUND_TYPE_SPHERE;
+            bound.sph.r = tweak.bounds[i].radius;
+            bound.mat = NULL;
         }
         else
         {
-            it.ent.bound.type = XBOUND_TYPE_OBB;
-            it.ent.bound.box.box.upper = tweak.bounds[i].extent;
-            it.ent.bound.box.box.lower = -it.ent.bound.box.box.upper;
-            it.ent.bound.mat = &it.mat;
-            xMat3x3Euler(&it.rot_mat, tweak.bounds[i].yaw, tweak.bounds[i].pitch,
+            bound.type = XBOUND_TYPE_OBB;
+            bound.box.box.upper = tweak.bounds[i].extent;
+            bound.box.box.lower = -bound.box.box.upper;
+            bound.mat = &it->mat;
+            xMat3x3Euler(&it->rot_mat, tweak.bounds[i].yaw, tweak.bounds[i].pitch,
                          tweak.bounds[i].roll);
         }
 
         if (tweak.bounds[i].damage_player)
         {
-            it.ent.penby = 0;
-            it.ent.collModel = models[0];
-            it.ent.model = models[0];
+            it->ent.penby = 0;
+            it->ent.model = it->ent.collModel = models[0];
         }
         else
         {
-            it.ent.penby = 0x10;
-            it.ent.collModel = models[3];
-            it.ent.model = models[3];
+            it->ent.penby = 0x10;
+            it->ent.model = it->ent.collModel = models[3];
         }
     }
 }
 
 void zNPCB_SB2::update_bounds()
 {
-    for (S32 i = 0; i < 3; i++)
-    {
-        bound_data& it = bounds[i + 2];
-        xMat4x3 buffer_mat;
-        const xMat4x3* bone_mat;
+    bound_data* it = &bounds[2];
 
-        if (tweak.bounds[i].bone == 0)
+    for (S32 i = 0; i < 3; i++, it++)
+    {
+        xBound& bound = it->ent.bound;
+        S32 bone = tweak.bounds[i].bone;
+        const xMat4x3* bone_mat;
+        xMat4x3 buffer_mat;
+
+        if (bone == 0)
         {
             bone_mat = (const xMat4x3*)model->Mat;
         }
@@ -2894,36 +2907,43 @@ void zNPCB_SB2::update_bounds()
         {
             const xMat4x3* skin = (const xMat4x3*)model->Mat;
 
-            xMat4x3Mul(&buffer_mat, &skin[tweak.bounds[i].bone], skin);
             bone_mat = &buffer_mat;
+            xMat4x3Mul(&buffer_mat, &skin[bone], skin);
         }
 
         xVec3 offset;
 
         xMat3x3RMulVec(&offset, bone_mat, &tweak.bounds[i].offset);
-        it.ent.bound.sph.center = bone_mat->pos + offset;
+        bound.sph.center = bone_mat->pos + offset;
 
         if (!tweak.bounds[i].is_sphere)
         {
-            xMat3x3Mul(it.ent.bound.mat, &it.rot_mat, bone_mat);
-            it.ent.bound.mat->pos = it.ent.bound.sph.center;
+            xMat3x3Mul(bound.mat, &it->rot_mat, bone_mat);
+            bound.mat->pos = bound.sph.center;
         }
 
         if (tweak.bounds[i].damage_player)
         {
-            it.ent.penby = 0;
-            it.ent.collModel = models[player_damaged() ? 3 : 0];
-            it.ent.model = it.ent.collModel;
+            it->ent.penby = 0;
+
+            bool damaged = player_damaged();
+            S32 which = 0;
+
+            if (damaged)
+            {
+                which = 3;
+            }
+
+            it->ent.model = it->ent.collModel = models[which];
         }
         else
         {
-            it.ent.penby = 0x10;
-            it.ent.collModel = models[3];
-            it.ent.model = models[3];
+            it->ent.penby = 0x10;
+            it->ent.model = it->ent.collModel = models[3];
         }
 
-        xQuickCullForBound(&it.ent.bound.qcd, &it.ent.bound);
-        zGridUpdateEnt(&it.ent);
+        xQuickCullForBound(&bound.qcd, &bound);
+        zGridUpdateEnt(&it->ent);
     }
 }
 
@@ -3029,7 +3049,7 @@ void zNPCB_SB2::update_dying_slug(zNPCB_SB2::slug_data& slug, F32 dt)
 
     slug.ent->model->Alpha -= fade_time * dt;
 
-    if (slug.ent->model->Alpha <= 0.0f)
+    if (!(slug.ent->model->Alpha > 0.0f))
     {
         slug.stage = SLUG_INACTIVE;
         slug.ent->flags &= ~1;
@@ -3087,9 +3107,9 @@ void zNPCB_SB2::update_fire_slug(zNPCB_SB2::slug_data& slug, F32 dt)
 
 void zNPCB_SB2::slug_interp(F32 time, F32& scale)
 {
-    static bool use_smooth = true;
-
     F32 ct = rc_scale.clamp_t(time);
+
+    static bool use_smooth = true;
 
     if (use_smooth)
     {
@@ -3196,7 +3216,7 @@ namespace
 
         F32 dt = n1->t - n0->t;
 
-        if (-1e-5f <= dt && dt <= 1e-5f)
+        if (xfeq0(dt))
         {
             for (F32* a = n0->value; value != end; value++, a++)
             {
@@ -3209,33 +3229,12 @@ namespace
             F32 u2 = u * u;
             F32 u3 = u2 * u;
 
-            F32 cm = -0.5f * u + -0.5f * u3 + u2;
-            F32 c0 = 1.0f + 1.5f * u3 + -2.5f * u2;
-            F32 c1 = 0.5f * u + -1.5f * u3 + 2.0f * u2;
+            F32 cm = u2 + -0.5f * u3 + -0.5f * u;
+            F32 c0 = 1.5f * u3 + -2.5f * u2 + 1.0f;
+            F32 c1 = -1.5f * u3 + 2.0f * u2 + 0.5f * u;
             F32 cp = 0.5f * u3 + -0.5f * u2;
 
-            if (index == 0 || nodes - 2 <= index)
-            {
-                if (index == 0)
-                {
-                    F32* p = curve[2].value;
-
-                    for (F32 *a = n0->value, *b = n1->value; value != end; value++, a++, b++, p++)
-                    {
-                        *value = cp * *p + (cm + c0) * *a + c1 * *b;
-                    }
-                }
-                else
-                {
-                    F32* p = curve[index - 1].value;
-
-                    for (F32 *a = n0->value, *b = n1->value; value != end; value++, a++, b++, p++)
-                    {
-                        *value = (c1 + cp) * *b + cm * *p + c0 * *a;
-                    }
-                }
-            }
-            else
+            if (index != 0 && index < nodes - 2)
             {
                 F32* pm = curve[index - 1].value;
                 F32* pp = curve[index + 2].value;
@@ -3243,7 +3242,25 @@ namespace
                 for (F32 *a = n0->value, *b = n1->value; value != end;
                      value++, a++, b++, pm++, pp++)
                 {
-                    *value = cp * *pp + c1 * *b + cm * *pm + c0 * *a;
+                    *value = cm * *pm + c0 * *a + c1 * *b + cp * *pp;
+                }
+            }
+            else if (index != 0)
+            {
+                F32* p = curve[index - 1].value;
+
+                for (F32 *a = n0->value, *b = n1->value; value != end; value++, a++, b++, p++)
+                {
+                    *value = cm * *p + c0 * *a + (c1 + cp) * *b;
+                }
+            }
+            else
+            {
+                F32* p = curve[index + 2].value;
+
+                for (F32 *a = n0->value, *b = n1->value; value != end; value++, a++, b++, p++)
+                {
+                    *value = (cm + c0) * *a + c1 * *b + cp * *p;
                 }
             }
         }
@@ -3252,7 +3269,7 @@ namespace
 
 void zNPCB_SB2::update_slugs(F32 dt)
 {
-    for (slug_data* it = slugs; it != slugs + MAX_SLUG; it++)
+    for (slug_data *it = slugs, *end = it + MAX_SLUG; it != end; it++)
     {
         switch (it->stage)
         {
@@ -3294,8 +3311,6 @@ void zNPCB_SB2::update_slugs(F32 dt)
 void zNPCB_SB2::scan_cronies()
 {
     st_XORDEREDARRAY* npclist = zNPCMgr_GetNPCList();
-
-    plankton = NULL;
 
     for (S32 i = 0; i < npclist->cnt; i++)
     {
@@ -3394,6 +3409,7 @@ void zNPCB_SB2::create_glow_light()
     memset(&glow_light, 0, sizeof(glow_light));
 
     xLightKit* dlk = NULL;
+    U32& total = glow_light.kit.lightCount;
     U32 id = globals.sceneCur->zen->easset->objectLightKit;
 
     if (id != 0)
@@ -3401,8 +3417,8 @@ void zNPCB_SB2::create_glow_light()
         dlk = (xLightKit*)xSTFindAsset(id, NULL);
     }
 
-    glow_light.kit.lightCount = 1;
-    glow_light.kit.tagID = 'LKIT';
+    total = 1;
+    glow_light.kit.tagID = 'TIKL';
     glow_light.kit.lightList = glow_light.light;
     glow_light.light[0].type = 1;
     glow_light.light[0].color.red = 1.0f;
@@ -3412,17 +3428,16 @@ void zNPCB_SB2::create_glow_light()
 
     if (dlk != NULL)
     {
-        const xLightKitLight* src = dlk->lightList;
-
-        for (U32 i = 0; i < dlk->lightCount && glow_light.kit.lightCount < 8; i++, src++)
+        for (U32 i = 0; i < dlk->lightCount && total < 8; i++)
         {
+            xLightKitLight& src = dlk->lightList[i];
             xLightKitLight& dst = glow_light.light[glow_light.kit.lightCount];
 
-            if (src->type != 1)
+            if (src.type != 1)
             {
-                dst = *src;
+                dst = src;
                 dst.platLight = NULL;
-                glow_light.kit.lightCount++;
+                total++;
             }
         }
     }
@@ -3470,7 +3485,7 @@ S32 zNPCGoalBossSB2Intro::Enter(F32 dt, void* updCtxt)
 
 S32 zNPCGoalBossSB2Intro::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
 {
-    if (tweak.intro_time <= owner.delay)
+    if (owner.delay >= tweak.intro_time)
     {
         *trantype = GOAL_TRAN_SET;
         return NPC_GOAL_BOSSSB2IDLE;
@@ -3521,15 +3536,14 @@ S32 zNPCGoalBossSB2Idle::Process(en_trantype* trantype, F32 dt, void* updCtxt, x
         return NPC_GOAL_BOSSSB2HUNT;
     }
 
-    if (owner.delay < owner.stage_delay)
+    if (owner.delay >= owner.stage_delay)
     {
-        return 0;
+        owner.stage_delay = 0.0f;
+        *trantype = GOAL_TRAN_SET;
+        return owner.next_goal();
     }
 
-    owner.stage_delay = 0.0f;
-    *trantype = GOAL_TRAN_SET;
-
-    return owner.next_goal();
+    return 0;
 }
 
 xFactoryInst* zNPCGoalBossSB2Taunt::create(S32 who, RyzMemGrow* grow, void* info)
@@ -3601,14 +3615,13 @@ S32 zNPCGoalBossSB2Dizzy::Process(en_trantype* trantype, F32 dt, void* updCtxt, 
         return owner.next_goal();
     }
 
-    if (!owner.player_on_ground())
+    if (owner.player_on_ground())
     {
-        return 0;
+        *trantype = GOAL_TRAN_SET;
+        return NPC_GOAL_BOSSSB2HUNT;
     }
 
-    *trantype = GOAL_TRAN_SET;
-
-    return NPC_GOAL_BOSSSB2HUNT;
+    return 0;
 }
 
 xFactoryInst* zNPCGoalBossSB2Hit::create(S32 who, RyzMemGrow* grow, void* info)
@@ -3618,34 +3631,27 @@ xFactoryInst* zNPCGoalBossSB2Hit::create(S32 who, RyzMemGrow* grow, void* info)
 
 S32 zNPCGoalBossSB2Hit::Enter(F32 dt, void* updCtxt) 
 {
-    // Function needs set up differently
-    // im just dumb
-
-    S32 tempHitVar;
-
     owner.flag.face_player = 1;
     owner.set_vulnerable(false);
 
-    if (owner.flag.dizzy == false) {
-    if (owner.life < 4){
-        if (owner.life < 2){
-            if (owner.life > 0){
-                owner.say(9);
-            }
-        }
-        else {
-            owner.say(2);
-        }
+    if (owner.flag.dizzy)
+    {
+        owner.say(9);
     }
-    else {
+    else if (owner.life > 4)
+    {
+        owner.say(2);
+    }
+    else if (owner.life > 2)
+    {
         owner.say(3);
     }
-    }
-    else {
-    owner.say(4);
+    else if (owner.life > 0)
+    {
+        owner.say(4);
     }
 
-return zNPCGoalCommon::Enter(dt, updCtxt);
+    return zNPCGoalCommon::Enter(dt, updCtxt);
 }
 
 S32 zNPCGoalBossSB2Hit::Exit(F32 dt, void* updCtxt)
@@ -3661,26 +3667,25 @@ xFactoryInst* zNPCGoalBossSB2Hunt::create(S32 who, RyzMemGrow* grow, void* info)
 
 S32 zNPCGoalBossSB2Hit::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
 {
-    if (owner.AnimTimeRemain(NULL) >= dt + 0.001f)
+    if (owner.AnimTimeRemain(NULL) < dt + 0.001f)
     {
-        return 0;
-    }
+        if (owner.life <= 0)
+        {
+            *trantype = GOAL_TRAN_SET;
+            return NPC_GOAL_BOSSSB2DEATH;
+        }
 
-    if (owner.life < 1)
-    {
-        *trantype = GOAL_TRAN_SET;
-        return NPC_GOAL_BOSSSB2DEATH;
-    }
+        if (owner.flag.dizzy)
+        {
+            *trantype = GOAL_TRAN_SET;
+            return NPC_GOAL_BOSSSB2DIZZY;
+        }
 
-    if (!owner.flag.dizzy)
-    {
         *trantype = GOAL_TRAN_SET;
         return owner.next_goal();
     }
 
-    *trantype = GOAL_TRAN_SET;
-
-    return NPC_GOAL_BOSSSB2DIZZY;
+    return 0;
 }
 
 S32 zNPCGoalBossSB2Hunt::Enter(F32 dt, void* updCtxt)
@@ -3828,14 +3833,13 @@ S32 zNPCGoalBossSB2Swipe::Process(en_trantype* trantype, F32 dt, void* updCtxt, 
             play_sound(SOUND_SWIPE, &owner.sound_loc.hand[owner.active_hand], 1.0f);
         }
 
-        if (!owner.player_on_ground())
+        if (owner.player_on_ground())
         {
-            return 0;
+            *trantype = GOAL_TRAN_SET;
+            return NPC_GOAL_BOSSSB2HUNT;
         }
 
-        *trantype = GOAL_TRAN_SET;
-
-        return NPC_GOAL_BOSSSB2HUNT;
+        return 0;
     }
 
     if (!holding &&
@@ -3855,21 +3859,19 @@ S32 zNPCGoalBossSB2Swipe::Process(en_trantype* trantype, F32 dt, void* updCtxt, 
         said = TRUE;
     }
 
-    if (!holding || !owner.player_on_ground())
+    if (holding && owner.player_on_ground())
     {
-        if (!holding || owner.delay < tweak.swipe.hold_time)
-        {
-            return 0;
-        }
-
         *trantype = GOAL_TRAN_SET;
+        return NPC_GOAL_BOSSSB2HUNT;
+    }
 
+    if (holding && owner.delay >= tweak.swipe.hold_time)
+    {
+        *trantype = GOAL_TRAN_SET;
         return owner.next_goal();
     }
 
-    *trantype = GOAL_TRAN_SET;
-
-    return NPC_GOAL_BOSSSB2HUNT;
+    return 0;
 }
 
 S32 zNPCGoalBossSB2Swipe::can_start() const
@@ -3986,12 +3988,15 @@ bool zNPCGoalBossSB2Chop::can_start() const
         return FALSE;
     }
 
-    xVec3 offset = target->ent->bound.mat->pos - owner.location();
+    xBound& bound = target->ent->bound;
+    xMat4x3& mat = *bound.mat;
+    xVec3 offset = mat.pos - owner.location();
     xVec3& facing = owner.facing();
+    F32 facing_yaw = xatan2(facing.x, facing.z);
+    F32 target_yaw = xatan2(offset.x, offset.z);
+    F32 dyaw = xrmod(PI + (facing_yaw - target_yaw));
 
-    F32 ang = xrmod(PI + (xatan2(facing.x, facing.z) - xatan2(offset.x, offset.z)));
-
-    return xabs(ang - PI) < 0.19634955f;
+    return xabs(dyaw - PI) < 0.19634955f;
 }
 
 xFactoryInst* zNPCGoalBossSB2Karate::create(S32 who, RyzMemGrow* grow, void* info)
@@ -4042,14 +4047,13 @@ S32 zNPCGoalBossSB2Karate::Process(en_trantype* trantype, F32 dt, void* updCtxt,
             return NPC_GOAL_BOSSSB2HUNT;
         }
 
-        if (!owner.player_damaged())
+        if (owner.player_damaged())
         {
-            return 0;
+            *trantype = GOAL_TRAN_SET;
+            return NPC_GOAL_BOSSSB2TAUNT;
         }
 
-        *trantype = GOAL_TRAN_SET;
-
-        return NPC_GOAL_BOSSSB2TAUNT;
+        return 0;
     }
 
     S32 count = 0;
@@ -4105,9 +4109,16 @@ S32 zNPCGoalBossSB2Karate::Process(en_trantype* trantype, F32 dt, void* updCtxt,
             return goal;
         }
 
+        U8* it = emitted;
+        U8* end = it + 3;
+
         started = FALSE;
         owner.flag.face_player = true;
-        memset(emitted, 0, sizeof(emitted));
+
+        while (it != end)
+        {
+            *it++ = FALSE;
+        }
     }
 
     return 0;
@@ -4217,26 +4228,21 @@ xVec3& zNPCB_SB2::get_home() const
 
 void zNPCB_SB2::set_location(const xVec2& loc)
 {
-    // The retail code assigns a scalar to the whole model position vector here;
-    // the y component is overwritten again from the entity frame every update.
-    frame->mat.pos.x = loc.x;
-    (xVec3&)model->Mat->pos = loc.x;
-    frame->mat.pos.z = loc.y;
-    (xVec3&)model->Mat->pos = loc.y;
+    // Retail really does splat the scalar through xVec3::operator=(F32) here, and
+    // really does aim the second one at &pos.z rather than at &pos.
+    (xVec3&)model->Mat->pos.x = frame->mat.pos.x = loc.x;
+    (xVec3&)model->Mat->pos.z = frame->mat.pos.z = loc.y;
 }
 
 bool zNPCB_SB2::turning() const
 {
     bool result = FALSE;
-    xVec2 cur = {};
+    xVec2 cur = { model->Mat->at.x, model->Mat->at.z };
 
-    cur.x = model->Mat->at.x;
-    cur.y = model->Mat->at.z;
-
-    if (!(-1e-5f <= turn.vel && turn.vel <= 1e-5f) ||
-        (!(-1e-5f <= turn.accel && turn.accel <= 1e-5f) &&
-         (turn.dir.x <= turn.dir.y || xabs(turn.dir.x - cur.x) >= 0.001f) &&
-         (turn.dir.x >= turn.dir.y || xabs(turn.dir.y - cur.y) >= 0.001f)))
+    if (!xfeq0(turn.vel) ||
+        (!xfeq0(turn.accel) &&
+         (!(turn.dir.x > turn.dir.y) || !(xabs(turn.dir.x - cur.x) < 0.001f)) &&
+         (!(turn.dir.x < turn.dir.y) || !(xabs(turn.dir.y - cur.y) < 0.001f))))
     {
         result = TRUE;
     }
