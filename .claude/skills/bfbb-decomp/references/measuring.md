@@ -91,10 +91,21 @@ Renaming identifiers **cannot** change codegen — names never reach a non-debug
 
 Reordering local declarations **does** change codegen, because declaration order drives stack slot assignment. Different rules apply: keep if the target improved and no neighbour regressed, revert otherwise.
 
-Scratch tooling for this (paths vary by session, rebuild if absent):
+Two permanent tools do this now. They replace the `vs_head.py` / `snapshot.py` scratch scripts that used to be rebuilt every session — and rebuilt wrong, which is where the three bugs below came from.
 
-- `vs_head.py <unit-frag> <src-path> ...` — swaps in HEAD's version of a file, measures, swaps back, and reports which functions changed. The honest way to prove a change caused no collateral damage.
-- `snapshot.py <out.json> <src>...` then `snapshot.py --cmp <before> <after>` — same idea across many units, for evaluating a shared-header change.
+```
+tools/blast.py <header-frag>              TUs that transitively compile it
+tools/blast.py <header-frag> --why <unit> the shortest include chain
+tools/sweep.py snap <out.json> <unit>...  measure many units
+tools/sweep.py snap <out.json> --all-affected <header-frag>
+tools/sweep.py cmp <before.json> <after.json>
+```
+
+Run `blast.py` first, because the answer is usually alarming. `xVec3.h` reaches **188 TUs, 64 of them `Matching`**; `xClumpColl.h` 169/55; `xParEmitterType.h` 131/38; `containers.h` 75/21. A filename grep suggests a small fraction of that. It buckets by `configure.py` status, and the `Matching` count is what decides how careful to be — those units must stay byte-identical or the DOL sha1 breaks.
+
+Then `sweep.py snap before.json --all-affected <header>`, edit the header, snap again, `cmp`. It exits non-zero on any regression so it can gate a commit, and it calls out separately any symbol that fell off 100%.
+
+`sweep.py` records **every symbol including data**, not just functions and not just the ones at 100% — that is what catches the `.sdata2` case below. It refuses to write a snapshot if any unit failed to measure, so a half-populated file cannot be compared against later.
 
 **A snapshot tool that cannot fail loudly is worse than no tool.** Three separate bugs in one session each produced a confident, wrong `CLEAN`:
 
