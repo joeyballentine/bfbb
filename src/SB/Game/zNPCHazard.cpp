@@ -1038,7 +1038,20 @@ void NPCHazard::Discard()
 
         Cleanup();
 
-        g_cnt_activehaz &= ~((g_cnt_activehaz - 1) >> 31);
+        // Two statements, per the target: subi / stw / lwz / srawi / andc.
+        // The reload is the whole story -- retail's build did not forward the
+        // store, ours does, so this reads 90.161% rather than 100%. That gap is
+        // a compiler-side missed store-forwarding, not a source shape; seven
+        // spellings and an inline-helper-by-reference were tried and none
+        // reproduce it. Marking the static `volatile` reaches 96.613% but emits
+        // an extra load the target does not have, so it is not the original.
+        //
+        // Do not collapse this back into one expression. The previous
+        // single-statement form `g_cnt_activehaz &= ~((g_cnt_activehaz - 1) >> 31);`
+        // scored higher (93.387%) but never decremented at all: for any x >= 1
+        // it folds to x &= 0xFFFFFFFF. The active-hazard count only ever grew.
+        g_cnt_activehaz--;
+        g_cnt_activehaz &= ~(g_cnt_activehaz >> 31);
     }
 }
 
