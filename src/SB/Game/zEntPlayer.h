@@ -396,6 +396,9 @@ extern _CurrentPlayer gCurrentPlayer;
 extern S32 gWaitingToAutoSave;
 extern S32 gSpongeBall;
 
+// Defined in zEntPlayer.cpp (.sdata:0x803CAAD8).
+extern F32 default_player_radius;
+
 void SetPlayerKillsVillainTimer(F32 time);
 
 void zEntPlayer_Load(xEnt*, xSerial*);

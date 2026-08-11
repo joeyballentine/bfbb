@@ -41,9 +41,6 @@
 U32 iSphereHitsEnv(const xSphere* b, const xEnv* env, xCollis* coll);
 // FIXME: belongs in zSurface.h (defined in zSurface.cpp)
 S32 zSurfaceGetDamageType(const xSurface* surf);
-// FIXME: belongs in zEntPlayer.h - retail defines this in zEntPlayer.cpp
-// (.sdata, global, value 0.5f). Our zEntPlayer.cpp does not have it yet.
-extern F32 default_player_radius;
 
 // FIXME: remove this when no longer needed for float data order
 static void __all_the_floats(F32* out)
