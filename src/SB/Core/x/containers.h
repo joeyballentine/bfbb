@@ -470,6 +470,14 @@ template <class T, U32 N> struct fixed_queue
     {
         return (_last + (N + 1) - _first) & N;
     }
+    T& get_at(S32 index) const
+    {
+        return const_cast<fixed_queue<T, N>*>(this)->_buffer[(_first + index + (N + 1)) & N];
+    }
+    T& operator[](S32 index)
+    {
+        return get_at(index);
+    }
 
     struct iterator
     {
@@ -479,6 +487,11 @@ template <class T, U32 N> struct fixed_queue
         T& operator*() const
         {
             return _owner->_buffer[_it];
+        }
+
+        T* operator->() const
+        {
+            return &_owner->_buffer[_it];
         }
 
         bool operator!=(const iterator& other) const
