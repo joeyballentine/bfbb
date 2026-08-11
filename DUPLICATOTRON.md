@@ -21,9 +21,24 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now |
 |---|---|---|
-| matched functions | 6491 / 10147 | 7408 / 10147 |
-| fuzzy match | 57.343% | 65.020% |
+| matched functions | 6491 / 10147 | 7678 / 10147 |
+| fuzzy match | 57.343% | 73.512% |
 | complete units | 195 / 543 | 223 / 543 |
+| **game code fuzzy** | — | **91.074%** (6520 / 7673) |
+
+Game code is tracked separately because it is the part that is actually
+being worked, and the project figure understates it badly: Renderware and
+Bink contribute 1375 functions at 6.6% and 2.4% and have never been
+touched. By category: SDK 99.484%, **game 91.074%**, MSL 79.045%,
+Renderware 6.629%, Bink 2.371%.
+
+Note the gap between game fuzzy (91.07%) and game `matched_code`
+(~55%). That is the near-miss effect, and a large and growing share of it
+is *known unfixable* rather than pending: ghost-literal pool
+displacements cap ~30 functions in `zEntCruiseBubble`, ~27 in
+`zNPCTypeBossPatrick` and 11 in `zNPCFXCinematic` (that last one priced
+exactly, with a throwaway probe that was measured and then removed).
+Do not read the remaining 9% as 9% of remaining work.
 
 Merged `bfbbdecomp/main` (d226f0ae..24d388c4) at `297ce59f`.
 
