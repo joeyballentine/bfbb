@@ -12,6 +12,11 @@ Usage:
   solo.py <unit-fragment>                 list the unit's non-matching functions
   solo.py <unit-fragment> <symbol-frag>   side-by-side diff for one function
   solo.py <unit-fragment> --missing       list target functions absent from ours
+  solo.py <unit-fragment> --bands         histogram of match quality, by count
+                                          and by bytes. Six lines instead of a
+                                          hundred-row listing, and it tells you
+                                          whether a unit's remaining work is a
+                                          few broken bodies or a pool ceiling.
 
 Output-size flags (the full listings are large; these keep them out of an
 agent's context when it is iterating):
@@ -164,6 +169,7 @@ def main():
     frag = sys.argv[1]
     sym = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("-") else None
     missing = "--missing" in sys.argv
+    bands = "--bands" in sys.argv
     quiet = "-q" in sys.argv or "--quiet" in sys.argv
     full = "--full" in sys.argv
     top = int(opt_arg("--top") or 0)
@@ -177,6 +183,28 @@ def main():
                 if s.get("kind") == "SYMBOL_FUNCTION"}
         right = {s["name"]: s for s in d.get("right", {}).get("symbols", [])
                  if s.get("kind") == "SYMBOL_FUNCTION"}
+
+        if bands:
+            # Absent functions are reported separately rather than folded into
+            # the 0% band: "not written" and "written wrong" are different work,
+            # and conflating them has sent agents at the wrong target before.
+            absent = [s for n, s in left.items() if n not in right]
+            present = [s for n, s in left.items() if n in right]
+            edges = [(100.0, 100.1, "exact"), (99.0, 100.0, "99-100"),
+                     (90.0, 99.0, "90-99"), (50.0, 90.0, "50-90"),
+                     (0.0, 50.0, "<50")]
+            print("%s: %d target functions" % (unit["name"], len(left)))
+            for lo, hi, label in edges:
+                sel = [s for s in present
+                       if lo <= s.get("match_percent", 0.0) < hi]
+                if sel:
+                    print("  %-7s %4d  %8d b" % (
+                        label, len(sel), sum(int(s.get("size", 0)) for s in sel)))
+            if absent:
+                print("  %-7s %4d  %8d b  (no symbol in our object)" % (
+                    "absent", len(absent),
+                    sum(int(s.get("size", 0)) for s in absent)))
+            return
 
         if missing:
             gone = [(int(s.get("size", 0)), n) for n, s in left.items()

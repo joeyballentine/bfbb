@@ -15,6 +15,12 @@ Four measurements exist and they disagree on purpose. Quoting the wrong one is h
 
 The default listings are big — a unit list is 45–120 rows and a symbol diff is one row per instruction, so a 2 KB function prints ~500. Every one of those rows stays in context for the rest of the run, and you will run the tool dozens of times.
 
+- `--bands` — a six-line histogram of match quality, by count **and by bytes**, with absent functions counted separately. This is the right first command on an unfamiliar unit: it costs six lines instead of a hundred-row listing and it answers the only question that matters at that point — is the remaining work a few broken bodies, or a pool ceiling holding a crowd at 99.x%?
+
+  The byte column is what makes it worth reading. `zEntPlayer` shows 224 exact but **45 functions in the 90–99 band holding 81,840 bytes** — far more than any other band, and invisible in a count-only view. `zEntCruiseBubble` shows the opposite shape: 176 exact and 44 stacked in 99–100, which is the ghost-literal ceiling, not work.
+
+  Absent functions are listed on their own line rather than folded into the 0% band. "Not written" and "written wrong" are different jobs, and conflating them has pointed agents at the wrong target.
+
 - `-q` / `--quiet` — header line only. This is what you want between edits, when all you need is whether the non-matching count moved.
 - `--top N` — the N worst rows. Enough to pick the next target.
 - Symbol diffs now print **only differing rows plus 3 lines of context** by default, with `... N identical` markers. `-C 1` tightens it further, which is the right setting when a function is at 99.x% and every difference is an isolated relocation. `--full` restores the every-row output when you genuinely need to inspect instruction scheduling or ordering.
