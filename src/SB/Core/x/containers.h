@@ -472,7 +472,10 @@ template <class T, U32 N> struct fixed_queue
     }
     T& get_at(S32 index) const
     {
-        return const_cast<fixed_queue<T, N>*>(this)->_buffer[(_first + index + (N + 1)) & N];
+        // Retail computes (_first + index) + 0x80. Spelling it
+        // `_first + index + (N + 1)` lets CW reassociate to
+        // `_first + (index + 0x80)` and the function stalls at 48.750%.
+        return const_cast<fixed_queue<T, N>*>(this)->_buffer[(N + 1 + _first + index) & N];
     }
     T& operator[](S32 index)
     {
@@ -491,7 +494,9 @@ template <class T, U32 N> struct fixed_queue
 
         T* operator->() const
         {
-            return &_owner->_buffer[_it];
+            // Retail is literally `bl __ml__` -- it calls operator*, it does
+            // not repeat the body. Inlining the subscript here reads 15.375%.
+            return &operator*();
         }
 
         bool operator!=(const iterator& other) const
