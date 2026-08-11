@@ -19,6 +19,8 @@
 #include "zNPCSndTable.h"
 #include "zNPCSndLists.h"
 #include "zNPCTypeBossSandy.h"
+#include "zThrown.h"
+#include "zEntSimpleObj.h"
 #include "xMarkerAsset.h"
 #include "zCamera.h"
 #include "zGrid.h"
@@ -66,11 +68,11 @@ static BossDamageEffectRecord BDErecord[4];
 static U8 sOthersHaventBeenAdded;
 static U8 sPCWasBubbleBouncing;
 static F32 sRadiusOfRing;
-static F32 sElbowDropTimer;
-static F32 sChaseTimer;
+static volatile F32 sElbowDropTimer;
+static volatile F32 sChaseTimer;
 static S32 sNumAttacks;
 static S32 sDidClothesline;
-static F32 sElbowDropThreshold;
+static volatile F32 sElbowDropThreshold;
 static zNPCBSandy* sSandyPtr;
 static xVec3* sCamSubTarget;
 static F32 sCurrYaw;
@@ -107,10 +109,10 @@ static xVec3 sBoneOffset[13] = { {},
                                  {},
                                  { 0.0f, -0.6f, 0.3f } };
 static char* sNFSoundLabel[30] = {
-    "FAB1006", "FAB1007", "FAB1008", "FAB1009", "FAB1010", "FAB1011", "FAB1012", "FAB1013",
-    "FAB1014", "FAB1015", "FAB1016", "FAB1017", "FAB1018", "FAB1018", "FAB1018", "FAB1018",
-    "FAB1018", "FAB1018", "FAB1019", "FAB1020", "FAB1021", "FAB1022", "FAB1023", "FAB1024",
-    "FAB1025", "FAB1026", "FAB1027", "FAB1028", "FAB1029", "FAB1030"
+    "FAB1006", "FAB1007",   "FAB1008",   "FAB1009", "FAB1010", "FAB1011", "FAB1012", "FAB1013",
+    "FAB1014", "FAB1015",   "FAB1016",   "FAB1017", "FAB1018", "FAB1019", "FAB1020", "FAB1021",
+    "FAB1022", "FAB1023",   "FAB1024",   "FAB1025", "FAB1026", "FAB1027", "FAB1028", "FAB1029",
+    "FAB1030", "FAB1031",   "FAB1032",   "FAB1041_a", "FAB1041_b", "FAB1065"
 };
 
 static const tweak_callback newsfish_cb = {};
@@ -129,6 +131,12 @@ static S32 sitCB(xGoal* rawgoal, void*, en_trantype* trantype, F32 dt, void*);
 static S32 getUpCB(xGoal* rawgoal, void*, en_trantype* trantype, F32 dt, void*);
 static S32 runToRopeCB(xGoal* rawgoal, void*, en_trantype* trantype, F32 dt, void*);
 static S32 clotheslineCB(xGoal* rawgoal, void*, en_trantype* trantype, F32 dt, void*);
+
+void zNPCBSandy_BossDamageEffect_Init();
+
+static void GetBonePos(xVec3* result, xMat4x3* matArray, S32 index, xVec3* offset);
+static void MakeOBBFor(S32 startBone, S32 endBone, xEnt* ent, xMat4x3* matArray);
+static S32 BoundEventCB(xBase*, xBase* to, U32 toEvent, const F32*, xBase*);
 
 void on_change_newsfish(const tweak_info& tweak)
 {
@@ -312,10 +320,6 @@ void zNPCBSandy::Init(xEntAsset* asset)
     char objName[32];
     xMarkerAsset* laserMarker;
     U32 colorPicker;
-    RwRGBA* _col;
-    // RwRGBA* _col;
-    // RwRGBA* _col;
-    // RwRGBA* _col;
 
     zNPCCommon::Init(asset);
     sSandyPtr = this;
@@ -324,9 +328,113 @@ void zNPCBSandy::Init(xEntAsset* asset)
     this->firstTimeR1Csn = 1;
     this->boundFlags = (U32*)xMemAlloc(gActiveHeap, 13 * sizeof(U32), 0x0);
     this->boundList = (xEnt**)xMemAlloc(gActiveHeap, 13 * sizeof(xEnt*), 0x0);
+    this->boundEmitTimer = (F32*)xMemAlloc(gActiveHeap, 13 * sizeof(F32), 0x0);
+
+    for (i = 0; i < 13; i++)
+    {
+        this->boundFlags[i] = 0;
+        this->boundList[i] = (xEnt*)xMemAlloc(gActiveHeap, sizeof(xEnt), 0x0);
+
+        ent = this->boundList[i];
+        ent->id = i;
+        ent->eventFunc = BoundEventCB;
+        ent->driver = (xEnt*)this;
+        ent->baseType = eBaseTypeDynamic;
+        ent->collType = XENT_COLLTYPE_STAT;
+        ent->chkby = XENT_COLLTYPE_PLYR;
+        ent->penby = XENT_COLLTYPE_PLYR;
+        ent->baseFlags |= 0x21;
+        ent->moreFlags = 0x10;
+        ent->flags = this->flags;
+        ent->model = this->model;
+        ent->update = NULL;
+        ent->bupdate = NULL;
+        ent->render = NULL;
+        ent->transl = NULL;
+        ent->subType = 0;
+        ent->collModel = NULL;
+        ent->lightKit = NULL;
+        ent->pflags = 0;
+        ent->move = NULL;
+        ent->frame = NULL;
+        ent->collis = NULL;
+        ent->ffx = NULL;
+        ent->num_ffx = 0;
+        ent->anim_coll = NULL;
+
+        xGridBoundInit(&ent->gridb, ent);
+
+        if (sBoundRadius[i] > 0.0f)
+        {
+            ent->bound.type = XBOUND_TYPE_SPHERE;
+            ent->bound.sph.r = sBoundRadius[i];
+
+            GetBonePos(&this->boundList[i]->bound.sph.center, (xMat4x3*)this->model->Mat, sBone[i],
+                       &sBoneOffset[i]);
+            xQuickCullForBound(&this->boundList[i]->bound.qcd, &this->boundList[i]->bound);
+        }
+        else
+        {
+            ent->bound.type = XBOUND_TYPE_OBB;
+            ent->bound.mat = (xMat4x3*)xMemAlloc(gActiveHeap, sizeof(xMat4x3), 0x0);
+        }
+    }
+
+    MakeOBBFor(2, 3, this->boundList[2], (xMat4x3*)this->model->Mat);
+    xQuickCullForBound(&this->boundList[2]->bound.qcd, &this->boundList[2]->bound);
+
+    MakeOBBFor(4, 5, this->boundList[4], (xMat4x3*)this->model->Mat);
+    xQuickCullForBound(&this->boundList[4]->bound.qcd, &this->boundList[4]->bound);
+
+    MakeOBBFor(9, 10, this->boundList[9], (xMat4x3*)this->model->Mat);
+    xQuickCullForBound(&this->boundList[9]->bound.qcd, &this->boundList[9]->bound);
+
+    MakeOBBFor(11, 12, this->boundList[11], (xMat4x3*)this->model->Mat);
+    xQuickCullForBound(&this->boundList[11]->bound.qcd, &this->boundList[11]->bound);
+
+    sOthersHaventBeenAdded = 1;
+
+    for (i = 0; i < 16; i++)
+    {
+        sSinTable[i] = isin(6.2831855f * i / 16.0f);
+    }
+
+    zNPCBSandy_BossDamageEffect_Init();
+
+    this->dustEddieSetting.custom_flags = 0x100;
+
+    strcpy(objName, "LASER_MK_00");
+    for (i = 0; i < 16; i++)
+    {
+        laserMarker = (xMarkerAsset*)xSTFindAsset(xStrHash(objName), NULL);
+        xVec3Copy(&this->laserPoint[i], (xVec3*)laserMarker);
+
+        objName[10]++;
+        if (objName[10] > '9')
+        {
+            objName[10] = '0';
+            objName[9]++;
+        }
+    }
+
+    this->laserShow.init("LaserShow", "NPC|zNPCBSandy|LaserShow|");
+
+    colorPicker = (xrand() >> 8) & 1;
+    this->curveNodeR = colorPicker ? 1.0f : 0.0f;
+    this->curveNodeG = colorPicker ? 1.0f : 0.0f;
+    this->curveNodeB = colorPicker ? 1.0f : 0.0f;
+
     this->curveNode[0].time = 0.0f;
     this->curveNode[0].scale = 1.0f;
-    colorPicker = 255.0f;
+    this->curveNode[0].color.r = (U8)(255.0f * this->curveNodeR);
+    this->curveNode[0].color.g = (U8)(255.0f * this->curveNodeG);
+    this->curveNode[0].color.b = (U8)(255.0f * this->curveNodeB);
+    this->curveNode[0].color.a = 0xff;
+    this->curveNode[1].time = 1.0f;
+    this->curveNode[1].scale = 1.0f;
+    this->curveNode[1].color.r = (U8)(255.0f * this->curveNodeR);
+    this->curveNode[1].color.g = (U8)(255.0f * this->curveNodeG);
+    this->curveNode[1].color.b = (U8)(255.0f * this->curveNodeB);
     this->curveNode[1].color.a = 0xff;
     this->curveNodeAlpha = 1.0f;
     this->laserShow.set_curve(&this->curveNode[0], 0x6);
@@ -341,9 +449,11 @@ void zNPCBSandy::Init(xEntAsset* asset)
         sNFSoundValue[i] = xStrHash(sNFSoundLabel[i]);
     }
 
+    sCurrNFSound = sNFSoundValue[0];
+
     RwIm3DVertexSetPos(&this->iconVert[0], 1.0f, 0.0f, 1.0f);
-    RwIm3DVertexSetPos(&this->iconVert[1], -1.0f, 1.0f, 1.0f);
-    RwIm3DVertexSetPos(&this->iconVert[2], 0.0f, -1.0f, -1.0f);
+    RwIm3DVertexSetPos(&this->iconVert[1], -1.0f, 0.0f, 1.0f);
+    RwIm3DVertexSetPos(&this->iconVert[2], 1.0f, 0.0f, -1.0f);
     RwIm3DVertexSetPos(&this->iconVert[3], -1.0f, 0.0f, -1.0f);
 
     RwIm3DVertexSetRGBA(&this->iconVert[0], 0xff, 0xff, 0xff, 0xff);
@@ -351,16 +461,22 @@ void zNPCBSandy::Init(xEntAsset* asset)
     RwIm3DVertexSetRGBA(&this->iconVert[2], 0xff, 0xff, 0xff, 0xff);
     RwIm3DVertexSetRGBA(&this->iconVert[3], 0xff, 0xff, 0xff, 0xff);
 
-    RwIm3DVertexSetUV(&this->iconVert[0], 0.0f, 0.0f);
-    RwIm3DVertexSetUV(&this->iconVert[1], 1.0f, 0.0f);
-    RwIm3DVertexSetUV(&this->iconVert[2], 0.0f, 1.0f);
-    RwIm3DVertexSetUV(&this->iconVert[3], 1.0f, 1.0f);
+    this->iconVert[0].u = 0.0f;
+    this->iconVert[1].u = 1.0f;
+    this->iconVert[2].u = 0.0f;
+    this->iconVert[3].u = 1.0f;
+
+    this->iconVert[0].v = 0.0f;
+    this->iconVert[1].v = 0.0f;
+    this->iconVert[2].v = 1.0f;
+    this->iconVert[3].v = 1.0f;
 
     this->wireLight[0] = 0;
     this->wireLight[1] = 0;
 
     xDebugAddTweak("NPC|zNPCBSandy|Newsfish", "Speak", &newsfish_cb, 0, 0);
-    xDebugAddSelectTweak("NPC|zNPCBSandy|NewsfishComment", &sCurrNFSound, 0, &sNFSoundValue[0], 0x1e, 0, 0, 0);
+    xDebugAddSelectTweak("NPC|zNPCBSandy|NewsfishComment", &sCurrNFSound,
+                         (const char**)&sNFSoundLabel[0], &sNFSoundValue[0], 0x1e, 0, 0, 0);
     xDebugAddTweak("NPC|zNPCBSandy|Shockwave|Do It", "Go", &shockwave_cb, 0, 0);
 
     this->shockwaveGrowthRate = 20.0f;
@@ -496,12 +612,29 @@ void zNPCBSandy::Reset()
     xAnimState* state;
     xModelInstance* currModel;
     xVec3 endPnt;
+    xVec3 zeroPnt;
 
     zNPCCommon::Reset();
 
     this->firstUpdate = 0x1;
     this->bossFlags = 0x400;
-    *this->boundFlags = 0;
+
+    for (i = 0; i < 13; i++)
+    {
+        this->boundFlags[i] = 0;
+    }
+
+    sUseBossCam = TRUE;
+    sCurrHeight = 0.15f;
+    sCurrRadius = 4.5f;
+    sCurrPitch = -0.3f;
+    sCurrYaw = 0.0f;
+    sCamSubTarget = (xVec3*)&this->model->Mat->pos;
+    sElbowDropTimer = 0.0f;
+    sChaseTimer = 0.0f;
+    sElbowDropThreshold = 0.0f;
+    sNumAttacks = 0;
+    sDidClothesline = 0;
 
     this->dustEddieEmitter = zParEmitterFind("PAREMIT_DUST_SWIRL");
     this->shockwaveEmitter = zParEmitterFind("PAREMIT_SHOCKWAVE");
@@ -522,6 +655,11 @@ void zNPCBSandy::Reset()
     this->hangingScoreboard = (xEnt*)zSceneFindObject(xStrHash("SO_SCOREBOARD"));
     this->bustedScoreboard = (xEnt*)zSceneFindObject(xStrHash("SCOREBOARD_BUSTED"));
     this->crashedScoreboard = (xEnt*)zSceneFindObject(xStrHash("SCOREBOARD_HAZARD"));
+
+    ((zEntSimpleObj*)this->crashedScoreboard)->sflags |= 0x8;
+    this->crashedScoreboard->model->PipeFlags &= ~0xc;
+    this->crashedScoreboard->model->PipeFlags |= 0x4;
+
     this->scoreboardShrap = (zShrapnelAsset*)xSTFindAsset(xStrHash("pdome_scoreboard_shrapnel"), 0);
     this->sboardSecondShrap = (zShrapnelAsset*)xSTFindAsset(xStrHash("pdome_scoreboard_secondary_shrapnel"), 0);
     this->sboardThirdShrap = (zShrapnelAsset*)xSTFindAsset(xStrHash("pdome_scoreboard_tertiary_shrapnel"), 0);
@@ -549,42 +687,113 @@ void zNPCBSandy::Reset()
         this->feetRaster = *x;
     }
 
-    crashedScoreboard->chkby += 0xef;
+    crashedScoreboard->chkby &= 0xef;
+    crashedScoreboard->flags &= ~0x1;
 
-    xVec3Copy(&this->ringCorner[0], (xVec3*)xSTFindAsset(xStrHash("CORNER_00"), &size));
-    xVec3Add(&this->ringEdgeCenter[0], &this->ringCorner[0], 0);
-    xVec3SMulBy(&this->ringEdgeCenter[0], 0.5f);
-    xVec3Sub(&this->ropeNormal[0], 0, &this->ringCorner[0]);
+    strcpy(objName, "CORNER_00");
+    for (i = 0; i < 8; i++)
+    {
+        objName[8] = '0' + (char)i;
+        marker = (xMarkerAsset*)xSTFindAsset(xStrHash(objName), &size);
+        xVec3Copy(&this->ringCorner[i], (xVec3*)marker);
+    }
 
-    this->ropeNormal[0].y = this->ropeNormal[0].z;
-    this->ropeNormal[0].z = -this->ropeNormal[0].x;
-    this->ropeNormal[0].x = this->ropeNormal[0].y;
-    this->ropeNormal[0].y = 0.0f;
+    for (i = 0; i < 8; i++)
+    {
+        j = i + 1;
+        if (j == 8)
+        {
+            j = 0;
+        }
 
-    xVec3Normalize(&this->ropeNormal[0], &this->ropeNormal[0]);
-    xVec3Copy(&this->bouncePoint[0], &this->ringEdgeCenter[0]);
-    xVec3AddScaled(&this->bouncePoint[0], &this->ringEdgeCenter[0], 6.042f);
+        xVec3Add(&this->ringEdgeCenter[i], &this->ringCorner[i], &this->ringCorner[j]);
+        xVec3SMulBy(&this->ringEdgeCenter[i], 0.5f);
+        xVec3Sub(&this->ropeNormal[i], &this->ringCorner[j], &this->ringCorner[i]);
+
+        this->ropeNormal[i].y = this->ropeNormal[i].z;
+        this->ropeNormal[i].z = -this->ropeNormal[i].x;
+        this->ropeNormal[i].x = this->ropeNormal[i].y;
+        this->ropeNormal[i].y = 0.0f;
+
+        xVec3Normalize(&this->ropeNormal[i], &this->ropeNormal[i]);
+        xVec3Copy(&this->bouncePoint[i], &this->ringEdgeCenter[i]);
+        xVec3AddScaled(&this->bouncePoint[i], &this->ropeNormal[i], 6.042f);
+    }
+
     strcpy(objName, "ROPE_0_0");
+    for (i = 0; i < 8; i++)
+    {
+        objName[5] = '0' + (char)i;
 
-    this->ropeObject[0][0] = (xEnt*)zSceneFindObject(xStrHash(objName));
-    this->ropeObject[0][0]->model->PipeFlags |= 4;
+        for (j = 0; j < 4; j++)
+        {
+            objName[7] = '0' + (char)j;
 
-    strcmp(this->ropeObject[0][0]->model->Anim->Table->StateList->Name, "Idle01");
+            this->ropeObject[i][j] = (xEnt*)zSceneFindObject(xStrHash(objName));
+            this->ropeObject[i][j]->model->PipeFlags &= ~0xc;
+            this->ropeObject[i][j]->model->PipeFlags |= 0x4;
+
+            state = this->ropeObject[i][j]->model->Anim->Table->StateList;
+            while (state)
+            {
+                if (strcmp(state->Name, "Idle01") == 0)
+                {
+                    state->Flags &= ~0x30;
+                    break;
+                }
+
+                state = state->Next;
+            }
+        }
+    }
+
     strcpy(objName, "ROPE_0_LO");
-    this-> ropeObjectLo[0] = (xEnt*)zSceneFindObject(xStrHash(objName));
+    for (i = 0; i < 8; i++)
+    {
+        objName[5] = '0' + (char)i;
+
+        this->ropeObjectLo[i] = (xEnt*)zSceneFindObject(xStrHash(objName));
+        this->ropeObjectLo[i]->model->PipeFlags &= ~0xc;
+        this->ropeObjectLo[i]->model->PipeFlags |= 0x4;
+    }
+
+    this->ropeSb = this->ropeObjectLo[4];
     this->ropeSbDamaged = (xEnt*)zSceneFindObject(xStrHash("ROPE_4_LO_DAMAGED"));
+    this->ropeSbDamaged->model->PipeFlags &= ~0xc;
+    this->ropeSbDamaged->model->PipeFlags |= 0x4;
+
     strcpy(objName, "TURNBUCKLE_OBJ_00");
-    this->turnbuckle[0] = (xEnt*)zSceneFindObject(xStrHash(objName));
-    sRadiusOfRing = xVec3Length(&endPnt) * 0.125f + sRadiusOfRing;
+    for (i = 0; i < 8; i++)
+    {
+        objName[16] = '0' + (char)i;
 
-    sLeftLegSpring.bound->type = 0;
-    sRightLegSpring.bound->type = 0;
-    sLeftArmSpring.bound->type = 0;
-    sRightArmSpring.bound->type = 0;
+        this->turnbuckle[i] = (xEnt*)zSceneFindObject(xStrHash(objName));
+        this->turnbuckle[i]->model->PipeFlags &= ~0xc;
+        this->turnbuckle[i]->model->PipeFlags |= 0x4;
+    }
 
-    zEntEvent(headBoulder, 0x25);
+    sRadiusOfRing = 0.0f;
+    for (i = 0; i < 4; i++)
+    {
+        xVec3Sub(&endPnt, &this->bouncePoint[i], &this->bouncePoint[i + 4]);
+        sRadiusOfRing = 0.125f * xVec3Length(&endPnt) + sRadiusOfRing;
+    }
 
-    this->timeToNextBolt[0] = 0.0f;
+    sLeftLegSpring.bound = NULL;
+    sRightLegSpring.bound = NULL;
+    sLeftArmSpring.bound = NULL;
+    sRightArmSpring.bound = NULL;
+
+    zEntEvent(headBoulder, eEventKill);
+
+    currModel = this->model;
+    while (currModel)
+    {
+        currModel->Data->boundingSphere.radius = 100.0f;
+        currModel = currModel->Next;
+    }
+
+    this->jawTime = 0.0f;
     this->jawData = xJaw_FindData(xStrHash("SpongebobPoseidome 44"));
 
     zNPCBSandy::InitFX();
@@ -595,28 +804,31 @@ void zNPCBSandy::Reset()
     }
 
     nfFlags = 0;
-    xVec3Init(&endPnt, 0.0f, 0.0f, 0.0f);
+    xVec3Init(&zeroPnt, 0.0f, 0.0f, 0.0f);
 
-    this->sparks[4].start = &endPnt;
-    this->sparks[4].end = &endPnt;
+    this->sparks[4].start = &zeroPnt;
+    this->sparks[4].end = &zeroPnt;
 
     if (!this->wireLight[0])
     {
         this->wireLight[0] = zLightningAdd(&this->sparks[4]);
     }
 
-    this->sparks[4].start = 0;
-    this->sparks[4].end = 0;
-    this->sparks[5].start = 0;
-    this->sparks[5].end = 0;
+    this->wireLight[0]->flags &= ~0x40;
+    this->sparks[4].start = NULL;
+    this->sparks[4].end = NULL;
+
+    this->sparks[5].start = &zeroPnt;
+    this->sparks[5].end = &zeroPnt;
 
     if (!this->wireLight[1])
     {
         this->wireLight[1] = zLightningAdd(&this->sparks[5]);
     }
 
-    this->sparks[5].start = 0;
-    this->sparks[5].end = 0;
+    this->wireLight[1]->flags &= ~0x40;
+    this->sparks[5].start = NULL;
+    this->sparks[5].end = NULL;
 }
 
 void zNPCBSandy::ParseINI()
@@ -1089,13 +1301,13 @@ void zNPCBSandy::InitFX()
 {
     this->timeToNextBolt[0] = 0.0f;
     this->timeToNextBolt[1] = 0.0f;
-    this->maxLightningWait[0] = 0.0f;
-    this->maxLightningWait[1] = 0.0f;
+    this->maxLightningWait[0] = 1.0f;
+    this->maxLightningWait[1] = 1.0f;
 
-    xMat4x3Copy((xMat4x3*)&this->sparkTransform[0][0], (xMat4x3*)&this->hangingScoreboard->model->Mat);
-    xMat4x3Copy((xMat4x3*)&this->sparkTransform[0][1], (xMat4x3*)&this->hangingScoreboard->model->Mat);
-    xMat4x3Copy((xMat4x3*)&this->sparkTransform[1][0], (xMat4x3*)&this->crashedScoreboard->model->Mat);
-    xVec3SMul((xVec3*)&this->sparkTransform[1][1], (xVec3*)&this->crashedScoreboard->model->Mat, 0.8f);
+    xMat4x3Copy((xMat4x3*)&this->sparkTransform[0][0], (xMat4x3*)this->hangingScoreboard->model->Mat);
+    xMat4x3Copy((xMat4x3*)&this->sparkTransform[0][1], (xMat4x3*)this->hangingScoreboard->model->Mat);
+    xMat4x3Copy((xMat4x3*)&this->sparkTransform[1][0], (xMat4x3*)this->crashedScoreboard->model->Mat);
+    xVec3SMul((xVec3*)&this->sparkTransform[1][1], (xVec3*)this->crashedScoreboard->model->Mat, 0.8f);
     xVec3SMul((xVec3*)&this->sparkTransform[1][1].up, (xVec3*)&this->crashedScoreboard->model->Mat->at, -0.8f);
     xVec3SMul((xVec3*)&this->sparkTransform[1][1].at, (xVec3*)&this->crashedScoreboard->model->Mat->up, 0.8f);
     xVec3Copy((xVec3*)&this->sparkTransform[1][1].pos, (xVec3*)&this->crashedScoreboard->model->Mat->pos);
@@ -1106,8 +1318,8 @@ void zNPCBSandy::InitFX()
 
     this->sparks[0].type = 0x3;
     this->sparks[0].setup_degrees = 66.0f;
-    this->sparks[0].move_degrees = 66.0f;
-    this->sparks[0].rot_radius = 66.0f;
+    this->sparks[0].move_degrees = -2500.0f;
+    this->sparks[0].rot_radius = 0.15f;
     this->sparks[0].total_points = 0x10;
     this->sparks[0].end_points = 0;
     this->sparks[0].time = 0.25f;
@@ -1125,8 +1337,8 @@ void zNPCBSandy::InitFX()
 
     this->sparks[1].type = 0x3;
     this->sparks[1].setup_degrees = 66.0f;
-    this->sparks[1].move_degrees = 66.0f;
-    this->sparks[1].rot_radius = 66.0f;
+    this->sparks[1].move_degrees = -2500.0f;
+    this->sparks[1].rot_radius = 0.15f;
     this->sparks[1].total_points = 0x10;
     this->sparks[1].end_points = 0;
     this->sparks[1].time = 0.25f;
@@ -1143,19 +1355,19 @@ void zNPCBSandy::InitFX()
     xVec3Init((xVec3*)&this->endPoints[2][1], 3.5f, 2.0f, 0.0f);
 
     this->sparks[2].type = 0x3;
-    this->sparks[2].setup_degrees = 66.0f;
-    this->sparks[2].move_degrees = 66.0f;
-    this->sparks[2].rot_radius = 66.0f;
+    this->sparks[2].zeus_normal_offset = 1.0f;
+    this->sparks[2].zeus_back_offset = -1.0f;
+    this->sparks[2].zeus_side_offset = 0.0f;
     this->sparks[2].total_points = 0x8;
     this->sparks[2].end_points = 0;
     this->sparks[2].time = 0.25f;
-    this->sparks[2].arc_height = -1.5f;
+    this->sparks[2].arc_height = -2.5f;
     this->sparks[2].thickness = 1.0f;
     this->sparks[2].color.r = 0xa0;
     this->sparks[2].color.g = 0xa0;
     this->sparks[2].color.b = 0xff;
     this->sparks[2].color.a = 0xc8;
-    this->sparks[2].rand_radius = 13.0f;
+    this->sparks[2].rand_radius = 25.0f;
     this->sparks[2].flags = 0x1c20;
 
     xVec3Init((xVec3*)&this->endPoints[3][0], 0.0f, 2.0f, 0.0f);
@@ -3007,6 +3219,7 @@ S32 zNPCGoalBossSandyNoHead::Process(en_trantype* trantype, F32 dt, void* updCtx
 {
     zNPCBSandy* sandy = (zNPCBSandy*)psyche->clt_owner;
     U32 numHints;
+    U32 hintsGiven;
     xVec3 newAt;
     F32 lerpFactor;
     xMat4x3 boneMat;
@@ -3038,21 +3251,23 @@ S32 zNPCGoalBossSandyNoHead::Process(en_trantype* trantype, F32 dt, void* updCtx
 
             if ((sandy->nfFlags & 0x4) == 0 && (sandy->round == 2 || sandy->round == 3))
             {
-                if (((sandy->nfFlags >> 3) & 3) < 3 || (xrand() & 0x300) == 0)
+                hintsGiven = (sandy->nfFlags >> 3) & 3;
+
+                if (hintsGiven < 3 || (xrand() & 0x300) == 0)
                 {
                     numHints = 2;
-                    if (((sandy->nfFlags >> 3) & 3) < 3)
+                    if (hintsGiven < 3)
                     {
-                        numHints = (sandy->nfFlags >> 3) & 3;
+                        numHints = hintsGiven;
                     }
 
                     if (sandy->round == 2)
                     {
-                        sandy->newsfish->SpeakStart(sNFSoundValue[numHints + 12], 0, 0xFFFFFFFF);
+                        sandy->newsfish->SpeakStart(sNFSoundValue[numHints + 12], 0, -1);
                     }
                     else
                     {
-                        sandy->newsfish->SpeakStart(sNFSoundValue[numHints + 21], 0, 0xFFFFFFFF);
+                        sandy->newsfish->SpeakStart(sNFSoundValue[numHints + 21], 0, -1);
                     }
 
                     sandy->nfFlags &= ~0x18;
@@ -3063,13 +3278,13 @@ S32 zNPCGoalBossSandyNoHead::Process(en_trantype* trantype, F32 dt, void* updCtx
 
         if (sandy->round == 2)
         {
-            if (secsSincePatWasCarryingHead > 0.5f)
+            if (secsSincePatWasCarryingHead < 0.5f)
             {
-                sCamSubTarget = &sandy->headBoulder->localCenter;
+                sCamSubTarget = &sandy->ringEdgeCenter[4];
             }
             else
             {
-                sCamSubTarget = &sandy->bouncePoint[0];
+                sCamSubTarget = &sandy->headBoulder->bound.sph.center;
             }
         }
     }
@@ -3077,22 +3292,90 @@ S32 zNPCGoalBossSandyNoHead::Process(en_trantype* trantype, F32 dt, void* updCtx
     {
         if (sandy->round == 2)
         {
-        }
-        else if (secsSincePatWasCarryingHead <= 15.0f)
-        {
-            if (((sandy->boundFlags[0] + 4) & 4) == 0)
+            if (sandy->bossFlags & 0x100)
             {
-                sandy->bossFlags |= 0x80;
+                sandy->headBoulder->collis_chk = 0x0;
+                sandy->headBoulder->collis_pen = 0x0;
+
+                xVec3Copy(&sandy->shockPos, (xVec3*)&sandy->headBoulder->model->Mat->pos);
+
+                sandy->headBoulder->angVel = 0.0f;
+                stage = 2;
+                DoAutoAnim(NPC_GSPOT_START, FALSE);
+                timeInGoal = 0.0f;
+
+                numHints = 6 - sandy->hitPoints;
+                sandy->newsfish->SpeakStart(sNFSoundValue[numHints + 15], 0, -1);
+
+                sandy->nfFlags |= 0x4;
+                sandy->hitPoints--;
+
+                xSndPlay3D(xStrHash("B101_SC_damage3"), 1.155f, 0.0f, 0x0, 0x0, sandy, 80.0f,
+                           SND_CAT_GAME, 0.0f);
+                zEntEvent(sandy, sandy, eEventNPCHPDecremented);
+
+                sandy->maxLightningWait[1] = 0.1f;
+
+                zNPCBSandy_BossDamageEffect(sandy->model, 0);
+                zNPCBSandy_BossDamageEffect(sandy->headBoulder->model, 0);
+
+                sandy->sboardThirdShrap->initCB(sandy->sboardThirdShrap,
+                                                sandy->crashedScoreboard->model, NULL, NULL);
+            }
+            else if ((timeInGoal > 15.0f && sandy->AnimTimeRemain(NULL) < 1.7f * dt) ||
+                     globals.player.carry.flyingToTarget == sandy)
+            {
+                stage = 3;
+                sandy->CalcMagnetizeInfo();
+                sUseBossCam = TRUE;
+                sCamSubTarget = (xVec3*)&sandy->model->Mat->pos;
+                DoAutoAnim(NPC_GSPOT_START, FALSE);
+                timeInGoal = 0.0f;
+
+                if (globals.player.carry.grabbed == sandy->headBoulder)
+                {
+                    globals.player.carry.grabbed = NULL;
+                }
+
+                if (globals.player.carry.flyingToTarget == sandy)
+                {
+                    zThrown_Remove(sandy->headBoulder);
+                    globals.player.carry.flyingToTarget = NULL;
+                }
             }
             else
             {
+                xVec3Sub(&newAt, &sandy->headBoulder->bound.sph.center,
+                         (xVec3*)&sandy->model->Mat->pos);
+
+                newAt.y = 0.0f;
+
+                xVec3Normalize(&newAt, &newAt);
+                xVec3SMul((xVec3*)&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 0.9f);
+                xVec3AddScaled((xVec3*)&sandy->frame->mat.at, &newAt, 0.1f);
+
+                sandy->frame->mat.at.y = 0.0f;
+                xVec3Normalize(&sandy->frame->mat.at, &sandy->frame->mat.at);
+                xVec3Cross(&sandy->frame->mat.right, &sandy->frame->mat.up,
+                           &sandy->frame->mat.at);
+
+                sandy->frame->mat.pos.y = 0.0f;
+
+                if (secsSincePatWasCarryingHead < 0.5f)
+                {
+                    sCamSubTarget = &sandy->ringEdgeCenter[4];
+                }
+                else
+                {
+                    sCamSubTarget = &sandy->headBoulder->bound.sph.center;
+                }
             }
         }
-        else
+        else if (timeInGoal > 15.0f)
         {
+            sandy->boundFlags[10] &= ~0x10;
+            sandy->boundFlags[12] &= ~0x10;
             stage = 4;
-            sandy->boundFlags[10] &= 0x100;
-            sandy->boundFlags[12] &= 0x100;
 
             xSndPlay3D(xStrHash("B101_SC_headback"), 1.155f, 0.0f, 0x0, 0x0, sandy, 30.0f,
                        SND_CAT_GAME, 0.8f);
@@ -3100,15 +3383,107 @@ S32 zNPCGoalBossSandyNoHead::Process(en_trantype* trantype, F32 dt, void* updCtx
             timeInGoal = 0.0f;
             sandy->bossFlags &= ~0x80;
         }
+        else if (sandy->boundFlags[1] & 0x4)
+        {
+            stage = 5;
+
+            numHints = 3 - sandy->hitPoints;
+            sandy->newsfish->SpeakStart(sNFSoundValue[numHints + 24], 0, -1);
+
+            sandy->nfFlags |= 0x4;
+            sandy->hitPoints--;
+
+            xSndPlay3D(xStrHash("B101_SC_damage3"), 1.155f, 0.0f, 0x0, 0x0, sandy, 80.0f,
+                       SND_CAT_GAME, 0.0f);
+            zEntEvent(sandy, sandy, eEventNPCHPDecremented);
+
+            if (sandy->hitPoints == 0)
+            {
+                zEntEvent(sandy, eEventDeath);
+            }
+
+            zNPCBSandy_BossDamageEffect(sandy->model, 0);
+            DoAutoAnim(NPC_GSPOT_START, FALSE);
+            timeInGoal = 0.0f;
+            sandy->bossFlags &= ~0x80;
+        }
+        else
+        {
+            sandy->bossFlags |= 0x80;
+            sandy->targetRaster = sandy->helmetRaster;
+
+            GetBonePos(&sandy->targetPos, (xMat4x3*)sandy->model->Mat, sBone[1], NULL);
+
+            sandy->targetPos.y = 0.1f;
+        }
     }
     else if (stage == 2)
     {
+        if (timeInGoal > 4.0f)
+        {
+            stage = 3;
+            sUseBossCam = TRUE;
+            sCamSubTarget = (xVec3*)&sandy->model->Mat->pos;
+            sandy->CalcMagnetizeInfo();
+            DoAutoAnim(NPC_GSPOT_START, FALSE);
+            timeInGoal = 0.0f;
+            sandy->bossFlags &= ~0x100;
+        }
+        else
+        {
+            if (timeInGoal > 1.5f)
+            {
+                sCamSubTarget = (xVec3*)&sandy->model->Mat->pos;
+            }
+
+            xVec3Copy((xVec3*)&sandy->headBoulder->model->Mat->pos, &sandy->shockPos);
+
+            sandy->headBoulder->model->Mat->pos.x += 0.1f * icos(31.0f * timeInGoal);
+            sandy->headBoulder->model->Mat->pos.z += 0.1f * isin(42.0f * timeInGoal);
+
+            sandy->headBoulder->angVel = 0.0f;
+            xVec3Init(&sandy->headBoulder->vel, 0.0f, 0.0f, 0.0f);
+        }
     }
     else if (stage == 3)
     {
+        lerpFactor = timeInGoal / sandy->magnetizeTime;
+
+        if (lerpFactor > 1.0f)
+        {
+            stage = 4;
+
+            xSndPlay3D(xStrHash("B101_SC_headback"), 1.155f, 0.0f, 0x0, 0x0, sandy, 30.0f,
+                       SND_CAT_GAME, 0.8f);
+            DoAutoAnim(NPC_GSPOT_START, FALSE);
+            timeInGoal = 0.0f;
+
+            zEntEvent(sandy->headBoulder, eEventKill);
+
+            sandy->model->Flags |= 0x1;
+            sandy->model->Next->Flags |= 0x1;
+            sandy->boundList[1]->chkby = 0x10;
+            sandy->boundList[1]->penby = 0x10;
+        }
+        else
+        {
+            xMat4x3Mul(&boneMat, (xMat4x3*)&sandy->model->Mat[sBone[1]],
+                       (xMat4x3*)sandy->model->Mat);
+            xQuatFromMat(&sandy->qHead, &boneMat);
+            xMat3x3RMulVec(&sandy->pHead, &boneMat, &sBoneOffset[1]);
+            xVec3AddTo(&sandy->pHead, &boneMat.pos);
+
+            xQuatSlerp(&q, &sandy->qBoulder, &sandy->qHead, lerpFactor);
+            xQuatToMat(&q, (xMat3x3*)sandy->headBoulder->model->Mat);
+
+            xVec3SMul((xVec3*)&sandy->headBoulder->model->Mat->pos, &sandy->pBoulder,
+                      1.0f - lerpFactor);
+            xVec3AddScaled((xVec3*)&sandy->headBoulder->model->Mat->pos, &sandy->pHead,
+                           lerpFactor);
+        }
     }
 
-    return zNPCGoalCommon::Process(trantype, dt, updCtxt, xscn);
+    return xGoal::Process(trantype, dt, updCtxt, xscn);
 }
 
 S32 zNPCGoalBossSandyElbowDrop::Enter(F32 dt, void* updCtxt)
@@ -3135,19 +3510,48 @@ S32 zNPCGoalBossSandyElbowDrop::Process(en_trantype* trantype, F32 dt, void* upd
     zNPCBSandy* sandy = (zNPCBSandy*)psyche->clt_owner;
     xVec3 newAt;
 
+    timeInGoal += dt;
+
     if (timeInGoal > 0.75f)
     {
         for (S32 i = 0; i < 13; i++)
         {
             sandy->boundFlags[i] |= 0x1;
         }
+
+        sandy->bossFlags |= 0x1;
     }
 
-    if (timeInGoal <= sandy->edropTurnMinTime)
+    if (timeInGoal > sandy->edropShockwaveTime)
     {
-        if (sandy->shockwaveMaxRadius < timeInGoal)
+        if (!(elbowFlags & 0x1))
         {
+            elbowFlags |= 0x1;
+            sandy->bossFlags |= 0x800;
+
+            xVec3Copy((xVec3*)&sandy->shockwaveEmitter->tasset->pos,
+                      (xVec3*)&sandy->model->Mat->pos);
+
+            sandy->shockwaveEmitter->tasset->pos.y = 0.0f;
+            sandy->shockRadius = 1.0f;
         }
+    }
+    else if (timeInGoal > sandy->edropTurnMinTime)
+    {
+        xVec3Sub(&newAt, (xVec3*)&globals.player.ent.model->Mat->pos,
+                 (xVec3*)&sandy->model->Mat->pos);
+
+        newAt.y = 0.0f;
+
+        xVec3Normalize(&newAt, &newAt);
+        xVec3SMul((xVec3*)&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 0.9f);
+        xVec3AddScaled((xVec3*)&sandy->frame->mat.at, &newAt, 0.1f);
+
+        sandy->frame->mat.at.y = 0.0f;
+        xVec3Normalize(&sandy->frame->mat.at, &sandy->frame->mat.at);
+        xVec3Cross(&sandy->frame->mat.right, &sandy->frame->mat.up, &sandy->frame->mat.at);
+
+        sandy->frame->mat.pos.y = 0.0f;
     }
 
     return xGoal::Process(trantype, dt, updCtxt, xscn);
@@ -3642,16 +4046,16 @@ S32 zNPCGoalBossSandyGetUp::Process(en_trantype* trantype, F32 dt, void* updCtxt
 S32 zNPCGoalBossSandyRunToRope::Enter(F32 dt, void* updCtxt)
 {
     zNPCBSandy* sandy = (zNPCBSandy*)psyche->clt_owner;
-    S32 i;
     S32 secondRope = 1;
-    F32 bestDot = 30.0f;
-    F32 bestDist = 0.0f;
-    F32 secondDot = bestDot;
-    F32 secondDist = bestDist;
-    F32 dist;
-    F32 side;
-    xVec3 toBounce;
     xVec3 heading;
+    F32 side;
+    F32 bestDot = 30.0f;
+    F32 secondDot = bestDot;
+    F32 bestDist = 0.0f;
+    F32 secondDist = bestDist;
+    S32 i;
+    F32 dist;
+    xVec3 toBounce;
 
     timeInGoal = 0.0f;
 
