@@ -150,9 +150,12 @@ template <class T> struct tier_queue
         return _size == 0;
     }
 
-    U8 wrap_block(u32 block) const
+    // Returns u32 with a (U8) truncation in the body, not a U8 return: a
+    // U8-returning member forces clrlwi r3,r3,24 at every call site, and
+    // the target's own wrap_block is `clrlwi r3,r4,24; blr`.
+    u32 wrap_block(u32 block) const
     {
-        return block;
+        return (U8)block;
     }
 
     u32 wrap_index(u32 index) const

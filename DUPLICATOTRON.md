@@ -1013,13 +1013,20 @@ Agents may not edit shared headers, so they report them instead. Outstanding:
 
 ### Rejected
 
-- **`containers.h` — `tier_queue<T>::wrap_block` returning `u32`.** The
-  evidence was real (it removes two `clrlwi` from
-  `tier_queue<joint_data>::clear`) but measured in isolation it costs a
-  different `xFX` function, net -1. Kept as `U8` until something explains both
-  diffs at once. **Measure every requested header change on its own before
-  believing it** — of four container changes requested with disassembly
-  evidence, one was a regression and one was neutral.
+- ~~**`containers.h` — `tier_queue<T>::wrap_block` returning `u32`.**~~
+  **LANDED** once `xFX` was rewritten. The original evidence was right (a
+  `U8`-returning member forces `clrlwi r3,r3,24` at every call site, and the
+  target's own `wrap_block` is `clrlwi r3,r4,24; blr`, i.e. a `u32` return
+  with a `(U8)` truncation in the body), but when first measured it cost a
+  different `xFX` function for net -1, so it was held. After the 17 absent
+  bodies landed, that conflicting function no longer exists: re-swept over
+  the 75 TUs, it is 1 improved / 0 regressed, taking
+  `tier_queue<joint_data>::clear` 97.273% → 100%.
+
+  The rule it was filed under still stands, and so does its converse:
+  **measure every requested header change on its own before believing it —
+  and re-measure a rejected one after the unit around it changes.** A
+  rejection is a measurement of a tree, not a fact about the source.
 
 ## Open leads
 
