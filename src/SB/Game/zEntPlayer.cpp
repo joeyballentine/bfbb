@@ -1,3 +1,7 @@
+// Retail called the 9-argument xVec3* xSndPlay3D out of line from this TU (see
+// zEntPlayerDriveUpdate), so opt out of zEnt.h's inline definition of it.
+#define XSNDPLAY3D_OUT_OF_LINE
+
 #include "xAnim.h"
 #include "zFX.h"
 #include <types.h>
@@ -31,6 +35,7 @@
 
 #include "zBase.h"
 #include "zCamera.h"
+#include "zEGenerator.h"
 #include "zEntButton.h"
 #include "zEntCruiseBubble.h"
 #include "zEntDestructObj.h"
@@ -271,8 +276,13 @@ static float sTongueDblSpeedMult;
 // Defined in iCollide.cpp but declared in no header.
 S32 iSphereHitsEnv4(const xSphere* b, const xEnv* env, const xMat3x3* mat, xCollis* colls);
 
+// FIXME: defined in zPlatform.cpp but missing from zPlatform.h.
+void zPlatform_Mount(zPlatform* plat);
+void zPlatform_Dismount(zPlatform* plat);
+
 // FIXME: these are defined in zSurface.cpp but zSurface.h only declares some of the
 // accessor family. They belong in zSurface.h.
+S32 zSurfaceGetDamageType(const xSurface* surf);
 U32 zSurfaceGetSlide(const xSurface* surf);
 U32 zSurfaceGetStep(const xSurface* surf);
 U32 zSurfaceGetSticky(const xSurface* surf);
@@ -7844,6 +7854,456 @@ static void zEntPlayerJumpLand(xEnt* ent)
     }
 }
 
+static void zEntPlayerJumpUpdate(xEnt* ent, xScene* sc, F32 dt)
+{
+    F32 lerp;
+
+    if (strcmp(ent->model->Anim->Single->State->Name, "BbashStrike01") == 0 &&
+        ent->model->Anim->Single->Time < 0.433333f)
+    {
+        return;
+    }
+
+    {
+        if (strcmp(ent->model->Anim->Single->State->Name, "BbashAttack01") == 0 ||
+            strcmp(ent->model->Anim->Single->State->Name, "BbashStart01") == 0)
+        {
+            if (bbash_tmr < 0.0f)
+            {
+                bbash_tmr += dt;
+
+                if (bbash_tmr >= 0.0f)
+                {
+                    ent->frame->vel.y = bbash_vel;
+                }
+            }
+            else
+            {
+                bbash_tmr += dt;
+            }
+
+            if (bbash_tmr > 0.0f && bbash_tmr > globals.player.g.BBashCVTime)
+            {
+                ent->frame->vel.y -= globals.player.g.Gravity * dt;
+            }
+        }
+        else if (globals.player.cheat_mode == 0)
+        {
+            globals.player.LastJumpState = globals.player.JumpState;
+
+            if (globals.player.Jump_HoldTimer)
+            {
+                globals.player.Jump_HoldTimer -= dt;
+
+                if (globals.player.Jump_HoldTimer <= 0.0f)
+                {
+                    globals.player.Jump_HoldTimer = 0.0f;
+                }
+                else if (globals.player.ControlOff || !(globals.pad0->on & XPAD_BUTTON_X))
+                {
+                    globals.player.Jump_HoldTimer = 0.0f;
+                    globals.player.Jump_ChangeTimer = 0.0f;
+                    globals.player.Jump_CurrGravity = globals.player.g.Gravity;
+                }
+            }
+
+            if (globals.player.Jump_ChangeTimer)
+            {
+                globals.player.Jump_ChangeTimer -= dt;
+
+                if (0.0f == globals.player.Jump_ChangeTimer)
+                {
+                    globals.player.Jump_ChangeTimer = 1e-07f;
+                }
+
+                if (globals.player.Jump_ChangeTimer <= -globals.player.s->GravSmooth)
+                {
+                    globals.player.Jump_HoldTimer = 0.0f;
+                    globals.player.Jump_ChangeTimer = 0.0f;
+                    globals.player.Jump_CurrGravity = globals.player.g.Gravity;
+                }
+                else if (globals.player.Jump_ChangeTimer < 0.0f)
+                {
+                    lerp = -globals.player.Jump_ChangeTimer / globals.player.s->GravSmooth;
+                    globals.player.Jump_CurrGravity = (1.0f - lerp) * globals.player.s->JumpGravity +
+                                                      lerp * globals.player.g.Gravity;
+                }
+            }
+
+            if ((ent->collis->colls[0].flags & 0x1) &&
+                !(ent->collis->colls[0].optr &&
+                  ((xBase*)ent->collis->colls[0].optr)->baseType == eBaseTypeVillain) &&
+                ent->frame->vel.y <= 0.0f)
+            {
+                if (globals.player.JumpState)
+                {
+                    zEntPlayerJumpLand(ent);
+
+                    if (gCurrentPlayer != eCurrentPlayerSandy ||
+                        strcmp(ent->model->Anim->Single->State->Name, "Fall01") != 0)
+                    {
+                        globals.player.Jump_CanDouble = 1;
+                    }
+
+                    globals.player.Jump_CanFloat = 1;
+                    globals.player.Jump_Springboard = NULL;
+                    globals.player.Jump_SpringboardStart = 0;
+                    globals.player.Bounced = 0;
+                    zCameraSetBbounce(0);
+                    zCameraSetLongbounce(0);
+                    zCameraSetHighbounce(0);
+                }
+            }
+            else
+            {
+                if (globals.player.JumpState == 0)
+                {
+                    globals.player.JumpState = 1;
+                    globals.player.JumpTimer = 0.0f;
+                }
+                else if (globals.player.JumpState == 1)
+                {
+                    globals.player.JumpTimer += dt;
+
+                    if (globals.player.JumpTimer >= 0.25f)
+                    {
+                        globals.player.JumpState = 2;
+                    }
+                }
+                else if (globals.player.JumpState == 2 && ent->frame->vel.y < 16.0f &&
+                         globals.player.Jump_SpringboardStart)
+                {
+                    globals.player.Jump_SpringboardStart = 0;
+
+                    if (0.0f == globals.player.Jump_Springboard->passet->sb.jmpdir.x &&
+                        0.0f == globals.player.Jump_Springboard->passet->sb.jmpdir.z)
+                    {
+                        globals.player.Jump_CanDouble = 1;
+                    }
+                }
+
+                if (globals.player.JumpState == 3)
+                {
+                    ent->frame->vel.x *= 0.96f;
+                    ent->frame->vel.z *= 0.96f;
+                }
+            }
+
+            if (globals.player.Jump_CurrGravity &&
+                (globals.player.JumpState == 2 || globals.player.JumpState == 1))
+            {
+                if (strcmp(globals.player.ent.model->Anim->Single->State->Name, "JumpMelee01") ==
+                        0 &&
+                    globals.player.ent.model->Anim->Single->Time < 0.25f)
+                {
+                    ent->frame->vel.y -= 0.64f * globals.player.Jump_CurrGravity * dt;
+                }
+                else if (!globals.player.IsCoptering &&
+                         strcmp(globals.player.ent.model->Anim->Single->State->Name,
+                                "BbounceStart01") != 0 &&
+                         strcmp(globals.player.ent.model->Anim->Single->State->Name,
+                                "BbounceAttack01") != 0)
+                {
+                    ent->frame->vel.y -= globals.player.Jump_CurrGravity * dt;
+                }
+            }
+
+            if (globals.player.JumpState == 0 || globals.player.JumpState == 1)
+            {
+                globals.player.CanJump = 1;
+                globals.player.IsJumping = 0;
+                globals.player.WasDJumping = globals.player.IsDJumping;
+                globals.player.IsDJumping = 0;
+            }
+        }
+    }
+}
+
+static void zEntPlayerEGenUpdate(xEnt* ent, xScene* sc, F32 dt)
+{
+    U32 i;
+    zEGenerator* egen;
+    xIsect isx;
+    F32 rad;
+
+    globals.player.earc_coll.flags &= ~0x1;
+
+    for (i = 0; i < ((zScene*)sc)->baseCount[eBaseTypeEGenerator]; i++)
+    {
+        egen = (zEGenerator*)((zScene*)sc)->baseList[eBaseTypeEGenerator] + i;
+
+        if (egen->flags & 0x1)
+        {
+            xLine3VecDist2(&egen->src_pos, &egen->dst_pos, &ent->bound.sph.center, &isx);
+
+            rad = ent->bound.sph.r;
+
+            if (isx.dist < rad * rad + 0.1f * (2.0f * rad) + 0.1f * 0.1f)
+            {
+                globals.player.earc_coll.flags |= 0x1;
+
+                if (zEntPlayer_Damage(egen, 1, NULL))
+                {
+                    if (globals.player.Health)
+                    {
+                        globals.player.DamageTimer = globals.player.g.DamageTimeEGen;
+                    }
+
+                    zRumbleStart(SDR_DamageByEGen);
+                }
+            }
+        }
+    }
+}
+
+static void zEntPlayerVelUpdate(xEnt* ent, xScene* sc, F32 dt)
+{
+    xVec3* v;
+    F32 min;
+    F32 interp;
+    F32 speedMult;
+    F32 gft;
+    F32 s;
+    xEnt* flent;
+    F32 sft;
+    F32 velen2;
+    xCollis* colls;
+    xCollis* coll;
+    S32 i;
+    F32 dh;
+    F32 h_dot_v;
+    F32 v_dot_n;
+    xVec3 boost;
+
+    if (ent->model->Anim->Single->State->UserFlags & 0x100)
+    {
+        return;
+    }
+
+    if (globals.player.SlideTrackSliding)
+    {
+        return;
+    }
+
+    v = &ent->frame->vel;
+
+    if (strcmp(ent->model->Anim->Single->State->Name, "BoulderRoll01") == 0)
+    {
+        min = 2.5f * globals.player.ent.model->Mat->at.x;
+
+        if (min > 0.0f)
+        {
+            if (v->x < min)
+            {
+                v->x = min;
+            }
+        }
+        else if (v->x > min)
+        {
+            v->x = min;
+        }
+
+        min = 2.5f * globals.player.ent.model->Mat->at.z;
+
+        if (min > 0.0f)
+        {
+            if (v->z < min)
+            {
+                v->z = min;
+            }
+        }
+        else if (v->z > min)
+        {
+            v->z = min;
+        }
+    }
+    else if (globals.player.IsBubbleBowling)
+    {
+        interp = 1.0f + sBubbleBowlTimer;
+        interp *= interp;
+        interp *= interp;
+        interp = 1.0f / interp;
+        speedMult = globals.player.g.BubbleBowlMinSpeed * (1.0f - interp) +
+                    interp * globals.player.bbowlInitVel;
+        v->x = globals.player.ent.model->Mat->at.x * speedMult;
+        v->z = globals.player.ent.model->Mat->at.z * speedMult;
+    }
+    else if (!(globals.player.SlideTimer > 0.0f) && !surfSlickRatio &&
+             !(globals.player.SlipFadeTimer > 0.0f))
+    {
+        if (globals.player.JumpState == 0)
+        {
+            gft = globals.player.KnockBackTimer;
+
+            if (gft)
+            {
+                s = gft / (gft + dt);
+                v->x *= s;
+                v->z *= s;
+            }
+            else
+            {
+                v->x = 0.0f;
+                v->z = 0.0f;
+            }
+
+            if (globals.player.ent.collis->colls[0].flags & 0x1)
+            {
+                flent = (xEnt*)globals.player.ent.collis->colls[0].optr;
+            }
+            else
+            {
+                flent = NULL;
+            }
+
+            if (flent == NULL)
+            {
+                v->y = 0.0f;
+            }
+            else if (flent->baseType == eBaseTypePlatform &&
+                     flent->subType == ZPLATFORM_SUBTYPE_TEETER)
+            {
+                if (sDriveVel.y < 0.0f)
+                {
+                    v->y = sDriveVel.y;
+                }
+                else
+                {
+                    v->y = 0.0f;
+                }
+            }
+            else
+            {
+                v->y = 0.0f;
+            }
+        }
+    }
+    else
+    {
+        if (globals.player.Slide == 0 && globals.player.SlideTimer > 0.0f)
+        {
+            sft = 2.15f - globals.player.SlideTimer;
+
+            if (globals.player.JumpState == 0 || globals.player.JumpState == 1)
+            {
+                if (globals.player.JumpState == 0)
+                {
+                    v->y = 0.0f;
+                }
+
+                if (sft < 0.4f)
+                {
+                    s = (0.4f - sft) / ((0.4f - sft) + dt);
+                    v->x *= s;
+                    v->z *= s;
+                }
+                else
+                {
+                    v->x = 0.0f;
+                    v->z = 0.0f;
+                    return;
+                }
+            }
+            else if (sft < 2.15f)
+            {
+                s = (2.15f - sft) / ((2.15f - sft) + dt);
+                v->x *= s;
+                v->z *= s;
+            }
+            else
+            {
+                v->x = 0.0f;
+                v->z = 0.0f;
+                return;
+            }
+        }
+
+        velen2 = xVec3Length2(v);
+
+        if (xabs(velen2) < 0.0001f)
+        {
+            v->x = 0.0f;
+            v->y = 0.0f;
+            v->z = 0.0f;
+        }
+        else
+        {
+            i = 0;
+            colls = ent->collis->colls;
+            coll = colls;
+
+            if (surfSlickRatio)
+            {
+                if (colls[0].optr)
+                {
+                    dh = ent->frame->mat.pos.y - ent->frame->oldmat.pos.y;
+
+                    if (dh > 0.0f)
+                    {
+                        v->x *= 0.97f;
+                        v->z *= 0.97f;
+                    }
+                }
+                else
+                {
+                    v->y = 0.0f;
+                }
+
+                coll = colls + 2;
+                i = 2;
+            }
+            else if (!(globals.player.SlideTimer > 0.0f))
+            {
+                if (globals.player.SlipFadeTimer > 0.0f)
+                {
+                    s = globals.player.SlipFadeTimer / (globals.player.SlipFadeTimer + dt);
+                    v->x *= s;
+                    v->z *= s;
+                }
+                else
+                {
+                    v->x = 0.0f;
+                    v->z = 0.0f;
+                    return;
+                }
+            }
+
+            for (; i < 6; i++, coll++)
+            {
+                if ((coll->flags & 0x1) && coll->dist < 0.5f &&
+                    (!coll->optr || ((xBase*)coll->optr)->baseType != eBaseTypeVillain))
+                {
+                    h_dot_v = xVec3Dot(v, &coll->hdng);
+
+                    if (h_dot_v < 0.0f)
+                    {
+                        continue;
+                    }
+
+                    v_dot_n = xVec3Dot(v, &coll->norm);
+
+                    if (v_dot_n > 0.0f)
+                    {
+                        continue;
+                    }
+
+                    if (-v_dot_n >= 0.965926f * velen2)
+                    {
+                        v->x = 0.0f;
+                        v->y = 0.0f;
+                        v->z = 0.0f;
+                        return;
+                    }
+
+                    xVec3SMul(&boost, &coll->norm, 0.5f * -v_dot_n);
+                    xVec3AddTo(v, &boost);
+                    velen2 = xVec3Length2(v);
+                }
+            }
+        }
+    }
+}
+
 F32 det3x3top1(F32 a, F32 b, F32 c, F32 d, F32 e, F32 f)
 {
     F32 ret = -((a * f) - ((b * f) - (e * c)));
@@ -8379,6 +8839,119 @@ static void PlayerBoundUpdate(xEnt* ent, xVec3* pos)
     xVec3AddScaled(&ent->bound.sph.center, &globals.player.RootUp, ent->bound.sph.r - 0.2f);
 }
 
+static void zEntPlayerSurfDamageUpdate(xEnt* ent, xScene* sc, F32 dt)
+{
+    xCollis* coll;
+    xCollis* cend;
+    xSurface* surf;
+    S32 damaged;
+    zSurfaceProps* prop;
+    F32 dx;
+    F32 dz;
+    F32 mag;
+    F32 kvel;
+    xEnt* cent;
+
+    if (globals.player.DamageTimer > 0.0f)
+    {
+        return;
+    }
+
+    coll = ent->collis->colls;
+    cend = coll + ent->collis->idx;
+
+    for (; coll < cend; coll++)
+    {
+        if ((coll->flags & 0x1) && (surf = zSurfaceGetSurface(coll)) != NULL && !surf->state)
+        {
+            prop = (zSurfaceProps*)surf->moprops;
+            damaged = 0;
+
+            if (prop && prop->asset)
+            {
+                switch (prop->asset->game_damage_type)
+                {
+                case 0:
+                    break;
+                case 4:
+                case 6:
+                    if (zEntPlayer_Damage(surf, 1, NULL))
+                    {
+                        if (globals.player.Health)
+                        {
+                            globals.player.DamageTimer = prop->asset->damage_timer
+                                                             ? prop->asset->damage_timer
+                                                             : globals.player.g.DamageTimeSurface;
+                        }
+
+                        if (globals.player.Health)
+                        {
+                            if (tslide_ground || coll == ent->collis->colls ||
+                                prop->asset->damage_bounce)
+                            {
+                                zEntPlayer_DamageKnockIntoAir(prop->asset->damage_bounce
+                                                                  ? prop->asset->damage_bounce
+                                                                  : globals.player.g.DamageSurfKnock);
+                            }
+                            else
+                            {
+                                dx = -coll->tohit.x;
+                                dz = -coll->tohit.z;
+                                mag = xsqrt(dx * dx + dz * dz);
+
+                                if (mag > 0.01f)
+                                {
+                                    kvel = sPlayerNPC_KnockBackVel / mag;
+                                    globals.player.ent.frame->vel.x = kvel * dx;
+                                    globals.player.ent.frame->vel.y = 0.0f;
+                                    globals.player.ent.frame->vel.z = kvel * dz;
+                                    globals.player.KnockBackTimer = sPlayerNPC_KnockBackTime;
+                                    globals.player.KnockIntoAirTimer = 0.0f;
+                                }
+                            }
+                        }
+                    }
+
+                    damaged = 1;
+                    break;
+                case 1:
+                    cent = (xEnt*)coll->optr;
+
+                    if (cent && cent->baseType == eBaseTypeEGenerator &&
+                        !(((zEGenerator*)cent)->flags & 0x1))
+                    {
+                        break;
+                    }
+                    // fall through
+                case 2:
+                case 3:
+                case 5:
+                    if (globals.player.Health)
+                    {
+                        globals.player.DamageTimer = 0.0f;
+                        zEntPlayer_Damage(surf, globals.player.Health, NULL);
+                        damaged = 1;
+                    }
+                    break;
+                case 7:
+                    if (globals.player.Health)
+                    {
+                        globals.player.DamageTimer = 0.0f;
+                        zEntPlayer_Damage(surf, 1);
+                        damaged = 1;
+                    }
+                    break;
+                }
+
+                if (damaged)
+                {
+                    return;
+                }
+            }
+        }
+    }
+}
+
 // Equivalent; scheduling.
 void PlayerMountHackUpdate(F32 delta)
 {
@@ -8403,6 +8976,284 @@ void PlayerMountHackTakeAction(xEnt* ent, U32 type)
         mount_type = type;
     }
     mount_tmr = 0.0f;
+}
+
+static void zEntPlayerDriveUpdate(xEnt* ent, xScene* sc, F32 dt)
+{
+    zPlatform* plat;
+    xCollis* coll;
+    xEntDrive* drv;
+    xSurface* surf;
+    zJumpParam jump;
+    U32 superbounce;
+    F32* jmphs;
+    xVec3* jmpdir;
+    xAnimPlay* aplay;
+    xAnimState* spring_state;
+
+    if (globals.player.carry.patLauncher)
+    {
+        plat = (zPlatform*)globals.player.carry.patLauncher;
+        globals.player.carry.patLauncher = NULL;
+
+        if (globals.player.Health)
+        {
+            goto do_bounce;
+        }
+    }
+
+    PlayerMountHackUpdate(dt);
+
+    drv = &globals.player.drv;
+
+    if (drv->odriver)
+    {
+        if (drv->odriver->baseType != eBaseTypePlatform)
+        {
+            if (!drv->os)
+            {
+                drv->otm = 0.0f;
+                drv->odriver = NULL;
+            }
+        }
+        else
+        {
+            plat = (zPlatform*)drv->odriver;
+
+            if (!drv->os)
+            {
+                drv->otm = 0.0f;
+                drv->odriver = NULL;
+
+                if (plat->subType == ZPLATFORM_SUBTYPE_BREAKAWAY)
+                {
+                    zPlatform_Dismount(plat);
+                }
+
+                if (plat->passet->flags & 0x1)
+                {
+                    zPlatform_Shake(plat, dt, 0.2f, 12.0f * PI);
+                }
+            }
+        }
+    }
+
+    coll = ent->collis->colls;
+
+    if (coll->flags & 0x1)
+    {
+        plat = (zPlatform*)coll->optr;
+    }
+    else
+    {
+        plat = NULL;
+    }
+
+    if (!plat)
+    {
+        if (!drv->driver)
+        {
+            return;
+        }
+
+        PlayerMountHackTakeAction(drv->driver, 0x21);
+
+        if (globals.player.JumpState != 0 && globals.player.JumpState != 1)
+        {
+            xEntDriveDismount(drv, 0.0001f);
+            return;
+        }
+
+        xEntDriveDismount(drv, 0.3f);
+        return;
+    }
+
+    surf = zSurfaceGetSurface(coll);
+
+    if (surf && !surf->state && zSurfaceGetDamageType(surf))
+    {
+        return;
+    }
+
+    if (plat != (zPlatform*)drv->driver)
+    {
+        if (drv->driver)
+        {
+            PlayerMountHackTakeAction(drv->driver, 0x21);
+            xEntDriveDismount(drv, 0.3f);
+        }
+
+        if ((plat->baseType == eBaseTypeNPC &&
+             (((xNPCBasic*)plat)->SelfType() & 0xffffff00) == 'NTT\0') ||
+            plat->baseType == eBaseTypeBoulder)
+        {
+            xEntDriveMount(drv, (xEnt*)plat, 0.15f, coll);
+            return;
+        }
+
+        if (plat->baseType != eBaseTypePlatform && (plat->moreFlags & 0x2) &&
+            (plat->moreFlags & 0x20))
+        {
+            xEntDriveMount(drv, (xEnt*)plat, 0.15f, coll);
+            return;
+        }
+
+        if (plat->baseType == eBaseTypePendulum)
+        {
+            xEntDriveMount(drv, (xEnt*)plat, 0.3f, coll);
+            PlayerMountHackTakeAction((xEnt*)plat, 0x20);
+            return;
+        }
+
+        if (plat->baseType == eBaseTypeStatic && plat->ffx)
+        {
+            xEntDriveMount(drv, (xEnt*)plat, -1.0f, coll);
+            return;
+        }
+
+        if (plat->baseType != eBaseTypePlatform)
+        {
+            return;
+        }
+
+        if (!(plat->plat_flags & 0x1))
+        {
+            return;
+        }
+
+        if (plat->subType != ZPLATFORM_SUBTYPE_SPRINGBOARD)
+        {
+            xEntDriveMount(drv, (xEnt*)plat, -1.0f, coll);
+            PlayerMountHackTakeAction((xEnt*)plat, 0x20);
+
+            if (plat->subType == ZPLATFORM_SUBTYPE_BREAKAWAY)
+            {
+                zPlatform_Mount(plat);
+            }
+
+            if (plat->passet->flags & 0x1)
+            {
+                zPlatform_Shake(plat, dt, 0.2f, 12.0f * PI);
+            }
+        }
+    }
+    else
+    {
+        plat = (zPlatform*)drv->driver;
+    }
+
+    if (plat->subType != ZPLATFORM_SUBTYPE_SPRINGBOARD)
+    {
+        return;
+    }
+
+    if (!globals.player.Health)
+    {
+        return;
+    }
+
+    if ((plat->passet->flags & 0x2) &&
+        (globals.player.JumpState == 0 || globals.player.JumpState == 1))
+    {
+        return;
+    }
+
+    if (plat->plat_flags & 0x2)
+    {
+        return;
+    }
+
+do_bounce:
+
+    if (plat->tmr <= 0.0f)
+    {
+        plat->ctr = 0;
+    }
+    else if (plat->ctr < 2)
+    {
+        plat->ctr++;
+    }
+
+    superbounce = 0;
+
+    if (strcmp(ent->model->Anim->Single->State->Name, "BbounceAttack01") == 0 &&
+        plat->passet->sb.jmpbounce != 0.0f)
+    {
+        jump.PeakHeight = plat->passet->sb.jmpbounce;
+        superbounce = 1;
+    }
+    else
+    {
+        jmphs = plat->passet->sb.jmph;
+        jump.PeakHeight = MAX(MAX(jmphs[0], jmphs[1]), jmphs[2]);
+    }
+
+    jmpdir = &plat->passet->sb.jmpdir;
+    jump.TimeHold = 0.0f;
+    jump.TimeGravChange = 0.3f;
+    CalcJumpImpulse(&jump, NULL);
+
+    startBounce = ent->frame->mat.pos.y;
+    zEntPlayerJumpStart(ent, &jump);
+
+    if (plat->asset->modelInfoID == xStrHash("tree_bounce_bind_top"))
+    {
+        xSndPlay3D(xStrHash("springboard_big"), 0.77f, 0.0f, 0x80, 0,
+                   (const xVec3*)&plat->model->Mat->pos, 0.0f, (sound_category)0, 0.0f);
+    }
+    else
+    {
+        xSndPlay3D(xStrHash("springboard"), 0.77f, 0.0f, 0x80, 0, (const xVec3*)&plat->model->Mat->pos, 0.0f,
+                   (sound_category)0, 0.0f);
+    }
+
+    xVec3SMul(&ent->frame->vel, jmpdir, ent->frame->vel.y);
+
+    globals.player.Jump_CanDouble = 0;
+    globals.player.Jump_CanFloat = 1;
+    globals.player.Jump_SpringboardStart = 1;
+    globals.player.Jump_Springboard = plat;
+
+    if (plat->passet->sb.springflags & 0x4)
+    {
+        zEntPlayerControlOff((zControlOwner)0x4000);
+    }
+    else
+    {
+        zEntPlayerControlOn((zControlOwner)0x4000);
+    }
+
+    aplay = plat->model->Anim;
+
+    if (aplay && (spring_state = xAnimTableGetState(aplay->Table, "Spring")) != NULL)
+    {
+        xAnimPlaySetState(aplay->Single, spring_state, 0.0f);
+    }
+
+    globals.player.Bounced = 1;
+    zCameraSetBbounce(1);
+
+    if (!(plat->passet->sb.springflags & 0x1) ||
+        ((plat->passet->sb.springflags & 0x2) && !superbounce))
+    {
+        if (jmpdir->x * jmpdir->x + jmpdir->z * jmpdir->z > jmpdir->y * jmpdir->y)
+        {
+            zCameraSetLongbounce(1);
+        }
+        else
+        {
+            zCameraSetHighbounce(0);
+        }
+    }
+    else
+    {
+        zCameraSetHighbounce(1);
+    }
+
+    tslide_ground = 0;
+    tslide_dbl_tmr = 0.0f;
+    tslide_inair_tmr = 0.0f;
+    globals.player.SlideTrackDecay = 0.0f;
 }
 
 void zEntPlayerExit(xEnt* ent)
@@ -9358,6 +10209,46 @@ S32 zEntPlayerEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam, x
     }
 
     return 1;
+}
+
+static void PlayerTeeterCheck(xEnt* ent, xScene* sc, F32 dt)
+{
+    S32 i;
+
+    if (globals.player.MountChimney)
+    {
+        globals.player.Teeter = 4;
+        return;
+    }
+
+    if (globals.player.Teeter)
+    {
+        globals.player.Teeter--;
+    }
+
+    if (globals.player.JumpState)
+    {
+        return;
+    }
+
+    for (i = 0; i < 4; i++)
+    {
+        if (floor_dist[i] > 0.424264f)
+        {
+            if (floor_tmr[i] >= 0.2f)
+            {
+                floor_tmr[i] = 0.2f;
+                globals.player.Teeter = 1;
+                return;
+            }
+
+            floor_tmr[i] += dt;
+        }
+        else
+        {
+            floor_tmr[i] = 0.0f;
+        }
+    }
 }
 
 void zEntPlayer_StoreCheckPoint(xVec3* pos, F32 rot, U32 initCamID)
