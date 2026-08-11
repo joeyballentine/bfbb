@@ -275,8 +275,31 @@ confirming before anyone builds a strategy on either model.
   `xVec2 facing = {0,0}` and `xLaserBolt.h`'s `xVec3 temp = {0,0,0}`, are
   both correct: removing them costs `xLaserBolt` a matched function and drops
   `zNPCTypeDutchman`'s fuzzy. In those two the original really did write an
-  aggregate initialiser; in `xGrid.h` it did not. Both were measured on a
-  full build and reverted.
+  aggregate initialiser. Both were measured on a full build and reverted.
+
+  **Correction: retail's `get_grid_index` did have the initialiser too.** The
+  claim previously recorded here -- that `xGrid.h` was the one case where the
+  original did not write one -- is refuted by the target itself. Disassemble
+  `get_grid_index__FRC5xGridff` and the first thing it does is
+  `lwz r5, @587@sda21` / `stw r5, 0x8(r1)`, filling the whole 4-byte
+  `grid_index` local from a constant before either field is assigned, and
+  `@587` is `.sbss2:0x803D0818`, `size:0x4`, `scope:local` -- precisely the
+  junk object. So removing the initialiser was still the right call on the
+  numbers (it was worth ~140 units), but the reason cannot be "retail did not
+  write one". Something else about our header's reach differs: retail emitted
+  that object in *fewer* TUs than our `xGrid.h` does, so keeping it added four
+  bytes where retail had none.
+
+  The consequence for anyone in `xScene`: `get_grid_index` sits at **60.558%**
+  and **cannot cross 99%** while the initialiser is deliberately absent -- the
+  missing `lwz`/`stw` pair alone is more than 1% of a 43-instruction function.
+  Treat it as a priced ceiling, not a lead. There is a second, independent
+  defect in it that *is* reachable if anyone wants the fuzzy: retail computes
+  both products before the first `bl` and parks the z product in `f31`, where
+  we park the raw `z` argument and recompute after the call. Hoisting both
+  `(v - min) * inv_csize` products into locals should recover it -- but it is
+  a shared header with a ~140-unit blast radius and it buys no function, so
+  measure the sweep before spending the time.
 
   This is the general answer to "what creates a literal before its first
   `.text` use", and it is worth checking other headers for the same shape
@@ -989,6 +1012,44 @@ Agents may not edit shared headers, so they report them instead. Outstanding:
   evidence, one was a regression and one was neutral.
 
 ## Open leads
+
+- **What actually creates the eleven ghost `.rodata` templates.** Four 12-byte
+  and seven 40-byte all-zero anonymous objects open the `.rodata` of at least
+  `zVar` and `xParEmitterType`, referenced by nothing in either object, and
+  they carry the *same* anonymous index range (`_617`–`_623`) in both. That
+  shared range is the clue: a single header almost certainly emits them into
+  every TU that includes it, which is exactly the parse-time aggregate-
+  initialiser mechanism written up under "Settled". Upstream never found the
+  cause and worked around it with `__deadstripped_*` in 15 files; the
+  workaround is now sanctioned (see the skill), but finding the header would
+  let all fifteen be deleted and would probably unblock units nobody has
+  connected to this yet. Look for a header with eleven aggregate initialisers
+  in `inline` bodies, sized 12 and 40 bytes.
+
+- **The reload-after-aliasing-store defect now has seven witnesses in one
+  unit.** Retail's `mwcceppc` **reloads** a value after an intervening store
+  that could alias it, where this branch's compiler keeps the cached copy. In
+  `xFX` alone this is the sole blocker for six of the nine remaining sub-90%
+  functions, and it is the same family as the alias oracle at `0x511fc0` (see
+  `project_float_meme_root_cause`), not the scheduler patch:
+
+  - `xFXRingCreate` (89.983%) — retail reloads `1.0f` (`@958`) once per
+    `*= 1.0f / lifetime`, because each `stfs` into the ring invalidates the
+    `.sdata2` load. The pre-existing `// non-matching: 1.0f is only loaded
+    once` comment turns out to be exactly this.
+  - `activate_ribbon` (45.000%) — retail reloads `active_ribbons_size` after
+    `active_ribbons[i] = ribbon`; we keep it in a register and sink the store.
+  - `xFXAuraUpdate` (85.147%) — retail reloads `gFrameCount` in each of four
+    unrolled iterations; we hoist it out.
+  - `LightResetFrame`, `DrawRing`, `xFXShineRender`, `xFXStreakRender` — same
+    shape, plus one base-address materialisation retail repeats and we CSE.
+
+  This is a better-evidenced patch target than anything currently on the list:
+  it is one rule, it is measurable in a single unit, and no source form reaches
+  it short of `volatile`, which would be wrong (and was already rejected on
+  `zNPCHazard::Discard` for emitting a load the target does not have). The
+  natural companion case is `zNPCHazard::Discard`'s residual, which survives a
+  control experiment.
 
 - **Epilogue `lwz` swap** (`lwz r31` before `lwz r0`) — checked, it is the sole
   blocker for only 2 functions project-wide, so it is *not* worth a compiler
