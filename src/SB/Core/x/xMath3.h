@@ -29,16 +29,6 @@ struct xSphere
 {
     xVec3 center;
     F32 r;
-
-    xSphere& operator=(const xSphere& rhs)
-    {
-        *(S32*)(&this->center.x) = *(S32*)(&rhs.center.x);
-        *(S32*)(&this->center.y) = *(S32*)(&rhs.center.y);
-        *(S32*)(&this->center.z) = *(S32*)(&rhs.center.z);
-        this->r = rhs.r;
-
-        return *this;
-    }
 };
 
 // Size: 0x18
@@ -72,16 +62,6 @@ struct xQuat
 {
     xVec3 v;
     F32 s;
-
-    xQuat& operator=(const xQuat& rhs)
-    {
-        *(S32*)(&this->v.x) = *(S32*)(&rhs.v.x);
-        *(S32*)(&this->v.y) = *(S32*)(&rhs.v.y);
-        *(S32*)(&this->v.z) = *(S32*)(&rhs.v.z);
-        this->s = rhs.s;
-
-        return *this;
-    }
 };
 
 struct xVec4
