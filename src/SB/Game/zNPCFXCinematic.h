@@ -210,6 +210,7 @@ struct NPCCone
     void UVBaseSet(F32 u, F32 v);
     void ColorSet(RwRGBA top, RwRGBA bot);
     void RadiusSet(F32);
+    void RenderCone(xVec3* pos_tiptop, xVec3* pos_botcenter);
 };
 
 struct NCINBeNosey : XCSNNosey

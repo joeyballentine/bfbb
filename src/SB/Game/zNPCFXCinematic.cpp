@@ -27,6 +27,9 @@ void clamp_bone_index(NCINEntry* fxrec, RpAtomic* model);
 // belongs in xDebug.h next to the other xDebugAddTweak overloads
 void xDebugAddTweak(const char*, xVec3*, const tweak_callback*, void*, U32);
 
+xVec3* LERP(F32 t, xVec3* dst, const xVec3* a, const xVec3* b);
+xVec3* SMOOTH(F32 t, xVec3* dst, const xVec3* a, const xVec3* b);
+
 void EmitFreezeBreath(xVec3* pos, xVec3* vel, F32 dt, F32 elapsed, F32 total);
 void NPAR_EmitTubeSpiralCin(const xVec3* pos, const xVec3* vel, F32 dt);
 
@@ -859,28 +862,48 @@ void NCIN_BubHit(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-// TODO: NEEDS REWRITEN / CORRECTED
-void NCIN_Zapper(const zCutsceneMgr*, NCINEntry* fxrec, S32 param)
+void NCIN_Zapper(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
-    if (param != 0)
+    _tagLightningAdd addInfo;
+
+    if (killit != 0)
     {
         fxrec->flg_stat |= 4;
 
-        if (fxrec->idx_anim == 29 || fxrec->idx_anim == 8)
+        switch (fxrec->typ_ncinfx)
         {
+        case NCIN_FXTYP_JELLYLIGHT_01:
+        case NCIN_FXTYP_MONCLOUD:
             if (fxrec->fxdata.lytdata.lyt_zap != NULL)
             {
                 zLightningKill(fxrec->fxdata.lytdata.lyt_zap);
             }
 
             fxrec->fxdata.lytdata.lyt_zap = NULL;
+            break;
         }
         return;
     }
 
     if (fxrec->flg_stat & 2)
     {
-        memset(&fxrec->fxdata.arcdata.lightning, 0, sizeof(fxrec->fxdata.arcdata.lightning));
+        memset(&addInfo, 0, sizeof(_tagLightningAdd));
+
+        switch (fxrec->typ_ncinfx)
+        {
+        case NCIN_FXTYP_JELLYLIGHT_01:
+            NPCC_MakeLightningInfo(NPC_LYT_JELLYFISH, &addInfo);
+            break;
+        case NCIN_FXTYP_MONCLOUD:
+            NPCC_MakeLightningInfo(NPC_LYT_CLOUDZAP, &addInfo);
+            break;
+        }
+
+        addInfo.start = &fxrec->pos_A[0];
+        addInfo.end = &fxrec->pos_A[1];
+        addInfo.time = 0.5f + (fxrec->tym_end - fxrec->tym_beg);
+
+        fxrec->fxdata.lytdata.lyt_zap = zLightningAdd(&addInfo);
     }
 
     if (fxrec->fxdata.lytdata.lyt_zap == NULL)
@@ -968,13 +991,13 @@ void NCIN_WaterSplash(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_HazProjShoot(const zCutsceneMgr* mgr, NCINEntry* fxrec, S32 param)
+void NCIN_HazProjShoot(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
-    if (param != 0)
+    if (killit != 0)
     {
         fxrec->flg_stat |= 4;
 
-        if (fxrec->fxdata.hazdata.npchaz->flg_hazard)
+        if (fxrec->fxdata.hazdata.npchaz != NULL)
         {
             fxrec->fxdata.hazdata.npchaz->MarkForRecycle();
         }
@@ -983,58 +1006,60 @@ void NCIN_HazProjShoot(const zCutsceneMgr* mgr, NCINEntry* fxrec, S32 param)
 
     if (fxrec->flg_stat & 2)
     {
-        S32 type = fxrec->fxdata.hazdata.npchaz->typ_hazard;
-        S32 use_haztyp = 10;
+        en_npchaz use_haztyp = NPC_HAZ_TARTARPROJ;
 
-        if (type == 11)
+        switch (fxrec->typ_ncinfx)
         {
-            use_haztyp = 18;
-        }
-        else if (type >= 10 && type < 13)
-        {
-            use_haztyp = (type == 12) ? 16 : 10;
+        case NCIN_FXTYP_TARTARSHOOT:
+            use_haztyp = NPC_HAZ_TARTARPROJ;
+            break;
+        case NCIN_FXTYP_BONESHOOT:
+            use_haztyp = NPC_HAZ_ARFBONE;
+            break;
+        case NCIN_FXTYP_OILSHOOT:
+            use_haztyp = NPC_HAZ_OILBUBBLE;
+            break;
         }
 
         NPCHazard* haz = HAZ_Acquire();
 
-        if (!haz)
+        if (haz == NULL)
         {
             return;
         }
 
-        if (!haz->ConfigHelper((en_npchaz)use_haztyp))
+        if (!haz->ConfigHelper(use_haztyp))
         {
             return;
         }
 
         haz->SetNPCOwner(NULL);
-        fxrec->fxdata.hazdata.npchaz = haz;
-        haz->flg_hazard &= ~128;
+        haz->custdata.collide.flg_collide = 0;
 
-        xVec3 diff = fxrec->pos_B[0] - fxrec->pos_A[0];
-        F32 len = diff.length();
+        xVec3 pos_beg = fxrec->pos_A[0];
+        xVec3 pos_end = fxrec->pos_A[1];
+        xVec3 dir_shoot = pos_beg - pos_end;
 
-        F32 tym = fxrec->tym_beg - fxrec->tym_end;
+        F32 dst_shoot = dir_shoot.length();
+        F32 tym = fxrec->tym_end - fxrec->tym_beg;
 
-        if (tym < 0.01f)
+        if (tym < 1e-5f)
         {
-            tym = 1.0f;
+            tym = 0.25f;
         }
 
-        haz->pos_hazard = diff;
+        haz->custdata.tartar.pos_tgt = pos_end;
         haz->Start(&fxrec->pos_A[0], tym);
+        fxrec->fxdata.hazdata.npchaz = haz;
     }
 
-    if (fxrec->fxdata.hazdata.npchaz)
+    if (fxrec->fxdata.hazdata.npchaz == NULL)
     {
-        if (fxrec->fxdata.hazdata.npchaz->typ_hazard != 11)
-        {
-            fxrec->fxdata.hazdata.npchaz->flg_hazard &= ~0xF000;
-        }
-        else
-        {
-            fxrec->flg_stat |= 4;
-        }
+        fxrec->flg_stat |= 4;
+    }
+    else if (fxrec->fxdata.hazdata.npchaz->typ_hazard != NPC_HAZ_TARTARSPILL)
+    {
+        fxrec->fxdata.hazdata.npchaz->flg_hazard &= ~0x60000;
     }
 }
 
@@ -1154,7 +1179,7 @@ void NCIN_TTGunSmoke_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpAtomic*,
     pos_smoke += mat_bone->at * vec_offset.z;
     pos_smoke += *(const xVec3*)&animMat->pos;
 
-    F32 tym_blow[2] = { 22.000002f, 23.166666f };
+    F32 tym_blow[2] = { 22.000002f, 23.166667f };
 
     csn = csnmgr->csn;
 
@@ -1237,9 +1262,86 @@ void NCIN_SleepyLamp_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_SleepyLamp_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag*, U32 a,
-                        U32 b)
+void NCIN_SleepyLamp_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpAtomic*,
+                        RwMatrixTag* animMat, U32 animIndex, U32 dataIndex)
 {
+    if (animIndex == 2)
+    {
+        xVec3* pos_robo = &fxrec->fxdata.lampdata.pos_robo;
+
+        *pos_robo = *(const xVec3*)&animMat->pos;
+        pos_robo->y += -2.0f;
+        return;
+    }
+
+    if (animIndex != 3)
+    {
+        return;
+    }
+
+    xVec3* pos_robo = &fxrec->fxdata.lampdata.pos_robo;
+
+    NPCCone cone;
+    xVec3 pos_lamp = *(const xVec3*)&animMat->pos;
+    xVec3 rgb_peace = { 1.0f, 1.0f, 0.63f };
+    xVec3 rgb_anger = { 0.5f, 0.0f, 0.0f };
+    xVec3 rgb_current;
+    RwRGBA rgba_top;
+    RwRGBA rgba_bot;
+    F32 pct;
+
+    static const F32 tym_anger[4] = { 4.8333335f, 5.3333335f, 11.000001f, 11.666667f };
+
+    F32 tym = csnmgr->csn->Time;
+
+    if (tym < tym_anger[0])
+    {
+        rgb_current = rgb_peace;
+    }
+    else if (tym > tym_anger[3])
+    {
+        rgb_current = rgb_peace;
+    }
+    else if (tym > tym_anger[1] && tym < tym_anger[2])
+    {
+        rgb_current = rgb_anger;
+    }
+    else
+    {
+        if (tym < tym_anger[1])
+        {
+            pct = (tym - tym_anger[0]) / (tym_anger[1] - tym_anger[0]);
+        }
+        else
+        {
+            pct = 1.0f - (tym - tym_anger[2]) / (tym_anger[3] - tym_anger[2]);
+        }
+
+        SMOOTH(CLAMP(pct, 0.0f, 1.0f), &rgb_current, &rgb_peace, &rgb_anger);
+    }
+
+    U8 red = (U8)(255.0f * rgb_current.x);
+    U8 green = (U8)(255.0f * rgb_current.y);
+    U8 blue = (U8)(255.0f * rgb_current.z);
+
+    rgba_top.red = red;
+    rgba_top.green = green;
+    rgba_top.blue = blue;
+    rgba_top.alpha = 96;
+
+    rgba_bot.red = red;
+    rgba_bot.green = green;
+    rgba_bot.blue = blue;
+    rgba_bot.alpha = 16;
+
+    memset(&cone, 0, sizeof(NPCCone));
+
+    cone.RadiusSet(3.5f);
+    cone.ColorSet(rgba_top, rgba_bot);
+    cone.UVBaseSet(0.5f, 0.0f);
+    cone.UVSliceSet(1.0f, 1.0f);
+    cone.TextureSet(NULL);
+    cone.RenderCone(&pos_lamp, pos_robo);
 }
 
 void NCIN_SleepyDRay_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
@@ -1255,9 +1357,52 @@ void NCIN_SleepyDRay_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_SleepyDRay_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag*, U32 a,
-                        U32 b)
+void NCIN_SleepyDRay_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpAtomic*,
+                        RwMatrixTag* animMat, U32 animIndex, U32 dataIndex)
 {
+    RwRGBA rgba_top = { 255, 255, 255, 255 };
+    RwRGBA rgba_bot = { 255, 255, 255, 255 };
+
+    static const F32 uv_scroll_dray[2] = { 0.0f, -4.55f };
+    static const F32 uv_slice_dray[2] = { 0.25f, 0.25f };
+
+    xVec3 pos_trail;
+
+    if (animIndex == 0)
+    {
+        const xVec3* pos_beam = &fxrec->pos_A[0];
+
+        for (S32 i = 0; i < 6; i++)
+        {
+            LERP(i / 6.0f, &pos_trail, pos_beam, (const xVec3*)&animMat->pos);
+            zFX_SpawnBubbleTrail(&pos_trail, 4);
+        }
+
+        zFX_SpawnBubbleTrail((const xVec3*)&animMat->pos, 4);
+        return;
+    }
+
+    if (animIndex != 2)
+    {
+        return;
+    }
+
+    xVec3 pos_top = *(const xVec3*)&animMat[16].pos + *(const xVec3*)&animMat->pos;
+
+    F32 tym = csnmgr->csn->Time - fxrec->tym_beg;
+    F32 uv_u = tym * uv_scroll_dray[0];
+    F32 uv_v = tym * uv_scroll_dray[1];
+
+    NPCCone cone;
+
+    memset(&cone, 0, sizeof(NPCCone));
+
+    cone.RadiusSet(0.5f);
+    cone.ColorSet(rgba_top, rgba_bot);
+    cone.UVBaseSet(uv_u, uv_v);
+    cone.UVSliceSet(uv_slice_dray[0], uv_slice_dray[1]);
+    cone.TextureSet(fxrec->fxdata.draydata.rast);
+    cone.RenderCone(&pos_top, &fxrec->pos_A[0]);
 }
 
 void NCIN_MaryBoom(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
@@ -1671,7 +1816,7 @@ void NCIN_HookRecoil_AR(const zCutsceneMgr* csnmgr, NCINEntry*, RpAtomic* model,
     {
         idx_anim = 5;
     }
-    else if (tym < 12.8f)
+    else if (tym < 12.800001f)
     {
         idx_anim = 1;
     }
@@ -1808,9 +1953,9 @@ void NCIN_LightninBone_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
         addInfo.color.g = 200;
         addInfo.color.b = 200;
         addInfo.color.a = 255;
+        addInfo.time = 0.25f * xurand() + 0.05f;
         addInfo.start = &pnt;
         addInfo.end = &pnt;
-        addInfo.time = 0.25f * xurand() + 0.05f;
 
         fxrec->fxdata.arcdata.lightning = zLightningAdd(&addInfo);
 
@@ -2414,9 +2559,11 @@ void NCIN_SBBNode_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     {
         fxrec->flg_stat |= 4;
 
-        if (zNPCB_SB2::singleton() != NULL)
+        zNPCB_SB2* sb2 = zNPCB_SB2::singleton();
+
+        if (sb2 != NULL)
         {
-            zNPCB_SB2::singleton()->bind_nodes();
+            sb2->bind_nodes();
         }
 
         if (fxrec->fxdata.matdata.mat != NULL)
