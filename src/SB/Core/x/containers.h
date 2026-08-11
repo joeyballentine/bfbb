@@ -22,6 +22,10 @@ struct tier_queue_allocator
     U32 _max_blocks_shift;
     U8 head;
 
+    // Used by the target but declared nowhere; bodies still to be written.
+    void init(u32, u32, u32);
+    void clear();
+
     U32 block_size() const
     {
         return _block_size;
@@ -91,6 +95,9 @@ template <class T> struct tier_queue
         {
             return &operator*();
         }
+
+        // Used by the target (__mm__...8iteratorFv); body still to be written.
+        iterator* operator--();
 
         bool operator==(const iterator& other) const
         {
@@ -164,6 +171,9 @@ template <class T> struct tier_queue
 
         return data[alloc->mod_block_size(index)];
     }
+
+    // Used by the target (__vc__36tier_queue<...>Fi); body still to be written.
+    T& operator[](S32 index);
 
     iterator create_iterator(u32 index) const
     {

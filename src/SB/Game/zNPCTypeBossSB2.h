@@ -225,7 +225,7 @@ struct zNPCB_SB2 : zNPCBoss
     void rebind_nodes(RpAtomic*, RwMatrixTag*);
     void setup_node_tags();
     void move_hand(zNPCB_SB2::hand_data&, F32);
-    void spin_platform(zNPCB_SB2::platform_data& p, const xVec3& axis, F32 max_vel, F32 accel);
+    void spin_platform(zNPCB_SB2::platform_data& p, const xVec3& axis, F32 accel, F32 max_vel);
     void check_platform_smack(zNPCB_SB2::hand_data& hand);
     void update_bounds();
     void update_platforms(F32);
@@ -268,8 +268,8 @@ struct zNPCB_SB2 : zNPCBoss
     void deactivate_hand(zNPCB_SB2::hand_enum);
     bool player_on_ground() const;
     void emit_slug(zNPCB_SB2::slug_enum which);
-    S32 slugs_ready() const;
-    S32 slugs_inactive() const;
+    bool slugs_ready() const;
+    bool slugs_inactive() const;
     void reset_stage();
     void fire_slug(zNPCB_SB2::slug_enum which, zNPCB_SB2::platform_data& target);
     void abandon_slugs();
@@ -400,7 +400,7 @@ struct zNPCGoalBossSB2Swipe : zNPCGoalCommon
     S32 Process(en_trantype*, F32, void*, xScene*);
     S32 Enter(F32 dt, void* updCtxt);
     S32 Exit(F32 dt, void* updCtxt);
-    S32 can_start() const;
+    bool can_start() const;
 };
 
 struct zNPCGoalBossSB2Chop : zNPCGoalCommon
@@ -439,7 +439,7 @@ struct zNPCGoalBossSB2Karate : zNPCGoalCommon
     S32 Process(en_trantype*, F32, void*, xScene*);
     S32 Enter(F32 dt, void* updCtxt);
     S32 Exit(F32, void*);
-    S32 can_start() const;
+    bool can_start() const;
 };
 
 struct zNPCGoalBossSB2Death : zNPCGoalCommon

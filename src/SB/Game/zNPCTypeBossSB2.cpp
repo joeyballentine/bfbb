@@ -1997,7 +1997,7 @@ void zNPCB_SB2::emit_slug(zNPCB_SB2::slug_enum which)
     }
 }
 
-S32 zNPCB_SB2::slugs_ready() const
+bool zNPCB_SB2::slugs_ready() const
 {
     const slug_data* pCurSlug = slugs;
     const slug_data* pLastSlug = &pCurSlug[MAX_SLUG];
@@ -2013,7 +2013,7 @@ S32 zNPCB_SB2::slugs_ready() const
     return 1;
 }
 
-S32 zNPCB_SB2::slugs_inactive() const
+bool zNPCB_SB2::slugs_inactive() const
 {
     const slug_data* pCurSlug = slugs;
     const slug_data* pLastSlug = &pCurSlug[MAX_SLUG];
@@ -3874,7 +3874,7 @@ S32 zNPCGoalBossSB2Swipe::Process(en_trantype* trantype, F32 dt, void* updCtxt, 
     return 0;
 }
 
-S32 zNPCGoalBossSB2Swipe::can_start() const
+bool zNPCGoalBossSB2Swipe::can_start() const
 {
     zNPCB_SB2::platform_data* platform = owner.player_platform();
     return platform != NULL;
@@ -4124,7 +4124,7 @@ S32 zNPCGoalBossSB2Karate::Process(en_trantype* trantype, F32 dt, void* updCtxt,
     return 0;
 }
 
-S32 zNPCGoalBossSB2Karate::can_start() const
+bool zNPCGoalBossSB2Karate::can_start() const
 {
     zNPCB_SB2::platform_data* platform = owner.player_platform();
     return platform != NULL;

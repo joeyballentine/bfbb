@@ -821,3 +821,29 @@ namespace
         return off;
     }
 }
+
+// These three land as weak symbols in this unit's split
+// (.text:0x8011A7E4/0x8011A848/0x8011A87C), in this order. The target's own
+// call graph shows operator* calling operator*= and operator+ calling
+// operator+=, which is the xBound.cpp idiom.
+xVec3 xVec3::operator*(const xVec3& v) const
+{
+    xVec3 temp = *this;
+    temp *= v;
+    return temp;
+}
+
+xVec3& xVec3::operator*=(const xVec3& v)
+{
+    x *= v.x;
+    y *= v.y;
+    z *= v.z;
+    return *this;
+}
+
+xVec3 xVec3::operator+(F32 f) const
+{
+    xVec3 temp = *this;
+    temp += f;
+    return temp;
+}

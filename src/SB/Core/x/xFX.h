@@ -182,6 +182,12 @@ struct xFXRibbon
     void set_texture(U32);
     void set_texture(RwTexture* texture);
     void set_curve(const curve_node* curve, size_t size);
+    // Used by the target but declared nowhere; signatures decoded from the
+    // mangled names. The bodies are still to be written in xFX.cpp.
+    void get_normal(xVec3&, const xVec3&, F32);
+    void refresh_joint(joint_data&, const tier_queue<joint_data>::iterator&);
+    void eval_joint(const joint_data&, iColor_tag&, F32&);
+    void render_strip(RxObjSpace3DVertex*, tier_queue<joint_data>::iterator, u32);
     void refresh_config();
     void set_default_config();
     void update_curve_tweaks();

@@ -41,6 +41,7 @@ struct xVec3
         return *this;
     }
     xVec3 operator+(const xVec3&) const;
+    xVec3 operator+(F32) const;
     xVec3 operator-(const xVec3&) const;
     xVec3 operator-() const
     {
@@ -53,6 +54,7 @@ struct xVec3
         return v;
     }
     xVec3 operator*(F32) const;
+    xVec3 operator*(const xVec3&) const;
     xVec3 operator/(F32) const;
     xVec3& operator+=(const xVec3&);
     xVec3& operator+=(F32 f)
@@ -74,6 +76,7 @@ struct xVec3
     }
 
     xVec3& operator*=(F32);
+    xVec3& operator*=(const xVec3&);
     xVec3& operator/=(F32);
 
     xVec3& right_normalize();
