@@ -263,6 +263,8 @@ struct NPCHazard
     void Cleanup();
     void WipeIt();
     void PosSet(const xVec3* pos);
+    void Timestep(F32 dt);
+    void Render();
     void NotifyCBSet(HAZNotify* noter);
     void SetAlpha(F32 alpha);
     void OrientToDir(const xVec3* vec_path, S32 doTheTwist);
@@ -317,6 +319,8 @@ struct NPCHazard
     void TypData_RotMatSet(xMat3x3* mat);
     void TypData_RotMatApply(xMat3x3* mat);
     en_hazmodel PickFunFrag();
+    void Upd_Explode(F32 dt);
+    void DeathStar();
     void PreCollide();
     S32 StaggeredCollide();
     void StagColGeneral(S32 who);

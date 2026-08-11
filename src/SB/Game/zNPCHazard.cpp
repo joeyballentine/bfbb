@@ -11,28 +11,56 @@
 #include "xMath.h"
 #include "xMathInlines.h"
 #include "xUtil.h"
+#include "xordarray.h"
+#include "zRenderState.h"
 
-extern U32 g_hash_hazanim[3];
-extern char* g_strz_hazanim[3];
-extern UVAModelInfo g_haz_uvAnimInfo[30];
-extern NPCHazard* g_haz_uvAnimQue[27];
-extern RpAtomic* g_hazard_rawModel[30];
-extern xAnimTable* g_haz_animTable[30];
+// TODO: these two belong in xCollide.h next to xSweptSpherePrepare; declared here
+// to keep the change inside this unit.
+S32 xSweptSphereToStatDyn(xSweptSphere* sws, xScene* sc, xEnt* mover, U8 collType);
+S32 xSweptSphereToNPC(xSweptSphere* sws, xScene* sc, xEnt* mover, U8 collType);
+// TODO: this one belongs in zNPCSupport.h beside the other NPCC_ helpers.
+S32 NPCC_HaveLOSToPos(xVec3* pos_src, xVec3* pos_tgt, F32 dst_max, xBase* tgt,
+                      xCollis* colCallers);
+
 extern const xVec3 g_O3;
 extern F32 _958_Hazard; // 0.0f
 extern F32 _959_Hazard; // 1.0f
 extern F32 _1041_Hazard; // -1.0f
 
-static S32 g_cnt_activehaz;
-static xParEmitterCustomSettings g_parf_default;
-static xParEmitterCustomSettings g_parf_zapwarn;
-static xParEmitterCustomSettings g_parf_zapwave;
-static xParEmitterCustomSettings g_parf_zaprain;
-static RwRaster* g_rast_hazshad[30];
-static zParEmitter* g_pemit_default;
-static zParEmitter* g_pemit_zapwarn;
-static zParEmitter* g_pemit_zapwave;
-static zParEmitter* g_pemit_zaprain;
+// .data order below is the target's: every one of these is a definition in this
+// TU, not an import.
+static RpAtomic* g_hazard_rawModel[30] = { NULL };
+
+static char* g_strz_hazModel[30] = {
+    "fx_boomball_bubble",       "fx_boomball_smoke",
+    "fx_fodbomb.dff",           "fx_tubelet_blast.dff",
+    "fx_duplotron_blast.dff",   "fx_cattleprod.dff",
+    "fx_proj_tartar.dff",       "fx_tartar_splat.dff",
+    "fx_steam.dff",             "fx_proj_missile.dff",
+    "fx_chuck_splish.dff",      "fx_chuck_splash.dff",
+    "fx_proj_bone.dff",         "fx_proj_slick_bubble.dff",
+    "fx_oil_puddle.dff",        "fx_oil_burst.dff",
+    "fx_oil_glob.dff",          "fx_proj_cloud.dff",
+    "frag_generic_wrench",      "frag_generic_joystick.dff",
+    "frag_generic_sink.dff",    "frag_generic_duck.dff",
+    "frag_generic_bra.dff",     "frag_generic_headphones.dff",
+    "frag_generic_cellphone.dff", "frag_generic_shoe.dff",
+    "fx_duplotron_blast.dff",   "fx_robobits.dff",
+    "fx_vissplash_wave.dff",    "fx_arfdog_nukem.dff",
+};
+
+static U32 g_hash_hazanim[3] = { 0, 0, 0 };
+static char* g_strz_hazanim[3] = { "Unknown", "Idle01", "Active01" };
+
+static NPCHazard* g_haz_uvAnimQue[27] = { NULL };
+
+static en_hazmodel g_haz_uvModelTypes[] = {
+    NPC_HAZMDL_CATTLEPROD,      NPC_HAZMDL_TARTARSTEAM,     NPC_HAZMDL_SLICKPROJ,
+    NPC_HAZMDL_SLICKPUDDLE,     NPC_HAZMDL_SLICKBURST,      NPC_HAZMDL_SLICKGLOB,
+    NPC_HAZMDL_TUBEBLAST,       NPC_HAZMDL_CHUCKSPLISH,     NPC_HAZMDL_CHUCKSPLASH,
+    NPC_HAZMDL_VISSPLASH,       NPC_HAZMDL_PUPPYNUKE,       NPC_HAZMDL_FODBOMB,
+    NPC_HAZMDL_BOOMBALL_BUBBLE, NPC_HAZMDL_BOOMBALL_SMOKE,  NPC_HAZMDL_FORCE,
+};
 
 static en_hazmodel g_funfrag_choices[8] = {
     NPC_HAZMDL_FUNFRAG_WRENCH,    NPC_HAZMDL_FUNFRAG_JOYSTICK, NPC_HAZMDL_FUNFRAG_SINK,
@@ -42,8 +70,46 @@ static en_hazmodel g_funfrag_choices[8] = {
 
 static zShrapnelAsset* g_data_hazshrap[5] = { NULL, NULL, NULL, NULL, NULL };
 
-static char* g_strz_hazModel[30];
-static NPCHazard g_hazards[64];
+char* g_strz_hazshrap[5] = {
+    "", "tartar_gunshot", "tartar_splatter", "slick_oilspill", "shrapnel_splash_water",
+};
+
+static RwRaster* g_rast_hazshad[30] = { NULL };
+
+char* g_strz_hazshad[30] = {
+    "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+    "shadow_monsoon_cloud", "", "", "", "", "", "", "", "", "", "", "", "",
+};
+
+static NPCHazard g_hazards[64] = { NPC_HAZ_UNKNOWN };
+static xAnimTable* g_haz_animTable[30];
+static UVAModelInfo g_haz_uvAnimInfo[30];
+
+static S32 g_cnt_activehaz;
+static xParEmitterCustomSettings g_parf_default;
+static xParEmitterCustomSettings g_parf_zapwarn;
+static xParEmitterCustomSettings g_parf_zapwave;
+static xParEmitterCustomSettings g_parf_zaprain;
+static zParEmitter* g_pemit_default;
+static zParEmitter* g_pemit_zapwarn;
+static zParEmitter* g_pemit_zapwave;
+static zParEmitter* g_pemit_zaprain;
+
+// These two are `inline` here rather than in a header: the target emits them
+// as weak per-TU copies (scope:weak in this object only), which is what an
+// out-of-line copy of an inline function looks like.
+inline xVec3* LERP(F32 t, xVec3* dst, const xVec3* a, const xVec3* b)
+{
+    dst->x = LERP(t, a->x, b->x);
+    dst->y = LERP(t, a->y, b->y);
+    dst->z = LERP(t, a->z, b->z);
+    return dst;
+}
+
+inline xVec3* SMOOTH(F32 t, xVec3* dst, const xVec3* a, const xVec3* b)
+{
+    return LERP(EASE(t), dst, a, b);
+}
 
 void zNPCHazard_Startup()
 {
@@ -57,7 +123,6 @@ void zNPCHazard_Shutdown()
 {
 }
 
-// WIP.
 void zNPCHazard_ScenePrepare()
 {
     memset(g_hazards, 0, sizeof(g_hazards));
@@ -70,7 +135,33 @@ void zNPCHazard_ScenePrepare()
     {
         g_haz_uvAnimInfo[i].Clear();
     }
+    for (S32 i = 0; i < 27; i++)
+    {
+        g_haz_animTable[i] = NULL;
+    }
     for (S32 i = 0; i < 30; i++)
+    {
+        g_hazard_rawModel[i] = NULL;
+    }
+}
+
+void zNPCHazard_SceneFinish()
+{
+    zNPCHazard_SceneReset();
+    zNPCHazard_KillEffects();
+
+    memset(g_hazards, 0, sizeof(g_hazards));
+    g_cnt_activehaz = 0;
+
+    for (S32 i = 0; i < 27; i++)
+    {
+        g_haz_uvAnimQue[i] = NULL;
+    }
+    for (S32 i = 0; i < 30; i++)
+    {
+        g_haz_uvAnimInfo[i].Hemorrage();
+    }
+    for (S32 i = 0; i < 27; i++)
     {
         g_haz_animTable[i] = NULL;
     }
@@ -105,8 +196,73 @@ void zNPCHazard_InitEffects()
     g_pemit_zaprain = zParEmitterFind("PAREMIT_DUPLO_STEAM");
 
     g_parf_default.custom_flags = 0x100;
+    xVec3Copy(&g_parf_default.pos, &g_O3);
+    g_parf_zapwarn.custom_flags = 0x100;
+    xVec3Copy(&g_parf_zapwarn.pos, &g_O3);
+    g_parf_zapwave.custom_flags = 0x100;
+    xVec3Copy(&g_parf_zapwave.pos, &g_O3);
+    g_parf_zaprain.custom_flags = 0x100;
+    xVec3Copy(&g_parf_zaprain.pos, &g_O3);
 
-    // TODO...
+    for (S32 i = 0; i < 30; i++)
+    {
+        char* namez = g_strz_hazModel[i];
+
+        if (namez != NULL && namez[0] != '\0')
+        {
+            U32 hashy = xStrHash(namez);
+            if (hashy != 0)
+            {
+                g_hazard_rawModel[i] = (RpAtomic*)xSTFindAsset(hashy, NULL);
+            }
+        }
+    }
+
+    for (S32 i = 0; g_haz_uvModelTypes[i] != NPC_HAZMDL_FORCE; i++)
+    {
+        en_hazmodel which = g_haz_uvModelTypes[i];
+        RpAtomic* raw_model = g_hazard_rawModel[which];
+
+        if (raw_model != NULL)
+        {
+            UVAModelInfo* uva = &g_haz_uvAnimInfo[which];
+
+            uva->Init(raw_model, 0);
+            uva->UVVelSet(0.0f, 1.0f);
+        }
+    }
+
+    for (S32 i = 0; i < 5; i++)
+    {
+        char* namez = g_strz_hazshrap[i];
+
+        g_data_hazshrap[i] = NULL;
+        if (namez != NULL && namez[0] != '\0')
+        {
+            U32 hashy = xStrHash(namez);
+            if (hashy != 0)
+            {
+                U32 size = 0;
+                void* asset = xSTFindAsset(hashy, &size);
+
+                if (asset != NULL && size != 0)
+                {
+                    g_data_hazshrap[i] = (zShrapnelAsset*)asset;
+                }
+            }
+        }
+    }
+
+    for (S32 i = 0; i < 30; i++)
+    {
+        char* namez = g_strz_hazshad[i];
+
+        g_rast_hazshad[i] = NULL;
+        if (namez != NULL && namez[0] != '\0')
+        {
+            g_rast_hazshad[i] = NPCC_FindRWRaster(namez);
+        }
+    }
 }
 
 void zNPCHazard_KillEffects()
@@ -136,6 +292,171 @@ S32 HAZ_ord_sorttest(void* vkey, void* vitem)
 }
 
 // Close, kind of.
+void zNPCHazard_Timestep(F32 dt)
+{
+    if (g_cnt_activehaz < 1)
+    {
+        return;
+    }
+
+    st_XORDEREDARRAY ord_haz;
+    XOrdInit(&ord_haz, 64, 1);
+
+    NPCHazard* haz = g_hazards;
+    for (S32 i = 0; i < 64; i++)
+    {
+        if (haz->flg_hazard & 1)
+        {
+            XOrdAppend(&ord_haz, haz);
+        }
+        haz++;
+    }
+
+    XOrdSort(&ord_haz, HAZ_ord_sorttest);
+
+    for (S32 i = 0; i < ord_haz.cnt; i++)
+    {
+        NPCHazard* hz = (NPCHazard*)ord_haz.list[i];
+        S32 flg = hz->flg_hazard;
+
+        if (flg & 4)
+        {
+            hz->Discard();
+            continue;
+        }
+        if (!(flg & 2))
+        {
+            continue;
+        }
+        if (flg & 0x80)
+        {
+            hz->Timestep(dt);
+        }
+
+        flg = hz->flg_hazard;
+        if (!(flg & 0x20))
+        {
+            hz->flg_hazard = flg & ~0x8;
+        }
+        hz->flg_hazard &= ~0x60;
+
+        hz->tmr_remain = MAX(-1.0f, hz->tmr_remain - dt);
+
+        if (hz->flg_hazard & 0x1000)
+        {
+            if (hz->tmr_remain < 0.0f)
+            {
+                hz->MarkForRecycle();
+            }
+        }
+
+        flg = hz->flg_hazard;
+        if (flg & 4)
+        {
+            hz->Discard();
+            continue;
+        }
+        if (!(flg & 0x80000))
+        {
+            continue;
+        }
+
+        g_haz_uvAnimQue[hz->typ_hazard] = hz;
+    }
+
+    XOrdDone(&ord_haz, 1);
+
+    for (S32 i = 0; i < 27; i++)
+    {
+        NPCHazard* hz = g_haz_uvAnimQue[i];
+        if (hz != NULL)
+        {
+            UVAModelInfo* uva = hz->uva_uvanim;
+            g_haz_uvAnimQue[i] = NULL;
+            if (uva != NULL)
+            {
+                uva->Update(dt, NULL);
+            }
+        }
+    }
+}
+
+void zNPCCommon_Hazards_RenderAll(S32 doOpaqueStuff)
+{
+    if (g_cnt_activehaz < 1)
+    {
+        return;
+    }
+
+    _SDRenderState rs_old = zRenderStateCurrent();
+
+    if (doOpaqueStuff)
+    {
+        zRenderState(SDRS_OpaqueModels);
+    }
+    else
+    {
+        zRenderState(SDRS_NPCVisual);
+    }
+
+    xLightKit_Enable(globals.player.ent.lightKit, globals.currWorld);
+
+    st_XORDEREDARRAY ord_haz;
+    XOrdInit(&ord_haz, 64, 1);
+
+    NPCHazard* haz = g_hazards;
+    for (S32 i = 0; i < 64; i++)
+    {
+        S32 flg = haz->flg_hazard;
+        if ((flg & 1) && (flg & 0x102) && !(flg & 0xc))
+        {
+            XOrdAppend(&ord_haz, haz);
+        }
+        haz++;
+    }
+
+    XOrdSort(&ord_haz, HAZ_ord_sorttest);
+
+    for (S32 i = 0; i < ord_haz.cnt; i++)
+    {
+        NPCHazard* hz = (NPCHazard*)ord_haz.list[i];
+
+        if (doOpaqueStuff && !(hz->flg_hazard & 0x200))
+        {
+            continue;
+        }
+        if (!doOpaqueStuff && (hz->flg_hazard & 0x200))
+        {
+            continue;
+        }
+
+        S32 flg = hz->flg_hazard;
+        if (flg & 0x800)
+        {
+            if (flg & 0x400)
+            {
+                RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
+            }
+            xLightKit_Enable(NULL, globals.currWorld);
+            hz->Render();
+            xLightKit_Enable(globals.player.ent.lightKit, globals.currWorld);
+            RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+        }
+        else
+        {
+            hz->Render();
+        }
+
+        RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLNONE);
+        hz->flg_hazard &= ~0x10;
+    }
+
+    XOrdDone(&ord_haz, 1);
+
+    xLightKit_Enable(NULL, globals.currWorld);
+    zRenderState(rs_old);
+}
+
 NPCHazard* HAZ_Acquire()
 {
     NPCHazard* da_haz = g_hazards;
@@ -186,27 +507,440 @@ void NPCHazard::WipeIt()
     memset(&this->custdata, 0, sizeof(this->custdata));
 }
 
-// WIP.
 S32 NPCHazard::ConfigHelper(en_npchaz haztype)
 {
     S32 result = 1;
+
     this->typ_hazard = haztype;
+
     switch (haztype)
     {
     case NPC_HAZ_UNKNOWN:
         result = 0;
         break;
     case NPC_HAZ_EXPLODE:
-        // TODO!!!
+    {
+        static const xVec2 uv_scroll_eo = { 0.0f, -5.0f };
+
+        this->flg_hazard |= 0x89180;
+        if (!this->GrabModel(NPC_HAZMDL_BOOMBALL_SMOKE))
+        {
+            result = 0;
+        }
+        this->uva_uvanim =
+            this->GetUVAInfo(NPC_HAZMDL_BOOMBALL_BUBBLE, uv_scroll_eo.x, uv_scroll_eo.y);
+        this->tmr_remain = 2.5f;
+        this->custdata.typical.rad_min = 0.1f;
+        this->custdata.typical.rad_max = 2.0f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
         break;
+    }
+    case NPC_HAZ_EXPLODE_INNER:
+    {
+        static const xVec2 uv_scroll_ei = { 0.0f, -5.0f };
+
+        this->flg_hazard |= 0x89180;
+        if (!this->GrabModel(NPC_HAZMDL_BOOMBALL_BUBBLE))
+        {
+            result = 0;
+        }
+        this->uva_uvanim =
+            this->GetUVAInfo(NPC_HAZMDL_BOOMBALL_BUBBLE, uv_scroll_ei.x, uv_scroll_ei.y);
+        this->tmr_remain = 2.0f;
+        this->custdata.typical.rad_min = 0.0f;
+        this->custdata.typical.rad_max = 1.5f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+        break;
+    }
+    case NPC_HAZ_FODBOMB:
+    {
+        static const xVec2 uv_scroll_fb = { 0.0f, -5.0f };
+
+        this->flg_hazard |= 0x8b180;
+        if (!this->GrabModel(NPC_HAZMDL_FODBOMB))
+        {
+            result = 0;
+        }
+        this->uva_uvanim = this->GetUVAInfo(NPC_HAZMDL_FODBOMB, uv_scroll_fb.x, uv_scroll_fb.y);
+        this->tmr_remain = 0.4f;
+        this->custdata.typical.rad_min = 0.3f;
+        this->custdata.typical.rad_max = 2.75f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+        break;
+    }
+    case NPC_HAZ_CATTLEPROD:
+    {
+        static const xVec2 uv_scroll_cp = { 5.0f, -5.0f };
+
+        this->flg_hazard |= 0x8b180;
+        if (!this->GrabModel(NPC_HAZMDL_CATTLEPROD))
+        {
+            result = 0;
+        }
+        this->uva_uvanim =
+            this->GetUVAInfo(NPC_HAZMDL_CATTLEPROD, uv_scroll_cp.x, uv_scroll_cp.y);
+        this->tmr_remain = 0.2f;
+        this->custdata.typical.rad_min = 0.15f;
+        this->custdata.typical.rad_max = 0.5f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+        break;
+    }
+    case NPC_HAZ_TUBELETBLAST:
+    {
+        static const xVec2 uv_scroll_tb = { 0.0f, -5.0f };
+
+        this->flg_hazard |= 0x8b180;
+        if (!this->GrabModel(NPC_HAZMDL_TUBEBLAST))
+        {
+            result = 0;
+        }
+        this->uva_uvanim =
+            this->GetUVAInfo(NPC_HAZMDL_TUBEBLAST, uv_scroll_tb.x, uv_scroll_tb.y);
+        this->tmr_remain = 1.0f;
+        this->custdata.typical.rad_min = 0.25f;
+        this->custdata.typical.rad_max = 7.0f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+        break;
+    }
+    case NPC_HAZ_PUPPYNUKE:
+    {
+        static const xVec2 uv_scroll_pn = { 5.0f, -5.0f };
+
+        this->flg_hazard |= 0x8b180;
+        if (!this->GrabModel(NPC_HAZMDL_PUPPYNUKE))
+        {
+            result = 0;
+        }
+        this->uva_uvanim =
+            this->GetUVAInfo(NPC_HAZMDL_PUPPYNUKE, uv_scroll_pn.x, uv_scroll_pn.y);
+        this->tmr_remain = 0.3f;
+        this->custdata.typical.rad_min = 0.5f;
+        this->custdata.typical.rad_max = 2.5f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+        break;
+    }
+    case NPC_HAZ_DUPLOBOOM:
+    {
+        xVec3 ang_spin;
+
+        this->flg_hazard |= 0xb180;
+        if (!this->GrabModel(NPC_HAZMDL_DUPLOBOOM))
+        {
+            result = 0;
+        }
+        this->tmr_remain = 0.75f;
+        this->custdata.typical.rad_min = 1.0f;
+        this->custdata.typical.rad_max = 5.0f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+
+        ang_spin.x = 0.016666668f * ((xrand() & 0x800000) ? 3.1415927f : -0.78539819f);
+        ang_spin.y = ang_spin.z = 0.0f;
+        this->TypData_RotMatStore(&ang_spin);
+        break;
+    }
+    case NPC_HAZ_THUNDER:
+    {
+        xVec3 ang_spin;
+
+        this->flg_hazard |= 0xb180;
+        if (!this->GrabModel(NPC_HAZMDL_THUNDER))
+        {
+            result = 0;
+        }
+        this->tmr_remain = 0.25f;
+        this->custdata.typical.rad_min = 0.1f;
+        this->custdata.typical.rad_max = 5.0f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+
+        ang_spin.x = 0.016666668f * ((xrand() & 0x800000) ? 3.1415927f : -0.78539819f);
+        ang_spin.y = ang_spin.z = 0.0f;
+        this->TypData_RotMatStore(&ang_spin);
+        break;
+    }
+    case NPC_HAZ_DUPLO_SHROOM:
+        this->flg_hazard |= 0x9180;
+        this->tmr_remain = 5.0f;
+        xVec3Copy(&this->custdata.shroom.vel_rise, &g_Y3);
+        xVec3Copy(&this->custdata.shroom.acc_rise, &g_Y3);
+        this->TypData_RotMatStore(NULL);
+        break;
+    case NPC_HAZ_PATRIOT:
+        this->flg_hazard |= 0x201180;
+        this->tmr_remain = 5.0f;
+        xVec3Copy(&this->custdata.patriot.pos_began, &g_O3);
+        this->custdata.patriot.spd_peak = 10.0f;
+        this->custdata.patriot.spd_curr = 0.0f;
+        this->custdata.patriot.acc_rate = 5.0f;
+        break;
+    case NPC_HAZ_TARTARPROJ:
+        this->flg_hazard |= 0x21a380;
+        if (!this->GrabModel(NPC_HAZMDL_TARTARPROJ))
+        {
+            result = 0;
+        }
+        this->tmr_remain = 0.25f;
+        this->custdata.typical.rad_min = 0.2f;
+        this->custdata.typical.rad_max = 0.25f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+        this->custdata.collide.flg_collide |= 7;
+        break;
+    case NPC_HAZ_TARTARSPILL:
+        this->flg_hazard |= 0xb380;
+        if (!this->GrabModel(NPC_HAZMDL_TARTARSPLAT))
+        {
+            result = 0;
+        }
+        this->tmr_remain = 4.0f;
+        this->custdata.typical.rad_min = 0.2f;
+        this->custdata.typical.rad_max = 1.0f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_max;
+        break;
+    case NPC_HAZ_TARTARSTINK:
+    {
+        static const xVec2 uv_scroll_ts = { 0.0f, 1.0f };
+
+        this->flg_hazard |= 0x89180;
+        if (!this->GrabModel(NPC_HAZMDL_TARTARSTEAM))
+        {
+            result = 0;
+        }
+        this->uva_uvanim =
+            this->GetUVAInfo(NPC_HAZMDL_TARTARSTEAM, uv_scroll_ts.x, uv_scroll_ts.y);
+        this->tmr_remain = 3.75f;
+        this->custdata.typical.rad_min = 0.2f;
+        this->custdata.typical.rad_max = 1.0f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_max;
+        break;
+    }
+    case NPC_HAZ_CHUCKBOMB:
+        this->flg_hazard |= 0x21a380;
+        this->custdata.collide.flg_collide |= 7;
+        if (!this->GrabModel(NPC_HAZMDL_CHUCKBOMB))
+        {
+            result = 0;
+        }
+        this->tmr_remain = 0.25f;
+        this->custdata.typical.rad_min = 1.0f;
+        this->custdata.typical.rad_max = 1.0f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+        break;
+    case NPC_HAZ_CHUCKBLAST:
+    {
+        static const xVec2 uv_scroll_cb = { 0.0f, -1.0f };
+
+        this->flg_hazard |= 0x8b980;
+        if (!this->GrabModel(NPC_HAZMDL_CHUCKSPLASH))
+        {
+            result = 0;
+        }
+        this->uva_uvanim =
+            this->GetUVAInfo(NPC_HAZMDL_CHUCKSPLASH, uv_scroll_cb.x, uv_scroll_cb.y);
+        this->tmr_remain = 1.0f;
+        this->custdata.typical.rad_min = 0.0f;
+        this->custdata.typical.rad_max = 3.0f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+        break;
+    }
+    case NPC_HAZ_CHUCKBLOOSH:
+    {
+        static const xVec2 uv_scroll_cl = { 0.0f, -1.0f };
+
+        this->flg_hazard |= 0x99180;
+        if (!this->GrabModel(NPC_HAZMDL_CHUCKSPLISH))
+        {
+            result = 0;
+        }
+        this->uva_uvanim =
+            this->GetUVAInfo(NPC_HAZMDL_CHUCKSPLISH, uv_scroll_cl.x, uv_scroll_cl.y);
+        this->tmr_remain = 1.6f + 1.6f * (0.25f * (xurand() - 0.5f));
+        this->custdata.typical.rad_min = 0.2f;
+        this->custdata.typical.rad_max = 1.0f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+        this->custdata.tartar.vel = g_Y3;
+        break;
+    }
+    case NPC_HAZ_ARFBONE:
+    {
+        xVec3 ang_spin;
+
+        this->flg_hazard |= 0x21a380;
+        if (!this->GrabModel(NPC_HAZMDL_ARFBONE))
+        {
+            result = 0;
+        }
+        this->tmr_remain = 0.25f;
+        this->custdata.typical.rad_min = 0.0f;
+        this->custdata.typical.rad_max = 1.0f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+
+        ang_spin.x = 0.016666668f * ((xrand() & 0x800000) ? 12.566371f : -12.566371f);
+        ang_spin.y = ang_spin.z = 0.0f;
+        this->TypData_RotMatStore(&ang_spin);
+        this->custdata.collide.flg_collide |= 7;
+        break;
+    }
+    case NPC_HAZ_ARFBONEBLAST:
+        this->flg_hazard |= 0xb180;
+        this->tmr_remain = 1.0f;
+        this->custdata.typical.rad_min = 0.5f;
+        this->custdata.typical.rad_max = 0.5f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+        break;
+    case NPC_HAZ_OILBUBBLE:
+    {
+        static const xVec2 uv_scroll_ob = { 0.0f, -2.0f };
+
+        this->flg_hazard |= 0x29a180;
+        if (!this->GrabModel(NPC_HAZMDL_SLICKPROJ))
+        {
+            result = 0;
+        }
+        this->uva_uvanim =
+            this->GetUVAInfo(NPC_HAZMDL_SLICKPROJ, uv_scroll_ob.x, uv_scroll_ob.y);
+        this->tmr_remain = 0.25f;
+        this->custdata.typical.rad_min = 0.0f;
+        this->custdata.typical.rad_max = 1.0f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+        this->custdata.collide.flg_collide |= 7;
+        break;
+    }
+    case NPC_HAZ_OILSLICK:
+    {
+        static const xVec2 uv_scroll_os = { 0.0f, -0.25f };
+
+        this->flg_hazard |= 0x8b180;
+        if (!this->GrabModel(NPC_HAZMDL_SLICKPUDDLE))
+        {
+            result = 0;
+        }
+        this->uva_uvanim =
+            this->GetUVAInfo(NPC_HAZMDL_SLICKPUDDLE, uv_scroll_os.x, uv_scroll_os.y);
+        this->tmr_remain = 10.0f;
+        this->custdata.typical.rad_min = 0.2f;
+        this->custdata.typical.rad_max = 1.5f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+        break;
+    }
+    case NPC_HAZ_OILBURST:
+    {
+        static const xVec2 uv_scroll_or = { 0.0f, -0.25f };
+
+        this->flg_hazard |= 0x8b180;
+        if (!this->GrabModel(NPC_HAZMDL_SLICKBURST))
+        {
+            result = 0;
+        }
+        this->uva_uvanim =
+            this->GetUVAInfo(NPC_HAZMDL_SLICKBURST, uv_scroll_or.x, uv_scroll_or.y);
+        this->tmr_remain = 0.75f;
+        this->custdata.typical.rad_min = 0.0f;
+        this->custdata.typical.rad_max = 1.75f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+        break;
+    }
+    case NPC_HAZ_OILGLOB:
+    {
+        static const xVec2 uv_scroll_og = { -1.0f, -2.0f };
+
+        this->flg_hazard |= 0x8b180;
+        if (!this->GrabModel(NPC_HAZMDL_SLICKGLOB))
+        {
+            result = 0;
+        }
+        this->uva_uvanim =
+            this->GetUVAInfo(NPC_HAZMDL_SLICKGLOB, uv_scroll_og.x, uv_scroll_og.y);
+        this->tmr_remain = 1.2f + 1.2f * (0.25f * (xurand() - 0.5f));
+        this->custdata.typical.rad_min = 0.1f;
+        this->custdata.typical.rad_max = 0.55f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+        xVec3Copy(&this->custdata.shroom.vel_rise, &g_O3);
+        xVec3SMul(&this->custdata.shroom.acc_rise, &g_Y3, 1.2f);
+        break;
+    }
+    case NPC_HAZ_MONCLOUD:
+    {
+        xVec3 ang_spin;
+
+        this->flg_hazard |= 0x9180;
+        if (!this->GrabModel(NPC_HAZMDL_MONCLOUD))
+        {
+            result = 0;
+        }
+        this->shadowCache = NPCC_ShadowCacheReserve();
+        this->tmr_remain = 7.5f;
+        this->custdata.cloud.spd_cloud = 3.0f;
+        this->custdata.cloud.rad_maxRange = 10.0f;
+        this->custdata.typical.rad_min = 0.0f;
+        this->custdata.typical.rad_max = 1.0f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+        xVec3Copy(&this->custdata.cloud.pos_home, &g_O3);
+
+        ang_spin.x = 0.016666668f * ((xrand() & 0x800000) ? 0.78539819f : -0.78539819f);
+        ang_spin.y = ang_spin.z = 0.0f;
+        this->TypData_RotMatStore(&ang_spin);
+        break;
+    }
+    case NPC_HAZ_FUNFRAG:
+        this->flg_hazard |= 0x19380;
+        if (!this->GrabModel(this->PickFunFrag()))
+        {
+            result = 0;
+        }
+        this->tmr_remain = 2.5f;
+        this->custdata.typical.rad_min = 1.0f;
+        this->custdata.typical.rad_max = 1.0f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+        this->TypData_RotMatStore(NULL);
+        break;
+    case NPC_HAZ_ROBOBITS:
+    {
+        static const xVec3 vec_tumble = { 6.2831855f, 0.78539819f, 0.78539819f };
+
+        this->flg_hazard |= 0x19380;
+        if (!this->GrabModel(NPC_HAZMDL_ROBOBITS))
+        {
+            result = 0;
+        }
+        this->tmr_remain = 0.25f;
+        this->custdata.typical.rad_min = 1e-05f;
+        this->custdata.typical.rad_max = 1.0f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+
+        xVec3 ang_spin = vec_tumble;
+        ang_spin.x *= 2.0f * (xurand() - 0.5f);
+        ang_spin.y *= 2.0f * (xurand() - 0.5f);
+        ang_spin.z *= 2.0f * (xurand() - 0.5f);
+        ang_spin *= 0.016666668f;
+        this->TypData_RotMatStore(&ang_spin);
+        break;
+    }
+    case NPC_HAZ_VISSPLASH:
+    {
+        static const xVec2 uv_scroll_vs = { 0.0f, -1.0f };
+
+        this->flg_hazard |= 0x89980;
+        if (!this->GrabModel(NPC_HAZMDL_VISSPLASH))
+        {
+            result = 0;
+        }
+        this->uva_uvanim =
+            this->GetUVAInfo(NPC_HAZMDL_CHUCKSPLASH, uv_scroll_vs.x, uv_scroll_vs.y);
+        this->tmr_remain = 0.25f;
+        this->custdata.typical.rad_min = 0.0f;
+        this->custdata.typical.rad_max = 1.0f;
+        this->custdata.typical.rad_cur = this->custdata.typical.rad_min;
+        break;
+    }
     default:
         result = 0;
         break;
     }
+
     if (!result)
     {
         this->MarkForRecycle();
     }
+
     return result;
 }
 
@@ -346,6 +1080,517 @@ void NPCHazard::PosSet(const xVec3* pos)
     }
 }
 
+void NPCHazard::Timestep(F32 dt)
+{
+    this->pam_interp = CLAMP(1.0f - this->tmr_remain / this->tym_lifespan, 0.0f, 1.0f);
+
+    if (this->mdl_hazard != NULL && (this->flg_hazard & 0x4000) &&
+        (this->flg_hazard & 0x8000))
+    {
+        this->TypData_RotMatApply(&this->custdata.typical.mat_rotDelta);
+    }
+
+    switch (this->typ_hazard)
+    {
+    case NPC_HAZ_EXPLODE:
+    case NPC_HAZ_EXPLODE_INNER:
+        this->Upd_Explode(dt);
+        break;
+    case NPC_HAZ_FODBOMB:
+        this->Upd_FodBomb(dt);
+        break;
+    case NPC_HAZ_CATTLEPROD:
+        this->Upd_CattleProd(dt);
+        break;
+    case NPC_HAZ_TUBELETBLAST:
+        this->Upd_TubeletBlast(dt);
+        break;
+    case NPC_HAZ_PUPPYNUKE:
+        this->Upd_PuppyNuke(dt);
+        break;
+    case NPC_HAZ_DUPLOBOOM:
+        this->Upd_DuploBoom(dt);
+        break;
+    case NPC_HAZ_THUNDER:
+        this->Upd_TikiThunder(dt);
+        break;
+    case NPC_HAZ_DUPLO_SHROOM:
+        this->Upd_Mushroom(dt);
+        break;
+    case NPC_HAZ_PATRIOT:
+        this->Upd_Patriot(dt);
+        break;
+    case NPC_HAZ_TARTARPROJ:
+        this->Upd_TTFlight(dt);
+        break;
+    case NPC_HAZ_TARTARSPILL:
+        this->Upd_TTSpill(dt);
+        break;
+    case NPC_HAZ_TARTARSTINK:
+        this->Upd_TTStink(dt);
+        break;
+    case NPC_HAZ_CHUCKBOMB:
+        this->Upd_ChuckBomb(dt);
+        break;
+    case NPC_HAZ_CHUCKBLAST:
+        this->Upd_ChuckBlast(dt);
+        break;
+    case NPC_HAZ_CHUCKBLOOSH:
+        this->Upd_ChuckBloosh(dt);
+        break;
+    case NPC_HAZ_ARFBONE:
+        this->Upd_BoneFlight(dt);
+        break;
+    case NPC_HAZ_ARFBONEBLAST:
+        this->Upd_BoneBlast(dt);
+        break;
+    case NPC_HAZ_OILBUBBLE:
+        this->Upd_OilBubble(dt);
+        break;
+    case NPC_HAZ_OILSLICK:
+        this->Upd_OilOoze(dt);
+        break;
+    case NPC_HAZ_OILBURST:
+        this->Upd_OilBurst(dt);
+        break;
+    case NPC_HAZ_OILGLOB:
+        this->Upd_OilGlob(dt);
+        break;
+    case NPC_HAZ_MONCLOUD:
+        this->Upd_MonCloud(dt);
+        break;
+    case NPC_HAZ_FUNFRAG:
+        this->Upd_FunFrag(dt);
+        break;
+    case NPC_HAZ_ROBOBITS:
+        this->Upd_RoboBits(dt);
+        break;
+    case NPC_HAZ_VISSPLASH:
+        this->Upd_VisSplash(dt);
+        break;
+    default:
+        break;
+    }
+
+    this->PosSet(NULL);
+}
+
+void NPCHazard::Render()
+{
+    xMat4x3 mat;
+    xVec3 scale = { 1.0f, 1.0f, 1.0f };
+
+    switch (this->typ_hazard)
+    {
+    case NPC_HAZ_EXPLODE:
+    case NPC_HAZ_EXPLODE_INNER:
+        if (this->mdl_hazard != NULL)
+        {
+            this->SetAlpha(0.25f * ARCH(this->pam_interp));
+            xVec3SMul(&this->mdl_hazard->Scale, &scale,
+                      2.0f * this->custdata.typical.rad_cur);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_FODBOMB:
+        if (this->mdl_hazard != NULL)
+        {
+            static const xVec3 scale = { 1.0f, 1.5f, 1.0f };
+
+            this->SetAlpha(0.35f * (1.0f - this->pam_interp));
+            xVec3SMul(&this->mdl_hazard->Scale, &scale,
+                      2.0f * this->custdata.typical.rad_cur);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_CATTLEPROD:
+        if (this->mdl_hazard != NULL)
+        {
+            F32 scaleit = 2.0f * this->custdata.typical.rad_cur;
+
+            this->SetAlpha(0.6f);
+            xVec3SMul(&this->mdl_hazard->Scale, &scale, scaleit);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_TUBELETBLAST:
+        if (this->mdl_hazard != NULL)
+        {
+            static const xVec3 scl_tallish = { 1.0f, 2.0f, 1.0f };
+
+            this->SetAlpha(1.0f - this->pam_interp);
+            xVec3SMul(&this->mdl_hazard->Scale, &scl_tallish,
+                      2.0f * this->custdata.typical.rad_cur);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_PUPPYNUKE:
+        if (this->mdl_hazard != NULL)
+        {
+            static const xVec3 wider = { 1.0f, 0.7f, 1.0f };
+            static const xVec3 taller = { 0.5f, 2.0f, 0.5f };
+            F32 scaleit;
+
+            this->SetAlpha(0.2f * ARCH(this->pam_interp));
+            scaleit = 2.0f * this->custdata.typical.rad_cur;
+            xVec3SMul(&this->mdl_hazard->Scale, &wider, scaleit);
+            xModelRender(this->mdl_hazard);
+            xVec3SMul(&this->mdl_hazard->Scale, &taller, scaleit);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_DUPLOBOOM:
+        if (this->mdl_hazard != NULL)
+        {
+            xVec3 tallish = { 1.0f, 2.0f, 1.0f };
+            F32 scaleit = 2.0f * this->custdata.typical.rad_cur;
+
+            this->SetAlpha(0.2f * (1.0f - this->pam_interp));
+            xVec3SMul(&this->mdl_hazard->Scale, &tallish, scaleit);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_THUNDER:
+        if (this->mdl_hazard != NULL)
+        {
+            static const xVec3 tallish = { 1.0f, 1.75f, 1.0f };
+
+            this->SetAlpha(0.5f * (1.0f - this->pam_interp));
+            xVec3SMul(&this->mdl_hazard->Scale, &tallish,
+                      2.0f * this->custdata.typical.rad_cur);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_MONCLOUD:
+        if (this->mdl_hazard != NULL)
+        {
+            static S32 skipfill = 0;
+            F32 alpha = 1.0f;
+            F32 ds2 = NPCC_ds2_toCam(&this->pos_hazard, NULL);
+            F32 pam;
+            RwRaster* rast;
+
+            if (ds2 >= SQ(4.0f))
+            {
+                xVec3 dir_plyr = *xEntGetPos(&globals.player.ent) - globals.camera.mat.pos;
+                dir_plyr.normalize();
+
+                xVec3 dir_haz = this->pos_hazard - globals.camera.mat.pos;
+                dir_haz.normalize();
+
+                F32 dotter = xVec3Dot(&dir_haz, &dir_plyr);
+                if (dotter > 0.86f)
+                {
+                    alpha = SMOOTH(CLAMP(1.0f - (dotter - 0.86f) / 0.14f, 0.0f, 1.0f), 0.7f,
+                                   1.0f);
+                }
+            }
+
+            if (ds2 < SQ(4.0f))
+            {
+                alpha = 0.7f;
+            }
+            else if (ds2 < SQ(6.0f))
+            {
+                alpha = SMOOTH((ds2 - SQ(4.0f)) / (SQ(6.0f) - SQ(4.0f)), 0.7f, alpha);
+            }
+
+            if (this->pam_interp < 0.15f)
+            {
+                pam = this->pam_interp / 0.15f;
+            }
+            else if (this->pam_interp < 0.85f)
+            {
+                pam = 1.0f;
+            }
+            else
+            {
+                pam = (1.0f - this->pam_interp) / (1.0f - 0.85f);
+            }
+
+            this->SetAlpha(SMOOTH(pam, 0.0f, alpha));
+            xVec3SMul(&this->mdl_hazard->Scale, &scale,
+                      2.0f * this->custdata.typical.rad_cur);
+
+            RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)3);
+            xModelRender(this->mdl_hazard);
+            RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)2);
+            xModelRender(this->mdl_hazard);
+
+            rast = g_rast_hazshad[NPC_HAZMDL_MONCLOUD];
+            if (rast == NULL)
+            {
+                break;
+            }
+            if (this->shadowCache == NULL)
+            {
+                break;
+            }
+
+            ds2 = NPCC_ds2_toCam(&this->pos_hazard, NULL);
+            if (ds2 < SQ(20.0f))
+            {
+                alpha = CLAMP(0.3f + (1.0f - ds2 / SQ(20.0f)), 0.0f, 1.0f);
+
+                mat.right = *(xVec3*)this->Right();
+                mat.at = g_NY3;
+                mat.up = *(xVec3*)this->At();
+                mat.pos = this->pos_hazard;
+
+                NPCC_RenderProjTexture(rast, alpha, &mat, 1.2f, 10.0f, this->shadowCache,
+                                       !skipfill, NULL);
+
+                if (skipfill++ > 12)
+                {
+                    skipfill = 0;
+                }
+            }
+        }
+        break;
+    case NPC_HAZ_TARTARPROJ:
+        if (this->mdl_hazard != NULL)
+        {
+            if (!(this->flg_hazard & 0x20000) && this->tmr_remain < 0.25f)
+            {
+                this->flg_hazard &= ~0x200;
+                this->SetAlpha(4.0f * this->tmr_remain);
+            }
+            xVec3SMul(&this->mdl_hazard->Scale, &scale,
+                      6.0f * this->custdata.typical.rad_cur);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_TARTARSPILL:
+        if (this->mdl_hazard != NULL)
+        {
+            if (this->tmr_remain > 1.0f)
+            {
+                this->SetAlpha(1.0f);
+            }
+            else
+            {
+                this->flg_hazard &= ~0x200;
+                this->SetAlpha(this->tmr_remain);
+            }
+            xVec3SMul(&this->mdl_hazard->Scale, &scale,
+                      2.0f * this->custdata.typical.rad_cur);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_TARTARSTINK:
+        if (this->mdl_hazard != NULL)
+        {
+            xVec3 squat = { 0.75f, 0.5f, 0.75f };
+
+            xVec3SMul(&this->mdl_hazard->Scale, &squat,
+                      2.0f * this->custdata.typical.rad_cur);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_ARFBONE:
+        if (this->mdl_hazard != NULL)
+        {
+            if (!(this->flg_hazard & 0x20000) && this->tmr_remain < 0.2f)
+            {
+                this->flg_hazard &= ~0x200;
+                this->SetAlpha(5.0f * this->tmr_remain);
+            }
+            xVec3SMul(&this->mdl_hazard->Scale, &scale,
+                      3.0f * (2.0f * this->custdata.typical.rad_cur));
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_ARFBONEBLAST:
+        break;
+    case NPC_HAZ_OILBUBBLE:
+        if (this->mdl_hazard != NULL)
+        {
+            this->SetAlpha(0.75f);
+            xVec3SMul(&this->mdl_hazard->Scale, &scale,
+                      2.0f * this->custdata.typical.rad_cur);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_OILSLICK:
+        if (this->mdl_hazard != NULL)
+        {
+            if (this->tmr_remain > 0.5f)
+            {
+                this->SetAlpha(0.75f);
+            }
+            else
+            {
+                this->SetAlpha(0.75f * MAX(0.0f, this->tmr_remain / 0.5f));
+            }
+            xVec3SMul(&this->mdl_hazard->Scale, &scale, this->custdata.typical.rad_cur);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_OILBURST:
+        if (this->mdl_hazard != NULL)
+        {
+            xVec3 uni = { 1.0f, 1.0f, 1.0f };
+
+            this->SetAlpha(0.75f * (1.0f - this->pam_interp));
+            xVec3SMul(&this->mdl_hazard->Scale, &uni,
+                      2.0f * this->custdata.typical.rad_cur);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_OILGLOB:
+        if (this->mdl_hazard != NULL)
+        {
+            xVec3 scl_a = { 0.75f, 0.1f, 0.5f };
+            xVec3 scl_b = { 0.25f, 1.5f, 0.25f };
+            xVec3 scl_c = { 1.5f, 0.75f, 1.5f };
+            xVec3 scl_now;
+            F32 scaleit;
+
+            if (this->tmr_remain > 0.35f)
+            {
+                this->SetAlpha(0.75f);
+            }
+            else
+            {
+                this->SetAlpha(0.75f * MAX(0.0f, this->tmr_remain / 0.35f));
+            }
+
+            scaleit = 2.0f * this->custdata.typical.rad_cur;
+
+            if (this->pam_interp <= 0.25f)
+            {
+                SMOOTH(this->pam_interp / 0.25f, &scl_now, &scl_a, &scl_b);
+            }
+            else
+            {
+                SMOOTH((this->pam_interp - 0.25f) / 0.75f, &scl_now, &scl_b, &scl_c);
+            }
+
+            xVec3SMul(&this->mdl_hazard->Scale, &scl_now, scaleit);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_CHUCKBOMB:
+        if (this->mdl_hazard != NULL)
+        {
+            if (!(this->flg_hazard & 0x20000) && this->tmr_remain < 0.25f)
+            {
+                this->flg_hazard &= ~0x200;
+                this->SetAlpha(4.0f * this->tmr_remain);
+            }
+            xVec3SMul(&this->mdl_hazard->Scale, &scale, this->custdata.typical.rad_cur);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_CHUCKBLAST:
+        if (this->mdl_hazard != NULL)
+        {
+            F32 rad = this->custdata.typical.rad_cur;
+            F32 alpha = CLAMP(xabs(isin(3.1415927f * this->pam_interp)), 0.0f, 1.0f);
+            F32 pam;
+
+            this->SetAlpha(alpha);
+
+            xVec3 splash = { 2.0f, 0.0f, 2.0f };
+            splash.y = 1.2f * alpha;
+            xVec3SMul(&this->mdl_hazard->Scale, &splash, rad);
+            xModelRender(this->mdl_hazard);
+
+            if (this->pam_interp <= 0.15f)
+            {
+                pam = this->pam_interp / 0.15f;
+            }
+            else
+            {
+                pam = 1.0f - (this->pam_interp - 0.15f) / 0.85f;
+            }
+
+            xVec3 ripple = { 1.0f, 0.0f, 1.0f };
+            ripple.y = 3.75f * EASE(pam);
+            xVec3SMul(&this->mdl_hazard->Scale, &ripple, rad);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_CHUCKBLOOSH:
+        if (this->mdl_hazard != NULL)
+        {
+            static const xVec3 scale_cl = { 2.0f, 3.5f, 2.0f };
+
+            if (this->tmr_remain > 0.8f)
+            {
+                this->SetAlpha(0.25f);
+            }
+            else
+            {
+                this->SetAlpha(0.25f * MAX(0.0f, this->tmr_remain / 0.8f));
+            }
+            xVec3SMul(&this->mdl_hazard->Scale, &scale_cl,
+                      2.0f * this->custdata.typical.rad_cur);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_FUNFRAG:
+        if (this->mdl_hazard != NULL)
+        {
+            xVec3SMul(&this->mdl_hazard->Scale, &scale,
+                      2.0f * this->custdata.typical.rad_cur);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_ROBOBITS:
+        if (this->mdl_hazard != NULL)
+        {
+            static const xVec3 scale_rb = { 1.0f, 1.0f, 1.0f };
+
+            this->SetAlpha(1.0f);
+            xVec3SMul(&this->mdl_hazard->Scale, &scale_rb, this->custdata.typical.rad_cur);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_VISSPLASH:
+        if (this->mdl_hazard != NULL)
+        {
+            F32 rad = this->custdata.typical.rad_cur;
+            F32 alpha = CLAMP(xabs(isin(3.1415927f * this->pam_interp)), 0.0f, 1.0f);
+            F32 pam;
+
+            this->SetAlpha(alpha);
+
+            xVec3 splash = { 2.0f, 0.0f, 2.0f };
+            splash.y = 1.2f * alpha;
+            xVec3SMul(&this->mdl_hazard->Scale, &splash, rad);
+            xModelRender(this->mdl_hazard);
+
+            if (this->pam_interp <= 0.15f)
+            {
+                pam = this->pam_interp / 0.15f;
+            }
+            else
+            {
+                pam = 1.0f - (this->pam_interp - 0.15f) / 0.85f;
+            }
+
+            xVec3 ripple = { 1.0f, 0.0f, 1.0f };
+            ripple.y = 3.75f * EASE(pam);
+            xVec3SMul(&this->mdl_hazard->Scale, &ripple, rad);
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    case NPC_HAZ_PATRIOT:
+        if (this->mdl_hazard != NULL)
+        {
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    default:
+        if (this->mdl_hazard != NULL)
+        {
+            xModelRender(this->mdl_hazard);
+        }
+        break;
+    }
+}
+
 void NPCHazard::Cleanup()
 {
     this->flg_hazard = 0;
@@ -438,6 +1683,31 @@ S32 NPCHazard::ColTestSphere(const xBound* bnd_tgt, F32 rad)
     return hit;
 }
 
+S32 NPCHazard::ColTestCyl(const xBound* bnd_tgt, F32 rad, F32 hyt)
+{
+    S32 hit = 1;
+    xVec3 delta = bnd_tgt->cyl.center - this->pos_hazard;
+    F32 hyt_top = 0.5f * hyt;
+    F32 rad_sum = rad + bnd_tgt->cyl.r;
+
+    hyt_top = hyt + hyt_top;
+
+    if (delta.y > hyt_top)
+    {
+        hit = 0;
+    }
+    else if (delta.y < hyt_top - hyt)
+    {
+        hit = 0;
+    }
+    else if (xVec3Length2(&delta) > SQ(rad_sum))
+    {
+        hit = 0;
+    }
+
+    return hit;
+}
+
 S32 NPCHazard::ColPlyrSphere(F32 rad)
 {
     return this->ColTestSphere(&globals.player.ent.bound, rad);
@@ -460,6 +1730,28 @@ void NPCHazard::HurtThePlayer()
     }
 }
 
+void NPCHazard::TypData_RotMatStore(xVec3* euler)
+{
+    xMat3x3* mat_spin = &this->custdata.typical.mat_rotDelta;
+
+    if (euler != NULL)
+    {
+        xMat3x3Euler(mat_spin, euler);
+    }
+    else
+    {
+        xVec3 ang_spin;
+
+        ang_spin.x = 12.566371f * (2.0f * (xurand() - 0.5f));
+        ang_spin.y = 0.78539819f * (2.0f * (xurand() - 0.5f));
+        ang_spin.z = 12.566371f * (2.0f * (xurand() - 0.5f));
+        xVec3SMulBy(&ang_spin, 0.016666668f);
+        xMat3x3Euler(mat_spin, &ang_spin);
+    }
+
+    this->flg_hazard |= 0x4000;
+}
+
 void NPCHazard::TypData_RotMatSet(xMat3x3* mat)
 {
     xMat3x3* frame = (xMat3x3*)xModelGetFrame(this->mdl_hazard);
@@ -472,6 +1764,32 @@ void NPCHazard::TypData_RotMatApply(xMat3x3* mat)
     xMat3x3* frame = (xMat3x3*)xModelGetFrame(this->mdl_hazard);
     xMat3x3Mul(frame, mat, frame);
     xModelSetFrame(this->mdl_hazard, (xMat4x3*)frame);
+}
+
+void NPCHazard::OrientToDir(const xVec3* vec_path, S32 doTheTwist)
+{
+    xVec3 dir_norm;
+    xMat3x3 mat_twist;
+    xMat3x3 mat_orient;
+
+    F32 len = xVec3Length(vec_path);
+    if (len < 1e-05f)
+    {
+        return;
+    }
+
+    xVec3SMul(&dir_norm, vec_path, -1.0f / len);
+    xMat3x3LookVec(&mat_orient, &dir_norm);
+
+    if (doTheTwist)
+    {
+        xMat3x3Rot(&mat_twist, &mat_orient.at,
+                   6.2831855f * (this->tym_lifespan - this->tmr_remain));
+        xMat3x3Mul(&mat_orient, &mat_orient, &mat_twist);
+        this->TypData_RotMatSet(&mat_orient);
+    }
+
+    this->TypData_RotMatSet(&mat_orient);
 }
 
 en_hazmodel NPCHazard::PickFunFrag()
@@ -489,6 +1807,67 @@ en_hazmodel NPCHazard::PickFunFrag()
     }
 
     return (en_hazmodel)xUtil_choose<S32>(choices, cnt_choice, NULL);
+}
+
+void NPCHazard::PreCollide()
+{
+    F32 gravity = 10.0f;
+
+    if (this->typ_hazard == NPC_HAZ_CHUCKBOMB)
+    {
+        gravity = 5.0f;
+    }
+    else if (this->typ_hazard == NPC_HAZ_TARTARPROJ)
+    {
+        gravity = 7.5f;
+    }
+    else if (this->typ_hazard == NPC_HAZ_ARFBONE)
+    {
+        gravity = 0.5f;
+    }
+    else if (this->typ_hazard == NPC_HAZ_OILBUBBLE)
+    {
+        gravity = 0.2f;
+    }
+    else if (this->typ_hazard == NPC_HAZ_FUNFRAG)
+    {
+        gravity = 7.5f;
+    }
+    else if (this->typ_hazard == NPC_HAZ_CHUCKBLOOSH)
+    {
+        gravity = 25.2f;
+    }
+    else if (this->typ_hazard == NPC_HAZ_ROBOBITS)
+    {
+    }
+
+    xParabola* parab = &this->custdata.collide.parabinfo;
+    static xCollis colrec;
+
+    this->tmr_remain = this->tmr_remain + 5.0f;
+
+    xVec3Copy(&parab->initPos, &this->pos_hazard);
+    xVec3Copy(&parab->initVel, &this->custdata.tartar.vel);
+    parab->gravity = gravity;
+    parab->minTime = 0.0f;
+    parab->maxTime = this->tmr_remain;
+
+    memset(&colrec, 0, sizeof(colrec));
+
+    if (xParabolaHitsEnv(parab, globals.sceneCur->env, &colrec))
+    {
+        this->flg_hazard |= 0x20000;
+        xVec3Copy(&this->custdata.collide.dir_normal, &colrec.norm);
+        parab->maxTime = colrec.dist;
+        this->tmr_remain = colrec.dist;
+    }
+    else
+    {
+        this->flg_hazard &= ~0x20000;
+        xVec3Copy(&this->custdata.collide.dir_normal, &g_Y3);
+    }
+
+    this->tym_lifespan = this->tmr_remain;
 }
 
 S32 NPCHazard::StaggeredCollide()
@@ -536,6 +1915,48 @@ S32 NPCHazard::StaggeredCollide()
     return 0;
 }
 
+void NPCHazard::StagColGeneral(S32 who)
+{
+    xParabola* parab = &this->custdata.collide.parabinfo;
+    F32 tym_beg = MIN(this->tym_lifespan - this->tmr_remain, this->tym_lifespan);
+    F32 tym_end = MIN(0.5f + tym_beg, this->tym_lifespan) + 0.016666668f;
+    xVec3 pos_beg = this->pos_hazard;
+    xVec3 pos_end;
+    xSweptSphere swdata;
+    S32 hit;
+
+    xParabolaEvalPos(parab, &pos_beg, tym_beg);
+    xParabolaEvalPos(parab, &pos_end, tym_end);
+
+    hit = 0;
+    memset(&swdata, 0, sizeof(swdata));
+    xSweptSpherePrepare(&swdata, &pos_beg, &pos_end, 0.05f);
+
+    if (who & 3)
+    {
+        hit = xSweptSphereToStatDyn(&swdata, globals.sceneCur, NULL, 8);
+    }
+    else if (who & 4)
+    {
+        hit = xSweptSphereToNPC(&swdata, globals.sceneCur, NULL, 8);
+    }
+
+    if (hit)
+    {
+        F32 tym_hit;
+
+        xSweptSphereGetResults(&swdata);
+
+        tym_hit = 0.0f;
+        if (swdata.dist > 1e-05f)
+        {
+            tym_hit = (swdata.curdist / swdata.dist) * (tym_end - tym_beg);
+        }
+
+        this->CollideResponse(&swdata, tym_hit);
+    }
+}
+
 void NPCHazard::StagColStat()
 {
     this->StagColGeneral(1);
@@ -554,6 +1975,77 @@ void NPCHazard::StagColNPC()
 void NPCHazard::CollideResponse(xSweptSphere* swdata, F32 tym_inFuture)
 {
     this->ColResp_Default(swdata, tym_inFuture);
+}
+
+void NPCHazard::ColResp_Default(xSweptSphere* swdata, F32 tym_inFuture)
+{
+    xParabola* parab = &this->custdata.collide.parabinfo;
+    F32 tym_used = MIN(this->tym_lifespan - this->tmr_remain, this->tym_lifespan);
+
+    this->tmr_remain = MIN(this->tmr_remain, tym_inFuture);
+    parab->maxTime = tym_used + this->tmr_remain;
+    this->tym_lifespan = parab->maxTime;
+
+    xParabolaEvalPos(parab, &this->custdata.collide.pos_collide, parab->maxTime);
+    this->custdata.collide.dir_normal = swdata->worldNormal;
+
+    if (swdata->optr == NULL || ((xBase*)swdata->optr)->baseType != eBaseTypeStatic)
+    {
+        this->flg_hazard |= 0x40000;
+    }
+}
+
+xAnimTable* ZNPC_AnimTable_HazardStd()
+{
+    S32 ourAnims[] = { 1, 2, 0 };
+    xAnimTable* table = (xAnimTable*)xAnimTableNew("HazardStandard", NULL, 0);
+
+    xAnimTableNewState(table, g_strz_hazanim[1], 0x10, 1, 1.0f, 0, 0, 0.0f, 0, 0,
+                       xAnimDefaultBeforeEnter, 0x0, 0x0);
+    xAnimTableNewState(table, g_strz_hazanim[2], 0x10, 1, 1.0f, 0, 0, 0.0f, 0, 0,
+                       xAnimDefaultBeforeEnter, 0x0, 0x0);
+
+    NPCC_BuildStandardAnimTran(table, g_strz_hazanim, ourAnims, 1, 0.2f);
+
+    return table;
+}
+
+void NPCHazard::Upd_Explode(F32 dt)
+{
+    this->custdata.typical.rad_cur = LERP(ARCH(this->pam_interp),
+                                          this->custdata.typical.rad_min,
+                                          this->custdata.typical.rad_max);
+
+    if ((this->flg_hazard & 0x2000) && !(globals.player.DamageTimer > 0.0f) &&
+        this->ColPlyrSphere(this->custdata.typical.rad_cur))
+    {
+        this->HurtThePlayer();
+    }
+
+    this->DeathStar();
+}
+
+void NPCHazard::DeathStar()
+{
+    static const xVec3 pos_offset = { 0.0f, 0.0f, 0.0f };
+    xVec3 pos_star = this->pos_hazard + pos_offset;
+
+    if (this->flg_hazard & 0x8)
+    {
+        xVec3 pos_slam = this->pos_hazard;
+
+        pos_slam += pos_offset;
+        zFX_SpawnBubbleSlam(&pos_slam, 30, 6.2831855f, 5.0f, 2.0f);
+    }
+
+    if (this->pam_interp < 0.16f)
+    {
+        F32 spd = 0.4f * this->custdata.typical.rad_max;
+        xVec3 vel_bub = { spd, spd, spd };
+        xVec3 vel_rnd = { 2.0f, 2.0f, 2.0f };
+
+        zFX_SpawnBubbleTrail(&pos_star, 20, &vel_bub, &vel_rnd);
+    }
 }
 
 void NPCHazard::Upd_PuppyNuke(F32 dt)
@@ -2009,6 +3501,203 @@ void NPCHazard::Upd_OilGlob(F32 dt)
     }
 }
 
+void NPCHazard::Upd_MonCloud(F32 dt)
+{
+    xVec3 dir_flat;
+    xVec3 dir_delta;
+    F32 ds2_owner;
+    zNPCCommon* npc_owner = this->npc_owner;
+
+    if (npc_owner != NULL)
+    {
+        ds2_owner = npc_owner->XZDstSqToPos(&this->pos_hazard, &dir_flat, NULL);
+        if (ds2_owner < 1e-05f)
+        {
+            xVec3Copy(&dir_flat, NPCC_rightDir(npc_owner));
+            ds2_owner = 1.0f;
+        }
+
+        F32 ds2_home = NPCC_DstSq(&this->custdata.cloud.pos_home, &this->pos_hazard, NULL);
+
+        if (!npc_owner->IsAlive() || ds2_home > SQ(this->custdata.cloud.rad_maxRange))
+        {
+            this->tmr_remain = MIN(this->tmr_remain, 1.0f);
+        }
+        else if (!xEntIsVisible(npc_owner) || globals.cmgr != NULL)
+        {
+            this->tmr_remain = -1.0f;
+            this->MarkForRecycle();
+            return;
+        }
+    }
+    else
+    {
+        ds2_owner = -1.0f;
+    }
+
+    if (globals.player.Health < 1)
+    {
+        this->tmr_remain = MIN(this->tmr_remain, 1.0f);
+    }
+
+    xEnt* plyr = &globals.player.ent;
+
+    xVec3Sub(&dir_delta, xEntGetPos(plyr), &this->pos_hazard);
+    dir_delta.y += 4.0f;
+
+    F32 dst_plyr = xVec3Length(&dir_delta);
+
+    if (!(ds2_owner < 0.0f) && ds2_owner < 2.0f)
+    {
+        xVec3SMul(&dir_delta, &dir_flat,
+                  (dt * this->custdata.cloud.spd_cloud) * (1.0f / xsqrt(ds2_owner)));
+        xVec3AddTo(&this->pos_hazard, &dir_delta);
+    }
+    else if (dst_plyr > 0.1f)
+    {
+        xVec3SMulBy(&dir_delta, (dt * this->custdata.cloud.spd_cloud) / dst_plyr);
+        xVec3AddTo(&this->pos_hazard, &dir_delta);
+    }
+    else
+    {
+        F32 slowit = 0.75f * dt;
+
+        dir_delta.x = dir_delta.x * slowit;
+        dir_delta.z = dir_delta.z * slowit;
+        xVec3AddTo(&this->pos_hazard, &dir_delta);
+    }
+
+    F32 tym_used = this->tym_lifespan - this->tmr_remain;
+    F32 rad_span = this->custdata.cloud.rad_max - this->custdata.cloud.rad_min;
+
+    if (tym_used < 0.25f)
+    {
+        this->custdata.cloud.rad_cur = 4.0f * (tym_used * rad_span);
+    }
+    else if (this->tmr_remain > 0.25f)
+    {
+        this->custdata.cloud.rad_cur = this->custdata.cloud.rad_max;
+    }
+    else
+    {
+        this->custdata.cloud.rad_cur = 4.0f * (this->tmr_remain * rad_span);
+    }
+
+    if ((this->flg_hazard & 0x2000) && !(globals.player.DamageTimer > 0.0f) &&
+        this->ColPlyrSphere(this->custdata.cloud.rad_cur))
+    {
+        this->HurtThePlayer();
+    }
+
+    xVec3Sub(&dir_delta, xEntGetPos(plyr), &this->pos_hazard);
+
+    F32 ds2_plyr = SQ(dir_delta.x) + SQ(dir_delta.z);
+
+    if (ds2_plyr > 1.0f && this->custdata.cloud.zap_lytnin == NULL)
+    {
+        this->custdata.cloud.tmr_dozap = 0.0f;
+    }
+    else if (xabs(dir_delta.y) > 10.0f)
+    {
+        this->custdata.cloud.tmr_dozap = 0.0f;
+    }
+    else
+    {
+        this->custdata.cloud.tmr_dozap = this->custdata.cloud.tmr_dozap + dt;
+    }
+
+    static S32 showLightning = 1;
+
+    if (this->custdata.cloud.zap_lytnin == NULL && ds2_plyr > 2.0f && ds2_owner > 2.0f)
+    {
+        if ((S32)((this->tym_lifespan - this->tmr_remain) / 1.0f) & 1)
+        {
+            if (this->custdata.cloud.zap_warnin == NULL)
+            {
+                static xCollis colrec;
+                _tagLightningAdd lyt;
+
+                memset(&colrec, 0, sizeof(colrec));
+                this->npc_owner->SndPlayRandom(NPC_STYP_LIGHTNING);
+
+                xVec3Copy(&this->custdata.cloud.pos_warnin, &this->pos_hazard);
+                this->custdata.cloud.pos_warnin.y = this->custdata.cloud.pos_warnin.y - 7.0f;
+                this->custdata.cloud.pos_warnin.x =
+                    this->custdata.cloud.rad_cur * (2.0f * (xurand() - 0.5f)) +
+                    this->custdata.cloud.pos_warnin.x;
+                this->custdata.cloud.pos_warnin.z =
+                    this->custdata.cloud.rad_cur * (2.0f * (xurand() - 0.5f)) +
+                    this->custdata.cloud.pos_warnin.z;
+
+                if (!NPCC_HaveLOSToPos(&this->pos_hazard, &this->custdata.cloud.pos_warnin,
+                                       10.0f, NULL, &colrec))
+                {
+                    this->custdata.cloud.pos_warnin.y =
+                        this->custdata.cloud.pos_warnin.y + (7.0f - colrec.dist);
+                }
+
+                NPCC_MakeLightningInfo(NPC_LYT_CLOUDWARN, &lyt);
+                lyt.start = &this->pos_hazard;
+                lyt.end = &this->custdata.cloud.pos_warnin;
+                lyt.time = 1.5f;
+
+                if (showLightning)
+                {
+                    this->custdata.cloud.zap_warnin = zLightningAdd(&lyt);
+                }
+            }
+            else
+            {
+                zLightningModifyEndpoints(this->custdata.cloud.zap_warnin, &this->pos_hazard,
+                                          &this->custdata.cloud.pos_warnin);
+                xVec3Copy(&g_parf_zapwarn.pos, &this->custdata.cloud.pos_warnin);
+                xParEmitterEmitCustom(g_pemit_zapwarn, dt, &g_parf_zapwarn);
+            }
+        }
+        else if (this->custdata.cloud.zap_warnin != NULL)
+        {
+            zLightningKill(this->custdata.cloud.zap_warnin);
+            this->custdata.cloud.zap_warnin = NULL;
+            xVec3Copy(&this->custdata.cloud.pos_warnin, &g_O3);
+        }
+    }
+    else if (this->custdata.cloud.zap_lytnin == NULL)
+    {
+        if (this->custdata.cloud.zap_warnin != NULL)
+        {
+            zLightningKill(this->custdata.cloud.zap_warnin);
+            this->custdata.cloud.zap_warnin = NULL;
+            xVec3Copy(&this->custdata.cloud.pos_warnin, &g_O3);
+        }
+    }
+
+    if (this->custdata.cloud.tmr_dozap > 1.0f && this->custdata.cloud.zap_lytnin != NULL)
+    {
+        if (this->custdata.cloud.tmr_dozap > 1.25f)
+        {
+            zLightningKill(this->custdata.cloud.zap_lytnin);
+            this->custdata.cloud.zap_lytnin = NULL;
+            this->custdata.cloud.tmr_dozap = 0.0f;
+        }
+    }
+    else if (this->custdata.cloud.tmr_dozap > 1.0f && ds2_owner > 2.0f)
+    {
+        _tagLightningAdd lyt;
+
+        NPCC_MakeLightningInfo(NPC_LYT_CLOUDZAP, &lyt);
+        lyt.start = &this->pos_hazard;
+        lyt.end = xEntGetPos(plyr);
+        lyt.time = 1.5f;
+
+        if (showLightning)
+        {
+            this->custdata.cloud.zap_lytnin = zLightningAdd(&lyt);
+        }
+
+        this->HurtThePlayer();
+    }
+}
+
 void NPCHazard::Upd_FunFrag(F32 dt)
 {
     HAZTarTar* tartar = &this->custdata.tartar;
@@ -2138,10 +3827,86 @@ void NPCHazard::VisSplashSparklies()
     }
 }
 
+S32 UVAModelInfo::Init(RpAtomic* model, U32 flags)
+{
+    this->model = model;
+    this->flg_uvam = flags;
+
+    if (model == NULL)
+    {
+        return 0;
+    }
+
+    if (this->flg_uvam & 1)
+    {
+        RpGeometry* geo = model->geometry;
+
+        if (geo == NULL)
+        {
+            return 0;
+        }
+
+        geo->flags |= 0x40;
+        this->SetColor(xColorFromRGBA(0xff, 0xff, 0xff, 0xff));
+    }
+
+    if (!this->CloneUV(this->uv, this->uvsize, model))
+    {
+        return 0;
+    }
+
+    this->offset.assign(0.0f, 0.0f);
+    this->offset_vel.assign(0.0f, 0.0f);
+
+    return 1;
+}
+
 void UVAModelInfo::Hemorrage()
 {
     model = 0;
     uv = 0;
+}
+
+void UVAModelInfo::Update(F32 dt, const xVec2* uvoff)
+{
+    if (uvoff != NULL)
+    {
+        this->offset = *uvoff;
+    }
+    else if (xVec2Length2(&this->offset_vel) > 0.0f)
+    {
+        this->offset += this->offset_vel * dt;
+    }
+    else
+    {
+        return;
+    }
+
+    this->offset.x = xfmod(this->offset.x, 1.0f);
+    this->offset.y = xfmod(this->offset.y, 1.0f);
+
+    this->Refresh();
+}
+
+void UVAModelInfo::Refresh()
+{
+    RpGeometry* geo = this->model->geometry;
+    RwTexCoords* dst = geo->texCoords[0];
+    RwTexCoords* src = this->uv;
+    RwTexCoords* end = &this->uv[this->uvsize];
+
+    // 0x10 is rpGEOMETRYLOCKTEXCOORDS1; the enum is not declared in any header here.
+    RpGeometryLock(geo, 0x10);
+
+    while (src < end)
+    {
+        dst->u = src->u + this->offset.x;
+        dst->v = src->v + this->offset.y;
+        src++;
+        dst++;
+    }
+
+    RpGeometryUnlock(geo);
 }
 
 S32 UVAModelInfo::GetUV(RwTexCoords*& coords, S32& numVertices, RpAtomic* model) const
