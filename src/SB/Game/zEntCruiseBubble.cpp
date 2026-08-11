@@ -1547,10 +1547,10 @@ namespace cruise_bubble
             // scheduling and register usage off
             hud.gizmos_used = 1;
             basic_rect<F32> reticle_bound;
-            reticle_bound.set_size(current_tweak->hud.reticle.size);
-            // reticle_bound gets loaded again as r3 here which shouldn't be
-            // might be a non functional match for edge cases
-            reticle_bound.center(0.5f, 0.5f);
+            // Chained, because retail never re-materialises r3 between these
+            // two calls. Only this site chains -- doing the same at the other
+            // two set_size call sites measures worse.
+            reticle_bound.set_size(current_tweak->hud.reticle.size).center(0.5f, 0.5f);
             show_gizmo(hud.gizmo[0], reticle_bound, hud.model.reticle);
 
             hud.model.wind->Alpha = 0.0f;
@@ -4213,16 +4213,18 @@ void xQuickCullForSphere(xQCData* q, const xSphere* s)
     xQuickCullForSphere(&xqc_def_ctrl, q, s);
 }
 
-template <class T> void basic_rect<T>::set_size(T w, T h)
+template <class T> basic_rect<T>& basic_rect<T>::set_size(T w, T h)
 {
     this->w = w;
     this->h = h;
+    return *this;
 }
 
-template <class T> void basic_rect<T>::set_size(T s)
+template <class T> basic_rect<T>& basic_rect<T>::set_size(T s)
 {
     this->h = s;
     this->w = s;
+    return *this;
 }
 
 template <class T> void basic_rect<T>::center(T x, T y)
