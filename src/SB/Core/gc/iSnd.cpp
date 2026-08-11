@@ -1,9 +1,4 @@
-// FIXME(header): iSnd.h declares `void iSndFindFreeVoice(U32, U32, U32)`, but the
-// retail function returns S32 (it returns the voice index, or -1). Until that
-// declaration is corrected, hide it so the definition below can compile.
-#define iSndFindFreeVoice iSndFindFreeVoice__WRONG_RETURN_TYPE_IN_HEADER
 #include "iSnd.h"
-#undef iSndFindFreeVoice
 
 #include "dolphin/ai.h"
 #include "dolphin/os.h"
@@ -36,8 +31,6 @@ namespace std
     float powf(float x, float y);
 }
 
-// FIXME: belongs in xstransvc.h
-S32 xSTGetAssetInfoInHxP(U32 aid, st_PKR_ASSET_TOCINFO* tocinfo, U32 hipHash);
 // FIXME: declared in zGame.h, which Core must not include
 void zGameScreenTransitionUpdate(F32 percentComplete, char* msg, U8* rgba);
 

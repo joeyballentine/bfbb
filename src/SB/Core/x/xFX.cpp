@@ -686,10 +686,6 @@ namespace
     }
 } // namespace
 
-// Defined in iModel.cpp but declared in no header.
-U32 iModelNormalEval(xVec3* out, const RpAtomic& m, const RwMatrixTag* mat, size_t index, S32 size,
-                     const xVec3* in);
-
 void xFXRenderProximityFade(const xModelInstance& model, F32 near_dist, F32 far_dist)
 {
     RpGeometry* geom;

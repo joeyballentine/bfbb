@@ -69,7 +69,7 @@ extern _tagxPad* gDebugPad;
 static S32 sShowMenuOnBoot = 1;
 F32 gSkipTimeCutscene = 1.0f;
 F32 gSkipTimeFlythrough = 1.0f;
-S32 gGameSfxReport;
+extern S32 gGameSfxReport;
 static st_SERIAL_PERCID_SIZE g_xser_sizeinfo[] = { { 'PLYR', 0x148 }, { 'CNTR', 0x1e0 }, { 0, 0 } };
 
 static void zLedgeAdjust(zLedgeGrabParams* params);

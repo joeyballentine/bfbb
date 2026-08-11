@@ -41,5 +41,16 @@ void xShadowManager_Init(S32 numEnts);
 void xShadowManager_Reset();
 void xShadowManager_Render();
 void xShadowRender(xEnt* ent, F32 max_dist);
+void xShadowRenderWorld(xVec3* center, F32 radius, F32 max_dist);
+extern F32 gShadowObjectRadius;
+// Retail returns U32 here: the call sites compare with cmplwi.
+U32 xShadowReceiveShadowSetup(xEnt* ent);
+void xShadowReceiveShadow(xEnt* ent, F32 shadowFactor, S32 shadowMode,
+                          RwMatrixTag* shadowMat, RwRaster* shadowRast);
+void xShadowVertical_FillCache(xShadowCache* cache, xVec3* pos, F32 r, F32 depth,
+                               F32 minNormY);
+void xShadowVertical_DrawCache(xShadowCache* cache, F32 shadowFactor, F32 fadeDist,
+                               S32 shadowMode, RwMatrixTag* shadowMat,
+                               RwRaster* shadowRast);
 
 #endif

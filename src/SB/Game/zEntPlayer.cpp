@@ -7171,13 +7171,6 @@ void zEntPlayer_ShadowModelDisable()
     }
 }
 
-extern F32 gShadowObjectRadius;
-
-void xShadowVertical_FillCache(xShadowCache* cache, xVec3* pos, F32 radius, F32 height, F32 slop);
-void xShadowVertical_DrawCache(xShadowCache* cache, F32 factor, F32 alpha, S32 flags,
-                               RwMatrixTag* mat, RwRaster* rast);
-U32 xShadowReceiveShadowSetup(xEnt* ent);
-void xShadowReceiveShadow(xEnt* ent, F32 factor, S32 flags, RwMatrixTag* mat, RwRaster* rast);
 
 static void zEntPlayer_BubbleBowlLaneRender(zEnt* ent)
 {
