@@ -43,6 +43,7 @@
 #include "zEntPlayerBungeeState.h"
 #include "zEntPlayerOOBState.h"
 #include "zEntTeleportBox.h"
+#include "zEntTrigger.h"
 #include "zGame.h"
 #include "zGrid.h"
 #include "zGameExtras.h"
@@ -128,7 +129,7 @@ static xEnt* sGrabFound;
 static S32 sGrabFailed;
 
 static F32 sPlayerCollAdjust;
-static S32 cchkButtbounce;
+static U32 cchkButtbounce;
 static S32 cchkSquish;
 
 static zPlayerLassoInfo* sLassoInfo;
@@ -276,6 +277,10 @@ static float sTongueDblSpeedMult;
 // Defined in iCollide.cpp but declared in no header.
 S32 iSphereHitsEnv4(const xSphere* b, const xEnv* env, const xMat3x3* mat, xCollis* colls);
 
+// FIXME: declared in iCollide.h, which this TU does not include.
+S32 iSphereHitsModel3(const xSphere* b, const xModelInstance* m, xCollis* colls, U8 ncolls,
+                      F32 sth);
+
 // FIXME: defined in zPlatform.cpp but missing from zPlatform.h.
 void zPlatform_Mount(zPlatform* plat);
 void zPlatform_Dismount(zPlatform* plat);
@@ -283,6 +288,8 @@ void zPlatform_Dismount(zPlatform* plat);
 // FIXME: these are defined in zSurface.cpp but zSurface.h only declares some of the
 // accessor family. They belong in zSurface.h.
 S32 zSurfaceGetDamageType(const xSurface* surf);
+U32 zSurfaceGetDamagePassthrough(const xSurface* surf);
+U32 zSurfaceGetMatchOrient(const xSurface* surf);
 U32 zSurfaceGetSlide(const xSurface* surf);
 U32 zSurfaceGetStep(const xSurface* surf);
 U32 zSurfaceGetSticky(const xSurface* surf);
@@ -325,6 +332,7 @@ void xEntBoulder_ApplyForces(xEntCollis* collis);
 
 // FIXME: defined in xCollide.cpp but missing from xCollide.h.
 S32 xSweptSphereToNonMoving(xSweptSphere* sws, xScene* sc, xEnt* mover, U8 collType);
+S32 xSweptSphereToTriangle(xSweptSphere* sws, xVec3* v0, xVec3* v1, xVec3* v2);
 
 void zEntPlayerCollide(xEnt* ent, xScene* sc, F32 dt);
 void zEntPlayer_CheckCritterContact(xEnt* ent, F32 dt);
@@ -9618,6 +9626,7 @@ void zEntPlayerReset(xEnt* ent)
 static xEnt* PlayerCollCheckOneEnt(xEnt* ent, xScene* sc, void* data);
 static xEnt* PlayerCollCheckOneVillain(xEnt* ent, xScene* sc, void* data);
 static void PlayerCollsSelectDepen(xEnt* ent, xScene* sc, F32 dt);
+static U32 CollidePyramidBoxTop(xCollis* coll, xBox* box, F32 height, xSphere* sph);
 
 static void PlayerCollisBuildFromDepen(xCollis* coll)
 {
@@ -9626,6 +9635,410 @@ static void PlayerCollisBuildFromDepen(xCollis* coll)
     xVec3SMul(&coll->hdng, &coll->depen, -1.0f / len);
     coll->dist = 0.5f - len;
     xVec3SMul(&coll->tohit, &coll->hdng, coll->dist);
+}
+
+static xEnt* PlayerCollCheckOneEnt(xEnt* ent, xScene* sc, void* data)
+{
+    xent_entent = 1;
+
+    xEnt* p = (xEnt*)data;
+    xCollis* coll;
+    U32 modl_coll = 0;
+
+    if (p->collis->idx >= 15)
+    {
+        xent_entent = 0;
+        return NULL;
+    }
+
+    if ((ent->chkby & p->collType) == 0)
+    {
+        xent_entent = 0;
+        return ent;
+    }
+
+    if (ent->id == p->id)
+    {
+        xent_entent = 0;
+        return ent;
+    }
+
+    coll = &p->collis->colls[p->collis->idx];
+
+    if (ent->miscflags & 0x8)
+    {
+        if (p->frame->mat.pos.y + p->bound.sph.r > ent->bound.box.box.upper.y)
+        {
+            xSphere tmpsph;
+
+            tmpsph.center.x = p->frame->mat.pos.x;
+            tmpsph.center.y = p->frame->mat.pos.y + p->bound.sph.r;
+            tmpsph.center.z = p->frame->mat.pos.z;
+            tmpsph.r = p->bound.sph.r;
+
+            CollidePyramidBoxTop(coll, &ent->bound.box.box, 1.0f, &tmpsph);
+        }
+        else
+        {
+            coll->flags = 0x1F00;
+            xBoundHitsBound(&p->bound, &ent->bound, coll);
+        }
+    }
+    else
+    {
+        if (ent->collLev == 5 && p->collType & (XENT_COLLTYPE_NPC | XENT_COLLTYPE_PLYR))
+        {
+            modl_coll = 1;
+        }
+
+        if (modl_coll)
+        {
+            coll->flags = 0;
+        }
+        else
+        {
+            coll->flags = 0x1F00;
+        }
+
+        xBoundHitsBound(&p->bound, &ent->bound, coll);
+    }
+
+    if (coll->flags & 0x1)
+    {
+        if (modl_coll)
+        {
+            coll->flags = 0x1F00;
+
+            xModelInstance* m = (ent->collModel) ? ent->collModel : ent->model;
+
+            if (m->Flags & 0x800)
+            {
+                coll->flags |= 0x2000;
+            }
+
+            U8 ncolls = 15 - p->collis->idx;
+            U8 idx = iSphereHitsModel3(&p->bound.sph, m, coll, ncolls, 0.78539819f);
+
+            for (U8 i = 0; i < idx; i++)
+            {
+                coll[i].optr = ent;
+                coll[i].mptr = ent->model;
+
+                p->collis->idx++;
+            }
+
+            xent_entent = 0;
+            return ent;
+        }
+        else
+        {
+            coll->oid = 0;
+            coll->optr = ent;
+            coll->mptr = ent->model;
+
+            p->collis->idx++;
+
+            if (coll->flags & 0x10)
+            {
+                xVec3Sub(&coll->tohit, xBoundCenter(&ent->bound), xEntGetCenter(p));
+                xVec3SMul(&coll->depen, &coll->tohit, -0.25f * (1.0f / xVec3Length(&coll->tohit)));
+                coll->depen.y = 0.0f;
+
+                PlayerCollisBuildFromDepen(coll);
+            }
+
+            if (ent->pflags & 0x20 && ent->bound.type == XBOUND_TYPE_SPHERE &&
+                p->bound.type == XBOUND_TYPE_SPHERE && coll->hdng.y < -0.866025f)
+            {
+                F32 rsum = p->bound.sph.r + ent->bound.sph.r;
+                F32 dx = p->bound.sph.center.x - ent->bound.sph.center.x;
+                F32 dy = p->bound.sph.center.y - ent->bound.sph.center.y;
+                F32 dz = p->bound.sph.center.z - ent->bound.sph.center.z;
+
+                F32 hsqr = SQR(rsum) - (SQR(dx) + SQR(dz));
+
+                if (hsqr >= 0.0f)
+                {
+                    coll->depen.x = 0.0f;
+                    coll->depen.y = xsqrt(hsqr) - dy;
+                    coll->depen.z = 0.0f;
+                    coll->dist = p->bound.sph.r - coll->depen.y;
+                    coll->hdng.x = 0.0f;
+                    coll->hdng.y = -1.0f;
+                    coll->hdng.z = 0.0f;
+                }
+            }
+        }
+    }
+
+    xent_entent = 0;
+    return ent;
+}
+
+static U32 CollidePyramidBoxTop(xCollis* coll, xBox* box, F32 height, xSphere* sph)
+{
+    xVec3 point;
+    xVec3 corner[2];
+    F32 quaddirX;
+    F32 quaddirZ;
+    xSweptSphere sws;
+    xVec3 start;
+    xVec3 end;
+
+    point.x = 0.5f * (box->lower.x + box->upper.x);
+    point.y = box->upper.y + height;
+    point.z = 0.5f * (box->lower.z + box->upper.z);
+
+    F32 dx = sph->center.x - point.x;
+    F32 dz = sph->center.z - point.z;
+
+    if (sph->center.x <= box->lower.x - sph->r || sph->center.x >= box->upper.x + sph->r ||
+        sph->center.z <= box->lower.z - sph->r || sph->center.z >= box->upper.z + sph->r ||
+        sph->center.y >= point.y + sph->r)
+    {
+        return 0;
+    }
+
+    if (xabs(dx) < 0.001f && xabs(dz) < 0.001f)
+    {
+        dz = 0.001f;
+    }
+
+    corner[0].y = box->upper.y;
+    corner[1].y = box->upper.y;
+
+    if (xabs(dx) > xabs(dz))
+    {
+        quaddirZ = 0.0f;
+
+        if (dx > 0.0f)
+        {
+            corner[0].x = box->upper.x;
+            corner[0].z = box->upper.z;
+            corner[1].x = box->upper.x;
+            corner[1].z = box->lower.z;
+            quaddirX = 1.0f;
+        }
+        else
+        {
+            corner[0].x = box->lower.x;
+            corner[0].z = box->lower.z;
+            corner[1].x = box->lower.x;
+            corner[1].z = box->upper.z;
+            quaddirX = -1.0f;
+        }
+    }
+    else
+    {
+        quaddirX = 0.0f;
+
+        if (dz > 0.0f)
+        {
+            corner[0].x = box->lower.x;
+            corner[0].z = box->upper.z;
+            corner[1].x = box->upper.x;
+            corner[1].z = box->upper.z;
+            quaddirZ = 1.0f;
+        }
+        else
+        {
+            corner[0].x = box->upper.x;
+            corner[0].z = box->lower.z;
+            corner[1].x = box->lower.x;
+            corner[1].z = box->lower.z;
+            quaddirZ = -1.0f;
+        }
+    }
+
+    start.x = sph->center.x;
+    start.y = sph->r + (sph->center.y + height);
+    start.z = sph->center.z;
+    end = sph->center;
+
+    xSweptSpherePrepare(&sws, &start, &end, sph->r);
+
+    if (xSweptSphereToTriangle(&sws, &point, &corner[0], &corner[1]))
+    {
+        xSweptSphereGetResults(&sws);
+
+        F32 normX = sws.worldNormal.x;
+        F32 normZ = sws.worldNormal.z;
+
+        if (xabs(normX) < 1e-5f && xabs(normZ) < 1e-5f)
+        {
+            normX = quaddirX;
+            normZ = quaddirZ;
+        }
+        else
+        {
+            F32 normMag = xsqrt(normX * normX + normZ * normZ);
+
+            normX = normX * (1.0f / normMag);
+            normZ = normZ * (1.0f / normMag);
+
+            if (normX * quaddirX + normZ * quaddirZ < 0.707107f)
+            {
+                normX = quaddirX;
+                normZ = quaddirZ;
+            }
+        }
+
+        F32 boxMaxSize = xsqrt(SQR(0.5f * (box->upper.x - box->lower.x)) +
+                               SQR(0.5f * (box->upper.z - box->lower.z)));
+
+        start.x = normX * (boxMaxSize + sph->r) + sph->center.x;
+        start.y = sph->center.y;
+        start.z = normZ * (boxMaxSize + sph->r) + sph->center.z;
+
+        xSweptSpherePrepare(&sws, &start, &end, sph->r);
+
+        if (xSweptSphereToTriangle(&sws, &point, &corner[0], &corner[1]))
+        {
+            xSweptSphereGetResults(&sws);
+
+            coll->flags |= k_HIT_IT | k_HIT_0x20000;
+            coll->oid = 0;
+            coll->optr = NULL;
+            coll->mptr = NULL;
+            coll->dist = sph->r - (sws.dist - sws.curdist);
+            coll->norm = sws.worldPolynorm;
+
+            coll->tohit.x = -normX * coll->dist;
+            coll->tohit.y = 0.0f;
+            coll->tohit.z = -normZ * coll->dist;
+
+            coll->hdng.x = -normX;
+            coll->hdng.y = 0.0f;
+            coll->hdng.z = -normZ;
+
+            coll->depen.x = normX * (sws.dist - sws.curdist);
+            coll->depen.y = 0.0f;
+            coll->depen.z = normZ * (sws.dist - sws.curdist);
+
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static xEnt* PlayerCollCheckOneVillain(xEnt* ent, xScene* sc, void* data)
+{
+    xEnt* p = (xEnt*)data;
+    xCollis* coll;
+
+    if (p->collis->idx >= 15)
+    {
+        return NULL;
+    }
+
+    if ((ent->chkby & p->collType) == 0)
+    {
+        return ent;
+    }
+
+    if (ent->id == p->id)
+    {
+        return ent;
+    }
+
+    if (!((zNPCCommon*)ent)->IsHealthy())
+    {
+        return ent;
+    }
+
+    coll = &p->collis->colls[p->collis->idx];
+
+    if (cchkButtbounce &&
+        (p->frame->oldmat.pos.y >= ent->frame->mat.pos.y + ent->bound.sph.r ||
+         p->frame->oldmat.pos.y >= ent->frame->oldmat.pos.y + ent->bound.sph.r) &&
+        p->frame->mat.pos.y <= ent->frame->mat.pos.y + ent->bound.sph.r)
+    {
+        F32 playerOldRad = p->bound.sph.r;
+
+        p->bound.sph.r *= 1.5f;
+        xBoundHitsBound(&p->bound, &ent->bound, coll);
+        p->bound.sph.r = playerOldRad;
+
+        if (coll->flags & k_HIT_IT)
+        {
+            coll->norm.x = 0.0f;
+            coll->norm.y = 1.0f;
+            coll->norm.z = 0.0f;
+
+            coll->depen.x = 0.0f;
+            coll->depen.y =
+                ent->frame->mat.pos.y + ent->bound.sph.r - p->frame->mat.pos.y;
+            coll->depen.z = 0.0f;
+
+            coll->dist = p->bound.sph.r - coll->depen.y;
+
+            coll->hdng.x = 0.0f;
+            coll->hdng.y = -1.0f;
+            coll->hdng.z = 0.0f;
+
+            coll->tohit.x = coll->hdng.x * coll->dist;
+            coll->tohit.y = coll->hdng.y * coll->dist;
+            coll->tohit.z = coll->hdng.z * coll->dist;
+
+            coll->oid = ent->id;
+            coll->optr = ent;
+            coll->mptr = ent->model;
+
+            p->collis->idx++;
+
+            return ent;
+        }
+    }
+
+    if (ent->bound.type == XBOUND_TYPE_BOX && ent->baseType == eBaseTypeNPC &&
+        (((xNPCBasic*)ent)->SelfType() & 0xffffff00) != 'NTT\0' &&
+        (((xNPCBasic*)ent)->SelfType() & 0xffffff00) != 'NTR\0' &&
+        p->frame->mat.pos.y + p->bound.sph.r > ent->bound.box.box.upper.y)
+    {
+        xSphere tmpsph;
+
+        tmpsph.center.x = p->frame->mat.pos.x;
+        tmpsph.center.y = p->frame->mat.pos.y + p->bound.sph.r;
+        tmpsph.center.z = p->frame->mat.pos.z;
+        tmpsph.r = p->bound.sph.r;
+
+        CollidePyramidBoxTop(coll, &ent->bound.box.box, 1.0f, &tmpsph);
+    }
+    else
+    {
+        xBoundHitsBound(&p->bound, &ent->bound, coll);
+    }
+
+    if (coll->flags & k_HIT_IT)
+    {
+        if (!(coll->flags & k_HIT_0x20000) && coll->hdng.y < 0.0f && coll->hdng.y > -0.93969f)
+        {
+            coll->flags |= k_HIT_0x20000;
+        }
+
+        coll->oid = 0;
+        coll->optr = ent;
+        coll->mptr = ent->model;
+
+        p->collis->idx++;
+
+        if (coll->mptr->Flags & 0x800)
+        {
+            coll->flags |= 0x2000;
+        }
+
+        if (coll->flags & 0x10)
+        {
+            xVec3Sub(&coll->tohit, xBoundCenter(&ent->bound), xEntGetCenter(p));
+            xVec3SMul(&coll->depen, &coll->tohit, -0.25f * (1.0f / xVec3Length(&coll->tohit)));
+            coll->depen.y = 0.0f;
+
+            PlayerCollisBuildFromDepen(coll);
+        }
+    }
+
+    return ent;
 }
 
 static void PlayerCollisTranslate(xCollis* c, F32 x, F32 y, F32 z)
@@ -9792,6 +10205,275 @@ static void CalcCombinedDepen(F32& dx, F32& dz, F32 ax, F32 az, F32 bx, F32 bz, 
     }
 }
 
+static void PlayerCollsSelectDepen(xEnt* ent, xScene* sc, F32 dt)
+{
+    xCollis* colls = ent->collis->colls;
+    xMat4x3* mat = &ent->frame->mat;
+    xCollis* c = colls + k_XCOLLS_IDX_COUNT;
+    xCollis* cend = colls + ent->collis->idx;
+    xVec3 motion_delta = mat->pos - ent->frame->oldmat.pos;
+
+    for (; c < cend; c++)
+    {
+        U8 idx = xCollideGetCollsIdx(c, &c->tohit, mat);
+
+        if (idx == k_XCOLLS_IDX_FLOOR)
+        {
+            xSurface* surface = zSurfaceGetSurface(c);
+            zSurfaceProps* surfaceProperties = (zSurfaceProps*)surface->moprops;
+
+            if (surfaceProperties->asset->phys_flags & 0x20)
+            {
+                xVec3 vec;
+                xVec3Init(&vec, c->tohit.x, 0.0001f, c->tohit.z);
+                xVec3Normalize(&vec, &vec);
+                idx = xCollideGetCollsIdx(c, &vec, mat);
+            }
+        }
+
+        xCollis* curr = colls + idx;
+
+        if (c->dist < curr->dist)
+        {
+            *curr = *c;
+        }
+    }
+
+    if (ent->pflags & 0x80)
+    {
+        xCollis* coll = ent->collis->colls;
+
+        if ((coll->flags & k_HIT_IT) && coll->dist < 0.5f)
+        {
+            F32 h_dot_n = xVec3Dot(&coll->hdng, &coll->norm);
+
+            if (h_dot_n > 0.0f)
+            {
+                xVec3Inv(&coll->norm, &coll->norm);
+                h_dot_n = -h_dot_n;
+            }
+
+            if (xabs(xacos(xVec3Dot(&coll->norm, &update_motion))) < 0.785398f)
+            {
+                F32 depen_len = h_dot_n * coll->dist + 0.5f;
+
+                if (depen_len < 0.0f || depen_len > 0.5f)
+                {
+                    depen_len = CLAMP(depen_len, 0.0f, 0.5f);
+                }
+
+                xVec3SMul(&coll->depen, &coll->norm, depen_len);
+            }
+        }
+    }
+
+    c = colls;
+    cend = colls + k_XCOLLS_IDX_COUNT;
+
+    for (; c < cend; c++)
+    {
+        xEnt* cent = (xEnt*)c->optr;
+
+        if (!cent)
+        {
+            continue;
+        }
+
+        if (!(cent->penby & ent->collType) || !(ent->collis->pen & cent->collType))
+        {
+            c->depen.x = 0.0f;
+            c->depen.y = 0.0f;
+            c->depen.z = 0.0f;
+            continue;
+        }
+
+        if (globals.player.DamageTimer > 0.0f)
+        {
+            xSurface* surf = zSurfaceGetSurface(c);
+
+            if (surf && !surf->state && zSurfaceGetDamageType(surf) &&
+                zSurfaceGetDamagePassthrough(surf))
+            {
+                c->depen.x = 0.0f;
+                c->depen.y = 0.0f;
+                c->depen.z = 0.0f;
+                continue;
+            }
+        }
+
+        if (cent->baseType == eBaseTypeVillain)
+        {
+            if (c == &colls[k_XCOLLS_IDX_FLOOR])
+            {
+                c->depen.y = 0.0f;
+            }
+            else if (c != &colls[k_XCOLLS_IDX_FRONT])
+            {
+                c->depen.x = 0.0f;
+                c->depen.y = 0.0f;
+                c->depen.z = 0.0f;
+            }
+        }
+    }
+
+    xCollis* cfloor = &colls[k_XCOLLS_IDX_FLOOR];
+    xCollis* cceil = &colls[k_XCOLLS_IDX_CEIL];
+    xSurface* sfloor = zSurfaceGetSurface(cfloor);
+
+    if ((cfloor->flags & k_HIT_IT) && ent->frame->vel.y > 0.0f && globals.player.JumpState != 0 &&
+        globals.player.JumpState != 1)
+    {
+        F32 floordot = xVec3Dot(&motion_delta, &cfloor->tohit);
+
+        if (floordot < 0.0f)
+        {
+            cfloor->flags &= ~k_HIT_IT;
+        }
+    }
+
+    if ((cfloor->flags & k_HIT_IT) && cfloor->dist < 0.5f)
+    {
+        if (sfloor && (globals.player.Slide == 1 || globals.player.Slide == 3))
+        {
+            xVec3AddTo(&mat->pos, &cfloor->depen);
+            PlayerCollsWallsTranslate(colls, &cfloor->depen);
+        }
+        else
+        {
+            mat->pos.y += cfloor->depen.y;
+            PlayerCollsWallsTranslate(colls, 0.0f, cfloor->depen.y, 0.0f);
+        }
+    }
+    else if ((cceil->flags & k_HIT_IT) && cceil->dist < 0.5f)
+    {
+        if (cceil->hdng.y < icos(0.523599f))
+        {
+            xVec3AddTo(&mat->pos, &cceil->depen);
+            PlayerCollsWallsTranslate(colls, &cceil->depen);
+        }
+        else
+        {
+            mat->pos.y += cceil->depen.y;
+            PlayerCollsWallsTranslate(colls, 0.0f, cceil->depen.y, 0.0f);
+            ent->frame->vel.y = 0.0f;
+        }
+    }
+
+    S32 num_walls = 0;
+    xCollis* first_wall = NULL;
+    xCollis* inside_wall = NULL;
+
+    for (c = &colls[k_XCOLLS_IDX_FRONT], cend = &colls[k_XCOLLS_IDX_COUNT]; c < cend; c++)
+    {
+        if (c->flags & k_HIT_0x10)
+        {
+            inside_wall = c;
+        }
+
+        if (c->flags & k_HIT_IT)
+        {
+            if (c->optr)
+            {
+                num_walls++;
+
+                if (!first_wall)
+                {
+                    first_wall = c;
+                }
+            }
+            else
+            {
+                num_walls++;
+
+                if (!first_wall)
+                {
+                    first_wall = c;
+                }
+            }
+        }
+    }
+
+    if (inside_wall)
+    {
+        inside_wall->flags &= ~k_HIT_IT;
+    }
+
+    if (num_walls)
+    {
+        if (num_walls == 1)
+        {
+            mat->pos.x += first_wall->depen.x;
+            mat->pos.z += first_wall->depen.z;
+        }
+        else
+        {
+            xCollis* cfront = &colls[k_XCOLLS_IDX_FRONT];
+            xCollis* crear = &colls[k_XCOLLS_IDX_REAR];
+
+            if ((cfront->flags & k_HIT_IT) && cfront->dist < 0.5f)
+            {
+                if ((crear->flags & k_HIT_IT) && crear->dist < 0.5f)
+                {
+                    F32 dx;
+                    F32 dz;
+
+                    CalcCombinedDepen(dx, dz, crear->depen.x, crear->depen.z, cfront->depen.x,
+                                      cfront->depen.z,
+                                      ComputeFudge(crear->tohit.y, cfront->tohit.y));
+
+                    mat->pos.x += dx;
+                    mat->pos.z += dz;
+
+                    PlayerCollsSidesTranslate(colls, dx, 0.0f, dz);
+                }
+                else
+                {
+                    mat->pos.x += cfront->depen.x;
+                    mat->pos.z += cfront->depen.z;
+
+                    PlayerCollsSidesTranslate(colls, cfront->depen.x, 0.0f, cfront->depen.z);
+                }
+            }
+            else if ((crear->flags & k_HIT_IT) && crear->dist < 0.5f)
+            {
+                mat->pos.x += crear->depen.x;
+                mat->pos.z += crear->depen.z;
+
+                PlayerCollsSidesTranslate(colls, crear->depen.x, 0.0f, crear->depen.z);
+            }
+
+            xCollis* cleft = &colls[k_XCOLLS_IDX_LEFT];
+            xCollis* cright = &colls[k_XCOLLS_IDX_RIGHT];
+
+            if ((cleft->flags & k_HIT_IT) && cleft->dist < 0.5f)
+            {
+                if ((cright->flags & k_HIT_IT) && cright->dist < 0.5f)
+                {
+                    F32 dx;
+                    F32 dz;
+
+                    CalcCombinedDepen(dx, dz, cleft->depen.x, cleft->depen.z, cright->depen.x,
+                                      cright->depen.z,
+                                      ComputeFudge(cleft->tohit.y, cright->tohit.y));
+
+                    mat->pos.x += dx;
+                    mat->pos.z += dz;
+                }
+                else
+                {
+                    mat->pos.x += cleft->depen.x;
+                    mat->pos.z += cleft->depen.z;
+                }
+            }
+            else if ((cright->flags & k_HIT_IT) && cright->dist < 0.5f)
+            {
+                mat->pos.x += cright->depen.x;
+                mat->pos.z += cright->depen.z;
+            }
+        }
+    }
+}
+
 void zEntPlayerCollide(xEnt* ent, xScene* sc, F32 dt)
 {
     cchkButtbounce =
@@ -9835,6 +10517,193 @@ void zEntPlayerCollide(xEnt* ent, xScene* sc, F32 dt)
     }
 
     xEntEndCollide(ent, sc, dt);
+}
+
+void zEntPlayerCollTrigger(xEnt* ent, xScene* sc)
+{
+    U32 i;
+    U32 inside;
+    zEntTrigger* trig;
+    xTriggerAsset* tasset;
+
+    for (i = 0; i < sc->num_trigs; i++)
+    {
+        trig = (zEntTrigger*)sc->trigs[i];
+
+        if (!xBaseIsEnabled(trig))
+        {
+            continue;
+        }
+
+        inside = 0;
+        tasset = (xTriggerAsset*)(trig->asset + 1);
+
+        switch (trig->subType)
+        {
+        case ZENTTRIGGER_TYPE_BOX:
+        {
+            xVec3 v;
+            xIsect isect;
+
+            xMat4x3Tolocal(&v, &trig->triggerMatrix, &ent->bound.sph.center);
+            iBoxIsectVec(&trig->triggerBox, &v, &isect);
+
+            if (isect.penned <= 0.0f)
+            {
+                inside = 1;
+            }
+            break;
+        }
+        case ZENTTRIGGER_TYPE_SPHERE:
+        {
+            xSphere sph;
+            xIsect isect;
+
+            sph.center = tasset->p[0];
+            sph.r = tasset->p[1].x;
+
+            iSphereIsectVec(&sph, &ent->bound.sph.center, &isect);
+
+            if (isect.penned <= 0.0f)
+            {
+                inside = 1;
+            }
+            break;
+        }
+        case ZENTTRIGGER_TYPE_VCYLINDER:
+        {
+            xCylinder cyl;
+            xIsect isect;
+
+            cyl.center = tasset->p[0];
+            cyl.r = tasset->p[1].x;
+            cyl.h = tasset->p[1].y;
+
+            iCylinderIsectVec(&cyl, &ent->bound.sph.center, &isect);
+
+            if (isect.penned <= 0.0f)
+            {
+                inside = 1;
+            }
+            break;
+        }
+        case ZENTTRIGGER_TYPE_VSPHERE:
+        {
+            xSphere sph;
+            xIsect isect;
+
+            sph.center = tasset->p[0];
+            sph.r = tasset->p[1].x;
+
+            iSphereIsectVec(&sph, &ent->bound.sph.center, &isect);
+
+            if (isect.penned <= 0.0f)
+            {
+                inside = 1;
+            }
+            break;
+        }
+        case ZENTTRIGGER_TYPE_4:
+        case ZENTTRIGGER_TYPE_5:
+            break;
+        }
+
+        if (inside && !(trig->entered & 0x1))
+        {
+            if (tasset->flags & 0x1)
+            {
+                if (xVec3Dot(&tasset->direction, (xVec3*)&ent->model->Mat->at) <= 0.0f)
+                {
+                    zEntEvent(trig, eEventEnterPlayer);
+
+                    switch (gCurrentPlayer)
+                    {
+                    case eCurrentPlayerSpongeBob:
+                        zEntEvent(trig, eEventEnterSpongeBob);
+                        break;
+                    case eCurrentPlayerPatrick:
+                        zEntEvent(trig, eEventEnterPatrick);
+                        break;
+                    case eCurrentPlayerSandy:
+                        zEntEvent(trig, eEventEnterSandy);
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                zEntEvent(trig, eEventEnterPlayer);
+
+                switch (gCurrentPlayer)
+                {
+                case eCurrentPlayerSpongeBob:
+                    zEntEvent(trig, eEventEnterSpongeBob);
+                    break;
+                case eCurrentPlayerPatrick:
+                    zEntEvent(trig, eEventEnterPatrick);
+                    break;
+                case eCurrentPlayerSandy:
+                    zEntEvent(trig, eEventEnterSandy);
+                    break;
+                }
+            }
+        }
+
+        if (!inside && (trig->entered & 0x1))
+        {
+            if (tasset->flags & 0x1)
+            {
+                if (xVec3Dot(&tasset->direction, (xVec3*)&ent->model->Mat->at) <= 0.0f)
+                {
+                    zEntEvent(trig, eEventExitPlayer);
+
+                    switch (gCurrentPlayer)
+                    {
+                    case eCurrentPlayerSpongeBob:
+                        zEntEvent(trig, eEventExitSpongeBob);
+                        break;
+                    case eCurrentPlayerPatrick:
+                        zEntEvent(trig, eEventExitPatrick);
+                        break;
+                    case eCurrentPlayerSandy:
+                        zEntEvent(trig, eEventExitSandy);
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                zEntEvent(trig, eEventExitPlayer);
+
+                switch (gCurrentPlayer)
+                {
+                case eCurrentPlayerSpongeBob:
+                    zEntEvent(trig, eEventExitSpongeBob);
+                    break;
+                case eCurrentPlayerPatrick:
+                    zEntEvent(trig, eEventExitPatrick);
+                    break;
+                case eCurrentPlayerSandy:
+                    zEntEvent(trig, eEventExitSandy);
+                    break;
+                }
+            }
+        }
+
+        if (inside && !globals.player.ControlOff && (globals.pad0->pressed & XPAD_BUTTON_O))
+        {
+            zEntEvent(trig, eEventButtonPressAction);
+        }
+
+        if (inside)
+        {
+            trig->entered |= 0x1;
+        }
+        else
+        {
+            trig->entered &= ~0x1;
+        }
+    }
 }
 
 xVec3* GetPosVec(xBase* base)
@@ -10211,6 +11080,129 @@ S32 zEntPlayerEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam, x
     return 1;
 }
 
+static void PlayerSwingUpdate(xEnt* ent, F32 mag, F32 angle, F32 dt)
+{
+    xVec3 pos;
+    xVec3 unitHang;
+    xVec3 accel;
+    xVec3 unitAccel;
+    xVec3 unitVel;
+    xVec3 unitDefl;
+
+    pos = *(xVec3*)&ent->model->Mat->pos;
+    pos.y += ent->bound.sph.r;
+
+    accel.x = mag * (2.0f * isin(angle));
+    accel.y = 0.0f;
+    accel.z = mag * (2.0f * icos(angle));
+
+    xVec3Normalize(&unitAccel, &accel);
+
+    for (S32 i = k_XCOLLS_IDX_FRONT; i < k_XCOLLS_IDX_COUNT; i++)
+    {
+        if (ent->collis->colls[i].flags & k_HIT_IT)
+        {
+            xVec3AddScaled(&globals.player.HangVel, &ent->collis->colls[i].norm,
+                           -xVec3Dot(&globals.player.HangVel, &ent->collis->colls[i].norm));
+        }
+    }
+
+    xVec3Normalize(&unitVel, &globals.player.HangVel);
+
+    xVec3Sub(&unitHang, &pos, (xVec3*)&sLassoInfo->swingTarget->model->Mat->pos);
+
+    F32 hangDist = xVec3Normalize(&unitHang, &unitHang);
+
+    F32 hangDot = xVec3Dot(&unitHang, &accel);
+
+    accel.x -= hangDot * unitHang.x;
+    accel.y -= hangDot * unitHang.y;
+    accel.z -= hangDot * unitHang.z;
+
+    if (xVec3Normalize(&unitDefl, &accel) > 1e-5f)
+    {
+        F32 velDot = xVec3Dot(&unitDefl, &globals.player.HangVel);
+
+        if (velDot < 0.0f)
+        {
+            xVec3Inv(&accel, &accel);
+        }
+
+        xVec3 velPerp;
+        xVec3 velAlong;
+
+        xVec3SMul(&velAlong, &unitDefl, velDot);
+        xVec3Sub(&velPerp, &globals.player.HangVel, &velAlong);
+        xVec3AddScaled(&accel, &velPerp, -1.5f);
+    }
+
+    accel.y -= 15.0f;
+
+    globals.player.HangVel.x += accel.x * dt;
+    globals.player.HangVel.y += accel.y * dt;
+    globals.player.HangVel.z += accel.z * dt;
+
+    F32 hangVelDot = xVec3Dot(&unitHang, &globals.player.HangVel);
+
+    if (hangDist > 3.96f && hangVelDot > 0.0f)
+    {
+        globals.player.HangVel.x -= hangVelDot * unitHang.x;
+        globals.player.HangVel.y -= hangVelDot * unitHang.y;
+        globals.player.HangVel.z -= hangVelDot * unitHang.z;
+    }
+
+    pos.x += globals.player.HangVel.x * dt;
+    pos.y += globals.player.HangVel.y * dt;
+    pos.z += globals.player.HangVel.z * dt;
+
+    xVec3Sub(&unitHang, &pos, (xVec3*)&sLassoInfo->swingTarget->model->Mat->pos);
+
+    hangDist = xVec3Normalize(&unitHang, &unitHang);
+
+    if (hangDist > 3.96f)
+    {
+        hangDist = 0.95f * hangDist + 0.2f;
+    }
+
+    globals.player.RootUpTarget = unitHang;
+    xVec3Inv(&globals.player.RootUpTarget, &globals.player.RootUpTarget);
+
+    globals.player.HangElapsed += dt;
+
+    xVec3Copy(&ent->frame->mat.pos, (xVec3*)&sLassoInfo->swingTarget->model->Mat->pos);
+    xVec3AddScaled(&ent->frame->mat.pos, &unitHang, hangDist);
+
+    ent->frame->mat.pos.y -= ent->bound.sph.r;
+    ent->frame->mode |= 0x1;
+
+    if (globals.player.HangStartLerp < 1.0f)
+    {
+        globals.player.HangStartLerp = MIN(1.0f, 5.0f * dt + globals.player.HangStartLerp);
+    }
+
+    F32 lerpDiff = 1.0f - mag * xVec3Dot(&unitAccel, &unitVel);
+    F32 lerp = ent->model->Anim->Single->BilinearLerp[0];
+
+    lerpDiff = 6.0f * (dt * (lerpDiff - lerp));
+
+    ent->model->Anim->Single->BilinearLerp[0] += lerpDiff;
+    ent->model->Anim->Single->Blend->BilinearLerp[0] += lerpDiff;
+
+    F32 newLerp = ent->model->Anim->Single->BilinearLerp[0];
+
+    if ((lerp <= 1.8f && newLerp > 1.8f) || (lerp >= 0.2f && newLerp < 0.2f))
+    {
+        zEntPlayer_SNDPlay(ePlayerSnd_LassoYank, 0.0f);
+    }
+
+    sSwingTimeElapsed += dt;
+
+    F32 curFactor = zCameraGetLassoCamFactor();
+
+    zCameraSetLassoCamFactor(
+        0.8f * curFactor + 0.2f * (0.5f - 0.5f * xVec3Dot(&globals.camera.mat.at, &unitHang)));
+}
+
 static void PlayerTeeterCheck(xEnt* ent, xScene* sc, F32 dt)
 {
     S32 i;
@@ -10249,6 +11241,136 @@ static void PlayerTeeterCheck(xEnt* ent, xScene* sc, F32 dt)
             floor_tmr[i] = 0.0f;
         }
     }
+}
+
+static void PlayerRotMatchUpdateEnt(xEnt* ent, xScene* sc, F32 dt, void* fdata)
+{
+    xFFXRotMatchState* rms = (xFFXRotMatchState*)fdata;
+
+    if (!ent->collis)
+    {
+        return;
+    }
+
+    if (!ent->frame)
+    {
+        return;
+    }
+
+    xCollis* coll = ent->collis->colls;
+    S32 hit_it = coll->flags & 0x1;
+    xSurface* surf = zSurfaceGetSurface(coll);
+    U8 grounded = 0;
+
+    if (hit_it && surf && !surf->state && zSurfaceGetMatchOrient(surf))
+    {
+        grounded = 1;
+    }
+
+    if (grounded)
+    {
+        if (!rms->lgrounded)
+        {
+            rms->tmr = 0.0f;
+        }
+
+        xVec3* fup = &globals.player.floor_norm;
+        xVec3* eup = &globals.player.RootUpTarget;
+        xVec3 nfup;
+        xVec3 neup;
+
+        F32 fup_len = xVec3Normalize(&nfup, fup);
+        F32 eup_len = xVec3Normalize(&neup, eup);
+        F32 fdecl = xacos(nfup.y);
+        F32 edecl = xacos(neup.y);
+
+        if (edecl < rms->max_decl || fdecl < rms->max_decl)
+        {
+            xVec3 raxis;
+
+            xVec3Cross(&raxis, eup, fup);
+            xVec3Normalize(&raxis, &raxis);
+
+            F32 rang = xVec3Dot(&nfup, &neup);
+
+            if (rang > 1.0f)
+            {
+                rang = 1.0f;
+            }
+
+            rang = xacos(rang);
+
+            if (rang)
+            {
+                F32 s = MIN(1.0f, dt / rms->tmatch);
+
+                if (fdecl >= rms->max_decl)
+                {
+                    s = MIN(s, (rms->max_decl - edecl) / (fdecl - edecl));
+                }
+
+                if (s)
+                {
+                    s = s * rang;
+                    s -= 0.001f;
+
+                    xMat4x3 rot;
+
+                    xMat4x3Rot(&rot, &raxis, s, xEntGetPos(ent));
+                    xMat3x3RMulVec(eup, &rot, &neup);
+
+                    globals.player.HangElapsed = 0.0f;
+                }
+            }
+        }
+    }
+    else if (!globals.player.HangEnt)
+    {
+        if (rms->lgrounded)
+        {
+            rms->tmr = -0.1f;
+        }
+
+        if (rms->tmr > 0.0f)
+        {
+            xVec3* eup = &globals.player.RootUpTarget;
+            xVec3 neup;
+
+            F32 eup_len = xVec3Normalize(&neup, eup);
+
+            xVec3 raxis;
+
+            xVec3Init(&raxis, -neup.z, 0.0f, neup.x);
+
+            F32 rang = xacos(neup.y);
+
+            if (rang)
+            {
+                F32 s = MIN(1.0f, dt / rms->trelax);
+
+                s = s * rang;
+
+                xMat4x3 rot;
+
+                xMat4x3Rot(&rot, &raxis, s, xEntGetPos(ent));
+                xMat3x3RMulVec(eup, &rot, &neup);
+
+                globals.player.HangElapsed = 0.0f;
+            }
+        }
+    }
+
+    if (xabs(globals.player.RootUpTarget.y - 1.0f) < 1e-5f)
+    {
+        globals.player.RootUpTarget.x = 0.0f;
+        globals.player.RootUpTarget.y = 1.0f;
+        globals.player.RootUpTarget.z = 0.0f;
+
+        globals.player.HangElapsed = 0.0f;
+    }
+
+    rms->tmr += dt;
+    rms->lgrounded = grounded;
 }
 
 void zEntPlayer_StoreCheckPoint(xVec3* pos, F32 rot, U32 initCamID)
