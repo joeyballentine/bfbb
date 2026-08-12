@@ -363,9 +363,72 @@ real bug — `ZNPC_AnimTable_ThunderCloud` used `g_strz_roboanim` where the targ
 uses `g_strz_cloudanim`, fixed in `504aebf3` for 99.420% -> 100.000%. Triaging
 the rest is cheap, high-yield source work.
 
-**2c. Weak/deduplicated symbols.** Our objects emit `operator=`
-instantiations the retail link dropped, blocking `xModel`, `xParSys`,
-`zSurface` and others from Matching regardless of their function scores.
+**2c. Weak/deduplicated symbols. REWRITTEN 2026-08-12 — the old framing was
+wrong.** It said our surplus `operator=` instantiations block units from
+Matching. They do not. Most of them are harmless and always will be.
+
+**The rule: a surplus or misplaced symbol blocks `Matching` only if this unit
+is the symbol's owner in the retail link.** Every TU that used an `xVec3`
+assignment emitted a weak copy of `__as__5xVec3FRC5xVec3`; the retail linker
+kept exactly one and discarded the rest, so dtk's extracted objects cannot show
+it anywhere except its owner. Ours emits it for the same reason theirs did, and
+the linker drops it for the same reason. `symorder.py` will report that surplus
+for every unit that assigns an `xVec3`, forever, and it means nothing.
+
+Use **`tools/symowner.py <symbol>`** to resolve a name through
+`config/GQPE78/symbols.txt` to an address and then through `splits.txt` to the
+owning unit. `__as__5xVec3FRC5xVec3` lives at `.text:0x8000B264 scope:weak`,
+inside `SB/Core/x/xBound.cpp`.
+
+Proof the surplus does not block: `zEnt.cpp`, `zEntTrigger.cpp`,
+`zPendulum.cpp`, `xSurface.cpp`, `xHudText.cpp` and `zVar.cpp` are all
+`Object(Matching, ...)` today and all emit surplus `.text` symbols their target
+objects lack — `zEnt` emits `__as__5xVec3FRC5xVec3` itself, mid-`.text`, and
+`zVar` emits a **strong global** `__deadstripped_zVar__Fv` at position 0.
+
+Re-triaged against that rule:
+
+| unit | actual blocker |
+|---|---|
+| `xParSys` | `using_ptank_render`, which it owns — **fixed, unit now links** (`98560c47`) |
+| `xClimate` | none. Its only symbol difference is xBound's. The blocker is `UpdateRain` at 92.405% |
+| `zSurface` | `.sdata2` ordering of `@900`, the signed int->float magic — a 2a deadstripped artifact, see below |
+| `xDebug` | `__as__10iColor_tagFRC10iColor_tag`, which it owns, one position too early |
+| `xModel` | owns `__as__11RwMatrixTagFRC11RwMatrixTag` and misplaces it — but it also has two broken functions, so symbols are not the first problem |
+
+**`xParSys` is the worked example.** It sat at 0 non-matching of 22 and could
+not link because CodeWarrior emits a header-defined `inline` at end-of-TU while
+the target has `using_ptank_render` at `.text` position 3, right after its first
+caller. Moving the definition into the `.cpp` between `par_sprite_update` and
+`render_par_sprite` put it exactly there and the unit linked, with the three
+foreign-owned weak symbols still present and still harmless.
+
+**`__deadstripped_<unit>()` does NOT make a unit unlinkable** — an earlier note
+here claimed it did, on the basis of `xDebug`. `zVar` and `xHudText` both carry
+the idiom and both link. In `xDebug` the stub is load-bearing for a different
+reason: it is a call-forcing stub, not the `.rodata` template kind, and it is
+the only thing causing ten weak inlines that `xDebug.o` *owns*
+(`0x80017DA4`-`0x80018064`, ~704 bytes) to be emitted at all. Removing it loses
+all ten. Keep it. `zFX`'s copy is likewise not a problem.
+
+**`zSurface`'s real blocker** is that `@900` (`43 30 00 00 80 00 00 00`, the
+signed int->float magic) sits after `zSurfaceUpdate`'s four floats in our
+`.sdata2` and before them in the target's. The constant is allocated at the
+TU's *first* signed int->float conversion in source order; in retail that
+happened inside a function between `zSurfaceGetSlideStopAngle` and
+`zSurfaceUpdate` that no longer exists. Proven with a throwaway probe: inserting
+such a conversion into `zSurfaceGetSlickness` moved the constant to the target's
+exact slot, `.sdata2` matched completely and `zSurfaceUpdate` reached 100%.
+Reordering the `switch` cases does not move it and costs 38 points. So this is a
+Phase 2a deadstripped-code artifact, the `__deadstripped_` exception does not
+cover it (condition 1 fails — the object *is* referenced), and `dwarf/` lists no
+zSurface function we lack.
+
+**Method warning for header blast-radius sweeps.** An include-path overlay does
+not work: mwcc's `-gccinc` own-directory rule resolves `#include "xParSys.h"`
+from `src/SB/Core/x/` before any `-i` path, so the overlay is silently ignored
+and the sweep appears to prove no change. Copy the whole tree and patch it.
+Always run an `#error` positive control first.
 
 ### Another scheduler patch — measured 2026-08-12, and the answer is NO-GO
 
@@ -1492,11 +1555,16 @@ Agents may not edit shared headers, so they report them instead. Outstanding:
   all; `gh.sh` gives a usable starting point for each.
 - **Five units at 100% still cannot be marked Matching.** Run
   `tools/symorder.py` on each for the specific reason.
-  - `xDebug.cpp` defines `__deadstripped_xDebug`, and `__as__10iColor_tag`
-    sits in the wrong place in `.text`.
-  - `xParSys.cpp` emits four `operator=` instantiations the retail link
-    dropped, plus an unreferenced 4-byte `.sbss2` object -- the same problem
-    that pins `ZDSP_elcb_event`.
+  - `xDebug.cpp` — the blocker is `__as__10iColor_tag`, which xDebug **owns**,
+    sitting one position too early in `.text`. Defining `__deadstripped_xDebug`
+    is NOT a problem; it is what causes the ten weak inlines xDebug owns to be
+    emitted at all. The trailing weak group comes out in reverse order of use
+    inside that stub, so this is a statement-order question within it.
+  - ~~`xParSys.cpp` emits four `operator=` instantiations the retail link
+    dropped~~ — **fixed and linked, `98560c47`.** Those four were owned by
+    other units and never mattered; the real blocker was `using_ptank_render`,
+    which xParSys owns, emitted at end-of-TU because it was a header `inline`.
+    See the rewritten 2c above for the general rule and `tools/symowner.py`.
   - `global_destructor_chain.c` and `__init_cpp_exceptions.cpp` put their
     `_reference` objects in `.sdata2`, where the target has them in `.ctors`
     and `.dtors`. The sources already carry
