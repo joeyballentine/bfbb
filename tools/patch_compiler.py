@@ -121,7 +121,7 @@ BASE_VERSION = "GC/2.0p1"
 PATCHED_VERSION = "GC/2.0p1a"
 
 BASE_SHA1 = "74bc177b10d1bbe8a60a21a6c0aa86d2dd9c0668"
-PATCHED_SHA1 = "7d3ff244fb371e3b15b0becd41ac04b627869ae8"
+PATCHED_SHA1 = "e1269faf6cba69cb7ed97c9de40bb2cf37e4ffe0"  # EXPERIMENT: E3n
 
 # Narrow may-alias predicate, assembled at VA 0x57ea50.
 CAVE_OFFSET = 0x17DE50
@@ -159,6 +159,12 @@ CAVE2_BYTES = bytes.fromhex(
     "acfeffff"
 )
 
+# EXPERIMENT (E3n): new clause at VA 0x57EBA4, entry 3 only.
+CAVE3_OFFSET = 0x17DFA4
+CAVE3_BYTES = bytes.fromhex(
+    "837e1404753c837d140275368b481883f904772e8b4a1883f90477268b481085c9741f81390500010075178379180074118b4a1085c9740a8339057505e99b34f9ffe915ffffff"
+)
+
 # Entries of the dispatch table at VA 0x5bd0bc that get redirected, as
 # (index, expected stock handler, replacement). Entry 0 is whole-object vs
 # whole-object; entries 1 and 3 are whole-object vs subrange, in both operand
@@ -168,7 +174,7 @@ DISPATCH_OFFSET = 0x1BA6BC
 DISPATCH = (
     (0, 0x00511FF2, 0x0057EB52),  # stock: cmp eax,edx; sete bl  (ref identity)
     (1, 0x00511FFF, 0x0057EB00),  # stock: same base object
-    (3, 0x00511FFF, 0x0057EB00),
+    (3, 0x00511FFF, 0x0057EBA4),  # EXPERIMENT: E3n clause instead of clause C
 )
 
 
@@ -205,7 +211,8 @@ def patch_compiler(compilers: Path) -> bool:
 
     data = bytearray(src.read_bytes())
 
-    for off, blob in ((CAVE_OFFSET, CAVE_BYTES), (CAVE2_OFFSET, CAVE2_BYTES)):
+    for off, blob in ((CAVE_OFFSET, CAVE_BYTES), (CAVE2_OFFSET, CAVE2_BYTES),
+                      (CAVE3_OFFSET, CAVE3_BYTES)):
         if any(data[off:off + len(blob)]):
             sys.exit(f"{src}: padding at {off:#x} is not zero, refusing to overwrite")
         data[off:off + len(blob)] = blob
