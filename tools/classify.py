@@ -42,8 +42,26 @@ def norm_reloc(txt):
     return re.sub(r"@\d+", "@X", txt)
 
 
+# objdiff prints a local branch's target as a section-relative address, so the
+# same branch reads differently whenever the function sits at a different
+# offset in .text -- which it does in most non-matching units. Comparing the
+# raw text therefore reports every branch in the function as a difference.
+# Rewriting the target as a delta from the branch's own address makes it
+# placement-independent. `bl <symbol>` carries a relocation instead of a hex
+# target and is deliberately left alone.
+BRANCH_ABS = re.compile(r"^(b\S*)\s+(0x[0-9a-fA-F]+)\s*$")
+
+
 def fmt(entry):
-    return entry.get("instruction", {}).get("formatted", "")
+    ins = entry.get("instruction", {})
+    txt = ins.get("formatted", "")
+    m = BRANCH_ABS.match(txt)
+    if m:
+        try:
+            return "%s %+d" % (m.group(1), int(m.group(2), 16) - int(ins["address"]))
+        except (KeyError, TypeError, ValueError):
+            pass
+    return txt
 
 
 def mnemonic(text):
