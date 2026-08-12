@@ -180,6 +180,19 @@ above). The other seven were all compiler-class and unreachable from source:
 **The lesson is that a tiny residual is evidence *against* source-reachability,
 not for it.** A function 2-3 instructions out has usually already had its shape
 solved by whoever left it there; what remains is the allocator or the scheduler.
+
+**Refined again after batch 2 — rank by absolute differing-instruction count,
+not by percentage.** Percentage conflates two unrelated things: a *small*
+function a few instructions out, and a *large* function with real bugs.
+`zGameModeSwitch` reads 94.872% because it is 78 instructions and 4 of them
+differ — a SCHED interleave, unreachable. `MorphCommon` reads 94.608% because it
+is 498 instructions with genuine source bugs, and it yielded three of them. Same
+percentage, opposite prospects. Of batch 2's first four, only the one genuinely
+large function carried real bugs; two were a single scheduler idiom repeated at
+six sites (`zTextBox`/`zUIFont`, the same float-literal-versus-stack-store shape
+as `xFont`'s `render_fill_rect`, which already carries a "float scheduling"
+comment).
+
 So work the one-away units in *ascending* percentage — the 13 sitting at 84-98%
 (`xHudFontMeter` 84.6, `zGoo` 90.7, `xClimate` 92.4, `zEGenerator` 92.4,
 `zUIFont` 93.3, `zGameState` 94.9, `zTextBox` 94.9, `iMorph` 94.6, `xSkyDome`
