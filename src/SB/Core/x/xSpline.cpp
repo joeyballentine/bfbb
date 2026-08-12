@@ -14,85 +14,41 @@ static F32 sBasisHermite[4][4];
 void Tridiag_Solve(F32* a, F32* b, F32* c, xVec3* d, xVec3* x, S32 n)
 {
     S32 j;
-
-    F32* a_temp;
-    F32* b_temp;
-    F32* c_temp;
-    xVec3* delta;
-
-    S32 vec_offset;
     F32 beta;
     F32* gamma;
+    xVec3* delta;
 
-    F32* c_prime;
-    F32* d_prime;
+    gamma = (F32*)RwMalloc(n * sizeof(F32));
+    delta = (xVec3*)RwMalloc(n * sizeof(xVec3));
 
-    c_prime = (F32*)RwMalloc(n << 2);
-    d_prime = (F32*)RwMalloc(n * 0xC);
+    gamma[0] = c[0] / b[0];
 
-    c_prime[0] = *c / *b;
+    delta[0].x = d[0].x / b[0];
+    delta[0].y = d[0].y / b[0];
+    delta[0].z = d[0].z / b[0];
 
-    d_prime[0] = d->x / *b;
-    d_prime[1] = d->y / *b;
-    d_prime[2] = d->z / *b;
-
-    a_temp = a + 1;
-    b_temp = b + 1;
-    c_temp = c + 1;
-    delta = d + 1;
-    vec_offset = 0xC;
-
-    if (n > 1)
+    for (j = 1; j < n; j++)
     {
-        for (j = 1; j < n; j += 1)
-        {
-            beta = b_temp[0];
-            gamma = (F32*)((S32)d_prime + vec_offset - 0xc);
-            vec_offset = vec_offset + 0xC;
-            b_temp = b_temp + 1;
-            c_temp = c_temp + 1;
-            *b_temp = *b_temp - *a_temp * c_prime[0];
-            c_prime[1] = *c_temp / beta;
-            d_prime[3] = (delta->x - *a_temp * gamma[0]) / beta;
-            d_prime[4] = (delta->y - *a_temp * gamma[1]) / beta;
-            *c_temp = *a_temp;
-            a_temp = a_temp + 1;
-            delta = delta + 1;
-            d_prime[5] = (*(&delta->z) - *c_temp * gamma[2]) / beta;
-            c_prime = c_prime + 1;
-            d_prime = d_prime + 3;
-        }
+        beta = b[j] - a[j] * gamma[j - 1];
+        gamma[j] = c[j] / beta;
+        delta[j].x = (d[j].x - a[j] * delta[j - 1].x) / beta;
+        delta[j].y = (d[j].y - a[j] * delta[j - 1].y) / beta;
+        delta[j].z = (d[j].z - a[j] * delta[j - 1].z) / beta;
     }
 
-    j = n - 2;
-    c_prime = d_prime + (n - 1) * 3;
-    delta->x = c_prime[0];
-    delta->y = c_prime[1];
-    delta->z = c_prime[2];
-    vec_offset = j * 0xC;
-    d_prime = d_prime + j * 3;
-    delta = x + j;
-    if (n > 1)
+    x[n - 1].x = delta[n - 1].x;
+    x[n - 1].y = delta[n - 1].y;
+    x[n - 1].z = delta[n - 1].z;
+
+    for (j = n - 2; j >= 0; j--)
     {
-        for (j = 0; j >= 0; j -= 1)
-        {
-            d_prime = (F32*)((S32)&x[1].x + vec_offset);
-            vec_offset = vec_offset - 0xC;
-            delta->x = *d_prime - *c_prime * *d_prime;
-            delta->y = d_prime[1] - *c_prime * d_prime[1];
-            beta = *c_prime;
-            c_prime = d_prime + 2;
-            c_prime = c_prime - 1;
-            d_prime = d_prime - 3;
-            delta->z = *c_prime - beta * d_prime[2];
-            delta = delta - 1;
-        }
+        x[j].x = delta[j].x - gamma[j] * x[j + 1].x;
+        x[j].y = delta[j].y - gamma[j] * x[j + 1].y;
+        x[j].z = delta[j].z - gamma[j] * x[j + 1].z;
     }
 
-    RwFree(c_prime);
-    RwFree(d_prime);
-
-    return;
+    RwFree(gamma);
+    RwFree(delta);
 }
 
 void Interpolate_Bspline(xVec3* data, xVec3* control, F32* knots, U32 nodata)
@@ -103,58 +59,61 @@ void Interpolate_Bspline(xVec3* data, xVec3* control, F32* knots, U32 nodata)
 
     U32 i;
 
+    F32 diff_31;
+    F32 diff_43;
+    F32 diff_53;
+    F32 diff_41;
+    F32 diff_32;
+    F32 diff_52;
+    F32 diff_42;
+
     F32 t1;
     F32 t2;
     F32 t3;
     F32 t4;
     F32 t5;
 
-    F32 diff_43;
-    F32 diff_41;
-    F32 diff_32;
-    F32 diff_52;
-
     alpha = (F32*)RwMalloc(nodata * 4);
     beta = (F32*)RwMalloc(nodata * 4);
     gamma = (F32*)RwMalloc(nodata * 4);
 
-    if (nodata > 2)
+    alpha[0] = alpha[nodata - 1] = 0.0f;
+    beta[0] = beta[nodata - 1] = 1.0f;
+    gamma[0] = gamma[nodata - 1] = 0.0f;
+
+    for (i = 1; i < nodata - 1; i += 1)
     {
-        knots = knots + 1;
+        t1 = knots[i + 1];
+        t2 = knots[i + 2];
+        t3 = knots[i + 3];
+        t4 = knots[i + 4];
+        t5 = knots[i + 5];
 
-        for (i = 1; i < nodata - 1; i += 1)
-        {
-            alpha = alpha + 1;
-            beta = beta + 1;
-            gamma = gamma + 1;
+        diff_31 = t3 - t1;
+        diff_43 = t4 - t3;
+        diff_32 = t3 - t2;
+        diff_53 = t5 - t3;
+        diff_41 = t4 - t1;
+        diff_52 = t5 - t2;
 
-            t1 = knots[1];
-            t2 = knots[2];
-            t3 = knots[3];
-            t4 = knots[4];
-            t5 = knots[5];
+        alpha[i] = (diff_43 * diff_43) / diff_41;
+        beta[i] = (diff_31 * diff_43) / diff_41 + (diff_53 * diff_32) / diff_52;
+        gamma[i] = (diff_32 * diff_32) / diff_52;
 
-            diff_41 = t4 - t1;
-            diff_43 = t4 - t3;
-            diff_32 = t3 - t2;
-            diff_52 = t5 - t2;
-
-            *alpha = (diff_43 * diff_43) / diff_41;
-            *beta = ((t3 - t1) * diff_43) / diff_41 + ((t5 - t3) * diff_32) / diff_52;
-            *gamma = (diff_32 * diff_32) / diff_52;
-
-            t4 = t4 - t2;
-            *alpha = *alpha / t4;
-            *beta = *beta / t4;
-            *gamma = *gamma / t4;
-        }
+        diff_42 = t4 - t2;
+        alpha[i] = alpha[i] / diff_42;
+        beta[i] = beta[i] / diff_42;
+        gamma[i] = gamma[i] / diff_42;
     }
+
     Tridiag_Solve(alpha, beta, gamma, data, control + 1, nodata);
+
+    control[0] = control[1];
+    control[nodata + 1] = control[nodata];
 
     RwFree(alpha);
     RwFree(beta);
     RwFree(gamma);
-    return;
 }
 
 // Implementation of Composite Simpson's 1/3 Rule to calculate arc length
@@ -281,16 +240,14 @@ void BasisToCoef3(xCoef3* coef, F32 (*N)[4], xVec3* v1, xVec3* v2, xVec3* v3, xV
 {
     S32 i;
 
-    for (i = 4; i != 0; i -= 1)
+    for (i = 0; i < 4; i++)
     {
-        coef->x.a[0] =
-            (N[3][0] * v4->x) + ((N[2][0] * v3->x) + ((v1->x * N[0][0]) + (N[1][0] * v2->x)));
-        coef->y.a[0] =
-            (N[3][0] * v4->y) + ((N[2][0] * v3->y) + ((v1->y * N[0][0]) + (N[1][0] * v2->y)));
-        N += 4;
-        coef->z.a[0] =
-            (N[3][0] * v4->z) + ((N[2][0] * v3->z) + (v1->z * N[0][0]) + (N[1][0] * v2->z));
-        coef += 4;
+        coef->x.a[i] =
+            (N[3][i] * v4->x) + ((N[2][i] * v3->x) + ((v1->x * N[0][i]) + (N[1][i] * v2->x)));
+        coef->y.a[i] =
+            (N[3][i] * v4->y) + ((N[2][i] * v3->y) + ((v1->y * N[0][i]) + (N[1][i] * v2->y)));
+        coef->z.a[i] =
+            (N[3][i] * v4->z) + ((N[2][i] * v3->z) + ((v1->z * N[0][i]) + (N[1][i] * v2->z)));
     }
 }
 
@@ -328,58 +285,50 @@ void CoefToUnity3(xCoef3* coef1, xCoef3* coef2, F32 f1, F32 f2)
 
 void BasisBspline(F32 (*N)[4], F32* t)
 {
-    U32 i;
     U32 k;
+    U32 i;
     U32 c;
-    F32 d1;
     F32 d2;
+    F32 d1;
 
-    N[0][3] = 0.0;
-    N[1][3] = 0.0;
-    N[2][3] = 0.0;
-    N[3][3] = 1.0;
-    N[4][3] = 0.0;
-    N[5][3] = 0.0;
-    N[6][3] = 0.0;
+    N[0][3] = 0.0f;
+    N[1][3] = 0.0f;
+    N[2][3] = 0.0f;
+    N[3][3] = 1.0f;
+    N[4][3] = 0.0f;
+    N[5][3] = 0.0f;
+    N[6][3] = 0.0f;
 
-    F32* Ntemp;
-    Ntemp = 0;
-
-    for (i = 2; i < 5; i += 1)
+    for (i = 2; i <= 4; i++)
     {
-        if (i != 0)
+        for (k = 0; k < 8 - i; k++)
         {
-            for (k = 0; k < 8; k += 1)
+            F32 Ntemp[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+            d2 = t[k + i - 1] - t[k];
+            if (d2 != 0.0f)
             {
-                d2 = t[k + i - 1] - *t;
-                if (d2 != 0.0)
-                {
-                    d2 = 1.0 / d2;
-                }
-                d1 = t[k + i] - t[1];
-                if (d1 != 0.0)
-                {
-                    d1 = 1.0 / d1;
-                }
-                if (i > 1)
-                {
-                    Ntemp = Ntemp - i;
-                    for (c = 0; c < 4; c += 1)
-                    {
-                        *Ntemp = *Ntemp + d1 * t[k + i] * *(Ntemp + 4) + d2 * -*t * *Ntemp;
-                        Ntemp = Ntemp + 1;
-                    }
-                }
-                (*N)[0] = Ntemp[0];
-                (*N)[1] = Ntemp[1];
-                (*N)[2] = Ntemp[2];
-                (*N)[3] = Ntemp[3];
-                t += 1;
-                N += 1;
+                d2 = 1.0f / d2;
             }
+
+            d1 = t[k + i] - t[k + 1];
+            if (d1 != 0.0f)
+            {
+                d1 = 1.0f / d1;
+            }
+
+            for (c = 5 - i; c <= 3; c++)
+            {
+                Ntemp[c - 1] += d2 * N[k][c] - d1 * N[k + 1][c];
+                Ntemp[c] += d2 * (-t[k] * N[k][c]) + d1 * (t[k + i] * N[k + 1][c]);
+            }
+
+            N[k][0] = Ntemp[0];
+            N[k][1] = Ntemp[1];
+            N[k][2] = Ntemp[2];
+            N[k][3] = Ntemp[3];
         }
     }
-    return;
 }
 
 F32 ClampBspline(xSpline3* spl, F32 u)
@@ -735,34 +684,21 @@ xSpline3* AllocSpline3(xVec3* points, F32* time, U32 numpoints, U32 numalloc, U3
 xSpline3* xSpline3_Bezier(xVec3* points, F32* time, U32 numpoints, U32 numalloc, xVec3* p1,
                           xVec3* p2)
 {
-    U32 i;
     xSpline3* spl;
-    xVec3* p1_temp;
-    xVec3* p2_temp;
-    S32 p1_inc;
-    S32 p2_inc;
+    U32 i;
 
     spl = AllocSpline3(points, time, numpoints, numalloc, 0U, 3U);
-    spl->p12 = (xVec3*)xMemAlloc(gActiveHeap, spl->allocN * 2 * 0xC, 0);
+    spl->p12 = (xVec3*)xMemAlloc(gActiveHeap, sizeof(xVec3) * (spl->allocN * 2), 0);
     if ((p1 == NULL) || (p2 == NULL))
     {
         xSpline3_Catmullize(spl);
     }
     else
     {
-        p1_temp = p1;
-        p2_temp = p2;
-        p1_inc = 0;
-        p2_inc = 0xC;
-
         for (i = 0; i < spl->N; i += 1)
         {
-            spl->p12 = p1_temp + p1_inc;
-            spl->p12 = p2_temp + p2_inc;
-            p1_temp += 0xC;
-            p2_temp += 0xC;
-            p1_inc += 0x18;
-            p2_inc += 0x18;
+            spl->p12[2 * i] = p1[i];
+            spl->p12[2 * i + 1] = p2[i];
         }
     }
     return spl;
