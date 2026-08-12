@@ -21,11 +21,12 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now (2026-08-12) |
 |---|---|---|
-| matched functions | 6491 / 10147 | 7814 / 10147 |
+| matched functions | 6491 / 10147 | 7815 / 10147 |
 | fuzzy match | 57.343% | 76.025% |
-| complete units | 195 / 543 | 223 / 543 |
-| **game code exact** | — | **59.613%** (bytes) |
-| **game code fuzzy** | — | **94.775%** (6656 / 7673 functions) |
+| complete units | 195 / 543 | 224 / 543 |
+| **game code exact** | — | **59.703%** (bytes) |
+| **game code fuzzy** | — | **94.776%** (6657 / 7673 functions) |
+| **game units linked** | — | **88 / 224** |
 
 Game code is tracked separately because it is the part that is actually
 being worked, and the project figure understates it badly: Renderware and
@@ -46,9 +47,25 @@ flattering one is the least useful:
 
 | measure | value | what it means |
 |---|---|---|
-| functions exact | 86.75% (6656/7673) | flatters: unmatched functions average 654 b, matched ones 146 b |
-| **bytes exact** | **59.61%** | the honest headline |
-| units fully matching | 87 / 221 | what a port actually needs — one bad function poisons a unit |
+| functions exact | 86.76% (6657/7673) | flatters: unmatched functions average 654 b, matched ones 146 b |
+| **bytes exact** | **59.70%** | the honest headline |
+| units linked | 88 / 224 | what a port actually needs — one bad function poisons a unit |
+
+**A fourth number, and it is the one that bites: `complete_units` counts
+`Object(Matching, ...)` markers in `configure.py`, not units that reach 100% in
+`report.json`.** On 2026-08-12 `zMenu` hit 14/14 functions at 100.0 with
+`report.json` scoring **100.0 on every section, code and data** — and a real
+link still moved the DOL, because `.sbss` is laid out in declaration order and
+ours was `menu_fmv_played, card, sInMenu, corruptFileCount, time_last,
+time_current, sAttractMode_timer` against the target's `menu_fmv_played,
+time_last, time_current, sAttractMode_timer, card, sInMenu, corruptFileCount`.
+Reordering three declarations fixed it and the unit linked.
+
+So finishing a unit's functions is **necessary but not sufficient**. The closing
+sequence is always: `tools/symorder.py <unit>` until it says "every section
+matches the target's symbol order", then `tools/fliptest.py --test <unit>`, then
+`--apply`, then a real `ninja` with the DOL sha1 checked. Skipping it means the
+work does not count where it matters.
 
 Note the gap between game fuzzy (91.07%) and game `matched_code`
 (~55%). That is the near-miss effect, and a large and growing share of it
@@ -140,12 +157,42 @@ order of everything below:
 Clearing every unit 1-3 away costs ~118 functions and takes fully-matching
 units **87 -> 145**. Nothing else has that leverage, because a unit only
 becomes `Matching` — the DOL linking *our* code — when every function in it is
-exact. Order: the 24 one-away units first (11 of them blocked by a single
-function already above 99%: `iPad` 99.890, `zCollGeom` 99.770, `xEntMotion`
-99.694, `zMenu` 99.622, `zEntButton` 99.619, `iAnim` 99.581, `zNPCTypeBoss`
-99.565, `zAnimList` 99.488, `zTaxi` 99.381, `xMovePoint` 99.333, `zCombo`
-99.175), then the 13 harder ones, then 2-away (18 units), then 3-away (16).
-Batch ~4 small units per agent; they share idioms.
+exact. Order: the 24 one-away units first, then the 13 harder ones, then 2-away
+(18 units), then 3-away (16). Batch ~4 small units per agent; they share idioms.
+
+**Measured correction (2026-08-12, batch 1 of 8 one-away units): the ordering
+above is inverted, and the yield is far lower than "~118 functions" implies.**
+Eight of the eleven units whose single blocker was *already above 99%* were
+attempted. **One converted** (`zMenu`, and only after the `.sbss` reorder
+above). The other seven were all compiler-class and unreachable from source:
+
+| unit | blocker | class |
+|---|---|---|
+| `zMenu` 99.622 | `zMenuLoop` | **fixed** — volatile static read into a local |
+| `iPad` 99.883 | `iPadUpdate` | SCHED — two adjacent independent `lis` swapped |
+| `zCollGeom` 99.770 | `zCollGeom_Init` | operand canonicalisation; 12 shapes measured |
+| `xEntMotion` 99.694 | `xEntMotionDebugDraw` | REGS — allocator tie-break |
+| `zEntButton` 99.429 | `zEntButton_Init` | SCHED — rotation of four `addi` |
+| `iAnim` 99.581 | `iAnimBlend` | REGS — copy base coalesced r21 vs r12 |
+| `zNPCTypeBoss` 99.565 | `ZNPC_AnimTable_BossSBobbyArm` | REGS — r4/r5 on a 2-word `@sda21` copy |
+| `zAnimList` 99.488 | `zAnimListInit` | 2b reload-after-store |
+
+**The lesson is that a tiny residual is evidence *against* source-reachability,
+not for it.** A function 2-3 instructions out has usually already had its shape
+solved by whoever left it there; what remains is the allocator or the scheduler.
+So work the one-away units in *ascending* percentage — the 13 sitting at 84-98%
+(`xHudFontMeter` 84.6, `zGoo` 90.7, `xClimate` 92.4, `zEGenerator` 92.4,
+`zUIFont` 93.3, `zGameState` 94.9, `zTextBox` 94.9, `iMorph` 94.6, `xSkyDome`
+96.5, `xNPCBasic` 98.6, `xstransvc` 98.6, `iTRC` 98.5) are where real source
+bugs still live. Skip `xSFX` 72.9 — see "Will this reach 100%?".
+
+Three of the seven have **provably identical instruction multisets**, so they
+are exactly the population a scheduler/allocator patch converts. Best test case
+on the board: the two-word `@sda21` aggregate copy adjacent to a call taking two
+null arguments, with three witnesses (`ZNPC_AnimTable_BossSBobbyArm` 99.565,
+`ZNPC_AnimTable_NightLight` 99.545, `ZNPC_AnimTable_Tubelet` 99.583) against two
+controls that match at 100.0 because they address a three-word table with
+`lis/addi` (`ZNPC_AnimTable_SleepyTime`, `ZNPC_AnimTable_BossSB1`).
 
 **Verify completeness with `tools/symorder.py`, not `report.json`.** It scored
 `zSurface` 28/28 while `solo.py` had a function at 99.733% and our object
@@ -170,6 +217,59 @@ deadstripped function can be *named* there, its real body is recoverable and
 the problem dissolves honestly. Highest-value investigation on the board and
 not yet run against this question.
 
+**RUN 2026-08-12. Repriced: 2a is worth ZERO `matched_functions`, because
+`report.json` is blind to literal-pool displacement.** Across the game units,
+545 functions differ *only* by a relocation whose target symbol name differs in
+the compiler-assigned `@NNN` id — and **all 545 already read exactly 100.0 in
+`report.json`**. Verified directly on `zNPCFXCinematic`: `solo.py`/objdiff says
+30 non-matching of 93, `report.json` says 16 of 93, and the delta is exactly the
+14 pool-only functions. `NCIN_MaryBoom` measures 99.894% under objdiff and
+**100.0000** in `report.json`; `report.json` scores that unit's `.sdata2` 100.0
+while the target section is 0xc0 bytes and ours is 0xb8.
+
+This also resolves the standing "`solo.py` and `report.json` disagree and both
+are right" puzzle — **the delta *is* the pool bucket.**
+
+So: **price pool work in units linked, never in `matched_functions`.** The
+honest price of 2a is **9 units, 0 functions** — 9 of the units that are 1-3
+report-functions from complete carry ≥1 pool-only function and will therefore
+fail `fliptest` even at `report.json` 100%: `zDiscoFloor` (14), `iMath3` (7),
+`xClimate` (4), `xHudMeter` (3), and `xTRC`, `xCM`, `zAssetTypes`, `iCamera`,
+`iScrFX` (1 each). 52 game units carry at least one.
+
+**And `dwarf/` does not help the two units 2a was priced on.** A sweep of all
+198 `dwarf/` files that map to a unit with a target object found 29 dwarf-only
+function definitions across 13 units (22 of 24 checked are absent from
+`config/GQPE78/symbols.txt`, i.e. from the whole retail DOL) — but
+`zNPCFXCinematic` (77 dwarf defs) and `zNPCTypeDutchman` (98) have **zero**.
+Point `dwarf/` at the 13 units that do: best are `zDiscoFloor` (3 away, 14
+pool-only, names `clip_render`, `sphere_hits_screen`, `compare_buckets`,
+`insert_atomic`) and `xTRC` (small, 3 away, `DisplayMessage`,
+`pad_message_valid`). Caveats: absent-from-DOL has three causes (deadstripped,
+GC-inlined, PS2-only — `xShadowReceiveShadowFastPS2` and `strtosjis` are plainly
+the third), and `dwarf/` is DWARF from a *linked* PS2 ELF, so anything the PS2
+linker also dropped is invisible there too.
+
+**Two framing errors corrected.** A name-based orphan scan is mostly false
+positives: CodeWarrior materialises one `.rodata` section base and addresses
+later constants by displacement, so in `zNPCFXCinematic` the "orphans" at
+`+0x170`/`+0x17c`/`+0x188` are all reached by `NCIN_SleepyLamp_AR` off a single
+`@405` base pair. `zVar` has 18 `.rodata` objects with 2 named; `zNPCHazard` 53
+with 14. Treat the project-wide name-based count of 323 as an upper bound, not a
+population. Second, the eleven-ghost-template id range is **not** stable across
+units (`@612`-`@618` here, `_617`-`_623` in `zVar`), so the "shared range is the
+clue" lead below is wrong. `zNPCFXCinematic`'s actual defect is pool *ordering*,
+not orphans: both pools hold the same 40 objects with the same values, but the
+target creates `3.0f` and the u32→double magic at `+0x18`/`+0x20` ahead of
+`3.141593` while we create them at `+0x60`/`+0x80`, and the unit has no stubs
+and no MISSING functions left, so no unwritten body can explain it.
+
+One genuine orphan does remain there: `@1756` = `(0.25f, 0.0f, 0.0f)`, 12 bytes,
+whose id places its owner between `NCIN_SleepyDRay_AR` and `NCIN_FodProd_Upd` —
+so one of `MaryBoom`, `PeteBonk`, `FireSpiral_Upd`, `FireSpiral_AR`,
+`ShieldPop`, `OilHazard` should declare a 12-byte aggregate initialiser with
+that value. Four of the six are 88-99%.
+
 **2b. The reload-after-aliasing-store defect.** Retail's `mwcceppc` reloads a
 value after a possibly-aliasing store; this branch's compiler forwards it.
 Eight witnesses, one rule, and no source form reaches it short of `volatile`,
@@ -183,10 +283,16 @@ instantiations the retail link dropped, blocking `xModel`, `xParSys`,
 
 ### Phase 3 — the near-miss sweep (~185 functions)
 
-Cheap per function, but **run it after 2a**. A large share of the 185 are
-pool-shift victims no source edit can fix, and running it first means agents
-rediscovering the same blocker unit by unit — which is exactly what happened
-twice in the 2026-08-12 batch.
+~~Cheap per function, but **run it after 2a**. A large share of the 185 are
+pool-shift victims no source edit can fix.~~
+
+**Corrected 2026-08-12: Phase 3 does not depend on 2a and can run now.** Pool
+victims already read 100.0 in `report.json`, so by construction *none* of the
+185 near-misses is a pool-shift victim — they are a disjoint population. What the
+batch-1 measurement does say is that the near-miss pool is much thinner than 185
+suggests: 7 of the 8 near-misses attempted were REGS/SCHED/2b and unreachable
+from source. Triage by class before assigning, and expect a low hit rate at the
+top of the percentage range.
 
 ### Phase 4 — the long tail (30 units, 623 functions, 410,192 b)
 
@@ -689,6 +795,25 @@ nobody ever defined - `xVec3::create`, unary `operator-`, `safe_normal`,
 target they are weak per-TU symbols, so defining them inline in the header
 makes them appear everywhere they are used at once. Cheap, and it also removes
 unresolved externs.
+
+**`xVec2::create` is now diagnosed exactly** (2026-08-12, second independent
+derivation). Mapping every `.sbss2` object in the `zNPCTypeDutchman` target to
+its referencing function pins the one we are missing: `@512` at `+0x000`, an
+8-byte all-zero template owned by `create__5xVec2Fff`. The target body loads that
+template, stores it to the frame, overwrites both words with `f1`/`f2`, and
+reloads — so `src/SB/Core/x/xMath2.h:75` should read `xVec2 v = { 0.0f, 0.0f };`,
+not `xVec2 v;`. Ours sits at **63.636%**, and target `.sbss2` is 19 objects
+(0x98) against our 18 (0x90). `create__5xVec2Fff` is emitted in exactly one
+target object project-wide, so the *symbol* blast radius is one unit — but the
+parse-time `.sbss2` template risk is header-wide and must be swept.
+
+Related, from the same sweep: only 31 units have `.sbss2` at all and 14 disagree
+in size — short by 8 in `xCutscene, xScene, rpptank, zScene, zNPCTypePrawn,
+zNPCTypeBossPlankton, zNPCTypeDutchman`, short by 4 in `iTRC, zDispatcher,
+zEntPlayerBungeeState, zEntPlayerOOBState, zMenu, zGame, zMain`, long by 8 in
+`zAssetTypes, zNPCTypeSubBoss, zNPCTypeCommon, zNPCGoals`. Note `zDispatcher` is
+now 4 bytes **short**, not long — the sign flipped after the `xGrid.h` fix
+(`134129c2`), so the `ZDSP_elcb_event` note in Open leads is stale.
 
 Still unwritten in this class, worth doing next: `basic_rect<F32>` accessors,
 `xSCurve`, `xQuickCullForSphere`, and `auto_tweak::load_param<T1,T2>` (that
