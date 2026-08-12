@@ -2780,7 +2780,7 @@ void zNPCDutchman::render_halo()
     mat.pos.y += tweak.halo.yoffset;
 }
 
-U8 zNPCDutchman::turning(F32 dt) const
+inline U8 zNPCDutchman::turning(F32 dt) const
 {
     U8 result = 0;
     xVec2 facing = { 0.0f, 0.0f };
