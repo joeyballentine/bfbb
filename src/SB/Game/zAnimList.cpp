@@ -22,14 +22,24 @@ U32 AlwaysConditional(xAnimTransition*, xAnimSingle*, void*)
     return 1;
 }
 
-// Equivalent
-// Mostly an issue of scheduling.
+// Equivalent. Blocked on the reload-after-store compiler defect, not on shape.
+// The target does `stw r3, nals; lwz r0, nals; cmpwi r0, 0` and then reuses that
+// reloaded r0 for `slwi r4, r0, 2`; our compiler forwards the stored value, so it
+// needs an extra `mr r4, r3` and shifts the forwarded copy instead. Measured:
+// plain `if (nals == 0)` gives 98.581% (four differing lines); the volatile read
+// below gives 99.488% (the load reappears, but volatile forbids CSE-ing it into
+// the shift, so the copy stays). Binding the volatile read to a local folds the
+// load away again and drops back to 98.581%. Also measured and rejected: a
+// volatile *store* to nals, and reading through a `S32* pnals = &nals` (both
+// 98.581% -- the store forwards anyway / the pointer is constant-propagated).
+// No source form reaches 100%.
 void zAnimListInit()
 {
     // ALST = Animation list https://battlepedia.org/ALST
     nals = xSTAssetCountByType('ALST'); // 0x414C5354
     // The volatile read is a matching device: the original reloads nals here
-    // instead of reusing the just-stored value.
+    // instead of reusing the just-stored value. It does not reach a byte-exact
+    // match on its own -- see the comment above zAnimListInit.
     if (*(volatile S32*)&nals == 0)
     {
         return;

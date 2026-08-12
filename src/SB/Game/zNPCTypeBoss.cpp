@@ -177,7 +177,11 @@ xAnimTable* ZNPC_AnimTable_BossSBobbyArm()
 
     S32 ourAnims[2] = { 1, 0 };
 
-    // Nearly identical, save for a redundant r5 load being skipped.
+    // REGS: the 8-byte copy of ourAnims takes r5 in the target and r4 here, so the
+    // two `li 0` argument constants come out in the opposite order. Instruction for
+    // instruction identical otherwise. The same permutation appears in
+    // ZNPC_AnimTable_NightLight and ZNPC_AnimTable_Tubelet, which are written in a
+    // different source shape, so it is not reachable from here.
     table = xAnimTableNew("zNPCBBobbyArm", NULL, 0);
 
     xAnimTableNewState(table, g_strz_bossanim[1], 0x10, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,

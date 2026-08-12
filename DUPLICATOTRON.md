@@ -751,6 +751,12 @@ be revisited if they ever block something:
 - `SysEvent` uses `switch ((S32)toEvent)` purely as a shape hack.
 - `ShadowLight` / `ShadowCamera` / `ShadowCameraRaster` are declared
   `volatile` as a matching device, not because they are.
+- `zAnimListInit` reads `nals` through `*(volatile S32*)&nals` as a matching
+  device. `nals` is not volatile in retail — the target simply reloads it after
+  the store (the 2b defect). The cast buys fuzzy 98.581 -> 99.488 and **zero**
+  matched functions, because volatile then forbids CSE-ing the reload into the
+  following `slwi`, so the two residuals are mutually exclusive from source.
+  Kept only because removing it costs fuzzy for nothing; it is not evidence.
 - The bone index `21` in Plankton's `aim_gun` is a literal.
 
 Note `tools/solo.py` parses `build.ninja`, which has two rule layouts: the source
