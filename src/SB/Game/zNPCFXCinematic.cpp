@@ -55,7 +55,7 @@ xVec3* SMOOTH(F32 t, xVec3* dst, const xVec3* a, const xVec3* b);
 void EmitFreezeBreath(xVec3* pos, xVec3* vel, F32 dt, F32 elapsed, F32 total);
 void NPAR_EmitTubeSpiralCin(const xVec3* pos, const xVec3* vel, F32 dt);
 
-void NCIN_Par_BPLANK_JET_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_Par_BPLANK_JET_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -91,7 +91,7 @@ void NCIN_Par_BPLANK_JET_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit
     }
 }
 
-void NCIN_Par_BPLANK_JET_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_Par_BPLANK_JET_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -127,7 +127,7 @@ void NCIN_Par_BPLANK_JET_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit
     }
 }
 
-void NCIN_Par_BPLANK_SBB_FLAMES_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_Par_BPLANK_SBB_FLAMES_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -163,7 +163,7 @@ void NCIN_Par_BPLANK_SBB_FLAMES_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32
     }
 }
 
-void NCIN_Par_BPLANK_SBB_FLAMES_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_Par_BPLANK_SBB_FLAMES_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -199,7 +199,7 @@ void NCIN_Par_BPLANK_SBB_FLAMES_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32
     }
 }
 
-void NCIN_Par_BPLANK_SBB_JET_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_Par_BPLANK_SBB_JET_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -235,7 +235,7 @@ void NCIN_Par_BPLANK_SBB_JET_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 ki
     }
 }
 
-void NCIN_Par_BPLANK_SBB_JET_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_Par_BPLANK_SBB_JET_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -271,7 +271,7 @@ void NCIN_Par_BPLANK_SBB_JET_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 ki
     }
 }
 
-void NCIN_Par_BPLANK_SBB_SMOKE_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_Par_BPLANK_SBB_SMOKE_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -307,7 +307,7 @@ void NCIN_Par_BPLANK_SBB_SMOKE_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 
     }
 }
 
-void NCIN_Par_BPLANK_SBB_SMOKE_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_Par_BPLANK_SBB_SMOKE_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -343,7 +343,7 @@ void NCIN_Par_BPLANK_SBB_SMOKE_2_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 
     }
 }
 
-void NCIN_Par_CIN_BIGDUP_SMOKE_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_Par_CIN_BIGDUP_SMOKE_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -353,7 +353,7 @@ void NCIN_Par_CIN_BIGDUP_SMOKE_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 ki
 
     if (fxrec->flg_stat & 2)
     {
-        fxrec->fxdata.pardata.emitter = zParEmitterFind("PAREMIT_CIN_BIGUP_SMOKE");
+        fxrec->fxdata.pardata.emitter = zParEmitterFind("PAREMIT_CIN_BIGDUP_SMOKE");
 
         xParEmitterAsset* a = fxrec->fxdata.pardata.emitter->tasset;
 
@@ -379,7 +379,7 @@ void NCIN_Par_CIN_BIGDUP_SMOKE_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 ki
     }
 }
 
-void NCIN_Par_CIN_BIGDUP_SPAWN_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_Par_CIN_BIGDUP_SPAWN_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -389,7 +389,7 @@ void NCIN_Par_CIN_BIGDUP_SPAWN_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 ki
 
     if (fxrec->flg_stat & 2)
     {
-        fxrec->fxdata.pardata.emitter = zParEmitterFind("PAREMIT_CIN_BIGUP_SPAWN");
+        fxrec->fxdata.pardata.emitter = zParEmitterFind("PAREMIT_CIN_BIGDUP_SPAWN");
 
         xParEmitterAsset* a = fxrec->fxdata.pardata.emitter->tasset;
 
@@ -415,7 +415,7 @@ void NCIN_Par_CIN_BIGDUP_SPAWN_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 ki
     }
 }
 
-void NCIN_Par_CIN_PLATFORM_JETS_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_Par_CIN_PLATFORM_JETS_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -525,11 +525,1217 @@ void zNPCFXShutdown()
 {
 }
 
-// TODO: needs g_cutmap and the per-cutscene NCINEntry tables, which do not
-// exist in this translation unit yet.
+struct NCINCutMap
+{
+    const char* csn_name;
+    NCINEntry* fxtab;
+    U32 hash_name;
+};
+
+typedef void (*NCINUpdCB)(zCutsceneMgr*, NCINEntry*, U32);
+typedef void (*NCINAnimCB)(zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+
+static void NCIN_ArfDogBoom(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_B101Shockwave_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_B201HideBelt_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_BombTrail_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_BoneTrail_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_BubHit(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_BubSlam(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_BubWipe(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_BubbleTrail_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_FireSpiral_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_FodProdBone_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_FodProd_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_FreezeBreath_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_Generic_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_GloveShrapnel_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_GooLever_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_HammerShock(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_HammerStreak_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_HazProjShoot(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_HazTTSteam_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_HookRecoil_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_Lightnin2Bones_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_LightninBone_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_MaryBoom(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_MidFish_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_OilHazard(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_Par_BPLANK_JET_1_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_Par_BPLANK_JET_2_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_Par_BPLANK_SBB_FLAMES_1_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_Par_BPLANK_SBB_FLAMES_2_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_Par_BPLANK_SBB_JET_1_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_Par_BPLANK_SBB_JET_2_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_Par_BPLANK_SBB_SMOKE_1_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_Par_BPLANK_SBB_SMOKE_2_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_Par_CIN_BIGDUP_SMOKE_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_Par_CIN_BIGDUP_SPAWN_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_Par_CIN_PLATFORM_JETS_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_PatBossShrapnel_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_PeteBonk(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_SBBNode_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_ShieldPop(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_SleepyDRay_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_SleepyLamp_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_SpatGlow_Upd(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_WaterSplash(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_Zapper(const zCutsceneMgr*, NCINEntry*, S32);
+static void NCIN_BombTrail_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_BoneTrail_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_BubTrailBone_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_BubbleTrail_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_EntityBonePar_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_FireSpiral_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_FodProdBone_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_FodProd_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_FreezeBreath_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_GloveShrapnel_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_GooLever_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_HammerStreak_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_HazTTSteam_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_HookRecoil_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_Lightnin2Bones_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_LightninBone_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_MidFish_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_PatBossShrapnel_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_SBBNode_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_SleepyDRay_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_SleepyLamp_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_SpatGlow_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+static void NCIN_TTGunSmoke_AR(const zCutsceneMgr*, NCINEntry*, RpAtomic*, RwMatrixTag*, U32, U32);
+
+static NCINEntry g_JF01_cin_fodder[7] = {
+    { NCIN_FXTYP_JELLYLIGHT_01, (NCINUpdCB)NCIN_Zapper,
+      NULL, NULL, 15.633334f, 15.966667f,
+      { { 21.693f, 2.663f, 74.889f }, { 22.186f, 1.863f, 74.348f } },
+      { { 21.693f, 2.663f, 74.889f }, { 22.186f, 1.863f, 74.348f } },
+      (S8*)"JELLYLIGHT_01 a", 0, 0, 0 },
+    { NCIN_FXTYP_JELLYLIGHT_01, (NCINUpdCB)NCIN_Zapper,
+      NULL, NULL, 15.633334f, 15.966667f,
+      { { 21.693f, 2.663f, 74.889f }, { 22.039f, 1.863f, 74.628f } },
+      { { 21.693f, 2.663f, 74.889f }, { 22.039f, 1.863f, 74.628f } },
+      (S8*)"JELLYLIGHT_01 b", 0, 0, 0 },
+    { NCIN_FXTYP_JELLYLIGHT_01, (NCINUpdCB)NCIN_Zapper,
+      NULL, NULL, 15.633334f, 15.966667f,
+      { { 21.693f, 2.663f, 74.889f }, { 22.157f, 1.863f, 74.995f } },
+      { { 21.693f, 2.663f, 74.889f }, { 22.157f, 1.863f, 74.995f } },
+      (S8*)"JELLYLIGHT_01 c", 0, 0, 0 },
+    { NCIN_FXTYP_BUBSLAM_LG, (NCINUpdCB)NCIN_BubSlam,
+      NULL, NULL, 17.166668f, 17.2f,
+      { { 27.262f, 3.154f, 88.222f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"BUBSLAM_LG", 0, 0, 0 },
+    { NCIN_FXTYP_FODDERPROD, (NCINUpdCB)NCIN_FodProd_Upd,
+      (NCINAnimCB)NCIN_FodProd_AR, NULL, 1.8333334f, 6.166667f,
+      { { 27.893f, 3.949f, 89.272f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"FODDERPROD a", 0, 0, 0 },
+    { NCIN_FXTYP_FODDERPROD, (NCINUpdCB)NCIN_FodProd_Upd,
+      (NCINAnimCB)NCIN_FodProd_AR, NULL, 18.666668f, 19.666668f,
+      { { 27.893f, 3.949f, 89.272f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"FODDERPROD b", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_JF01_cin_hammer[8] = {
+    { NCIN_FXTYP_HAMSHOCK, (NCINUpdCB)NCIN_HammerShock,
+      NULL, NULL, 1.5666667f, 1.6666667f,
+      { { 11.586f, 16.481f, -59.963f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"HAMSHOCK", 0, 0, 0 },
+    { NCIN_FXTYP_BUBSLAM_LG, (NCINUpdCB)NCIN_BubSlam,
+      NULL, NULL, 1.7f, 1.8000001f,
+      { { 11.586f, 16.181f, -59.963f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"BUBSLAM_LG", 0, 0, 0 },
+    { NCIN_FXTYP_HAMSTREAK, (NCINUpdCB)NCIN_HammerStreak_Upd,
+      (NCINAnimCB)NCIN_HammerStreak_AR, NULL, 1.2333333f, 2.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"HAMSTREAK a", 0, 0, 0 },
+    { NCIN_FXTYP_HAMSTREAK, (NCINUpdCB)NCIN_HammerStreak_Upd,
+      (NCINAnimCB)NCIN_HammerStreak_AR, NULL, 2.3333335f, 3.3333335f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"HAMSTREAK b", 0, 0, 0 },
+    { NCIN_FXTYP_HAMSTREAK, (NCINUpdCB)NCIN_HammerStreak_Upd,
+      (NCINAnimCB)NCIN_HammerStreak_AR, NULL, 3.5666668f, 3.9333336f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"HAMSTREAK c", 0, 0, 0 },
+    { NCIN_FXTYP_BUBSLAM_SM, (NCINUpdCB)NCIN_BubSlam,
+      NULL, NULL, 8.900001f, 9.0f,
+      { { 12.604f, 17.0f, -58.185f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"BUBSLAM_SM a", 0, 0, 0 },
+    { NCIN_FXTYP_BUBSLAM_SM, (NCINUpdCB)NCIN_BubSlam,
+      NULL, NULL, 9.566668f, 9.666667f,
+      { { 12.604f, 16.4f, -58.185f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"BUBSLAM_SM b", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_JF03_cin_tartar[10] = {
+    { NCIN_FXTYP_TARTARSHOOT, (NCINUpdCB)NCIN_HazProjShoot,
+      NULL, NULL, 12.6f, 12.833334f,
+      { { -9.294f, 2.176f, 73.936f }, { -6.553f, 2.284f, 74.638f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"TARTARSHOOT a", 0, 0, 0 },
+    { NCIN_FXTYP_TARTARSHOOT, (NCINUpdCB)NCIN_HazProjShoot,
+      NULL, NULL, 12.933334f, 13.166667f,
+      { { -9.181f, 2.236f, 73.556f }, { -6.357f, 2.25f, 73.469f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"TARTARSHOOT b", 0, 0, 0 },
+    { NCIN_FXTYP_TARTARSHOOT, (NCINUpdCB)NCIN_HazProjShoot,
+      NULL, NULL, 13.200001f, 13.366668f,
+      { { -9.286f, 2.214f, 72.854f }, { -6.942f, 2.164f, 70.731f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"TARTARSHOOT c", 0, 0, 0 },
+    { NCIN_FXTYP_TARTARSHOOT, (NCINUpdCB)NCIN_HazProjShoot,
+      NULL, NULL, 13.900001f, 14.066668f,
+      { { -14.262f, 1.952f, 75.581f }, { -5.214f, 2.273f, 75.341f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"TARTARSHOOT d", 0, 0, 0 },
+    { NCIN_FXTYP_TARTARSHOOT, (NCINUpdCB)NCIN_HazProjShoot,
+      NULL, NULL, 14.566668f, 14.800001f,
+      { { -14.262f, 1.952f, 75.581f }, { -5.044f, 2.272f, 73.945f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"TARTARSHOOT e", 0, 0, 0 },
+    { NCIN_FXTYP_TARTARSHOOT, (NCINUpdCB)NCIN_HazProjShoot,
+      NULL, NULL, 15.1f, 15.300001f,
+      { { -14.262f, 2.1952f, 75.581f }, { -5.226f, 2.272f, 72.566f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"TARTARSHOOT f", 0, 0, 0 },
+    { NCIN_FXTYP_TARTARSTEAM, (NCINUpdCB)NCIN_HazTTSteam_Upd,
+      (NCINAnimCB)NCIN_HazTTSteam_AR, NULL, 14.000001f, 20.833334f,
+      { { 0.0f, 1.0f, 0.0f }, { 4.1f, 0.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"TARTARSTEAM A", 0, 0, 0 },
+    { NCIN_FXTYP_TARTARSTEAM, (NCINUpdCB)NCIN_HazTTSteam_Upd,
+      (NCINAnimCB)NCIN_HazTTSteam_AR, NULL, 19.333334f, 20.833334f,
+      { { 0.0f, 1.0f, 0.0f }, { 3.1f, 0.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"TARTARSTEAM B", 0, 0, 0 },
+    { NCIN_FXTYP_TTGUNSMOKE, (NCINUpdCB)NCIN_Generic_Upd,
+      (NCINAnimCB)NCIN_TTGunSmoke_AR, NULL, 21.333334f, 23.2f,
+      { { 0.0f, 0.0f, 0.7f }, { 0.1f, 19.1f, 0.0f } },
+      { { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"TARTARGUNSMOKE A", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_BB01_cin_glove[6] = {
+    { NCIN_FXTYP_BUBSLAM_LG, (NCINUpdCB)NCIN_BubSlam,
+      NULL, NULL, 17.0f, 17.166668f,
+      { { -36.396f, 0.016f, -34.518f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"BUBSLAM_LG a", 0, 0, 0 },
+    { NCIN_FXTYP_BUBSLAM_LG, (NCINUpdCB)NCIN_BubSlam,
+      NULL, NULL, 17.0f, 17.166668f,
+      { { -36.396f, 0.266f, -34.518f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"BUBSLAM_LG b", 0, 0, 0 },
+    { NCIN_FXTYP_BUBSLAM_LG, (NCINUpdCB)NCIN_BubSlam,
+      NULL, NULL, 17.0f, 17.166668f,
+      { { -36.396f, 0.616f, -34.518f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"BUBSLAM_LG c", 0, 0, 0 },
+    { NCIN_FXTYP_GLOVEFRAG, (NCINUpdCB)NCIN_GloveShrapnel_Upd,
+      (NCINAnimCB)NCIN_GloveShrapnel_AR, NULL, 17.0f, 17.166668f,
+      { { 0.0f, 0.0f, 0.0f }, { 3.1f, 0.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"Glove Smash", 0, 0, 0 },
+    { NCIN_FXTYP_MIDFISH, (NCINUpdCB)NCIN_MidFish_Upd,
+      (NCINAnimCB)NCIN_MidFish_AR, NULL, 15.233335f, 17.2f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"MIDFISH", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_GL01_cin_monsoon[2] = {
+    { NCIN_FXTYP_MONCLOUD, (NCINUpdCB)NCIN_Zapper,
+      NULL, NULL, 16.366667f, 16.7f,
+      { { 213.488f, 9.0f, 32.119f }, { 213.488f, 6.619f, 32.119f } },
+      { { 213.488f, 9.0f, 32.119f }, { 213.488f, 6.619f, 32.119f } },
+      (S8*)"MONCLOUD", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_RB01_cin_sleepytime[3] = {
+    { NCIN_FXTYP_SLEEPYLAMP, (NCINUpdCB)NCIN_SleepyLamp_Upd,
+      (NCINAnimCB)NCIN_SleepyLamp_AR, NULL, 0.0f, 5.8333335f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"SLEEPYLAMP", 0, 0, 0 },
+    { NCIN_FXTYP_SLEEPYDRAY, (NCINUpdCB)NCIN_SleepyDRay_Upd,
+      (NCINAnimCB)NCIN_SleepyDRay_AR, NULL, 8.766667f, 9.500001f,
+      { { -20.968f, 0.985f, 10.83894f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"SLEEPYDRAY", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_BC01_cin_arfarf[9] = {
+    { NCIN_FXTYP_ARFDOGBOOM, (NCINUpdCB)NCIN_ArfDogBoom,
+      NULL, NULL, 7.3333335f, 8.333334f,
+      { { 22.008f, 2.894f, 8.802f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"ARFDOGBOOM a", 0, 0, 0 },
+    { NCIN_FXTYP_ARFDOGBOOM, (NCINUpdCB)NCIN_ArfDogBoom,
+      NULL, NULL, 12.6f, 13.1f,
+      { { 22.465f, 3.695f, 8.574f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"ARFDOGBOOM b", 0, 0, 0 },
+    { NCIN_FXTYP_ARFDOGBOOM, (NCINUpdCB)NCIN_ArfDogBoom,
+      NULL, NULL, 12.500001f, 13.333334f,
+      { { 22.665f, 3.224f, 9.5f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"ARFDOGBOOM c", 0, 0, 0 },
+    { NCIN_FXTYP_BONETRAIL, (NCINUpdCB)NCIN_BoneTrail_Upd,
+      (NCINAnimCB)NCIN_BoneTrail_AR, NULL, 13.933334f, 14.400001f,
+      { { 32.0f, 2.0f, 5.0f }, { 22.665f, 3.124f, 9.5f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"BONETRAIL", 0, 0, 0 },
+    { NCIN_FXTYP_HOOKRECOIL, (NCINUpdCB)NCIN_HookRecoil_Upd,
+      (NCINAnimCB)NCIN_HookRecoil_AR, NULL, 0.6666667f, 2.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"HOOKRECOIL a", 0, 0, 0 },
+    { NCIN_FXTYP_HOOKRECOIL, (NCINUpdCB)NCIN_HookRecoil_Upd,
+      (NCINAnimCB)NCIN_HookRecoil_AR, NULL, 14.333334f, 14.6f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"HOOKRECOIL b", 0, 0, 0 },
+    { NCIN_FXTYP_HOOKRECOIL, (NCINUpdCB)NCIN_HookRecoil_Upd,
+      (NCINAnimCB)NCIN_HookRecoil_AR, NULL, 16.833334f, 17.266668f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"HOOKRECOIL c", 0, 0, 0 },
+    { NCIN_FXTYP_BUBSLAM_SM, (NCINUpdCB)NCIN_BubSlam,
+      NULL, NULL, 14.266667f, 14.433334f,
+      { { 21.7136f, 4.1645f, 9.5129f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_BB01_cin_chuck[3] = {
+    { NCIN_FXTYP_WATERSPLASH, (NCINUpdCB)NCIN_WaterSplash,
+      NULL, NULL, 10.6f, 10.666667f,
+      { { 24.947f, -0.804f, 39.105f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"WATERSPLASH", 0, 0, 0 },
+    { NCIN_FXTYP_BOMBTRAIL, (NCINUpdCB)NCIN_BombTrail_Upd,
+      (NCINAnimCB)NCIN_BombTrail_AR, NULL, 4.8333335f, 10.666667f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"BOMBTRAIL", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_KF01_cin_tubelet[5] = {
+    { NCIN_FXTYP_FIRESPIRAL, (NCINUpdCB)NCIN_FireSpiral_Upd,
+      (NCINAnimCB)NCIN_FireSpiral_AR, NULL, 0.0f, 6.433334f,
+      { { -66.481f, 2.385f, 1.765f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"FIRESPIRAL", 0, 0, 0 },
+    { NCIN_FXTYP_PETEBONK, (NCINUpdCB)NCIN_PeteBonk,
+      NULL, NULL, 6.3f, 6.366667f,
+      { { -66.52f, 2.385f, 1.765f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"PETEBONK", 0, 0, 0 },
+    { NCIN_FXTYP_MARYBOOM, (NCINUpdCB)NCIN_MaryBoom,
+      NULL, NULL, 10.6f, 11.333334f,
+      { { -66.481f, 5.584f, 1.458f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"MARYBOOM", 0, 0, 0 },
+    { NCIN_FXTYP_BUBSLAM_LG, (NCINUpdCB)NCIN_BubSlam,
+      NULL, NULL, 16.1f, 16.166668f,
+      { { -68.625f, 1.334f, -1.131f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"BUBSLAM_LG", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_GY01_cin_slick[5] = {
+    { NCIN_FXTYP_SHIELDPOP, (NCINUpdCB)NCIN_ShieldPop,
+      NULL, NULL, 3.3333335f, 3.6666667f,
+      { { 4.8f, 11.2f, 3.7f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"SHIELDPOP", 0, 0, 0 },
+    { NCIN_FXTYP_OILSHOOT, (NCINUpdCB)NCIN_HazProjShoot,
+      NULL, NULL, 5.2000003f, 5.6000004f,
+      { { 4.8f, 12.5f, 3.7f }, { 8.64f, 9.411f, 1.659f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"OILSHOOT", 0, 0, 0 },
+    { NCIN_FXTYP_OILHAZARD, (NCINUpdCB)NCIN_OilHazard,
+      NULL, NULL, 5.566667f, 8.133334f,
+      { { 8.64f, 9.411f, 1.659f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"OILHAZARD", 0, 0, 0 },
+    { NCIN_FXTYP_BUBSLAM_SM, (NCINUpdCB)NCIN_BubSlam,
+      NULL, NULL, 9.266667f, 9.400001f,
+      { { 4.8f, 14.65f, 3.7f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"BUBSLAM_SM", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_GY01_cin_gy_open[2] = {
+    { NCIN_FXTYP_SPATULAGLOW, (NCINUpdCB)NCIN_SpatGlow_Upd,
+      (NCINAnimCB)NCIN_SpatGlow_AR, NULL, 6.666667f, 18.333334f,
+      { { 0.0f, 0.0f, 0.0f }, { 5.1f, 0.1f, 0.0f } },
+      { { 2.4e+02f, 235.0f, 224.0f }, { 128.0f, 2.0f, 0.0f } },
+      (S8*)"Spatula Glow", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_GY01_cin_gy_end[2] = {
+    { NCIN_FXTYP_SPATULAGLOW, (NCINUpdCB)NCIN_SpatGlow_Upd,
+      (NCINAnimCB)NCIN_SpatGlow_AR, NULL, 25.000002f, 28.333334f,
+      { { 0.0f, 0.0f, 0.0f }, { 3.1f, 0.1f, 0.0f } },
+      { { 2.4e+02f, 235.0f, 224.0f }, { 128.0f, 3.5f, 0.0f } },
+      (S8*)"Spatula Glow", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_B101_b1_open[4] = {
+    { NCIN_FXTYP_B101OPEN_SBENTER, (NCINUpdCB)NCIN_BubHit,
+      NULL, NULL, 1.5000001f, 2.25f,
+      { { 3.34f, 0.6f, 3.14f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"OPEN_SBENTER", 0, 0, 0 },
+    { NCIN_FXTYP_B101OPEN_PATENTER, (NCINUpdCB)NCIN_BubHit,
+      NULL, NULL, 1.8333334f, 2.3333335f,
+      { { 4.64f, 0.58f, 3.26f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"OPEN_PATENTER", 0, 0, 0 },
+    { NCIN_FXTYP_B101OPEN_SHOCKWAVE, (NCINUpdCB)NCIN_B101Shockwave_Upd,
+      NULL, NULL, 35.5f, 38.333336f,
+      { { 0.0f, -0.5f, -9.5f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"OPEN_LANDSHOCKWAVE", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_B101_b1_round2[4] = {
+    { NCIN_FXTYP_B101ROUND1_SHOCK1, (NCINUpdCB)NCIN_LightninBone_Upd,
+      (NCINAnimCB)NCIN_LightninBone_AR, NULL, 0.0f, 5.0000005f,
+      { { 0.0f, 0.7f, 0.0f }, { 0.1f, 2.1f, 0.0f } },
+      { { 5.0f, -2.0f, 5.0f }, { -2.5f, -2.0f, -2.5f } },
+      (S8*)"B101ROUND1_SHOCK1", 0, 0, 0 },
+    { NCIN_FXTYP_B101ROUND1_SHOCK2, (NCINUpdCB)NCIN_LightninBone_Upd,
+      (NCINAnimCB)NCIN_LightninBone_AR, NULL, 0.0f, 5.0000005f,
+      { { 0.0f, 2.6f, 3.2f }, { 0.1f, 2.1f, 0.0f } },
+      { { 5.0f, 5.0f, 2.0f }, { -2.5f, -2.5f, 2.0f } },
+      (S8*)"B101ROUND1_SHOCK2", 0, 0, 0 },
+    { NCIN_FXTYP_B101ROUND1_SHOCK3, (NCINUpdCB)NCIN_Lightnin2Bones_Upd,
+      (NCINAnimCB)NCIN_Lightnin2Bones_AR, NULL, 0.0f, 5.0000005f,
+      { { 0.0f, 0.0f, 0.5f }, { 0.1f, 5.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.5f }, { 0.1f, 8.1f, 0.0f } },
+      (S8*)"B101ROUND1_SHOCK3", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_B101_b1_ending[10] = {
+    { NCIN_FXTYP_B101ENDING_SHOCK1, (NCINUpdCB)NCIN_Lightnin2Bones_Upd,
+      (NCINAnimCB)NCIN_Lightnin2Bones_AR, NULL, 0.16666667f, 0.4666667f,
+      { { 0.0f, 0.4f, 0.0f }, { 2.1f, 4.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, 5.1f, 0.0f } },
+      (S8*)"ENDING_NECK1", 0, 0, 0 },
+    { NCIN_FXTYP_B101ENDING_SHOCK1, (NCINUpdCB)NCIN_Lightnin2Bones_Upd,
+      (NCINAnimCB)NCIN_Lightnin2Bones_AR, NULL, 0.8000001f, 0.90000004f,
+      { { 0.0f, 0.4f, 0.0f }, { 2.1f, 4.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, 5.1f, 0.0f } },
+      (S8*)"ENDING_NECK2", 0, 0, 0 },
+    { NCIN_FXTYP_B101ENDING_SHOCK2, (NCINUpdCB)NCIN_LightninBone_Upd,
+      (NCINAnimCB)NCIN_LightninBone_AR, NULL, 0.5f, 2.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, 17.1f, 0.0f } },
+      { { 4.0f, 4.0f, 2.0f }, { -0.5f, -0.5f, -1.0f } },
+      (S8*)"ENDING_LEFTSHOULDER", 0, 0, 0 },
+    { NCIN_FXTYP_B101ENDING_SHOCK3, (NCINUpdCB)NCIN_LightninBone_Upd,
+      (NCINAnimCB)NCIN_LightninBone_AR, NULL, 1.5000001f, 3.0000002f,
+      { { -0.18f, 0.39f, 0.18f }, { 2.1f, 16.1f, 0.0f } },
+      { { 3.0f, 3.0f, 3.0f }, { -1.5f, -1.5f, -1.5f } },
+      (S8*)"ENDING_HELMETBALL", 0, 0, 0 },
+    { NCIN_FXTYP_B101ENDING_SHOCK4, (NCINUpdCB)NCIN_LightninBone_Upd,
+      (NCINAnimCB)NCIN_LightninBone_AR, NULL, 2.5000002f, 4.3333335f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, 24.1f, 0.0f } },
+      { { -4.0f, 4.0f, 2.0f }, { 0.5f, -0.5f, -1.0f } },
+      (S8*)"ENDING_RIGHTSHOULDER", 0, 0, 0 },
+    { NCIN_FXTYP_B101ENDING_SHOCKWAVE, (NCINUpdCB)NCIN_B101Shockwave_Upd,
+      NULL, NULL, 4.4333334f, 6.666667f,
+      { { 0.0f, -0.5f, -1.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"ENDING_FALLSHOCKWAVE", 0, 0, 0 },
+    { NCIN_FXTYP_B101ENDING_SHOCK2, (NCINUpdCB)NCIN_LightninBone_Upd,
+      (NCINAnimCB)NCIN_LightninBone_AR, NULL, 25.000002f, 25.833334f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, 17.1f, 0.0f } },
+      { { 2.0f, 2.0f, 1.0f }, { -0.5f, -0.5f, -1.0f } },
+      (S8*)"ENDING_LEFTSHOULDER b", 0, 0, 0 },
+    { NCIN_FXTYP_B101ENDING_SHOCK3, (NCINUpdCB)NCIN_LightninBone_Upd,
+      (NCINAnimCB)NCIN_LightninBone_AR, NULL, 26.833334f, 27.666668f,
+      { { -0.18f, 0.39f, 0.18f }, { 2.1f, 16.1f, 0.0f } },
+      { { 2.0f, 2.0f, 2.0f }, { -1.0f, -1.0f, -1.0f } },
+      (S8*)"ENDING_HELMETBALL b", 0, 0, 0 },
+    { NCIN_FXTYP_SPATULAGLOW, (NCINUpdCB)NCIN_SpatGlow_Upd,
+      (NCINAnimCB)NCIN_SpatGlow_AR, NULL, 20.500002f, 24.333334f,
+      { { 0.0f, 0.0f, 0.0f }, { 5.1f, 0.1f, 0.0f } },
+      { { 2.4e+02f, 235.0f, 224.0f }, { 128.0f, 1.0f, 0.0f } },
+      (S8*)"Spatula Glow", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_B201_b2_open[2] = {
+    { NCIN_FXTYP_B201OPEN_FREEZE, (NCINUpdCB)NCIN_FreezeBreath_Upd,
+      (NCINAnimCB)NCIN_FreezeBreath_AR, NULL, 3.3333335f, 5.0000005f,
+      { { 0.0f, -0.2f, 0.0f }, { 0.1f, 29.1f, 0.0f } },
+      { { 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"Openning Freeze Breath", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_B201_b2_round2[4] = {
+    { NCIN_FXTYP_B201HIDECONVEYOR, (NCINUpdCB)NCIN_B201HideBelt_Upd,
+      NULL, NULL, 7.2333336f, 8.666667f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.1f, 0.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"Hide Conveyor a", 0, 0, 0 },
+    { NCIN_FXTYP_B201ROUND1_FREEZE, (NCINUpdCB)NCIN_FreezeBreath_Upd,
+      (NCINAnimCB)NCIN_FreezeBreath_AR, NULL, 9.333334f, 10.000001f,
+      { { 0.0f, -0.2f, 0.0f }, { 0.1f, 29.1f, 0.0f } },
+      { { 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"Round 1 Freeze Breath", 0, 0, 0 },
+    { NCIN_FXTYP_B201HIDECONVEYOR, (NCINUpdCB)NCIN_B201HideBelt_Upd,
+      NULL, NULL, 10.966667f, 12.666667f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.1f, 0.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"Hide Conveyor b", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_B201_b2_round3[2] = {
+    { NCIN_FXTYP_B201GOOLEVER, (NCINUpdCB)NCIN_GooLever_Upd,
+      (NCINAnimCB)NCIN_GooLever_AR, NULL, 0.8333334f, 3.3666668f,
+      { { 0.0f, 0.0f, 0.0f }, { 1.1f, 2.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"Goo Lever", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_B201_b2_ending[2] = {
+    { NCIN_FXTYP_B201FRAG, (NCINUpdCB)NCIN_PatBossShrapnel_Upd,
+      (NCINAnimCB)NCIN_PatBossShrapnel_AR, NULL, 1.6666667f, 2.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 1.1f, 0.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"Pat Splode", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_B302_begin[27] = {
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_FLAMES_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 3.0000002f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"0-SBB_FLAMES_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_FLAMES_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 3.0000002f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"0-SBB_FLAMES_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_JET_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 3.0000002f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"0-SBB_JET_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_JET_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 3.0000002f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"0-SBB_JET_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_SMOKE_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 3.0000002f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"0-SBB_SMOKE_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_SMOKE_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 3.0000002f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"0-SBB_SMOKE_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_BIGDUP_SMOKE_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 36.666668f, 42.000004f,
+      { { 0.0f, 0.0f, 0.0f }, { 1.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"1-CIN_BIGDUP_SMOKE", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 66.66667f, 72.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 3.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"2-BPLANK_JET_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 66.66667f, 72.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 3.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"2-BPLANK_JET_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_FLAMES_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 76.66667f, 84.00001f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"3-SBB_FLAMES_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_FLAMES_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 76.66667f, 84.00001f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"3-SBB_FLAMES_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_JET_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 76.66667f, 84.00001f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"3-SBB_JET_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_JET_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 76.66667f, 84.00001f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"3-SBB_JET_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_SMOKE_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 76.66667f, 84.00001f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"3-SBB_SMOKE_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_SMOKE_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 76.66667f, 84.00001f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"3-SBB_SMOKE_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 76.66667f, 84.00001f,
+      { { 0.0f, 0.0f, 0.0f }, { 3.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"4-BPLANK_JET_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 76.66667f, 84.00001f,
+      { { 0.0f, 0.0f, 0.0f }, { 3.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"4-BPLANK_JET_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_FLAMES_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 90.00001f, 166.66667f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"5-SBB_FLAMES_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_FLAMES_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 90.00001f, 166.66667f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"5-SBB_FLAMES_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_JET_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 90.00001f, 166.66667f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"5-SBB_JET_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_JET_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 90.00001f, 166.66667f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"5-SBB_JET_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_SMOKE_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 90.00001f, 166.66667f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"5-SBB_SMOKE_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_SMOKE_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 90.00001f, 166.66667f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"5-SBB_SMOKE_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 90.00001f, 166.66667f,
+      { { 0.0f, 0.0f, 0.0f }, { 3.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"6-BPLANK_JET_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 90.00001f, 166.66667f,
+      { { 0.0f, 0.0f, 0.0f }, { 3.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"6-BPLANK_JET_2", 0, 0, 0 },
+    { NCIN_FXTYP_B303STUFF, (NCINUpdCB)NCIN_SBBNode_Upd,
+      (NCINAnimCB)NCIN_SBBNode_AR, NULL, 0.0f, 166.66667f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"SBB Nodes", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_B302_end[31] = {
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_JET_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 12.666667f,
+      { { 0.0f, 0.0f, 0.0f }, { 1.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"0-SBB_JET_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_JET_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 12.666667f,
+      { { 0.0f, 0.0f, 0.0f }, { 1.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"0-SBB_JET_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_PLATFORM_JETS_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 4.04f,
+      { { 0.0f, 0.0f, 0.0f }, { 11.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"1-CIN_PLATFORM_JETS-01", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_PLATFORM_JETS_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 4.0733333f,
+      { { 0.0f, 0.0f, 0.0f }, { 12.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"1-CIN_PLATFORM_JETS-02", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_PLATFORM_JETS_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 4.0933337f,
+      { { 0.0f, 0.0f, 0.0f }, { 17.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"1-CIN_PLATFORM_JETS-03", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_PLATFORM_JETS_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 4.1133337f,
+      { { 0.0f, 0.0f, 0.0f }, { 14.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"1-CIN_PLATFORM_JETS-04", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_PLATFORM_JETS_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 4.1333337f,
+      { { 0.0f, 0.0f, 0.0f }, { 19.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"1-CIN_PLATFORM_JETS-05", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_PLATFORM_JETS_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 5.503334f,
+      { { 0.0f, 0.0f, 0.0f }, { 13.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"1-CIN_PLATFORM_JETS-07", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_PLATFORM_JETS_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 5.54f,
+      { { 0.0f, 0.0f, 0.0f }, { 22.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"1-CIN_PLATFORM_JETS-08", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_PLATFORM_JETS_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 5.5533338f,
+      { { 0.0f, 0.0f, 0.0f }, { 10.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"1-CIN_PLATFORM_JETS-09", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_PLATFORM_JETS_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 5.596667f,
+      { { 0.0f, 0.0f, 0.0f }, { 20.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"1-CIN_PLATFORM_JETS-10", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_PLATFORM_JETS_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 5.616667f,
+      { { 0.0f, 0.0f, 0.0f }, { 25.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"1-CIN_PLATFORM_JETS-11", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_PLATFORM_JETS_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 5.7000003f,
+      { { 0.0f, 0.0f, 0.0f }, { 18.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"1-CIN_PLATFORM_JETS-12", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_PLATFORM_JETS_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 11.966667f,
+      { { 0.0f, 0.0f, 0.0f }, { 24.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"1-CIN_PLATFORM_JETS-13", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_PLATFORM_JETS_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 12.666667f,
+      { { 0.0f, 0.0f, 0.0f }, { 16.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"1-CIN_PLATFORM_JETS-14", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_PLATFORM_JETS_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 12.666667f,
+      { { 0.0f, 0.0f, 0.0f }, { 21.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"1-CIN_PLATFORM_JETS-15", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_PLATFORM_JETS_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 12.666667f,
+      { { 0.0f, 0.0f, 0.0f }, { 23.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"1-CIN_PLATFORM_JETS-16", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_PLATFORM_JETS_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 12.666667f,
+      { { 0.0f, 0.0f, 0.0f }, { 15.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"1-CIN_PLATFORM_JETS-06", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_FLAMES_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 12.666667f,
+      { { 0.0f, 0.0f, 0.0f }, { 1.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"2-SBB_FLAMES_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_FLAMES_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 12.666667f,
+      { { 0.0f, 0.0f, 0.0f }, { 1.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"2-SBB_FLAMES_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_SMOKE_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 12.666667f,
+      { { 0.0f, 0.0f, 0.0f }, { 1.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"2-SBB_SMOKE_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_SMOKE_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 0.0f, 12.666667f,
+      { { 0.0f, 0.0f, 0.0f }, { 1.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"2-SBB_SMOKE_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 12.900001f, 13.800001f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"3-BPLANK_JET_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 12.900001f, 13.800001f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"3-BPLANK_JET_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 20.333334f, 24.166668f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"4-BPLANK_JET_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 20.333334f, 24.166668f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"4-BPLANK_JET_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 30.666668f, 32.4f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"5-BPLANK_JET_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 30.666668f, 32.4f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"5-BPLANK_JET_2", 0, 0, 0 },
+    { NCIN_FXTYP_B303STUFF, (NCINUpdCB)NCIN_BubbleTrail_Upd,
+      (NCINAnimCB)NCIN_BubbleTrail_AR, NULL, 22.033335f, 22.6f,
+      { { 1e+01f, 5.0f, -8.0f }, { 0.1f, 0.1f, 4e+02f } },
+      { { 0.0f, 3e+01f, -3e+01f }, { 3.0f, 2e+01f, 4.0f } },
+      (S8*)"SBB Leakage Left", 0, 0, 0 },
+    { NCIN_FXTYP_B303STUFF, (NCINUpdCB)NCIN_BubbleTrail_Upd,
+      (NCINAnimCB)NCIN_BubbleTrail_AR, NULL, 22.033335f, 22.6f,
+      { { 11.0f, 2.0f, 8.0f }, { 0.1f, 0.1f, 4e+02f } },
+      { { 0.0f, 3e+01f, 3e+01f }, { 3.0f, 2e+01f, 4.0f } },
+      (S8*)"SBB Leakage Right", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_B303_end[28] = {
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_FLAMES_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 9.166667f, 33.300003f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"00-SBB_FLAMES_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_FLAMES_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 9.166667f, 33.300003f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"00-SBB_FLAMES_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_SMOKE_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 9.166667f, 33.300003f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"00-SBB_SMOKE_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_SMOKE_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 9.166667f, 33.300003f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"00-SBB_SMOKE_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_JET_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 9.166667f, 38.166668f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"01-SBB_JET_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_SBB_JET_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 9.166667f, 38.166668f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"01-SBB_JET_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 22.666668f, 25.333334f,
+      { { 0.0f, 0.0f, 0.0f }, { 4.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"02-BPLANK_JET_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 22.666668f, 25.333334f,
+      { { 0.0f, 0.0f, 0.0f }, { 4.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"02-BPLANK_JET_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 50.000004f, 53.500004f,
+      { { 0.0f, 0.0f, 0.0f }, { 4.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"03-BPLANK_JET_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 50.000004f, 53.500004f,
+      { { 0.0f, 0.0f, 0.0f }, { 4.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"03-BPLANK_JET_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_BIGDUP_SMOKE_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 36.666668f, 90.00001f,
+      { { 0.0f, 0.0f, 0.0f }, { 16.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"04-CIN_BIGDUP_SMOKE", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_BIGDUP_SPAWN_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 55.333336f, 56.333336f,
+      { { 0.0f, 0.0f, 0.0f }, { 16.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"05-CIN_BIGDUP_SPAWN", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 56.000004f, 58.666668f,
+      { { 0.0f, 0.0f, 0.0f }, { 1.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"06-BPLANK_JET_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 56.000004f, 58.666668f,
+      { { 0.0f, 0.0f, 0.0f }, { 1.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"06-BPLANK_JET_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_BIGDUP_SPAWN_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 64.600006f, 65.600006f,
+      { { 0.0f, 0.0f, 0.0f }, { 16.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"07-CIN_BIGDUP_SPAWN", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 65.26667f, 74.16667f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"08-BPLANK_JET_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 65.26667f, 74.16667f,
+      { { 0.0f, 0.0f, 0.0f }, { 2.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"08-BPLANK_JET_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_BIGDUP_SPAWN_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 68.66667f, 69.66667f,
+      { { 0.0f, 0.0f, 0.0f }, { 16.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"09-CIN_BIGDUP_SPAWN", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 69.333336f, 74.16667f,
+      { { 0.0f, 0.0f, 0.0f }, { 3.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"10-BPLANK_JET_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 69.333336f, 74.16667f,
+      { { 0.0f, 0.0f, 0.0f }, { 3.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"10-BPLANK_JET_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 77.66667f, 89.36667f,
+      { { 0.0f, 0.0f, 0.0f }, { 5.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"11-BPLANK_JET_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 77.66667f, 89.36667f,
+      { { 0.0f, 0.0f, 0.0f }, { 5.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"11-BPLANK_JET_2", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_BIGDUP_SPAWN_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 83.933334f, 84.933334f,
+      { { 0.0f, 0.0f, 0.0f }, { 16.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"12-CIN_BIGDUP_SPAWN", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_1_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 84.600006f, 87.50001f,
+      { { 0.0f, 0.0f, 0.0f }, { 7.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"13-BPLANK_JET_1", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_BPLANK_JET_2_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 84.600006f, 87.50001f,
+      { { 0.0f, 0.0f, 0.0f }, { 7.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"13-BPLANK_JET_2", 0, 0, 0 },
+    { NCIN_FXTYP_B303STUFF, (NCINUpdCB)NCIN_BubbleTrail_Upd,
+      (NCINAnimCB)NCIN_BubbleTrail_AR, NULL, 25.666668f, 27.666668f,
+      { { 3.0f, 0.0f, 4.8f }, { 13.1f, 24.1f, 1e+03f } },
+      { { 0.0f, 0.0f, 12.0f }, { 0.5f, 1e+01f, 4.0f } },
+      (S8*)"SBB Leakage Left", 0, 0, 0 },
+    { NCIN_FXTYP_B303STUFF, (NCINUpdCB)NCIN_BubbleTrail_Upd,
+      (NCINAnimCB)NCIN_BubbleTrail_AR, NULL, 29.000002f, 30.333334f,
+      { { -3.0f, 0.0f, 4.8f }, { 14.1f, 16.1f, 1e+03f } },
+      { { 0.0f, 0.0f, 12.0f }, { 0.5f, 1e+01f, 4.0f } },
+      (S8*)"SBB Leakage Right", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINEntry g_HB00_prologue[24] = {
+    { NCIN_FXTYP_BUBTRAILBONE, (NCINUpdCB)NCIN_Generic_Upd,
+      (NCINAnimCB)NCIN_BubTrailBone_AR, NULL, 56.26667f, 56.666668f,
+      { { 0.0f, 0.0f, 0.0f }, { 11.1f, 0.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"BUBBLETRAILBONE 0", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_BIGDUP_SMOKE_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 31.666668f, 42.333336f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"CIN_DUPLO_SMOKE-01", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_BIGDUP_SPAWN_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 57.333336f, 57.833336f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"CIN_BIGDUP_SPAWN-01", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_BIGDUP_SPAWN_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 58.500004f, 59.000004f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"CIN_BIGDUP_SPAWN-02", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_BIGDUP_SPAWN_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 59.166668f, 60.000004f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"CIN_BIGDUP_SPAWN-03", 0, 0, 0 },
+    { NCIN_FXTYP_PAR_ENTITY_BONE, (NCINUpdCB)NCIN_Par_CIN_BIGDUP_SPAWN_Upd,
+      (NCINAnimCB)NCIN_EntityBonePar_AR, NULL, 59.833336f, 60.333336f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.1f, -0.9f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"CIN_BIGDUP_SPAWN-04", 0, 0, 0 },
+    { NCIN_FXTYP_BUBTRAILBONE, (NCINUpdCB)NCIN_Generic_Upd,
+      (NCINAnimCB)NCIN_BubTrailBone_AR, NULL, 57.000004f, 58.666668f,
+      { { 0.0f, 0.0f, 0.0f }, { 7.1f, 6.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"BUBBLETRAILBONE 1", 0, 0, 0 },
+    { NCIN_FXTYP_BUBTRAILBONE, (NCINUpdCB)NCIN_Generic_Upd,
+      (NCINAnimCB)NCIN_BubTrailBone_AR, NULL, 58.500004f, 59.333336f,
+      { { 0.0f, 0.0f, 0.0f }, { 7.1f, 6.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"BUBBLETRAILBONE 2", 0, 0, 0 },
+    { NCIN_FXTYP_BUBTRAILBONE, (NCINUpdCB)NCIN_Generic_Upd,
+      (NCINAnimCB)NCIN_BubTrailBone_AR, NULL, 59.000004f, 63.000004f,
+      { { 0.0f, 0.0f, 0.0f }, { 5.1f, 6.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"BUBBLETRAILBONE 3", 0, 0, 0 },
+    { NCIN_FXTYP_BUBTRAILBONE, (NCINUpdCB)NCIN_Generic_Upd,
+      (NCINAnimCB)NCIN_BubTrailBone_AR, NULL, 60.000004f, 60.666668f,
+      { { 0.0f, 0.0f, 0.0f }, { 5.1f, 6.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"BUBBLETRAILBONE 4", 0, 0, 0 },
+    { NCIN_FXTYP_BUBTRAILBONE, (NCINUpdCB)NCIN_Generic_Upd,
+      (NCINAnimCB)NCIN_BubTrailBone_AR, NULL, 60.666668f, 62.93334f,
+      { { 0.0f, 0.0f, 0.0f }, { 7.1f, 6.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"BUBBLETRAILBONE 4", 0, 0, 0 },
+    { NCIN_FXTYP_FODDERPROD, (NCINUpdCB)NCIN_FodProdBone_Upd,
+      (NCINAnimCB)NCIN_FodProdBone_AR, NULL, 65.333336f, 7e+01f,
+      { { 0.2f, 0.0f, 0.5f }, { 2.1f, 5.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"FODDERPROD a", 0, 0, 0 },
+    { NCIN_FXTYP_FODDERPROD, (NCINUpdCB)NCIN_FodProdBone_Upd,
+      (NCINAnimCB)NCIN_FodProdBone_AR, NULL, 65.833336f, 7e+01f,
+      { { 0.2f, 0.0f, 0.5f }, { 7.1f, 5.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"FODDERPROD b", 0, 0, 0 },
+    { NCIN_FXTYP_FODDERPROD, (NCINUpdCB)NCIN_FodProdBone_Upd,
+      (NCINAnimCB)NCIN_FodProdBone_AR, NULL, 66.333336f, 7e+01f,
+      { { 0.2f, 0.0f, 0.5f }, { 6.1f, 5.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"FODDERPROD c", 0, 0, 0 },
+    { NCIN_FXTYP_FODDERPROD, (NCINUpdCB)NCIN_FodProdBone_Upd,
+      (NCINAnimCB)NCIN_FodProdBone_AR, NULL, 66.833336f, 7e+01f,
+      { { 0.2f, 0.0f, 0.5f }, { 5.1f, 5.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"FODDERPROD d", 0, 0, 0 },
+    { NCIN_FXTYP_FODDERPROD, (NCINUpdCB)NCIN_FodProdBone_Upd,
+      (NCINAnimCB)NCIN_FodProdBone_AR, NULL, 74.833336f, 75.26667f,
+      { { 0.2f, 0.0f, 0.5f }, { 6.1f, 5.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"FODDERPROD r", 0, 0, 0 },
+    { NCIN_FXTYP_FODDERPROD, (NCINUpdCB)NCIN_FodProdBone_Upd,
+      (NCINAnimCB)NCIN_FodProdBone_AR, NULL, 75.700005f, 76.333336f,
+      { { 0.2f, 0.0f, 0.5f }, { 6.1f, 5.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"FODDERPROD r", 0, 0, 0 },
+    { NCIN_FXTYP_FODDERPROD, (NCINUpdCB)NCIN_FodProdBone_Upd,
+      (NCINAnimCB)NCIN_FodProdBone_AR, NULL, 75.833336f, 76.66667f,
+      { { 0.2f, 0.0f, 0.5f }, { 3.1f, 5.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"FODDERPROD s", 0, 0, 0 },
+    { NCIN_FXTYP_FODDERPROD, (NCINUpdCB)NCIN_FodProdBone_Upd,
+      (NCINAnimCB)NCIN_FodProdBone_AR, NULL, 77.16667f, 78.00001f,
+      { { 0.2f, 0.0f, 0.5f }, { 6.1f, 5.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"FODDERPROD t", 0, 0, 0 },
+    { NCIN_FXTYP_FODDERPROD, (NCINUpdCB)NCIN_FodProdBone_Upd,
+      (NCINAnimCB)NCIN_FodProdBone_AR, NULL, 86.00001f, 87.66667f,
+      { { 0.2f, 0.0f, 0.5f }, { 7.1f, 5.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"FODDERPROD w", 0, 0, 0 },
+    { NCIN_FXTYP_BUBWIPE, (NCINUpdCB)NCIN_BubWipe,
+      NULL, NULL, 91.333336f, 92.833336f,
+      { { -427.8f, 4.75f, 589.0f }, { 0.0f, 0.0f, -1.0f } },
+      { { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f } },
+      (S8*)"BUBBLEWIPE 1", 0, 0, 0 },
+    { NCIN_FXTYP_BUBWIPE, (NCINUpdCB)NCIN_BubWipe,
+      NULL, NULL, 91.333336f, 93.333336f,
+      { { -327.0f, 17.0f, 6.9e+02f }, { 0.0f, 0.0f, -1.0f } },
+      { { 0.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f } },
+      (S8*)"BUBBLEWIPE 2", 0, 0, 0 },
+    { NCIN_FXTYP_BUBTRAILBONE, (NCINUpdCB)NCIN_Generic_Upd,
+      (NCINAnimCB)NCIN_BubTrailBone_AR, NULL, 193.33334f, 200.00002f,
+      { { 0.0f, 0.0f, 0.0f }, { 7.1f, 6.1f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      (S8*)"BUBBLETRAILBONE 7", 0, 0, 0 },
+    { NCIN_FXTYP_UNKNOWN, NULL,
+      NULL, NULL, 0.0f, 0.0f,
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      { { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } },
+      NULL, 0, 0, 0 },
+};
+
+static NCINCutMap g_cutmap[24] = {
+    { "cin_fodder", g_JF01_cin_fodder, 0 },
+    { "cin_hammer", g_JF01_cin_hammer, 0 },
+    { "cin_tartar", g_JF03_cin_tartar, 0 },
+    { "cin_glove", g_BB01_cin_glove, 0 },
+    { "cin_monsoon", g_GL01_cin_monsoon, 0 },
+    { "cin_sleepytime_intro", g_RB01_cin_sleepytime, 0 },
+    { "cin_arf_intro", g_BC01_cin_arfarf, 0 },
+    { "cin_chuck", g_BB01_cin_chuck, 0 },
+    { "cin_tublet_intro", g_KF01_cin_tubelet, 0 },
+    { "cin_slick", g_GY01_cin_slick, 0 },
+    { "gy_dutchman_open", g_GY01_cin_gy_open, 0 },
+    { "gy_dutchman_end", g_GY01_cin_gy_end, 0 },
+    { "b1_open", g_B101_b1_open, 0 },
+    { "b1_round2", g_B101_b1_round2, 0 },
+    { "b1_ending", g_B101_b1_ending, 0 },
+    { "b2_open", g_B201_b2_open, 0 },
+    { "b2_round2", g_B201_b2_round2, 0 },
+    { "b2_round3", g_B201_b2_round3, 0 },
+    { "b2_ending", g_B201_b2_ending, 0 },
+    { "B3_open", g_B302_begin, 0 },
+    { "B3_transition", g_B302_end, 0 },
+    { "B3_end_game_win", g_B303_end, 0 },
+    { "cin_prolog", g_HB00_prologue, 0 },
+    { NULL, NULL, 0 },
+};
+
 static NCINEntry* zNPCFXCutscenePickTable(const zCutsceneMgr* csnmgr)
 {
-    return NULL;
+    NCINEntry* fxtab = NULL;
+    xCutscene* csn;
+    NCINCutMap* cutmap;
+    static S32 needinit = 1;
+
+    if (needinit != 0)
+    {
+        cutmap = g_cutmap;
+
+        while (cutmap->csn_name != NULL)
+        {
+            cutmap->hash_name = xStrHash(cutmap->csn_name);
+            cutmap++;
+        }
+
+        needinit = 0;
+    }
+
+    cutmap = g_cutmap;
+    csn = csnmgr->csn;
+
+    while (cutmap->csn_name != NULL)
+    {
+        if (cutmap->hash_name == csn->Info->AssetID)
+        {
+            fxtab = cutmap->fxtab;
+            break;
+        }
+
+        cutmap++;
+    }
+
+    return fxtab;
 }
 
 S32 zNPCFXCutscenePrep(const xScene*, F32, const zCutsceneMgr* csnmgr)
@@ -751,7 +1957,7 @@ void zNPCFXCutscene(const xScene*, F32, const zCutsceneMgr* csnmgr)
     }
 }
 
-void NCIN_Generic_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_Generic_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -760,7 +1966,7 @@ void NCIN_Generic_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 }
 
 // TODO: NEEDS REWRITEN / CORRECTED
-void NCIN_BubSlam(const zCutsceneMgr*, NCINEntry* fxrec, S32 param)
+static void NCIN_BubSlam(const zCutsceneMgr*, NCINEntry* fxrec, S32 param)
 {
     if (param != 0)
     {
@@ -786,7 +1992,7 @@ void NCIN_BubSlam(const zCutsceneMgr*, NCINEntry* fxrec, S32 param)
     }
 }
 
-void NCIN_BubWipe(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_BubWipe(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     xMat4x3* mat;
     xVec3* pos;
@@ -847,7 +2053,7 @@ void NCIN_BubWipe(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     xMemPopTemp(pos);
 }
 
-void NCIN_BubTrailBone_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
+static void NCIN_BubTrailBone_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
                           U32 num_1, U32 num_2)
 {
     S32 ifx = fxrec->pos_A[1].x;
@@ -868,7 +2074,7 @@ void NCIN_BubTrailBone_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMa
     zFX_SpawnBubbleTrail(&pos_emit, 1);
 }
 
-void NCIN_BubHit(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_BubHit(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -884,7 +2090,7 @@ void NCIN_BubHit(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_Zapper(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_Zapper(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     _tagLightningAdd addInfo;
 
@@ -934,7 +2140,7 @@ void NCIN_Zapper(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_HammerShock(const zCutsceneMgr*, NCINEntry* fxrec, S32 param)
+static void NCIN_HammerShock(const zCutsceneMgr*, NCINEntry* fxrec, S32 param)
 {
     if (param != 0)
     {
@@ -970,7 +2176,7 @@ static void NCIN_HammerStreak_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 kil
     }
 }
 
-void NCIN_HammerStreak_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
+static void NCIN_HammerStreak_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
                           U32 animIndex, U32 dataIndex)
 {
     S32 i;
@@ -1000,7 +2206,7 @@ void NCIN_HammerStreak_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMa
     xFXStreakUpdate(strkdat->sid_vert, &top, &bottom);
 }
 
-void NCIN_WaterSplash(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_WaterSplash(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -1013,7 +2219,7 @@ void NCIN_WaterSplash(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_HazProjShoot(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_HazProjShoot(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -1085,7 +2291,7 @@ void NCIN_HazProjShoot(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_HazTTSteam_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_HazTTSteam_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -1131,7 +2337,7 @@ void NCIN_HazTTSteam_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_HazTTSteam_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
+static void NCIN_HazTTSteam_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
                         U32 animIndex, U32 dataIndex)
 {
     S32 idx_boneSign;
@@ -1172,7 +2378,7 @@ void NCIN_HazTTSteam_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatr
     haz->pos_hazard = pos;
 }
 
-void NCIN_TTGunSmoke_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpAtomic*,
+static void NCIN_TTGunSmoke_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpAtomic*,
                         RwMatrixTag* animMat, U32 animIndex, U32 dataIndex)
 {
     S32 idx_boneGun;
@@ -1231,7 +2437,7 @@ void NCIN_TTGunSmoke_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpAtomic*,
     NPAR_EmitTarTarSmoke(&pos_smoke, &vel_smoke);
 }
 
-void NCIN_ArfDogBoom(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_ArfDogBoom(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -1272,7 +2478,7 @@ void NCIN_ArfDogBoom(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     fxrec->fxdata.hazdata.npchaz = haz;
 }
 
-void NCIN_SleepyLamp_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_SleepyLamp_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -1284,7 +2490,7 @@ void NCIN_SleepyLamp_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_SleepyLamp_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpAtomic*,
+static void NCIN_SleepyLamp_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpAtomic*,
                         RwMatrixTag* animMat, U32 animIndex, U32 dataIndex)
 {
     if (animIndex == 2)
@@ -1366,7 +2572,7 @@ void NCIN_SleepyLamp_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpAtomic*,
     cone.RenderCone(&pos_lamp, pos_robo);
 }
 
-void NCIN_SleepyDRay_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_SleepyDRay_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -1379,7 +2585,7 @@ void NCIN_SleepyDRay_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_SleepyDRay_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpAtomic*,
+static void NCIN_SleepyDRay_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpAtomic*,
                         RwMatrixTag* animMat, U32 animIndex, U32 dataIndex)
 {
     RwRGBA rgba_top = { 255, 255, 255, 255 };
@@ -1427,7 +2633,7 @@ void NCIN_SleepyDRay_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpAtomic*,
     cone.RenderCone(&pos_top, &fxrec->pos_A[0]);
 }
 
-void NCIN_MaryBoom(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_MaryBoom(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -1465,7 +2671,7 @@ void NCIN_MaryBoom(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     fxrec->fxdata.hazdata.npchaz = haz;
 }
 
-void NCIN_PeteBonk(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_PeteBonk(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -1478,7 +2684,7 @@ void NCIN_PeteBonk(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_FireSpiral_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_FireSpiral_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -1487,7 +2693,7 @@ void NCIN_FireSpiral_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_FireSpiral_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
+static void NCIN_FireSpiral_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
                         U32 animIndex, U32 dataIndex)
 {
     F32 tym;
@@ -1513,7 +2719,7 @@ void NCIN_FireSpiral_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatr
     NPAR_EmitTubeSpiralCin(&pos_emit, &vel, MAX(0.25f, MIN(tym, 1.0f)));
 }
 
-void NCIN_ShieldPop(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_ShieldPop(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -1526,7 +2732,7 @@ void NCIN_ShieldPop(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_OilHazard(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_OilHazard(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     S32 i;
     S32 rc;
@@ -1590,7 +2796,7 @@ void NCIN_OilHazard(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     fxrec->fxdata.hazdata.npchaz = haz;
 }
 
-void NCIN_FodProd_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_FodProd_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -1641,7 +2847,7 @@ void NCIN_FodProd_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     fxrec->fxdata.hazdata.npchaz = haz;
 }
 
-void NCIN_FodProd_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
+static void NCIN_FodProd_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
                      U32 animIndex, U32 dataIndex)
 {
     if (animIndex != 0)
@@ -1669,7 +2875,7 @@ void NCIN_FodProd_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixT
     haz->PosSet(&pos_poke);
 }
 
-void NCIN_FodProdBone_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_FodProdBone_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -1720,7 +2926,7 @@ void NCIN_FodProdBone_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     fxrec->fxdata.hazdata.npchaz = haz;
 }
 
-void NCIN_FodProdBone_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
+static void NCIN_FodProdBone_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
                          U32 animIndex, U32 dataIndex)
 {
     xMat4x3* mat_bone;
@@ -1755,7 +2961,7 @@ void NCIN_FodProdBone_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMat
     haz->PosSet(&pos_poke);
 }
 
-void NCIN_MidFish_Upd(const zCutsceneMgr* mgr, NCINEntry* e, S32 i)
+static void NCIN_MidFish_Upd(const zCutsceneMgr* mgr, NCINEntry* e, S32 i)
 {
     if (i != 0)
     {
@@ -1763,7 +2969,7 @@ void NCIN_MidFish_Upd(const zCutsceneMgr* mgr, NCINEntry* e, S32 i)
     }
 }
 
-void NCIN_MidFish_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
+static void NCIN_MidFish_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
                      U32 animIndex, U32 dataIndex)
 {
     static S32 g_idx_handbone[] = { 11, 16, 27, 36, 41, -1 };
@@ -1788,7 +2994,7 @@ void NCIN_MidFish_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixT
     }
 }
 
-void NCIN_BombTrail_Upd(const zCutsceneMgr* mgr, NCINEntry* e, S32 i)
+static void NCIN_BombTrail_Upd(const zCutsceneMgr* mgr, NCINEntry* e, S32 i)
 {
     if (i != 0)
     {
@@ -1796,7 +3002,7 @@ void NCIN_BombTrail_Upd(const zCutsceneMgr* mgr, NCINEntry* e, S32 i)
     }
 }
 
-void NCIN_BombTrail_AR(const zCutsceneMgr* mgr, NCINEntry* e, RpAtomic* a, RwMatrixTag* t, U32 i1, U32 i2)
+static void NCIN_BombTrail_AR(const zCutsceneMgr* mgr, NCINEntry* e, RpAtomic* a, RwMatrixTag* t, U32 i1, U32 i2)
 {
     if (i1 == 0x4)
     {
@@ -1804,7 +3010,7 @@ void NCIN_BombTrail_AR(const zCutsceneMgr* mgr, NCINEntry* e, RpAtomic* a, RwMat
     }
 }
 
-void NCIN_BoneTrail_Upd(const zCutsceneMgr* mgr, NCINEntry* e, S32 i)
+static void NCIN_BoneTrail_Upd(const zCutsceneMgr* mgr, NCINEntry* e, S32 i)
 {
     if (i != 0)
     {
@@ -1812,7 +3018,7 @@ void NCIN_BoneTrail_Upd(const zCutsceneMgr* mgr, NCINEntry* e, S32 i)
     }
 }
 
-void NCIN_BoneTrail_AR(const zCutsceneMgr* mgr, NCINEntry* e, RpAtomic* a, RwMatrixTag* t, U32 i1, U32 i2)
+static void NCIN_BoneTrail_AR(const zCutsceneMgr* mgr, NCINEntry* e, RpAtomic* a, RwMatrixTag* t, U32 i1, U32 i2)
 {
     if (i1 == 0x7)
     {
@@ -1820,7 +3026,7 @@ void NCIN_BoneTrail_AR(const zCutsceneMgr* mgr, NCINEntry* e, RpAtomic* a, RwMat
     }
 }
 
-void NCIN_HookRecoil_Upd(const zCutsceneMgr* mgr, NCINEntry* e, S32 i)
+static void NCIN_HookRecoil_Upd(const zCutsceneMgr* mgr, NCINEntry* e, S32 i)
 {
     if (i != 0)
     {
@@ -1828,7 +3034,7 @@ void NCIN_HookRecoil_Upd(const zCutsceneMgr* mgr, NCINEntry* e, S32 i)
     }
 }
 
-void NCIN_HookRecoil_AR(const zCutsceneMgr* csnmgr, NCINEntry*, RpAtomic* model,
+static void NCIN_HookRecoil_AR(const zCutsceneMgr* csnmgr, NCINEntry*, RpAtomic* model,
                         RwMatrixTag* animMat, U32 animIndex, U32 dataIndex)
 {
     F32 tym = csnmgr->csn->Time;
@@ -1861,7 +3067,7 @@ void NCIN_HookRecoil_AR(const zCutsceneMgr* csnmgr, NCINEntry*, RpAtomic* model,
     }
 }
 
-void NCIN_Lightnin2Bones_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_Lightnin2Bones_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     _tagLightningAdd addInfo;
     xVec3 pnt;
@@ -1898,7 +3104,7 @@ void NCIN_Lightnin2Bones_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     fxrec->fxdata.arcdata.lightning = zLightningAdd(&addInfo);
 }
 
-void NCIN_Lightnin2Bones_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
+static void NCIN_Lightnin2Bones_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
                             U32 animIndex, U32 dataIndex)
 {
     xVec3 begpos;
@@ -1947,7 +3153,7 @@ void NCIN_Lightnin2Bones_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, Rw
     }
 }
 
-void NCIN_LightninBone_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_LightninBone_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     _tagLightningAdd addInfo;
     xVec3 pnt;
@@ -2008,7 +3214,7 @@ void NCIN_LightninBone_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     zLightningShow(light, 1);
 }
 
-void NCIN_LightninBone_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
+static void NCIN_LightninBone_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
                           U32 animIndex, U32 dataIndex)
 {
     xVec3 pnt1;
@@ -2036,7 +3242,7 @@ void NCIN_LightninBone_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMa
     zLightningModifyEndpoints(fxrec->fxdata.arcdata.lightning, &pnt1, &pnt2);
 }
 
-void NCIN_B101Shockwave_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_B101Shockwave_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     zParEmitter* emitter = fxrec->fxdata.pardata.emitter;
 
@@ -2079,7 +3285,7 @@ void NCIN_B101Shockwave_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_FreezeBreath_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_FreezeBreath_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -2092,7 +3298,7 @@ void NCIN_FreezeBreath_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_FreezeBreath_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpAtomic*,
+static void NCIN_FreezeBreath_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpAtomic*,
                           RwMatrixTag* animMat, U32 animIndex, U32 dataIndex)
 {
     xVec3 pnt1;
@@ -2122,7 +3328,7 @@ void NCIN_FreezeBreath_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpAtomic
                      csnmgr->csn->Time - fxrec->tym_beg, fxrec->tym_end - fxrec->tym_beg);
 }
 
-void NCIN_B201HideBelt_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_B201HideBelt_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     S32 i;
 
@@ -2149,7 +3355,7 @@ void NCIN_B201HideBelt_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_GooLever_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_GooLever_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     zParEmitter* emitter = fxrec->fxdata.pardata.emitter;
 
@@ -2178,7 +3384,7 @@ void NCIN_GooLever_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_GooLever_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
+static void NCIN_GooLever_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
                       U32 animIndex, U32 dataIndex)
 {
     S32 ifx = fxrec->pos_A[1].x;
@@ -2202,7 +3408,7 @@ void NCIN_GooLever_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrix
     }
 }
 
-void NCIN_PatBossShrapnel_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_PatBossShrapnel_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -2227,7 +3433,7 @@ void NCIN_PatBossShrapnel_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_PatBossShrapnel_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model,
+static void NCIN_PatBossShrapnel_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model,
                              RwMatrixTag* animMat, U32 animIndex, U32 dataIndex)
 {
     S32 ifx = fxrec->pos_A[1].x;
@@ -2238,7 +3444,7 @@ void NCIN_PatBossShrapnel_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* mo
     }
 }
 
-void NCIN_SpatGlow_Upd(const zCutsceneMgr* mgr, NCINEntry* e, S32 i)
+static void NCIN_SpatGlow_Upd(const zCutsceneMgr* mgr, NCINEntry* e, S32 i)
 {
     if (i != 0)
     {
@@ -2246,7 +3452,7 @@ void NCIN_SpatGlow_Upd(const zCutsceneMgr* mgr, NCINEntry* e, S32 i)
     }
 }
 
-void NCIN_SpatGlow_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model, RwMatrixTag* animMat,
+static void NCIN_SpatGlow_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model, RwMatrixTag* animMat,
                       U32 animIndex, U32 dataIndex)
 {
     S32 ifx = fxrec->pos_A[1].x;
@@ -2269,7 +3475,7 @@ void NCIN_SpatGlow_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model, Rw
     xFXAuraAdd(fxrec, (xVec3*)&animMat[boneIndex].pos, &color, fxrec->pos_B[1].y);
 }
 
-void NCIN_GloveShrapnel_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_GloveShrapnel_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -2294,7 +3500,7 @@ void NCIN_GloveShrapnel_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_GloveShrapnel_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model,
+static void NCIN_GloveShrapnel_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model,
                            RwMatrixTag* animMat, U32 animIndex, U32 dataIndex)
 {
     S32 ifx = fxrec->pos_A[1].x;
@@ -2307,7 +3513,7 @@ void NCIN_GloveShrapnel_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* mode
     }
 }
 
-void NCIN_EntityBonePar_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model,
+static void NCIN_EntityBonePar_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model,
                            RwMatrixTag* animMat, U32 animIndex, U32 dataIndex)
 {
     F32 dt;
@@ -2495,7 +3701,7 @@ void clamp_bone_index(NCINEntry*, RpAtomic*)
 {
 }
 
-void NCIN_BubbleTrail_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_BubbleTrail_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -2512,7 +3718,7 @@ void NCIN_BubbleTrail_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     fxrec->fxdata.customdata.f[0] = 0.0f;
 }
 
-void NCIN_BubbleTrail_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model,
+static void NCIN_BubbleTrail_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model,
                          RwMatrixTag* animMat, U32 animIndex, U32 dataIndex)
 {
     S32 ifx = fxrec->pos_A[1].x;
@@ -2575,7 +3781,7 @@ void NCIN_BubbleTrail_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model,
     oldvel = vel;
 }
 
-void NCIN_SBBNode_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
+static void NCIN_SBBNode_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
     {
@@ -2601,7 +3807,7 @@ void NCIN_SBBNode_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-void NCIN_SBBNode_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model,
+static void NCIN_SBBNode_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* model,
                      RwMatrixTag* animMat, U32 animIndex, U32 dataIndex)
 {
     zNPCB_SB2* sb2;
