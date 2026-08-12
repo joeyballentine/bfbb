@@ -254,15 +254,38 @@ comparison passes. Five game functions currently counted as matched reference
 the wrong symbol: `HurtThePlayer` and `WipeIt` (`zNPCHazard`), `Subscribe`
 (`zNPCSpawner`), `ParseINI` (`zNPCSleepy`), and `ThunderCloud` (now fixed).
 
-Three of those five point at a device that should be reviewed:
-`src/SB/Game/zNPCHazard.cpp:27-28` and `zNPCSpawner.cpp:16` declare
-`extern F32 _959_Hazard; // 1.0f`, `_1041_Hazard; // -1.0f` and
-`_805_Spawner; // 5.0f`, and **nothing in `src/` or `config/` ever defines
-them.** The source reads an undefined external float where the original used a
-literal, which leaves undefined symbols in the object and means those units can
-never be marked Matching regardless of their scores. Replacing them with the
-literals will move the pools, so measure before and after — but they cannot
-stay.
+Three of those five pointed at a device that has now been removed. **RESOLVED
+2026-08-12** (`87692902`, `0c6050f7`): `zNPCHazard`, `zNPCSpawner`, `zScene` and
+`zNPCTypeRobot` declared externs that nothing anywhere defined —
+`_958_Hazard // 0.0f`, `_959_Hazard // 1.0f`, `_1041_Hazard // -1.0f`,
+`_805_Spawner // 5.0f`, `_1250`, `_1251`, `_2013`, `_2014`, `byte_803D0884`, and
+`zNPCSleepy::init`. They were a pool-slot device, and **the names literally
+encode the target's anonymous pool ids** — the target references `@958`, `@959`,
+`@1041`, `@805`, `@1250`… at exactly those sites. Someone read the numbering off
+the target and named externs after it instead of writing the constants.
+
+The `zNPCHazard`/`zNPCSpawner` values came from the comments; `zScene`'s four
+carried no comments and were recovered from the target object
+(`@1250` = `0f 0f 0f 00`, `@2013` = `00 00 00 ff`, `@1251`/`@2014` zero, in
+`.sdata2`/`.sbss2` respectively). Nine undefined symbols eliminated; those
+objects can now in principle link.
+
+**Removing a placeholder can convert its neighbours.** One edit in
+`zNPCSpawner` — `_805_Spawner` to `5.0f` — took six functions to 100.0, five of
+them untouched ones sitting at 99.8-99.93%. In `zNPCHazard` nothing shifted at
+all, because those literals reused slots that already existed. Both outcomes are
+normal; measure the whole unit either way.
+
+Two related placeholders of the *defined* kind were also removed: `xFont`'s
+`_1107` (unused dead `.rodata`) and `zScene`'s `_2098_0` (a hand-written
+288-byte jump table duplicating the compiler's own switch table, displacing
+every later `.data` object by 288 bytes). After both, each unit's `.data` and
+`.sdata2` match the target's layout exactly.
+
+**Expect the metric not to notice.** That batch made 16 functions byte-exact and
+`report.json`'s `matched_functions` moved by **1**, because pool-only and
+relocation-target differences already scored 100.0 there. The work is still
+real: byte-exactness is what `Matching` requires.
 
 So: **price pool work in units linked, never in `matched_functions`.** The
 honest price of 2a is **9 units, 0 functions** — 9 of the units that are 1-3
