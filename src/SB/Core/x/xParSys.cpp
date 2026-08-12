@@ -12,6 +12,7 @@ static xVec3 par_offset_right;
 static xVec3 par_offset_up;
 
 static void render_par_sprite(void* data, xParGroup* ps);
+inline bool using_ptank_render(const xParSysAsset& tasset);
 
 static xParSysInfo sParSysInfo[7] = {
     { XPARSYSINFO_TYPE_SPRITE, render_par_sprite },
@@ -122,6 +123,15 @@ static void par_sprite_update(xParSys& sys, xParGroup& group)
     }
 
     pool.flush();
+}
+
+// Defined here rather than in the header: xParSys.o owns this weak symbol in
+// the retail link, and CodeWarrior emits it at end-of-TU when it is an inline
+// in the header. The target has it at .text position 3, immediately after its
+// first caller.
+inline bool using_ptank_render(const xParSysAsset& tasset)
+{
+    return (tasset.parFlags >> 7) & 0x1;
 }
 
 static void render_par_sprite(void* data, xParGroup* ps)

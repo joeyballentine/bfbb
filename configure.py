@@ -577,7 +577,7 @@ config.libs = [
             Object(NonMatching, "SB/Core/x/xNPCBasic.cpp"),
             Object(NonMatching, "SB/Game/zEntPlayerBungeeState.cpp", extra_cflags=["-sym on"]),
             Object(NonMatching, "SB/Game/zCollGeom.cpp"),
-            Object(NonMatching, "SB/Core/x/xParSys.cpp", extra_cflags=["-sym on"]),
+            Object(Matching, "SB/Core/x/xParSys.cpp", extra_cflags=["-sym on"]),
             Object(NonMatching, "SB/Core/x/xParEmitter.cpp"),
             Object(Matching, "SB/Core/x/xVolume.cpp"),
             Object(NonMatching, "SB/Core/x/xParEmitterType.cpp"),
