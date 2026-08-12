@@ -230,6 +230,27 @@ while the target section is 0xc0 bytes and ours is 0xb8.
 This also resolves the standing "`solo.py` and `report.json` disagree and both
 are right" puzzle — **the delta *is* the pool bucket.**
 
+**Worse: the blindness is not limited to anonymous ids. `report.json` will score
+a function 100.0 while it references an entirely different named global.**
+`ZNPC_AnimTable_ThunderCloud` read `g_strz_roboanim` where the target reads
+`g_strz_cloudanim` — a real behavioural bug, the thunder cloud playing robot
+animations — and `report.json` called it 100.0 both before and after the fix,
+while objdiff moved 99.420 -> 100.000. Whenever a relocation *target* is the
+only difference, the relocated field is zero in both objects and the byte
+comparison passes. Five game functions currently counted as matched reference
+the wrong symbol: `HurtThePlayer` and `WipeIt` (`zNPCHazard`), `Subscribe`
+(`zNPCSpawner`), `ParseINI` (`zNPCSleepy`), and `ThunderCloud` (now fixed).
+
+Three of those five point at a device that should be reviewed:
+`src/SB/Game/zNPCHazard.cpp:27-28` and `zNPCSpawner.cpp:16` declare
+`extern F32 _959_Hazard; // 1.0f`, `_1041_Hazard; // -1.0f` and
+`_805_Spawner; // 5.0f`, and **nothing in `src/` or `config/` ever defines
+them.** The source reads an undefined external float where the original used a
+literal, which leaves undefined symbols in the object and means those units can
+never be marked Matching regardless of their scores. Replacing them with the
+literals will move the pools, so measure before and after — but they cannot
+stay.
+
 So: **price pool work in units linked, never in `matched_functions`.** The
 honest price of 2a is **9 units, 0 functions** — 9 of the units that are 1-3
 report-functions from complete carry ≥1 pool-only function and will therefore
