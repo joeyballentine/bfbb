@@ -12,7 +12,7 @@
 
 _tagClimate* sClimate;
 
-const float snow_life = 3.0f;
+float snow_life = 3.0f;
 const xVec3 snow_vel = { 0.0f, -2.0f, 0.0f };
 const xVec3 snow_dvel = { 0.1f, 0.1f, 0.1f };
 
@@ -79,7 +79,7 @@ void xClimateSetRain(F32 stre)
 
 // Equivalent
 // Float literal is being loaded three separate times in the original code.
-void GetPosBigDogWhattupFool(xVec3* vec)
+static void GetPosBigDogWhattupFool(xVec3* vec)
 {
     xCamera* camera = &xglobals->camera;
     vec->x = 10.0f * camera->mat.at.x + camera->mat.pos.x;
@@ -89,7 +89,7 @@ void GetPosBigDogWhattupFool(xVec3* vec)
 
 // NOTE (Square): I think it's equivalent but it's very hard to tell. Our compiler is optimizing the float ops
 // much more aggresively and it's throwing the regalloc off.
-void UpdateRain(_tagClimate* climate, float seconds)
+static void UpdateRain(_tagClimate* climate, float seconds)
 {
     _tagRain* r = &climate->rain;
     xParEmitterCustomSettings info;
@@ -186,7 +186,7 @@ void UpdateRain(_tagClimate* climate, float seconds)
     }
 }
 
-void UpdateWind(_tagClimate* climate, F32 seconds)
+static void UpdateWind(_tagClimate* climate, F32 seconds)
 {
     return;
 }
