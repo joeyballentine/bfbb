@@ -373,7 +373,7 @@ void zMusicUpdate(F32 dt)
 static void volume_update(F32 vol)
 {
     F32 oldVol = volume.cur;
-    if (volume.inc >= 1e-5f && volume.inc <= -1e-5f)
+    if (volume.inc >= -1e-5f && volume.inc <= 1e-5f)
     {
         volume.cur = volume.end;
     }
@@ -382,10 +382,11 @@ static void volume_update(F32 vol)
         volume.cur = volume.inc * vol + volume.cur;
     }
 
-    if ((volume.inc < 0.0f && volume.cur <= volume.end) ||
+    S32 fadeDown = (volume.inc < 0.0f) ? 1 : 0;
+    if ((fadeDown && volume.cur <= volume.end) ||
         (!(volume.inc < 0.0f) && volume.cur >= volume.end))
     {
-        volume.end = volume.cur;
+        volume.cur = volume.end;
         volume.inc = 0.0f;
     }
 

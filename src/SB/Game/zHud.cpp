@@ -24,9 +24,9 @@ namespace zhud
     {
         static U8 hiding[5];
 
-        static U32 value[5];
+        static U32* value[5];
         static U32 old_value[5];
-        static U32 max_value[5];
+        static U32* max_value[5];
         static U32 old_max_value[5];
         static xhud::widget* widgets[9];
 
@@ -132,27 +132,27 @@ namespace zhud
         }
         else
         {
-            xhud::font_meter_widget* meter = (xhud::font_meter_widget*)zSceneFindObject(xStrHash(widget_resources[7]));
+            wc = (widget_chunk*)zSceneFindObject(xStrHash(widget_resources[7]));
+            xhud::font_meter_widget* meter = (xhud::font_meter_widget*)&wc->w;
             meter->max_value = (F32)special.max_value;
             meter->get_asset()->counter_mode = 1;
             widgets[7] = meter;
             meter->enable();
 
-            // TODO: the return of zSceneFindObject isn't a model_widget, but an object that contains a model_widget at 0x10
-            //       what is it???
-            xhud::model_widget* model = (xhud::model_widget*)zSceneFindObject(xStrHash(special.hud_model));
+            wc = (widget_chunk*)zSceneFindObject(xStrHash(special.hud_model));
+            xhud::model_widget* model = (xhud::model_widget*)&wc->w;
             widgets[8] = model;
             model->enable();
         }
         
         memset(max_value, 0x0, sizeof(max_value));
         
-        value[0] = globals.player.Health;
-        max_value[0] = globals.player.MaxHealth;
-        value[1] = globals.player.Inv_Shiny;
-        value[2] = globals.player.Inv_Spatula;
-        value[3] = globals.player.Inv_PatsSock_Total;
-        value[4] = globals.player.Inv_LevelPickups_CurrentLevel;
+        value[0] = &globals.player.Health;
+        max_value[0] = &globals.player.MaxHealth;
+        value[1] = &globals.player.Inv_Shiny;
+        value[2] = &globals.player.Inv_Spatula;
+        value[3] = &globals.player.Inv_PatsSock_Total;
+        value[4] = &globals.player.Inv_LevelPickups_CurrentLevel;
 
         for (i = 0; i < 5; i++) 
         {
@@ -161,12 +161,12 @@ namespace zhud
                 xhud::meter_widget* meter = (xhud::meter_widget*)get_meter_widget(meter_widget_index[i]);
                 if (max_value[i] != 0)
                 {
-                    old_max_value[i] = max_value[i];
-                    meter->max_value = (F32)max_value[i];
+                    old_max_value[i] = *max_value[i];
+                    meter->max_value = (F32)old_max_value[i];
                 }
 
-                old_value[i] = value[i];
-                meter->set_value_immediate((F32)value[i]);
+                old_value[i] = *value[i];
+                meter->set_value_immediate((F32)old_value[i]);
                 hiding[i] = 0;
             }
         }
@@ -214,13 +214,13 @@ namespace zhud
         for (i = 0; i < 5; i++)
         {
             U32 updated_value = 1;
-            if (value[i] == old_value[i])
+            if (old_value[i] == *value[i])
             {
                 updated_value = 0;
             }
             
             U32 another_updated_value = 0;
-            if (updated_value & 0xFF || (max_value[i] != 0 && old_max_value[i] != max_value[i]))
+            if (updated_value & 0xFF || (max_value[i] != 0 && old_max_value[i] != *max_value[i]))
             {
                 another_updated_value = 1;
             }
@@ -233,12 +233,12 @@ namespace zhud
                     xhud::meter_widget* meter = (xhud::meter_widget*)get_meter_widget(meter_idx);
                     if (max_value[i] != 0)
                     {
-                        old_max_value[i] = max_value[i];
-                        meter->max_value = (F32)max_value[i];
+                        old_max_value[i] = *max_value[i];
+                        meter->max_value = (F32)old_max_value[i];
                     }     
                     
-                    old_value[i] = value[i];
-                    meter->set_value((F32)value[i]);
+                    old_value[i] = *value[i];
+                    meter->set_value((F32)old_value[i]);
 
                     hiding[i] = 0;
                     ping_widget(*meter);

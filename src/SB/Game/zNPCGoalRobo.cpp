@@ -1169,11 +1169,11 @@ S32 zNPCGoalAlertFodBzzt::Enter(F32 dt, void* updCtxt)
     return zNPCGoalCommon::Enter(dt, updCtxt);
 }
 
-// Equivalent. Weirdness with reloading zNPCFodBzzt::cnt_alerthokey and regalloc.
 S32 zNPCGoalAlertFodBzzt::Exit(F32 dt, void* updCtxt)
 {
     zNPCFodBzzt::cnt_alerthokey--;
-    zNPCFodBzzt::cnt_alerthokey &= ~(zNPCFodBzzt::cnt_alerthokey >> 31);
+    S32 cnt = zNPCFodBzzt::cnt_alerthokey;
+    zNPCFodBzzt::cnt_alerthokey = cnt & ~(cnt >> 31);
 
     zNPC_SNDStop(eNPCSnd_FodBzztAttack);
     return xGoal::Exit(dt, updCtxt);

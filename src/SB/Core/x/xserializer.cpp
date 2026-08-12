@@ -432,16 +432,16 @@ static st_SERIAL_CLIENTINFO* XSER_get_client(U32 idtag)
 
 S32 xSerial_svgame_register(st_XSAVEGAME_DATA* sgctxt, en_SAVEGAME_MODE mode)
 {
-    g_xserdata.flg_info &= 0xfffffffe;
+    st_XSERIAL_DATA_PRIV* xsd = &g_xserdata;
+    xsd->flg_info &= 0xfffffffe;
 
     if (mode == XSG_MODE_SAVE)
     {
-        xSGAddSaveClient(sgctxt, 'SVID', &g_xserdata, xSER_xsgclt_svinfo_ver,
-                         xSER_xsgclt_svproc_ver);
+        xSGAddSaveClient(sgctxt, 'SVID', xsd, xSER_xsgclt_svinfo_ver, xSER_xsgclt_svproc_ver);
 
-        for (S32 i = 0; i < g_xserdata.cltlist.cnt; i++)
+        for (S32 i = 0; i < xsd->cltlist.cnt; i++)
         {
-            xSGAddSaveClient(sgctxt, *(U32*)g_xserdata.cltlist.list[i], g_xserdata.cltlist.list[i],
+            xSGAddSaveClient(sgctxt, *(U32*)xsd->cltlist.list[i], xsd->cltlist.list[i],
                              xSER_xsgclt_svinfo_clt, xSER_xsgclt_svproc_clt);
         }
         xSGAddSaveClient(sgctxt, 'SFIL', &g_xserdata, xSER_xsgclt_svinfo_fill,
@@ -449,7 +449,7 @@ S32 xSerial_svgame_register(st_XSAVEGAME_DATA* sgctxt, en_SAVEGAME_MODE mode)
     }
     else if (mode == XSG_MODE_LOAD)
     {
-        xSGAddLoadClient(sgctxt, 'SVID', &g_xserdata, xSER_xsgclt_ldproc_ver);
+        xSGAddLoadClient(sgctxt, 'SVID', xsd, xSER_xsgclt_ldproc_ver);
         xSGAddLoadClient(sgctxt, 0, &g_xserdata, xSER_xsgclt_ldproc_clt);
         xSGAddLoadClient(sgctxt, 'SFIL', &g_xserdata, xSER_xsgclt_ldproc_fill);
     }

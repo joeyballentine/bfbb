@@ -199,30 +199,28 @@ void xSndCalculateListenerPosition()
 }
 
 void xSndProcessSoundPos(const xVec3* pActual, xVec3* pProcessed) {
-    xVec3 playerDelta;
     xVec3 temp_f;
+    xVec3 playerDelta;
 
     F32 factor;
     F32 inwardShift;
 
-    switch ((S32) gSnd.pos.x) {
-    case 0:
-        temp_f -= *pActual;
-        temp_f += temp_f;
-        playerDelta -= *pActual;
-        playerDelta += playerDelta;
+    switch (gSnd.listenerMode) {
+    case SND_LISTENER_MODE_PLAYER:
+        temp_f = *pActual - gSnd.listenerMat[1].pos;
+        playerDelta = *pActual - gSnd.listenerMat[0].pos;
         factor = xVec3Length(&temp_f);
         inwardShift = xVec3Length(&playerDelta);
         if (inwardShift < factor) {
-            temp_f *= (factor - ((factor - inwardShift) * 0.5f)) / factor;
-            *pProcessed += temp_f;
-            *pProcessed += *pProcessed;
+            inwardShift = (factor - inwardShift) * 0.5f;
+            temp_f *= (factor - inwardShift) / factor;
+            *pProcessed = temp_f + gSnd.listenerMat[1].pos;
             return;
         }
-        *pProcessed += *pActual;
+        *pProcessed = *pActual;
         return;
-    case 1:
-        *pProcessed += *pActual;
+    case SND_LISTENER_MODE_CAMERA:
+        *pProcessed = *pActual;
         return;
     }
 }

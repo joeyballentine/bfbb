@@ -1935,8 +1935,7 @@ namespace
 
         while (shared.end_jot < shared.page_end_jot)
         {
-            shared.end_jot++;
-            if (!trigger_jot(shared.end_jot - 1))
+            if (!trigger_jot(shared.end_jot++))
             {
                 break;
             }
@@ -1945,7 +1944,7 @@ namespace
         if (shared.end_jot == shared.page_end_jot)
         {
             xtextbox::jot* jots = ((xtextbox::layout*)&shared.lt)->jots();
-            xtextbox::jot* last = &jots[shared.end_jot - 1];
+            xtextbox::jot* last = jots + shared.end_jot - 1;
 
             if (last->flag.page_break && (S32)(shared.end_jot - 1) > shared.begin_jot)
             {

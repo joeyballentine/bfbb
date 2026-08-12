@@ -2028,9 +2028,9 @@ S32 zSaveLoad_LoadGame()
     }
 
     XSGAutoData* asg = xSGAutoSave_GetCache();
-    S32 use_game = currentCard;
     if (success && teststat)
     {
+        S32 use_game = currentGame;
         S32 idx = xSGTgtPhysSlotIdx(xsgdata, use_tgt);
         asg->SetCache(use_tgt, use_game, idx);
         globals.autoSaveFeature = 1;

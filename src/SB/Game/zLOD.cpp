@@ -158,6 +158,8 @@ void zLOD_Setup(void)
 // WIP
 void zLOD_Update(U32 percent_update)
 {
+    xVec3* camPos = &globals.camera.mat.pos;
+
     if (sManagerCount == 0)
     {
         return;
@@ -166,7 +168,7 @@ void zLOD_Update(U32 percent_update)
     U32 numUpdates = (sManagerCount * percent_update) / 100;
     if (numUpdates == 0)
     {
-        numUpdates = 1;
+        numUpdates++;
     }
 
     for (U32 i = 0; i < numUpdates; i++)
@@ -175,68 +177,69 @@ void zLOD_Update(U32 percent_update)
         if (sManagerIndex >= sManagerCount)
             sManagerIndex = 0;
 
-        zLODManager* mgr = &sManagerList[sManagerIndex];
-        xModelInstance* model = mgr->model;
-        zLODTable* lod = mgr->lod;
+        zLODTable* lod = sManagerList[sManagerIndex].lod;
+        xModelInstance* model = sManagerList[sManagerIndex].model;
 
-        if (!mgr || !model || !lod)
+        if (!lod)
         {
             continue;
         }
 
         RwMatrix* mat = model->Mat;
-        F32 distscale = mat->right.x * mat->right.x + mat->up.x * mat->up.x + mat->at.x * mat->at.x;
+        F32 distscale =
+            mat->right.x * mat->right.x + mat->right.y * mat->right.y + mat->right.z * mat->right.z;
         if (distscale < 0.0001f)
             distscale = 1.0f;
 
-        xVec3* camPos = &globals.camera.mat.pos;
         F32 camdist2 = 0.0f;
         if (mat)
         {
-            F32 dx = camPos->x - mat->pos.x;
-            F32 dy = camPos->y - mat->pos.y;
-            F32 dz = camPos->z - mat->pos.z;
-            camdist2 = (dx * dx + dy * dy + dz * dz) / distscale;
+            camdist2 = ((camPos->x - mat->pos.x) * (camPos->x - mat->pos.x) +
+                        (camPos->y - mat->pos.y) * (camPos->y - mat->pos.y) +
+                        (camPos->z - mat->pos.z) * (camPos->z - mat->pos.z)) /
+                       distscale;
         }
 
-        if (camdist2 >= mgr->adjustNoRenderDist)
+        if (camdist2 >= sManagerList[sManagerIndex].adjustNoRenderDist)
         {
-            model->PipeFlags |= 0x400;
+            model->Flags |= 0x400;
 
-            if (mgr->numextra)
+            if (sManagerList[sManagerIndex].numextra)
             {
                 for (xModelInstance* extra = model->Next; extra; extra = extra->Next)
-                    extra->PipeFlags |= 0x400;
+                    extra->Flags |= 0x400;
             }
         }
         else
         {
-            model->PipeFlags &= ~0x400;
+            model->Flags &= (U16)~0x400;
 
             if (lod->baseBucket)
             {
                 model->Bucket = lod->baseBucket;
-                model->Data = (*lod->baseBucket)->Data;
+                model->Data = (*model->Bucket)->OriginalData;
             }
 
             S32 lodIndex;
-            for (lodIndex = 0; lodIndex < 3 && lod->lodBucket[lodIndex]; lodIndex++)
+            for (lodIndex = 0;
+                 lodIndex < 3 && lod->lodBucket[lodIndex] && camdist2 > lod->lodDist[lodIndex];
+                 lodIndex++)
             {
-                if (lod->lodDist[lodIndex] < camdist2)
-                {
-                    model->Bucket = lod->lodBucket[lodIndex];
-                    model->Data = (*lod->lodBucket[lodIndex])->Data;
-                }
+                model->Bucket = lod->lodBucket[lodIndex];
+                model->Data = (*model->Bucket)->OriginalData;
             }
 
-            if (mgr->numextra)
+            if (sManagerList[sManagerIndex].numextra)
             {
-                for (xModelInstance* extra = model->Next; extra; extra = extra->Next)
+                if (lodIndex == 0)
                 {
-                    if (lodIndex == 0)
-                        extra->PipeFlags &= ~0x400;
-                    else
-                        extra->PipeFlags |= 0x400;
+                    for (xModelInstance* extra = model->Next; extra; extra = extra->Next)
+                        extra->Flags &= (U16)~0x400;
+                }
+                else
+                {
+                    for (xModelInstance* extra = model->Next; extra; extra = extra->Next)
+                        extra->Flags |= 0x400;
                 }
             }
         }
@@ -267,32 +270,25 @@ zLODTable* zLOD_Get(xEnt* ent)
 void zLOD_UseCustomTable(xEnt* ent, zLODTable* lod)
 {
     xModelInstance* model = ent->model;
-    if (model == NULL || sManagerCount == 0)
-    {
-        return;
-    }
 
     for (U32 i = 0; i < sManagerCount; i++)
     {
-        zLODManager* mgr = &sManagerList[i];
-
-        if (mgr->model == model)
+        if (sManagerList[i].model == model)
         {
-            mgr->lod = lod;
+            sManagerList[i].lod = lod;
+            sManagerList[i].adjustNoRenderDist =
+                (10.0f + xsqrt(lod->noRenderDist)) * (10.0f + xsqrt(lod->noRenderDist));
 
-            F32 dist = xsqrt(lod->noRenderDist) + 10.0f;
-            mgr->adjustNoRenderDist = dist * dist;
-
+            xVec3* camPos = &globals.camera.mat.pos;
+            F32 camdist2 = 0.0f;
             RwMatrix* mat = model->Mat;
-            F32 distscale =
-                mat->right.x * mat->right.x + mat->up.x * mat->up.x + mat->at.x * mat->at.x;
+            F32 distscale = mat->right.x * mat->right.x + mat->right.y * mat->right.y +
+                            mat->right.z * mat->right.z;
             if (distscale < 0.0001f)
             {
                 distscale = 1.0f;
             }
 
-            xVec3* camPos = &globals.camera.mat.pos;
-            F32 camdist2 = 0.0f;
             if (mat)
             {
                 camdist2 = ((camPos->x - mat->pos.x) * (camPos->x - mat->pos.x) +
@@ -301,44 +297,53 @@ void zLOD_UseCustomTable(xEnt* ent, zLODTable* lod)
                            distscale;
             }
 
-            if (camdist2 < mgr->adjustNoRenderDist)
+            if (camdist2 >= sManagerList[i].adjustNoRenderDist)
             {
-                model->PipeFlags &= ~0x400;
+                model->Flags |= 0x400;
 
-                if (lod->baseBucket)
-                {
-                    model->Bucket = lod->baseBucket;
-                    model->Data = (*lod->baseBucket)->Data;
-                }
-
-                S32 lodIndex;
-                for (lodIndex = 0;
-                     lodIndex < 3 && lod->lodBucket[lodIndex] && lod->lodDist[lodIndex] < camdist2;
-                     lodIndex++)
-                {
-                    model->Bucket = lod->lodBucket[lodIndex];
-                    model->Data = (*lod->lodBucket[lodIndex])->Data;
-                }
-
-                if (mgr->numextra)
+                if (sManagerList[sManagerIndex].numextra)
                 {
                     for (xModelInstance* m = model->Next; m; m = m->Next)
                     {
-                        if (lodIndex == 0)
-                            m->PipeFlags &= ~0x400;
-                        else
-                            m->PipeFlags |= 0x400;
+                        m->Flags |= 0x400;
                     }
                 }
             }
             else
             {
-                model->PipeFlags |= 0x400;
+                model->Flags &= (U16)~0x400;
 
-                if (mgr->numextra)
+                if (lod->baseBucket)
                 {
-                    for (xModelInstance* m = model->Next; m; m = m->Next)
-                        m->PipeFlags |= 0x400;
+                    model->Bucket = lod->baseBucket;
+                    model->Data = (*model->Bucket)->OriginalData;
+                }
+
+                S32 lodIndex;
+                for (lodIndex = 0;
+                     lodIndex < 3 && lod->lodBucket[lodIndex] && camdist2 > lod->lodDist[lodIndex];
+                     lodIndex++)
+                {
+                    model->Bucket = lod->lodBucket[lodIndex];
+                    model->Data = (*model->Bucket)->OriginalData;
+                }
+
+                if (sManagerList[sManagerIndex].numextra)
+                {
+                    if (lodIndex == 0)
+                    {
+                        for (xModelInstance* m = model->Next; m; m = m->Next)
+                        {
+                            m->Flags &= (U16)~0x400;
+                        }
+                    }
+                    else
+                    {
+                        for (xModelInstance* m = model->Next; m; m = m->Next)
+                        {
+                            m->Flags |= 0x400;
+                        }
+                    }
                 }
             }
 

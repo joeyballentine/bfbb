@@ -538,13 +538,13 @@ static void fcb()
             if (flags_bit_12 && (orig_flags & 0x4000) && !flags_bit_10 && !flags_bit_13)
             {
                 streams[i].vinf.flags |= 0x400;
-                ARQPostRequest(&streams[i].request, (u32)streams[i].vinf.voice, 0, 1, source,
+                ARQPostRequest(&streams[i].request, (u32)&streams[i], 0, 1, source,
                                streams[i].dest_b, length, arqcb);
             }
             else if (flags_bit_13 && (orig_flags & 0x8000) && !flags_bit_9 && !flags_bit_12)
             {
                 streams[i].vinf.flags |= 0x200;
-                ARQPostRequest(&streams[i].request, (u32)streams[i].vinf.voice, 0, 1, source,
+                ARQPostRequest(&streams[i].request, (u32)&streams[i], 0, 1, source,
                                streams[i].dest_a, length, arqcb);
             }
         }
