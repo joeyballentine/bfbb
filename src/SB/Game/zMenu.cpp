@@ -153,11 +153,14 @@ U32 zMenuLoop()
         }
 
         time_current = 1.0f / float(GET_BUS_FREQUENCY() >> 2) * iTimeGet();
-        time_elapsed = time_current - time_last;
+
+        F32 current = time_current;
+
+        time_elapsed = current - time_last;
 
         if (menu_fmv_played && time_elapsed > 1.0f / 60.f)
         {
-            time_last = time_current - 1.0f / 60.f;
+            time_last = current - 1.0f / 60.f;
             time_elapsed = 1.0f / 60.f;
         }
 
