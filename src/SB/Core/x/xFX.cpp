@@ -515,13 +515,8 @@ void xFXUpdate(F32 dt)
     xFXAuraUpdate(dt);
 }
 
-static const RwV3d _1168 = { 1, 0, 0 };
-static const RwV3d _1169 = { 0, 1, 0 };
-
 static void LightResetFrame(RpLight* light)
 {
-    // non-matching: lwzu instruction
-
     RwV3d v1 = { 1, 0, 0 };
     RwV3d v2 = { 0, 1, 0 };
 
@@ -653,7 +648,7 @@ RpAtomic* xFXBubbleRender(RpAtomic* atomic)
 
     bp = BFX + bfx_curr * 1; // Why multiply by 1? Probably needs rewritten differently
 
-    RwRenderStateGet(rwRENDERSTATECULLMODE, NULL);
+    RwRenderStateGet(rwRENDERSTATECULLMODE, &cmode);
     RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLBACK);
     iDrawSetFBMSK(bp->pass1_fbmsk);
     iModelSetMaterialAlpha(atomic, bp->pass1_alpha);
@@ -686,7 +681,7 @@ RpAtomic* xFXBubbleRender(RpAtomic* atomic)
         (*gAtomicRenderCallBack)(atomic);
     }
 
-    RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)0x8);
+    RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)cmode);
 
     return atomic;
 }
@@ -702,7 +697,7 @@ RpAtomic* xFXShinyRender(RpAtomic* atomic)
         sTweaked = 1;
     }
 
-    RwRenderStateGet(rwRENDERSTATECULLMODE, NULL);
+    RwRenderStateGet(rwRENDERSTATECULLMODE, &cmode);
     RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLBACK);
     iDrawSetFBMSK(-1);
     iModelSetMaterialAlpha(atomic, rwCULLMODEFORCEENUMSIZEINT);
@@ -711,7 +706,7 @@ RpAtomic* xFXShinyRender(RpAtomic* atomic)
     iDrawSetFBMSK(0);
     iModelSetMaterialAlpha(atomic, 0);
     gFXSurfaceFlags = 0x10;
-    xFXAtomicEnvMapSetup(atomic, sFresnelMap, 1.0f);
+    xFXAtomicEnvMapSetup(atomic, sFresnelMap, 0.0f);
     gFXSurfaceFlags = 0;
     (*gAtomicRenderCallBack)(atomic);
     iModelSetMaterialAlpha(atomic, 0xff);
@@ -720,7 +715,7 @@ RpAtomic* xFXShinyRender(RpAtomic* atomic)
     xFXAtomicEnvMapSetup(atomic, sEnvMap, 1.0f);
     gFXSurfaceFlags = 0;
     (*gAtomicRenderCallBack)(atomic);
-    RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)0x8); // TODO: Fix Magic Number
+    RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)cmode);
 
     return atomic;
 }
@@ -1527,20 +1522,18 @@ void xFXFireworksInit(const char* fireworksTrailEmitter, const char* fireworksEm
 
 void xFXFireworksLaunch(F32 countdownTime, const xVec3* pos, F32 fuelTime)
 {
-    U32 counter = FIREWORK_COUNT;
-    _tagFirework* candidate = sFirework;
-    while (counter)
+    for (S32 i = 0; i < FIREWORK_COUNT; i++)
     {
-        if (candidate->state == 0)
+        _tagFirework& f = sFirework[i];
+
+        if (f.state == 0)
         {
-            candidate->state = 1;
-            candidate->timer = countdownTime;
-            candidate->pos = *pos;
-            candidate->fuel = fuelTime;
+            f.state = 1;
+            f.timer = countdownTime;
+            f.pos = *pos;
+            f.fuel = fuelTime;
             return;
         }
-        --counter;
-        ++candidate;
     }
 }
 
@@ -1557,9 +1550,11 @@ void xFXFireworksUpdate(F32 dt)
             sFirework[i].timer -= dt;
             if (sFirework[i].timer <= 0.0f)
             {
-                sFirework[i].vel.x = 13.0f * xurand() + 6.5f;
+                // The addend really is a negative literal, not a subtraction:
+                // the target's pool holds -6.5f and the code is an fmadds.
+                sFirework[i].vel.x = 13.0f * xurand() + -6.5f;
                 sFirework[i].vel.y = 0.0f;
-                sFirework[i].vel.z = 13.0f * xurand() + 6.5f;
+                sFirework[i].vel.z = 13.0f * xurand() + -6.5f;
                 sFirework[i].state = 2;
 
                 if (sFireworkLaunchSoundID != 0)
@@ -1618,14 +1613,10 @@ void xFXFireworksUpdate(F32 dt)
                     xParEmitterEmitCustom(femit, dt, &xplo_info);
                 }
 
-                F32 a = 0.4f * xurand() + 0.1f;
-                F32 b = 0.5f * xurand() + 0.5f;
-                F32 g = 0.5f * xurand() + 0.5f;
-                F32 r = 0.5f * xurand() + 0.5f;
-                F32 size = 5.0f * xurand() + 2.0f;
-                F32 intensity = 0.3f * xurand() + 0.1f;
-                F32 life = 0.5f * xurand() + 0.5f;
-                xScrFXGlareAdd(&sFirework[i].pos, life, intensity, size, r, g, b, a, NULL);
+                xScrFXGlareAdd(&sFirework[i].pos, 0.5f * xurand() + 0.5f, 0.3f * xurand() + 0.1f,
+                               5.0f * xurand() + 2.0f, 0.5f * xurand() + 0.5f,
+                               0.5f * xurand() + 0.5f, 0.5f * xurand() + 0.5f,
+                               0.4f * xurand() + 0.1f, NULL);
 
                 xVec3 diff;
                 xVec3Sub(&diff, xEntGetPos(&globals.player.ent), &sFirework[i].pos);
@@ -1651,14 +1642,11 @@ void xFXFireworksUpdate(F32 dt)
 
 void xFXStreakInit()
 {
-    xFXStreak* streak = sStreakList;
-
     for (S32 i = 0; i < 10; i++)
     {
-        memset(streak, 0, sizeof(xFXStreak));
-        streak->flags = 0;
-        streak->head = 0;
-        streak++;
+        memset(&sStreakList[i], 0, sizeof(xFXStreak));
+        sStreakList[i].flags = 0;
+        sStreakList[i].head = 0;
     }
 }
 
@@ -1888,18 +1876,19 @@ void xFXStreakStop(U32 id)
         return;
     }
 
-    U32 flags = sStreakList[id].flags;
-    if (!flags)
+    xFXStreak* s = &sStreakList[id];
+
+    if (!s->flags)
     {
         return;
     }
 
-    if (flags & 0x1)
+    if (s->flags & 0x1)
     {
-        sStreakList[id].flags = flags ^ 0x1;
+        s->flags = s->flags ^ 0x1;
     }
 
-    sStreakList[id].flags |= 0x2;
+    s->flags |= 0x2;
 }
 
 void xFXStreakUpdate(U32 id, const xVec3* a, const xVec3* b)
@@ -1932,13 +1921,10 @@ void xFXStreakUpdate(U32 id, const xVec3* a, const xVec3* b)
 
 void xFXShineInit()
 {
-    xFXShine* shine = sShineList;
-
     for (S32 i = 0; i < 2; i++)
     {
-        memset(shine, 0, sizeof(xFXShine));
-        shine->flags = 0;
-        shine++;
+        memset(&sShineList[i], 0, sizeof(xFXShine));
+        sShineList[i].flags = 0;
     }
 }
 
@@ -2531,7 +2517,7 @@ void xFXRibbon::refresh_joint(joint_data& joint, const tier_queue<joint_data>::i
         }
         else
         {
-            xVec3 offset = dir * (1.0f / xsqrt(len2));
+            const xVec3 offset = dir * (1.0f / xsqrt(len2));
 
             get_normal(joint.norm, offset, joint.orient);
         }
@@ -2612,11 +2598,11 @@ void xFXRibbon::render_strip(RxObjSpace3DVertex* verts, tier_queue<joint_data>::
         F32 offset2 = (cfg.pivot - 1.0f) * width;
         F32 u = ulookup[back];
 
-        xVec3 loc1 = joint.loc + joint.norm * offset1;
+        const xVec3 loc1 = joint.loc + joint.norm * offset1;
 
         set_vert(*v, loc1, u, 0.0f, color);
 
-        xVec3 loc2 = joint.loc + joint.norm * offset2;
+        const xVec3 loc2 = joint.loc + joint.norm * offset2;
 
         set_vert(v[1], loc2, u, 1.0f, color);
 
