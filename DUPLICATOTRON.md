@@ -19,18 +19,36 @@ is off-limits for upstream PRs.
 
 ## Status
 
-| metric | at branch point | now |
+| metric | at branch point | now (2026-08-12) |
 |---|---|---|
-| matched functions | 6491 / 10147 | 7678 / 10147 |
-| fuzzy match | 57.343% | 73.512% |
+| matched functions | 6491 / 10147 | 7814 / 10147 |
+| fuzzy match | 57.343% | 76.025% |
 | complete units | 195 / 543 | 223 / 543 |
-| **game code fuzzy** | — | **91.074%** (6520 / 7673) |
+| **game code exact** | — | **59.613%** (bytes) |
+| **game code fuzzy** | — | **94.775%** (6656 / 7673 functions) |
 
 Game code is tracked separately because it is the part that is actually
 being worked, and the project figure understates it badly: Renderware and
 Bink contribute 1375 functions at 6.6% and 2.4% and have never been
-touched. By category: SDK 99.484%, **game 91.074%**, MSL 79.045%,
+touched. By category: SDK 99.484%, **game 94.775%**, MSL 79.045%,
 Renderware 6.629%, Bink 2.371%.
+
+**Report exact and fuzzy together; they have decoupled.** `matched_functions`
+counts a function **only at exactly 100.0%** — not at >=99% (verified: `zFX`
+matched 54, functions at 100.0 = 54, functions at >=99.0 = 59). So near-miss
+work is nearly invisible in fuzzy: the 2026-08-12 batch converted 24 functions
+from 99.9% to 100.0% and moved fuzzy **+0.014** while moving exact **+0.61**.
+The inverse also holds — the `xShadow` pass the same day moved that unit's
+fuzzy +3.14 and exact by **zero**, because nothing crossed 100.0.
+
+Three different denominators answer three different questions, and the
+flattering one is the least useful:
+
+| measure | value | what it means |
+|---|---|---|
+| functions exact | 86.75% (6656/7673) | flatters: unmatched functions average 654 b, matched ones 146 b |
+| **bytes exact** | **59.61%** | the honest headline |
+| units fully matching | 87 / 221 | what a port actually needs — one bad function poisons a unit |
 
 Note the gap between game fuzzy (91.07%) and game `matched_code`
 (~55%). That is the near-miss effect, and a large and growing share of it
@@ -95,8 +113,113 @@ Practical consequence: when a unit has several near-100% functions and one
 large unwritten function early in the file, write the big one first. Filling
 small stubs around it just re-shuffles a pool that is going to move again.
 
-86 units are within 3 functions of being complete — finishing those is the
-fastest route to raising `complete_units`.
+58 game units are within 3 functions of being complete — finishing those is the
+fastest route to raising `complete_units`. See the roadmap below.
+
+## Roadmap to 100% game code
+
+Written 2026-08-12 against that day's build. Re-derive the numbers before
+trusting them; the shape is what matters, not the digits.
+
+**1,017 functions and 663,320 bytes remain, across 221 game units of which 87
+are fully matching.** The distribution is barbell-shaped, and that dictates the
+order of everything below:
+
+| band | count | note |
+|---|---|---|
+| 99-100 | 185 | 168,944 b — each 1-3 instructions out |
+| 90-99 | 455 | the big middle |
+| 0-90 (nonzero) | 278 | broken bodies |
+| absent | 99 | 98 with no symbol + 1 wrong `operator=` |
+
+**58 units are 1-3 functions from complete**, while **30 units hold 623 of the
+1,017 functions** (61%), zEntPlayer alone holding 88.
+
+### Phase 1 — convert units, not functions
+
+Clearing every unit 1-3 away costs ~118 functions and takes fully-matching
+units **87 -> 145**. Nothing else has that leverage, because a unit only
+becomes `Matching` — the DOL linking *our* code — when every function in it is
+exact. Order: the 24 one-away units first (11 of them blocked by a single
+function already above 99%: `iPad` 99.890, `zCollGeom` 99.770, `xEntMotion`
+99.694, `zMenu` 99.622, `zEntButton` 99.619, `iAnim` 99.581, `zNPCTypeBoss`
+99.565, `zAnimList` 99.488, `zTaxi` 99.381, `xMovePoint` 99.333, `zCombo`
+99.175), then the 13 harder ones, then 2-away (18 units), then 3-away (16).
+Batch ~4 small units per agent; they share idioms.
+
+**Verify completeness with `tools/symorder.py`, not `report.json`.** It scored
+`zSurface` 28/28 while `solo.py` had a function at 99.733% and our object
+emitted a weak `xVec3::operator=` the retail link deduplicated. Five units sit
+at 100% and still cannot be marked Matching for this class of reason (see
+Open leads).
+
+### Phase 2 — the structural blockers
+
+These block dozens of functions each and decide whether 100% is reachable.
+
+**2a. Deadstripped-literal pool displacement.** A function the retail link
+removed left `.sdata2`/`.rodata`/`.sbss2` literals behind that nothing
+surviving references, so every later pool offset shifts. Priced on 2026-08-12
+at **44 functions across just `zNPCFXCinematic` and `zNPCTypeDutchman`** (both
+measured with throwaway probes that were then removed), and it is the same
+mechanism as the eleven ghost `.rodata` templates in 15+ units and the
+`.sbss2` object pinning `ZDSP_elcb_event` at 99.984%. **Fabricating bodies is
+not allowed** — the objects *are* referenced, which fails condition 1 of the
+`__deadstripped_<unit>()` exception. The legitimate attack is `dwarf/`: if a
+deadstripped function can be *named* there, its real body is recoverable and
+the problem dissolves honestly. Highest-value investigation on the board and
+not yet run against this question.
+
+**2b. The reload-after-aliasing-store defect.** Retail's `mwcceppc` reloads a
+value after a possibly-aliasing store; this branch's compiler forwards it.
+Eight witnesses, one rule, and no source form reaches it short of `volatile`,
+which is wrong and was already rejected on `zNPCHazard::Discard`. This is a
+compiler patch, which is what this branch is for. Prior art: the float-meme
+alias patch priced at +55/+77 functions.
+
+**2c. Weak/deduplicated symbols.** Our objects emit `operator=`
+instantiations the retail link dropped, blocking `xModel`, `xParSys`,
+`zSurface` and others from Matching regardless of their function scores.
+
+### Phase 3 — the near-miss sweep (~185 functions)
+
+Cheap per function, but **run it after 2a**. A large share of the 185 are
+pool-shift victims no source edit can fix, and running it first means agents
+rediscovering the same blocker unit by unit — which is exactly what happened
+twice in the 2026-08-12 batch.
+
+### Phase 4 — the long tail (30 units, 623 functions, 410,192 b)
+
+Real decomp work: `zEntPlayer` (88), `zNPCTypeRobot` (42), `zNPCGoalRobo`
+(39), `zNPCHazard` (38), `xFX` (34), `zNPCTypeBossPlankton` (25). zEntPlayer
+needs a dedicated multi-run campaign, never a shared batch — at 146 KB with 54
+already-matched functions, a pool disturbance risks a lot at once. Plus the 98
+absent bodies, concentrated in `zEntPickup`, `iParMgr`, `xShadowSimple`,
+`zNPCGoalStd`, `xSnd`.
+
+### Phase 5 — the queued shared-header changes
+
+Deliberately last, applied one at a time with a full sweep after each. High
+blast radius: `xVec3.h` reaches 188 TUs, `xClumpColl.h` 169, `xFX.h` 74. See
+"Queued shared-header changes" below.
+
+### Will this reach 100%?
+
+**Not from source alone.** `xSFXUpdateEnvironmentalStreamSounds` had five
+errors proved against the target and its control flow brought to an exact
+match; eight variants measured, all *below* the untouched baseline. REGS-class
+and SCHED residues have resisted every source shape tried across many
+functions. `LassoNotify` is one unreachable branch instruction. These are
+documented dead ends, not open puzzles.
+
+The realistic path is **two tracks in parallel**: source work clears Phases 1,
+3 and 4, while the compiler track (2b, plus whatever 2a's DWARF work reveals)
+closes the last stretch. If the compiler track fails, the branch plateaus —
+high, but short of 100%.
+
+Recommended order: **Phase 1 first** (best leverage, lowest risk, visible as
+whole units), with **2a's DWARF investigation alongside** — it is research
+rather than edits, and it gates Phase 3.
 
 ## Tooling
 
