@@ -21,12 +21,12 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now (2026-08-12) |
 |---|---|---|
-| matched functions | 6491 / 10147 | 7815 / 10147 |
-| fuzzy match | 57.343% | 76.025% |
-| complete units | 195 / 543 | 224 / 543 |
-| **game code exact** | — | **59.703%** (bytes) |
-| **game code fuzzy** | — | **94.776%** (6657 / 7673 functions) |
-| **game units linked** | — | **88 / 224** |
+| matched functions | 6491 / 10147 | 7894 / 10147 |
+| fuzzy match | 57.343% | 76.308% |
+| complete units | 195 / 543 | 225 / 543 |
+| **game code exact** | — | **62.235%** (bytes) |
+| **game code fuzzy** | — | **95.192%** (6736 / 7673 functions) |
+| **game units linked** | — | **89 / 224** |
 
 Game code is tracked separately because it is the part that is actually
 being worked, and the project figure understates it badly: Renderware and
@@ -507,15 +507,43 @@ function off 100%. Broader rules are worse (the full-memory-barrier form reaches
 33 and is the unconditional-may-alias experiment already measured at -144/-330);
 narrower ones reach 4-7.
 
-**REGS is not approachable.** 88 sole blockers, of which 31 are a single
-register 2-cycle and the rest small rotations; the biggest cluster is `f0<->f1`
-at 6 functions and the `ZNPC_AnimTable_*` family is 3. The difference in
-`ZNPC_AnimTable_BossSBobbyArm` is purely *which free register the allocator
-hands out first* for a scratch while two argument registers are pending. That is
-the free-list/coalescing order, and the RE notes cover none of it — they stop at
-the scheduler, the pick-next heuristic, the dep-graph builders and the alias
-oracle. Locating the allocator, its interference graph and a gate narrow enough
-to flip only the copy-scratch case, for 3 witnesses, is not justified.
+**REGS is not approachable, and the allocator is now mapped so nobody has to
+ask again.** 88 sole blockers, of which 31 are a single register 2-cycle; the
+biggest cluster is `f0<->f1` at 6 functions and the `ZNPC_AnimTable_*` family
+is 3.
+
+The allocator, read from `.text` on 2026-08-12 — previously unmapped:
+
+- **RA/schedule driver `0x508680`**, once per function. Five-iteration loop over
+  register classes (current class at `[0x5ea299]`); per class it compares live
+  ranges `[0x5e9b04+class*4]` against physical count `[0x5e9800+class*4]` and
+  runs build → simplify → select → spill.
+- **Allocatable-mask builder `0x4fe4d0(class)`**, from `.bss` tables `[0x5e3b68]`
+  (slot → register bit) and `[0x5e5c78]` (reserved flags).
+- **Simplify/degree `0x508a20`**, iterating the live-range array `[0x5e9858]` by
+  index — i.e. IR creation order — degrees at `[lr+0x12]`. Classic
+  Chaitin-Briggs; this fixes the select-stack order.
+- **Color/select `0x508900`**, the decisive one: it clears each interference
+  neighbour's colour bit, then scans from bit 0 upward and assigns the
+  **lowest-numbered free register**.
+
+So the `r4`/`r5` difference is **not a tie-break knob** — it is coloring order.
+Whichever live range is coloured first takes r4 and the other takes r5, and that
+order comes from creation index. Changing it is a whole-program change with the
+same blast radius as the tie-break experiments already measured dead
+(ties-keep-earlier −1204). There is no narrow gate. That is *why* REGS is a
+wall, not merely that it is one.
+
+**The dependency-graph framing is mechanically impossible**, so that door is
+closed too. The store builder `0x508350` creates WAR/WAW edges by walking only
+the **backward** pending lists `[0x5e0866]`/`[0x5e0862]`. The discriminating
+reload in `get_texture_size` is a *forward* instruction, five after the store, so
+it is not in any list at edge-creation time — it only becomes visible later as an
+outgoing RAW edge at the RAW builder `0x508100`. An earlier note here claimed the
+builder "is given that information"; it is not. A reload gate would need a new
+forward block-scan or a post-DAG cleanup pass, neither of which exists. And
+empirically it would not have separated the populations anyway: gains are 32%
+reloaded (10/31), losses 40% (36/89) — statistically indistinguishable.
 
 **One untried framing, flagged not recommended.** The discriminator between
 clause D's gains and losses is whether the stored slots are reloaded in the same
@@ -840,7 +868,48 @@ confirming before anyone builds a strategy on either model.
   the same way is not safe — it pins volatile frame locals and measures -4.
   Patched compiler sha1 is now
   `7d3ff244fb371e3b15b0becd41ac04b627869ae8`.
-- **Clause D is dead — do not refit it.** A directional rule (an `stfs` to a
+- ~~**Clause D is dead — do not refit it.**~~ **REFITTED AND INSTALLED
+  2026-08-12 as E3n (`3316f9f0`, `e88c7360`). This entry was stale and cost the
+  project real progress; read the correction below before believing anything
+  that follows it.**
+
+  Re-measured on today's tree the same clause is **+59/−10**, not +22/−18, and
+  with eight of the ten losses recovered from source it is **+63 net**: Game
+  Code 6673 → 6736 functions, exact 60.038% → 62.235%, DOL sha1 unchanged,
+  `complete_units` unchanged at 89. Nothing about the compiler changed. The
+  *tree* changed — most functions clause D used to damage have since been
+  rewritten or converted by ordinary source work.
+
+  **The generalisable lesson: a shelved patch verdict is a property of the patch
+  TIMES the tree it was measured against. Re-measure before trusting any of
+  them, including E3n itself.** Two separate investigations this month reached
+  "no-go" on this clause by reasoning from the recorded numbers instead of
+  re-running them.
+
+  **The lever that recovered the losses: `const` on the destination frame
+  local.** E3n's gate requires the store side to be a *declared* frame object
+  (`base word0 == 0x00010005`, `[base+0x18] != 0`); `const` clears that field,
+  no alias edge is created, and the retail schedule returns. Every loss was the
+  same idiom — `xVec3 local = <expr>;`, a compiler-generated three-word struct
+  copy sharing a block with a `.sdata2` literal load. It is semantically
+  accurate wherever the local is never modified, so it is a faithfulness
+  improvement rather than a hack. It does **not** work on by-value call
+  arguments, nor where the local is written later (`BasisBspline`'s `Ntemp`,
+  `nearestTrackCB`'s `pdx[]`/`pdz[]`).
+
+  Two losses remain and are the standing price: `xMath3::xBoxFromCircle`
+  (77.875%; recoverable to 99.375% only via an aggregate initialiser that drops
+  the target's 12-byte zero `.rodata` template `@441`, so the faithful shape is
+  kept) and `xSpline::BasisBspline` (96.264%).
+
+  Also settled, so nobody re-runs it: the losses were **not** "false matches"
+  that only worked by accident under the old scheduler. `ColTestCyl`'s split
+  multiply and `dampen_velocity`'s comparison ladder look contorted but are
+  faithful — the natural fused forms measure 82.5% and 47.8%. Roughly 45 source
+  shapes were measured across the ten before the `const` lever was found.
+
+  The original entry, preserved because its measurements were honest at the
+  time: a directional rule (an `stfs` to a
   declared frame local may not be crossed by a *later* small static load,
   entry 3 only) hits exactly the motion four otherwise-finished functions
   need, and measures +22 functions to 100% against 18 whose percent drops.
