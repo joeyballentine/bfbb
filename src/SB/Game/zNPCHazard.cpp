@@ -23,9 +23,6 @@ S32 NPCC_HaveLOSToPos(xVec3* pos_src, xVec3* pos_tgt, F32 dst_max, xBase* tgt,
                       xCollis* colCallers);
 
 extern const xVec3 g_O3;
-extern F32 _958_Hazard; // 0.0f
-extern F32 _959_Hazard; // 1.0f
-extern F32 _1041_Hazard; // -1.0f
 
 // .data order below is the target's: every one of these is a definition in this
 // TU, not an import.
@@ -499,9 +496,9 @@ void NPCHazard::WipeIt()
     this->typ_hazard = NPC_HAZ_UNKNOWN;
     this->flg_hazard = 0;
     xVec3Copy(&this->pos_hazard, &g_O3);
-    this->tym_lifespan = _959_Hazard;
-    this->tmr_remain = _1041_Hazard;
-    this->pam_interp = _958_Hazard;
+    this->tym_lifespan = 1.0f;
+    this->tmr_remain = -1.0f;
+    this->pam_interp = 0.0f;
     this->cb_notify = NULL;
     this->npc_owner = NULL;
     memset(&this->custdata, 0, sizeof(this->custdata));
@@ -1752,7 +1749,7 @@ void NPCHazard::HurtThePlayer()
     }
     else if (zEntPlayer_DamageNPCKnockBack((xBase*)this->npc_owner, 1, &this->pos_hazard))
     {
-        this->npc_owner->Vibrate(NPC_VIBE_NORM, _1041_Hazard);
+        this->npc_owner->Vibrate(NPC_VIBE_NORM, -1.0f);
     }
 }
 
@@ -3939,6 +3936,24 @@ void UVAModelInfo::Refresh()
     RpGeometryUnlock(geo);
 }
 
+void UVAModelInfo::SetColor(iColor_tag color)
+{
+    RpGeometry* geo = model->geometry;
+
+    RwRGBA col;
+    col.red = color.r;
+    col.green = color.g;
+    col.blue = color.b;
+    col.alpha = color.a;
+
+    int numMats = model->geometry->matList.numMaterials;
+
+    for (int i = 0; i < numMats; i++)
+    {
+        geo->matList.materials[i]->color = col;
+    }
+}
+
 S32 UVAModelInfo::GetUV(RwTexCoords*& coords, S32& numVertices, RpAtomic* model) const
 {
     coords = NULL;
@@ -3981,22 +3996,4 @@ S32 UVAModelInfo::CloneUV(RwTexCoords*& coords, S32& numVertices, RpAtomic* mode
 F32 xVec2Length2(const xVec2* v)
 {
     return xVec2Dot(v, v);
-}
-
-void UVAModelInfo::SetColor(iColor_tag color)
-{
-    RpGeometry* geo = model->geometry;
-
-    RwRGBA col;
-    col.red = color.r;
-    col.green = color.g;
-    col.blue = color.b;
-    col.alpha = color.a;
-
-    int numMats = model->geometry->matList.numMaterials;
-
-    for (int i = 0; i < numMats; i++)
-    {
-        geo->matList.materials[i]->color = col;
-    }
 }

@@ -13,8 +13,6 @@
 static SMDepot g_smdepot = {};
 static S32 g_drawSpawnBounds;
 
-extern F32 _805_Spawner; // 5.0f
-
 void zNPCSpawner_Startup()
 {
 }
@@ -45,35 +43,29 @@ void zNPCSpawner_SceneFinish()
     XOrdDone(&depot->spawners, 0);
 }
 
-// Something weird with the conditions here.
 zNPCSpawner* zNPCSpawner_GetInstance()
 {
     SMDepot* depot = &g_smdepot;
-    zNPCSpawner* sm = (zNPCSpawner*)depot->spawners.list;
-    if (depot->spawners.cnt > 0)
+    zNPCSpawner* found = NULL;
+
+    for (S32 i = 0; i < depot->spawners.cnt; i++)
     {
-        for (S32 i = depot->spawners.cnt; i > 0; i--)
+        zNPCSpawner* sm = (zNPCSpawner*)depot->spawners.list[i];
+        if (!(sm->flg_spawner & 1))
         {
-            zNPCSpawner* sm_tmp = sm;
-            if (!(sm_tmp->flg_spawner & 1))
-            {
-                sm_tmp->flg_spawner |= 1;
-                return sm_tmp;
-            }
-            sm++;
+            found = sm;
+            sm->flg_spawner |= 1;
+            break;
         }
-        return NULL;
     }
-    else
-    {
-        return NULL;
-    }
+
+    return found;
 }
 
 void zNPCSpawner::Subscribe(zNPCCommon* owner)
 {
     this->npc_owner = owner;
-    this->tym_delay = _805_Spawner;
+    this->tym_delay = 5.0f;
     this->max_spawn = -1;
     this->wavestat = SM_STAT_BEGIN;
     XOrdInit(&this->pendlist, 0x10, 0);
