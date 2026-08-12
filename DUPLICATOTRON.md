@@ -367,6 +367,83 @@ the rest is cheap, high-yield source work.
 instantiations the retail link dropped, blocking `xModel`, `xParSys`,
 `zSurface` and others from Matching regardless of their function scores.
 
+### Another scheduler patch — measured 2026-08-12, and the answer is NO-GO
+
+Sized before building anything, because the population had never been measured.
+
+**First, a measurement artifact that invalidated the starting numbers.** objdiff
+prints a local branch's target as a section-relative address, so every branch in
+a function reads as a difference whenever the function sits at a different
+`.text` offset. `classify.py` compared raw text and so inflated `OTHER` roughly
+2x while hiding ~500 already-byte-equal functions inside it. Fixed in
+`eebc2025`; buckets went OTHER 914 -> 443, POOL 150 -> 493, SCHED 26 -> 83,
+REGS 23 -> 94. **The old "SCHED 26" floor was an artifact.** Anyone quoting
+`classify.py` numbers from before that commit should re-run it.
+
+**The real population**, with the two streams realigned independently and pool
+ids, local-static ids, resolved relocation names and branch deltas all
+normalised:
+
+| class | project | game | converts on a scheduler patch? |
+|---|---|---|---|
+| SCHED sole blocker | 89 | 86 | yes |
+| SCHED-modulo-registers sole | 87 | 85 | only if the reorder is pre-RA — unproven |
+| SCHED **plus** a separate REGS window | 42 | 41 | **no** — needs both |
+| REGS sole blocker | 88 | 87 | no |
+| byte-equal (pool/placement only) | 545 | 543 | already 100.0 in report.json |
+
+That third row is a class nobody had named. A naive count scores those 42 as
+gains and they do not convert; carry the distinction so the next patch is not
+over-priced.
+
+**The filter that kills it.** A patch at the `0x511fc0` alias oracle is an alias
+*edge* — it can only stop one memory reference crossing another. Of the 218
+scheduling-sole functions, **78 contain a motion that crosses no memory
+operation at all** (an `addi` sinking past an `addi`, an `mr` past an `fmuls`).
+Those are pick-order/tiebreak, and every tiebreak mutation is already measured
+and dead. At most 140 are reachable by any alias predicate, before asking
+whether one predicate covers them.
+
+**No cluster has a head.** Reducing each permutation to its motions gives 673
+events across 218 functions; the largest single shape is 23 events / 18
+functions and it is one of the unreachable ALU-past-ALU ones. The top 32 shapes
+cover 292 of 673.
+
+**The best candidate rule is clause D, which is already dead.** "A literal load
+may not hoist over a stack store" converts **11** functions (14 if three
+register fixes come free) — `zNPCGoalRobo` x3, `xFX::eval_joint`,
+`xRayHitsSceneFlags`, `LeafNodeBoxPolyIntersect`, `KickOilGlobby`,
+`auto_tweak::load_param<iColor_tag,i>`, `CollidePyramidBoxTop`, `NCIN_Zapper`,
+`xFont::render_fill_rect`. Scanning all 7,251 functions currently at exactly
+100.0, it puts **243 of them at risk across 821 sites — 17x the gain**, and
+`xFont::get_texture_size` is the recorded witness of clause D knocking a
+function off 100%. Broader rules are worse (the full-memory-barrier form reaches
+33 and is the unconditional-may-alias experiment already measured at -144/-330);
+narrower ones reach 4-7.
+
+**REGS is not approachable.** 88 sole blockers, of which 31 are a single
+register 2-cycle and the rest small rotations; the biggest cluster is `f0<->f1`
+at 6 functions and the `ZNPC_AnimTable_*` family is 3. The difference in
+`ZNPC_AnimTable_BossSBobbyArm` is purely *which free register the allocator
+hands out first* for a scratch while two argument registers are pending. That is
+the free-list/coalescing order, and the RE notes cover none of it — they stop at
+the scheduler, the pick-next heuristic, the dep-graph builders and the alias
+oracle. Locating the allocator, its interference graph and a gate narrow enough
+to flip only the copy-scratch case, for 3 witnesses, is not justified.
+
+**One untried framing, flagged not recommended.** The discriminator between
+clause D's gains and losses is whether the stored slots are reloaded in the same
+block. The alias predicate is not given that information — but the dependency
+graph builder at `0x508100`/`0x508350`, which walks the pending load/store lists
+at `[0x5e0866]`/`[0x5e0862]`, is. Installing the predicate there rather than at
+`0x511fc0` is the only unexplored option. It is a much larger RE job, the
+ceiling is still ~14 functions, and nothing about it has been measured.
+
+Better uses of a session, by the same measurement: 98 game functions have no
+symbol at all (39,896 bytes), 394 game functions are genuine source differences,
+and `zNPCGoalRobo` and `zNPCHazard` each carry 17 scheduling-sole functions plus
+real source work.
+
 ### Phase 3 — the near-miss sweep (~185 functions)
 
 ~~Cheap per function, but **run it after 2a**. A large share of the 185 are
