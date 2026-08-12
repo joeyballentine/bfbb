@@ -3326,12 +3326,13 @@ void zNPCSleepy::Reset()
 void zNPCSleepy::ParseINI()
 {
     static F32 rad_minimum;
+    static S8 init;
 
     NPCConfig* cfg = cfg_npc;
     zNPCRobot::ParseINI();
     cfg->snd_trax = g_sndTrax_Sleepy;
     NPCS_SndTablePrepare(g_sndTrax_Sleepy);
-    // Scheduling issue with init.
+
     if (init == 0)
     {
         rad_minimum = 5.0f;

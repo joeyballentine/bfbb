@@ -2102,8 +2102,10 @@ void zNPCDutchman::add_spray(const xVec3& loc, F32 dt)
         xParEmitterPropsAsset& prop = *snot_emitter->prop;
         F32 old_rate[2] = { prop.rate.val[0], prop.rate.val[1] };
 
-        prop.rate.val[0] = prop.rate.val[0] * tweak.flame.sneeze_mult;
-        prop.rate.val[1] = prop.rate.val[1] * tweak.flame.sneeze_mult;
+        F32 mult = tweak.flame.sneeze_mult;
+
+        prop.rate.val[0] = prop.rate.val[0] * mult;
+        prop.rate.val[1] = prop.rate.val[1] * mult;
 
         emit_particles(*snot_emitter, dt, snot_emitter_settings);
 

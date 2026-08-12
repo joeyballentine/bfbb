@@ -739,8 +739,6 @@ void xfont::irender(const char* text, F32 x, F32 y) const
     irender(text, 0x40000000, x, y);
 }
 
-static const basic_rect<F32> _1107 = {};
-
 void xfont::irender(const char* text, size_t text_size, F32 x, F32 y) const
 {
     if (!text)
@@ -776,7 +774,7 @@ void xfont::irender(const char* text, size_t text_size, F32 x, F32 y) const
 
 namespace
 {
-    substr text_delims = { " \t\n{}=*+:;,", 11 };
+    const substr text_delims = { " \t\n{}=*+:;,", 11 };
 
     size_t parse_split_tag(xtextbox::split_tag& ti)
     {
@@ -1304,8 +1302,6 @@ xtextbox::callback xtextbox::text_cb = { xtextbox::text_render, NULL, NULL };
         }                                                                                          \
     }
 
-const xtextbox::tag_entry_list _1642 = {};
-
 xtextbox::tag_entry_list xtextbox::read_tag(const substr& s)
 {
     static substr arg_buffer[32];
@@ -1394,7 +1390,7 @@ xtextbox::tag_entry_list xtextbox::read_tag(const substr& s)
         }
     }
 
-    tag_entry_list ret = _1642;
+    tag_entry_list ret = { entry_buffer, 0 };
     ret.size = entries_used;
 
     return ret;
