@@ -12,6 +12,8 @@
 #include <xEvent.h>
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\cmath>
 
+static xParEmitterAsset sSaveEmmiterSettings;
+static xParEmitterPropsAsset sSaveEmmiterPropSettings;
 static xParEmitterPropsAsset sDummyProp;
 
 void add_tweaks(xParEmitter& pe)
@@ -238,8 +240,8 @@ xPar* xParEmitterEmitCustom(xParEmitter* p, F32 dt, xParEmitterCustomSettings* i
     p_tasset = p->tasset;
     if ((custom_flags & 0x1) != 0)
     {
-        sSaveEmmiterSettings(p_tasset, p_tasset, 0.0);
-        sSaveEmmiterPropSettings(p->prop, p->prop, 0.0);
+        memcpy(&sSaveEmmiterSettings, p_tasset, sizeof(xParEmitterAsset));
+        memcpy(&sSaveEmmiterPropSettings, p->prop, sizeof(xParEmitterPropsAsset));
     }
     if ((custom_flags & 0x100) != 0)
     {
@@ -306,11 +308,11 @@ xPar* xParEmitterEmitCustom(xParEmitter* p, F32 dt, xParEmitterCustomSettings* i
             break;
         }
     }
-    newpar = xParEmitterEmit(p, dt, dt);
+    newpar = xParEmitterEmit(p, dt);
     if ((custom_flags & 0x1) != 0)
     {
-        sSaveEmmiterSettings(p_tasset, p_tasset, 0.0);
-        sSaveEmmiterPropSettings(p->prop, p->prop, 0.0);
+        memcpy(p_tasset, &sSaveEmmiterSettings, sizeof(xParEmitterAsset));
+        memcpy(p->prop, &sSaveEmmiterPropSettings, sizeof(xParEmitterPropsAsset));
     }
     return newpar;
 }
@@ -746,7 +748,7 @@ xPar* xParEmitterEmit(xParEmitter* pe, F32 emit_dt, F32 par_dt)
                         break;
                     }
                     case eParEmitterOffsetPoint:
-                        xParEmitterEmitOffsetPoint(pe, p, pea, (xEnt*)attachObject);
+                        xParEmitterEmitOffsetPoint(pe, p, pea, par_dt, (xEnt*)attachObject);
                         break;
                     case eParEmitterVCylEdge:
                         xParEmitterEmitVCylEdge(p, pea, par_dt);
@@ -819,9 +821,9 @@ void xParInterp::order()
     }
 }
 
-void xParEmitterEmit(xParEmitter* pe, F32 dt)
+inline xPar* xParEmitterEmit(xParEmitter* pe, F32 dt)
 {
-    xParEmitterEmit(pe, dt, dt);
+    return xParEmitterEmit(pe, dt, dt);
 }
 
 void xParInterp::operator=(const xParInterp& p)
@@ -831,12 +833,4 @@ void xParInterp::operator=(const xParInterp& p)
     this->val[1] = p.val[1];
     this->freq = p.freq;
     this->oofreq = p.oofreq;
-}
-
-void sSaveEmmiterSettings(xParEmitterAsset* a, xParEmitterAsset* b, F32 c)
-{
-}
-
-void sSaveEmmiterPropSettings(xParEmitterPropsAsset* a, xParEmitterPropsAsset* b, F32 c)
-{
 }

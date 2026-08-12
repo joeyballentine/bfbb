@@ -351,7 +351,7 @@ void xParEmitterEmitEntity(xPar* p, xParEmitterAsset* a, F32 dt, xEnt* ent)
     xParEmitterAngleVariation(p, a);
 }
 
-void xParEmitterEmitOffsetPoint(xParEmitter* pe, xPar* p, xParEmitterAsset* a, xEnt* ent)
+void xParEmitterEmitOffsetPoint(xParEmitter* pe, xPar* p, xParEmitterAsset* a, F32 dt, xEnt* ent)
 {
     xModelInstance* model;
     RpAtomic* data;
@@ -456,9 +456,8 @@ namespace
                             const xMat4x3& mat);
 }
 
-// NOTE: retail takes (xVec3&, xVec3&, const xParEmitterAsset&, const xEnt&) -
-// xParEmitterType.h is missing both `const`s. See the report.
-xMat4x3* xParEmitterTransformEntBone(xVec3& loc, xVec3& vel, xParEmitterAsset& a, xEnt& ent)
+xMat4x3* xParEmitterTransformEntBone(xVec3& loc, xVec3& vel, const xParEmitterAsset& a,
+                                     const xEnt& ent)
 {
     static xMat4x3 buffer_mat;
     xMat4x3* mat;
@@ -526,8 +525,8 @@ namespace
     }
 }
 
-// NOTE: retail takes (xVec3&, xVec3&, const xParEmitterAsset&, const xMat4x3&).
-void xParEmitterTransformEntBone(xVec3& loc, xVec3& vel, xParEmitterAsset& a, xMat4x3& mat)
+void xParEmitterTransformEntBone(xVec3& loc, xVec3& vel, const xParEmitterAsset& a,
+                                 const xMat4x3& mat)
 {
     transform_ent_bone(loc, vel, a, mat);
 }
@@ -537,16 +536,16 @@ namespace
     xVec3 get_random_offset(const xPEEntBone& eb, const xMat4x3& mat);
 }
 
-// NOTE: retail takes (xPar*, xParEmitterAsset*, F32, const xMat4x3&).
-void xParEmitterEmitEntBone(xPar* p, xParEmitterAsset* a, F32 dt, xMat4x3& mat)
+void xParEmitterEmitEntBone(xPar* p, xParEmitterAsset* a, F32 dt, const xMat4x3& mat)
 {
-    xVec3 off = get_random_offset(a->e_entbone, mat);
+    const xPEEntBone& eb = a->e_entbone;
+    xVec3 off = get_random_offset(eb, mat);
 
     p->m_pos += off;
 
-    if (a->e_entbone.deflection != 0.0f)
+    if (eb.deflection != 0.0f)
     {
-        p->m_vel += off * a->e_entbone.deflection * dt;
+        p->m_vel += off * eb.deflection * dt;
     }
 
     xParEmitterAngleVariation(p, a);
@@ -663,8 +662,7 @@ namespace
     xVec3 get_random_offset(const xBound& b, F32 expand, U32 subtype);
 }
 
-// NOTE: retail takes (xPar*, xParEmitterAsset*, F32, const xEnt*).
-void xParEmitterEmitEntBound(xPar* p, xParEmitterAsset* a, F32 dt, xEnt* ent)
+void xParEmitterEmitEntBound(xPar* p, xParEmitterAsset* a, F32 dt, const xEnt* ent)
 {
     xMat4x3* mat = (xMat4x3*)ent->model->Mat;
 

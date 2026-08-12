@@ -142,8 +142,6 @@ xPar* xParEmitterEmitSetTexIdxs(xPar* p, const xParSys* ps);
 xPar* xParEmitterEmit(xParEmitter* pe, F32 emit_dt, F32 par_dt);
 void xParEmitterUpdate(xBase* to, xScene*, F32 dt);
 void xParEmitterDestroy();
-void xParEmitterEmit(xParEmitter* pe, F32 dt);
+xPar* xParEmitterEmit(xParEmitter* pe, F32 dt);
 
-void sSaveEmmiterSettings(xParEmitterAsset* a, xParEmitterAsset* b, F32 c);
-void sSaveEmmiterPropSettings(xParEmitterPropsAsset* a, xParEmitterPropsAsset* b, F32 c);
 #endif
