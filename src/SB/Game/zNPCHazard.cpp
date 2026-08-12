@@ -1707,7 +1707,10 @@ S32 NPCHazard::ColTestSphere(const xBound* bnd_tgt, F32 rad)
 S32 NPCHazard::ColTestCyl(const xBound* bnd_tgt, F32 rad, F32 hyt)
 {
     S32 hit = 1;
-    xVec3 delta = bnd_tgt->cyl.center - this->pos_hazard;
+    // `delta` is const because the scheduler otherwise treats the stores that
+    // fill it as possibly aliasing the 0.5f literal load, and refuses to hoist
+    // that load above them the way the retail code does.
+    const xVec3 delta = bnd_tgt->cyl.center - this->pos_hazard;
     F32 hyt_top = 0.5f * hyt;
     F32 rad_sum = rad + bnd_tgt->cyl.r;
     F32 hyt_bot;

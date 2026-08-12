@@ -8962,11 +8962,16 @@ static RpCollisionTriangle* nearestTrackCB(RpIntersection*, RpCollisionTriangle*
         pdz[i] = tpd->center.z - xformVert[i].z;
     }
 
+    // `zero` is a matching device, not recovered source. pdx/pdz are written
+    // in a loop and so cannot be const; binding the literal to a local is the
+    // only way left to stop the scheduler treating those stores as aliasing
+    // this load, which retail issues ahead of them.
+    const F32 zero = 0.0f;
     F32 f3 = pdx[0] * pdz[1] - pdz[0] * pdx[1];
     F32 f2 = pdx[1] * pdz[2] - pdz[1] * pdx[2];
     F32 f1 = pdx[2] * pdz[0] - pdz[2] * pdx[0];
 
-    if ((f3 >= 0.0f && f2 >= 0.0f && f1 >= 0.0f) || (f3 <= 0.0f && f2 <= 0.0f && f1 <= 0.0f))
+    if ((f3 >= zero && f2 >= zero && f1 >= zero) || (f3 <= zero && f2 <= zero && f1 <= zero))
     {
         tpd->neardist = 0.0f;
         tpd->vert[0] = xformVert[0];
@@ -15662,7 +15667,10 @@ static void dampen_velocity(xVec3& v1, const xVec3& v2, F32 f)
 {
     F32 f0 = v1.x * v2.x;
 
-    xVec3 v1_old = v1;
+    // `v1_old` is const so that the scheduler does not treat the stores that
+    // fill it as possibly aliasing the 0.0f literal load below; retail issues
+    // that load before the last two stores.
+    const xVec3 v1_old = v1;
 
     F32 f3 = v2.y;
     F32 f4 = -((f * f0) - v1.x);

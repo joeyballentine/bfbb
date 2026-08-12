@@ -836,7 +836,7 @@ F32 zNPCCommon::BoundAsRadius(S32 useCfg) const
 
         if (cfg->useBoxBound)
         {
-            xVec3 dim = cfg->dim_bound;
+            const xVec3 dim = cfg->dim_bound;
             rad = (dim.x + dim.y + dim.z) * (1 / 6.f);
         }
         else

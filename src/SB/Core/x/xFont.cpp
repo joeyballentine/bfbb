@@ -3296,7 +3296,7 @@ namespace
 {
     xVec2 get_texture_size(RwRaster& raster)
     {
-        xVec2 vec = { raster.width / 640.0f, raster.height / 480.0f };
+        const xVec2 vec = { raster.width / 640.0f, raster.height / 480.0f };
         return vec;
     }
 

@@ -1187,8 +1187,12 @@ namespace cruise_bubble
 
         void render_model_2d(xModelInstance* model, const basic_rect<F32>& rect, F32 param_3)
         {
-            xVec3 r = { 0.0f, 0.0f, 1.0f };
-            xVec3 from = { 0.0f, 0.0f, -0.01f };
+            // Both are const so that the scheduler does not treat the stores
+            // that copy their .rodata templates onto the stack as aliasing the
+            // literal loads for the assign() calls below; retail issues those
+            // loads first, and the lwzu that folds away one addi depends on it.
+            const xVec3 r = { 0.0f, 0.0f, 1.0f };
+            const xVec3 from = { 0.0f, 0.0f, -0.01f };
 
             xMat4x3 frame;
 
@@ -1612,7 +1616,10 @@ namespace cruise_bubble
                 show_gizmo(hud.gizmo[index], hud.gizmo[index].bound, hud.model.target);
             }
             gizmo = &hud.gizmo[index];
-            xVec3 screen_loc = cruise_bubble::world_to_screen(*target);
+            // const so that the stores filling screen_loc are not treated as
+            // aliasing the current_tweak load below, which retail hoists above
+            // them.
+            const xVec3 screen_loc = cruise_bubble::world_to_screen(*target);
 
             gizmo->bound.set_size(current_tweak->hud.target.size);
             gizmo->bound.center(screen_loc.x, screen_loc.y);

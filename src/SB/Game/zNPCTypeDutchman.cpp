@@ -3375,7 +3375,10 @@ void zNPCGoalDutchmanBeam::add_blast_effects(S32 which, F32 dt)
 
 void zNPCGoalDutchmanBeam::add_effects(S32 which, F32 dt)
 {
-    xVec3 offset = beam[which].loc - owner.get_orbit();
+    // `offset` is const so that the scheduler does not treat the store of its
+    // initialiser as aliasing the tweak/literal loads that retail hoists above
+    // it; see the note in zNPCHazard::ColTestCyl.
+    const xVec3 offset = beam[which].loc - owner.get_orbit();
     F32 max_dist = 0.01f + tweak.ground_radius;
 
     if (offset.length2() > max_dist * max_dist)
