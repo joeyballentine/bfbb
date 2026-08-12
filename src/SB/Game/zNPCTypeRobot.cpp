@@ -634,12 +634,12 @@ xAnimTable* ZNPC_AnimTable_ThunderCloud()
 
     xAnimTable* table = xAnimTableNew("ThunderCloud", NULL, 0);
 
-    xAnimTableNewState(table, g_strz_roboanim[0x01], 0x010, 1, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_cloudanim[0x01], 0x010, 1, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_roboanim[0x02], 0x010, 1, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
+    xAnimTableNewState(table, g_strz_cloudanim[0x02], 0x010, 1, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
 
-    NPCC_BuildStandardAnimTran(table, g_strz_roboanim, ourAnims, 1, 0.2f);
+    NPCC_BuildStandardAnimTran(table, g_strz_cloudanim, ourAnims, 1, 0.2f);
 
     return table;
 }
