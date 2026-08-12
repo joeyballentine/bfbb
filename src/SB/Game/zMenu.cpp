@@ -31,6 +31,15 @@
 
 bool menu_fmv_played;
 
+// These three are declared here rather than beside time_elapsed and holdTmr
+// because .sbss is laid out in declaration order, and the target's order is
+// menu_fmv_played, time_last, time_current, sAttractMode_timer, card, sInMenu,
+// corruptFileCount. time_elapsed and holdTmr have non-zero initialisers, so
+// they land in .sdata and are not part of that sequence.
+static volatile F32 time_last;
+static volatile F32 time_current;
+static volatile F32 sAttractMode_timer;
+
 static S32 sFirstBoot = 1;
 
 // TODO: This probably wasn't volatile in the original code, but we have 100%
@@ -43,9 +52,6 @@ static char corruptFiles[3][64];
 
 static volatile F32 time_elapsed = 1.0f / 100.0f;
 static volatile F32 holdTmr = 10.0f;
-static volatile F32 time_last;
-static volatile F32 time_current;
-static volatile F32 sAttractMode_timer;
 
 S32 zMenuRunning()
 {

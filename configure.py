@@ -510,7 +510,7 @@ config.libs = [
             Object(NonMatching, "SB/Game/zLightning.cpp", extra_cflags=["-sym on"]),
             Object(NonMatching, "SB/Game/zLOD.cpp"),
             Object(NonMatching, "SB/Game/zMain.cpp"),
-            Object(Equivalent, "SB/Game/zMenu.cpp"),
+            Object(Matching, "SB/Game/zMenu.cpp"),
             Object(Matching, "SB/Game/zMovePoint.cpp", extra_cflags=["-sym on"]),
             Object(NonMatching, "SB/Game/zMusic.cpp"),
             Object(Equivalent, "SB/Game/zParCmd.cpp"),
