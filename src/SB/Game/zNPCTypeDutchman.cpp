@@ -687,7 +687,7 @@ void zNPCDutchman::RenderExtra()
         beaming = TRUE;
     }
 
-    S32 haloing = flag.fade != FADE_TELEPORT;
+    U32 haloing = flag.fade != FADE_TELEPORT;
 
     if (beaming)
     {
@@ -739,13 +739,13 @@ namespace
         if (init)
         {
             turn_accel = 540.0f;
-            auto_tweak::load_param<F32, F32>(turn_accel, DEG2RAD(10), 0.01f, 1000000000.0f, ap,
+            auto_tweak::load_param<F32, F32>(turn_accel, DEG2RAD(1), 0.01f, 1000000000.0f, ap,
                                              apsize, "turn_accel");
         }
         if (init)
         {
             turn_max_vel = 180.0f;
-            auto_tweak::load_param<F32, F32>(turn_max_vel, DEG2RAD(10), 0.01f, 1000000000.0f, ap,
+            auto_tweak::load_param<F32, F32>(turn_max_vel, DEG2RAD(1), 0.01f, 1000000000.0f, ap,
                                              apsize, "turn_max_vel");
         }
         if (init)
@@ -828,19 +828,19 @@ namespace
         if (init)
         {
             initiate.turn_vel = 900.0f;
-            auto_tweak::load_param<F32, F32>(initiate.turn_vel, DEG2RAD(10), -1000000000.0f,
+            auto_tweak::load_param<F32, F32>(initiate.turn_vel, DEG2RAD(1), -1000000000.0f,
                                              1000000000.0f, ap, apsize, "initiate.turn_vel");
         }
         if (init)
         {
             initiate.turn_accel = 180.0f;
-            auto_tweak::load_param<F32, F32>(initiate.turn_accel, DEG2RAD(10), 0.01f, 1000000000.0f,
+            auto_tweak::load_param<F32, F32>(initiate.turn_accel, DEG2RAD(1), 0.01f, 1000000000.0f,
                                              ap, apsize, "initiate.turn_accel");
         }
         if (init)
         {
             initiate.up_vel = 10.0f;
-            auto_tweak::load_param<F32, F32>(initiate.up_vel, DEG2RAD(10), 0.01f, 1000000000.0f, ap,
+            auto_tweak::load_param<F32, F32>(initiate.up_vel, 1.0f, -100000.0f, 100000.0f, ap,
                                              apsize, "initiate.up_vel");
         }
         if (init)
@@ -960,13 +960,13 @@ namespace
         if (init)
         {
             teleport.turn_accel = 2160.0f;
-            auto_tweak::load_param<F32, F32>(teleport.turn_accel, DEG2RAD(10), 0.01f, 1000000000.0f,
+            auto_tweak::load_param<F32, F32>(teleport.turn_accel, DEG2RAD(1), 0.01f, 1000000000.0f,
                                              ap, apsize, "teleport.turn_accel");
         }
         if (init)
         {
             teleport.turn_max_vel = 720.0f;
-            auto_tweak::load_param<F32, F32>(teleport.turn_max_vel, DEG2RAD(10), 0.01,
+            auto_tweak::load_param<F32, F32>(teleport.turn_max_vel, DEG2RAD(1), 0.01,
                                              1000000000.0f, ap, apsize, "teleport.turn_max_vel");
         }
         if (init)
@@ -1092,13 +1092,13 @@ namespace
         if (init)
         {
             flame.blob_pitch = 60.0f;
-            auto_tweak::load_param<F32, F32>(flame.blob_pitch, DEG2RAD(10), -90.0f, 90.0f, ap,
+            auto_tweak::load_param<F32, F32>(flame.blob_pitch, DEG2RAD(1), -90.0f, 90.0f, ap,
                                              apsize, "flame.blob_pitch");
         }
         if (init)
         {
             flame.spray_width = 0.1f;
-            auto_tweak::load_param<F32, F32>(flame.splash_width, 1.0f, 0.0f, 10.0f, ap, apsize,
+            auto_tweak::load_param<F32, F32>(flame.spray_width, 1.0f, 0.0f, 10.0f, ap, apsize,
                                              "flame.spray_width");
         }
         if (init)
@@ -1111,7 +1111,7 @@ namespace
         {
             flame.sneeze_mult = 10.0f;
             auto_tweak::load_param<F32, F32>(flame.sneeze_mult, 1.0f, 1.0f, 100.0f, ap, apsize,
-                                             "flame.sneete_mult");
+                                             "flame.sneeze_mult");
         }
         if (init)
         {
@@ -1128,13 +1128,13 @@ namespace
         if (init)
         {
             lasso.max_angle_enable = 60.0f;
-            auto_tweak::load_param<F32, F32>(lasso.max_angle_enable, DEG2RAD(10), 0.01f,
+            auto_tweak::load_param<F32, F32>(lasso.max_angle_enable, DEG2RAD(1), 0.01f,
                                              1000000000.0f, ap, apsize, "lasso.max_angle_enable");
         }
         if (init)
         {
             lasso.max_angle_disable = 90.0f;
-            auto_tweak::load_param<F32, F32>(lasso.max_angle_disable, DEG2RAD(10), 0.01f,
+            auto_tweak::load_param<F32, F32>(lasso.max_angle_disable, DEG2RAD(1), 0.01f,
                                              1000000000.0f, ap, apsize, "lasso.max_angle_disable");
         }
         if (init)
@@ -1394,27 +1394,27 @@ namespace
         }
         if (init)
         {
-            sound[SOUND_BIZARRE].volume = 0.5f;
+            sound[SOUND_BIZARRE].volume = 1.0f;
             auto_tweak::load_param<F32, F32>(sound[SOUND_BIZARRE].volume, 1.0f, 0.0f, 1.0f, ap,
                                              apsize, "sound[SOUND_BIZARRE].volume");
         }
         if (init)
         {
-            sound[SOUND_BIZARRE].range_inner = 1.0f;
+            sound[SOUND_BIZARRE].range_inner = 10.0f;
             auto_tweak::load_param<F32, F32>(sound[SOUND_BIZARRE].range_inner, 1.0f, 0.0f,
                                              100000.0f, ap, apsize,
                                              "sound[SOUND_BIZARRE].range_inner");
         }
         if (init)
         {
-            sound[SOUND_BIZARRE].range_outer = 10.0f;
+            sound[SOUND_BIZARRE].range_outer = 40.0f;
             auto_tweak::load_param<F32, F32>(sound[SOUND_BIZARRE].range_outer, 1.0f, 0.0f,
                                              100000.0f, ap, apsize,
                                              "sound[SOUND_BIZARRE].range_outer");
         }
         if (init)
         {
-            sound[SOUND_BIZARRE].delay = 40.0f;
+            sound[SOUND_BIZARRE].delay = 0.0f;
             auto_tweak::load_param<F32, F32>(sound[SOUND_BIZARRE].delay, 1.0f, 0.0f, 10.0f, ap,
                                              apsize, "sound[SOUND_BIZARRE].delay");
         }
@@ -2070,7 +2070,7 @@ void zNPCDutchman::add_slime(const xVec3& loc, F32 dt)
         F32 dist2 = (loc - slime.origin).length2();
         F32 max_dist = 0.5f + first.dist;
 
-        if (max_dist * max_dist <= dist2)
+        if (dist2 >= max_dist * max_dist)
         {
             if (slime.slices.full())
             {
@@ -2240,19 +2240,18 @@ void zNPCDutchman::update_flames(F32 dt)
 
 void zNPCDutchman::start_fight()
 {
-    if (!flag.fighting)
+    if (flag.fighting || life <= 0)
     {
-        if (life > 0)
-        {
-            flag.fighting = 1;
-
-            psy_instinct->GoalSet(NPC_GOAL_DUTCHMANINITIATE, 1);
-            zCameraDisableTracking(CO_BOSS);
-            boss_cam.start(globals.camera);
-            boss_cam.set_targets(*(const xVec3*)&globals.player.ent.model->Mat->pos,
-                                 bound.sph.center, bound.sph.r);
-        }
+        return;
     }
+
+    flag.fighting = 1;
+
+    psy_instinct->GoalSet(NPC_GOAL_DUTCHMANINITIATE, 1);
+    zCameraDisableTracking(CO_BOSS);
+    boss_cam.start(globals.camera);
+    boss_cam.set_targets(*(const xVec3*)&globals.player.ent.model->Mat->pos, bound.sph.center,
+                         bound.sph.r);
 }
 
 void zNPCDutchman::set_life(S32 value)
@@ -2436,7 +2435,14 @@ U8 zNPCDutchman::check_player_damage()
 
 xVec3 zNPCDutchman::get_eye_loc(S32 index) const
 {
-    static S32 lookup[] = { 20, 21 };
+    static const S32 lookup[] = { 10, 13 };
+
+    return xModelGetBoneLocation(*model, lookup[index]);
+}
+
+xVec3 zNPCDutchman::get_hand_loc(S32 index) const
+{
+    static const S32 lookup[] = { 32, 40 };
 
     return xModelGetBoneLocation(*model, lookup[index]);
 }
@@ -2481,17 +2487,17 @@ xVec3 zNPCDutchman::random_orbit(const xVec3& loc, F32 min_ang, F32 max_ang) con
 
     F32 rand_ang = (r - min_ang) * xurand() + min_ang;
 
-    if (xrand() & 0x2000)
+    if ((xrand() >> 13) & 1)
     {
-        rand_ang = rand_ang * -1.0f;
+        rand_ang *= -1.0f;
     }
 
-    ang = ang + rand_ang;
+    F32 new_ang = ang + rand_ang;
 
     xVec3 dest = orbit;
 
-    dest.x = tweak.orbit_radius * isin(ang) + dest.x;
-    dest.z = tweak.orbit_radius * icos(ang) + dest.z;
+    dest.x = tweak.orbit_radius * isin(new_ang) + dest.x;
+    dest.z = tweak.orbit_radius * icos(new_ang) + dest.z;
 
     return dest;
 }
@@ -2596,13 +2602,6 @@ zNPCLassoInfo* zNPCDutchman::PRIV_GetLassoData()
 S32 zNPCDutchman::IsAlive()
 {
     return life > 0;
-}
-
-xVec3 zNPCDutchman::get_hand_loc(S32 index) const
-{
-    static S32 lookup[] = { 6, 10 };
-
-    return xModelGetBoneLocation(*model, lookup[index]);
 }
 
 void zNPCDutchman::set_alpha(F32 value)
@@ -2764,7 +2763,7 @@ void zNPCDutchman::render_halo()
 U8 zNPCDutchman::turning(F32 dt) const
 {
     U8 result = 0;
-    xVec2 facing;
+    xVec2 facing = { 0.0f, 0.0f };
 
     facing.x = model->Mat->at.x;
     facing.y = model->Mat->at.z;
@@ -2846,14 +2845,16 @@ S32 zNPCGoalDutchmanInitiate::Enter(F32 dt, void* updCtxt)
 
     xVec2 offset = { end_loc.x - orbit.x, end_loc.z - orbit.z };
 
-    if (offset.length2() < 0.001f)
+    F32 dist2 = offset.length2();
+
+    if (dist2 < 0.001f)
     {
         owner.move.dest.x = orbit.x;
         owner.move.dest.z = orbit.z + tweak.orbit_radius;
     }
     else
     {
-        F32 scale = tweak.orbit_radius / xsqrt(offset.length2());
+        F32 scale = tweak.orbit_radius / xsqrt(dist2);
 
         owner.move.dest.x = offset.x * scale + orbit.x;
         owner.move.dest.z = offset.y * scale + orbit.z;
@@ -2994,7 +2995,9 @@ S32 zNPCGoalDutchmanDamage::Exit(F32 dt, void* updCtxt)
 
 S32 zNPCGoalDutchmanDamage::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
 {
-    if (owner.AnimCurState()->ID == g_hash_subbanim[19])
+    U32 id = owner.AnimCurState()->ID;
+
+    if (id == g_hash_subbanim[19])
     {
         owner.LassoSyncAnims(LASS_ANIM_GRAB);
     }
@@ -3058,7 +3061,9 @@ S32 zNPCGoalDutchmanReappear::Exit(F32 dt, void* updCtxt)
 
 S32 zNPCGoalDutchmanReappear::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
 {
-    if (owner.AnimCurState()->ID != g_hash_subbanim[5] || owner.AnimTimeRemain(NULL) < dt)
+    U32 id = owner.AnimCurState()->ID;
+
+    if (id != g_hash_subbanim[5] || dt > owner.AnimTimeRemain(NULL))
     {
         *trantype = GOAL_TRAN_SET;
         return owner.next_goal();
@@ -3178,7 +3183,7 @@ void zNPCGoalDutchmanBeam::update_fire(F32 dt)
         xfeq0(beam[1].vel) && xeq(beam[1].dist / tweak.beam.end_dist, 1.0f, 1e-5f))
     {
         owner.delay = 0.0f;
-        substate = SS_DONE;
+        substate = SS_UNFOCUS;
 
         for (S32 i = 0; i < 2; i++)
         {
@@ -3369,8 +3374,9 @@ void zNPCGoalDutchmanBeam::predict_target(xVec3& target) const
     xVec3 offset = player_loc - owner.get_center();
     F32 mag2 = offset.length2();
     F32 minmag = tweak.beam.start_dist;
+    F32 minmag2 = minmag * minmag;
 
-    if (mag2 <= 0.001f + minmag * minmag)
+    if (mag2 <= 0.001f + minmag2)
     {
         target = player_loc;
     }
@@ -3438,31 +3444,30 @@ namespace
 
 void zNPCGoalDutchmanFlame::update_wait(F32 dt)
 {
-    if (!(owner.delay < tweak.flame.start_delay))
+    if (owner.delay < tweak.flame.start_delay || owner.turning())
     {
-        if (!owner.turning())
-        {
-            substate = SS_MOVE;
-
-            owner.move.accel = tweak.accel;
-            owner.move.max_vel = tweak.max_vel;
-
-            const xVec3& orbit = owner.get_orbit();
-            xVec3& dest = owner.move.dest;
-
-            dest = orbit - (dest - orbit);
-
-            move_dir.assign(dest.x - orbit.x, dest.z - orbit.z);
-            move_dir.normalize();
-
-            owner.flag.move = zNPCDutchman::MOVE_FOLLOW;
-            stopped = 0;
-
-            owner.turn_to_face(dest);
-            owner.start_flames();
-            owner.start_hand_trail();
-        }
+        return;
     }
+
+    substate = SS_MOVE;
+
+    owner.move.accel = tweak.accel;
+    owner.move.max_vel = tweak.max_vel;
+
+    const xVec3& orbit = owner.get_orbit();
+    xVec3& dest = owner.move.dest;
+
+    dest = orbit - (dest - orbit);
+
+    move_dir.assign(dest.x - orbit.x, dest.z - orbit.z);
+    move_dir.normalize();
+
+    owner.flag.move = zNPCDutchman::MOVE_FOLLOW;
+    stopped = 0;
+
+    owner.turn_to_face(dest);
+    owner.start_flames();
+    owner.start_hand_trail();
 }
 
 void zNPCGoalDutchmanFlame::update_move(F32 dt)
@@ -3511,7 +3516,7 @@ void zNPCGoalDutchmanFlame::update_stop(F32 dt)
 {
     U8 anim_done = FALSE;
 
-    if (owner.AnimCurState()->ID != g_hash_subbanim[18] || owner.AnimTimeRemain(NULL) < dt)
+    if (owner.AnimCurState()->ID != g_hash_subbanim[18] || dt > owner.AnimTimeRemain(NULL))
     {
         anim_done = TRUE;
     }
@@ -3562,9 +3567,10 @@ namespace
 {
     F32 angle_difference(const xVec2& a, const xVec2& b)
     {
-        F32 ang = xatan2(a.x, a.y);
+        F32 ang1 = xatan2(a.x, a.y);
+        F32 ang2 = xatan2(b.x, b.y);
 
-        return xrmod(PI + (xatan2(b.x, b.y) - ang)) - PI;
+        return xrmod(PI + (ang2 - ang1)) - PI;
     }
 }
 
@@ -3593,7 +3599,9 @@ S32 zNPCGoalDutchmanPostFlame::Exit(F32 dt, void* updCtxt)
 
 S32 zNPCGoalDutchmanPostFlame::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
 {
-    if (owner.AnimCurState()->ID == g_hash_subbanim[1])
+    U32 id = owner.AnimCurState()->ID;
+
+    if (id == g_hash_subbanim[1])
     {
         owner.update_round();
 
@@ -3658,8 +3666,10 @@ S32 zNPCGoalDutchmanCaught::Process(en_trantype* trantype, F32 dt, void* updCtxt
 {
     owner.LassoSyncAnims(LASS_ANIM_GRAB);
 
-    if (owner.delay >= tweak.lasso.escape_delay ||
-        owner.AnimCurState()->ID != g_hash_subbanim[19] || owner.AnimTimeRemain(NULL) < dt)
+    xAnimState* state = owner.AnimCurState();
+
+    if (owner.delay >= tweak.lasso.escape_delay || state->ID != g_hash_subbanim[19] ||
+        dt > owner.AnimTimeRemain(NULL))
     {
         owner.set_life(owner.life - 1);
 
