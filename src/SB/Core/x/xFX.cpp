@@ -2372,6 +2372,43 @@ void xFXRibbon::deactivate()
     }
 }
 
+void xFXRibbon::update(F32 dt)
+{
+    debug_update(dt);
+
+    mtime += (U32)(1000.0f * dt);
+
+    while (!joints.empty())
+    {
+        joint_data& oldest = joints.back();
+
+        if (mtime - oldest.born < mlife)
+        {
+            break;
+        }
+
+        oldest.born = mtime - mlife;
+
+        if (joints.size() == 1)
+        {
+            joints.clear();
+            break;
+        }
+
+        if (mtime - (*(joints.end() - 2)).born < mlife)
+        {
+            break;
+        }
+
+        joints.pop_back();
+    }
+
+    if (!need_update())
+    {
+        deactivate();
+    }
+}
+
 void xFXRibbon::start_render()
 {
     RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)cfg.blend_src);
@@ -2607,6 +2644,41 @@ namespace
         RwIm3DVertexSetRGBA(&vert, r, g, b, a);
     }
 } // namespace
+
+S32 xFXRibbon::render_compare(const xFXRibbon& other) const
+{
+    if (raster < other.raster)
+    {
+        return -1;
+    }
+
+    if (raster > other.raster)
+    {
+        return 1;
+    }
+
+    if (cfg.blend_src < other.cfg.blend_src)
+    {
+        return -1;
+    }
+
+    if (cfg.blend_src > other.cfg.blend_src)
+    {
+        return 1;
+    }
+
+    if (cfg.blend_dst < other.cfg.blend_dst)
+    {
+        return -1;
+    }
+
+    if (cfg.blend_dst > other.cfg.blend_dst)
+    {
+        return 1;
+    }
+
+    return 0;
+}
 
 void xFXRibbonSceneEnter()
 {
@@ -3027,6 +3099,28 @@ void xFXRibbon::debug_update_curve()
 {
 }
 
+bool xFXRibbon::need_update() const
+{
+    bool result = false;
+
+    if (visible() || debug_need_update())
+    {
+        result = true;
+    }
+
+    return result;
+}
+
+bool xFXRibbon::debug_need_update() const
+{
+    return false;
+}
+
+bool xFXRibbon::visible() const
+{
+    return !joints.empty();
+}
+
 void xFXRibbon::debug_update(F32)
 {
 }
@@ -3079,4 +3173,9 @@ inline void tier_queue_allocator::clear()
         blocks[i].prev = (i - 1) & mask;
         blocks[i].next = (i + 1) & mask;
     }
+}
+
+F32 xFXRibbon::get_age(const joint_data& joint) const
+{
+    return 0.001f * (mtime - joint.born);
 }

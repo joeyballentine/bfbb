@@ -72,104 +72,17 @@ struct xFXRibbon
     U32 mtime;
     U32 mlife;
 
-    bool visible() const
-    {
-        return !joints.empty();
-    }
+    bool visible() const;
 
-    bool need_update() const
-    {
-        bool result = false;
+    bool need_update() const;
 
-        if (visible() || debug_need_update())
-        {
-            result = true;
-        }
+    S32 render_compare(const xFXRibbon& other) const;
 
-        return result;
-    }
+    F32 get_age(const joint_data& joint) const;
 
-    S32 render_compare(const xFXRibbon& other) const
-    {
-        if (raster < other.raster)
-        {
-            return -1;
-        }
+    void update(F32 dt);
 
-        if (raster > other.raster)
-        {
-            return 1;
-        }
-
-        if (cfg.blend_src < other.cfg.blend_src)
-        {
-            return -1;
-        }
-
-        if (cfg.blend_src > other.cfg.blend_src)
-        {
-            return 1;
-        }
-
-        if (cfg.blend_dst < other.cfg.blend_dst)
-        {
-            return -1;
-        }
-
-        if (cfg.blend_dst > other.cfg.blend_dst)
-        {
-            return 1;
-        }
-
-        return 0;
-    }
-
-    F32 get_age(const joint_data& joint) const
-    {
-        return 0.001f * (mtime - joint.born);
-    }
-
-    void update(F32 dt)
-    {
-        debug_update(dt);
-
-        mtime += (U32)(1000.0f * dt);
-
-        while (!joints.empty())
-        {
-            joint_data& oldest = joints.back();
-
-            if (mtime - oldest.born < mlife)
-            {
-                break;
-            }
-
-            oldest.born = mtime - mlife;
-
-            if (joints.size() == 1)
-            {
-                joints.clear();
-                break;
-            }
-
-            if (mtime - (*(joints.end() - 2)).born < mlife)
-            {
-                break;
-            }
-
-            joints.pop_back();
-        }
-
-        if (!need_update())
-        {
-            deactivate();
-        }
-    }
-
-    bool debug_need_update() const
-    {
-        return false;
-    }
+    bool debug_need_update() const;
 
     void clear()
     {
