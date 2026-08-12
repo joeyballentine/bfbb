@@ -52,6 +52,7 @@
 #include "zGust.h"
 #include "zLasso.h"
 #include "zMusic.h"
+#include "zNPCGoals.h"
 #include "zNPCTypeTiki.h"
 #include "zNPCTypeTiki.h"
 #include "zNPCMessenger.h"
@@ -4554,28 +4555,64 @@ static void zEntPlayer_BoulderVehicleUpdate(xEnt* ent, xScene* sc, F32 dt)
 static void zEntPlayer_PredictionUpdate(xEnt* ent, F32 dt)
 {
     zPlayerGlobals* g = &globals.player;
+    xVec3 lastDir;
     F32 lastVel;
-    F32 newAngV;
-    F32 r;
 
-    xVec3Copy((xVec3*)&newAngV, &g->PredictCurrDir); // newangv prolly not right
+    xVec3Copy(&lastDir, &g->PredictCurrDir);
+    lastVel = g->PredictCurrVel;
+
     xVec3Sub(&g->PredictCurrDir, &ent->frame->mat.pos, &ent->frame->oldmat.pos);
-    xVec3SMulBy(&g->PredictCurrDir, (1.0f / last_update_dt));
-    r = xVec3Length(&g->PredictCurrDir);
-    g->PredictCurrVel = r;
+    xVec3SMulBy(&g->PredictCurrDir, 1.0f / last_update_dt);
+    g->PredictCurrDir.y = 0.0f;
 
-    if (r > 0.05f)
+    g->PredictCurrVel = xVec3Length(&g->PredictCurrDir);
+
+    if (g->PredictCurrVel > 0.05f)
     {
-        xVec3SMulBy(&g->PredictCurrDir, 1.0f);
+        xVec3SMulBy(&g->PredictCurrDir, 1.0f / g->PredictCurrVel);
     }
     else
     {
-        xVec3Copy(&g->PredictCurrDir, &ent->frame->mat.pos);
+        xVec3Copy(&g->PredictCurrDir, (xVec3*)&ent->model->Mat->at);
     }
 
-    if (g->PredictCurrDir.x > 0.05f)
+    g->PredictCurrVel = 0.9f * lastVel + (1.0f - 0.9f) * g->PredictCurrVel;
+
+    if (g->PredictCurrVel > 0.05f)
     {
-        // xVec3Cross(&g->PredictCurrDir, const xVec3*, const xVec3*) local vars
+        xVec3 cross;
+        F32 newAngV;
+
+        xVec3Cross(&cross, &lastDir, &g->PredictCurrDir);
+        newAngV = xasin(cross.y);
+
+        if (xVec3Dot(&lastDir, &g->PredictCurrDir) < 0.0f)
+        {
+            if (newAngV > 0.0f)
+            {
+                newAngV = PI - newAngV;
+            }
+            else
+            {
+                newAngV = -PI - newAngV;
+            }
+        }
+
+        newAngV /= dt;
+        g->PredictAngV = 0.9f * g->PredictAngV + (1.0f - 0.9f) * newAngV;
+
+        if (g->PredictAngV > 0.05f || g->PredictAngV < -0.05f)
+        {
+            F32 r = g->PredictCurrVel / g->PredictAngV;
+
+            xVec3Init(&g->PredictRotate, -g->PredictCurrDir.z, 0.0f, g->PredictCurrDir.x);
+            xVec3SMulBy(&g->PredictRotate, r);
+            xVec3Sub(&g->PredictTranslate, (xVec3*)&ent->model->Mat->pos, &g->PredictRotate);
+        }
+    }
+    else
+    {
+        g->PredictAngV = 0.0f;
     }
 }
 
@@ -7123,6 +7160,138 @@ catchtunnel_done:
             (ent->model->Mat->pos.y - ent->frame->oldmat.pos.y) / dt;
         tslide_lastrealvel.z =
             (ent->model->Mat->pos.z - ent->frame->oldmat.pos.z) / dt;
+    }
+}
+
+xVec3* NPCC_rightDir(xEnt* ent);
+
+void zEntPlayer_CheckCritterContact(xEnt* player, F32 dt)
+{
+    S32 i;
+    xEntCollis* plyrcol = player->collis;
+
+    if (globals.player.DamageTimer > 0.0f)
+    {
+        return;
+    }
+
+    for (i = plyrcol->npc_sidx; i < plyrcol->npc_eidx; i++)
+    {
+        xCollis* colrec = &plyrcol->colls[i];
+
+        if (colrec->optr == NULL)
+        {
+            continue;
+        }
+
+        zNPCCommon* npc = (zNPCCommon*)colrec->optr;
+
+        if (npc->baseType != eBaseTypeNPC)
+        {
+            continue;
+        }
+
+        S32 npctype = npc->SelfType();
+
+        if (npctype == NPC_TYPE_CRITTER)
+        {
+            zEntPlayer_DamageNPCKnockBack(npc, 1, npc->Pos());
+            return;
+        }
+
+        if (npctype == NPC_TYPE_GLOVE)
+        {
+            if (xVec3Dot(&g_NY3, &colrec->hdng) < 0.86f)
+            {
+                continue;
+            }
+
+            xPsyche* psy = npc->psy_instinct;
+
+            if (psy->GIDOfActive() != NPC_GOAL_ALERTGLOVE)
+            {
+                continue;
+            }
+
+            F32 tym_inGoal = psy->TimerGet(XPSY_TYMR_CURGOAL);
+
+            if (tym_inGoal < 0.35f)
+            {
+                continue;
+            }
+
+            static U32 hashes_ss[3] = { xStrHash("BBounceStrike01"), xStrHash("BBounceAttack01"),
+                                        xStrHash("BBounceStrike01") };
+            static U32 hashes_pa[3] = { xStrHash("StunJump"), xStrHash("StunFall"),
+                                        xStrHash("StunLand") };
+
+            U32 anid_player = globals.player.ent.model->Anim->Single->State->ID;
+            S32 found = 0;
+
+            if (gCurrentPlayer == eCurrentPlayerSpongeBob)
+            {
+                for (S32 k = 0; k < 3; k++)
+                {
+                    if (anid_player == hashes_ss[k])
+                    {
+                        found = 1;
+                        break;
+                    }
+                }
+            }
+            else if (gCurrentPlayer == eCurrentPlayerPatrick)
+            {
+                for (S32 k = 0; k < 3; k++)
+                {
+                    if (anid_player == hashes_pa[k])
+                    {
+                        found = 1;
+                        break;
+                    }
+                }
+            }
+
+            if (found)
+            {
+                continue;
+            }
+
+            zEntPlayer_DamageNPCKnockBack(npc, 1, npc->Pos());
+            return;
+        }
+
+        if ((npctype & 0xffffff00) == 'NTR\0' || (npctype & 0xffffff00) == 'NTF\0' ||
+            (npctype & 0xffffff00) == 'NTD\0' || (npctype & 0xffffff00) == 'NTA\0')
+        {
+            if (xVec3Dot(&g_NY3, &colrec->hdng) < 0.65f)
+            {
+                continue;
+            }
+
+            U32 mvinf = zEntPlayer_MoveInfo();
+
+            if (!(mvinf & 0x1))
+            {
+                continue;
+            }
+
+            xVec3 dir_push;
+            F32 dsq = npc->XZDstSqToPlayer(&dir_push, NULL);
+
+            if (dsq > 1e-5f)
+            {
+                dir_push /= xsqrt(dsq);
+            }
+            else
+            {
+                dir_push = *NPCC_rightDir(&globals.player.ent);
+            }
+
+            xVec3 vel_push = dir_push * 3.0f * dt;
+
+            player->frame->mat.pos += vel_push;
+            player->frame->mode |= 0x1;
+        }
     }
 }
 
@@ -13149,6 +13318,68 @@ static void PlayerHackFixBbashMiss(xModelInstance* model)
             astate->Speed = bbspeed[i];
         }
     }
+}
+
+static void PlayerLedgeInit(zLedgeGrabParams* ledge, xModelInstance* model)
+{
+    S32 i;
+    xAnimState* idle;
+    xAnimState* grab;
+    xVec3 tran[64];
+    xQuat quat[64];
+
+    idle = model->Anim->Table->StateList;
+    grab = xAnimTableGetState(model->Anim->Table, "LedgeGrab01");
+
+    if (grab && !(grab->UserFlags & 0x40000000))
+    {
+        if (!(((iAnimSKBHeader*)grab->Data->RawData[0])->Flags & 0x80000000))
+        {
+            ledge->tranCount = _iAnimSKBExtractTranslate(
+                (iAnimSKBHeader*)grab->Data->RawData[0], 1, ledge->tranTable, 60);
+
+            iAnimEval(idle->Data->RawData[0], 0.0f, 0, tran, quat);
+            _iAnimSKBAdjustTranslate((iAnimSKBHeader*)grab->Data->RawData[0], 1, (F32*)&tran[1],
+                                     (F32*)&tran[1]);
+
+            for (i = 0; i < ledge->tranCount; i++)
+            {
+                ledge->tranTable[i].x -= tran[1].x;
+                ledge->tranTable[i].y -= tran[1].y;
+                ledge->tranTable[i].z -= tran[1].z;
+            }
+
+            ledge->zdist = ledge->tranTable[ledge->tranCount - 1].z;
+            ((iAnimSKBHeader*)grab->Data->RawData[0])->Flags |= 0x80000000;
+        }
+
+        grab->Data->FileFlags &= ~0x777;
+        xAnimFileSetTime(grab->Data, grab->Data->Duration, grab->Data->TimeOffset);
+        ledge->ttime = grab->Data->Duration / grab->Speed;
+    }
+    else
+    {
+        ledge->ttime = 0.5f;
+        ledge->tranCount = 0;
+        ledge->zdist = 0.1f;
+    }
+
+    ledge->optr = NULL;
+    ledge->y0det = 0.0f;
+    ledge->dydet = 1.2f;
+    ledge->r0det = 0.5f;
+    ledge->drdet = 0.7f;
+    ledge->thdet = PI / 2;
+    ledge->rtime = 0.2f;
+    ledge->tmr = 0.0f;
+    ledge->spos.x = 0.0f;
+    ledge->spos.y = 0.0f;
+    ledge->spos.z = 0.0f;
+    ledge->tpos.x = 0.0f;
+    ledge->tpos.y = 0.0f;
+    ledge->tpos.z = 0.0f;
+    ledge->nrays = 3;
+    ledge->rrand = 0;
 }
 
 static void PlayerLedgeUpdate(xEnt* ent, xScene* sc, F32 dt)
