@@ -272,10 +272,62 @@ that value. Four of the six are 88-99%.
 
 **2b. The reload-after-aliasing-store defect.** Retail's `mwcceppc` reloads a
 value after a possibly-aliasing store; this branch's compiler forwards it.
-Eight witnesses, one rule, and no source form reaches it short of `volatile`,
-which is wrong and was already rejected on `zNPCHazard::Discard`. This is a
-compiler patch, which is what this branch is for. Prior art: the float-meme
-alias patch priced at +55/+77 functions.
+One rule, and no source form reaches it short of `volatile`, which is wrong and
+was already rejected on `zNPCHazard::Discard`. This is a compiler patch, which
+is what this branch is for. Prior art: the float-meme alias patch priced at
++55/+77 functions.
+
+**CENSUSED 2026-08-12 — and it does not price like the float meme.** Across all
+542 units with both objects:
+
+| tier | what it is | functions |
+|---|---|---|
+| NAMED | surplus load of a *named* global; symbol identical in both objects, so the comparison is exact | **90** (58 game) |
+| MEMBER | surplus load of a struct member `0xN(reg)`; registers normalised, so collisions possible | 96 |
+| ANON | surplus load of an anonymous pool literal; ids differ across objects, so per-literal attribution is impossible | 87 |
+
+**The number that matters is 8.** Of the 58 game NAMED candidates, only 8 have a
+match percentage consistent with the reload being their *sole* cause (comparing
+the surplus load count against the observed deficit). The other 50 have other
+differences too, so fixing 2b moves them but does not convert them:
+`iModelStreamRead` 99.490, `zParPTankSteamUpdate` 98.919, `zLightningUpdate`
+98.802, `zParPTankSparkleUpdate` 98.776, `zUIRenderAll` 98.652,
+`PlayerMountHackUpdate` 94.545, `xCMupdate` 91.500, `xSerialShutdown` 80.000.
+Distribution of the 58 by band: 2 at 99-100, 31 at 90-99, 16 at 50-90, 9 below.
+
+**The "seven witnesses in `xFX`" claim below is stale** — re-measured after the
+2026-08-12 `xFX` work, `DrawRing` (93 loads vs 93, `Im3DBufferPos` 4 vs 4),
+`xFXShineRender` (55 vs 55) and `xFXStreakRender` (33 vs 33) have *identical*
+load counts and are not reload cases at all. `zAnimListInit` is also excluded,
+because the `volatile` device means we now emit the reload; its residual is the
+`mr` copy. The surviving verified witnesses are `activate_ribbon`,
+`xFXAuraUpdate` and `NPCHazard::Discard` (NAMED), plus `xFXRingCreate` and
+`LightResetFrame` (ANON, float-literal reloads).
+
+Most-reloaded symbols, in case the trigger is narrower than "any global":
+`__ctype_map` (7), `RwEngineInstance` (6), `cb_bink_sound` (6), `globals` (5),
+`cb_bink_IO` (4), `gTRKCPUState` (3).
+
+**Method warning — four separate attempts failed the same way**, all worth
+knowing before writing any cross-object comparison: objdiff row *alignment*
+hides a surplus when it pairs the extra instruction against one of ours (2/9
+recall); raw operand text never matches because anonymous pool ids differ
+(`@1171` left, `@531` right) and registers differ (0/9); collapsing all
+anonymous ids to one token merges every distinct float literal in a function
+(9/9 recall but 43% of all non-matching functions flagged); `relocation.
+target_symbol` is an **index into that side's symbol list**, not a name, and the
+indices differ between objects; and symbols of the form `name$1234` are
+function-local statics whose ids also differ. Normalise all five before
+counting, and require that *we* do not load a named symbol the target lacks —
+that last check is what separates the defect from a plain wrong-symbol source
+bug. The census script is `cen_2b_v7.py` (scratchpad), validated at 5/5 recall
+on the re-verified witnesses.
+
+**Byproduct worth mining: 30 functions reference a different named symbol than
+the target does.** Some are naming artifacts, but the first one checked was a
+real bug — `ZNPC_AnimTable_ThunderCloud` used `g_strz_roboanim` where the target
+uses `g_strz_cloudanim`, fixed in `504aebf3` for 99.420% -> 100.000%. Triaging
+the rest is cheap, high-yield source work.
 
 **2c. Weak/deduplicated symbols.** Our objects emit `operator=`
 instantiations the retail link dropped, blocking `xModel`, `xParSys`,
