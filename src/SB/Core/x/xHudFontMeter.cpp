@@ -2,7 +2,7 @@
 
 #include <types.h>
 #include <xMath2.h>
-#include <PowerPC_EABI_Support\MSL_C\MSL_Common\printf.h>
+#include <stdio.h>
 #include <PowerPC_EABI_Support\MSL_C++\MSL_Common\Include\new.h>
 
 void xhud::font_meter_widget::load(xBase& data, xDynAsset& asset, size_t)
@@ -61,24 +61,30 @@ bool xhud::font_meter_widget::is(U32 id) const
     return val;
 }
 
+// NOTE: this belongs in xHudFontMeter.h, defined inline in the class body --
+// the target emits it weak, in its own section, and its string literal opens
+// @stringBase0 ahead of update()'s format strings. Defined here it is strong
+// and lands in .text between is() and update(); it has to sit above update()
+// for the string pool to come out in the target's order.
+char* xhud::font_meter_asset::type_name()
+{
+    return "hud:meter:font";
+}
+
+// Non-matching by six instructions, all register allocation: the target leaves
+// r3 free until after format_text[mode] is loaded, so the `this->a` load and
+// the format_text base both get r3, and `this->buffer` is materialised into r3
+// only just before the call. Ours hoists `addi r3, r31, 0x118` to the top of
+// the block and pushes the other two into r4. Identical instruction multiset
+// modulo register numbering; ~20 source shapes measured, none below the r3/r4
+// split, and the unpatched GC/2.0p1 emits the same code.
 void xhud::font_meter_widget::update(F32 dt)
 
 {
-    // Not right yet, and the last 16% of this function is here. Only [0] is
-    // ever written, yet sprintf indexes this with counter_mode (0..2), so the
-    // other two entries are read uninitialised -- retail must have had a real
-    // table of format strings. The target's frame is 0x10 larger than ours and
-    // it does not emit this store, so recovering the strings out of the target
-    // object's .data (as was done for zMain's g_xser_sizeinfo) should close it.
-    char* format_text[3];
-    format_text[0] = 0;
+    static char* format_text[3] = { "%d", "%d/%d", "%d of %d" };
 
     F32 a;
     S32 new_value;
-    basic_rect<F32> bounds;
-
-    U8 flag_1;
-    U8 flag_2;
 
     this->updater(dt);
     this->xf.id = this->font.id;
@@ -91,50 +97,29 @@ void xhud::font_meter_widget::update(F32 dt)
     this->xf.height = a;
 
     a = this->rc.a * (F32)this->start_font.c.a + 0.5f;
-    if (a <= 0.0f)
-    {
-        flag_1 = 0;
-    }
-    else if (a >= 255.0f)
-    {
-        flag_1 = 255;
-    }
-    else
-    {
-        flag_1 = (U8)(S32)a;
-    }
-    this->font.c.a = flag_1;
+    this->font.c.a = (a <= 0.0f) ? 0 : ((a >= 255.0f) ? 255 : (U8)(S32)a);
 
     a = this->rc.a * (F32)this->start_font.drop_c.a + 0.5f;
-    if (a <= 0.0f)
-    {
-        flag_1 = 0;
-    }
-    else if (a >= 255.0f)
-    {
-        flag_1 = 255;
-    }
-    else
-    {
-        flag_1 = (U8)(S32)a;
-    }
-    this->font.drop_c.a = flag_1;
+    this->font.drop_c.a = (a <= 0.0f) ? 0 : ((a >= 255.0f) ? 255 : (U8)(S32)a);
 
     new_value = (S32)(this->value + 0.5f);
     if (this->last_value != new_value)
     {
         this->last_value = new_value;
+        font_meter_asset& fma = *(font_meter_asset*)this->a;
+        U8 mode;
+
         a = this->max_value;
         if (a < this->min_value)
         {
-            flag_2 = 0;
+            mode = 0;
         }
         else
         {
-            flag_2 = ((font_meter_asset*)(this->a))->counter_mode;
+            mode = fma.counter_mode;
         }
-        sprintf(this->buffer, format_text[flag_2], new_value, (S32)(a + 0.5f));
-        bounds = this->xf.bounds(this->buffer);
+        sprintf(this->buffer, format_text[mode], new_value, (S32)(a + 0.5f));
+        basic_rect<F32> bounds = this->xf.bounds(this->buffer);
         this->offset.x = -bounds.x;
         this->offset.y = -bounds.y;
     }
@@ -162,11 +147,6 @@ void xhud::font_meter_widget::render()
         this->xf.render(this->buffer, temp_x, y);
     }
     return;
-}
-
-char* xhud::font_meter_asset::type_name()
-{
-    return "hud:meter:font";
 }
 
 // NOTE: this belongs in xFont.h. It is inline, so the compiler emits a weak
