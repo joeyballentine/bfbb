@@ -33,6 +33,28 @@ void xBoundGetSphere(xSphere& o, const xBound& bound);
 void xModelSetScale(xModelInstance* model, const xVec3& scale);
 void xSCurve(F32& p, F32& v, F32& a, F32 t);
 
+// These structs were used in deadstripped functions.
+// This function is here to force the symbols to be linked.
+// @558 is tweak_callback::create_change's template, which the real definition
+// below still emits, so it is not repeated here.
+void __deadstripped_zFX()
+{
+    const char _446[0x0C] = {};
+    const char _447[0x0C] = {};
+    const char _451[0x0C] = {};
+    const char _482[0x0C] = {};
+
+    const char _553[0x28] = {};
+    const char _554[0x28] = {};
+    const char _555[0x28] = {};
+    const char _556[0x28] = {};
+    const char _557[0x28] = {};
+    const char _559[0x28] = {};
+
+    const F32 _screen_bounds[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
+    const F32 _default_adjust[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
+}
+
 const xFXRing sPatrickStunRing[3] = { { 0x741b0566,
                                         1.0f,
                                         { 0.0f, 0.0f, 0.0f },
@@ -1099,6 +1121,50 @@ void zFX_SpawnBubbleMenuTrail(const xVec3* pos, U32 num, const xVec3* pos_rnd, c
     xMemPopTemp(posbuf);
 }
 
+void zFX_SpawnBubbleWall()
+{
+    RwCamera* camera = RwCameraGetCurrentCamera();
+    if (camera == NULL)
+    {
+        return;
+    }
+
+    RwMatrix* mat = RwFrameGetMatrix(RwCameraGetFrame(camera));
+
+    xVec3 pos[100];
+    xVec3 vel[100];
+
+    // Retail hoisted these six loads out of the loop. Our compiler does not, so
+    // they are hoisted by hand; the declaration order fixes the register
+    // assignment and the assignment order fixes the emitted load order.
+    F32 sy, sx, vsz, vsy, vsx, sz;
+    sx = bubblewall_scale.x;
+    sy = bubblewall_scale.y;
+    sz = bubblewall_scale.z;
+    vsx = bubblewall_velscale.x;
+    vsy = bubblewall_velscale.y;
+    vsz = bubblewall_velscale.z;
+
+    xVec3* pp = pos;
+    xVec3* vp = vel;
+    for (U32 i = 0; i < 50; i++, pp++, vp++)
+    {
+        pp->x = mat->pos.x + (xurand() - 0.5f) + sx * (xurand() - 0.5f);
+        pp->y = mat->pos.y + (xurand() - 0.5f) + sy * (xurand() - 0.5f);
+        pp->z = mat->pos.z + (xurand() - 0.5f) + sz * (xurand() - 0.5f);
+
+        xVec3 offset;
+        xVec3ScaleC(&offset, (xVec3*)&mat->at, 1.2f, 1.2f, 1.2f);
+        xVec3Add(pp, pp, &offset);
+
+        vp->x = vsx * (xurand() - 0.5f);
+        vp->y = vsy * (xurand() - 0.5f);
+        vp->z = vsz * (xurand() - 0.5f);
+    }
+
+    zParPTankSpawnBubbles(pos, vel, 50, 1.0f);
+}
+
 void zFX_SpawnBubbleSlam(const xVec3* pos, U32 num, F32 rang, F32 bvel, F32 rvel)
 {
     xVec3* posbuf = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
@@ -1111,8 +1177,8 @@ void zFX_SpawnBubbleSlam(const xVec3* pos, U32 num, F32 rang, F32 bvel, F32 rvel
     F32 yvel = 0.25f * rvel;
 
     xVec3* pp = posbuf;
-    xVec3* vp = posbuf + num;
-    for (U32 j = 0; j < num; j++)
+    xVec3* vp = velbuf;
+    for (U32 j = 0; j < num; j++, pp++, vp++)
     {
         *pp = *pos;
         pp->y += 0.2f;
@@ -1151,7 +1217,7 @@ void zFX_SpawnBubbleBlast(const xVec3* pos, U32 num, F32 radius, F32 blast_vel, 
         *itl = *pos + *itv * radius;
         *itv *= blast_vel;
 
-        xVec3 rvel;
+        xVec3 rvel = { 0.0f, 0.0f, 0.0f };
         rvel.x = xurand() - 0.5f;
         rvel.y = xurand() - 0.5f;
         rvel.z = xurand() - 0.5f;
@@ -1176,6 +1242,25 @@ namespace
 
         void reset();
         void update(F32);
+    };
+
+    struct entrail_type
+    {
+        char* model_name;
+        S32 bone;
+        F32 rate;
+        F32 cull_dist;
+        xVec3 offset;
+        xVec3 offset_rand;
+        xVec3 vel;
+        xVec3 vel_rand;
+    };
+
+    entrail_type entrail_types[2] = {
+        { "hovering_platform_wheel_bind", 0, 70.0f, 25.0f, { 0.0f, 0.5f, 0.0f },
+          { 0.4f, 0.4f, 0.4f }, { 0.0f, -3.0f, 0.0f }, { 1.5f, 0.0f, 1.5f } },
+        { "plat_support_double_bind", 0, 70.0f, 25.0f, { 0.0f, -2.0f, 0.0f },
+          { 0.4f, 0.4f, 0.4f }, { 0.0f, -3.0f, 0.0f }, { 1.5f, 0.0f, 1.5f } }
     };
 
     enum state_enum
@@ -1303,9 +1388,9 @@ namespace
         ac.z = c.z - a.z;
 
         xVec3 n = { 0.0f, 0.0f, 0.0f };
-        n.z = ab.x * ac.y - ac.x * ab.y;
         n.x = ab.y * ac.z - ac.y * ab.z;
         n.y = ab.z * ac.x - ac.z * ab.x;
+        n.z = ab.x * ac.y - ac.x * ab.y;
 
         return 0.5f * n.length();
     }
@@ -1358,8 +1443,10 @@ namespace
 
         for (; count != 0; count--)
         {
-            U32 vidx = *idx;
+            U16 vidx = *idx;
             U32 bones = bone_idx[vidx];
+            const xVec3* vert = &verts[vidx];
+            const xVec3* norm = &normals[vidx];
             const F32* wt = &weights[vidx * 4];
 
             U32 shift = 0;
@@ -1370,22 +1457,20 @@ namespace
                 U32 mask = 1 << (b & 0x1f);
                 if (!(mask & *(U32*)((U8*)done + word)))
                 {
-                    xMat4x3Mul(&scratch[b & 0xff], &bone_mats[b & 0xff], &mat[(b & 0xff) + 1]);
+                    U32 bi = b & 0xff;
+                    xMat4x3Mul(&scratch[bi], &bone_mats[bi], &mat[bi] + 1);
                     *(U32*)((U8*)done + word) |= mask;
                 }
             }
 
-            xVec3 acc;
-            acc.x = 0.0f;
-            acc.y = 0.0f;
-            acc.z = 0.0f;
+            xVec3 acc = { 0.0f, 0.0f, 0.0f };
 
             U32 bits = bones;
             const F32* w = wt;
-            for (S32 k = 4; *w != 0.0f && k != 0; k--)
+            for (U32 k = 4; *w != 0.0f && k != 0; k--)
             {
                 xVec3 tmp;
-                xMat4x3Toworld(&tmp, &scratch[bits & 0xff], &verts[vidx]);
+                xMat4x3Toworld(&tmp, &scratch[bits & 0xff], vert);
                 bits >>= 8;
                 tmp *= *w;
                 acc += tmp;
@@ -1396,10 +1481,10 @@ namespace
             acc = 0.0f;
             bits = bones;
             w = wt;
-            for (S32 k = 4; *w != 0.0f && k != 0; k--)
+            for (U32 k = 4; *w != 0.0f && k != 0; k--)
             {
                 xVec3 tmp;
-                xMat3x3RMulVec(&tmp, &scratch[bits & 0xff], &normals[vidx]);
+                xMat3x3RMulVec(&tmp, &scratch[bits & 0xff], norm);
                 bits >>= 8;
                 tmp *= *w;
                 acc += tmp;
@@ -1535,10 +1620,10 @@ namespace
             return;
         }
 
-        xModelInstance* model = popper.ent->model;
         xVec3* vbuf = buffer + emit;
         xVec3* loc = buffer;
         xVec3* v = vbuf;
+        xModelInstance* model = popper.ent->model;
 
         xMat3x3 oldmat;
         if (model->Scale.x != 0.0f)
@@ -1614,15 +1699,16 @@ namespace
         F32 area = popper.area;
         F32 vel_add = 0.0f;
         F32 rate = popper.rate;
+        F32 t = popper.time / popper.end_time;
 
         switch (popper.state)
         {
         case STATE_ON:
         {
-            F32 p, v, a;
-            xSCurve(p, v, a, popper.time / popper.end_time);
-            vel_add = v * popper.radius;
+            F32 p, a;
+            xSCurve(p, vel_add, a, t);
             area = area * p;
+            vel_add *= popper.radius;
             xVec3 scale;
             if (popper.model_scale.x == 0.0f)
             {
@@ -1637,22 +1723,22 @@ namespace
         }
         case STATE_OFF:
         {
-            set_popper_alpha(popper, xSCurve(1.0f - popper.time / popper.end_time));
+            set_popper_alpha(popper, xSCurve(1.0f - t));
             break;
         }
         }
 
         F32 size;
         F32 emit;
-        if (area > 4.0f)
-        {
-            emit = rate * 4.0f;
-            size = 0.5f * xsqrt(area);
-        }
-        else
+        if (area <= 4.0f)
         {
             emit = rate * area;
             size = 1.0f;
+        }
+        else
+        {
+            emit = rate * 4.0f;
+            size = 0.5f * xsqrt(area);
         }
 
         popper.emitted += emit * dt;
@@ -1836,8 +1922,9 @@ void zFXPopOn(xEnt& ent, F32 rate, F32 time)
         popper->emitted = 0.0f;
         popper->model_scale = ent.model->Scale;
 
+        xEnt* pent = popper->ent;
         xVec3 tiny = { 0.001f, 0.001f, 0.001f };
-        xModelSetScale(popper->ent->model, tiny);
+        xModelSetScale(pent->model, tiny);
     }
 }
 
@@ -1954,6 +2041,153 @@ void update_entrails(F32 dt)
     for (it = entrails; it != end; it++)
     {
         it->update(dt);
+    }
+}
+
+namespace
+{
+    void entrail_data::update(F32 dt)
+    {
+        if (ent == NULL)
+        {
+            return;
+        }
+
+        if (!xEntIsVisible(ent))
+        {
+            flags &= ~1;
+            return;
+        }
+
+        entrail_type& t = entrail_types[type];
+
+        const xVec3& campos = globals.camera.mat.pos;
+        xMat4x3* frame = xEntGetFrame(ent);
+        F32 dx = campos.x - frame->pos.x;
+        F32 dy = campos.y - frame->pos.y;
+        F32 dz = campos.z - frame->pos.z;
+        xVec3 dist = { dx, dy, dz };
+
+        if (dist.length2() > t.cull_dist * t.cull_dist)
+        {
+            flags &= ~1;
+            return;
+        }
+
+        if (t.bone > ent->model->BoneCount)
+        {
+            return;
+        }
+
+        if (!(flags & 1))
+        {
+            emitted = 0.0f;
+        }
+
+        emitted += t.rate * dt;
+
+        S32 emit = emitted;
+        if (emit <= 0)
+        {
+            return;
+        }
+        emitted -= emit;
+
+        xMat4x3 mat;
+        xModelGetBoneMat(mat, *ent->model, t.bone);
+
+        xVec3 new_loc;
+        xVec3 new_vel;
+        xMat4x3Toworld(&new_loc, &mat, &t.offset);
+        xMat3x3RMulVec(&new_vel, &mat, &t.vel);
+
+        if (flags & 1)
+        {
+            zFX_SpawnBubbleTrail(&loc, &new_loc, &vel, &new_vel, emit, &t.offset_rand, &t.vel_rand,
+                                 1.0f);
+        }
+        else
+        {
+            zFX_SpawnBubbleTrail(&new_loc, &new_loc, &new_vel, &new_vel, emit, &t.offset_rand,
+                                 &t.vel_rand, 1.0f);
+        }
+
+        loc = new_loc;
+        vel = new_vel;
+        flags |= 1;
+    }
+} // namespace
+
+static void setup_entrails(zScene& s)
+{
+    U32 hash[2];
+    U32 hash_dff[2];
+    U32 hash_minf[2];
+
+    for (U32 i = 0; i < 2; i++)
+    {
+        hash[i] = xStrHash(entrail_types[i].model_name);
+        hash_dff[i] = xStrHashCat(hash[i], ".dff");
+        hash_minf[i] = xStrHashCat(hash[i], ".minf");
+    }
+
+    add_entrail_tweaks();
+
+    entrails_size = 0;
+
+    {
+        zEnt** it = s.ents;
+        zEnt** end = it + s.num_ents;
+        for (; it != end; it++)
+        {
+            xEnt* ent = *it;
+            if (!(ent->baseFlags & 0x20))
+            {
+                continue;
+            }
+
+            U32 model = ent->asset->modelInfoID;
+            for (U32 i = 0; i < 2; i++)
+            {
+                if (model == hash[i] || model == hash_dff[i] || model == hash_minf[i])
+                {
+                    entrails_size++;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (entrails_size == 0)
+    {
+        return;
+    }
+
+    entrails = (entrail_data*)xMemAlloc(gActiveHeap, entrails_size * sizeof(entrail_data), 0);
+
+    U32 count = 0;
+    zEnt** it = s.ents;
+    zEnt** end = it + s.num_ents;
+    for (; it != end; it++)
+    {
+        zEnt* ent = *it;
+        if (!(ent->baseFlags & 0x20))
+        {
+            continue;
+        }
+
+        U32 model = ent->asset->modelInfoID;
+        for (U32 i = 0; i < 2; i++)
+        {
+            if (model == hash[i] || model == hash_dff[i] || model == hash_minf[i])
+            {
+                entrails[count].reset();
+                entrails[count].type = i;
+                entrails[count].ent = ent;
+                count++;
+                break;
+            }
+        }
     }
 }
 
