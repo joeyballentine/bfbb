@@ -127,7 +127,6 @@ struct xParEmitter : xBase
 
 struct xScene;
 
-void add_tweaks(xParEmitter& pe);
 S32 xParInterpConvertInterpMode(xParInterp* p);
 void xParEmitterInit(void* b, void* tasset);
 void xParEmitterInit(xBase* b, xParEmitterAsset* pea);

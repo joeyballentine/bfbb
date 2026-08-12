@@ -16,7 +16,7 @@ static xParEmitterAsset sSaveEmmiterSettings;
 static xParEmitterPropsAsset sSaveEmmiterPropSettings;
 static xParEmitterPropsAsset sDummyProp;
 
-void add_tweaks(xParEmitter& pe)
+static void add_tweaks(xParEmitter& pe)
 {
 }
 
@@ -808,7 +808,7 @@ void xParEmitterDestroy()
     xDebugRemoveTweak("Particle Emitters");
 }
 
-void xParInterp::order()
+inline void xParInterp::order()
 {
     F32 f1;
     F32 f2;
@@ -826,7 +826,7 @@ inline xPar* xParEmitterEmit(xParEmitter* pe, F32 dt)
     return xParEmitterEmit(pe, dt, dt);
 }
 
-void xParInterp::operator=(const xParInterp& p)
+inline void xParInterp::operator=(const xParInterp& p)
 {
     this->interp = p.interp;
     this->val[0] = p.val[0];
