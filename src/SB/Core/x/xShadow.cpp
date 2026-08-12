@@ -180,77 +180,77 @@ void xShadowRenderWorld(xVec3* center, F32 radius, F32 max_dist)
     F32 env_dist;
     S32 i;
 
-    RwFrame* camFrame = (RwFrame*)ShadowCamera->object.object.parent;
-    RwMatrixTag* camMatrix = &camFrame->modelling;
-
     gShadowFlags = 0;
     hit_ent = 0;
     hit_env = 0;
     ent_dist = 100.0f;
     env_dist = 100.0f;
 
+    RwFrame* camFrame = (RwFrame*)ShadowCamera->object.object.parent;
+    RwMatrixTag* camMatrix = &camFrame->modelling;
+    xVec3* rt = (xVec3*)&camMatrix->right;
+    xVec3* up = (xVec3*)&camMatrix->up;
+    xVec3* at = (xVec3*)&camMatrix->at;
+
     xVec3Init(&ent_pos, 0.0f, 0.0f, 0.0f);
     xVec3Init(&env_pos, 0.0f, 0.0f, 0.0f);
 
-    xVec3* rt = (xVec3*)&camMatrix->right;
-    xVec3* at = (xVec3*)&camMatrix->at;
-    xVec3* up = (xVec3*)&camMatrix->up;
+    for (i = 0; i < 1; i++)
+    {
+        R[i].dir = *at;
+        R[i].origin = *center;
+        xVec3AddScaled(&R[i].origin, rt, sf[i][0]);
+        xVec3AddScaled(&R[i].origin, up, sf[i][1]);
+        R[i].min_t = 0.0f;
+        R[i].max_t = max_dist;
+        R[i].flags = 0xc00;
 
-    i = 0;
-    {
-    R[0].dir = *at;
-    R[0].origin = *center;
-    xVec3AddScaled(&R[0].origin, rt, sf[i][0]);
-    xVec3AddScaled(&R[0].origin, up, sf[i][1]);
-    R[0].min_t = 0.0f;
-    R[0].max_t = max_dist;
-    R[0].flags = 0xc00;
+        xQuickCullForRay(&q, &R[i]);
 
-    xQuickCullForRay(&q, &R[0]);
-
-    entcoll[0].dist = FLOAT_MAX;
-    xRayHitsGrid(&colls_grid, globals.sceneCur, &R[0], xRayHitsEnt, &q, entcoll);
-    xRayHitsGrid(&colls_oso_grid, globals.sceneCur, &R[0], xRayHitsEnt, &q, entcoll);
-    xRayHitsGrid(&npcs_grid, globals.sceneCur, &R[0], xRayHitsEnt, &q, entcoll);
-    if (entcoll[0].dist < FLOAT_MAX)
-    {
-        entcoll[0].flags |= 0x1;
-    }
-    else
-    {
-        entcoll[0].flags &= ~0x1;
-    }
-
-    envcoll[0].dist = FLOAT_MAX;
-    iRayHitsEnv(&R[0], globals.sceneCur->env, envcoll);
-    if (envcoll[0].dist < FLOAT_MAX)
-    {
-        envcoll[0].flags |= 0x1;
-    }
-    else
-    {
-        envcoll[0].flags &= ~0x1;
-    }
-
-    if (entcoll[0].flags & 0x1)
-    {
-        hit_ent = 1;
-        if (entcoll[0].dist < ent_dist)
+        entcoll[i].dist = FLOAT_MAX;
+        xRayHitsGrid(&colls_grid, globals.sceneCur, &R[i], xRayHitsEnt, &q, &entcoll[i]);
+        xRayHitsGrid(&colls_oso_grid, globals.sceneCur, &R[i], xRayHitsEnt, &q, &entcoll[i]);
+        xRayHitsGrid(&npcs_grid, globals.sceneCur, &R[i], xRayHitsEnt, &q, &entcoll[i]);
+        if (entcoll[i].dist < FLOAT_MAX)
         {
-            ent_dist = entcoll[0].dist;
-            ent_pos = R[0].origin;
-            xVec3AddScaled(&ent_pos, &R[0].dir, entcoll[0].dist);
+            entcoll[i].flags |= 0x1;
         }
-    }
-
-    if (envcoll[0].flags & 0x1)
-    {
-        hit_env = 1;
-        if (envcoll[0].dist < env_dist)
+        else
         {
-            env_dist = envcoll[0].dist;
-            env_pos = R[0].origin;
-            xVec3AddScaled(&env_pos, &R[0].dir, envcoll[0].dist);
+            entcoll[i].flags &= ~0x1;
+        }
+
+        envcoll[i].dist = FLOAT_MAX;
+        iRayHitsEnv(&R[i], globals.sceneCur->env, &envcoll[i]);
+        if (envcoll[i].dist < FLOAT_MAX)
+        {
+            envcoll[i].flags |= 0x1;
+        }
+        else
+        {
+            envcoll[i].flags &= ~0x1;
+        }
+
+        if (entcoll[i].flags & 0x1)
+        {
+            hit_ent = 1;
+            if (entcoll[i].dist < ent_dist)
+            {
+                ent_dist = entcoll[i].dist;
+                ent_pos = R[i].origin;
+                xVec3AddScaled(&ent_pos, &R[i].dir, entcoll[i].dist);
+            }
+        }
+
+        if (envcoll[i].flags & 0x1)
+        {
+            hit_env = 1;
+            if (envcoll[i].dist < env_dist)
+            {
+                env_dist = envcoll[i].dist;
+                env_pos = R[i].origin;
+                xVec3AddScaled(&env_pos, &R[i].dir, envcoll[i].dist);
+            }
         }
     }
 
@@ -285,7 +285,6 @@ void xShadowRenderWorld(xVec3* center, F32 radius, F32 max_dist)
     shadowZone.t.sphere.radius = zone.r;
 
     ShadowRender(ShadowCamera, ShadowRenderRaster, &shadowZone, ShadowStrength, 0.0f);
-    }
 }
 
 static void modelRenderCB(void* param)
@@ -513,7 +512,7 @@ void xShadowReceiveShadow(xEnt* ent, F32 shadowFactor, S32 shadowMode, RwMatrixT
                 normal.x *= scale;
                 normal.z *= scale;
 
-                if (normal.x * at.x + normal.y * at.y + normal.z * at.z > -0.000697246f)
+                if (normal.x * at.x + normal.y * at.y + normal.z * at.z > -0.00069724565f)
                 {
                     continue;
                 }
@@ -625,11 +624,17 @@ static void xShadow_PickByRayCast(xShadowMgr* mgr)
 
         iRayHitsModel(&ray, ep->model, &colrec);
 
-        if ((colrec.flags & 1) && (colrec.dist <= 21.7f))
+        if (!(colrec.flags & 1))
         {
-            ent_best = ep;
-            idx_best = i;
+            continue;
         }
+        if (colrec.dist > 21.7f)
+        {
+            continue;
+        }
+
+        ent_best = ep;
+        idx_best = i;
     }
 
     if (idx_best > 0)
@@ -826,18 +831,20 @@ static S32 CmpShadowMgr(const void* a, const void* b)
     xEnt* entB = ((const xShadowMgr*)b)->ent;
 
     U8 typeA = entA->baseType;
-    S32 isPlayerA = 0;
+    U8 flagA = 0;
     if ((typeA == eBaseTypePlayer) || (typeA == eBaseTypeBoulder))
     {
-        isPlayerA = 1;
+        flagA = 1;
     }
+    S32 isPlayerA = flagA;
 
     U8 typeB = entB->baseType;
-    S32 isPlayerB = 0;
+    U8 flagB = 0;
     if ((typeB == eBaseTypePlayer) || (typeB == eBaseTypeBoulder))
     {
-        isPlayerB = 1;
+        flagB = 1;
     }
+    S32 isPlayerB = flagB;
 
     if (isPlayerA && !isPlayerB)
     {
@@ -1001,14 +1008,7 @@ static S32 ShadowRender(RwCamera* shadowCamera, RwRaster* shadowRast, RpIntersec
     scl.z = 1.0f / (fadeDist + radius);
     RwMatrixScale(&param.invMatrix, &scl, rwCOMBINEPOSTCONCAT);
 
-    if (fadeDist > 0.0f)
-    {
-        param.fade = 1;
-    }
-    else
-    {
-        param.fade = 0;
-    }
+    param.fade = (fadeDist > 0.0f) ? 1 : 0;
 
     param.numIm3DBatch = 0;
 
@@ -1251,10 +1251,11 @@ static S32 shadowCacheLeafCB(S32 numTriangles, S32 triOffset, void* data)
             F32 nz = worldV[j].z - worldV[k].z;
             F32 pdot = nz * (cbparam->capsuleStart.x - worldV[j].x) +
                        nx * (cbparam->capsuleStart.z - worldV[j].z);
+            F32 plen = nz * nz + nx * nx;
 
-            if ((pdot > 0.0f) && ((nz * nz + nx * nx) * cbparam->capsuleRadius *
-                                      cbparam->capsuleRadius <=
-                                  pdot * pdot))
+            if ((pdot > 0.0f) &&
+                (pdot * pdot >=
+                 plen * (cbparam->capsuleRadius * cbparam->capsuleRadius)))
             {
                 goto next_tri;
             }
@@ -1266,11 +1267,13 @@ static S32 shadowCacheLeafCB(S32 numTriangles, S32 triOffset, void* data)
             F32 posZ = cbparam->capsuleStart.z - worldV[k].z;
             F32 dotA = (worldV[(k + 1) % 3].x - worldV[k].x) * posX +
                        (worldV[(k + 1) % 3].z - worldV[k].z) * posZ;
-            F32 dotB = (worldV[(k + 2) % 3].x - worldV[k].x) * posX +
-                       (worldV[(k + 2) % 3].z - worldV[k].z) * posZ;
+            F32 dotBx = (worldV[(k + 2) % 3].x - worldV[k].x) * posX;
+            F32 dotBz = (worldV[(k + 2) % 3].z - worldV[k].z) * posZ;
+            F32 dotB = dotBx + dotBz;
 
             if ((dotA < 0.0f) && (dotB < 0.0f) &&
-                (cbparam->capsuleRadius * cbparam->capsuleRadius < posX * posX + posZ * posZ))
+                (posX * posX + posZ * posZ >
+                 cbparam->capsuleRadius * cbparam->capsuleRadius))
             {
                 goto next_tri;
             }
@@ -1364,6 +1367,7 @@ static S32 shadowCacheEntityCB(xEnt* ent, void* cbdata)
     xCollis coll;
     RwMatrixTag inverseLTM;
     RpV3dGradient grad;
+    F32 recip;
 
     if (!(ent->baseFlags & 0x10))
     {
@@ -1391,32 +1395,24 @@ static S32 shadowCacheEntityCB(xEnt* ent, void* cbdata)
         xBoxHitsObb((xBox*)cbparam->isx, &ent->bound.box.box, ent->bound.mat, &coll);
     }
     else if ((ent->bound.type == XBOUND_TYPE_BOX) &&
-             (ent->bound.box.box.lower.x < ((xBox*)cbparam->isx)->upper.x) &&
-             (ent->bound.box.box.lower.y < ((xBox*)cbparam->isx)->upper.y) &&
-             (ent->bound.box.box.lower.z < ((xBox*)cbparam->isx)->upper.z) &&
+             (((xBox*)cbparam->isx)->upper.x > ent->bound.box.box.lower.x) &&
+             (((xBox*)cbparam->isx)->upper.y > ent->bound.box.box.lower.y) &&
+             (((xBox*)cbparam->isx)->upper.z > ent->bound.box.box.lower.z) &&
              (((xBox*)cbparam->isx)->lower.x < ent->bound.box.box.upper.x) &&
              (((xBox*)cbparam->isx)->lower.y < ent->bound.box.box.upper.y) &&
              (((xBox*)cbparam->isx)->lower.z < ent->bound.box.box.upper.z))
     {
-        coll.flags = 1;
+        coll.flags |= 0x1;
     }
 
     if (coll.flags & 0x1)
     {
-        xModelInstance* model = ent->collModel;
-        if (model == NULL)
-        {
-            model = ent->model;
-        }
+        xModelInstance* model = (ent->collModel != NULL) ? ent->collModel : ent->model;
 
         RpCollisionData* colldata = RpCollisionGeometryGetData(model->Data->geometry);
 
-        if ((model->Data->boundingSphere.radius <= 2.0f) || (colldata == NULL) ||
-            (colldata->tree == NULL))
-        {
-            cbparam->cache->ent[cbparam->cache->entCount++] = ent;
-        }
-        else
+        if ((model->Data->boundingSphere.radius > 2.0f) && (colldata != NULL) &&
+            (colldata->tree != NULL))
         {
             RwMatrixInvert(&inverseLTM, model->Mat);
             RwV3dTransformPoints((RwV3d*)&cbparam->localLine, (RwV3d*)&cbparam->capsuleStart, 2,
@@ -1433,29 +1429,29 @@ static S32 shadowCacheEntityCB(xEnt* ent, void* cbdata)
 
             memset(cbparam->rayCloser, 0, sizeof(cbparam->rayCloser));
 
-            grad.dzdx = 0.0f;
+            recip = 0.0f;
             if (cbparam->localDelta.x != 0.0f)
             {
-                grad.dzdx = 1.0f / cbparam->localDelta.x;
+                recip = 1.0f / cbparam->localDelta.x;
             }
-            grad.dydx = cbparam->localDelta.y * grad.dzdx;
-            grad.dzdx = cbparam->localDelta.z * grad.dzdx;
+            grad.dydx = cbparam->localDelta.y * recip;
+            grad.dzdx = cbparam->localDelta.z * recip;
 
-            grad.dzdy = 0.0f;
+            recip = 0.0f;
             if (cbparam->localDelta.y != 0.0f)
             {
-                grad.dzdy = 1.0f / cbparam->localDelta.y;
+                recip = 1.0f / cbparam->localDelta.y;
             }
-            grad.dxdy = cbparam->localDelta.x * grad.dzdy;
-            grad.dzdy = cbparam->localDelta.z * grad.dzdy;
+            grad.dxdy = cbparam->localDelta.x * recip;
+            grad.dzdy = cbparam->localDelta.z * recip;
 
-            grad.dydz = 0.0f;
+            recip = 0.0f;
             if (cbparam->localDelta.z != 0.0f)
             {
-                grad.dydz = 1.0f / cbparam->localDelta.z;
+                recip = 1.0f / cbparam->localDelta.z;
             }
-            grad.dxdz = cbparam->localDelta.x * grad.dydz;
-            grad.dydz = cbparam->localDelta.y * grad.dydz;
+            grad.dxdz = cbparam->localDelta.x * recip;
+            grad.dydz = cbparam->localDelta.y * recip;
 
             _rpCollBSPTreeForAllCapsuleLeafNodeIntersections(colldata->tree, &cbparam->localLine,
                                                              cbparam->localRadius, &grad,
@@ -1465,6 +1461,10 @@ static S32 shadowCacheEntityCB(xEnt* ent, void* cbdata)
             {
                 cbparam->cache->ent[cbparam->cache->entCount++] = ent;
             }
+        }
+        else
+        {
+            cbparam->cache->ent[cbparam->cache->entCount++] = ent;
         }
     }
 
@@ -1491,10 +1491,10 @@ void xShadowVertical_FillCache(xShadowCache* cache, xVec3* pos, F32 r, F32 depth
 
     isx.type = rpINTERSECTBOX;
     isx.t.box.sup.x = pos->x + r;
-    isx.t.box.inf.x = pos->x - r;
     isx.t.box.sup.y = pos->y + r;
-    isx.t.box.inf.y = (pos->y - r) - depth;
     isx.t.box.sup.z = pos->z + r;
+    isx.t.box.inf.x = pos->x - r;
+    isx.t.box.inf.y = (pos->y - r) - depth;
     isx.t.box.inf.z = pos->z - r;
 
     context.minNormY = minNormY;
@@ -1519,7 +1519,7 @@ void xShadowVertical_FillCache(xShadowCache* cache, xVec3* pos, F32 r, F32 depth
     {
         for (S32 j = 0; j < 4; j++)
         {
-            if (sortRayDepth[j + 1] < sortRayDepth[j])
+            if (sortRayDepth[j] > sortRayDepth[j + 1])
             {
                 F32 t = sortRayDepth[j];
                 sortRayDepth[j] = sortRayDepth[j + 1];
@@ -1528,28 +1528,29 @@ void xShadowVertical_FillCache(xShadowCache* cache, xVec3* pos, F32 r, F32 depth
         }
     }
 
-    cbparam.capsuleEnd.y = sortRayDepth[2];
-    if (cbparam.capsuleEnd.y == -1e38f)
+    F32 endY = sortRayDepth[2];
+    if (endY == -1e38f)
     {
-        cbparam.capsuleEnd.y = pos->y - depth;
+        endY = pos->y - depth;
     }
-    if (cbparam.capsuleEnd.y > pos->y - 0.001f)
+    if (endY > pos->y - 0.001f)
     {
-        cbparam.capsuleEnd.y = pos->y - 0.001f;
+        endY = pos->y - 0.001f;
     }
-    if (isx.t.box.inf.y < cbparam.capsuleEnd.y - 1.0f)
+    if (endY - 1.0f > isx.t.box.inf.y)
     {
-        isx.t.box.inf.y = cbparam.capsuleEnd.y - 1.0f;
+        isx.t.box.inf.y = endY - 1.0f;
     }
 
+    cbparam.cache = cache;
     cbparam.isx = &isx;
     cbparam.capsuleStart.x = pos->x;
     cbparam.capsuleStart.y = pos->y;
     cbparam.capsuleStart.z = pos->z;
-    cbparam.capsuleRadius = r;
-    cbparam.cache = cache;
     cbparam.capsuleEnd.x = cbparam.capsuleStart.x;
+    cbparam.capsuleEnd.y = endY;
     cbparam.capsuleEnd.z = cbparam.capsuleStart.z;
+    cbparam.capsuleRadius = r;
 
     xQuickCullForBox(&qcd, (xBox*)cbparam.isx);
 
@@ -1645,14 +1646,7 @@ void xShadowVertical_DrawCache(xShadowCache* cache, F32 shadowFactor, F32 fadeDi
     scl.z = 1.0f / (fadeDist + radius);
     RwMatrixScale(&param.invMatrix, &scl, rwCOMBINEPOSTCONCAT);
 
-    if (fadeDist > 0.0f)
-    {
-        param.fade = 1;
-    }
-    else
-    {
-        param.fade = 0;
-    }
+    param.fade = (fadeDist > 0.0f) ? 1 : 0;
 
     param.numIm3DBatch = 0;
 
