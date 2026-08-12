@@ -1657,6 +1657,24 @@ namespace
     }
 } // namespace
 
+inline U8 zNPCDutchman::turning() const
+{
+    U8 result = 0;
+    xVec2 facing = { 0.0f, 0.0f };
+
+    facing.x = model->Mat->at.x;
+    facing.y = model->Mat->at.z;
+
+    if (!xfeq0(turn.vel) ||
+        (!xfeq0(turn.accel) && !(turn.dir.x > turn.dir.y && xabs(turn.dir.x - facing.x) < 0.001f) &&
+         !(turn.dir.x < turn.dir.y && xabs(turn.dir.y - facing.y) < 0.001f)))
+    {
+        result = 1;
+    }
+
+    return result;
+}
+
 void zNPCDutchman::update_turn(F32 dt)
 {
     get_center();

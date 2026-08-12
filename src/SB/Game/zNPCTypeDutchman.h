@@ -197,24 +197,7 @@ struct zNPCDutchman : zNPCSubBoss
     xVec3 get_splash_loc() const;
     xVec3 random_orbit(const xVec3&, F32, F32) const;
 
-    U8 turning() const
-    {
-        U8 result = 0;
-        xVec2 facing = { 0.0f, 0.0f };
-
-        facing.x = model->Mat->at.x;
-        facing.y = model->Mat->at.z;
-
-        if (!xfeq0(turn.vel) ||
-            (!xfeq0(turn.accel) &&
-             !(turn.dir.x > turn.dir.y && xabs(turn.dir.x - facing.x) < 0.001f) &&
-             !(turn.dir.x < turn.dir.y && xabs(turn.dir.y - facing.y) < 0.001f)))
-        {
-            result = 1;
-        }
-
-        return result;
-    }
+    U8 turning() const;
     void vanish();
     void reappear();
     void turn_to_face(const xVec3&);
