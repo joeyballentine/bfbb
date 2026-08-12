@@ -111,7 +111,7 @@ struct xVec3
     {
         xVec3 v = xVec3::m_Null;
 
-        v.x = y * c.y - c.y * z;
+        v.x = y * c.z - c.y * z;
         v.y = z * c.x - c.z * x;
         v.z = x * c.y - c.x * y;
 
