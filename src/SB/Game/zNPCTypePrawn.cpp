@@ -54,7 +54,15 @@ namespace
         U32 mode;
     };
 
-    const sound_asset_type sound_assets[14] = {};
+    const sound_asset_type sound_assets[14] = {
+        { 0, "Prawn_hit", 0, 0 },          { 0, "Prawn_FF_hit", 0, 0 },
+        { 1, "B101_SC_jump", 0, 0 },       { 1, "Prawn_FF_hit", 0, 0 },
+        { 1, "fanfare", 0, 0 },            { 1, "sax", 0, 0 },
+        { 1, "Mon_alert", 0, 0 },          { 2, "RP_whirr_loop", 0, 3 },
+        { 2, "PR_attack_loop", 0, 3 },     { 2, "Prawn_Attack_loop", 0, 3 },
+        { 2, "Crystals_loop", 0, 3 },      { 2, "RSB_foot_loop", 0, 3 },
+        { 3, "PR_attack_loop", 0, 1 },     { 3, "Prawn_Attack_loop", 0, 1 },
+    };
 
     const char* sound_asset_names[4][6];
     U32 sound_asset_ids[4][6];
@@ -626,6 +634,75 @@ namespace
 
 void zNPCPrawn::Setup()
 {
+    static const S32 vert_index[4] = { 2, 0, 1, 3 };
+
+    this->disco = (z_disco_floor*)zSceneFindObject(xStrHash("DISCO_PRAWN"));
+    this->closeups_used = 0;
+
+    for (S32 i = 0; i < 8; i++)
+    {
+        char name[64];
+        sprintf(name, "JUMBOTRON_%02d", i);
+
+        xBase* obj = zSceneFindObject(xStrHash(name));
+        if (obj == NULL || !xEntValidType(obj->baseType))
+        {
+            continue;
+        }
+
+        xEnt* ent = (xEnt*)obj;
+        if (ent->model == NULL)
+        {
+            continue;
+        }
+
+        this->closeup_model[this->closeups_used] = ent->model;
+
+        RpGeometry* geom = ent->model->Data->geometry;
+        if (geom == NULL)
+        {
+            continue;
+        }
+
+        RpMorphTarget* morph = geom->morphTarget;
+        if (morph == NULL)
+        {
+            continue;
+        }
+
+        xVec3* verts = (xVec3*)morph->verts;
+        if (verts == NULL)
+        {
+            continue;
+        }
+
+        xVec3* dst = this->closeup_loc[this->closeups_used];
+        const xMat4x3* mat = (const xMat4x3*)ent->model->Mat;
+        S32 numverts = geom->numVertices;
+
+        S32 j;
+        for (j = 0; j < 4; j++)
+        {
+            if (vert_index[j] >= numverts)
+            {
+                break;
+            }
+            xMat4x3Toworld(&dst[j], mat, &verts[vert_index[j]]);
+        }
+
+        if (j < 4)
+        {
+            continue;
+        }
+
+        this->closeups_used++;
+    }
+
+    if (this->closeups_used)
+    {
+        closeup.set_background(xColorFromRGBA(0, 0, 0, 0xff));
+    }
+
     zNPCSubBoss::Setup();
 }
 
@@ -790,6 +867,11 @@ namespace
 
 void zNPCPrawn::ParseINI()
 {
+    static const zNPCPrawn::range_type default_pattern[20] = {
+        { 0, 1 },   { 3, 4 },   { 6, 11 },  { 13, 22 }, { 24, 27 },
+        { 29, 35 }, { 37, 38 }, { 40, 45 }, { -1, -1 },
+    };
+
     zNPCCommon::ParseINI();
     tweak.load(this->parmdata, this->pdatsize);
     tweak.turn_accel = zParamGetFloat(this->parmdata, this->pdatsize, "turn_accel", 5.0f);
@@ -821,31 +903,34 @@ void zNPCPrawn::ParseINI()
         zParamGetInt(this->parmdata, this->pdatsize, "beam.sweep.amount[1]", 3);
     tweak.beam.sweep.amount[2] =
         zParamGetInt(this->parmdata, this->pdatsize, "beam.sweep.amount[2]", 4);
-    tweak.beam.sweep.arc = zParamGetFloat(this->parmdata, this->pdatsize, "beam.sweep.arc", 20.0f);
-    tweak.beam.sweep.arc = zParamGetFloat(this->parmdata, this->pdatsize, "beam.sweep.delay", 0.5f);
     tweak.beam.sweep.arc =
-        zParamGetFloat(this->parmdata, this->pdatsize, "beam.sweep.accel", 60.0f);
-    tweak.beam.sweep.arc =
-        zParamGetFloat(this->parmdata, this->pdatsize, "beam.sweep.max_vel", 26.5f);
-    tweak.beam.sweep.arc =
+        0.017453292f * zParamGetFloat(this->parmdata, this->pdatsize, "beam.sweep.arc", 20.0f);
+    tweak.beam.sweep.delay =
+        zParamGetFloat(this->parmdata, this->pdatsize, "beam.sweep.delay", 0.5f);
+    tweak.beam.sweep.accel =
+        0.017453292f * zParamGetFloat(this->parmdata, this->pdatsize, "beam.sweep.accel", 60.0f);
+    tweak.beam.sweep.max_vel =
+        0.017453292f * zParamGetFloat(this->parmdata, this->pdatsize, "beam.sweep.max_vel", 26.5f);
+    tweak.beam.fire.duration = -1.0f;
+    tweak.beam.fire.ring.size =
         zParamGetFloat(this->parmdata, this->pdatsize, "beam.fire.ring.size", 0.4f);
-    tweak.beam.sweep.arc =
+    tweak.beam.fire.ring.alpha =
         zParamGetFloat(this->parmdata, this->pdatsize, "beam.fire.ring.alpha", 1.0f);
-    tweak.beam.sweep.arc =
+    tweak.beam.fire.ring.vel =
         zParamGetFloat(this->parmdata, this->pdatsize, "beam.fire.ring.vel", 9.0f);
-    tweak.beam.sweep.arc =
+    tweak.beam.fire.ring.accel =
         zParamGetFloat(this->parmdata, this->pdatsize, "beam.fire.ring.accel", 10.0f);
-    tweak.beam.sweep.arc =
+    tweak.beam.fire.ring.emit_delay =
         zParamGetFloat(this->parmdata, this->pdatsize, "beam.fire.ring.emit_delay", 0.1f);
-    tweak.beam.sweep.arc =
+    tweak.beam.fire.ring.grow =
         zParamGetFloat(this->parmdata, this->pdatsize, "beam.fire.ring.grow", 0.15f);
-    tweak.beam.sweep.arc =
+    tweak.beam.fire.ring.fade_dist =
         zParamGetFloat(this->parmdata, this->pdatsize, "beam.fire.ring.fade_dist", 15.0f);
-    tweak.beam.sweep.arc =
+    tweak.beam.fire.ring.kill_dist =
         zParamGetFloat(this->parmdata, this->pdatsize, "beam.fire.ring.kill_dist", 20.0f);
-    tweak.beam.sweep.arc =
+    tweak.beam.fire.ring.follow =
         zParamGetFloat(this->parmdata, this->pdatsize, "beam.fire.ring.follow", 0.0f);
-    tweak.beam.sweep.arc =
+    tweak.beam.fire.ring.hit_radius =
         zParamGetFloat(this->parmdata, this->pdatsize, "beam.fire.ring.hit_radius", 0.3f);
     tweak.beam.fire.ring.hit_offset =
         zParamGetVector(this->parmdata, this->pdatsize, "beam.fire.ring.hit_offset",
@@ -854,11 +939,13 @@ void zNPCPrawn::ParseINI()
         zParamGetInt(this->parmdata, this->pdatsize, "beam.fire.emit_bone", 0x2b);
     tweak.beam.fire.offset =
         zParamGetVector(this->parmdata, this->pdatsize, "beam.fire.offset",
-                        xVec3::create(0.0f, 0.0f, 0.0f), &tweak.beam.fire.offset);
-    tweak.beam.fire.yaw = zParamGetFloat(this->parmdata, this->pdatsize, "beam.fire.yaw", 0.0f);
-    tweak.beam.fire.pitch = zParamGetFloat(this->parmdata, this->pdatsize, "beam.fire.pitch", 5.5f);
-    isin(tweak.beam.fire.pitch);
-    icos(tweak.beam.fire.pitch);
+                        xVec3::create(0.0f, 0.15f, 0.0f), &tweak.beam.fire.offset);
+    tweak.beam.fire.yaw =
+        0.017453292f * zParamGetFloat(this->parmdata, this->pdatsize, "beam.fire.yaw", 0.0f);
+    tweak.beam.fire.pitch =
+        0.017453292f * zParamGetFloat(this->parmdata, this->pdatsize, "beam.fire.pitch", 5.5f);
+    this->precomp.sin_pitch = isin(tweak.beam.fire.pitch);
+    this->precomp.cos_pitch = icos(tweak.beam.fire.pitch);
     tweak.aim_lane.duration =
         zParamGetFloat(this->parmdata, this->pdatsize, "aim_lane.duration", 2.0f);
     tweak.aim_lane.state_delay =
@@ -899,6 +986,11 @@ void zNPCPrawn::ParseINI()
         zParamGetFloat(this->parmdata, this->pdatsize, "danger.cycle_delay", 6.0f);
     tweak.danger.pattern_offset =
         zParamGetInt(this->parmdata, this->pdatsize, "danger.pattern_offset", 0x5d);
+
+    memcpy(tweak.danger.pattern, default_pattern, sizeof(tweak.danger.pattern));
+    tweak.danger.pattern_size =
+        load_patterns(this->parmdata, this->pdatsize, "tweak.danger.pattern[%d]",
+                      (zNPCPrawn::range_type*)tweak.danger.pattern, 20);
 }
 
 void tweak_group::load(xModelAssetParam* p, U32 i)
@@ -1259,15 +1351,15 @@ void zNPCPrawn::update_turn(F32 dt)
     get_center();
 
     RwMatrix* mat = this->model->Mat;
-    F32 at_x = mat->at.x;
-    F32 at_z = mat->at.z;
+    xVec2 facing = { mat->at.x, mat->at.z };
 
     if (!turning())
     {
         return;
     }
 
-    F32 cur = xatan2(at_x, at_z);
+    F32 cur = xatan2(facing.x, facing.y);
+    F32 time_to_target;
     F32 diff = xatan2(this->look_dir.x, this->look_dir.y) - cur;
     if (diff > 3.1415927f)
     {
@@ -1279,64 +1371,53 @@ void zNPCPrawn::update_turn(F32 dt)
     }
 
     bool decel = true;
-    if (0.001f <= FABS(this->turn.vel) && (diff < 0.0f) == (this->turn.vel < 0.0f))
+
+    if (!(FABS(this->turn.vel) < 0.001f) && (diff < 0.0f ? 1 : 0) == (this->turn.vel < 0.0f ? 1 : 0))
     {
         decel = false;
     }
 
-    F32 time_to_target = 1.0e38f;
-    if (!decel)
+    if (decel)
+    {
+        time_to_target = 1.0e38f;
+    }
+    else
     {
         time_to_target = diff / this->turn.vel;
     }
 
     F32 time_to_stop = FABS(this->turn.vel / this->turn.accel);
 
-    F32 dir = -1.0f;
-    if (time_to_stop < time_to_target)
-    {
-        dir = 1.0f;
-    }
-
-    F32 sign = -1.0f;
-    if (diff >= 0.0f)
-    {
-        sign = 1.0f;
-    }
+    F32 dir = (time_to_target > time_to_stop) ? 1.0f : -1.0f;
+    F32 sign = (diff >= 0.0f) ? 1.0f : -1.0f;
 
     F32 max_vel = this->turn.max_vel;
-    F32 dvel = this->turn.accel * dir * sign * dt;
+    F32 dvel = this->turn.accel * (dir * sign) * dt;
     F32 vel = this->turn.vel + dvel;
 
-    if (max_vel < FABS(vel))
+    if (FABS(vel) <= max_vel)
     {
-        if (max_vel < FABS(this->turn.vel))
-        {
-            if ((vel < 0.0f) != (dvel < 0.0f))
-            {
-                this->turn.vel = vel;
-            }
-        }
-        else
-        {
-            this->turn.vel = range_limit<F32>(vel, -max_vel, max_vel);
-        }
+        this->turn.vel = vel;
     }
-    else
+    else if (FABS(this->turn.vel) <= max_vel)
+    {
+        this->turn.vel = range_limit<F32>(vel, -max_vel, max_vel);
+    }
+    else if ((vel < 0.0f ? 1 : 0) != (dvel < 0.0f ? 1 : 0))
     {
         this->turn.vel = vel;
     }
 
     F32 step = this->turn.vel * dt;
-    if (time_to_target <= time_to_stop)
+    if (time_to_target > time_to_stop)
     {
-        if ((step < 0.0f) != (diff < 0.0f))
+        if ((step < 0.0f ? 1 : 0) == (diff < 0.0f ? 1 : 0) && FABS(step) > FABS(diff))
         {
             this->turn.vel = 0.0f;
             step = diff;
         }
     }
-    else if ((step < 0.0f) == (diff < 0.0f) && FABS(diff) < FABS(step))
+    else if ((step < 0.0f ? 1 : 0) != (diff < 0.0f ? 1 : 0))
     {
         this->turn.vel = 0.0f;
         step = diff;
@@ -1684,6 +1765,18 @@ namespace
     {
         zRenderState(SDRS_Fill);
         RwRenderStateSet(rwRENDERSTATETEXTURERASTER, this->bgraster);
+
+        rwGameCube2DVertex* vert = (rwGameCube2DVertex*)xMemPushTemp(6 * sizeof(*vert));
+
+        set_vert(vert[0], 0.0f, 0.0f, 0.0f, 0.0f);
+        set_vert(vert[1], 0.0f, this->h, 0.0f, 1.0f);
+        set_vert(vert[2], this->w, 0.0f, 1.0f, 0.0f);
+        vert[3] = vert[2];
+        vert[4] = vert[1];
+        set_vert(vert[5], this->w, this->h, 1.0f, 1.0f);
+
+        RwIm2DRenderPrimitive(rwPRIMTYPETRILIST, vert, 6);
+        xMemPopTemp(vert);
     }
 
     void television::set_vert(rwGameCube2DVertex& vert, F32 x, F32 y, F32 u, F32 v)
@@ -1701,9 +1794,17 @@ namespace
 
     void television::move(const xVec3& v1, const xVec3& v2)
     {
-        RwFrameTranslate((RwFrame*)this->cam->object.object.parent, (const RwV3d*)&v1,
-                         rwCOMBINEREPLACE);
-        xMat3x3LookAt((xMat3x3*)this->cam->object.object.parent, &v2, &v1);
+        xMat3x3 mat;
+
+        RwFrame* frame = (RwFrame*)this->cam->object.object.parent;
+        RwFrameTranslate(frame, (const RwV3d*)&v1, rwCOMBINEREPLACE);
+
+        xMat3x3LookAt(&mat, &v2, &v1);
+
+        RwMatrix* m = &frame->modelling;
+        m->right = *(RwV3d*)&mat.right;
+        m->at = *(RwV3d*)&mat.at;
+        m->up = *(RwV3d*)&mat.up;
     }
 } // namespace
 
@@ -1761,14 +1862,14 @@ xVec3 zNPCPrawn::get_away() const
     away.y = 0.0f;
 
     F32 dist2 = away.x * away.x + away.z * away.z;
-    if (dist2 >= 0.001f)
+    if (dist2 < 0.001f)
     {
-        F32 scale = 0.70710677f * (1.0f / xsqrt(dist2));
-        away.assign(away.x * scale, 0.70710677f, away.z * scale);
+        away.assign(0.0f, 1.0f, 0.0f);
     }
     else
     {
-        away.assign(0.0f, 1.0f, 0.0f);
+        F32 scale = 0.70710677f * (1.0f / xsqrt(dist2));
+        away.assign(away.x * scale, 0.70710677f, away.z * scale);
     }
 
     return away;
