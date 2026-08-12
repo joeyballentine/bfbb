@@ -207,6 +207,43 @@ null arguments, with three witnesses (`ZNPC_AnimTable_BossSBobbyArm` 99.565,
 controls that match at 100.0 because they address a three-word table with
 `lis/addi` (`ZNPC_AnimTable_SleepyTime`, `ZNPC_AnimTable_BossSB1`).
 
+**Batch 3 (2026-08-12, post-E3n): the five never-investigated one-away units
+are also compiler-class. Retire them.** Ranked by differing rows rather than
+percentage — which is the right heuristic and still did not find source work:
+
+| unit | blocker | rows | class |
+|---|---|---|---|
+| `zEntHangable` | `zEntHangable_UpdateFX` | 2/65 | **branch form** — see below |
+| `xSkyDome` | `xSkyDome_AddEntity` | 4/78 | SCHED |
+| `xstransvc` | `XST_unlock` | 5/22 | REGS (r5<->r6) |
+| `xMovePoint` | `xMovePointGetNext` | 10/75 | REGS (r4<->r6) |
+| `xNPCBasic` | `Init__9xNPCBasic` | 11/127 | SCHED |
+
+`zEntHangable` is a **new residue class worth naming: codegen branch form, not
+scheduling.** Verified against raw target bytes in `build/GQPE78/asm/`. The
+target's `case 2:` body is *two* instructions, so CW picks its 1-instruction
+inverted dispatch and falls through; ours is one instruction, because CW drops
+the unreachable end-of-case branch, so it picks the 2-instruction
+`beq case / b default` form instead. ~30 shapes measured: every `switch` form
+gives 99.769 with the same 2 rows, every `if`/`goto`/loop form collapses to a
+single `beq` (96.769), and extra arms flip CW into its tree form (90-93%). No
+source shape keeps the dead end-of-case branch alive.
+
+**Boundary on the E3n `const` lever, measured on four units: it does not reach a
+store made *through a pointer parameter*, only stores into a declared frame
+object.** Top-level `const` on a pointer parameter (`xEnt* const ent`) does not
+change the CW mangled name, so it is free to try without touching a header — and
+it moves nothing. Do not retry it.
+
+**`dwarf/` is not always right.** It lists `xMovePointGetNext`'s locals as only
+`rnd, idx, previousOption`; writing it that way measures **92.467%** against the
+current 99.333%. Keep the locals. Use DWARF as evidence, not as an oracle.
+
+**Retail bug, faithful, flagged for PCPORT:** `xSkyDome_AddEntity`'s first loop
+is `for (i = 0; i > sSkyCount; i++)` — it never executes, so the duplicate-entity
+guard is dead and an entity can be added to `sSkyList` twice. The target emits
+`cmpw`/`bgt`, so retail shipped it. A PC port will want `i < sSkyCount`.
+
 **Verify completeness with `tools/symorder.py`, not `report.json`.** It scored
 `zSurface` 28/28 while `solo.py` had a function at 99.733% and our object
 emitted a weak `xVec3::operator=` the retail link deduplicated. Five units sit
