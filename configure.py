@@ -822,8 +822,8 @@ config.libs = [
             Object(Matching, "dolphin/src/os/OSThread.c"),
             Object(Matching, "dolphin/src/os/OSTime.c"),
             Object(Matching, "dolphin/src/os/OSSync.c"),
-            Object(NonMatching, "dolphin/src/os/init/__start.c"),
-            Object(NonMatching, "dolphin/src/os/init/__ppc_eabi_init.cpp")
+            Object(Matching, "dolphin/src/os/init/__start.c"),
+            Object(Matching, "dolphin/src/os/init/__ppc_eabi_init.cpp")
         ]
     ),
     DolphinLib(
@@ -852,13 +852,13 @@ config.libs = [
         [
             Object(NonMatching, "Runtime/__mem.c", extra_cflags=["-inline on, deferred"]),
             Object(Matching, "Runtime/__va_arg.c"),
-            Object(NonMatching, "Runtime/global_destructor_chain.c"),
+            Object(Matching, "Runtime/global_destructor_chain.c"),
             Object(NonMatching, "Runtime/New.cp"),
             Object(NonMatching, "Runtime/NMWException.cp", extra_cflags=["-inline deferred"]),
             Object(Matching, "Runtime/CPlusLibPPC.cp"),
             Object(NonMatching, "Runtime/ptmf.c"),
             Object(NonMatching, "Runtime/runtime.c"),
-            Object(NonMatching, "Runtime/__init_cpp_exceptions.cpp", extra_cflags=["-inline deferred"]),
+            Object(Matching, "Runtime/__init_cpp_exceptions.cpp", extra_cflags=["-inline deferred"]),
             Object(NonMatching, "Runtime/Gecko_ExceptionPPC.cp", extra_cflags=["-inline deferred"]),
             Object(NonMatching, "Runtime/GCN_mem_alloc.c", extra_cflags=["-inline deferred"]),
         ]
