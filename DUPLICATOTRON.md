@@ -894,50 +894,47 @@ confirming before anyone builds a strategy on either model.
   believing it. And a `GLOBAL` symbol that should be `LOCAL` is not cosmetic --
   it makes that unit's scores fragile against unrelated edits.
 
-- **We emit inline helper definitions in dozens of objects where retail emits
-  each in exactly one. This is what blocks `zLight`, and it will block many
-  more units as they complete.** Counted across every unit's target object
-  against ours:
+- **RETRACTED: "we emit inline helpers in dozens of objects, retail emits one".
+  That was a methodological error, and the method is the lesson.** The target
+  objects under `build/GQPE78/obj/` are not retail's compiler output. They are
+  reconstructed by decomp-toolkit from the *linked* DOL, where `mwld` had
+  already collapsed every weak duplicate into a single copy. So a target object
+  set can only ever show **one** definition of any weak or inline-emitted
+  symbol, no matter how many the original compile produced.
 
-  | symbol | target objects defining it | ours |
+  Measured across three unrelated symbols, all showing the same shape:
+
+  | symbol | target objects | ours |
   |---|---|---|
-  | `__as__5xVec3FRC5xVec3` | **1** (`xBound`) | **73** |
-  | `xModelGetFrame__FP14xModelInstance` | **1** (`xEnt`) | **31** |
-  | `xEntGetPos__FPC4xEnt` | **1** (`xEnt`) | **27** |
+  | `__as__5xVec3FRC5xVec3` | 1 | 73 |
+  | `__as__4xBoxFRC4xBox` | 1 | 7 |
+  | `__as__7xSphereFRC7xSphere` | 1 | 7 |
 
-  All three are `WEAK` in the target. The mechanism: `xEnt.h` and `xModel.h`
-  each carry a plain declaration *and* an `inline` definition, so CodeWarrior
-  emits a weak out-of-line copy in every TU where a call is not inlined. Retail
-  clearly had the declaration only, with one `WEAK` definition in the owning
-  `.cpp` -- the convention this tree already uses for e.g.
-  `WEAK U8 xSndIsPlayingByHandle` in `zEntPlayer.cpp`.
+  **Counting definitions of a weak symbol across target objects measures the
+  linker, not the source.** Do not draw conclusions from it. Reference counts
+  are still meaningful -- ours 856 against the target's 893 for `__as__5xVec3`
+  says our call sites broadly agree -- but definition counts are not.
 
-  Verified on `zLight`, which is 17/17 functions at 100% and still will not
-  link: its object and the target's reference `__as__5xVec3` 3x and
-  `xEntGetPos` 2x **identically**. The only difference is that ours also
-  *defines* all three. `xModelGetFrame` is referenced 0 times in the target and
-  once in ours, and that once is from inside our own surplus `xEntGetPos` body.
+  Two changes were made on the strength of the bad reading before it was
+  caught. `8211ea95` moved `xEntGetPos`/`xModelGetFrame` out of their headers
+  into single `WEAK` definitions; it measured at zero cost with the DOL intact,
+  but the premise was false, an `inline` one-line accessor in a header is what
+  the original source almost certainly had, and `zLight` still fails
+  `fliptest` without it. **Reverted in `be71d261`.** The second, giving `xVec3`
+  a user-declared `operator=` with one out-of-line definition, was far worse
+  and never landed: it makes `xVec3` non-trivially-copyable, so every struct
+  containing one gets a member-wise implicit `operator=`, and a full rebuild
+  measured **+1 function, -39** -- `__as__9xEntFrame` fell to 0.000%,
+  `__as__13zThrownStruct` to 54%, `__as__5xBBox` to 50%. This is the exact
+  inverse of the `xCollis::tri_data` finding below: a user-declared `operator=`
+  on a widely-embedded value type is poison, in both directions.
 
-  This is invisible to `report.json`, which pairs by name and does not care
-  that we carry an extra definition -- the same blind spot that hid the dead
-  `__declspec`. It costs nothing in `matched_functions` and everything in
-  `complete_units`.
-
-  **APPLIED in `8211ea95`, at zero cost.** Moving
-  the bodies out of `xEnt.h`/`xModel.h` into `xEnt.cpp` as single `WEAK`
-  definitions takes `xEntGetPos` from 27 defining objects to 2 and
-  `xModelGetFrame` from 31 to 2 (the stray second is `zNPCGoalRobo`), and
-  `zLight` drops to a **single** surplus symbol, `__as__5xVec3`. `main.dol` sha1
-  unchanged and no function gained or lost. The apparent -1 on
-  `check_hide_entities` was a report.json mispairing, not a real cost -- see the
-  ninja/solo entry above. **What remains for `zLight` to link is the
-  `__as__5xVec3` half**: The
-  `__as__5xVec3` case is harder and needs its own decision -- `xVec3` has no
-  user-declared `operator=`, so the 73 copies are compiler-generated, and
-  suppressing them means declaring `operator=` in `xMath3.h` and defining it
-  `WEAK` in `xBound.cpp`. Measure with a full build and a per-function
-  `report.json` diff; expect it to move many units at once, in either
-  direction.
+  `zLight` remains unlinked and its actual blocker is **unknown**. It is 17/17
+  functions at 100%, its object carries `__as__5xVec3` where the target's does
+  not, and removing the other two surplus symbols did not help -- so the
+  surplus-weak-symbol theory does not explain it either. Note `zVar` is
+  `Matching` while carrying a surplus `__deadstripped_zVar`, so surplus symbols
+  are evidently tolerable in at least some cases. Start there.
 
 - **`xDebug` is blocked on something else and is *not* covered by the above.**
   Its 16 functions are at 100% and `fliptest` still fails. The set difference
