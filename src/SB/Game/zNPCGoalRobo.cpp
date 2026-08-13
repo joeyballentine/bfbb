@@ -1686,9 +1686,8 @@ S32 zNPCGoalAlertChomper::CalcEvadePos(xVec3* pos)
         xVec3 pos_loca[4];
         F32 ds2_best;
         S32 idx_best;
-        S32 i;
 
-        for (i = 0; i < 4; i++)
+        for (S32 i = 0; i < 4; i++)
         {
             pos_loca[i] = pos_home;
         }
@@ -1705,7 +1704,7 @@ S32 zNPCGoalAlertChomper::CalcEvadePos(xVec3* pos)
         ds2_best = -1.0f;
         idx_best = -1;
 
-        for (i = 0; i < 4; i++)
+        for (S32 i = 0; i < 4; i++)
         {
             if (npc->XZDstSqToPos(&pos_loca[i], NULL, NULL) < 2.0f)
             {
@@ -2242,76 +2241,71 @@ S32 zNPCGoalAlertTarTar::HoppyUpdate(en_trantype* trantype, F32 dt)
 
     if (!(tmr_reload < 0.0f))
     {
-        nextgoal = 0;
+        return 0;
     }
-    else
+
+    F32 tym_reload = 2.0f;
+
+    if (zGameExtras_CheatFlags() & 0x800)
     {
-        F32 tym_reload = 2.0f;
+        tym_reload = 0.25f;
+    }
 
-        if (zGameExtras_CheatFlags() & 0x800)
+    xVec3 dir_plyr;
+    F32 ds2_plyr = npc->XYZDstSqToPlayer(&dir_plyr);
+
+    if (xabs(dir_plyr.y) > 12.0f)
+    {
+        return 0;
+    }
+
+    if (ds2_plyr < 1.0f)
+    {
+        return 0;
+    }
+
+    xVec3SMulBy(&dir_plyr, 1.0f / xsqrt(ds2_plyr));
+
+    F32 dot = xVec3Dot(NPCC_faceDir(npc), &dir_plyr);
+
+    if (dot < 0.86f)
+    {
+        return 0;
+    }
+
+    switch (hoppy)
+    {
+    case HOPPY_PATTERN_START:
+        if (!*(U8*)(&npc->npcset.allowChase))
         {
-            tym_reload = 0.25f;
+            hoppy = HOPPY_PATTERN_SHOOT;
         }
-
-        xVec3 dir_plyr;
-        F32 ds2_plyr = npc->XYZDstSqToPlayer(&dir_plyr);
-
-        if (xabs(dir_plyr.y) > 12.0f)
+        else if (xrand() & 0x800000)
         {
-            nextgoal = 0;
-        }
-        else if (ds2_plyr < 1.0f)
-        {
-            nextgoal = 0;
+            hoppy = HOPPY_PATTERN_SHOOT;
         }
         else
         {
-            xVec3SMulBy(&dir_plyr, 1.0f / xsqrt(ds2_plyr));
-
-            F32 dot = xVec3Dot(NPCC_faceDir(npc), &dir_plyr);
-
-            if (dot < 0.86f)
-            {
-                nextgoal = 0;
-            }
-            else
-            {
-                switch (hoppy)
-                {
-                case HOPPY_PATTERN_START:
-                    if (!npc->npcset.allowChase)
-                    {
-                        hoppy = HOPPY_PATTERN_SHOOT;
-                    }
-                    else if (xrand() & 0x800000)
-                    {
-                        hoppy = HOPPY_PATTERN_SHOOT;
-                    }
-                    else
-                    {
-                        hoppy = HOPPY_PATTERN_SHOOT;
-                    }
-                    break;
-                case HOPPY_PATTERN_SHOOT:
-                    tmr_reload = tym_reload;
-                    *trantype = GOAL_TRAN_PUSH;
-                    nextgoal = NPC_GOAL_ATTACKTARTAR;
-                    break;
-                case HOPPY_PATTERN_HOPLEFT:
-                    hoppy = HOPPY_PATTERN_HOPRIGHT;
-                    break;
-                case HOPPY_PATTERN_HOPRIGHT:
-                    hoppy = HOPPY_PATTERN_SHOOT;
-                    break;
-                case HOPPY_PATTERN_HOPSHOOT:
-                    hoppy = HOPPY_PATTERN_HOPSHOOT;
-                    tmr_reload = tym_reload * (0.25f * (xurand() - 0.5f)) + tym_reload;
-                    *trantype = GOAL_TRAN_PUSH;
-                    nextgoal = NPC_GOAL_ATTACKTARTAR;
-                    break;
-                }
-            }
+            hoppy = HOPPY_PATTERN_SHOOT;
         }
+        break;
+    case HOPPY_PATTERN_SHOOT:
+        tmr_reload = tym_reload;
+        *trantype = GOAL_TRAN_PUSH;
+        nextgoal = NPC_GOAL_ATTACKTARTAR;
+        break;
+    case HOPPY_PATTERN_HOPLEFT:
+        hoppy = HOPPY_PATTERN_HOPRIGHT;
+        break;
+    case HOPPY_PATTERN_HOPRIGHT:
+        hoppy = HOPPY_PATTERN_SHOOT;
+        break;
+    case HOPPY_PATTERN_HOPSHOOT:
+        hoppy = HOPPY_PATTERN_HOPSHOOT;
+        tmr_reload = tym_reload * (0.25f * (xurand() - 0.5f)) + tym_reload;
+        *trantype = GOAL_TRAN_PUSH;
+        nextgoal = NPC_GOAL_ATTACKTARTAR;
+        break;
     }
 
     return nextgoal;
@@ -2505,6 +2499,7 @@ static S32 g_idx_handbone[6] = { 10, 15, 25, 35, 40, -1 };
 
 void zNPCGoalAlertGlove::FXTurbulence()
 {
+    S32* pbone;
     zNPCRobot* npc = (zNPCRobot*)(psyche->clt_owner);
 
     if (xrand() & 0x800000)
@@ -2513,8 +2508,9 @@ void zNPCGoalAlertGlove::FXTurbulence()
     }
 
     xVec3 pos_npc = *npc->Pos();
-    S32* pbone = g_idx_handbone;
     S32 idx_bone;
+
+    pbone = g_idx_handbone;
 
     while ((idx_bone = *pbone) >= 0)
     {
@@ -2567,9 +2563,10 @@ void zNPCGoalAlertGlove::FXWhirlwind()
     for (S32 i = 0; i < 4.0f; i++)
     {
         F32 pct = xurand();
+        F32 inv = 1.0f - pct;
+
         pos.y = hyt_base + 0.55f * pct;
 
-        F32 inv = 1.0f - pct;
         F32 spd = LERP(inv, 0.4f, 3.4f);
 
         xVec3 dir = { 0.0f, 0.0f, 0.0f };
@@ -4170,7 +4167,7 @@ S32 zNPCGoalChase::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene*
         }
     }
 
-    return xGoal::Process(trantype, dt, updCtxt, xscn);
+    return xGoal::Process(trantype, dt, updCtxt, NULL);
 }
 
 S32 zNPCGoalAttackCQC::Enter(F32 dt, void* updCtxt)
@@ -4351,14 +4348,17 @@ void zNPCGoalAttackChomper::BreathAttack()
 
     S32 i;
     xVec3 vel_emit;
+    F32 wgt_up;
+    F32 wgt_right;
+
+    wgt_right = vec_coneWeights.x;
+    wgt_up = vec_coneWeights.y;
 
     for (i = 0; i < 8; i++)
     {
         vel_emit = *(const xVec3*)NPCC_faceDir(npc) * vec_coneWeights.z;
-        vel_emit +=
-            *(const xVec3*)NPCC_rightDir(npc) * (vec_coneWeights.x * (2.0f * (xurand() - 0.5f)));
-        vel_emit +=
-            *(const xVec3*)NPCC_upDir(npc) * (vec_coneWeights.y * (2.0f * (xurand() - 0.5f)));
+        vel_emit += *(const xVec3*)NPCC_rightDir(npc) * (wgt_right * (2.0f * (xurand() - 0.5f)));
+        vel_emit += *(const xVec3*)NPCC_upDir(npc) * (wgt_up * (2.0f * (xurand() - 0.5f)));
         vel_emit.normalize();
         vel_emit *= 12.0f * xurand() + 5.0f;
 
@@ -4411,8 +4411,8 @@ S32 zNPCGoalAttackHammer::Process(en_trantype* trantype, F32 dt, void* updCtxt, 
     F32 tym_animCurr = npc->AnimTimeCurrent();
     S32 doPLYRTests = (tym_animCurr > 1.0f);
     S32 doCHCKTests = (tym_animCurr > 1.15f);
-    bool inDamageWindow =
-        ((tym_animCurr > tym_animDamage[0]) && (tym_animCurr < tym_animDamage[1]));
+    S32 inDamageWindow =
+        (bool)((tym_animCurr > tym_animDamage[0]) && (tym_animCurr < tym_animDamage[1]));
 
     if (doPLYRTests && inDamageWindow && !(flg_attack & 3) && PlayerTests(&pos_vert, dt))
     {
@@ -4496,8 +4496,8 @@ S32 zNPCGoalAttackHammer::PlayerTests(xVec3* pos_vert, F32 dt)
 
     xBound bnd;
     memset(&bnd, 0, sizeof(xBound));
-    bnd.sph.r = 0.55f;
     bnd.type = 1;
+    bnd.sph.r = 0.55f;
     bnd.sph.center = *pos_vert;
 
     if (npc->DBG_IsNormLog(eNPCDCAT_Thirteen, 2) != 0)
@@ -4523,8 +4523,8 @@ S32 zNPCGoalAttackHammer::ShockwaveTests(xVec3* pos_vert, F32 dt)
 
     xBound bnd;
     memset(&bnd, 0, sizeof(xBound));
-    bnd.sph.r = 0.55f;
     bnd.type = 1;
+    bnd.sph.r = 0.55f;
     bnd.sph.center = *pos_vert;
 
     if (npc->DBG_IsNormLog(eNPCDCAT_Thirteen, 2) != 0)
@@ -4943,8 +4943,8 @@ S32 zNPCGoalAttackArfMelee::Process(en_trantype* trantype, F32 dt, void* updCtxt
 
 void zNPCGoalAttackArfMelee::PlayerTests()
 {
-    S32 idxlist[2] = { 0x25, 0x26 };
     zNPCRobot* npc = (zNPCRobot*)(psyche->clt_owner);
+    S32 idxlist[2] = { 0x25, 0x26 };
     xBound bnd;
 
     memset(&bnd, 0, sizeof(xBound));
@@ -4994,12 +4994,13 @@ void zNPCGoalAttackArfMelee::FXStreakDone()
 
 void zNPCGoalAttackArfMelee::FXStreakUpdate()
 {
-    S32 idxlist[2] = { 0x25, 0x26 };
     zNPCRobot* npc = (zNPCRobot*)(psyche->clt_owner);
+    S32 idxlist[2] = { 0x25, 0x26 };
 
     for (S32 i = 0; i < 2; i++)
     {
         const xMat4x3* mat = (const xMat4x3*)npc->BoneMat(idxlist[i]);
+        S32 idx = 2 * i;
 
         xVec3 wide = mat->right * 0.7f;
         xVec3 high = mat->up * 0.7f;
@@ -5010,7 +5011,8 @@ void zNPCGoalAttackArfMelee::FXStreakUpdate()
         xMat3x3RMulVec(&b, (const xMat3x3*)npc->BoneMat(0), &b);
         a += *(const xVec3*)npc->BonePos(0);
         b += *(const xVec3*)npc->BonePos(0);
-        xFXStreakUpdate(streakID[2 * i + 0], &a, &b);
+
+        xFXStreakUpdate(streakID[idx], &a, &b);
 
         xVec3 a2 = mat->pos - high;
         xVec3 b2 = mat->pos + high;
@@ -5019,7 +5021,7 @@ void zNPCGoalAttackArfMelee::FXStreakUpdate()
         xMat3x3RMulVec(&b2, (const xMat3x3*)npc->BoneMat(0), &b2);
         a2 += *(const xVec3*)npc->BonePos(0);
         b2 += *(const xVec3*)npc->BonePos(0);
-        xFXStreakUpdate(streakID[2 * i + 1], &a2, &b2);
+        xFXStreakUpdate(streakID[idx + 1], &a2, &b2);
     }
 }
 
@@ -5332,7 +5334,13 @@ void zNPCGoalDogLaunch::PreCollide()
     xVec3Sub(&npc->frame->vel, &pos_tgt, &pos_src);
 
     F32 dst = xVec3Length(&npc->frame->vel);
-    F32 tym_ETALand = MAX(dst, 1.0f) / 15.0f;
+
+    if (dst < 1.0f)
+    {
+        dst = 1.0f;
+    }
+
+    F32 tym_ETALand = dst / 15.0f;
 
     xVec3SMulBy(&npc->frame->vel, 1.0f / tym_ETALand);
 
@@ -5422,7 +5430,14 @@ void zNPCGoalDogLaunch::BubTrailCone(const xVec3* pos, S32 num, const xVec3* pos
         return;
     }
 
-    F32 ang_perseg = 2.0f * PI / num;
+    F32 zrnd_vel;
+    F32 zrnd_pos;
+    F32 ang_perseg;
+
+    zrnd_pos = pos_rand->z;
+    zrnd_vel = vel_rand->z;
+    ang_perseg = 2.0f * PI / num;
+
     xVec3* pos_cur = posbuf;
     xVec3* vel_cur = velbuf;
 
@@ -5433,12 +5448,12 @@ void zNPCGoalDogLaunch::BubTrailCone(const xVec3* pos, S32 num, const xVec3* pos
         F32 sinang = isin(ang);
 
         *pos_cur = *pos;
-        *vel_cur = mat->at * (pos_rand->z * xurand());
+        *vel_cur = mat->at * (zrnd_pos * xurand());
         *pos_cur += mat->right * cosang * pos_rand->x;
         *pos_cur += mat->up * sinang * pos_rand->y;
 
         *vel_cur = g_O3;
-        *vel_cur = mat->at * (vel_rand->z * xurand());
+        *vel_cur = mat->at * (zrnd_vel * xurand());
         *vel_cur += mat->right * cosang * vel_rand->x;
         *vel_cur += mat->up * sinang * vel_rand->y;
 
@@ -5562,8 +5577,8 @@ S32 zNPCGoalTeleport::Exit(F32 dt, void* updCtxt)
 
 S32 zNPCGoalTeleport::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
 {
-    zNPCArfArf* npc = (zNPCArfArf*)(psyche->clt_owner);
     S32 nextgoal = 0;
+    zNPCArfArf* npc = (zNPCArfArf*)(psyche->clt_owner);
 
     if (*trantype != GOAL_TRAN_NONE)
     {
@@ -5571,10 +5586,12 @@ S32 zNPCGoalTeleport::Process(en_trantype* trantype, F32 dt, void* updCtxt, xSce
     }
 
     zMovePoint* telept = npc->GetTelepoint(npc->cfg_npc->pts_damage - npc->hitpoints);
-    S32 arrived = 0;
+    S32 arrived;
     xVec3 dir_move;
 
     npc->FacePlayer(dt, 3.0f * PI);
+
+    arrived = 0;
 
     if (telept != NULL)
     {
@@ -5583,7 +5600,7 @@ S32 zNPCGoalTeleport::Process(en_trantype* trantype, F32 dt, void* updCtxt, xSce
         F32 dst = xVec3Length(&dir_move);
         F32 spd = npc->ThrottleAdjust(dt, 12.0f, 15.0f);
 
-        if ((dst < 1e-05f) || (dst < spd * dt))
+        if ((dst < 1e-05f) || (spd * dt > dst))
         {
             arrived = 1;
             xVec3Copy(&npc->frame->mat.pos, telept->PosGet());
@@ -5659,9 +5676,9 @@ S32 zNPCGoalHokeyPokey::Process(en_trantype* trantype, F32 dt, void* updCtxt, xS
         *trantype = GOAL_TRAN_SET;
         nextgoal = NPC_GOAL_IDLE;
     }
-    else if (!(zNPCFodBzzt::tmr_hokeypokey < 0.4f))
+    else if (zNPCFodBzzt::tmr_hokeypokey > 0.4f)
     {
-        cnt_loop = MAX(cnt_loop, 2);
+        cnt_loop = MAX(2, cnt_loop);
     }
     else if (!*(U8*)(&npc->npcset.allowDetect))
     {
@@ -5686,7 +5703,13 @@ S32 zNPCGoalHokeyPokey::Process(en_trantype* trantype, F32 dt, void* updCtxt, xS
     }
     else if (xabs(ang_spinrate) < 1.5707964f)
     {
-        F32 sidely = (flg_hokey & 1) ? 1.0f : -1.0f;
+        F32 sidely = -1.0f;
+
+        if (flg_hokey & 1)
+        {
+            sidely = 1.0f;
+        }
+
         ang_spinrate += sidely * (18.849556f * dt);
     }
 
@@ -6050,11 +6073,11 @@ void zNPCGoalLassoGrab::DoTurnAway(F32 dt)
 
     S32 ntyp = npc->SelfType();
     S32 faceAway = 1;
-    S32 i;
+    S32 i = 0;
 
-    for (i = 0; ntlist_towards[i] != 0; i++)
+    while (ntlist_towards[i] != 0)
     {
-        if (ntlist_towards[i] == ntyp)
+        if (ntlist_towards[i++] == ntyp)
         {
             faceAway = 0;
             break;
@@ -6456,9 +6479,9 @@ S32 zNPCGoalBashed::Enter(F32 dt, void* updCtxt)
         (globals.player.g.BBashHeight + player_bash_fromgrav) / globals.player.g.BBashTime;
     npc->frame->vel.y = 10.0f;
     npc->frame->vel.x =
-        (globals.camera.mat.right.x * (xurand() - 0.5f) * 2.0f + globals.camera.mat.at.x) * 5.0f;
+        (globals.camera.mat.right.x * (2.0f * (xurand() - 0.5f)) + globals.camera.mat.at.x) * 5.0f;
     npc->frame->vel.z =
-        (globals.camera.mat.right.z * (xurand() - 0.5f) * 2.0f + globals.camera.mat.at.z) * 5.0f;
+        (globals.camera.mat.right.z * (2.0f * (xurand() - 0.5f)) + globals.camera.mat.at.z) * 5.0f;
     npc->frame->mode |= 4;
     zNPCGoalLoopAnim::LoopCountSet(1);
     npc->InflictPain(1, 0);
@@ -7131,7 +7154,7 @@ F32 zNPCGoalRespawn::LaunchRoboBits()
     xVec3 vec_toss = pos_tgt - pos_bone;
 
     F32 dst_toss = xVec3Length(&vec_toss);
-    F32 tym_toss = dst_toss * 0.5f;
+    F32 tym_toss = dst_toss / 2.0f;
 
     if (dst_toss < 0.25f || tym_toss < 0.25f)
     {
@@ -7228,9 +7251,9 @@ void zNPCGoalRespawn::DoAppearFX(F32 dt)
 
     npc->VFXStarTrek(dt, &pos_poof, &vel_poof);
 
+    vel_poof.y -= 1.0f;
     pos_poof.x += fv;
     pos_poof.z += fv;
-    vel_poof.y -= 1.0f;
 
     npc->VFXStarTrek(dt, &pos_poof, &vel_poof);
 
@@ -7584,7 +7607,9 @@ S32 zNPCGoalTubeDuckling::DuckStackInterp(F32 dt)
     zNPCTubeSlave* npc = (zNPCTubeSlave*)this->psyche->clt_owner;
     zNPCTubelet* pete = npc->tub_pete;
 
-    F32 turnrate = MAX(npc->cfg_npc->spd_turnMax, pete->cfg_npc->spd_turnMax) * 1.1f;
+    F32 turnrate = MAX(npc->cfg_npc->spd_turnMax, pete->cfg_npc->spd_turnMax);
+
+    turnrate *= 1.1f;
 
     npc->TurnToFace(dt, NPCC_faceDir(pete), turnrate);
 
@@ -7596,7 +7621,9 @@ S32 zNPCGoalTubeDuckling::DuckStackInterp(F32 dt)
     xVec3 pos_desire;
     npc->PosStacked(&pos_desire);
 
-    if (dst_visacard < 0.0f)
+    S32 snapped = (dst_visacard < 0.0f) ? 1 : 0;
+
+    if (snapped)
     {
         xVec3Copy(&npc->frame->mat.pos, &pos_desire);
         stillbusy = 0;
@@ -8413,11 +8440,21 @@ S32 RoboToCntrIdx(S32 robotId)
 {
     S32 res = ROBOCOP_CNTR_FORCE;
 
-    for (RoboCopMap* cur = g_map_policeCounter; cur->ntyp_robotype != 0; cur++)
+    // NOTE: 'cur' starts at the head of the table while 'i' starts at zero, so
+    // entry zero is examined twice before the scan moves on. Harmless, but it
+    // is what retail does.
+    S32 i = 0;
+    RoboCopMap* cur = g_map_policeCounter;
+
+    while (cur->ntyp_robotype != 0)
     {
-        if (cur->ntyp_robotype == robotId)
+        RoboCopMap* here = cur;
+
+        cur = &g_map_policeCounter[i++];
+
+        if (here->ntyp_robotype == robotId)
         {
-            res = cur->idx_copCounter;
+            res = here->idx_copCounter;
             break;
         }
     }
