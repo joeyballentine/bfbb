@@ -37,6 +37,12 @@
 
 static const basic_rect<F32> screen_bounds = { 0, 0, 1, 1 };
 
+substr substr::create(const char* text, size_t size)
+{
+    substr s = { text, size };
+    return s;
+}
+
 namespace
 {
     struct font_asset
@@ -272,107 +278,118 @@ namespace
         return true;
     }
 
-    // FIXME: Float conversions seem to need work
     basic_rect<F32> get_tex_bounds(const font_data& fd, U8 c)
     {
-        typedef __typeof__(((struct font_asset){ 0 }).char_pos[0]) char_pos_t;
+        const font_asset& a = *fd.asset;
+        basic_rect<F32> result;
 
-        F32 boundX;
-        F32 boundY;
-        F32 boundW;
-        F32 boundH;
-        char_pos_t* temp_r8;
-
-        if (fd.asset->flags & 0x4)
+        if (a.flags & 0x4)
         {
-            boundX = (F32)(c / fd.asset->line_size);
-            boundY = (F32)(c % fd.asset->line_size);
+            result.x = c / a.line_size;
+            result.y = c % a.line_size;
         }
         else
         {
-            boundY = (F32)(c / fd.asset->line_size);
-            boundX = (F32)(c % fd.asset->line_size);
+            result.x = c % a.line_size;
+            result.y = c / a.line_size;
         }
 
-        temp_r8 = &fd.asset->char_pos[c];
-        boundX = (F32)(temp_r8->offset + (fd.asset->du * boundX + (F32)fd.asset->u));
-        boundW = (F32)temp_r8->size - 0.5f;
-        boundY = ((F32)fd.asset->dv * boundY) + (F32)fd.asset->v;
-        boundH = (F32)fd.asset->dv - 0.5f;
+        result.x = a.char_pos[c].offset + (a.du * result.x + a.u);
+        result.w = a.char_pos[c].size - 0.5f;
+        result.y = a.dv * result.y + a.v;
+        result.h = a.dv - 0.5f;
 
-        basic_rect<F32> result = { boundX, boundY, boundW, boundH };
-        result.scale((F32)fd.asset->dv, (F32)fd.asset->v);
+        result.scale(fd.iwidth, fd.iheight);
+
         return result;
     }
 
     basic_rect<F32> get_bounds(const font_data& fd, U8 c)
     {
-        // todo: uses int-to-float conversion
-        // clang-format off
-        basic_rect<F32> result =
-        {
-            0.0f,
-            (F32)(-fd.asset->baseline / fd.asset->dv),
-            (F32)(fd.asset->char_pos[c].size + fd.asset->space.x) / (fd.asset->du + fd.asset->space.x),
-            1.0f
-        };
-        // clang-format on
+        const font_asset& a = *fd.asset;
+
+        basic_rect<F32> result;
+
+        result.x = 0.0f;
+        result.y = (F32)-a.baseline / a.dv;
+        result.w = (F32)(a.char_pos[c].size + a.space.x) / (a.du + a.space.x);
+        result.h = 1.0f;
 
         return result;
     }
 
     bool init_font_data(font_data& fd)
     {
-        // todo: uses int-to-float conversion
         font_asset& a = *fd.asset;
         S32 height;
         U8 i;
-        U8 c;
+        char c;
         U32 tail_index;
 
-        fd.texture = (RwTexture*)xSTFindAsset(a.tex_id, 0);
+        fd.texture = (RwTexture*)xSTFindAsset(a.tex_id, NULL);
 
         if (fd.texture == NULL)
         {
-            c = 0;
+            return false;
         }
-        else
-        {
-            // &= produces different codegen here due to order of operations
-            fd.texture->filterAddressing = fd.texture->filterAddressing & 0xFFFFFF00 | 2;
 
-            fd.raster = fd.texture->raster;
-            height = fd.raster->height;
-            fd.iwidth = 1.0f / fd.raster->width;
-            fd.iheight = 1.0f / height;
-            memset(fd.char_index, 0xFF, 0x100);
-            fd.index_max = 0;
-            tail_index = fd.index_max;
-            c = a.char_set[tail_index];
-            while (i = tail_index, c != 0)
+        // &= produces different codegen here due to order of operations
+        fd.texture->filterAddressing = fd.texture->filterAddressing & 0xFFFFFF00 | 2;
+
+        fd.raster = fd.texture->raster;
+
+        height = fd.raster->height;
+
+        fd.iwidth = 1.0f / fd.raster->width;
+        fd.iheight = 1.0f / height;
+
+        memset(fd.char_index, 0xFF, 0x100);
+
+        fd.index_max = 0;
+
+        while (a.char_set[fd.index_max] != '\0')
+        {
+            i = fd.index_max;
+            c = a.char_set[i];
+
+            fd.char_index[c] = i;
+
+            if ((a.flags & 0x1) && c >= 'A' && c <= 'Z')
             {
-                U32 unk = tail_index & 0xFF;
-                char bVar2 = a.char_set[unk];
-                fd.char_index[bVar2] = i;
-                if ((((a.flags & 1) == 0) || (bVar2 < 0x41)) || (0x5a < bVar2))
-                {
-                    if ((((a.flags & 2) != 0) && (0x60 < bVar2)) && (bVar2 < 0x7b))
-                    {
-                        fd.char_index[bVar2 - 0x20] = i;
-                    }
-                }
-                else
-                {
-                    fd.char_index[bVar2 + 0x20] = i;
-                }
-                // not sure why it's a separate variable
-                get_tex_bounds(fd, c);
+                fd.char_index[c + 0x20] = i;
+            }
+            else if ((a.flags & 0x2) && c >= 'a' && c <= 'z')
+            {
+                fd.char_index[c - 0x20] = i;
             }
 
-            c = 1;
+            fd.tex_bounds[i] = get_tex_bounds(fd, i);
+            fd.bounds[i] = get_bounds(fd, i);
+            fd.dstfrac[i].x = (F32)a.char_pos[i].size / (a.char_pos[i].size + a.space.x);
+            fd.dstfrac[i].y = (F32)a.dv / (a.dv + a.space.y);
+
+            fd.index_max++;
         }
 
-        return c;
+        tail_index = fd.index_max;
+
+        if (fd.char_index[' '] == 0xFF)
+        {
+            fd.char_index[' '] = tail_index;
+            fd.tex_bounds[tail_index].assign(0, 0, 0, 0);
+            fd.bounds[tail_index].assign(0.0f, (F32)-a.baseline / a.dv,
+                                         (a.flags & 0x8) ? 1.0f : 0.5f, 1.0f);
+            tail_index++;
+        }
+
+        if (fd.char_index['\n'] == 0xFF)
+        {
+            fd.char_index['\n'] = tail_index;
+            fd.tex_bounds[tail_index].assign(0, 0, 0, 0);
+            fd.bounds[tail_index].assign(0.0f, (F32)-a.baseline / a.dv, 0.0f, 1.0f);
+        }
+
+        return true;
     }
 
     void start_tex_render(U32 font_id)
@@ -458,8 +475,6 @@ namespace
             xModelInstance model[MODEL_CACHE_SIZE];
         };
 
-        // non-matching: two instructions swapped
-
         model_cache_inited = true;
 
         void* data = xMemAlloc(gActiveHeap, sizeof(model_pool), 16);
@@ -512,8 +527,6 @@ namespace
         {
             return NULL;
         }
-
-        // non-matching: instruction order
 
         model_cache_entry& e = model_cache[oldest];
 
@@ -621,7 +634,6 @@ basic_rect<F32> xfont::bounds(char c) const
 
     if (fd.char_index[c] == 0xFF)
     {
-        // non-matching: scheduling
         return basic_rect<F32>::m_Null;
     }
 
@@ -753,11 +765,11 @@ void xfont::irender(const char* text, size_t text_size, F32 x, F32 y) const
     basic_rect<F32> bounds = { x, y, width, height };
     U32 i = 0;
 
-    // non-matching: color not stored in r28
+    // non-matching: color not hoisted into r28
 
     while (i < text_size && text[i] != '\0')
     {
-        char c = text[i];
+        U8 c = text[i];
 
         char_render(c, id, bounds, clip, color);
 
@@ -782,12 +794,7 @@ namespace
         ti.action.size = 0;
         ti.name.size = 0;
 
-        // non-matching: scheduling
-
-        substr s;
-
-        s.text = ti.tag.text;
-        s.size = ti.tag.size;
+        substr s = ti.tag;
 
         s.text++;
         s.size--;
@@ -809,7 +816,7 @@ namespace
             return 0;
         }
 
-        char c = s.text[0];
+        U8 c = s.text[0];
 
         if (c == '\0' || c == '{')
         {
@@ -888,7 +895,7 @@ namespace
     const char* parse_next_text_jot(xtextbox::jot& a, const xtextbox& tb, const xtextbox& ctb,
                                     const char* text, size_t text_size)
     {
-        char c = text[0];
+        U8 c = text[0];
 
         a.s.text = text;
         a.s.size = 1;
@@ -1327,7 +1334,7 @@ xtextbox::tag_entry_list xtextbox::read_tag(const substr& s)
 
         const char* d = find_char(it, delims);
 
-        entry.name.size = (d) ? it.size : d - it.text;
+        entry.name.size = (!d) ? it.size : d - it.text;
 
         trim_ws(entry.name);
 
@@ -1345,13 +1352,13 @@ xtextbox::tag_entry_list xtextbox::read_tag(const substr& s)
 
         if (*d != ';')
         {
-            substr& arg = arg_buffer[args_used];
-
             entry.op = *d;
-            entry.args = &arg;
+            entry.args = &arg_buffer[args_used];
 
             while (it.size)
             {
+                substr& arg = arg_buffer[args_used];
+
                 arg.text = it.text;
 
                 const char* d = find_char(it, sub_delims);
@@ -1372,7 +1379,6 @@ xtextbox::tag_entry_list xtextbox::read_tag(const substr& s)
 
                 if (arg.size)
                 {
-                    // non-matching: missing addi instruction
                     args_used++;
                     entry.args_size++;
                 }
@@ -1398,15 +1404,14 @@ xtextbox::tag_entry_list xtextbox::read_tag(const substr& s)
 
 xtextbox::tag_entry* xtextbox::find_entry(const tag_entry_list& el, const substr& name)
 {
-    // non-matching: el.size and el.entries are not cached at the beginning
+    tag_entry* entries = el.entries;
+    size_t size = el.size;
 
-    for (size_t i = 0; i < el.size; i++)
+    for (size_t i = 0; i < size; i++)
     {
-        tag_entry& e = el.entries[i];
-
-        if (icompare(name, e.name) == 0)
+        if (icompare(name, entries[i].name) == 0)
         {
-            return &e;
+            return &entries[i];
         }
     }
 
@@ -1422,11 +1427,11 @@ size_t xtextbox::read_list(const tag_entry& e, F32* v, size_t vsize)
         total = vsize;
     }
 
-    // non-matching: e.args is not stored in r31
+    const substr* args = e.args;
 
     for (size_t i = 0; i < total; i++)
     {
-        v[i] = xatof(e.args[i].text);
+        v[i] = xatof(args[i].text);
     }
 
     return total;
@@ -1441,11 +1446,11 @@ size_t xtextbox::read_list(const tag_entry& e, S32* v, size_t vsize)
         total = vsize;
     }
 
-    // non-matching: e.args is not stored in r31
+    const substr* args = e.args;
 
     for (size_t i = 0; i < total; i++)
     {
-        v[i] = atoi(e.args[i].text);
+        v[i] = atoi(args[i].text);
     }
 
     return total;
@@ -1490,9 +1495,7 @@ void xtextbox::layout::clear()
 
 void xtextbox::layout::trim_line(jot_line& line)
 {
-    // non-matching: mtctr and bdnz not generated
-
-    for (S32 i = line.last - 1; i >= line.first; i--)
+    for (S32 i = line.last - 1; i >= (S32)line.first; i--)
     {
         jot& a = _jots[i];
 
@@ -1508,7 +1511,7 @@ void xtextbox::layout::trim_line(jot_line& line)
         }
     }
 
-    for (S32 i = line.first; i < line.last; i++)
+    for (size_t i = line.first; i < line.last; i++)
     {
         jot& a = _jots[i];
 
@@ -1982,8 +1985,8 @@ F32 xtextbox::layout::yextent(F32 max, S32& size, S32 begin_jot, S32 end_jot) co
         begin_line++;
     }
 
-    // non-matching: wrong float registers
     F32 top = _lines[begin_line].bounds.y;
+    F32 bottom = max + top;
     S32 i = begin_line;
 
     while (true)
@@ -1996,7 +1999,7 @@ F32 xtextbox::layout::yextent(F32 max, S32& size, S32 begin_jot, S32 end_jot) co
         // non-matching: r11 missing
         const jot_line& line = this->_lines[i];
 
-        if (line.bounds.y + line.bounds.h > max + top)
+        if (line.bounds.y + line.bounds.h > bottom)
         {
             i--;
             break;
@@ -3247,8 +3250,10 @@ namespace
             case tex_args::SCALE_FONT_WIDTH:
             {
                 size = get_texture_size(*ttc.raster);
+
                 F32 tmpX = tb.font.width;
-                F32 tmpY = size.y * (tb.font.width / size.x);
+                F32 tmpY = size.y * (tmpX / size.x);
+
                 size.x = tmpX;
                 size.y = tmpY;
                 break;
@@ -3256,8 +3261,10 @@ namespace
             case tex_args::SCALE_FONT_HEIGHT:
             {
                 size = get_texture_size(*ttc.raster);
-                F32 tmpX = size.x * (tb.font.height / size.y);
+
                 F32 tmpY = tb.font.height;
+                F32 tmpX = size.x * (tmpY / size.y);
+
                 size.x = tmpX;
                 size.y = tmpY;
                 break;
@@ -3566,8 +3573,6 @@ void render_fill_rect(const basic_rect<F32>& bounds, iColor_tag color)
         RwIm2DVertex vert[4];
         basic_rect<F32> r = bounds;
 
-        // non-matching: float scheduling
-
         r.scale(640.0f, 480.0f);
 
         set_rect_verts(vert, r.x, r.y, r.w, r.h, color, rcz, nsz);
@@ -3714,10 +3719,13 @@ void basic_rect<F32>::set_bounds(F32 x1, F32 y1, F32 x2, F32 y2)
 
 void basic_rect<F32>::get_bounds(F32& x1, F32& y1, F32& x2, F32& y2) const
 {
-    x1 = x;
-    x2 = x + w;
-    y1 = y;
-    y2 = y + h;
+    F32 tx = x;
+    F32 ty = y;
+
+    x1 = tx;
+    x2 = tx + w;
+    y1 = ty;
+    y2 = ty + h;
 }
 
 basic_rect<F32>& basic_rect<F32>::move(F32 x, F32 y)
@@ -3737,12 +3745,6 @@ xVec2& xVec2::assign(F32 x, F32 y)
     this->x = x;
     this->y = y;
     return *this;
-}
-
-substr substr::create(const char* text, size_t size)
-{
-    substr s = { text, size };
-    return s;
 }
 
 size_t rskip_ws(substr& s)
