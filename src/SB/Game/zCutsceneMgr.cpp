@@ -18,6 +18,10 @@
 #include "iCutscene.h"
 #include "iSystem.h"
 
+// Local in the target, not global -- and defined after its caller, so the
+// forward declaration is what keeps CodeWarrior emitting a real bl.
+static void check_hide_entities();
+
 static zCutsceneHack cutsceneHackTable[58] = {
     {"cin_hammer", "spongebob.dff", 0.0f, 1, 0, 0, NULL},
     {"cin_hammer", "fish_j_skel.dff", 0.0f, 1, 0, 0, NULL},
@@ -483,7 +487,7 @@ void zCutsceneMgrUpdate(xBase* to, xScene* sc, F32 dt)
     check_hide_entities();
 }
 
-void check_hide_entities()
+static void check_hide_entities()
 {
     bool mgrNotNull = globals.cmgr;
     if (mgrNotNull == ents_hidden)
