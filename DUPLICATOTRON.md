@@ -21,10 +21,10 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now (2026-08-13) |
 |---|---|---|
-| matched functions | 6491 / 10147 | 7949 / 10147 |
-| complete units | 195 / 543 | 231 / 543 |
-| **game code exact** | — | **63.260%** (bytes) |
-| **game code fuzzy** | — | **95.292%** (6780 / 7673 functions) |
+| matched functions | 6491 / 10147 | 7975 / 10147 |
+| complete units | 195 / 543 | 232 / 543 |
+| **game code exact** | — | **63.820%** (bytes) |
+| **game code fuzzy** | — | **95.383%** (6806 / 7673 functions) |
 | **game units linked** | — | **91 / 224** |
 | SDK code | — | **90 / 90 units, 100.000% fuzzy — complete** |
 
@@ -708,6 +708,30 @@ machine to commit:
   first rather than indexing inside each arm. `const sound_asset& asset =
   sound_assets[which];` ahead of the `if` took `kill_sound` from 52% to 100%
   and `play_sound` from 3% to 96%.
+- **`x / 2.0f` is not `x * 0.5f`.** Both emit a single `fmuls` against 0.5f,
+  but the division form emits `fmuls rD, var, const` and the multiplication
+  form `fmuls rD, const, var`. Operand order is otherwise canonicalised by CW
+  and unreachable, so this is one of the few ways to choose it. (`zNPCGoalRobo`
+  `LaunchRoboBits` -- it was the entire residue.) Note the trick does not
+  generalise to other constants: for `fv * 2.0f` neither `2.0f * fv` nor a
+  named temp moves the operands.
+- **`S32 flag = (cond) ? 1 : 0; if (flag)`** is the only shape that reproduces
+  CW's `li 1 / b / li 0 / cmpwi` boolean materialisation. A bare `if (cond)`,
+  an `S32`/`bool` temp assigned from the comparison, and a two-statement
+  `if (c) flag = 1;` all get folded away -- all four measured.
+- **The narrowing type of a boolean temp picks the compare.** `S32 x =
+  (bool)(a && b);` gives `clrlwi` at definition plus *signed* compares at use;
+  plain `bool` gives `li 0/1` and `clrlwi.`; `U8` gives `clrlwi` + `cmplwi`;
+  `S8` gives `extsb`. Four distinct emissions from one expression.
+- **`F32 x = expr; x *= k;` versus `F32 x = expr * k;`** decides whether the
+  multiply lands before or after an intervening call.
+- **`arr[i++]` in the body with `arr[i]` in the condition** reproduces a
+  non-CSE'd double load plus `lwzx base, offset` addressing, where a hoisted
+  pointer will not.
+- **Reading a `U8` flag field as its declared signed type emits `extsb.`;
+  retail often wants the plain byte** (`cmplwi`), i.e. `*(U8*)&field`. Same
+  result for a 0/1 flag, but it changes register allocation across the whole
+  function -- worth 1.7 points on one `zNPCGoalRobo` function.
 - **CodeWarrior inlines a same-TU callee only if it is defined *earlier*.**
   So forward-declare the helper and put its body *after* the caller when the
   target emits a real `bl`. Conversely, a static helper defined above its only
@@ -800,6 +824,30 @@ the *count* of preceding objects matters as much as their order. Worth
 confirming before anyone builds a strategy on either model.
 
 ## Settled
+
+- **"POOL is worth zero" has a corollary that is worth a great deal: driving a
+  REAL row *into* the POOL bucket is a full `report.json` win.** These are two
+  different moves and it is easy to conflate them. Realigning the pool under
+  rows that are *already* POOL-only buys nothing, because they read 100.0
+  already. But taking a function whose instructions genuinely differ and fixing
+  the source until the only remaining difference is a pool ordinal moves it
+  from below 100.0 to exactly 100.0. Measured on `zNPCGoalRobo`: one function
+  reached byte-exact and twelve more became POOL-only, and the build scored
+  **all thirteen**. So the instruction to agents is "do not work on POOL rows",
+  never "do not let a function end up POOL-only" -- POOL-only is a finished
+  function.
+
+- **CodeWarrior emits `__declspec(section)` functions in REVERSE order of
+  definition.** `Runtime/__mem.c` defined `memset, __fill_mem, memcpy` and the
+  object came out `memcpy, __fill_mem, memset` against a target of `memset,
+  __fill_mem, memcpy`. Reversing the definitions produced the target order,
+  `symorder.py` went green, `fliptest` passed and the unit is now `Matching`.
+  Declaration order in the header is *not* the driver -- that was changed first
+  and moved nothing, so `__mem.h` is untouched. Worth trying wherever a
+  `.init`/`.ctors`/`.dtors` section is in the right set but the wrong order.
+  Note this was undiagnosable until `4647a07f` restored the `__declspec` guard
+  and moved these three functions out of `.text`; it is the second unit that
+  one-character fix has unblocked.
 
 - **Never buy pool alignment with an explicit template instantiation.** In
   `zNPCHazard`, `xUtil_choose<int>` is instantiated by the target at the call
