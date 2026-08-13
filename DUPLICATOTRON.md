@@ -21,10 +21,10 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now (2026-08-13) |
 |---|---|---|
-| matched functions | 6491 / 10147 | 8009 / 10147 |
+| matched functions | 6491 / 10147 | 8011 / 10147 |
 | complete units | 195 / 543 | 232 / 543 |
-| **game code exact** | — | **66.321%** (bytes) |
-| **game code fuzzy** | — | **95.558%** (6840 / 7673 functions) |
+| **game code exact** | — | **66.393%** (bytes) |
+| **game code fuzzy** | — | **95.661%** (6842 / 7673 functions) |
 | **game units linked** | — | **91 / 224** |
 | SDK code | — | **90 / 90 units, 100.000% fuzzy — complete** |
 
@@ -867,6 +867,16 @@ confirming before anyone builds a strategy on either model.
   Note this was undiagnosable until `4647a07f` restored the `__declspec` guard
   and moved these three functions out of `.text`; it is the second unit that
   one-character fix has unblocked.
+
+  **Do not generalise this to `.bss`.** Function-local statics are laid out in
+  **ascending** declaration order, the opposite way round, and the two are
+  separate mechanisms. Measured on `zEntPlayer_Init`'s four `drybob` arrays:
+  declaring them `chgData, oldData, chgTime, oldTime` (matching the target's
+  `.bss` order at `r31+0x6ac/0x7ac/0x8ac/0x9ac`) gives **94.829%**, reversing
+  them gives **94.513%**. This entry originally claimed the reverse rule
+  covered both and `52461655` acted on that; `b1d360cf` corrects it. The
+  ascending order is also what `dwarf/` reports, so `dwarf/` is a usable
+  cross-check for `.bss` layout but says nothing about `__declspec(section)`.
 
 - **Never buy pool alignment with an explicit template instantiation.** In
   `zNPCHazard`, `xUtil_choose<int>` is instantiated by the target at the call
