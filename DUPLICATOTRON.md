@@ -825,6 +825,59 @@ confirming before anyone builds a strategy on either model.
 
 ## Settled
 
+- **We emit inline helper definitions in dozens of objects where retail emits
+  each in exactly one. This is what blocks `zLight`, and it will block many
+  more units as they complete.** Counted across every unit's target object
+  against ours:
+
+  | symbol | target objects defining it | ours |
+  |---|---|---|
+  | `__as__5xVec3FRC5xVec3` | **1** (`xBound`) | **73** |
+  | `xModelGetFrame__FP14xModelInstance` | **1** (`xEnt`) | **31** |
+  | `xEntGetPos__FPC4xEnt` | **1** (`xEnt`) | **27** |
+
+  All three are `WEAK` in the target. The mechanism: `xEnt.h` and `xModel.h`
+  each carry a plain declaration *and* an `inline` definition, so CodeWarrior
+  emits a weak out-of-line copy in every TU where a call is not inlined. Retail
+  clearly had the declaration only, with one `WEAK` definition in the owning
+  `.cpp` -- the convention this tree already uses for e.g.
+  `WEAK U8 xSndIsPlayingByHandle` in `zEntPlayer.cpp`.
+
+  Verified on `zLight`, which is 17/17 functions at 100% and still will not
+  link: its object and the target's reference `__as__5xVec3` 3x and
+  `xEntGetPos` 2x **identically**. The only difference is that ours also
+  *defines* all three. `xModelGetFrame` is referenced 0 times in the target and
+  once in ours, and that once is from inside our own surplus `xEntGetPos` body.
+
+  This is invisible to `report.json`, which pairs by name and does not care
+  that we carry an extra definition -- the same blind spot that hid the dead
+  `__declspec`. It costs nothing in `matched_functions` and everything in
+  `complete_units`.
+
+  **The fix is identified but not applied**, because it is tree-wide and must
+  not land while unit agents are mid-flight measuring with `solo.py`: move the
+  bodies out of `xEnt.h`/`xModel.h` into `xEnt.cpp` as `WEAK` definitions. The
+  `__as__5xVec3` case is harder and needs its own decision -- `xVec3` has no
+  user-declared `operator=`, so the 73 copies are compiler-generated, and
+  suppressing them means declaring `operator=` in `xMath3.h` and defining it
+  `WEAK` in `xBound.cpp`. Measure with a full build and a per-function
+  `report.json` diff; expect it to move many units at once, in either
+  direction.
+
+- **`xDebug` is blocked on something else and is *not* covered by the above.**
+  Its 16 functions are at 100% and `fliptest` still fails. The set difference
+  is our surplus `__deadstripped_xDebug` carrier -- tolerable in itself, since
+  `zVar` is `Matching` carrying the same device -- plus one ordering
+  difference: the target emits `__as__10iColor_tag` immediately after
+  `create__5xfont`, its only caller, while we emit it two slots later, after
+  `NSCREENY`/`NSCREENX`. Emission order is otherwise exactly reverse order of
+  first use on both sides. Tried and failed: adding an explicit `iColor_tag`
+  assignment between the NSCREEN calls and `xfont::create` in the carrier, on
+  the theory that retail's deadstripped function had one -- CW folds the
+  trivial copy, emits nothing, and the order does not move. This looks like a
+  difference in when the compiler flushes a nested instantiation dependency,
+  not something reachable from source shape.
+
 - **A user-declared `operator=` on a union member was holding `xCollis` back,
   and it was never legal.** `xCollis::tri_data` carried a hand-written
   `operator=`, which makes `xCollis` non-trivially copyable, so
