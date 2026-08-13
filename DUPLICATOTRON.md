@@ -852,6 +852,32 @@ confirming before anyone builds a strategy on either model.
   further down as a recommended fix. It has not been measured this way. Do that
   before applying it.
 
+- **`ninja` does not track every header dependency. Incremental builds after a
+  header edit can be measured on stale objects.** `zNPCGoalRobo.cpp` includes
+  `xEnt.h` on line 5; `ninja -t deps` lists 180 dependencies for its object and
+  `xEnt.h` is not among them, so after editing that header `ninja` reported
+  "no work to do" and left a stale object behind. 376 of 542 objects predated
+  the edit, most legitimately (bink/rwsdk do not include it), but not all.
+
+  This matters because it silently changed a conclusion. The incremental build
+  of the inline-helper fix reported **0 flipped, 0 lost**; a forced full
+  rebuild of the same tree reported **0 flipped, 1 lost**. The regression was
+  real and the incremental build hid it.
+
+  **After any shared-header change, force a full rebuild before believing the
+  number**: `find src -name "*.cpp" -o -name "*.c" | xargs touch && ninja`.
+  Every header change measured before 2026-08-13 was measured incrementally and
+  may be understated. HEAD as of `eeacf61b` has since been re-verified with a
+  full rebuild -- DOL sha1 intact, 8029 functions -- so the committed state is
+  sound; it is the *rejected* experiments whose costs may have been larger than
+  recorded.
+
+  Separately, `solo.py` and `report.json` disagree on `check_hide_entities`
+  even on a current tree: a fresh private compile scores it 100.0 while the
+  ninja object scores 91.047, and `zCutsceneMgr` reads 3 non-matching under
+  `solo.py` against 4 under `report.json`. Unexplained; worth running down,
+  because it means `solo.py` alone can miss a regression.
+
 - **We emit inline helper definitions in dozens of objects where retail emits
   each in exactly one. This is what blocks `zLight`, and it will block many
   more units as they complete.** Counted across every unit's target object
@@ -881,9 +907,17 @@ confirming before anyone builds a strategy on either model.
   `__declspec`. It costs nothing in `matched_functions` and everything in
   `complete_units`.
 
-  **The fix is identified but not applied**, because it is tree-wide and must
-  not land while unit agents are mid-flight measuring with `solo.py`: move the
-  bodies out of `xEnt.h`/`xModel.h` into `xEnt.cpp` as `WEAK` definitions. The
+  **The fix works and was measured, and it is on hold at -1 function.** Moving
+  the bodies out of `xEnt.h`/`xModel.h` into `xEnt.cpp` as single `WEAK`
+  definitions takes `xEntGetPos` from 27 defining objects to 2 and
+  `xModelGetFrame` from 31 to 2 (the stray second is `zNPCGoalRobo`), and
+  `zLight` drops to a **single** surplus symbol. `main.dol` sha1 is unchanged.
+  But a clean rebuild costs `check_hide_entities` in `zCutsceneMgr`, 100.0 ->
+  91.047, so it is **-1 matched function for no linked unit**, because `zLight`
+  still needs `__as__5xVec3` before it can link. Verified by reverting and
+  rebuilding clean: 8029 functions with the current headers, 8028 with the fix.
+  **Land it together with the `__as__5xVec3` half, not before** -- at that
+  point it buys a unit and the one function is worth trading. The
   `__as__5xVec3` case is harder and needs its own decision -- `xVec3` has no
   user-declared `operator=`, so the 73 copies are compiler-generated, and
   suppressing them means declaring `operator=` in `xMath3.h` and defining it
