@@ -319,7 +319,8 @@ void xShadowManager_Remove(xEnt* ent);
 namespace bungee_state
 {
     void reset();
-}
+    void init();
+} // namespace bungee_state
 
 // FIXME: defined in iPad.cpp but declared in no header.
 extern _tagxPad mPad[4];
@@ -330,6 +331,13 @@ U32 xSceneNearestFloorPoly(xScene* sc, xNearFloorPoly* nfpoly, U8 collType, U8 c
 static void zEntPlayer_ReticleRender(zEnt* ent);
 static void zEntPlayer_UpdateVelocityBlur();
 void zEntPlayer_SNDPlayDelayed(F32 seconds);
+S32 zEntPlayerEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam,
+                      xBase* toParamWidget);
+static void PlayerRotMatchUpdateEnt(xEnt* ent, xScene* sc, F32 dt, void* fdata);
+static S32 BoulderVEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam,
+                           xBase* toParamWidget);
+static void zEntPlayer_SNDInit();
+void zEntPlayer_RestoreSounds();
 
 // FIXME: declared in zEntPickup.h, which this TU does not include.
 void zEntPickup_CheckAllPickupsAgainstPlayer(xScene* sc, F32 dt);
@@ -5865,20 +5873,22 @@ void zEntPlayer_Init(xEnt* ent, xEntAsset* asset)
     xFFXRotMatchState* rms;
     U32 trailerHash;
     xEnt* hitch;
-    S32 drybob_anim_count;
-    F32 drybob_oldTime[64];
-    F32* drybob_chgTime[64];
-    void* drybob_oldData[64];
-    void** drybob_chgData[64];
+    static S32 drybob_anim_count;
+    static F32 drybob_oldTime[64];
+    static F32* drybob_chgTime[64];
+    static void* drybob_oldData[64];
+    static void** drybob_chgData[64];
 
     zEntInit((zEnt*)ent, asset, 'PLYR');
     xEntInitShadow(*ent, (xEntShadow&)globals.player.entShadow_embedded);
     ent->simpShadow = &globals.player.simpShadow_embedded;
     xShadowSimple_CacheInit(ent->simpShadow, ent, 80);
 
-    if (ent->linkCount * 8 + 21 != 0)
+    // The light kit ID is stored immediately after the asset's link array.
+    if (*(U32*)((xLinkAsset*)(asset + 1) + ent->linkCount) != 0)
     {
-        ent->lightKit = (xLightKit*)xSTFindAsset((ent->linkCount << 5) + asset->id, NULL);
+        ent->lightKit =
+            (xLightKit*)xSTFindAsset(*(U32*)((xLinkAsset*)(asset + 1) + ent->linkCount), NULL);
         if ((ent->lightKit != NULL) && (ent->lightKit->tagID != 'TIKL'))
         {
             ent->lightKit = NULL;
@@ -5889,35 +5899,11 @@ void zEntPlayer_Init(xEnt* ent, xEntAsset* asset)
     memset(&globals.player.sb_models, 0, 56);
     index = 0;
 
-    for (m = globals.player.model_spongebob; m != NULL; m = m)
+    for (m = globals.player.model_spongebob; m != NULL; m = m->Next)
     {
-        for (S32 i = 0; i < 2; i++)
+        for (S32 i = 0; i < 14; i++)
         {
             if (globals.player.sb_model_indices[i] == index)
-            {
-                globals.player.sb_models[i] = m;
-            }
-            if (globals.player.sb_model_indices[1] == index)
-            {
-                globals.player.sb_models[i] = m;
-            }
-            if (globals.player.sb_model_indices[1] == index)
-            {
-                globals.player.sb_models[i] = m;
-            }
-            if (globals.player.sb_model_indices[1] == index)
-            {
-                globals.player.sb_models[i] = m;
-            }
-            if (globals.player.sb_model_indices[1] == index)
-            {
-                globals.player.sb_models[i] = m;
-            }
-            if (globals.player.sb_model_indices[1] == index)
-            {
-                globals.player.sb_models[i] = m;
-            }
-            if (globals.player.sb_model_indices[1] == index)
             {
                 globals.player.sb_models[i] = m;
             }
@@ -6005,9 +5991,94 @@ void zEntPlayer_Init(xEnt* ent, xEntAsset* asset)
         globals.player.model_sandy = NULL;
     }
 
-    // another loop goes here
+    for (aa = 0; aa < drybob_anim_count; aa++)
+    {
+        *drybob_chgData[aa] = drybob_oldData[aa];
+        *drybob_chgTime[aa] = drybob_oldTime[aa];
+    }
 
     drybob_anim_count = 0;
+
+    // NOTE: the treedome model load and the wet/dry animation table swap that
+    // retail runs here are not written yet. They own @stringBase0 0x2a45,
+    // 0x2a61 and 0x2a75 -- "spongebob_bind_treedome.dff", "spongebob_bind.ATBL"
+    // and "spongebob_bind_treedome.ATBL" -- so the string pool stays four
+    // entries short of the target's until they land.
+
+    cruise_bubble::init();
+    load_player_ini();
+    xEntEnable(ent);
+    xEntShow(ent);
+    globals.player.Visible = 1;
+    globals.player.AutoMoveSpeed = 0;
+    ent->pflags &= ~0x4;
+    ent->collis->chk &= ~0x1;
+    ent->update = zEntPlayer_Update;
+    ent->move = zEntPlayer_Move;
+    ent->render = (xEntRenderCallback)zEntPlayer_Render;
+    ent->eventFunc = zEntPlayerEventCB;
+
+    if (ent->linkCount != 0)
+    {
+        ent->link = (xLinkAsset*)(asset + 1);
+    }
+    else
+    {
+        ent->link = NULL;
+    }
+
+    if (globals.sceneCur->baseCount[eBaseTypeGust] != 0)
+    {
+        xFFXAddEffect(ent, zGustUpdateEnt, &gust_data);
+    }
+
+    rms = xFFXRotMatchAlloc();
+
+    if (rms != NULL)
+    {
+        rms->max_decl = globals.player.g.RotMatchMaxAngle;
+        rms->tmatch = globals.player.g.RotMatchMatchTime;
+        rms->trelax = globals.player.g.RotMatchRelaxTime;
+        rms->tmr = 0.0f;
+        xFFXAddEffect(ent, PlayerRotMatchUpdateEnt, rms);
+    }
+
+    bungee_state::init();
+    oob_state::init();
+
+    boulderVehicle = NULL;
+    boulderVehicle = (xEntBoulder*)zSceneFindObject(xStrHash("BOULDER_VEHICLE"));
+
+    if (boulderVehicle != NULL)
+    {
+        boulderVehicle->eventFunc = BoulderVEventCB;
+    }
+
+    sNumHitches = 0;
+    sHitchAngle = 0.0f;
+    trailerHash = xStrHash("trailer_hitch");
+
+    for (aa = 0; aa < globals.sceneCur->num_base; aa++)
+    {
+        hitch = (xEnt*)globals.sceneCur->base[aa];
+
+        if (hitch->baseType == eBaseTypeDestructObj || hitch->baseType == eBaseTypePlatform ||
+            hitch->baseType == eBaseTypeStatic)
+        {
+            if (hitch->asset->modelInfoID == trailerHash)
+            {
+                sHitch[sNumHitches] = hitch;
+                sNumHitches++;
+            }
+        }
+    }
+
+    lastgCurrentPlayer = eCurrentPlayerCount;
+    zEntPlayerPreReset();
+    zEntPlayerReset(ent);
+    zEntPlayer_SNDInit();
+    sPlayerDiedLastTime = 0;
+    zEntPlayer_RestoreSounds();
 }
 
 void zEntPlayer_RestoreSounds()
