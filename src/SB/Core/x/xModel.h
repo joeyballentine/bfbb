@@ -161,9 +161,7 @@ inline void xModelSetFrame(xModelInstance* modelInst, const xMat4x3* frame)
     xMat4x3Copy((xMat4x3*)modelInst->Mat, frame);
 }
 
-inline xMat4x3* xModelGetFrame(xModelInstance* modelInst)
-{
-    return (xMat4x3*)modelInst->Mat;
-}
+// Not inline -- see the note on xEntGetPos in xEnt.h. The single WEAK
+// definition lives in xEnt.cpp, matching the target.
 
 #endif

@@ -1975,3 +1975,17 @@ void xEntInitShadow(xEnt& ent, xEntShadow& shadow)
     shadow.radius[0] = -1.0f;
     shadow.radius[1] = -1.0f;
 }
+
+// The target emits exactly one WEAK out-of-line copy of each of these, both in
+// this object, and every other translation unit calls them. Keeping the bodies
+// here rather than inline in xEnt.h/xModel.h is what stops 27 and 31 of our
+// objects respectively from carrying a definition the target's lack.
+WEAK xMat4x3* xModelGetFrame(xModelInstance* modelInst)
+{
+    return (xMat4x3*)modelInst->Mat;
+}
+
+WEAK xVec3* xEntGetPos(const xEnt* ent)
+{
+    return &xModelGetFrame(ent->model)->pos;
+}

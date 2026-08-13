@@ -293,10 +293,10 @@ inline void xEntShow(xEnt* ent)
     ent->flags |= 0x1;
 }
 
-inline xVec3* xEntGetPos(const xEnt* ent)
-{
-    return &xModelGetFrame(ent->model)->pos;
-}
+// Not inline: retail emits a single WEAK out-of-line copy, in xEnt.cpp, and
+// every other translation unit calls it. An inline body here makes CodeWarrior
+// emit a weak copy in each TU that cannot inline the call, which leaves those
+// objects carrying a definition the target's do not have.
 
 inline xVec3* xEntGetCenter(const xEnt* ent)
 {
