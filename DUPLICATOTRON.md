@@ -19,14 +19,14 @@ is off-limits for upstream PRs.
 
 ## Status
 
-| metric | at branch point | now (2026-08-12) |
+| metric | at branch point | now (2026-08-13) |
 |---|---|---|
-| matched functions | 6491 / 10147 | 7894 / 10147 |
-| fuzzy match | 57.343% | 76.308% |
-| complete units | 195 / 543 | 225 / 543 |
-| **game code exact** | — | **62.235%** (bytes) |
-| **game code fuzzy** | — | **95.192%** (6736 / 7673 functions) |
-| **game units linked** | — | **89 / 224** |
+| matched functions | 6491 / 10147 | 7935 / 10147 |
+| complete units | 195 / 543 | 231 / 543 |
+| **game code exact** | — | **62.821%** (bytes) |
+| **game code fuzzy** | — | **95.286%** (6766 / 7673 functions) |
+| **game units linked** | — | **91 / 224** |
+| SDK code | — | **90 / 90 units, 100.000% fuzzy — complete** |
 
 Game code is tracked separately because it is the part that is actually
 being worked, and the project figure understates it badly: Renderware and
@@ -800,6 +800,67 @@ the *count* of preceding objects matters as much as their order. Worth
 confirming before anyone builds a strategy on either model.
 
 ## Settled
+
+- **`__declspec` was dead tree-wide, and the fix completed the SDK category.**
+  `include/types.h` had `#ifdef __MWERKS__ / #define __declspec(x)`. The
+  original commit `06a3f860` wrote `#ifndef` -- stub the attribute for the host
+  and IDE compilers that cannot parse it -- and `50c8ffa7` flipped it, which
+  inverts the meaning: the attribute became a no-op under CodeWarrior, the one
+  compiler where it carries information, and stayed live for the compilers that
+  choke on it. Dead as a result: 24 `section` attributes, 19 `weak`, and the 23
+  uses of the `WEAK` macro, which expands through `__declspec(weak)`.
+
+  Verified against the compiler, not assumed: `__declspec(section ".ctors")`
+  works unaided, an undeclared section name is a hard error, and `.ctors`,
+  `.dtors`, `.init`, `.sdata2` -- every name the tree uses -- are accepted.
+  `.bss`/`.sbss`/`.sbss2` are rejected, and `.ctors`/`.dtors` accept data but
+  not code. So the attribute was never unsupported; it never arrived.
+
+  Restoring `#ifndef` moved `memset`/`memcpy`/`__fill_mem` and
+  `__init_hardware`/`__flush_cache` from `.text` to `.init`, moved the three
+  `_reference` objects from `.sdata2` to `.ctors`/`.dtors`, and changed 32
+  symbols from GLOBAL to WEAK, in every case toward the target. DOL sha1
+  unchanged; 7924 -> 7935 functions; four units became linkable and
+  `complete_units` went 227 -> 231. **SDK Code is now 90/90 at 100.000%
+  fuzzy.**
+
+  The general lesson: a macro that neutralises a compiler attribute is
+  invisible to every diff tool here, because the object is self-consistently
+  wrong. `tools/` gained nothing to detect this; the way it surfaced was
+  comparing **symbol binding and section** between target and ours, which no
+  existing tool did. That comparison is worth keeping -- it still reports
+  ~2044 mismatches, of which 1033 are WEAK-in-target/GLOBAL-in-ours from
+  header-defined functions and are a separate, unexamined lever.
+
+- **A "cluster of near-identical functions at 99.8%" is a pool-alignment
+  symptom, not a codegen problem.** `xFont` showed 14 `parse_tag_*` and 17
+  `reset_tag_*` functions all at 99.7-99.9%, which reads like one missing
+  source idiom repeated. It was one bad line in an unrelated function: a
+  `typedef __typeof__(((struct font_asset){ 0 }).char_pos[0])` in
+  `get_tex_bounds` emitted a 404-byte anonymous `.rodata` object referenced by
+  nothing. Those bytes shifted every later `.rodata` offset, and since objdiff
+  pairs anonymous symbols **by ordinal within a section**, every `cb$` callback
+  table after it mispaired. Removing it flipped ~50 functions at once.
+  `xFont` went 67 -> 9 non-matching.
+
+  So: when many functions in one unit sit just under 100% with a single
+  differing relocation each, look for a surplus or missing *data* object
+  earlier in the section before looking at any of the functions. Same shape as
+  the `.sbss2` entry below, and the same shape as `zNPCTypeRobot`'s `.bss`
+  ordering pass.
+
+  Note the metric consequence: report.json already scored most of those 50 at
+  100.0 (it is blind to anonymous pool ids), so a 58-function solo.py gain
+  showed up as far less on the project figure. **Always quote the report.json
+  delta, not the solo.py delta.**
+
+- **`classify.py` was misfiling pool-only functions as OTHER.** `norm_reloc`
+  collapsed `@NNNN` but not the `$NNNN` suffix CodeWarrior appends to a
+  function-local static (`npcmsg$1475`, `skipstates$1647`) -- a per-TU counter
+  that differs between the two objects for the same variable. 178 instructions
+  in `zNPCTypeRobot` alone carry one, and 11 of the rows the tool ranked as
+  that unit's highest-value work were pool-only. Fixed in `d695e5d9`. Any
+  ranking produced by `classify.py` before that commit over-states OTHER.
 
 - **An aggregate initialiser in an inline function seeds a junk `.sbss2`
   object -- this was the anonymous-literal mystery.** CodeWarrior creates an
