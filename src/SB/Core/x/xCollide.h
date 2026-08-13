@@ -29,14 +29,6 @@ struct xCollis
         U32 index;
         F32 r;
         F32 d;
-
-        tri_data& operator=(const tri_data& o)
-        {
-            index = o.index;
-            r = o.r;
-            d = o.d;
-            return *this;
-        };
     };
 
     U32 flags;
