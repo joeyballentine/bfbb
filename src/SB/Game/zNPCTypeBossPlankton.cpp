@@ -493,9 +493,9 @@ inline void zNPCBPlankton::render_debug()
 {
 }
 
-inline S32 zNPCBPlankton::turning() const
+inline U8 zNPCBPlankton::turning() const
 {
-    S32 result = 0;
+    U8 result = 0;
     xVec2 at = { model->Mat->at.x, model->Mat->at.z };
 
     if (!xfeq0(turn.vel) ||
@@ -577,70 +577,54 @@ inline S32 zNPCBPlankton::IsAlive()
 
 xAnimTable* ZNPC_AnimTable_BossPlankton()
 {
-    // clang-format off
-    S32 anim_list[32] = {            //dwarf says it should be 32, matches less with 15
-        ANIM_Idle01,
-        ANIM_Taunt01,
-        ANIM_move,
-        ANIM_stun_begin,
-        ANIM_stun_loop,
-        ANIM_stun_end,
-        ANIM_attack_beam_begin,
-        ANIM_attack_beam_loop,
-        ANIM_attack_beam_end,
-        ANIM_attack_wall_begin,
-        ANIM_attack_wall_loop,
-        ANIM_attack_wall_end,
-        ANIM_attack_missle,
-        ANIM_attack_bomb,
-        ANIM_Unknown,
-    };
-    // clang-format on
+    S32 anim_list[32]; //dwarf says it should be 32, matches less with 15
 
     xAnimTable* table = xAnimTableNew("zNPCBPlankton", NULL, 0);
+    S32 anim_size = 0;
 
+    anim_list[anim_size++] = ANIM_Idle01;
     xAnimTableNewState(table, g_strz_bossanim[ANIM_Idle01], 0x10, 0, 1.0f, NULL, NULL, 0.0f, NULL,
                        NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    anim_list[0] = 3;
+    anim_list[anim_size++] = ANIM_Taunt01;
     xAnimTableNewState(table, g_strz_bossanim[ANIM_Taunt01], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL,
                        NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    anim_list[0] = 0x42;
+    anim_list[anim_size++] = ANIM_move;
     xAnimTableNewState(table, g_strz_bossanim[ANIM_move], 0x10, 0, f1585, NULL, NULL, f1586, NULL,
                        NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    anim_list[0] = 0x43;
+    anim_list[anim_size++] = ANIM_stun_begin;
     xAnimTableNewState(table, g_strz_bossanim[ANIM_stun_begin], 0x20, 0, f1585, NULL, NULL, f1586,
                        NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    anim_list[0] = 0x44;
+    anim_list[anim_size++] = ANIM_stun_loop;
     xAnimTableNewState(table, g_strz_bossanim[ANIM_stun_loop], 0x10, 0, f1585, NULL, NULL, f1586,
                        NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    anim_list[0] = 0x45;
+    anim_list[anim_size++] = ANIM_stun_end;
     xAnimTableNewState(table, g_strz_bossanim[ANIM_stun_end], 0x20, 0, f1585, NULL, NULL, f1586,
                        NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    anim_list[0] = 0x46;
+    anim_list[anim_size++] = ANIM_attack_beam_begin;
     xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_beam_begin], 0x20, 0, f1585, NULL, NULL,
                        f1586, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    anim_list[0] = 0x47;
+    anim_list[anim_size++] = ANIM_attack_beam_loop;
     xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_beam_loop], 0x10, 0, f1585, NULL, NULL,
                        f1586, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    anim_list[0] = 0x48;
+    anim_list[anim_size++] = ANIM_attack_beam_end;
     xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_beam_end], 0x20, 0, f1585, NULL, NULL,
                        f1586, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    anim_list[0] = 0x49;
+    anim_list[anim_size++] = ANIM_attack_wall_begin;
     xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_wall_begin], 0x20, 0, f1585, NULL, NULL,
                        f1586, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    anim_list[0] = 0x4a;
+    anim_list[anim_size++] = ANIM_attack_wall_loop;
     xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_wall_loop], 0x10, 0, f1585, NULL, NULL,
                        f1586, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    anim_list[0] = 0x4b;
+    anim_list[anim_size++] = ANIM_attack_wall_end;
     xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_wall_end], 0x20, 0, f1585, NULL, NULL,
                        f1586, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    anim_list[0] = 0x4c;
+    anim_list[anim_size++] = ANIM_attack_missle;
     xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_missle], 0x20, 0, f1585, NULL, NULL,
                        f1586, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    anim_list[0] = 0x4d;
+    anim_list[anim_size++] = ANIM_attack_bomb;
     xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_bomb], 0x20, 0, f1585, NULL, NULL, f1586,
                        NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    anim_list[0] = 0;
+    anim_list[anim_size] = ANIM_Unknown;
 
     NPCC_BuildStandardAnimTran(table, g_strz_bossanim, anim_list, 1, f1657);
 
@@ -1580,8 +1564,7 @@ void zNPCBPlankton::Damage(en_NPC_DAMAGE_TYPE damtype, xBase* from, const xVec3*
     {
         if (vec_hit != NULL)
         {
-            xVec3 vel = *vec_hit * tweak.hit_vel;
-            impart_velocity(vel);
+            impart_velocity(*vec_hit * tweak.hit_vel);
         }
         stun();
         break;
@@ -1910,7 +1893,7 @@ void zNPCBPlankton::update_dialog(F32 dt)
 {
     if (mode != MODE_BUDDY)
     {
-        if (old_player_health < globals.player.Health && globals.player.Health != 0)
+        if (globals.player.Health < old_player_health && old_player_health != 0)
         {
             say(7, 0, false);
         }
@@ -1918,13 +1901,13 @@ void zNPCBPlankton::update_dialog(F32 dt)
 
         xVec3* player_loc = get_player_loc();
 
-        S32 start = active_territory - 1;
-        if (start < 0)
+        S32 i = active_territory - 1;
+        if (i < 0)
         {
-            start = 0;
+            i = 0;
         }
 
-        for (S32 i = start; i <= active_territory; i++)
+        for (; i <= active_territory; i++)
         {
             territory_data& t = territory[i];
 
@@ -1936,7 +1919,7 @@ void zNPCBPlankton::update_dialog(F32 dt)
             }
         }
 
-        for (S32 i = 0; i < territory_size; i++)
+        for (S32 i = 0; i < active_territory; i++)
         {
             territory_data& t = territory[i];
 
@@ -1945,20 +1928,20 @@ void zNPCBPlankton::update_dialog(F32 dt)
             {
                 xVec3 diff = *player_loc - reinterpret_cast<xVec3&>(t.fuse->model->Mat->pos);
 
-                if (diff.length2() >= tweak.help.fuse_dist * tweak.help.fuse_dist)
-                {
-                    t.fuse_detect_time = 0.0f;
-                }
-                else
+                if (diff.length2() <= tweak.help.fuse_dist * tweak.help.fuse_dist)
                 {
                     t.fuse_detect_time = t.fuse_detect_time + dt;
 
-                    if (tweak.help.fuse_delay <= t.fuse_detect_time)
+                    if (t.fuse_detect_time >= tweak.help.fuse_delay)
                     {
                         t.fuse_detected = 1;
                         say(1, 0, false);
                         return;
                     }
+                }
+                else
+                {
+                    t.fuse_detect_time = 0.0f;
                 }
             }
         }
@@ -2041,11 +2024,11 @@ void zNPCBPlankton::update_aim_gun(F32)
     }
 }
 
-S32 zNPCBPlankton::check_player_damage()
+bool zNPCBPlankton::check_player_damage()
 {
-    S32 damage = 0;
+    bool damage = false;
 
-    return damage & !globals.player.cheat_mode;
+    return globals.player.cheat_mode ? false : damage;
 }
 
 F32 zNPCBPlankton::orbit_yaw_offset(const xVec3& p0, const xVec3& p1) const
@@ -2210,15 +2193,15 @@ xVec3 zNPCBPlankton::random_orbit(const xVec3& loc, F32 min_ang, F32 max_ang) co
     F32 ang;
 
     F32 d2 = diff.length2();
-    if (d2 > 0.000001f)
+    if (xfeq0(d2))
+    {
+        ang = 0.0f;
+    }
+    else
     {
         F32 dist = xsqrt(d2);
         F32 inv = 1.0f / dist;
         ang = xatan2(diff.x * inv, diff.z * inv);
-    }
-    else
-    {
-        ang = 0.0f;
     }
 
     if (max_ang > PI)
@@ -2227,47 +2210,41 @@ xVec3 zNPCBPlankton::random_orbit(const xVec3& loc, F32 min_ang, F32 max_ang) co
     }
 
     F32 delta = (max_ang - min_ang) * xurand() + min_ang;
-    if (xrand() & 0x2000)
+    if ((xrand() >> 13) & 1)
     {
-        delta = -delta;
+        delta *= -1.0f;
     }
 
-    ang = ang + delta;
+    F32 yaw = ang + delta;
 
-    xVec3 out;
-    out.x = orbit.center.x + orbit.radius * isin(ang);
-    out.y = orbit.center.y;
-    out.z = orbit.center.z + orbit.radius * icos(ang);
+    xVec3 out = orbit.center;
+    out.x += orbit.radius * isin(yaw);
+    out.z += orbit.radius * icos(yaw);
     return out;
 }
 
 xVec3 zNPCBPlankton::player_orbit() const
 {
-    xVec3* player_loc = get_player_loc();
-    xVec3& loc = location();
-    F32 offset = xabs(orbit_yaw_offset(loc, *player_loc));
-    F32 t = xAccelMoveTime(orbit.radius * offset, move.accel.x, 1.0f, move.max_vel.x);
+    F32 offset = std::fabsf(orbit_yaw_offset(location(), *get_player_loc()));
+    F32 t = xAccelMoveTime(orbit.radius * offset, move.accel.x, 1000000000.0f, move.max_vel.x);
 
     xVec3 predicted;
     zEntPlayer_PredictPos(&predicted, t, 1.0f, 1);
 
-    xVec2 diff = { predicted.x - orbit.center.x, predicted.z - orbit.center.z };
+    xVec2 center = { orbit.center.x, orbit.center.z };
+    xVec2 ppos = { predicted.x, predicted.z };
+    xVec2 diff = ppos - center;
     F32 d2 = diff.length2();
 
-    xVec3 out;
-    if (d2 > 0.0001f)
+    if (d2 <= 0.001f)
     {
-        F32 dist = xsqrt(d2);
-        xVec2 dir = diff / dist;
-        xVec2 pos = dir * orbit.radius + xVec2::create(orbit.center.x, orbit.center.z);
-        out = xVec3::create(pos.x, orbit.center.y, pos.y);
-    }
-    else
-    {
-        out = location();
+        return location();
     }
 
-    return out;
+    xVec2 dir = diff * (1.0f / xsqrt(d2));
+    xVec2 pos = center + dir * orbit.radius;
+
+    return xVec3::create(pos.x, orbit.center.y, pos.y);
 }
 
 U8 zNPCBPlankton::crony_attacking() const
@@ -2284,55 +2261,58 @@ void zNPCBPlankton::stun()
 {
     S32 gid = psy_instinct->GIDOfActive();
 
-    if (gid != NPC_GOAL_BPLANKTONSTUN && gid != NPC_GOAL_BPLANKTONDIZZY)
+    if (gid == NPC_GOAL_BPLANKTONSTUN || gid == NPC_GOAL_BPLANKTONFALL ||
+        gid == NPC_GOAL_BPLANKTONDIZZY)
     {
-        play_sound(SOUND_HIT, (xVec3*)&bound.pad[3], 1.0f);
+        return;
+    }
 
-        if (mode == MODE_BUDDY)
+    play_sound(SOUND_HIT, (xVec3*)&bound.pad[3], 1.0f);
+
+    if (mode == MODE_BUDDY)
+    {
+        psy_instinct->GoalSet(NPC_GOAL_BPLANKTONSTUN, 1);
+    }
+    else
+    {
+        if (territory[active_territory].timer != NULL)
         {
-            psy_instinct->GoalSet(NPC_GOAL_BPLANKTONSTUN, 1);
+            zEntEvent(this, territory[active_territory].timer, 0x12);
         }
-        else
+
+        psy_instinct->GoalSet(NPC_GOAL_BPLANKTONFALL, 1);
+
+        S32 count = 0;
+        for (S32 i = 0; i < territory_size; i++)
         {
-            if (territory[active_territory].timer != NULL)
+            if (territory[i].fuse != NULL && !zEntDestructObj_isDestroyed(territory[i].fuse))
             {
-                zEntEvent(this, territory[active_territory].timer, 0x12);
+                count++;
             }
+        }
 
-            psy_instinct->GoalSet(NPC_GOAL_BPLANKTONDIZZY, 1);
-
-            S32 count = 0;
-            for (S32 i = 0; i < territory_size; i++)
-            {
-                if (territory[i].fuse != NULL && !zEntDestructObj_isDestroyed(territory[i].fuse))
-                {
-                    count++;
-                }
-            }
-
-            switch (count)
-            {
-            case 1:
-            {
-                say(6, 0, false);
-                break;
-            }
-            case 2:
-            {
-                say(5, 0, false);
-                break;
-            }
-            case 3:
-            {
-                say(4, 0, false);
-                break;
-            }
-            default:
-            {
-                say(3, 0, false);
-                break;
-            }
-            }
+        switch (count)
+        {
+        case 1:
+        {
+            say(6, 0, false);
+            break;
+        }
+        case 2:
+        {
+            say(5, 0, false);
+            break;
+        }
+        case 3:
+        {
+            say(4, 0, false);
+            break;
+        }
+        default:
+        {
+            say(3, 0, false);
+            break;
+        }
         }
     }
 }
@@ -2360,8 +2340,7 @@ void zNPCBPlankton::impart_velocity(const xVec3& vel)
     {
     case MOVE_ORBIT:
     {
-        xVec3 ring_vel = world_to_ring_vel(vel, location(), orbit.center);
-        xVec3 add = ring_vel;
+        xVec3 add = world_to_ring_vel(vel, location(), orbit.center);
 
         add.y = 0.0f;
 
@@ -2376,6 +2355,9 @@ void zNPCBPlankton::impart_velocity(const xVec3& vel)
         move.vel += add;
         break;
     }
+    case MOVE_NONE:
+    case MOVE_ACCEL:
+    case MOVE_STOP:
     default:
     {
         move.vel += vel;
@@ -2761,8 +2743,7 @@ S32 zNPCGoalBPlanktonFlank::Enter(F32 dt, void* updCtxt)
     owner.flag.attacking = true;
 
     xVec3 target = owner.orbit.center + globals.camera.mat.at * owner.orbit.radius;
-    xVec3 loc = owner.random_orbit(target, 0.0f, tweak.follow.min_ang);
-    owner.set_location(loc);
+    owner.set_location(owner.random_orbit(target, 0.0f, tweak.follow.min_ang));
 
     owner.refresh_orbit();
     owner.follow_camera();
@@ -2781,14 +2762,14 @@ S32 zNPCGoalBPlanktonFlank::Process(en_trantype* trantype, F32 dt, void* updCtxt
 {
     xVec3& loc = owner.location();
 
-    if (xabs(loc.y - owner.orbit.center.y) > 0.1f)
+    if (xabs(loc.y - owner.orbit.center.y) <= 0.1f)
     {
-        return 0;
+        owner.beam_duration = tweak.beam.time_fire;
+        *trantype = GOAL_TRAN_SET;
+        return NPC_GOAL_BPLANKTONBEAM;
     }
 
-    owner.beam_duration = tweak.beam.time_fire;
-    *trantype = GOAL_TRAN_SET;
-    return NPC_GOAL_BPLANKTONBEAM;
+    return 0;
 }
 
 xFactoryInst* zNPCGoalBPlanktonEvade::create(S32 who, RyzMemGrow* grow, void* info)
@@ -2835,22 +2816,23 @@ S32 zNPCGoalBPlanktonEvade::Process(en_trantype* trantype, F32 dt, void* updCtxt
         return NPC_GOAL_BPLANKTONBEAM;
     }
 
-    if (evade_delay <= owner.delay)
+    if (owner.delay >= evade_delay)
     {
         xVec3 ring_loc = world_to_ring_loc(owner.location(), owner.orbit.center);
-        F32 x;
 
-        if (owner.move.vel.x >= 0.0f)
+        if (owner.move.vel.x < 0.0f)
         {
-            x = -(0.7f * ring_loc.z - ring_loc.x);
+            ring_loc.x = (PI / 2) * ring_loc.z + ring_loc.x;
         }
         else
         {
-            x = 0.7f * ring_loc.z + ring_loc.x;
+            ring_loc.x = -((PI / 2) * ring_loc.z - ring_loc.x);
         }
 
-        xVec3 target = xVec3::create(x, 0.0f, owner.orbit.radius);
-        owner.move.dest = ring_to_world_loc(target, owner.orbit.center);
+        ring_loc.y = 0.0f;
+        ring_loc.z = owner.orbit.radius;
+
+        owner.move.dest = ring_to_world_loc(ring_loc, owner.orbit.center);
 
         evade_delay = owner.delay + tweak.evade.move_delay_min +
                       (tweak.evade.move_delay_max - tweak.evade.move_delay_min) * xurand();
@@ -2870,7 +2852,7 @@ namespace
 
         F32 ang = ring.x / ring.z;
 
-        return xVec3::create(ring.z * isin(ang) + center.x, ring.y + center.y,
+        return xVec3::create(ring.z * isin(ang) + center.x, center.y + ring.y,
                              ring.z * icos(ang) + center.z);
     }
 
@@ -2917,27 +2899,23 @@ S32 zNPCGoalBPlanktonHunt::Process(en_trantype* trantype, F32 dt, void* updCtxt,
 
     owner.refresh_orbit();
 
-    xVec3& loc = owner.location();
-    xVec3* pl = get_player_loc();
-    xVec3 diff = *pl - loc;
-
-    if (diff.length2() >= tweak.hunt.beam_dist * tweak.hunt.beam_dist)
+    if ((*get_player_loc() - owner.location()).length2() >=
+        tweak.hunt.beam_dist * tweak.hunt.beam_dist)
     {
         return 0;
     }
 
-    xVec3* pl2 = get_player_loc();
-    xVec3 pdiff = *pl2 - player_loc;
-    player_loc = *pl2;
+    xVec3 pdiff = *get_player_loc() - player_loc;
+    player_loc = *get_player_loc();
 
-    if (owner.delay < tweak.hunt.beam_interval && pdiff.length2() > 4.0f)
+    if (owner.delay >= tweak.hunt.beam_interval || pdiff.length2() <= 0.0001f)
     {
-        return 0;
+        owner.beam_duration = tweak.hunt.beam_duration;
+        *trantype = GOAL_TRAN_SET;
+        return NPC_GOAL_BPLANKTONBEAM;
     }
 
-    owner.beam_duration = tweak.hunt.beam_duration;
-    *trantype = GOAL_TRAN_SET;
-    return NPC_GOAL_BPLANKTONBEAM;
+    return 0;
 }
 
 xFactoryInst* zNPCGoalBPlanktonTaunt::create(S32 who, RyzMemGrow* grow, void* info)
@@ -3159,21 +3137,19 @@ S32 zNPCGoalBPlanktonBeam::Process(en_trantype* trantype, F32 dt, void* updCtxt,
     return 0;
 }
 
-S32 zNPCGoalBPlanktonBeam::update_warm_up(F32 dt)
+void zNPCGoalBPlanktonBeam::update_warm_up(F32 dt)
 {
-    if (tweak.beam.time_warm_up <= owner.delay)
+    if (owner.delay >= tweak.beam.time_warm_up)
     {
         owner.delay = 0.0f;
         substate = SS_FIRE;
         owner.disable_emitter(*owner.beam_charge);
     }
-
-    return 0;
 }
 
-S32 zNPCGoalBPlanktonBeam::update_fire(F32 dt)
+void zNPCGoalBPlanktonBeam::update_fire(F32 dt)
 {
-    if (owner.beam_duration <= owner.delay || !owner.flag.attacking)
+    if (owner.delay >= owner.beam_duration || !owner.flag.attacking)
     {
         owner.AnimStart(g_hash_bossanim[ANIM_attack_beam_end], 0);
         owner.flag.aim_gun = false;
@@ -3181,52 +3157,45 @@ S32 zNPCGoalBPlanktonBeam::update_fire(F32 dt)
     }
     else
     {
-        xVec3& loc = owner.location();
-        xVec3* player_loc = get_player_loc();
-        xVec3 diff = *player_loc - loc;
-
-        if (diff.length2() >= tweak.beam.max_dist * tweak.beam.max_dist)
+        if ((*get_player_loc() - owner.location()).length2() >=
+            tweak.beam.max_dist * tweak.beam.max_dist)
         {
             substate = SS_COOL_DOWN;
         }
         else
         {
-            xVec3 origin = xModelGetBoneLocation(*owner.model, 0x16);
-
-            xVec3* player_loc2 = get_player_loc();
-            xVec3 to_player = *player_loc2 - origin;
-
             xMat4x3 mat;
-            xMat3x3LookVec3(mat, to_player);
+            mat.pos = xModelGetBoneLocation(*owner.model, 0x16);
 
-            xVec3 emit_off = mat.at * tweak.beam.emit_dist;
-            origin += emit_off;
+            xMat3x3LookVec3(mat, *get_player_loc() - mat.pos);
+
+            mat.pos += mat.at * tweak.beam.emit_dist;
 
             emitted = emitted + dt * tweak.beam.rate;
             S32 count = (S32)emitted;
             emitted = emitted - count;
 
-            for (S32 i = 0; i < count; i++)
+            if (count > 0)
             {
-                owner.beam.emit(origin, to_player);
-                owner.beam_ring.emit(mat, -1);
+                for (S32 i = 0; i < count; i++)
+                {
+                    owner.beam.emit(mat.pos, mat.at);
+                    owner.beam_glow.emit(mat, -1);
+                }
             }
         }
     }
-
-    return 0;
 }
 
-S32 zNPCGoalBPlanktonBeam::update_cool_down(F32 dt)
+void zNPCGoalBPlanktonBeam::update_cool_down(F32 dt)
 {
     xAnimState* state = owner.AnimCurState();
 
-    if (state->ID != g_hash_bossanim[ANIM_attack_beam_end] || owner.AnimTimeRemain(NULL) < f1658 + dt)
+    if (state->ID != g_hash_bossanim[ANIM_attack_beam_end] ||
+        owner.AnimTimeRemain(NULL) < 0.001f + dt)
     {
         substate = SS_DONE;
     }
-
-    return 0;
 }
 
 xFactoryInst* zNPCGoalBPlanktonWall::create(S32 who, RyzMemGrow* grow, void* info)

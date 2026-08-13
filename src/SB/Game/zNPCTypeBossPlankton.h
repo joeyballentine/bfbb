@@ -132,7 +132,7 @@ struct zNPCBPlankton : zNPCBoss
     void scan_cronies();
     void update_turn(F32);
     void update_move(F32);
-    S32 check_player_damage();
+    bool check_player_damage();
     void reset_territories();
     void update_animation(F32);
     void update_follow(F32);
@@ -171,7 +171,7 @@ struct zNPCBPlankton : zNPCBoss
     xVec3& location() const;
     void face_player();
     void render_debug();
-    S32 turning() const;
+    U8 turning() const;
     void take_control();
     F32 get_orbit_yaw(const xVec3&) const;
     void set_location(const xVec3&);
@@ -368,9 +368,9 @@ struct zNPCGoalBPlanktonBeam : zNPCGoalCommon
     S32 Enter(F32, void*);
     S32 Exit(F32, void*);
     S32 Process(en_trantype*, F32, void*, xScene*);
-    S32 update_cool_down(F32);
-    S32 update_warm_up(F32);
-    S32 update_fire(F32);
+    void update_cool_down(F32);
+    void update_warm_up(F32);
+    void update_fire(F32);
 };
 
 struct zNPCGoalBPlanktonWall : zNPCGoalCommon
