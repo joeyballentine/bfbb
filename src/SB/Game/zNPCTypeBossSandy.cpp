@@ -307,8 +307,8 @@ xAnimTable* ZNPC_AnimTable_BossSandyScoreboard()
 
     xAnimTableNewTransition(table, "Idle01", "Shocked01", HeadIsShocked, NULL, 0x0, 0x0, 0.0f, 0.0f,
                             0, 0, 0.25f, NULL);
-    xAnimTableNewTransition(table, "Shocked01", "Idle01", HeadIsShocked, NULL, 0x0, 0x0, 0.0f, 0.0f,
-                            0, 0, 0.25f, NULL);
+    xAnimTableNewTransition(table, "Shocked01", "Idle01", HeadNotShocked, NULL, 0x0, 0x0, 0.0f,
+                            0.0f, 0, 0, 0.25f, NULL);
 
     return table;
 }
@@ -959,8 +959,8 @@ static void SpringRender(SandyLimbSpring* spring)
     RxObjSpace3DVertex* vert = gRenderArr.m_vertex;
     F32 minX = spring->bound->box.box.lower.x;
     F32 maxX = spring->bound->box.box.upper.x;
-    F32 radius = spring->bound->box.box.upper.y;
     F32 len = maxX - minX;
+    F32 radius = spring->bound->box.box.upper.y;
     F32 maxStep = 0.1f * (4.0f * (2.0f * len)) / (478.0f - 0.6f * (2.0f * len) / 0.1f);
     S32 numVerts = 0;
     S32 done = 0;
@@ -1103,13 +1103,15 @@ static void zNPCBSandy_BossDamageEffect(xModelInstance* minst, U32 remove)
         }
 
         i = 0;
+        minst = BDErecord[idx].BDEminst;
         BDErecord[idx].BDEtimer = 0.0f;
 
-        for (minst = BDErecord[idx].BDEminst; minst != NULL; minst = minst->Next)
+        while (minst != NULL)
         {
             minst->RedMultiplier = BDErecord[idx].save_F32[i++];
             minst->GreenMultiplier = BDErecord[idx].save_F32[i++];
             minst->BlueMultiplier = BDErecord[idx].save_F32[i++];
+            minst = minst->Next;
         }
 
         BDErecord[idx].BDEminst = NULL;
@@ -1259,7 +1261,7 @@ void zNPCBSandy::Render()
         RwMatrixUpdate(&mat);
 
         RwIm3DTransform(&this->iconVert[0], 4, &mat,
-                        rwIM3D_VERTEXUV | rwIM3D_ALLOPAQUE | rwIM3D_VERTEXRGBA);
+                        rwIM3D_VERTEXUV | rwIM3D_ALLOPAQUE | rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA);
         RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
         RwIm3DEnd();
     }
@@ -1408,11 +1410,11 @@ void zNPCBSandy::InitFX()
 
 void zNPCBSandy::UpdateFX(F32 dt)
 {
+    S32 board;
     S32 i;
     S32 boltIdx;
-    S32 board;
-    xVec3 pntA;
     xVec3 pntB;
+    xVec3 pntA;
     xMat3x3 rotMat;
 
     if (!(this->bustedScoreboard->flags & 0x1) && !(this->crashedScoreboard->flags & 0x1))
@@ -1501,7 +1503,7 @@ static void UpdateSandyBossCam(zNPCBSandy* sandy, F32 dt)
         tempTarget.x = globals.player.ent.model->Mat->pos.x;
         tempTarget.y = 0.0f;
         tempTarget.z = globals.player.ent.model->Mat->pos.z;
-        sandy->specialBossCam.set_targets(tempTarget, (xVec3&)sCamSubTarget, 2.0f);
+        sandy->specialBossCam.set_targets(tempTarget, *sCamSubTarget, 2.0f);
 
         if ((sandy->bossFlags & 0x4000))
         {
@@ -1520,8 +1522,8 @@ static void UpdateSandyBossCam(zNPCBSandy* sandy, F32 dt)
             sandy->bossCam.start(globals.camera);
         }
 
-        sandy->bossCam.set_targets(*((xVec3*)&globals.player.ent.model->Mat->pos),
-                                   (xVec3&)sCamSubTarget, 10.0f);
+        sandy->bossCam.set_targets(*((xVec3*)&globals.player.ent.model->Mat->pos), *sCamSubTarget,
+                                   10.0f);
 
         if (sandy->bossFlags & 0x4000)
         {
@@ -1571,9 +1573,9 @@ static void GetBonePos(xVec3* result, xMat4x3* matArray, S32 index, xVec3* offse
 
 static void MakeOBBFor(S32 startBone, S32 endBone, xEnt* ent, xMat4x3* matArray)
 {
-    xVec3 axis;
-    xVec3 dir;
     xVec3 startPos;
+    xVec3 dir;
+    xVec3 axis;
     F32 len;
     F32 angle;
 
@@ -2008,9 +2010,9 @@ void zNPCBSandy::Process(xScene* xscn, F32 dt)
 
     amp = xJaw_EvalData(this->jawData, this->jawTime);
 
-    this->jawLevel = this->jawLevel * 0.9f;
+    this->jawLevel *= 0.9f;
     this->jawLevel = 0.1f * amp + this->jawLevel;
-    this->jawThreshold = this->jawThreshold * 0.99f;
+    this->jawThreshold *= 0.99f;
     this->jawThreshold = 0.01f * amp + this->jawThreshold;
 
     wasBeat = this->isBeat;
@@ -2287,9 +2289,9 @@ void zNPCBSandy::NewTime(xScene* xscn, F32 dt)
     F32 amount;
     xCollis* coll;
     xCollis* collEnd;
-    xVec3 dir;
-    xVec3 toEdge;
     xVec3 up;
+    xVec3 toEdge;
+    xVec3 dir;
 
     if (globals.cmgr != NULL)
     {
@@ -2313,25 +2315,27 @@ void zNPCBSandy::NewTime(xScene* xscn, F32 dt)
     {
         dot = xVec3Dot(&this->ropeNormal[i], (xVec3*)&this->model->Mat->right);
 
-        if (dot >= 1e-05f || dot <= -1e-05f)
+        if (dot < 1e-05f && dot > -1e-05f)
         {
-            xVec3Sub(&toEdge, (xVec3*)&this->model->Mat->pos, &this->ringEdgeCenter[i]);
+            continue;
+        }
 
-            dist = xVec3Dot(&toEdge, &this->ropeNormal[i]) / -dot;
+        xVec3Sub(&toEdge, (xVec3*)&this->model->Mat->pos, &this->ringEdgeCenter[i]);
 
-            if (dist < 0.0f)
+        dist = xVec3Dot(&toEdge, &this->ropeNormal[i]) / -dot;
+
+        if (dist < 0.0f)
+        {
+            if (-dist < negDist)
             {
-                if (-dist < negDist)
-                {
-                    negDist = -dist;
-                }
+                negDist = -dist;
             }
-            else
+        }
+        else
+        {
+            if (dist < posDist)
             {
-                if (dist < posDist)
-                {
-                    posDist = dist;
-                }
+                posDist = dist;
             }
         }
     }
@@ -2447,7 +2451,7 @@ void zNPCBSandy::NewTime(xScene* xscn, F32 dt)
                 continue;
             }
 
-            if (hit->baseType != eBaseTypeNPC)
+            if (hit->baseType != eBaseTypeDynamic)
             {
                 continue;
             }
@@ -2586,8 +2590,8 @@ static S32 chaseCB(xGoal* rawgoal, void*, en_trantype* trantype, F32 dt, void*)
     zNPCGoalBossSandyChase* chase = (zNPCGoalBossSandyChase*)rawgoal;
     zNPCBSandy* sandy = (zNPCBSandy*)chase->psyche->clt_owner;
     S32 nextgoal = 0;
-    xVec3 pcFuturePos;
     xVec3 tempVector;
+    xVec3 pcFuturePos;
     F32 length;
     F32 futureDist;
     F32 atDot;
@@ -2621,7 +2625,7 @@ static S32 chaseCB(xGoal* rawgoal, void*, en_trantype* trantype, F32 dt, void*)
 
     if (futureDist > 3.5f && futureDist < 6.0f && atDot > 0.70700002f && rightDot < 0.0f)
     {
-        sElbowDropThreshold = sElbowDropThreshold + 1.0f;
+        sElbowDropThreshold += 1.0f;
     }
 
     if (globals.player.ControlOff)
@@ -2674,6 +2678,7 @@ static S32 meleeCB(xGoal* rawgoal, void*, en_trantype* trantype, F32 dt, void*)
     zNPCGoalBossSandyMelee* melee = (zNPCGoalBossSandyMelee*)rawgoal;
     zNPCBSandy* sandy = (zNPCBSandy*)melee->psyche->clt_owner;
     S32 nextgoal = 0;
+    U32 idx;
     U32 numHints;
     xVec3 tempVector;
     F32 length;
@@ -2716,7 +2721,7 @@ static S32 meleeCB(xGoal* rawgoal, void*, en_trantype* trantype, F32 dt, void*)
 
         if (numHints < 3 || (xrand() & 0x300) == 0)
         {
-            U32 idx = 2;
+            idx = 2;
             if (numHints < 3)
             {
                 idx = numHints;
@@ -3013,10 +3018,8 @@ S32 zNPCGoalBossSandyIdle::Process(en_trantype* trantype, F32 dt, void* updCtxt,
     xVec3Cross(&sandy->frame->mat.right, &sandy->frame->mat.up, &sandy->frame->mat.at);
 
     sandy->frame->mat.pos.y = 0.0f;
-    xVec3Dot(&newAt, (xVec3*)&sandy->model->Mat->right);
 
-    F32 lerp = 1.0f;
-    lerp -= 0.02f;
+    F32 lerp = 1.0f - xVec3Dot(&newAt, (xVec3*)&sandy->model->Mat->right);
     sandy->model->Anim->Single->BilinearLerp[0] = lerp;
     sandy->model->Anim->Single->Blend->BilinearLerp[0] = lerp;
 
@@ -3058,9 +3061,9 @@ S32 zNPCGoalBossSandyTaunt::Process(en_trantype* trantype, F32 dt, void* updCtxt
     newAt.y = 0.0f;
 
     xVec3Normalize(&newAt, &newAt);
-    xVec3SMul((xVec3*)&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 0.98f);
+    xVec3SMul((xVec3*)&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 0.9f);
 
-    xVec3AddScaled((xVec3*)&sandy->frame->mat.at, &newAt, 0.02f);
+    xVec3AddScaled((xVec3*)&sandy->frame->mat.at, &newAt, 0.1f);
 
     sandy->frame->mat.at.y = 0.0f;
     xVec3Normalize(&sandy->frame->mat.at, &sandy->frame->mat.at);
@@ -3097,9 +3100,9 @@ S32 zNPCGoalBossSandyChase::Process(en_trantype* trantype, F32 dt, void* updCtxt
     newAt.y = 0.0f;
 
     xVec3Normalize(&newAt, &newAt);
-    xVec3SMul((xVec3*)&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 0.98f);
+    xVec3SMul((xVec3*)&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 0.9f);
 
-    xVec3AddScaled((xVec3*)&sandy->frame->mat.at, &newAt, 0.02f);
+    xVec3AddScaled((xVec3*)&sandy->frame->mat.at, &newAt, 0.1f);
 
     sandy->frame->mat.at.y = 0.0f;
     xVec3Normalize(&sandy->frame->mat.at, &sandy->frame->mat.at);
@@ -3658,8 +3661,8 @@ S32 zNPCGoalBossSandyLeap::Process(en_trantype* trantype, F32 dt, void* updCtxt,
         }
         else
         {
-            sandy->frame->mat.pos.y =
-                7.0f - timeLeft * ((7.0f * recip) * recip * timeLeft);
+            F32 accel = (7.0f * recip) * recip;
+            sandy->frame->mat.pos.y = 7.0f - timeLeft * (accel * timeLeft);
             sandy->frame->mat.pos.x = startX * (timeLeft * recip) + endX;
             sandy->frame->mat.pos.z = startZ * (timeLeft * recip) + endZ;
         }
@@ -3681,8 +3684,8 @@ S32 zNPCGoalBossSandyLeap::Process(en_trantype* trantype, F32 dt, void* updCtxt,
         }
         else
         {
-            sandy->frame->mat.pos.y =
-                7.0f - timeInGoal * ((7.0f * recip) * recip * timeInGoal);
+            F32 accel = (7.0f * recip) * recip;
+            sandy->frame->mat.pos.y = 7.0f - timeInGoal * (accel * timeInGoal);
         }
         break;
     case 3:
@@ -3753,8 +3756,8 @@ S32 zNPCGoalBossSandyLeap::Exit(F32 dt, void* updCtxt)
 S32 zNPCGoalBossSandySit::Enter(F32 dt, void* updCtxt)
 {
     zNPCBSandy* sandy = (zNPCBSandy*)psyche->clt_owner;
-    U32 numHints;
     U32 idx;
+    U32 numHints;
 
     timeInGoal = 0.0f;
     sitFlags = 0;
@@ -3785,17 +3788,18 @@ S32 zNPCGoalBossSandySit::Enter(F32 dt, void* updCtxt)
 
 S32 zNPCGoalBossSandySit::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
 {
+    RwMatrix* bmat;
     zNPCBSandy* sandy = (zNPCBSandy*)psyche->clt_owner;
     S32 inRing;
     S32 numSpins;
+    S32 numHints;
     F32 popFactor;
-    xVec3 shrapVel;
     xVec3 boulderCenter;
-    RwMatrix* bmat;
+    xVec3 shrapVel;
 
     timeInGoal += dt;
 
-    if (globals.player.carry.grabbed == sandy->headBoulder)
+    if (sandy->headBoulder == globals.player.carry.grabbed)
     {
         xVec3Init(&sandy->headBoulder->vel, 0.0f, 0.0f, 0.0f);
     }
@@ -3914,7 +3918,8 @@ S32 zNPCGoalBossSandySit::Process(en_trantype* trantype, F32 dt, void* updCtxt, 
     {
         sitFlags |= 0x2;
 
-        sandy->newsfish->SpeakStart(sNFSoundValue[(9 - sandy->hitPoints) + 6], 0, 0xFFFFFFFF);
+        numHints = 9 - sandy->hitPoints;
+        sandy->newsfish->SpeakStart(sNFSoundValue[numHints + 6], 0, 0xFFFFFFFF);
 
         sandy->nfFlags |= 0x4;
         sandy->hitPoints = sandy->hitPoints - 1;
@@ -3923,13 +3928,10 @@ S32 zNPCGoalBossSandySit::Process(en_trantype* trantype, F32 dt, void* updCtxt, 
                    0.0f);
         zEntEvent(sandy, sandy, eEventNPCHPDecremented);
 
-        inRing = 0;
         bmat = sandy->headBoulder->model->Mat;
 
-        if (bmat->pos.x > -3.0f && bmat->pos.x < 3.0f && bmat->pos.z > -3.0f && bmat->pos.z < 3.0f)
-        {
-            inRing = 1;
-        }
+        inRing =
+            bmat->pos.x > -3.0f && bmat->pos.x < 3.0f && bmat->pos.z > -3.0f && bmat->pos.z < 3.0f;
 
         if (inRing || (sandy->hitPoints == 6 && (sandy->hangingScoreboard->flags & 0x1)))
         {
@@ -4046,21 +4048,27 @@ S32 zNPCGoalBossSandyGetUp::Process(en_trantype* trantype, F32 dt, void* updCtxt
 S32 zNPCGoalBossSandyRunToRope::Enter(F32 dt, void* updCtxt)
 {
     zNPCBSandy* sandy = (zNPCBSandy*)psyche->clt_owner;
-    S32 secondRope = 1;
+    S32 secondRope;
     xVec3 heading;
     F32 side;
-    F32 bestDot = 30.0f;
-    F32 secondDot = bestDot;
-    F32 bestDist = 0.0f;
-    F32 secondDist = bestDist;
+    F32 bestDot;
+    F32 secondDot;
+    F32 bestDist;
+    F32 secondDist;
     S32 i;
     F32 dist;
     xVec3 toBounce;
 
     timeInGoal = 0.0f;
 
+    secondRope = 1;
     sandy->fromRope = 1;
     sandy->toRope = 5;
+
+    bestDot = 30.0f;
+    secondDot = bestDot;
+    bestDist = 0.0f;
+    secondDist = bestDist;
 
     xVec3Sub(&heading, (xVec3*)&sandy->model->Mat->pos,
              (xVec3*)&globals.player.ent.model->Mat->pos);
