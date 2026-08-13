@@ -1640,6 +1640,18 @@ void xFXFireworksUpdate(F32 dt)
     }
 }
 
+// Carrier, not recovered code. This string literal is present in the target's
+// @stringBase0 at this position and is referenced by nothing in the target
+// object, so it belongs to a function the retail link deadstripped. We do not
+// know what that function was; only the literal and its position are evidence.
+// Emitting it here keeps every later @stringBase0 offset in step with the
+// target. A string only survives into the pool if it is returned, so this needs
+// a body -- an unused local drops it.
+const char* __deadstripped_xFX_1()
+{
+    return "update frame\n";
+}
+
 void xFXStreakInit()
 {
     for (S32 i = 0; i < 10; i++)
@@ -1652,11 +1664,12 @@ void xFXStreakInit()
 
 void xFXStreakUpdate(F32 dt)
 {
-    xFXStreak* s = sStreakList;
     S32 i;
 
-    for (i = 0; i < 10; i++, s++)
+    for (i = 0; i < 10; i++)
     {
+        xFXStreak* s = &sStreakList[i];
+
         if (s->flags == 0)
         {
             continue;
@@ -1722,10 +1735,10 @@ void xFXStreakRender()
     S32 j;
     xFXStreakElem* e;
 
-    s = sStreakList;
-
-    for (streak = 0; streak < 10; streak++, s++)
+    for (streak = 0; streak < 10; streak++)
     {
+        s = &sStreakList[streak];
+
         if (s->flags == 0)
         {
             continue;
@@ -1801,8 +1814,10 @@ U32 xFXStreakStart(F32 frequency, F32 alphaFadeRate, F32 alphaStart, U32 texture
     xFXStreak* s;
     U32 i;
 
-    for (s = sStreakList, i = 0; i < 10; s++, i++)
+    for (i = 0; i < 10; i++)
     {
+        s = &sStreakList[i];
+
         if (s->flags == 0x0)
         {
             s->flags = 0x1;
@@ -1935,10 +1950,10 @@ void xFXShineUpdate(F32 dt)
     S32 j;
     xFXShineElem* e;
 
-    s = sShineList;
-
-    for (i = 0; i < 2; i++, s++)
+    for (i = 0; i < 2; i++)
     {
+        s = &sShineList[i];
+
         if (s->flags == 0)
         {
             continue;
@@ -2664,6 +2679,61 @@ S32 xFXRibbon::render_compare(const xFXRibbon& other) const
     }
 
     return 0;
+}
+
+// Carrier, not recovered code. These eleven RwBlendFunction names are present
+// in the target's @stringBase0 right here, between "fx_streak1" and
+// "FX|Ribbon", and nothing in the target object references them -- they belong
+// to a function the retail link deadstripped, plausibly the "FX|Ribbon" tweak
+// registration, since xFXRibbonSceneEnter only ever removes that tweak. That
+// attribution is a guess; the literals, their order and their position are the
+// only evidence. Emitting them keeps "FX|Ribbon" at its target offset of 0x13a.
+// The if-chain is the one shape that leaks nothing of its own: a string table
+// adds a pointer array to .rodata and a switch adds a jump table to .data.
+const char* __deadstripped_xFX_2(S32 i)
+{
+    if (i == 0)
+    {
+        return "BLENDZERO";
+    }
+    if (i == 1)
+    {
+        return "BLENDONE";
+    }
+    if (i == 2)
+    {
+        return "BLENDSRCCOLOR";
+    }
+    if (i == 3)
+    {
+        return "BLENDINVSRCCOLOR";
+    }
+    if (i == 4)
+    {
+        return "BLENDSRCALPHA";
+    }
+    if (i == 5)
+    {
+        return "BLENDINVSRCALPHA";
+    }
+    if (i == 6)
+    {
+        return "BLENDDESTALPHA";
+    }
+    if (i == 7)
+    {
+        return "BLENDINVDESTALPHA";
+    }
+    if (i == 8)
+    {
+        return "BLENDDESTCOLOR";
+    }
+    if (i == 9)
+    {
+        return "BLENDINVDESTCOLOR";
+    }
+
+    return "BLENDSRCALPHASAT";
 }
 
 void xFXRibbonSceneEnter()
