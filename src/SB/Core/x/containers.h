@@ -256,7 +256,9 @@ template <class T> struct tier_queue
 
         if (alloc->mod_block_size(index) == 0)
         {
-            alloc->free_block(blocks[get_block(index)]);
+            u32 block = get_block(index);
+
+            alloc->free_block(blocks[block]);
         }
     }
 
