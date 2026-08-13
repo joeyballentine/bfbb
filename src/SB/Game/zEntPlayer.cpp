@@ -5874,10 +5874,10 @@ void zEntPlayer_Init(xEnt* ent, xEntAsset* asset)
     U32 trailerHash;
     xEnt* hitch;
     static S32 drybob_anim_count;
-    static F32 drybob_oldTime[64];
-    static F32* drybob_chgTime[64];
-    static void* drybob_oldData[64];
     static void** drybob_chgData[64];
+    static void* drybob_oldData[64];
+    static F32* drybob_chgTime[64];
+    static F32 drybob_oldTime[64];
 
     zEntInit((zEnt*)ent, asset, 'PLYR');
     xEntInitShadow(*ent, (xEntShadow&)globals.player.entShadow_embedded);
@@ -5925,8 +5925,9 @@ void zEntPlayer_Init(xEnt* ent, xEntAsset* asset)
     globals.player.sb_models[12]->Mat = globals.player.model_spongebob->Mat;
     globals.player.sb_models[13]->Mat = globals.player.model_spongebob->Mat;
 
-    iModelTagSetup((xModelTag*)globals.player.model_wand, globals.player.sb_models[5]->Data,
-                   -0.604f, 0.46f, 0.63f);
+    globals.player.model_wand = globals.player.sb_models[5];
+    iModelTagSetup(&globals.player.BubbleWandTag[0], globals.player.model_wand->Data, -0.604f,
+                   0.46f, 0.63f);
     iModelTagSetup(&globals.player.BubbleWandTag[1], globals.player.model_wand->Data, -0.563f,
                    0.427f, 0.294f);
     iModelTagSetup(&sSpongeBobLFoot, globals.player.sb_models[8]->Data, 0.119f, 0.043f, -0.032f);
@@ -5945,8 +5946,10 @@ void zEntPlayer_Init(xEnt* ent, xEntAsset* asset)
     sLassoInfo = &globals.player.lassoInfo;
     sLasso = &sLassoInfo->lasso;
 
-    // missing line of code here
-    // bbash_vel =
+    bbncvtm = globals.player.g.BBashTime - globals.player.g.BBashCVTime;
+    bbash_vel =
+        (globals.player.g.BBashHeight + 0.5f * globals.player.g.Gravity * bbncvtm * bbncvtm) /
+        globals.player.g.BBashTime;
 
     info = xSTFindAsset(0x791025ac, &bufsize);
 
@@ -5999,11 +6002,48 @@ void zEntPlayer_Init(xEnt* ent, xEntAsset* asset)
 
     drybob_anim_count = 0;
 
-    // NOTE: the treedome model load and the wet/dry animation table swap that
-    // retail runs here are not written yet. They own @stringBase0 0x2a45,
-    // 0x2a61 and 0x2a75 -- "spongebob_bind_treedome.dff", "spongebob_bind.ATBL"
-    // and "spongebob_bind_treedome.ATBL" -- so the string pool stays four
-    // entries short of the target's until they land.
+    info = xSTFindAsset(xStrHash("spongebob_bind_treedome.dff"), NULL);
+
+    if (info != NULL)
+    {
+        RpAtomic* treedome0 = (RpAtomic*)info;
+        RpAtomic* treedome1 = iModelFile_RWMultiAtomic(treedome0);
+        RpAtomic* treedome2 = iModelFile_RWMultiAtomic(treedome1);
+        RpAtomic* treedome3 = iModelFile_RWMultiAtomic(treedome2);
+
+        globals.player.sb_models[1]->Data = treedome0;
+        globals.player.sb_models[2]->Data = treedome1;
+        globals.player.sb_models[0]->Data = treedome3;
+
+        wettbl = (xAnimTable*)xSTFindAsset(xStrHash("spongebob_bind.ATBL"), NULL);
+        drytbl = (xAnimTable*)xSTFindAsset(xStrHash("spongebob_bind_treedome.ATBL"), NULL);
+
+        if (wettbl != NULL && drytbl != NULL)
+        {
+            for (drystate = drytbl->StateList; drystate != NULL; drystate = drystate->Next)
+            {
+                if (!(drystate->UserFlags & 0x40000000))
+                {
+                    wetstate = xAnimTableGetState(wettbl, drystate->Name);
+                    wetfile = wetstate->Data;
+                    dryfile = drystate->Data;
+                    numa = wetfile->NumAnims[0] * wetfile->NumAnims[1];
+
+                    for (aa = 0; aa < numa; aa++)
+                    {
+                        drybob_chgData[drybob_anim_count] = &wetfile->RawData[aa];
+                        drybob_oldData[drybob_anim_count] = wetfile->RawData[aa];
+                        drybob_chgTime[drybob_anim_count] = &wetfile->Duration;
+                        drybob_oldTime[drybob_anim_count] = wetfile->Duration;
+                        wetfile->RawData[aa] = dryfile->RawData[aa];
+                        drybob_anim_count++;
+                    }
+
+                    wetfile->Duration = dryfile->Duration;
+                }
+            }
+        }
+    }
 
     cruise_bubble::init();
     load_player_ini();
@@ -6011,7 +6051,7 @@ void zEntPlayer_Init(xEnt* ent, xEntAsset* asset)
     xEntShow(ent);
     globals.player.Visible = 1;
     globals.player.AutoMoveSpeed = 0;
-    ent->pflags &= ~0x4;
+    ent->pflags &= (U8)~XENT_PFLAGS_HAS_GRAVITY;
     ent->collis->chk &= ~0x1;
     ent->update = zEntPlayer_Update;
     ent->move = zEntPlayer_Move;
