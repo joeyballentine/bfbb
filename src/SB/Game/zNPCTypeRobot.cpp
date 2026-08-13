@@ -120,10 +120,6 @@ F32 zNPCFodBzzt::uv_slice_discoLight[2] = { 1.0f, 1.0f };
 
 S32 g_needMusician = 1;
 
-RwRaster* zNPCSleepy::rast_killcone;
-
-RwRaster* zNPCSleepy::rast_detectcone;
-
 F32 zNPCSleepy::uv_deathcone[2] = { 0.0f, 0.0f };
 
 F32 zNPCSleepy::uv_nightlight[2] = { 0.0f, 0.0f };
@@ -132,44 +128,12 @@ F32 zNPCSleepy::uv_slice_nightlight[2] = { 0.25f, 0.25f };
 
 F32 zNPCSleepy::uv_slice_deathcone[2] = { 0.25f, 0.25f };
 
-volatile F32 zNPCSleepy::hyt_NightLightCurrent;
-
 static S32 g_sleepy_NightLightStates[10] = { 'NGN0', 'NGN2', 'NGN1', 'NGN3', 'NGN4',
                                              'NGR4', 'NGR=', 'NGR0', 'NGR1', 0 };
 
 static S32 g_sleepy_angryStates[5] = { 'NGR4', 'NGR0', 'NGRi', 'NGR=', 0 };
 
-static RxObjSpace3DVertex g_vert_list[34];
-
-RwRaster* zNPCArfDog::rast_blink;
-
 NPCLaser zNPCTubeSlave::laser;
-
-static zNPCSlick* g_slick_slipfx_owner;
-
-static zParEmitter* g_pemit_smoke;
-
-static zParEmitter* g_pemit_flame;
-
-static zParEmitter* g_pemit_trek;
-
-static zParEmitter* g_pemit_propwash;
-
-static zParEmitter* g_pemit_exhaust;
-
-static zParEmitter* g_pemit_steam;
-
-static xParEmitterCustomSettings g_parf_smoke;
-
-static xParEmitterCustomSettings g_parf_spark;
-
-static xParEmitterCustomSettings g_parf_trek;
-
-static xParEmitterCustomSettings g_parf_propwash;
-
-static xParEmitterCustomSettings g_parf_exhaust;
-
-static xParEmitterCustomSettings g_parf_steam;
 
 void zNPCFodBzzt_DoTheHokeyPokey(F32 dt);
 void ZNPC_Destroy_Robot(xFactoryInst* inst);
@@ -1063,6 +1027,8 @@ U32 zNPCRobot::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
             idx = 2;
             break;
         }
+        idx = 3;
+        break;
     case NPC_GOAL_WANDER:
     case NPC_GOAL_EVADE:
     case NPC_GOAL_GOHOME:
@@ -1105,15 +1071,12 @@ U32 zNPCRobot::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
         break;
     case NPC_GOAL_KNOCK:
     {
-        S32 pick;
+        S32 rnd = xrand();
+        S32 pick = 0x26;
 
-        if (xrand() & 0x800000)
+        if (rnd & 0x800000)
         {
             pick = 0x25;
-        }
-        else
-        {
-            pick = 0x26;
         }
 
         idx = pick;
@@ -1278,7 +1241,7 @@ S32 zNPCRobot::RoboHandleMail(NPCMsg* mail)
     }
     case NPC_MID_SCRIPTBEGIN:
     {
-        psy->GoalSet('NGS0', 0);
+        psy_instinct->GoalSet('NGS0', 0);
         break;
     }
     case NPC_MID_STUN:
@@ -1887,18 +1850,22 @@ void zNPCRobot::TurnThemHeads()
 
         F32 dst_toPlyr = xVec3Normalize(&dir, &dir);
 
-        if (dst_toPlyr <= cfg_npc->rad_detect)
+        if (dst_toPlyr > cfg_npc->rad_detect)
         {
-            if (xVec3Dot(&dir, NPCC_faceDir(this)) >= 0.0f)
-            {
-                xMat4x3* neck = (xMat4x3*)model->Mat + idx_neckBone;
-
-                xVec3Inv(&dir, &dir);
-                xMat3x3LookVec(&mat, &dir);
-                xMat3x3Transpose(&back, (xMat3x3*)model->Mat);
-                xMat3x3Mul(neck, &mat, &back);
-            }
+            return;
         }
+
+        if (xVec3Dot(&dir, NPCC_faceDir(this)) < 0.0f)
+        {
+            return;
+        }
+
+        xMat4x3* neck = (xMat4x3*)model->Mat + idx_neckBone;
+
+        xVec3Inv(&dir, &dir);
+        xMat3x3LookVec(&mat, &dir);
+        xMat3x3Transpose(&back, (xMat3x3*)model->Mat);
+        xMat3x3Mul(neck, &mat, &back);
     }
 }
 
@@ -2015,7 +1982,7 @@ F32 zNPCRobot::MoveTowardsArena(F32 dt, F32 speed)
 
 void zNPCRobot::ShowerConfetti(xVec3* pos)
 {
-    xVec3 pos_emit = *(pos ? pos : xEntGetCenter(this));
+    const xVec3 pos_emit = *(pos ? pos : xEntGetCenter(this));
 
     zNPCRobot_TubeConfetti(&pos_emit);
 }
@@ -3268,11 +3235,17 @@ U8 zNPCMonsoon::FoulWeather(F32)
     return 0;
 }
 
+RwRaster* zNPCSleepy::rast_killcone;
+
+RwRaster* zNPCSleepy::rast_detectcone;
+
+volatile F32 zNPCSleepy::hyt_NightLightCurrent;
+
 // Scheduling
 void zNPCSleepy_Timestep(F32 dt)
 {
-    static S8 init;
     static F32 tmr_cycle;
+    static S8 init;
 
     if (init == 0)
     {
@@ -3477,36 +3450,40 @@ void zNPCSleepy::SnoreNZeez(F32 dt)
     xVec3 dir_zeez;
     xVec3 pos_zeez;
 
-    if (NPCC_ds2_toCam(Pos(), NULL) <= SQ(30.0f))
+    F32 ds2_toCam = NPCC_ds2_toCam(Pos(), NULL);
+
+    if (ds2_toCam > SQ(30.0f))
     {
-        tmr_emitzeez = MAX(-1.0f, tmr_emitzeez - dt);
+        return;
+    }
 
-        if (tmr_emitzeez < 0.0f)
+    tmr_emitzeez = MAX(-1.0f, tmr_emitzeez - dt);
+
+    if (tmr_emitzeez < 0.0f)
+    {
+        cnt_grpzeez -= 1.0f;
+
+        if (cnt_grpzeez < 0.0f)
         {
-            cnt_grpzeez -= 1.0f;
-
-            if (0.0f <= cnt_grpzeez)
-            {
-                tmr_emitzeez = 0.4f;
-            }
-            else
-            {
-                cnt_grpzeez = 3.0f;
-                tmr_emitzeez = 3.0f;
-            }
-
-            xVec3Copy(&pos_zeez, (const xVec3*)BonePos(6));
-            xMat3x3RMulVec(&pos_zeez, (const xMat3x3*)BoneMat(0), &pos_zeez);
-            xVec3AddTo(&pos_zeez, Pos());
-            pos_zeez.y += 0.5f;
-
-            xVec3Inv(&dir_zeez, NPCC_faceDir(this));
-            dir_zeez += g_Y3;
-            dir_zeez.normalize();
-            dir_zeez *= 1.5f;
-
-            NPAR_EmitSleepyZeez(&pos_zeez, &dir_zeez);
+            cnt_grpzeez = 3.0f;
+            tmr_emitzeez = 3.0f;
         }
+        else
+        {
+            tmr_emitzeez = 0.4f;
+        }
+
+        xVec3Copy(&pos_zeez, (const xVec3*)BonePos(6));
+        xMat3x3RMulVec(&pos_zeez, (const xMat3x3*)BoneMat(0), &pos_zeez);
+        xVec3AddTo(&pos_zeez, Pos());
+        pos_zeez.y += 0.5f;
+
+        xVec3Inv(&dir_zeez, NPCC_faceDir(this));
+        dir_zeez += g_Y3;
+        dir_zeez.normalize();
+        dir_zeez *= 1.5f;
+
+        NPAR_EmitSleepyZeez(&pos_zeez, &dir_zeez);
     }
 }
 
@@ -3698,6 +3675,8 @@ void zNPCSleepy::RenderExtra()
     }
 }
 
+static RxObjSpace3DVertex g_vert_list[34];
+
 void zNPCSleepy::RendConeOfDeath(S32 which)
 {
     static RwRGBA rgba_beg = { 0, 200, 240, 0 };
@@ -3790,8 +3769,8 @@ void zNPCSleepy::RendConeOfDeath(S32 which)
 
 void zNPCSleepy::RendConeRange()
 {
-    static F32 uv_top[2];
-    static F32 uv_bot[2];
+    static F32 uv_top[2] = { 0.0f, 0.0f };
+    static F32 uv_bot[2] = { 0.0f, 1.0f };
 
     xMat3x3 mat_spin;
     xVec3 pos_top;
@@ -3949,24 +3928,21 @@ void zNPCArfArf::ParseChild(xBase* child)
     {
         if (((xNPCBasic*)child)->SelfType() == NPC_TYPE_ARFDOG)
         {
+            zNPCArfDog* pup = (zNPCArfDog*)child;
             S32 i;
 
             for (i = 0; i < 5; i++)
             {
                 if (pup_kennel[i] == NULL)
                 {
-                    pup_kennel[i] = (zNPCArfDog*)child;
-                    ((zNPCCommon*)child)->DuploOwner(this);
+                    pup_kennel[i] = pup;
+                    pup->DuploOwner(this);
                     break;
                 }
             }
 
             xSceneID2Name(globals.sceneCur, id);
-            xSceneID2Name(globals.sceneCur, child->id);
-        }
-        else
-        {
-            ((xNPCBasic*)child)->SelfType();
+            xSceneID2Name(globals.sceneCur, pup->id);
         }
     }
     else if (child->baseType == eBaseTypeGroup)
@@ -4032,18 +4008,18 @@ U32 zNPCArfArf::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
 
     switch (gid)
     {
-    case 'NGRK':
-        idx = 16;
-        break;
     case 'NGR>':
         idx = 1;
         break;
     case 'NGRJ':
-        if (rawgoal->GetFlags() & 0x1)
+    {
+        zNPCGoalAttackArf* atkgoal = (zNPCGoalAttackArf*)rawgoal;
+
+        if (atkgoal->flg_attack & 0x1)
         {
             idx = 14;
         }
-        else if (rawgoal->GetFlags() & 0x2)
+        else if (atkgoal->flg_attack & 0x2)
         {
             idx = 15;
         }
@@ -4052,21 +4028,22 @@ U32 zNPCArfArf::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
             idx = 14;
         }
         break;
-    case 'NGRi':
-        if (hitpoints < 2)
-        {
-            if (hitpoints == 1)
-            {
-                idx = 22;
-            }
-        }
-        else
-        {
-            idx = 20;
-        }
+    }
+    case 'NGRK':
+        idx = 16;
         break;
     case 'NGR[':
         idx = 30;
+        break;
+    case 'NGRi':
+        if (hitpoints >= 2)
+        {
+            idx = 20;
+        }
+        else if (hitpoints == 1)
+        {
+            idx = 22;
+        }
         break;
     default:
         da_anim = zNPCRobot::AnimPick(gid, gspot, rawgoal);
@@ -4125,6 +4102,8 @@ zNPCArfDog* zNPCArfArf::AdoptADoggie()
 
     return pup;
 }
+
+RwRaster* zNPCArfDog::rast_blink;
 
 void zNPCArfDog::Init(xEntAsset* asset)
 {
@@ -4295,12 +4274,9 @@ void zNPCArfDog::Process(xScene* xscn, F32 dt)
     case 'NGRY':
         ratio += 0.3333f;
     case 'NGRZ':
+        BlinkUpdate(dt, ratio);
         break;
-    default:
-        return;
     }
-
-    BlinkUpdate(dt, ratio);
 }
 
 void zNPCArfDog::BlinkReset()
@@ -4472,7 +4448,7 @@ void zNPCTubelet::Reset()
     zNPCRobot::Reset();
     NPCConfig* cfg = cfg_npc;
     hitpoints = cfg->pts_damage;
-    ModelAtomicHide(0, NULL);
+    ModelAtomicShow(0, NULL);
     ModelAtomicHide(1, NULL);
     ModelAtomicHide(4, NULL);
 }
@@ -4541,13 +4517,15 @@ void zNPCTubelet::ParseChild(xBase* child)
     }
     else if (child->baseType == eBaseTypeGroup)
     {
+        xGroup* grp = (xGroup*)child;
+
         xSceneID2Name(globals.sceneCur, id);
 
-        U32 cnt = xGroupGetCount((xGroup*)child);
+        U32 cnt = xGroupGetCount(grp);
 
         for (S32 i = 0; i < (S32)cnt; i++)
         {
-            xBase* grpitem = xGroupGetItemPtr((xGroup*)child, i);
+            xBase* grpitem = xGroupGetItemPtr(grp, i);
 
             if (grpitem != NULL)
             {
@@ -4676,10 +4654,10 @@ S32 zNPCTubelet::RoboHandleMail(NPCMsg* mail)
         case eEventNPCSetActiveOn:
         case eEventNPCSetActiveOff:
         {
+            handled = 0;
+
             NPCMsg msg = *mail;
             zNPCTubeSlave* slave;
-
-            handled = 0;
 
             slave = tub_paul;
 
@@ -4687,6 +4665,7 @@ S32 zNPCTubelet::RoboHandleMail(NPCMsg* mail)
             {
                 msg.sendto = slave->id;
                 msg.sysevent.from = this;
+                msg.sysevent.to = slave;
                 slave->NPCMessage(&msg);
             }
 
@@ -4696,6 +4675,7 @@ S32 zNPCTubelet::RoboHandleMail(NPCMsg* mail)
             {
                 msg.sendto = slave->id;
                 msg.sysevent.from = this;
+                msg.sysevent.to = slave;
                 slave->NPCMessage(&msg);
             }
 
@@ -4732,33 +4712,32 @@ void zNPCTubelet::LassoNotify(en_LASSO_EVENT event)
 
     switch (event)
     {
-    case LASS_EVNT_ENDED:
-    case LASS_EVNT_ABORT:
-        break;
     case LASS_EVNT_BEGIN:
         tubestat = TUBE_STAT_LASSO;
-        return;
-    }
-
-    if ((lass->stage == LASS_STAT_PENDING || lass->stage == LASS_STAT_DONE) &&
-        tubestat == TUBE_STAT_LASSO && hitpoints >= 1)
-    {
-        PrepTheBand();
-
-        xPsyche* psy = psy_instinct;
-
-        if (psy->GIDInStack(NPC_GOAL_ALERT))
+        break;
+    case LASS_EVNT_ENDED:
+    case LASS_EVNT_ABORT:
+        if ((lass->stage == LASS_STAT_PENDING || lass->stage == LASS_STAT_DONE) &&
+            tubestat == TUBE_STAT_LASSO && hitpoints >= 1)
         {
-            tubestat = TUBE_STAT_ATTACK;
+            PrepTheBand();
+
+            xPsyche* psy = psy_instinct;
+
+            if (psy->GIDInStack(NPC_GOAL_ALERT))
+            {
+                tubestat = TUBE_STAT_ATTACK;
+            }
+            else if (psy->GIDInStack(NPC_GOAL_IDLE))
+            {
+                tubestat = TUBE_STAT_DUCKLING;
+            }
+            else
+            {
+                tubestat = TUBE_STAT_DUCKLING;
+            }
         }
-        else if (psy->GIDInStack(NPC_GOAL_IDLE))
-        {
-            tubestat = TUBE_STAT_DUCKLING;
-        }
-        else
-        {
-            tubestat = TUBE_STAT_DUCKLING;
-        }
+        break;
     }
 }
 
@@ -4773,7 +4752,7 @@ void zNPCTubelet::Bonk()
         hitpoints = 0;
         pflags |= 0x20;
 
-        bonkSpinRate = 6.28319f * (2.0f * (xurand() - 0.5f)) + 12.5664f;
+        bonkSpinRate = 6.2831855f * (2.0f * (xurand() - 0.5f)) + 12.566371f;
 
         ShowerConfetti(NULL);
         PainInTheBand();
@@ -4791,14 +4770,16 @@ void zNPCTubelet::Unbonk()
     ModelAtomicHide(1, NULL);
     ModelAtomicHide(4, NULL);
     hitpoints = cfg_npc->pts_damage;
-    // Epilogue weirdness
     pflags &= 0xdf;
-    bonkSpinRate = -1.0;
+    // Epilogue weirdness: the target restores r31 before r0.
+    bonkSpinRate = -1.0f;
 }
 
 S32 zNPCTubelet::Chk_IsBonked()
 {
     S32 die;
+    S32 cnt_hurt = 0;
+    S32 alldead = 0;
 
     if (tubestat == TUBE_STAT_DYING)
     {
@@ -4810,12 +4791,14 @@ S32 zNPCTubelet::Chk_IsBonked()
     }
     else
     {
-        S32 cnt_hurt;
         zNPCTubeSlave* mary;
 
         bonkSpinRate = 0.0f;
 
-        cnt_hurt = (hitpoints == 0);
+        if (hitpoints == 0)
+        {
+            cnt_hurt = 1;
+        }
 
         if (tub_paul == NULL)
         {
@@ -4838,6 +4821,11 @@ S32 zNPCTubelet::Chk_IsBonked()
         }
 
         if (cnt_hurt == 3)
+        {
+            alldead = 1;
+        }
+
+        if (alldead)
         {
             if (mary != NULL)
             {
@@ -4966,9 +4954,15 @@ void zNPCTubeSlave::Setup()
     if (!laser.TextureGet())
     {
         RwTexture* txtr = NPCC_FindRWTexture("energy_beam");
-        RwRaster* rast = (txtr != NULL) ? txtr->raster : NULL;
-        RwRGBA rgba_beg = { 255, 128, 255, 255 };
-        RwRGBA rgba_end = { 255, 128, 255, 255 };
+        RwRaster* rast = NULL;
+
+        if (txtr != NULL)
+        {
+            rast = txtr->raster;
+        }
+
+        const RwRGBA rgba_beg = { 255, 128, 255, 255 };
+        const RwRGBA rgba_end = { 255, 128, 255, 255 };
 
         laser.TextureSet(rast);
         laser.UVScrollSet(0.1f, 0.0f);
@@ -5157,6 +5151,8 @@ void zNPCTubeSlave::DoLaserRendering()
     }
 }
 
+static zNPCSlick* g_slick_slipfx_owner;
+
 void zNPCSlick::Init(xEntAsset* asset)
 {
     zNPCRobot::Init(asset);
@@ -5230,7 +5226,7 @@ void zNPCSlick::SelfSetup()
 
 U32 zNPCSlick::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
 {
-    static const S32 choices[3] = { 20, 21, 22 };
+    static S32 choices[3] = { 20, 21, 22 };
 
     S32 idx = -1;
     U32 hashid = 0;
@@ -5297,13 +5293,16 @@ void zNPCSlick::Process(xScene* xscn, F32 dt)
         StuffToDoIfAlive(dt);
     }
 
-    if (globals.player.ForceSlipperyTimer <= 0.0f)
+    if (globals.player.ForceSlipperyTimer > 0.0f)
+    {
+        if (this == g_slick_slipfx_owner)
+        {
+            SlipSlidenAway(dt);
+        }
+    }
+    else
     {
         g_slick_slipfx_owner = NULL;
-    }
-    else if (this == g_slick_slipfx_owner)
-    {
-        SlipSlidenAway(dt);
     }
 
     zNPCRobot::Process(xscn, dt);
@@ -5368,16 +5367,16 @@ void zNPCSlick::ShieldUpdate(F32 dt)
 
     if (alf_shieldCurrent < alf_shieldDesired)
     {
-        alf_shieldCurrent = alf_shieldCurrent + 0.392157f * dt;
+        alf_shieldCurrent = alf_shieldCurrent + 0.39215687f * dt;
     }
     else if (alf_shieldCurrent > alf_shieldDesired)
     {
-        alf_shieldCurrent = alf_shieldCurrent - 0.392157f * dt;
+        alf_shieldCurrent = alf_shieldCurrent - 0.39215687f * dt;
     }
 
-    alf_shieldCurrent = CLAMP(alf_shieldCurrent, 0.0f, 0.392157f);
+    alf_shieldCurrent = CLAMP(alf_shieldCurrent, 0.0f, 0.39215687f);
 
-    F32 rat_shield = alf_shieldCurrent / 0.392157f;
+    F32 rat_shield = alf_shieldCurrent / 0.39215687f;
 
     rad_shield = SMOOTH(rat_shield, 0.3f, 2.5f);
 
@@ -5539,26 +5538,17 @@ void zNPCSlick::SlipSlidenAway(F32 dt)
 
         F32 rad = 1.2f * globals.player.ent.bound.sph.r;
 
-        xVec3 pos_base;
-        xVec3* pos_plyr = xEntGetPos(&globals.player.ent);
-        pos_base.x = pos_plyr->x;
-        pos_base.z = pos_plyr->z;
-        pos_base.y = pos_plyr->y + 0.35f;
+        xVec3 pos_base = *xEntGetPos(&globals.player.ent);
 
-        for (S32 i = 0; i < 4; i++)
+        pos_base.y += 0.35f;
+
+        for (U32 i = 0; i < 4; i++)
         {
             xVec3 pos_emit;
-            xVec3 tmp;
 
-            tmp = *NPCC_upDir(&globals.player.ent) * (rad * (2.0f * (xurand() - 0.5f)));
-            pos_emit = tmp;
-
-            tmp = *NPCC_faceDir(&globals.player.ent) * (rad * (2.0f * (xurand() - 0.5f)));
-            pos_emit += tmp;
-
-            tmp = *NPCC_rightDir(&globals.player.ent) * (rad * (2.0f * (xurand() - 0.5f)));
-            pos_emit += tmp;
-
+            pos_emit = *NPCC_upDir(&globals.player.ent) * (rad * (2.0f * (xurand() - 0.5f)));
+            pos_emit += *NPCC_faceDir(&globals.player.ent) * (rad * (2.0f * (xurand() - 0.5f)));
+            pos_emit += *NPCC_rightDir(&globals.player.ent) * (rad * (2.0f * (xurand() - 0.5f)));
             pos_emit += pos_base;
 
             NPAR_EmitOilVapors(&pos_emit);
@@ -5594,7 +5584,7 @@ S32 ROBO_grul_goAlertMelee(xGoal* rawgoal, void*, en_trantype* trantype, F32, vo
         return 0;
     }
 
-    if (!(U8)npc->npcset.allowDetect)
+    if ((U8)npc->npcset.allowDetect == 0)
     {
         return 0;
     }
@@ -5645,7 +5635,7 @@ S32 ROBO_grul_goAlertLobber(xGoal* rawgoal, void*, en_trantype* trantype, F32, v
         return 0;
     }
 
-    if (!(U8)npc->npcset.allowDetect)
+    if ((U8)npc->npcset.allowDetect == 0)
     {
         return 0;
     }
@@ -5671,7 +5661,7 @@ S32 ROBO_grul_goAlertLobber(xGoal* rawgoal, void*, en_trantype* trantype, F32, v
         return 0;
     }
 
-    F32 dst_lob = MAX(npc->cfg_npc->rad_attack, 1.5f * arena->Radius(1.0f));
+    F32 dst_lob = MAX(1.5f * arena->Radius(1.0f), npc->cfg_npc->rad_attack);
 
     xVec3 delta;
     F32 dsq = arena->DstSqFromHome(xEntGetPos(&globals.player.ent), &delta);
@@ -5862,6 +5852,30 @@ S32 SLCK_grul_alert(xGoal* goal, void*, en_trantype* trantype, float, void*)
     return NPC_GOAL_ALERTSLICK;
 }
 
+static zParEmitter* g_pemit_smoke;
+
+static zParEmitter* g_pemit_flame;
+
+static zParEmitter* g_pemit_trek;
+
+static zParEmitter* g_pemit_propwash;
+
+static zParEmitter* g_pemit_exhaust;
+
+static zParEmitter* g_pemit_steam;
+
+static xParEmitterCustomSettings g_parf_smoke;
+
+static xParEmitterCustomSettings g_parf_spark;
+
+static xParEmitterCustomSettings g_parf_trek;
+
+static xParEmitterCustomSettings g_parf_propwash;
+
+static xParEmitterCustomSettings g_parf_exhaust;
+
+static xParEmitterCustomSettings g_parf_steam;
+
 void ROBO_InitEffects()
 {
     g_pemit_smoke = zParEmitterFind("PAREMIT_ROBO_DMGSMOKE");
@@ -5915,7 +5929,7 @@ void zNPCRobot::DoFX_Motorboat(F32 dt)
 
         if (cnt_nextemit < 5)
         {
-            if (SQ(0.2f) < xVec3Length2(&frame->vel) && GetVertPos(NPC_MDLVERT_PROPEL, &pos_emit))
+            if (xVec3Length2(&frame->vel) > SQ(0.2f) && GetVertPos(NPC_MDLVERT_PROPEL, &pos_emit))
             {
                 zFX_SpawnBubbleTrail(&pos_emit, 1);
             }
