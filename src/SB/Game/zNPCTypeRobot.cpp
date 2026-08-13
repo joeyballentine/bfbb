@@ -4856,7 +4856,7 @@ void zNPCTubelet::PainInTheBand()
     tmr_restoreHealth = 2.5f;
 }
 
-S32 zNPCTubelet::Chk_NonAlertBonk(F32 dt)
+void zNPCTubelet::Chk_NonAlertBonk(F32 dt)
 {
     if (tubestat == TUBE_STAT_DUCKLING)
     {
@@ -4870,11 +4870,6 @@ S32 zNPCTubelet::Chk_NonAlertBonk(F32 dt)
             tub_mary->PartyOn();
         }
     }
-
-    // NOTE(duplicatotron): the retail function returns nothing; the `S32` in
-    // zNPCTypeRobot.h should be `void`.  This `return` is forced by the
-    // declaration and costs one instruction.
-    return 0;
 }
 
 void TubeNotice::Notice(en_psynote note, xGoal* goal, void* data)
@@ -5499,7 +5494,7 @@ void zNPCSlick::BUpdate(xVec3* pos)
     }
 }
 
-bool zNPCSlick::IsShield() const
+S32 zNPCSlick::IsShield() const
 {
     return alf_shieldDesired == 100.0f / 255.0f;
 }

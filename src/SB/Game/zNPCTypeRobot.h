@@ -549,7 +549,7 @@ struct zNPCTubelet : zNPCRobot
     void Init(xEntAsset* asset);
     void Unbonk();
     U32 AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal);
-    S32 Chk_NonAlertBonk(F32 dt);
+    void Chk_NonAlertBonk(F32 dt);
     void LassoModelIndex(S32* idxgrab, S32* idxhold);
     void ParseLinks();
     void ParseChild(xBase* child);
@@ -636,7 +636,7 @@ struct zNPCSlick : zNPCRobot
     void ShieldHide();
     void ShieldShow();
     void ShieldGeneratorDamaged();
-    bool IsShield() const;
+    S32 IsShield() const;
     void ShieldFX(F32 dt);
     void ShieldCollide(F32 dt);
     void StuffToDoIfAlive(F32 dt);
