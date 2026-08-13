@@ -21,10 +21,10 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now (2026-08-13) |
 |---|---|---|
-| matched functions | 6491 / 10147 | 7975 / 10147 |
+| matched functions | 6491 / 10147 | 8009 / 10147 |
 | complete units | 195 / 543 | 232 / 543 |
-| **game code exact** | — | **63.820%** (bytes) |
-| **game code fuzzy** | — | **95.383%** (6806 / 7673 functions) |
+| **game code exact** | — | **66.321%** (bytes) |
+| **game code fuzzy** | — | **95.558%** (6840 / 7673 functions) |
 | **game units linked** | — | **91 / 224** |
 | SDK code | — | **90 / 90 units, 100.000% fuzzy — complete** |
 
@@ -824,6 +824,25 @@ the *count* of preceding objects matters as much as their order. Worth
 confirming before anyone builds a strategy on either model.
 
 ## Settled
+
+- **A user-declared `operator=` on a union member was holding `xCollis` back,
+  and it was never legal.** `xCollis::tri_data` carried a hand-written
+  `operator=`, which makes `xCollis` non-trivially copyable, so
+  `__as__10xEntCollis` emitted a loop calling `__as__7xCollis` where the target
+  does a flat `lwz/lwzu + stw/stwu` copy of 180 8-byte units. It sat at
+  **0.000%**. `tri_data` is used as a union member, and C++98 forbids a union
+  member with a non-trivial copy assignment operator -- CodeWarrior accepted it
+  anyway, which is why it survived. Removing it: 0.000 -> 100.000, no
+  regression anywhere in a full build. **Worth sweeping for the same shape
+  elsewhere**: a nested type with a hand-written `operator=` that is also used
+  inside a union is both illegal and a matching blocker.
+
+- **`xSndIsPlayingByHandle` should stay `U8`. Measured and rejected.** The
+  reading that it should be `U32` -- because the adjacent `xSndIsPlaying` is
+  `U32` over the same `bool`-returning `iSnd*` call, and because we emit a
+  `clrlwi` retail does not -- is wrong. Changing it does not even fix
+  `xSndIsPlayingByHandle` itself, and it costs `zEntPlayer_SNDPlayStream` and
+  `zEntPlayer_SNDStopStream` their 100.0. Net -2. Do not retry.
 
 - **"POOL is worth zero" has a corollary that is worth a great deal: driving a
   REAL row *into* the POOL bucket is a full `report.json` win.** These are two
