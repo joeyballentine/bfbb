@@ -9,6 +9,22 @@
 
 extern xVec3 dutchman_reticle_center;
 
+// These two belong in xParEmitter.h and xFX.h respectively -- both are weak
+// (inline) in the retail object and this is the only translation unit that
+// uses either, so they are defined here until those shared headers can carry
+// them. Bodies recovered byte-exact from the target.
+inline void xParInterp::set(F32 value)
+{
+    val[0] = val[1] = value;
+    interp = 0;
+    freq = oofreq = 1.0f;
+}
+
+inline void xFXRibbon::init(S32, const char* name)
+{
+    init(name, NULL);
+}
+
 U32 xSndPlay3DFade(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, const xVec3* pos,
                    F32 innerRadius, F32 outerRadius, sound_category category, F32 fadeTime,
                    F32 delay);
@@ -717,6 +733,11 @@ void zNPCDutchman::ParseINI()
 
 namespace
 {
+
+    void tweak_group::load(xModelAssetParam* ap, U32 apsize)
+    {
+        register_tweaks(true, ap, apsize, NULL);
+    }
 
     void tweak_group::register_tweaks(bool init, xModelAssetParam* ap, U32 apsize, const char*)
     {
@@ -1447,11 +1468,6 @@ namespace
         }
     }
 
-    void tweak_group::load(xModelAssetParam* ap, U32 apsize)
-    {
-        register_tweaks(true, ap, apsize, NULL);
-    }
-
 } // namespace
 
 void zNPCDutchman::SelfSetup()
@@ -1657,6 +1673,20 @@ namespace
     }
 } // namespace
 
+inline U8 zNPCDutchman::turning(F32 dt) const
+{
+    U8 result = 0;
+    F32 fy = model->Mat->at.z;
+    xVec2 facing = { model->Mat->at.x, fy };
+
+    if (xabs(turn.vel) > dt * turn.max_vel || turn.dir.dot(facing) < 1.0f - dt)
+    {
+        result = 1;
+    }
+
+    return result;
+}
+
 inline U8 zNPCDutchman::turning() const
 {
     U8 result = 0;
@@ -1821,7 +1851,9 @@ void zNPCDutchman::update_wave(zNPCDutchman::wave_data& wave, F32 dt)
     }
 
     F32 frac = dist * flames.imax_dist;
-    xVec3 tan = { wave.dir.z, 0.0f, -wave.dir.x };
+    F32 tanx = wave.dir.z;
+    F32 tanz = -wave.dir.x;
+    xVec3 tan = { tanx, 0.0f, tanz };
     F32 decay = 1.0f - frac * tweak.flame.decay;
     F32 diff = dist - old_dist;
 
@@ -1892,6 +1924,37 @@ void zNPCDutchman::stop_eye_glow()
     flag.eye_glow = false;
 }
 
+void zNPCDutchman::update_eye_glow(F32 dt)
+{
+    if (flag.eye_glow)
+    {
+        xVec3 offset = get_facing() * tweak.beam.glow_dist;
+
+        for (S32 i = 0; i < 2; i++)
+        {
+            xParEmitterAsset* ea = eyeglow_emitter[i]->tasset;
+            xParEmitterPropsAsset* prop = eyeglow_emitter[i]->prop;
+
+            ea->pos = get_eye_loc(i) + offset;
+
+            F32 old_size_birth[2] = { prop->size_birth.val[0], prop->size_birth.val[1] };
+            F32 old_size_death[2] = { prop->size_death.val[0], prop->size_death.val[1] };
+
+            prop->size_birth.val[0] = prop->size_birth.val[0] * eye_glow.size;
+            prop->size_birth.val[1] = prop->size_birth.val[1] * eye_glow.size;
+            prop->size_death.val[0] = prop->size_death.val[0] * eye_glow.size;
+            prop->size_death.val[1] = prop->size_death.val[1] * eye_glow.size;
+
+            emit_particles(*eyeglow_emitter[i], dt);
+
+            prop->size_birth.val[0] = old_size_birth[0];
+            prop->size_birth.val[1] = old_size_birth[1];
+            prop->size_death.val[0] = old_size_death[0];
+            prop->size_death.val[1] = old_size_death[1];
+        }
+    }
+}
+
 void zNPCDutchman::start_hand_trail()
 {
     flag.hand_trail = true;
@@ -1905,6 +1968,28 @@ void zNPCDutchman::start_hand_trail()
 void zNPCDutchman::stop_hand_trail()
 {
     flag.hand_trail = false;
+}
+
+void zNPCDutchman::update_hand_trail(F32 dt)
+{
+    if (!flag.hand_trail)
+    {
+        return;
+    }
+
+    xParEmitterAsset* tasset = hand_trail_emitter->tasset;
+
+    tasset->emit_type = 5;
+    tasset->e_line.radius = tweak.teleport.trail_width;
+
+    for (S32 i = 0; i < 2; i++)
+    {
+        tasset->e_line.pos1 = hand_trail.loc[i];
+        hand_trail.loc[i] = get_hand_loc(i);
+        tasset->e_line.pos2 = hand_trail.loc[i];
+
+        emit_particles(*hand_trail_emitter, dt);
+    }
 }
 
 void zNPCDutchman::dissolve(F32 delay)
@@ -1987,6 +2072,12 @@ void zNPCDutchman::reset_blob_mat()
     mat.right.assign(1.0f, 0.0f, 0.0f);
     mat.up.assign(0.0f, cs, sn);
     mat.at.assign(0.0f, -sn, cs);
+}
+
+void zNPCDutchman::refresh_reticle()
+{
+    dutchman_reticle_center = xModelGetBoneLocation(*model, 0x2f);
+    dutchman_reticle_center.y += tweak.reticle_y;
 }
 
 void zNPCDutchman::reset_lasso_anim()
@@ -2217,11 +2308,14 @@ void zNPCDutchman::update_flames(F32 dt)
 
         add_spray(nose_loc, dt);
 
-        xVec3 ground_loc = { facing.x * tweak.flame.lead_dist + nose_loc.x, tweak.ground_y,
-                             facing.z * tweak.flame.lead_dist + nose_loc.z };
+        F32 gx = facing.x * tweak.flame.lead_dist + nose_loc.x;
+        F32 gz = facing.z * tweak.flame.lead_dist + nose_loc.z;
+        xVec3 ground_loc = { gx, tweak.ground_y, gz };
 
         const xVec3& orbit = get_orbit();
-        xVec2 orbit_offset = { ground_loc.x - orbit.x, ground_loc.z - orbit.z };
+        F32 ox = ground_loc.x - orbit.x;
+        F32 oz = ground_loc.z - orbit.z;
+        xVec2 orbit_offset = { ox, oz };
 
         if (!(orbit_offset.length2() > tweak.ground_radius * tweak.ground_radius))
         {
@@ -2234,7 +2328,9 @@ void zNPCDutchman::update_flames(F32 dt)
             {
                 flames.emitted = emit;
 
-                xVec3 tan = { facing.z, 0.0f, -facing.x };
+                F32 tanx = facing.z;
+                F32 tanz = -facing.x;
+                xVec3 tan = { tanx, 0.0f, tanz };
 
                 if (waves.full())
                 {
@@ -2313,6 +2409,27 @@ void zNPCDutchman::start_beam()
 void zNPCDutchman::stop_beam()
 {
     flag.beaming = false;
+}
+
+void zNPCDutchman::set_alpha(F32 value)
+{
+    alpha = value;
+
+    F32 model_alpha = value * tweak.alpha;
+
+    for (xModelInstance* m = model; m != NULL; m = m->Next)
+    {
+        if (model_alpha < 1.0f)
+        {
+            m->Flags |= 0x4000;
+        }
+        else
+        {
+            m->Flags &= 0xbfff;
+        }
+
+        m->Alpha = model_alpha;
+    }
 }
 
 void zNPCDutchman::start_flames()
@@ -2408,10 +2525,10 @@ U8 zNPCDutchman::check_player_damage()
         xBox box;
 
         box.upper.x = 0.5f * tweak.damage.snot_size.x;
-        box.upper.y = tweak.damage.snot_size.y;
-        box.upper.z = tweak.damage.snot_size.z;
         box.lower.x = -box.upper.x;
+        box.upper.y = tweak.damage.snot_size.y;
         box.lower.y = 0.0f;
+        box.upper.z = tweak.damage.snot_size.z;
         box.lower.z = 0.0f;
 
         xMat4x3 mat;
@@ -2432,10 +2549,10 @@ U8 zNPCDutchman::check_player_damage()
         xBox box;
 
         box.upper.x = 0.5f * tweak.damage.slime_width;
-        box.upper.y = 0.01f;
-        box.upper.z = slime.slices.front().dist;
         box.lower.x = -box.upper.x;
+        box.upper.y = 0.01f;
         box.lower.y = 0.0f;
+        box.upper.z = slime.slices.front().dist;
         box.lower.z = slime.slices.back().dist;
 
         xMat4x3 mat;
@@ -2478,6 +2595,25 @@ xVec3 zNPCDutchman::get_splash_loc() const
     loc.z = facing.z * tweak.flame.lead_dist + nose.z;
 
     return loc;
+}
+
+void zNPCDutchman::vanish()
+{
+    old.moreFlags = moreFlags;
+    pflags = 0;
+    moreFlags = 0;
+    flags2.flg_colCheck = 0;
+    flags2.flg_penCheck = 0;
+    chkby = 0;
+    penby = 0;
+    xEntHide(this);
+}
+
+void zNPCDutchman::reappear()
+{
+    moreFlags = old.moreFlags;
+    xNPCBasic::RestoreColFlags();
+    xEntShow(this);
 }
 
 xVec3 zNPCDutchman::random_orbit(const xVec3& loc, F32 min_ang, F32 max_ang) const
@@ -2539,25 +2675,6 @@ void zNPCDutchman::turn_to_face(const xVec3& loc)
         dir *= 1.0f / xsqrt(dist2);
         turn.dir = dir;
     }
-}
-
-void zNPCDutchman::vanish()
-{
-    old.moreFlags = moreFlags;
-    pflags = 0;
-    moreFlags = 0;
-    flags2.flg_colCheck = 0;
-    flags2.flg_penCheck = 0;
-    chkby = 0;
-    penby = 0;
-    xEntHide(this);
-}
-
-void zNPCDutchman::reappear()
-{
-    moreFlags = old.moreFlags;
-    xNPCBasic::RestoreColFlags();
-    xEntShow(this);
 }
 
 void zNPCDutchman::reset_speed()
@@ -2624,35 +2741,8 @@ S32 zNPCDutchman::IsAlive()
     return life > 0;
 }
 
-void zNPCDutchman::set_alpha(F32 value)
-{
-    alpha = value;
-
-    F32 model_alpha = value * tweak.alpha;
-
-    for (xModelInstance* m = model; m != NULL; m = m->Next)
-    {
-        if (model_alpha < 1.0f)
-        {
-            m->Flags |= 0x4000;
-        }
-        else
-        {
-            m->Flags &= 0xbfff;
-        }
-
-        m->Alpha = model_alpha;
-    }
-}
-
 zNPCGoalDutchmanNil::zNPCGoalDutchmanNil(S32 goalID, zNPCDutchman&) : zNPCGoalCommon(goalID)
 {
-}
-
-void zNPCDutchman::refresh_reticle()
-{
-    dutchman_reticle_center = xModelGetBoneLocation(*model, 0x2f);
-    dutchman_reticle_center.y += tweak.reticle_y;
 }
 
 void zNPCDutchman::halt(F32 decel)
@@ -2666,12 +2756,7 @@ void zNPCDutchman::halt(F32 decel)
 
 namespace
 {
-    void set_vert(RxObjSpace3DVertex& vert, const xVec3& loc, F32 u, F32 v, U8 alpha)
-    {
-        RwIm3DVertexSetPos(&vert, loc.x, loc.y, loc.z);
-        RwIm3DVertexSetUV(&vert, u, v);
-        RwIm3DVertexSetRGBA(&vert, 0xff, 0xff, 0xff, alpha);
-    }
+    void set_vert(RxObjSpace3DVertex& vert, const xVec3& loc, F32 u, F32 v, U8 alpha);
 
     void set_beam_verts(RxObjSpace3DVertex* vert, const xVec3& loc0, const xVec3& loc1, U8 a0,
                         U8 a1, const xVec3& half_right)
@@ -2682,6 +2767,13 @@ namespace
         vert[3] = vert[2];
         vert[4] = vert[1];
         set_vert(vert[5], loc1 + half_right, 1.0f, 1.0f, a1);
+    }
+
+    void set_vert(RxObjSpace3DVertex& vert, const xVec3& loc, F32 u, F32 v, U8 alpha)
+    {
+        RwIm3DVertexSetPos(&vert, loc.x, loc.y, loc.z);
+        RwIm3DVertexSetUV(&vert, u, v);
+        RwIm3DVertexSetRGBA(&vert, 0xff, 0xff, 0xff, alpha);
     }
 
     xVec3 world_to_screen(const xVec3& loc)
@@ -2739,7 +2831,7 @@ namespace
     RxObjSpace3DVertex* render_beam(RxObjSpace3DVertex* vert, const zNPCDutchman::beam_info& beam)
     {
         U32 segments = beam.segments;
-        U8 alpha = (U8)(0.5f + 255.0f * beam.alpha / segments);
+        U8 alpha = (S32)(0.5f + 255.0f * beam.alpha / segments);
 
         for (U32 i = 0; i < segments; i++)
         {
@@ -2780,73 +2872,9 @@ void zNPCDutchman::render_halo()
     mat.pos.y += tweak.halo.yoffset;
 }
 
-inline U8 zNPCDutchman::turning(F32 dt) const
+xFactoryInst* zNPCGoalDutchmanNil::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    U8 result = 0;
-    xVec2 facing = { 0.0f, 0.0f };
-
-    facing.x = model->Mat->at.x;
-    facing.y = model->Mat->at.z;
-
-    if (xabs(turn.vel) > dt * turn.max_vel || turn.dir.dot(facing) < 1.0f - dt)
-    {
-        result = 1;
-    }
-
-    return result;
-}
-
-void zNPCDutchman::update_eye_glow(F32 dt)
-{
-    if (flag.eye_glow)
-    {
-        xVec3 offset = get_facing() * tweak.beam.glow_dist;
-
-        for (S32 i = 0; i < 2; i++)
-        {
-            xParEmitterAsset* ea = eyeglow_emitter[i]->tasset;
-            xParEmitterPropsAsset* prop = eyeglow_emitter[i]->prop;
-
-            ea->pos = get_eye_loc(i) + offset;
-
-            F32 old_size_birth[2] = { prop->size_birth.val[0], prop->size_birth.val[1] };
-            F32 old_size_death[2] = { prop->size_death.val[0], prop->size_death.val[1] };
-
-            prop->size_birth.val[0] = prop->size_birth.val[0] * eye_glow.size;
-            prop->size_birth.val[1] = prop->size_birth.val[1] * eye_glow.size;
-            prop->size_death.val[0] = prop->size_death.val[0] * eye_glow.size;
-            prop->size_death.val[1] = prop->size_death.val[1] * eye_glow.size;
-
-            emit_particles(*eyeglow_emitter[i], dt);
-
-            prop->size_birth.val[0] = old_size_birth[0];
-            prop->size_birth.val[1] = old_size_birth[1];
-            prop->size_death.val[0] = old_size_death[0];
-            prop->size_death.val[1] = old_size_death[1];
-        }
-    }
-}
-
-void zNPCDutchman::update_hand_trail(F32 dt)
-{
-    if (!flag.hand_trail)
-    {
-        return;
-    }
-
-    xParEmitterAsset* tasset = hand_trail_emitter->tasset;
-
-    tasset->emit_type = 5;
-    tasset->e_line.radius = tweak.teleport.trail_width;
-
-    for (S32 i = 0; i < 2; i++)
-    {
-        tasset->e_line.pos1 = hand_trail.loc[i];
-        hand_trail.loc[i] = get_hand_loc(i);
-        tasset->e_line.pos2 = hand_trail.loc[i];
-
-        emit_particles(*hand_trail_emitter, dt);
-    }
+    return new (who, grow) zNPCGoalDutchmanNil(who, (zNPCDutchman&)*info);
 }
 
 xFactoryInst* zNPCGoalDutchmanInitiate::create(S32 who, RyzMemGrow* grow, void* info)
@@ -2858,29 +2886,32 @@ S32 zNPCGoalDutchmanInitiate::Enter(F32 dt, void* updCtxt)
 {
     const xVec3& orbit = owner.get_orbit();
     const xVec3& end_loc = *owner.nav_curr->PosGet();
-    xVec3& loc = *(xVec3*)&owner.model->Mat->pos;
-    xVec3& floc = owner.frame->mat.pos;
+    zNPCDutchman& npc = owner;
+    xVec3& loc = *(xVec3*)&npc.model->Mat->pos;
+    xVec3& floc = npc.frame->mat.pos;
 
     loc = floc = end_loc;
 
-    xVec2 offset = { end_loc.x - orbit.x, end_loc.z - orbit.z };
+    F32 ox = end_loc.x - orbit.x;
+    F32 oz = end_loc.z - orbit.z;
+    xVec2 offset = { ox, oz };
 
     F32 dist2 = offset.length2();
 
     if (dist2 < 0.001f)
     {
-        owner.move.dest.x = orbit.x;
-        owner.move.dest.z = orbit.z + tweak.orbit_radius;
+        npc.move.dest.x = orbit.x;
+        npc.move.dest.z = orbit.z + tweak.orbit_radius;
     }
     else
     {
         F32 scale = tweak.orbit_radius / xsqrt(dist2);
 
-        owner.move.dest.x = offset.x * scale + orbit.x;
-        owner.move.dest.z = offset.y * scale + orbit.z;
+        npc.move.dest.x = offset.x * scale + orbit.x;
+        npc.move.dest.z = offset.y * scale + orbit.z;
     }
 
-    owner.move.dest.y = orbit.y;
+    npc.move.dest.y = orbit.y;
 
     owner.dissolve(0.0f);
     owner.face_player();
@@ -2940,9 +2971,9 @@ S32 zNPCGoalDutchmanIdle::Process(en_trantype* trantype, float dt, void* updCtxt
     return xGoal::Process(trantype, dt, updCtxt, xscn);
 }
 
-xFactoryInst* zNPCGoalDutchmanNil::create(S32 who, RyzMemGrow* grow, void* info)
+xFactoryInst* zNPCGoalDutchmanDisappear::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalDutchmanNil(who, (zNPCDutchman&)*info);
+    return new (who, grow) zNPCGoalDutchmanDisappear(who, (zNPCDutchman&)*info);
 }
 
 S32 zNPCGoalDutchmanDisappear::Enter(F32 dt, void* updCtxt)
@@ -2953,81 +2984,17 @@ S32 zNPCGoalDutchmanDisappear::Enter(F32 dt, void* updCtxt)
     return zNPCGoalCommon::Enter(dt, updCtxt);
 }
 
+S32 zNPCGoalDutchmanDisappear::Exit(F32 dt, void* updCtxt)
+{
+    return xGoal::Exit(dt, updCtxt);
+}
+
 S32 zNPCGoalDutchmanDisappear::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
 {
     if (owner.delay >= tweak.teleport.fade_time)
     {
         *trantype = GOAL_TRAN_SET;
         return 0x4e474d41;
-    }
-
-    return xGoal::Process(trantype, dt, updCtxt, xscn);
-}
-
-S32 zNPCGoalDutchmanReappear::Enter(F32 dt, void* updCtxt)
-{
-    owner.delay = 0.0f;
-    owner.face_player();
-    owner.coalesce(tweak.teleport.fade_time);
-
-    return zNPCGoalCommon::Enter(dt, updCtxt);
-}
-
-xFactoryInst* zNPCGoalDutchmanDisappear::create(S32 who, RyzMemGrow* grow, void* info)
-{
-    return new (who, grow) zNPCGoalDutchmanDisappear(who, (zNPCDutchman&)*info);
-}
-
-S32 zNPCGoalDutchmanDisappear::Exit(F32 dt, void* updCtxt)
-{
-    return xGoal::Exit(dt, updCtxt);
-}
-
-xFactoryInst* zNPCGoalDutchmanDamage::create(S32 who, RyzMemGrow* grow, void* info)
-{
-    return new (who, grow) zNPCGoalDutchmanDamage(who, (zNPCDutchman&)*info);
-}
-
-S32 zNPCGoalDutchmanDamage::Enter(F32 dt, void* updCtxt)
-{
-    owner.LassoNotify(LASS_EVNT_ENDED);
-    owner.dissolve(tweak.teleport.fade_time);
-
-    owner.turn.accel = tweak.teleport.turn_accel;
-    owner.turn.max_vel = tweak.teleport.turn_max_vel;
-    owner.move.accel = tweak.teleport.accel;
-    owner.move.max_vel = tweak.teleport.max_vel;
-    owner.flag.move = zNPCDutchman::MOVE_FOLLOW;
-
-    xVec2 offset = owner.turn.dir * tweak.orbit_radius;
-
-    owner.move.dest = owner.get_orbit();
-    owner.move.dest.x += offset.x;
-    owner.move.dest.z += offset.y;
-
-    return zNPCGoalCommon::Enter(dt, updCtxt);
-}
-
-S32 zNPCGoalDutchmanDamage::Exit(F32 dt, void* updCtxt)
-{
-    return xGoal::Exit(dt, updCtxt);
-}
-
-S32 zNPCGoalDutchmanDamage::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
-{
-    U32 id = owner.AnimCurState()->ID;
-
-    if (id == g_hash_subbanim[19])
-    {
-        owner.LassoSyncAnims(LASS_ANIM_GRAB);
-    }
-
-    if (owner.move.vel.length2() < 0.01f &&
-        (owner.move.dest - owner.get_center()).length2() < 0.01f)
-    {
-        *trantype = GOAL_TRAN_SET;
-
-        return NPC_GOAL_DUTCHMANREAPPEAR;
     }
 
     return xGoal::Process(trantype, dt, updCtxt, xscn);
@@ -3071,6 +3038,15 @@ S32 zNPCGoalDutchmanTeleport::Process(en_trantype* trantype, F32 dt, void* updCt
 xFactoryInst* zNPCGoalDutchmanReappear::create(S32 who, RyzMemGrow* grow, void* info)
 {
     return new (who, grow) zNPCGoalDutchmanReappear(who, (zNPCDutchman&)*info);
+}
+
+S32 zNPCGoalDutchmanReappear::Enter(F32 dt, void* updCtxt)
+{
+    owner.delay = 0.0f;
+    owner.face_player();
+    owner.coalesce(tweak.teleport.fade_time);
+
+    return zNPCGoalCommon::Enter(dt, updCtxt);
 }
 
 S32 zNPCGoalDutchmanReappear::Exit(F32 dt, void* updCtxt)
@@ -3499,7 +3475,9 @@ void zNPCGoalDutchmanFlame::update_move(F32 dt)
     {
         xVec3 splash_loc = owner.get_splash_loc();
         const xVec3& orbit = owner.get_orbit();
-        xVec2 offset = { splash_loc.x - orbit.x, splash_loc.z - orbit.z };
+        F32 ox = splash_loc.x - orbit.x;
+        F32 oz = splash_loc.z - orbit.z;
+        xVec2 offset = { ox, oz };
 
         if (offset.dot(move_dir) > tweak.ground_radius)
         {
@@ -3712,6 +3690,61 @@ S32 zNPCGoalDutchmanCaught::Process(en_trantype* trantype, F32 dt, void* updCtxt
     return xGoal::Process(trantype, dt, updCtxt, xscn);
 }
 
+xFactoryInst* zNPCGoalDutchmanDamage::create(S32 who, RyzMemGrow* grow, void* info)
+{
+    return new (who, grow) zNPCGoalDutchmanDamage(who, (zNPCDutchman&)*info);
+}
+
+S32 zNPCGoalDutchmanDamage::Enter(F32 dt, void* updCtxt)
+{
+    owner.LassoNotify(LASS_EVNT_ENDED);
+    owner.dissolve(tweak.teleport.fade_time);
+
+    owner.turn.accel = tweak.teleport.turn_accel;
+    owner.turn.max_vel = tweak.teleport.turn_max_vel;
+    owner.move.accel = tweak.teleport.accel;
+    owner.move.max_vel = tweak.teleport.max_vel;
+    owner.flag.move = zNPCDutchman::MOVE_FOLLOW;
+
+    xVec2 offset = owner.turn.dir * tweak.orbit_radius;
+
+    owner.move.dest = owner.get_orbit();
+    owner.move.dest.x += offset.x;
+    owner.move.dest.z += offset.y;
+
+    return zNPCGoalCommon::Enter(dt, updCtxt);
+}
+
+S32 zNPCGoalDutchmanDamage::Exit(F32 dt, void* updCtxt)
+{
+    return xGoal::Exit(dt, updCtxt);
+}
+
+S32 zNPCGoalDutchmanDamage::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
+{
+    U32 id = owner.AnimCurState()->ID;
+
+    if (id == g_hash_subbanim[19])
+    {
+        owner.LassoSyncAnims(LASS_ANIM_GRAB);
+    }
+
+    if (owner.move.vel.length2() < 0.01f &&
+        (owner.move.dest - owner.get_center()).length2() < 0.01f)
+    {
+        *trantype = GOAL_TRAN_SET;
+
+        return NPC_GOAL_DUTCHMANREAPPEAR;
+    }
+
+    return xGoal::Process(trantype, dt, updCtxt, xscn);
+}
+
+xFactoryInst* zNPCGoalDutchmanDeath::create(S32 who, RyzMemGrow* grow, void* info)
+{
+    return new (who, grow) zNPCGoalDutchmanDeath(who, (zNPCDutchman&)*info);
+}
+
 S32 zNPCGoalDutchmanDeath::Enter(F32 dt, void* updCtxt)
 {
     owner.delay = 0.0f;
@@ -3720,13 +3753,9 @@ S32 zNPCGoalDutchmanDeath::Enter(F32 dt, void* updCtxt)
 
 S32 zNPCGoalDutchmanDeath::Exit(F32 dt, void* updCtxt)
 {
-    owner.move.dest.assign(dt, 1.0f, 0.0f);
+    xVec3& up = *(xVec3*)&owner.model->Mat[1].up;
+    up.assign(0.0f, 1.0f, 0.0f);
     return xGoal::Exit(dt, updCtxt);
-}
-
-xFactoryInst* zNPCGoalDutchmanDeath::create(S32 who, RyzMemGrow* grow, void* info)
-{
-    return new (who, grow) zNPCGoalDutchmanDeath(who, (zNPCDutchman&)*info);
 }
 
 S32 zNPCGoalDutchmanDeath::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
