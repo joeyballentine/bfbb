@@ -21,10 +21,10 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now (2026-08-13) |
 |---|---|---|
-| matched functions | 6491 / 10147 | 8029 / 10147 |
+| matched functions | 6491 / 10147 | 8045 / 10147 |
 | complete units | 195 / 543 | 232 / 543 |
-| **game code exact** | — | **66.953%** (bytes) |
-| **game code fuzzy** | — | **95.724%** (6860 / 7673 functions) |
+| **game code exact** | — | **67.548%** (bytes) |
+| **game code fuzzy** | — | **95.759%** (6876 / 7673 functions) |
 | **game units linked** | — | **91 / 224** |
 | SDK code | — | **90 / 90 units, 100.000% fuzzy — complete** |
 
@@ -824,6 +824,25 @@ the *count* of preceding objects matters as much as their order. Worth
 confirming before anyone builds a strategy on either model.
 
 ## Settled
+
+- **`xVec2::create` brace-init is the strongest-evidenced open header change,
+  and it is still UNVERIFIED.** `zNPCTypeDutchman` reports `create__5xVec2Fff`
+  at 63.636%: the target loads an 8-byte all-zero `@512`, stores it to the
+  return slot, then overwrites both words; we go straight to two `stfs`. The
+  agent slot-mapped `.sbss2` on both sides -- target 19 slots, ours 18, in
+  exact 1:1 owner order with a uniform 8-byte offset -- and named five
+  functions whose *entire* residue is that shift and which should reach 100.0
+  with the one change: `clip_outside_circle(xVec3)` 99.143, `update_eye_glow`
+  99.787, `calc_beam_loc` 99.859, `Process__PostFlame` 99.915, and `create`
+  itself.
+
+  **Do not apply it on that evidence alone.** The identical change to
+  `xVec3::create` was equally well evidenced, made both overloads byte-exact,
+  and still came out +2/-5 with a broken DOL on a full rebuild, because it adds
+  an object to `.sbss2`/`.rodata` in *every* TU that instantiates it and
+  `.sbss2` ordering is per-object. Measure with `find src -name "*.cpp" -o
+  -name "*.c" | xargs touch && ninja`, a per-function `report.json` diff, and
+  the `306526d9...` DOL check before believing either direction.
 
 - **`xVec3::create` brace-init: measured, and it BREAKS THE DOL. Do not apply.**
   The target's `create__5xVec3Ffff`/`create__5xVec3Ff` load a 12-byte all-zero
