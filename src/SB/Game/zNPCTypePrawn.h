@@ -335,7 +335,7 @@ struct zNPCGoalPrawnBeam : zNPCGoalCommon
     S32 Enter(float, void*);
     S32 Exit(float, void*);
     S32 Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn);
-    bool update_aim(F32);
+    S32 update_aim(F32);
     S32 update_fire(F32);
     S32 update_hold(F32);
     S32 update_sweep(F32);

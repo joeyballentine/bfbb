@@ -284,13 +284,24 @@ bool aqua_beam::hits_sphere(const xSphere& o) const
     xVec3 center = o.center - cfg.ring.hit_offset;
 
     fixed_queue<aqua_beam::ring_segment, 31>::iterator it = ring.queue.begin();
+
+    // Declared and initialised in opposite orders: retail hoists all three out of the
+    // loop, and this is the split that reproduces its register/emission order.
+    F32 radius;
+    F32 grow;
+    F32 hit_radius;
+
+    hit_radius = cfg.ring.hit_radius;
+    grow = cfg.ring.grow;
+    radius = o.r;
+
     while (it != ring.queue.end())
     {
         aqua_beam::ring_segment& ring = *it;
-        F32 maxdist = cfg.ring.hit_radius * (cfg.ring.grow * ring.dist + 1.0f) + o.r;
+        F32 maxdist = hit_radius * (grow * ring.dist + 1.0f) + radius;
         xVec3 delta = center - *(xVec3*)&ring.model->Mat->pos;
 
-        if (delta.length2() <= maxdist * maxdist && FABS(delta.dot(ring.mat.at)) < maxdist)
+        if (!(delta.length2() > maxdist * maxdist) && FABS(delta.dot(ring.mat.at)) < maxdist)
         {
             return true;
         }
@@ -517,7 +528,7 @@ void zNPCPrawn::Init(xEntAsset* asset)
     zNPCCommon::Init(asset);
     memset(&this->flag, 0, 1);
     this->flg_move = 1;
-    this->flg_vuln = 0x11;
+    this->flg_vuln = 0x100001;
     this->chkby = 0x10;
     this->penby = 0x10;
     this->beam.load(tweak.beam.fire, xStrHash("glow_ring_add.dff"));
@@ -529,8 +540,8 @@ namespace
     bool television::create(S32 width, S32 height)
     {
         cam = NULL;
-        raster = NULL;
         bgraster = NULL;
+        raster = NULL;
         world = NULL;
         memset(&bgcolor, 0x0, sizeof(bgcolor));
 
@@ -562,9 +573,7 @@ namespace
         RpWorldAddCamera(world, cam);
         _rwObjectHasFrameSetFrame(cam, RwFrameCreate());
 
-        xVec2 windowSize;
-        windowSize.x = 1.0;
-        windowSize.y = 1.0;
+        xVec2 windowSize = { 1.0f, 1.0f };
         RwCameraSetViewWindow(cam, (const RwV2d*)&windowSize);
         RwCameraSetProjection(cam, rwPERSPECTIVE);
 
@@ -843,7 +852,7 @@ namespace
     S32 load_patterns(xModelAssetParam* ap, U32 apsize, const char* fmt,
                       zNPCPrawn::range_type* pattern, S32 count)
     {
-        char name[140];
+        char name[128];
         S32 i;
 
         for (i = 0; i < count; pattern++, i++)
@@ -932,14 +941,12 @@ void zNPCPrawn::ParseINI()
         zParamGetFloat(this->parmdata, this->pdatsize, "beam.fire.ring.follow", 0.0f);
     tweak.beam.fire.ring.hit_radius =
         zParamGetFloat(this->parmdata, this->pdatsize, "beam.fire.ring.hit_radius", 0.3f);
-    tweak.beam.fire.ring.hit_offset =
-        zParamGetVector(this->parmdata, this->pdatsize, "beam.fire.ring.hit_offset",
-                        xVec3::create(0.0f, 0.0f, 0.0f), &tweak.beam.fire.ring.hit_offset);
+    zParamGetVector(this->parmdata, this->pdatsize, "beam.fire.ring.hit_offset",
+                    xVec3::create(0.0f, 0.0f, 0.0f), &tweak.beam.fire.ring.hit_offset);
     tweak.beam.fire.emit_bone =
         zParamGetInt(this->parmdata, this->pdatsize, "beam.fire.emit_bone", 0x2b);
-    tweak.beam.fire.offset =
-        zParamGetVector(this->parmdata, this->pdatsize, "beam.fire.offset",
-                        xVec3::create(0.0f, 0.15f, 0.0f), &tweak.beam.fire.offset);
+    zParamGetVector(this->parmdata, this->pdatsize, "beam.fire.offset",
+                    xVec3::create(0.0f, 0.15f, 0.0f), &tweak.beam.fire.offset);
     tweak.beam.fire.yaw =
         0.017453292f * zParamGetFloat(this->parmdata, this->pdatsize, "beam.fire.yaw", 0.0f);
     tweak.beam.fire.pitch =
@@ -998,142 +1005,145 @@ void tweak_group::load(xModelAssetParam* p, U32 i)
     this->register_tweaks(TRUE, p, i, 0);
 }
 
-/*
-
-TODO: 42%, needs quite a bit of work still.
-Thought this function was going to be an easy copy/paste like other register_tweak fn,
-but turning out to be harder to decipher than I anticipated so leaving it like this for now.
-*/
 void tweak_group::register_tweaks(bool init, xModelAssetParam* ap, U32 apsize, const char* c)
 {
     if (init)
     {
-        this->sound[0].volume = 0;
-        auto_tweak::load_param<F32, F32>(this->sound[0].volume, 1.0f, 0.0, 1.0f, ap, apsize,
-                                         "TODO1");
-    }
-
-    if (init)
-    {
-        this->sound[0].range_inner = 0;
-        auto_tweak::load_param<F32, F32>(this->sound[0].range_inner, 1.0f, 0.0, 1.0f, ap, apsize,
-                                         "TODO2");
+        this->beam.fire.sound_interval = 2;
+        auto_tweak::load_param<S32, S32>(this->beam.fire.sound_interval, 1, 1, 10, ap, apsize,
+                                         "beam.fire.sound_interval");
     }
     if (init)
     {
-        this->sound[0].range_outer = 0;
-        auto_tweak::load_param<F32, F32>(this->sound[0].range_outer, 1.0f, 0.0, 1.0f, ap, apsize,
-                                         "TODO3");
-    }
-
-    if (init)
-    {
-        this->sound[0].delay = 0;
-        auto_tweak::load_param<F32, F32>(this->sound[0].delay, 1.0f, 0.0, 1.0f, ap, apsize,
-                                         "TODO4");
+        this->sound[0].volume = 1.0f;
+        auto_tweak::load_param<F32, F32>(this->sound[0].volume, 1.0f, 0.0f, 1.0f, ap, apsize,
+                                         "sound[SOUND_HIT].volume");
     }
     if (init)
     {
-        this->sound[1].volume = 0;
-        auto_tweak::load_param<F32, F32>(this->sound[1].volume, 1.0f, 0.0, 1.0f, ap, apsize,
-                                         "TODo5");
+        this->sound[0].range_inner = 20.0f;
+        auto_tweak::load_param<F32, F32>(this->sound[0].range_inner, 1.0f, 0.0f, 100000.0f, ap,
+                                         apsize, "sound[SOUND_HIT].range_inner");
     }
     if (init)
     {
-        this->sound[1].range_inner = 0;
-        auto_tweak::load_param<F32, F32>(this->sound[1].range_inner, 1.0f, 0.0, 1.0f, ap, apsize,
-                                         "TODo6");
-    }
-
-    if (init)
-    {
-        this->sound[1].range_outer = 0;
-        auto_tweak::load_param<F32, F32>(this->sound[1].range_outer, 1.0f, 0.0, 1.0f, ap, apsize,
-                                         "todo7");
+        this->sound[0].range_outer = 40.0f;
+        auto_tweak::load_param<F32, F32>(this->sound[0].range_outer, 1.0f, 0.0f, 100000.0f, ap,
+                                         apsize, "sound[SOUND_HIT].range_outer");
     }
     if (init)
     {
-        this->sound[1].delay = 0;
-        auto_tweak::load_param<F32, F32>(this->sound[1].delay, 1.0f, 0.0, 1.0f, ap, apsize,
-                                         "todo8");
+        this->sound[0].delay = 0.0f;
+        auto_tweak::load_param<F32, F32>(this->sound[0].delay, 1.0f, 0.0f, 100000.0f, ap, apsize,
+                                         "sound[SOUND_HIT].delay");
     }
     if (init)
     {
-        this->sound[2].volume = 0;
-        auto_tweak::load_param<F32, F32>(this->sound[2].volume, 1.0f, 0.0, 1.0f, ap, apsize,
-                                         "todo9");
+        this->sound[1].volume = 1.0f;
+        auto_tweak::load_param<F32, F32>(this->sound[1].volume, 1.0f, 0.0f, 1.0f, ap, apsize,
+                                         "sound[SOUND_BEAM_BEGIN].volume");
     }
     if (init)
     {
-        this->sound[2].range_inner = 0;
-        auto_tweak::load_param<F32, F32>(this->sound[2].range_inner, 1.0f, 0.0, 1.0f, ap, apsize,
-                                         "todo10");
-    }
-
-    if (init)
-    {
-        this->sound[2].range_outer = 0;
-        auto_tweak::load_param<F32, F32>(this->sound[2].range_outer, 1.0f, 0.0, 1.0f, ap, apsize,
-                                         "todo11");
+        this->sound[1].range_inner = 20.0f;
+        auto_tweak::load_param<F32, F32>(this->sound[1].range_inner, 1.0f, 0.0f, 100000.0f, ap,
+                                         apsize, "sound[SOUND_BEAM_BEGIN].range_inner");
     }
     if (init)
     {
-        this->sound[2].delay = 0;
-        auto_tweak::load_param<F32, F32>(this->sound[2].delay, 1.0f, 0.0, 1.0f, ap, apsize,
-                                         "todo12");
+        this->sound[1].range_outer = 40.0f;
+        auto_tweak::load_param<F32, F32>(this->sound[1].range_outer, 1.0f, 0.0f, 100000.0f, ap,
+                                         apsize, "sound[SOUND_BEAM_BEGIN].range_outer");
     }
     if (init)
     {
-        this->sound[3].volume = 0;
-        auto_tweak::load_param<F32, F32>(this->sound[3].volume, 1.0f, 0.0, 1.0f, ap, apsize,
-                                         "todo13");
+        this->sound[1].delay = 0.3f;
+        auto_tweak::load_param<F32, F32>(this->sound[1].delay, 1.0f, 0.0f, 100000.0f, ap, apsize,
+                                         "sound[SOUND_BEAM_BEGIN].delay");
     }
     if (init)
     {
-        this->sound[3].range_inner = 0;
-        auto_tweak::load_param<F32, F32>(this->sound[3].range_inner, 1.0f, 0.0, 1.0f, ap, apsize,
-                                         "todo14");
-    }
-
-    if (init)
-    {
-        this->sound[3].range_outer = 0;
-        auto_tweak::load_param<F32, F32>(this->sound[3].range_outer, 1.0f, 0.0, 1.0f, ap, apsize,
-                                         "todo15");
+        this->sound[2].volume = 0.4f;
+        auto_tweak::load_param<F32, F32>(this->sound[2].volume, 1.0f, 0.0f, 1.0f, ap, apsize,
+                                         "sound[SOUND_BEAM_LOOP].volume");
     }
     if (init)
     {
-        this->sound[3].delay = 0;
-        auto_tweak::load_param<F32, F32>(this->sound[3].delay, 1.0f, 0.0, 1.0f, ap, apsize,
-                                         "todo16");
-    }
-
-    if (init)
-    {
-        this->sound[3].delay = 0;
-        auto_tweak::load_param<F32, F32>(this->sound[3].delay, 1.0f, 0.0, 1.0f, ap, apsize,
-                                         "todo17");
-    }
-
-    if (init)
-    {
-        sound_data[0].volume = sound[0].volume;
-        sound_data[0].id = sound_asset_ids[0][0] = xStrHash("TES1");
+        this->sound[2].range_inner = 10.0f;
+        auto_tweak::load_param<F32, F32>(this->sound[2].range_inner, 1.0f, 0.0f, 100000.0f, ap,
+                                         apsize, "sound[SOUND_BEAM_LOOP].range_inner");
     }
     if (init)
     {
-        sound_data[1].volume = sound[1].volume;
-        sound_data[1].id = sound_asset_ids[0][1] = xStrHash("TES2");
+        this->sound[2].range_outer = 30.0f;
+        auto_tweak::load_param<F32, F32>(this->sound[2].range_outer, 1.0f, 0.0f, 100000.0f, ap,
+                                         apsize, "sound[SOUND_BEAM_LOOP].range_outer");
     }
     if (init)
     {
-        sound_data[2].volume = sound[2].volume;
-        sound_data[2].id = sound_asset_ids[0][2] = xStrHash("TES3");
+        this->sound[2].delay = 1.25f;
+        auto_tweak::load_param<F32, F32>(this->sound[2].delay, 1.0f, 0.0f, 100000.0f, ap, apsize,
+                                         "sound[SOUND_BEAM_LOOP].delay");
     }
     if (init)
     {
-        sound_data[3].volume = sound[3].volume;
-        sound_data[3].id = sound_asset_ids[0][3] = xStrHash("TES4");
+        this->sound[2].fade_time = 1.25f;
+        auto_tweak::load_param<F32, F32>(this->sound[2].fade_time, 1.0f, 0.0f, 100000.0f, ap,
+                                         apsize, "sound[SOUND_BEAM_LOOP].fade_time");
+    }
+    if (init)
+    {
+        this->sound[3].volume = 0.5f;
+        auto_tweak::load_param<F32, F32>(this->sound[3].volume, 1.0f, 0.0f, 1.0f, ap, apsize,
+                                         "sound[SOUND_RING].volume");
+    }
+    if (init)
+    {
+        this->sound[3].range_inner = 0.0f;
+        auto_tweak::load_param<F32, F32>(this->sound[3].range_inner, 1.0f, 0.0f, 100000.0f, ap,
+                                         apsize, "sound[SOUND_RING].range_inner");
+    }
+    if (init)
+    {
+        this->sound[3].range_outer = 10.0f;
+        auto_tweak::load_param<F32, F32>(this->sound[3].range_outer, 1.0f, 0.0f, 100000.0f, ap,
+                                         apsize, "sound[SOUND_RING].range_outer");
+    }
+    if (init)
+    {
+        this->sound[3].delay = 0.1f;
+        auto_tweak::load_param<F32, F32>(this->sound[3].delay, 1.0f, 0.0f, 100000.0f, ap, apsize,
+                                         "sound[SOUND_RING].delay");
+    }
+    if (init)
+    {
+        this->sound[3].fade_time = 0.1f;
+        auto_tweak::load_param<F32, F32>(this->sound[3].fade_time, 1.0f, 0.0f, 100000.0f, ap,
+                                         apsize, "sound[SOUND_RING].fade_time");
+    }
+    if (init)
+    {
+        this->sound[0].asset = sound_asset_ids[0][0];
+        const sound_asset_type& asset = sound_assets[this->sound[0].asset];
+        sound_data[0].id = xStrHash(asset.name);
+    }
+    if (init)
+    {
+        this->sound[1].asset = sound_asset_ids[1][0];
+        const sound_asset_type& asset = sound_assets[this->sound[1].asset];
+        sound_data[1].id = xStrHash(asset.name);
+    }
+    if (init)
+    {
+        this->sound[2].asset = sound_asset_ids[2][0];
+        const sound_asset_type& asset = sound_assets[this->sound[2].asset];
+        sound_data[2].id = xStrHash(asset.name);
+    }
+    if (init)
+    {
+        this->sound[3].asset = sound_asset_ids[3][0];
+        const sound_asset_type& asset = sound_assets[this->sound[3].asset];
+        sound_data[3].id = xStrHash(asset.name);
     }
 }
 
@@ -1391,9 +1401,10 @@ void zNPCPrawn::update_turn(F32 dt)
     F32 dir = (time_to_target > time_to_stop) ? 1.0f : -1.0f;
     F32 sign = (diff >= 0.0f) ? 1.0f : -1.0f;
 
-    F32 max_vel = this->turn.max_vel;
-    F32 dvel = this->turn.accel * (dir * sign) * dt;
+    F32 accel = this->turn.accel * (dir * sign);
+    F32 dvel = accel * dt;
     F32 vel = this->turn.vel + dvel;
+    F32 max_vel = this->turn.max_vel;
 
     if (FABS(vel) <= max_vel)
     {
@@ -1484,7 +1495,7 @@ void zNPCPrawn::update_floor(F32 dt)
 void zNPCPrawn::update_beam(F32 dt)
 {
     xMat4x3* rootmat = (xMat4x3*)this->model->Mat;
-    xMat4x3& bonemat = ((xMat4x3*)rootmat)[tweak.beam.fire.emit_bone];
+    xMat4x3& bonemat = ((xMat4x3*)this->model->Mat)[tweak.beam.fire.emit_bone];
 
     xVec3 loc = rootmat->pos + bonemat.pos + tweak.beam.fire.offset;
 
@@ -1493,8 +1504,10 @@ void zNPCPrawn::update_beam(F32 dt)
     dir.y = -this->precomp.sin_pitch;
 
     F32 yaw = xatan2(dir.x, dir.z) + tweak.beam.fire.yaw;
-    dir.x = isin(yaw) * this->precomp.cos_pitch;
-    dir.z = icos(yaw) * this->precomp.cos_pitch;
+    F32 sin_yaw = isin(yaw);
+    F32 cos_yaw = icos(yaw);
+    dir.x = sin_yaw * this->precomp.cos_pitch;
+    dir.z = cos_yaw * this->precomp.cos_pitch;
 
     this->beam.move(loc, dir);
 
@@ -1737,7 +1750,9 @@ namespace
 
         while (currentInstance != NULL)
         {
-            if (currentInstance->Flags & 1)
+            // Retail bug: the visibility flag of the *head* instance is retested on every
+            // iteration instead of the instance about to be drawn. Preserved as shipped.
+            if (model_inst.Flags & 1)
             {
                 iModelRender(currentInstance->Data, currentInstance->Mat);
             }
@@ -1815,11 +1830,7 @@ void zNPCPrawn::set_life(S32 life)
     this->life = range_limit<S32>(life, 0, this->cfg_npc->pts_damage);
 
     S32 state = this->psy_instinct->GIDOfActive();
-    if (state == NPC_GOAL_PRAWNDAMAGE || state == NPC_GOAL_PRAWNDEATH || oldlife <= this->life)
-    {
-        update_round();
-    }
-    else
+    if (state != NPC_GOAL_PRAWNDAMAGE && state != NPC_GOAL_PRAWNDEATH && this->life < oldlife)
     {
         this->psy_instinct->GoalSet(NPC_GOAL_PRAWNDAMAGE, 1);
         play_sound(0, &this->bound.sph.center, 1.0f);
@@ -1829,10 +1840,14 @@ void zNPCPrawn::set_life(S32 life)
             zEntEvent((xBase*)this, (xBase*)this, 0x1d7);
         }
 
-        if (this->life < 1)
+        if (this->life <= 0)
         {
             zEntEvent((xBase*)this, (xBase*)this, 0x24);
         }
+    }
+    else
+    {
+        update_round();
     }
 }
 
@@ -1883,27 +1898,30 @@ void zNPCPrawn::repel_player() const
     }
 
     xVec3 center = get_center();
-    xVec3* player_vel = &globals.player.ent.frame->vel;
     xVec3* player_loc = (xVec3*)&globals.player.ent.model->Mat->pos;
+    xVec3* player_vel = &globals.player.ent.frame->vel;
 
     xVec3 offset = *player_loc - center;
     offset.y = 0.0f;
 
     F32 dist2 = offset.length2();
-    if ((dist2 < -1.0e-05f || 1.0e-05f < dist2) && dist2 < tweak.repel_radius * tweak.repel_radius)
+    if ((dist2 >= -1.0e-05f && dist2 <= 1.0e-05f) ||
+        dist2 >= tweak.repel_radius * tweak.repel_radius)
     {
-        F32 dist = xsqrt(dist2);
-        xVec3 dir = offset;
-        dir *= 1.0f / dist;
-
-        F32 into = player_vel->dot(dir);
-        if (into < 0.0f)
-        {
-            *player_vel -= dir * into;
-        }
-
-        *player_loc += dir * (tweak.repel_radius - dist);
+        return;
     }
+
+    F32 dist = xsqrt(dist2);
+    xVec3 dir = offset;
+    dir *= 1.0f / dist;
+
+    F32 into = player_vel->dot(dir);
+    if (into < 0.0f)
+    {
+        *player_vel -= dir * into;
+    }
+
+    *player_loc += dir * (tweak.repel_radius - dist);
 }
 
 void zNPCPrawn::show_model()
@@ -1966,23 +1984,13 @@ S32 zNPCGoalPrawnBeam::Enter(F32 dt, void* updCtxt)
     RwMatrix* mat = globals.player.ent.model->Mat;
     xVec3* at = (xVec3*)&mat->at;
 
-    if (at->length2() >= 1.0e-05f)
+    if (at->length2() < 0.001f)
     {
-        F32 dir = 1.0f;
-        if (facing.z * at->x - at->z * facing.x < 0.0f)
-        {
-            dir = -1.0f;
-        }
-        this->sweep_dir = dir;
+        this->sweep_dir = ((xrand() >> 17) & 1) ? -1.0f : 1.0f;
     }
     else
     {
-        F32 dir = 1.0f;
-        if (xrand() & 0x20000)
-        {
-            dir = -1.0f;
-        }
-        this->sweep_dir = dir;
+        this->sweep_dir = (facing.z * at->x - at->z * facing.x < 0.0f) ? -1.0f : 1.0f;
     }
 
     init_look_dir();
@@ -2027,19 +2035,20 @@ S32 zNPCGoalPrawnBeam::Process(en_trantype* trantype, F32 dt, void* updCtxt, xSc
         break;
     }
 
-    if (this->substate < MAX_SS)
+    if (this->substate >= MAX_SS)
     {
-        return xGoal::Process(trantype, dt, updCtxt, xscn);
+        *trantype = GOAL_TRAN_SET;
+        return NPC_GOAL_PRAWNBOWL;
     }
 
-    *trantype = GOAL_TRAN_SET;
-    return NPC_GOAL_PRAWNBOWL;
+    return xGoal::Process(trantype, dt, updCtxt, xscn);
 }
 
-bool zNPCGoalPrawnBeam::update_aim(F32 dt)
+S32 zNPCGoalPrawnBeam::update_aim(F32 dt)
 {
     zNPCPrawn& prawn = *((zNPCPrawn*)this->psyche->clt_owner);
-    return !prawn.turning();
+    // SS_AIM (0) while still turning, SS_FIRE (1) once the aim is settled.
+    return prawn.turning() ? 0 : 1;
 }
 
 S32 zNPCGoalPrawnBeam::update_fire(F32 dt)
@@ -2074,17 +2083,21 @@ S32 zNPCGoalPrawnBeam::update_hold(F32 dt)
 
 S32 zNPCGoalPrawnBeam::update_sweep(F32 dt)
 {
+    RwMatrix* mat = globals.player.ent.model->Mat;
     zNPCPrawn& prawn = *((zNPCPrawn*)this->psyche->clt_owner);
 
-    RwMatrix* mat = globals.player.ent.model->Mat;
     xVec3& center = prawn.get_center();
     xVec3& facing = prawn.get_facing();
 
-    F32 goal = xatan2(mat->pos.x - center.x, mat->pos.z - center.z) +
-               this->sweep_dir * tweak.beam.sweep.arc;
+    xVec2 delta = { 0.0f, 0.0f };
+    delta.x = mat->pos.x - center.x;
+    delta.y = mat->pos.z - center.z;
+
+    F32 goal = xatan2(delta.x, delta.y) + this->sweep_dir * tweak.beam.sweep.arc;
     F32 cur = xatan2(facing.x, facing.z);
 
-    if ((xrmod(3.1415927f + (goal - cur)) - 3.1415927f < 0.0f) == (this->sweep_dir < 0.0f))
+    F32 turn_diff = xrmod(3.1415927f + (goal - cur)) - 3.1415927f;
+    if ((turn_diff < 0.0f ? 1 : 0) == (this->sweep_dir < 0.0f ? 1 : 0))
     {
         goal += (0.5f * this->sweep_dir) * tweak.beam.sweep.arc;
         prawn.look_dir.x = isin(goal);
@@ -2112,9 +2125,9 @@ S32 zNPCGoalPrawnBeam::update_stop(F32 dt)
 
 void zNPCGoalPrawnBeam::init_look_dir()
 {
+    RwMatrix* mat = globals.player.ent.model->Mat;
     zNPCPrawn& prawn = *((zNPCPrawn*)this->psyche->clt_owner);
 
-    RwMatrix* mat = globals.player.ent.model->Mat;
     xVec3& center = prawn.get_center();
 
     xVec2 delta = { 0.0f, 0.0f };
@@ -2233,16 +2246,17 @@ void zNPCPrawn::render_debug()
 bool zNPCPrawn::turning() const
 {
     bool result = false;
+    xVec2 facing = { 0.0f, 0.0f };
     RwMatrix* mat = this->model->Mat;
 
-    xVec2 facing = { 0.0f, 0.0f };
     facing.x = mat->at.x;
     facing.y = mat->at.z;
 
     if (!(this->turn.vel >= -1.0e-05f && this->turn.vel <= 1.0e-05f) ||
         (!(this->turn.accel >= -1.0e-05f && this->turn.accel <= 1.0e-05f) &&
-         (this->look_dir.x <= this->look_dir.y || !(FABS(this->look_dir.x - facing.x) < 0.001f)) &&
-         (this->look_dir.x >= this->look_dir.y || !(FABS(this->look_dir.y - facing.y) < 0.001f))))
+         (!(this->look_dir.x > this->look_dir.y) ||
+          !(FABS(this->look_dir.x - facing.x) < 0.001f)) &&
+         (!(this->look_dir.x < this->look_dir.y) || !(FABS(this->look_dir.y - facing.y) < 0.001f))))
     {
         result = true;
     }
@@ -2327,6 +2341,7 @@ namespace auto_tweak
         {
             result = hi;
         }
-        value = result * scale;
+        result *= scale;
+        value = result;
     }
 } // namespace auto_tweak
