@@ -45,11 +45,11 @@ struct xVec3
     xVec3 operator-(const xVec3&) const;
     xVec3 operator-() const
     {
-        xVec3 v;
+        xVec3 v = *this;
 
-        v.x = -x;
-        v.y = -y;
-        v.z = -z;
+        v.x = -v.x;
+        v.y = -v.y;
+        v.z = -v.z;
 
         return v;
     }
