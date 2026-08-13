@@ -21,10 +21,10 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now (2026-08-13) |
 |---|---|---|
-| matched functions | 6491 / 10147 | 8011 / 10147 |
+| matched functions | 6491 / 10147 | 8029 / 10147 |
 | complete units | 195 / 543 | 232 / 543 |
-| **game code exact** | — | **66.393%** (bytes) |
-| **game code fuzzy** | — | **95.661%** (6842 / 7673 functions) |
+| **game code exact** | — | **66.953%** (bytes) |
+| **game code fuzzy** | — | **95.724%** (6860 / 7673 functions) |
 | **game units linked** | — | **91 / 224** |
 | SDK code | — | **90 / 90 units, 100.000% fuzzy — complete** |
 
@@ -824,6 +824,33 @@ the *count* of preceding objects matters as much as their order. Worth
 confirming before anyone builds a strategy on either model.
 
 ## Settled
+
+- **`xVec3::create` brace-init: measured, and it BREAKS THE DOL. Do not apply.**
+  The target's `create__5xVec3Ffff`/`create__5xVec3Ff` load a 12-byte all-zero
+  `.rodata` template, copy it to the frame and then overwrite all three words,
+  so `xVec3 v = { 0.0f, 0.0f, 0.0f };` reproduces them exactly and takes both
+  from 50.000% to byte-identical. It is still a no-go. A full build gives
+  **+2 functions, -5 functions, and `main.dol` sha1
+  `e81045024e60853b3c12a37cc9bf5b1682b60bea`** instead of `306526d9...`.
+
+  The losses are the point: `xMath3Init`, `xParEmitterEmitSphereEdge`,
+  `get_triangle_area` (`zFX`), `FodBombBubbles` (`zNPCHazard`) and
+  `zVarGameSlotInfo` (`zVar`) each fall off 100.0, and several sit in units
+  that are `Matching`, which is why the link moves.
+
+  Two lessons. First, a header change that is provably right *for one function*
+  can still be wrong for the tree -- this one is genuinely what retail's
+  `create` did, and it still cannot land while other units depend on the
+  current shape. Second, and more useful: **"most of the damage is POOL-class,
+  so it is free" is not a safe inference.** That was the reasoning used to
+  re-open this after it had been rejected on `solo.py` counts, and it was
+  wrong -- the regressions were real `OTHER`/`SIZE` losses, not pool ordinals.
+  Re-price on `report.json` *and* check the DOL before believing either
+  direction.
+
+  The same brace-init question is open for `xVec2::create`, which is written up
+  further down as a recommended fix. It has not been measured this way. Do that
+  before applying it.
 
 - **We emit inline helper definitions in dozens of objects where retail emits
   each in exactly one. This is what blocks `zLight`, and it will block many
