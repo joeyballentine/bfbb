@@ -39,7 +39,14 @@ REG = re.compile(r"\b[rf]\d{1,2}\b")
 
 
 def norm_reloc(txt):
-    return re.sub(r"@\d+", "@X", txt)
+    # Two flavours of unstable identifier. `@1171` is an anonymous pool entry,
+    # numbered by ordinal within its section, so the same literal reads as
+    # @1171 on one side and @531 on the other. `name$1647` is the suffix CW
+    # gives a function-local static; the number is a per-translation-unit
+    # counter, so it differs for the same variable. Neither says anything
+    # about codegen, and leaving $NNNN unnormalised misfiled every function
+    # whose only residue was a local-static reference as OTHER.
+    return re.sub(r"\$\d+", "$X", re.sub(r"@\d+", "@X", txt))
 
 
 # objdiff prints a local branch's target as a section-relative address, so the
@@ -82,7 +89,7 @@ def classify(left_sym, right_sym):
             ta, tb = fmt(a), fmt(b)
             if ta == tb:
                 continue
-            if norm_reloc(ta) == norm_reloc(tb) and "@" in ta:
+            if norm_reloc(ta) == norm_reloc(tb) and ("@" in ta or "$" in ta):
                 continue
             pool = False
             break
