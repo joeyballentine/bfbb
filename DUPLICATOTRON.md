@@ -872,11 +872,27 @@ confirming before anyone builds a strategy on either model.
   sound; it is the *rejected* experiments whose costs may have been larger than
   recorded.
 
-  Separately, `solo.py` and `report.json` disagree on `check_hide_entities`
-  even on a current tree: a fresh private compile scores it 100.0 while the
-  ninja object scores 91.047, and `zCutsceneMgr` reads 3 non-matching under
-  `solo.py` against 4 under `report.json`. Unexplained; worth running down,
-  because it means `solo.py` alone can miss a regression.
+  **RESOLVED, and `solo.py` was the one telling the truth.** The apparent
+  `solo.py` / `report.json` disagreement on `check_hide_entities` was not a
+  compiler or flags problem: solo's private compile and ninja's object are
+  **byte-identical** (verified by hashing both, plus a third compile with
+  ninja's exact `-o <dir>` and `-MMD` form -- all three sha1-equal), and solo
+  derives its 77 flag tokens from `build.ninja` with no divergence at all.
+
+  The function's 172 bytes already matched the target. What differed was
+  **binding**: ours `GLOBAL`, the target's `LOCAL`. objdiff pairs by name and
+  scored it 100.0; dtk's report pairs local symbols by ordinal, so when the
+  inline-helper change altered the object's local-symbol set it mispaired this
+  function against a different one and reported 91.047%. Adding the missing
+  `static` (`58dcb963`) fixed the binding, and the inline-helper change is now
+  measured at **zero cost** -- no function gained or lost tree-wide, DOL
+  unchanged.
+
+  Two things worth carrying forward. `report.json` can report a *false*
+  regression when a unit's local-symbol set changes, so a surprising drop on a
+  function you did not touch is worth checking against the raw bytes before
+  believing it. And a `GLOBAL` symbol that should be `LOCAL` is not cosmetic --
+  it makes that unit's scores fragile against unrelated edits.
 
 - **We emit inline helper definitions in dozens of objects where retail emits
   each in exactly one. This is what blocks `zLight`, and it will block many
@@ -907,17 +923,15 @@ confirming before anyone builds a strategy on either model.
   `__declspec`. It costs nothing in `matched_functions` and everything in
   `complete_units`.
 
-  **The fix works and was measured, and it is on hold at -1 function.** Moving
+  **APPLIED in `8211ea95`, at zero cost.** Moving
   the bodies out of `xEnt.h`/`xModel.h` into `xEnt.cpp` as single `WEAK`
   definitions takes `xEntGetPos` from 27 defining objects to 2 and
   `xModelGetFrame` from 31 to 2 (the stray second is `zNPCGoalRobo`), and
-  `zLight` drops to a **single** surplus symbol. `main.dol` sha1 is unchanged.
-  But a clean rebuild costs `check_hide_entities` in `zCutsceneMgr`, 100.0 ->
-  91.047, so it is **-1 matched function for no linked unit**, because `zLight`
-  still needs `__as__5xVec3` before it can link. Verified by reverting and
-  rebuilding clean: 8029 functions with the current headers, 8028 with the fix.
-  **Land it together with the `__as__5xVec3` half, not before** -- at that
-  point it buys a unit and the one function is worth trading. The
+  `zLight` drops to a **single** surplus symbol, `__as__5xVec3`. `main.dol` sha1
+  unchanged and no function gained or lost. The apparent -1 on
+  `check_hide_entities` was a report.json mispairing, not a real cost -- see the
+  ninja/solo entry above. **What remains for `zLight` to link is the
+  `__as__5xVec3` half**: The
   `__as__5xVec3` case is harder and needs its own decision -- `xVec3` has no
   user-declared `operator=`, so the 73 copies are compiler-generated, and
   suppressing them means declaring `operator=` in `xMath3.h` and defining it
