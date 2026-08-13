@@ -21,10 +21,10 @@ is off-limits for upstream PRs.
 
 | metric | at branch point | now (2026-08-13) |
 |---|---|---|
-| matched functions | 6491 / 10147 | 7935 / 10147 |
+| matched functions | 6491 / 10147 | 7949 / 10147 |
 | complete units | 195 / 543 | 231 / 543 |
-| **game code exact** | — | **62.821%** (bytes) |
-| **game code fuzzy** | — | **95.286%** (6766 / 7673 functions) |
+| **game code exact** | — | **63.260%** (bytes) |
+| **game code fuzzy** | — | **95.292%** (6780 / 7673 functions) |
 | **game units linked** | — | **91 / 224** |
 | SDK code | — | **90 / 90 units, 100.000% fuzzy — complete** |
 
@@ -800,6 +800,35 @@ the *count* of preceding objects matters as much as their order. Worth
 confirming before anyone builds a strategy on either model.
 
 ## Settled
+
+- **Never buy pool alignment with an explicit template instantiation.** In
+  `zNPCHazard`, `xUtil_choose<int>` is instantiated by the target at the call
+  site, so its int->float magic constant owns `.sdata2` 0x120; our build defers
+  instantiation to end of TU and parks it at 0x150. Adding
+  `template S32 xUtil_choose<S32>(const S32*, S32, const F32*);` at the call
+  site realigned the whole `.sdata2` tail and took the unit **39 -> 33** in
+  `solo.py`. It was still the wrong trade, for two reasons, and it was reverted.
+
+  First, an explicit instantiation gives the symbol **GLOBAL** binding where the
+  target's is **LOCAL** (`readelf -sW`). objdiff does not compare binding, so
+  `solo.py` and `report.json` are both blind to it -- but `symorder`,
+  `fliptest` and the real link are not. This is the same axis that surfaced the
+  dead `__declspec`, and it is worth remembering that a device invisible to the
+  metric can still be a genuine object difference.
+
+  Second, and decisively: **it bought zero.** Measured directly by building both
+  ways -- with the line, Game Code 6780 functions and 1038976 bytes; without it,
+  6780 and 1038976, identical to the byte. The ten `solo.py` rows it moved were
+  all already 100.0 in `report.json`, because they were pool rows. This is
+  Phase 2a doing exactly what 2a was repriced to do in the entry below, and it
+  is the second time a `solo.py` gain of this shape has evaporated on the
+  metric. **Price data-layout work against `report.json` before accepting it,
+  never against `solo.py`.**
+
+  The corollary cuts the other way too, so check rather than assume: `xFX`'s
+  missing `.rodata` strings looked like the same trap and were not.
+  `xFXRibbonSceneEnter` read 99.947 in `report.json`, not 100.0, so the
+  `__deadstripped_xFX` carriers bought a real function.
 
 - **`__declspec` was dead tree-wide, and the fix completed the SDK category.**
   `include/types.h` had `#ifdef __MWERKS__ / #define __declspec(x)`. The
