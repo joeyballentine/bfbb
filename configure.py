@@ -850,7 +850,7 @@ config.libs = [
         "Runtime.PPCEABI.H",
         [],
         [
-            Object(NonMatching, "Runtime/__mem.c", extra_cflags=["-inline on, deferred"]),
+            Object(Matching, "Runtime/__mem.c", extra_cflags=["-inline on, deferred"]),
             Object(Matching, "Runtime/__va_arg.c"),
             Object(Matching, "Runtime/global_destructor_chain.c"),
             Object(NonMatching, "Runtime/New.cp"),

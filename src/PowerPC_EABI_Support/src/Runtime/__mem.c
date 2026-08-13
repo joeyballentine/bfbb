@@ -1,10 +1,38 @@
 #include <string.h>
 #include <dolphin/types.h>
 
-void* memset(void* dst, int c, size_t n)
+// CodeWarrior emits __declspec(section ".init") functions in reverse order of
+// definition, so this file reads memcpy, __fill_mem, memset to produce the
+// target's .init layout of memset, __fill_mem, memcpy.
+
+void* memcpy(void* dst, const void* src, size_t n)
 {
-    __fill_mem(dst, c, n);
-    return dst;
+    u8* __src;
+    u8* __dst;
+    int i;
+
+    if (src >= dst)
+    {
+        __src = ((u8*)src) - 1;
+        __dst = ((u8*)dst) - 1;
+        i = n + 1;
+        while (--i)
+        {
+            *((u8*)++__dst) = *((u8*)++__src);
+        }
+        return dst;
+    }
+    else
+    {
+        __src = ((u8*)src) + n;
+        __dst = ((u8*)dst) + n;
+        i = n + 1;
+        while (--i)
+        {
+            *((u8*)--__dst) = *((u8*)--__src);
+        }
+        return dst;
+    }
 }
 
 void __fill_mem(void* dst, int c, size_t n)
@@ -72,32 +100,8 @@ void __fill_mem(void* dst, int c, size_t n)
     }
 }
 
-void* memcpy(void* dst, const void* src, size_t n)
+void* memset(void* dst, int c, size_t n)
 {
-    u8* __src;
-    u8* __dst;
-    int i;
-
-    if (src >= dst)
-    {
-        __src = ((u8*)src) - 1;
-        __dst = ((u8*)dst) - 1;
-        i = n + 1;
-        while (--i)
-        {
-            *((u8*)++__dst) = *((u8*)++__src);
-        }
-        return dst;
-    }
-    else
-    {
-        __src = ((u8*)src) + n;
-        __dst = ((u8*)dst) + n;
-        i = n + 1;
-        while (--i)
-        {
-            *((u8*)--__dst) = *((u8*)--__src);
-        }
-        return dst;
-    }
+    __fill_mem(dst, c, n);
+    return dst;
 }
