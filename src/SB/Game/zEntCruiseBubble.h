@@ -149,7 +149,7 @@ namespace cruise_bubble
 
                 cb_damage_ent(F32 radius);
 
-                S32 operator()(xEnt&, xGridBound&);
+                bool operator()(xEnt&, xGridBound&);
             };
 
             state_missle_explode();
@@ -173,7 +173,7 @@ namespace cruise_bubble
         {
             struct cb_lock_targets
             {
-                S32 operator()(xEnt&, xGridBound&);
+                bool operator()(xEnt&, xGridBound&);
             };
 
             F32 reticle_delay;

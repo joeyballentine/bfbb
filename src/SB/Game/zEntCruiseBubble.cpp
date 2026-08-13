@@ -46,8 +46,8 @@ void zFX_SpawnBubbleTrail(const xVec3* pos_beg, const xVec3* pos_end, U32 num,
 // FIXME: defined in xCamera.cpp, but no header declares it.
 void SweptSphereHitsCameraEnt(xScene*, xRay3* ray, xQCData* qcd, xEnt* ent, void* data);
 
-basic_rect<F32> screen_bounds = { 0.0f, 0.0f, 1.0f, 1.0f };
-basic_rect<F32> default_adjust = { 0.0f, 0.0f, 1.0f, 1.0f };
+const basic_rect<F32> screen_bounds = { 0.0f, 0.0f, 1.0f, 1.0f };
+const basic_rect<F32> default_adjust = { 0.0f, 0.0f, 1.0f, 1.0f };
 
 namespace cruise_bubble
 {
@@ -56,6 +56,16 @@ namespace cruise_bubble
         tweak_group normal_tweak;
         tweak_group cheat_tweak;
         xMat4x3 start_cam_mat;
+
+        const xFXRibbon::curve_node wake_ribbon_curve[2] = {
+            { 0.0f, { 0xFF, 0xFF, 0xFF, 0x64 }, 0.3f },
+            { 1.0f, { 0x00, 0x00, 0x00, 0x00 }, 1.0f },
+        };
+
+        const xFXRibbon::curve_node cheat_wake_ribbon_curve[2] = {
+            { 0.0f, { 0xFF, 0x9B, 0x9B, 0x64 }, 0.5f },
+            { 1.0f, { 0x00, 0x00, 0x00, 0x00 }, 2.0f },
+        };
 
         const xDecalEmitter::curve_node explode_curve[3] = {
             { 0.0f, { 0xFF, 0xFF, 0xFF, 0xFF }, 0.1f },
@@ -87,42 +97,6 @@ namespace cruise_bubble
         xFXRibbon wake_ribbon[2];
         xDecalEmitter explode_decal;
         state_missle_explode::quadrant_zone state_missle_explode::qzone;
-
-        const xFXRibbon::curve_node wake_ribbon_curve[2] = {
-            { 0.0f, { 0xFF, 0xFF, 0xFF, 0x64 }, 0.3f },
-            { 1.0f, { 0x00, 0x00, 0x00, 0x00 }, 1.0f },
-        };
-
-        const xFXRibbon::curve_node cheat_wake_ribbon_curve[2] = {
-            { 0.0f, { 0xFF, 0x9B, 0x9B, 0x64 }, 0.5f },
-            { 1.0f, { 0x00, 0x00, 0x00, 0x00 }, 2.0f },
-        };
-
-        struct
-        {
-            bool hiding;
-            F32 alpha;
-            F32 alpha_vel;
-            F32 glow;
-            F32 glow_vel;
-
-            // Offset 0x14
-            struct
-            {
-                xModelInstance* reticle;
-                xModelInstance* target;
-                xModelInstance* swirl;
-                xModelInstance* wind;
-            } model;
-            // Offset 0x24
-            hud_gizmo gizmo[33];
-            // Offset 0x654
-            U32 gizmos_used;
-            // Offset 0x658
-            uv_animated_model uv_swirl;
-            // Offset 0x674
-            uv_animated_model uv_wind;
-        } hud;
 
         struct
         {
@@ -1229,6 +1203,32 @@ namespace cruise_bubble
                 a += fade;
             }
         }
+
+        struct
+        {
+            bool hiding;
+            F32 alpha;
+            F32 alpha_vel;
+            F32 glow;
+            F32 glow_vel;
+
+            // Offset 0x14
+            struct
+            {
+                xModelInstance* reticle;
+                xModelInstance* target;
+                xModelInstance* swirl;
+                xModelInstance* wind;
+            } model;
+            // Offset 0x24
+            hud_gizmo gizmo[33];
+            // Offset 0x654
+            U32 gizmos_used;
+            // Offset 0x658
+            uv_animated_model uv_swirl;
+            // Offset 0x674
+            uv_animated_model uv_wind;
+        } hud;
 
         void init_hud()
         {
@@ -3226,12 +3226,13 @@ namespace cruise_bubble
             }
 
             xSweptSphereGetResults(&ss);
-            // scheduling off
+            // SCHED: the target computes all three subtractions before storing any of
+            // them; we store each as it is computed. Not reachable from source -
+            // brace-init and scalar temps were both measured and are no better.
             xVec3 overshoot = {};
             overshoot.x = loc->x - ss.worldPos.x;
             overshoot.y = loc->y - ss.worldPos.y;
             overshoot.z = loc->z - ss.worldPos.z;
-            // till here
             hit_loc = ss.worldPos + ss.worldTangent * overshoot.dot(ss.worldTangent);
             hit_depen = hit_loc - *loc;
             hit_norm = ss.worldNormal;
@@ -3909,7 +3910,7 @@ namespace cruise_bubble
                 globals.camera.mat.pos + globals.camera.mat.at * current_tweak->reticle.dist_min;
 
             xBoxFromCone(bound.box.box, center, globals.camera.mat.at, dist, r1, r2);
-            bound.box.center = (bound.box.box.lower + bound.box.box.upper) * 0.5f;
+            bound.box.center = (bound.box.box.upper + bound.box.box.lower) * 0.5f;
 
             xQuickCullForBox(&bound.qcd, &bound.box.box);
         }
@@ -4107,8 +4108,8 @@ namespace cruise_bubble
             return STATE_CAMERA_RESTORE;
         }
 
-        S32 cruise_bubble::state_missle_explode::cb_damage_ent::operator()(xEnt& ent,
-                                                                           xGridBound& bound)
+        bool cruise_bubble::state_missle_explode::cb_damage_ent::operator()(xEnt& ent,
+                                                                            xGridBound& bound)
         {
             if (!(ent.chkby & 0x10))
             {
@@ -4119,7 +4120,8 @@ namespace cruise_bubble
                 return 1;
             }
 
-            xSphere o = { shared.hit_loc, this->radius };
+            F32 rad = this->radius;
+            xSphere o = { shared.hit_loc, rad };
 
             if (!xSphereHitsBound(o, ent.bound))
             {
@@ -4147,8 +4149,8 @@ namespace cruise_bubble
             return 1;
         }
 
-        S32 cruise_bubble::state_camera_attach::cb_lock_targets::operator()(xEnt& ent,
-                                                                            xGridBound& bound)
+        bool cruise_bubble::state_camera_attach::cb_lock_targets::operator()(xEnt& ent,
+                                                                             xGridBound& bound)
         {
             if (!(ent.chkby & 0x10))
             {
