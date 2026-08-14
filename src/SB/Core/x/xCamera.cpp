@@ -27,11 +27,32 @@ S32 xcam_do_collis = 1;
 F32 xcam_collis_radius = 0.4f;
 F32 xcam_collis_stiffness = 0.3f;
 RpAtomic* sInvisWallHack;
+F32 gCameraLastFov;
 static xMat4x3 sCameraFXMatOld;
 cameraFX sCameraFX[10];
 cameraFXTableEntry sCameraFXTable[3] = {};
 
 zGlobals globals;
+
+// These structs were used in deadstripped functions.
+// This function is here to force the symbols to be linked.
+void __deadstripped_xCamera()
+{
+    const char _405[0x0C] = {};
+    const char _406[0x0C] = {};
+    const char _410[0x0C] = {};
+    const char _441[0x0C] = {};
+
+    const char _555[0x28] = {};
+    const char _556[0x28] = {};
+    const char _557[0x28] = {};
+    const char _558[0x28] = {};
+    const char _559[0x28] = {};
+    const char _560[0x28] = {};
+    const char _561[0x28] = {};
+
+    const char _711[0x10] = {};
+}
 
 static void xCameraFXInit();
 void add_camera_tweaks();
@@ -1418,6 +1439,22 @@ float std::asinf(float x)
 }
 #endif
 
+F32 xQuatGetAngle(const xQuat* q)
+{
+    if (q->s > 0.99998999f)
+    {
+        return 0.0f;
+    }
+    else if (q->s < -0.99998999f)
+    {
+        return 6.2831855f;
+    }
+    else
+    {
+        return 2.0f * xacos(q->s);
+    }
+}
+
 // xBound& xBound::operator=(const xBound& b)
 // {
 //     qcd.xmin = b.qcd.xmin;
@@ -1451,13 +1488,12 @@ float std::asinf(float x)
 
 static void bound_sphere_xz(xVec3& r3, xVec3& r4, const xVec3& r5, F32 f1, const xVec3& r6, F32 f2)
 {
-    // non-matching: incorrect registers and out-of-order instructions
     F32 _f31 = f1 / f2;
-    F32 _f3 = _f31 / xsqrt(SQR(f2) - SQR(f1));
+    F32 _f3 = _f31 * xsqrt(SQR(f2) - SQR(f1));
     F32 _f5 = f1 * _f31;
+    F32 _f6 = _f3 * r6.x;
     F32 _f7 = _f3 * r6.z;
     F32 _f8 = _f5 * r6.x;
-    F32 _f6 = _f3 * r6.x;
     F32 _f5_2 = _f5 * r6.z;
 
     r3.x = r5.x + _f7 + _f8;
@@ -1679,22 +1715,6 @@ void xMat3x3LookAt(xMat3x3* m, const xVec3* pos, const xVec3* at)
 
     xVec3Sub(&v, at, pos);
     xMat3x3LookVec(m, &v);
-}
-
-F32 xQuatGetAngle(const xQuat* q)
-{
-    if (q->s > 0.99998999f)
-    {
-        return 0.0f;
-    }
-    else if (q->s < -0.99998999f)
-    {
-        return 6.2831855f;
-    }
-    else
-    {
-        return 2.0f * xacos(q->s);
-    }
 }
 
 U32 xEntIsVisible(const xEnt* ent)

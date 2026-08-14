@@ -1393,8 +1393,3 @@ U32 zCamera_FlyOnly()
         return 0;
     }
 }
-
-// Retail defines gCameraLastFov in xCamera.cpp (.sbss+0xc there), not here. Until it
-// moves, keeping the definition at the very end of this TU stops it from displacing
-// the function-scope statics of zCameraUpdate and zCameraSetConvers in .sbss.
-F32 gCameraLastFov;
