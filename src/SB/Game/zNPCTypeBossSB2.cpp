@@ -829,13 +829,13 @@ namespace
         if (init)
         {
             turn_accel = 540.0f;
-            auto_tweak::load_param<F32, F32>(turn_accel, DEG2RAD(10), 0.01f, 1000000000.0f, ap,
+            auto_tweak::load_param<F32, F32>(turn_accel, DEG2RAD(1), 0.01f, 1000000000.0f, ap,
                                              apsize, "turn_accel");
         }
         if (init)
         {
             turn_max_vel = 180.0f;
-            auto_tweak::load_param<F32, F32>(turn_max_vel, DEG2RAD(10), 0.01f, 1000000000.0f, ap,
+            auto_tweak::load_param<F32, F32>(turn_max_vel, DEG2RAD(1), 0.01f, 1000000000.0f, ap,
                                              apsize, "turn_max_vel");
         }
         if (init)
@@ -960,7 +960,7 @@ namespace
         if (init)
         {
             karate.emit_arc = 55.0f;
-            auto_tweak::load_param<F32, F32>(karate.emit_arc, DEG2RAD(10), 0.01f, 1000000000.0f, ap,
+            auto_tweak::load_param<F32, F32>(karate.emit_arc, DEG2RAD(1), 0.01f, 1000000000.0f, ap,
                                              apsize, "karate.emit_arc");
         }
         if (init)
@@ -1122,19 +1122,19 @@ namespace
         if (init)
         {
             bounds[0].yaw = 0.0f;
-            auto_tweak::load_param<F32, F32>(bounds[0].yaw, DEG2RAD(10), -1000000000.0f,
+            auto_tweak::load_param<F32, F32>(bounds[0].yaw, DEG2RAD(1), -1000000000.0f,
                                              1000000000.0f, ap, apsize, "bounds[0].yaw");
         }
         if (init)
         {
             bounds[0].pitch = 0.0f;
-            auto_tweak::load_param<F32, F32>(bounds[0].pitch, DEG2RAD(10), -1000000000.0f,
+            auto_tweak::load_param<F32, F32>(bounds[0].pitch, DEG2RAD(1), -1000000000.0f,
                                              1000000000.0f, ap, apsize, "bounds[0].pitch");
         }
         if (init)
         {
             bounds[0].roll = 0.0f;
-            auto_tweak::load_param<F32, F32>(bounds[0].roll, DEG2RAD(10), -1000000000.0f,
+            auto_tweak::load_param<F32, F32>(bounds[0].roll, DEG2RAD(1), -1000000000.0f,
                                              1000000000.0f, ap, apsize, "bounds[0].roll");
         }
         if (init)
@@ -1176,19 +1176,19 @@ namespace
         if (init)
         {
             bounds[1].yaw = 0.0f;
-            auto_tweak::load_param<F32, F32>(bounds[1].yaw, DEG2RAD(10), -1000000000.0f,
+            auto_tweak::load_param<F32, F32>(bounds[1].yaw, DEG2RAD(1), -1000000000.0f,
                                              1000000000.0f, ap, apsize, "bounds[1].yaw");
         }
         if (init)
         {
             bounds[1].pitch = 0.0f;
-            auto_tweak::load_param<F32, F32>(bounds[1].pitch, DEG2RAD(10), -1000000000.0f,
+            auto_tweak::load_param<F32, F32>(bounds[1].pitch, DEG2RAD(1), -1000000000.0f,
                                              1000000000.0f, ap, apsize, "bounds[1].pitch");
         }
         if (init)
         {
             bounds[1].roll = 0.0f;
-            auto_tweak::load_param<F32, F32>(bounds[1].roll, DEG2RAD(10), -1000000000.0f,
+            auto_tweak::load_param<F32, F32>(bounds[1].roll, DEG2RAD(1), -1000000000.0f,
                                              1000000000.0f, ap, apsize, "bounds[1].roll");
         }
         if (init)
@@ -1230,19 +1230,19 @@ namespace
         if (init)
         {
             bounds[2].yaw = 0.0f;
-            auto_tweak::load_param<F32, F32>(bounds[2].yaw, DEG2RAD(10), -1000000000.0f,
+            auto_tweak::load_param<F32, F32>(bounds[2].yaw, DEG2RAD(1), -1000000000.0f,
                                              1000000000.0f, ap, apsize, "bounds[2].yaw");
         }
         if (init)
         {
             bounds[2].pitch = 0.0f;
-            auto_tweak::load_param<F32, F32>(bounds[2].pitch, DEG2RAD(10), -1000000000.0f,
+            auto_tweak::load_param<F32, F32>(bounds[2].pitch, DEG2RAD(1), -1000000000.0f,
                                              1000000000.0f, ap, apsize, "bounds[2].pitch");
         }
         if (init)
         {
             bounds[2].roll = 0.0f;
-            auto_tweak::load_param<F32, F32>(bounds[2].roll, DEG2RAD(10), -1000000000.0f,
+            auto_tweak::load_param<F32, F32>(bounds[2].roll, DEG2RAD(1), -1000000000.0f,
                                              1000000000.0f, ap, apsize, "bounds[2].roll");
         }
         if (init)
