@@ -448,7 +448,7 @@ namespace bungee_state
 
                 cb_cache_collisions(const xSphere& o, ent_info* ent_cache, S32& ent_cache_size);
 
-                S32 operator()(xEnt&, xGridBound&);
+                bool operator()(xEnt&, xGridBound&);
             };
             hanging_state_type() : state_type(STATE_HANGING)
             {
@@ -665,7 +665,7 @@ namespace bungee_state
         }
         void hanging_state_type::on_tweak_vertical(const tweak_info& ti)
         {
-            reinterpret_cast<hanging_state_type*>(ti.context)->reset_props_horizontal();
+            reinterpret_cast<hanging_state_type*>(ti.context)->reset_props_vertical();
         }
         void hanging_state_type::reset_props_vertical()
         {
@@ -896,8 +896,8 @@ namespace bungee_state
             }
 
             xEnt& player = globals.player.ent;
-            const char* anim_name = player.model->Anim->Single->State->Name;
             bool found = false;
+            const char* anim_name = player.model->Anim->Single->State->Name;
             if (shared.hook == NULL && globals.player.s->pcType == ePlayer_SB &&
                 (strcmp(anim_name, "JumpStart01") || strcmp(anim_name, "JumpLift01") ||
                  strcmp(anim_name, "JumpApex01") || strcmp(anim_name, "DJumpStart01") ||
@@ -1007,7 +1007,6 @@ namespace bungee_state
             F32 dv;
             F32 range;
             F32 v;
-            F32 ybottom;
 
             if (can_dive && globals.pad0->pressed & XPAD_BUTTON_X && control_lag_timer <= 0.0f &&
                 !dying && dive_remaining <= 0.0f)
@@ -1071,11 +1070,11 @@ namespace bungee_state
             }
             else if (!has_dived)
             {
-                range = h.vertical.max_dist - h.vertical.min_dist;
-                ybottom = -(h.vertical.min_dist + range * fixed.dive.min_dist);
+                F32 span = h.vertical.max_dist - h.vertical.min_dist;
+                F32 ybottom = -h.vertical.min_dist - span * fixed.dive.min_dist;
+                F32 ytop = -h.vertical.min_dist - span * fixed.dive.max_dist;
 
-                if (loc.y <= ybottom &&
-                    loc.y <= -(h.vertical.min_dist + range * fixed.dive.max_dist))
+                if (loc.y <= ybottom && loc.y <= ytop)
                 {
                     if (!can_dive)
                     {
@@ -1197,27 +1196,28 @@ namespace bungee_state
 
         void hanging_state_type::start_detaching()
         {
-            xVec3 eulerVec;
-            xMat3x3 mat;
+            xMat4x3 mat;
 
             detaching = true;
             calc_drop_off_velocity(drop_off_vel, shared.hook_loc, shared.drop_loc,
                                    globals.player.g.Gravity,
                                    shared.hook->asset->detach.free_fall_time);
 
-            xVec3 localMatRIght = local_to_world(globals.camera.mat.right);
-            mat.right = globals.camera.mat.right;
+            xMat4x3& cam = globals.camera.mat;
+            xVec3 world_loc = local_to_world(loc);
+            mat.right = cam.right;
             mat.up.assign(0.0f, 1.0f, 0.0f);
-            mat.at = localMatRIght.cross(mat.up);
+            mat.at = mat.right.cross(mat.up);
 
             F32 hgoal = globals.camera.hgoal;
             F32 dgoal = globals.camera.dgoal;
-            detach.start_loc = globals.camera.mat.pos - localMatRIght;
+            detach.start_loc = cam.pos - world_loc;
             detach.end_loc = mat.up * hgoal + mat.at * -dgoal;
 
+            xVec3 eulerVec;
             xMat3x3GetEuler(&mat, &eulerVec);
-            eulerVec.x = zCameraTweakGlobal_GetPitch();
-            eulerVec.y = 0.0f;
+            eulerVec.y = zCameraTweakGlobal_GetPitch();
+            eulerVec.z = 0.0f;
             xMat3x3Euler(&mat, &eulerVec);
 
             xQuatFromMat(&detach.start_dir, &globals.camera.mat);
@@ -1240,13 +1240,13 @@ namespace bungee_state
             globals.camera.pcur = PI + eulerVec.x;
         }
 
-        S32 hanging_state_type::cb_cache_collisions::operator()(xEnt& ent, xGridBound& bound)
+        bool hanging_state_type::cb_cache_collisions::operator()(xEnt& ent, xGridBound& bound)
         {
             xCollis coll;
 
             if (!(ent.chkby & 0x10) || !(ent.penby & 0x10))
             {
-                return 1;
+                return true;
             }
 
             coll.flags = 0x0;
@@ -1254,7 +1254,7 @@ namespace bungee_state
 
             if (!(coll.flags & 0x1))
             {
-                return 1;
+                return true;
             }
 
             if (ent.collLev == 0x5)
@@ -1262,7 +1262,7 @@ namespace bungee_state
                 xSphereHitsModel(&o, ent.model, &coll);
                 if (!(coll.flags & 0x1))
                 {
-                    return 1;
+                    return true;
                 }
             }
 
@@ -1271,7 +1271,7 @@ namespace bungee_state
             cache_item.hits = 0;
             ent_cache_size++;
 
-            return 1;
+            return true;
         }
     } // namespace
 
@@ -2525,15 +2525,7 @@ namespace bungee_state
                 }
             }
 
-            F32 vscale;
-            if (vel.y >= 0.0f)
-            {
-                vscale = 0.0f;
-            }
-            else
-            {
-                vscale = -vel.y * h.camera.vel_scale;
-            }
+            F32 vscale = (vel.y >= 0.0f) ? 0.0f : -vel.y * h.camera.vel_scale;
 
             offset = dir * -(h.camera.rest_dist + vscale);
 
@@ -2556,15 +2548,15 @@ namespace bungee_state
                 interpolate_camera_loc(goal, dt);
 
                 xVec3 dv = cam_dir - v;
-                if ((S32)(vel.x < 0.0f) != (S32)(dv.x < 0.0f))
+                if (((dv.x < 0.0f) ? 1 : 0) != ((vel.x < 0.0f) ? 1 : 0))
                 {
                     cam_dir.x = v.x;
                 }
-                if ((S32)(vel.y < 0.0f) != (S32)(dv.y < 0.0f))
+                if (((dv.y < 0.0f) ? 1 : 0) != ((vel.y < 0.0f) ? 1 : 0))
                 {
                     cam_dir.y = v.y;
                 }
-                if ((S32)(vel.z < 0.0f) != (S32)(dv.z < 0.0f))
+                if (((dv.z < 0.0f) ? 1 : 0) != ((vel.z < 0.0f) ? 1 : 0))
                 {
                     cam_dir.z = v.z;
                 }
@@ -2645,10 +2637,11 @@ namespace bungee_state
 
             if (shared.anim_state & 0x80 && ap->Single->CurrentSpeed == 0.0f && !xScrFxIsFading())
             {
+                globals.player.DamageTimer = fixed.death_time;
+
                 iColor_tag black = { 0, 0, 0, 0xff };
                 iColor_tag clear = { 0, 0, 0, 0 };
 
-                globals.player.DamageTimer = fixed.death_time;
                 xScrFxFade(&clear, &black, fixed.death_time, NULL, 1);
             }
 
