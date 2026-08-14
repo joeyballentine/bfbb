@@ -267,6 +267,60 @@ deadstripped function can be *named* there, its real body is recoverable and
 the problem dissolves honestly. Highest-value investigation on the board and
 not yet run against this question.
 
+**2026-08-14: `zPlatform` is the fourth and most informative 2a witness, and it
+re-confirms the zero pricing the hard way.** Mid-investigation `report.json`
+and `solo.py` appeared to *agree* at 21/24, which looked like a counter-example
+to the blindness. It was not. `zPlatFM_Update` was being held off 100.0 by a
+single **non-pool** row — the target stores `tmrs[i] = 0.0f` *before* the
+`flags &= ~(1 << i)` read-modify-write, we did it after. Swapping those two
+statements moved `solo.py` 99.431 -> 99.883 and flipped `report.json` to a
+clean **100.0 while 21 pool rows remain in the diff**, banking all 3588 bytes.
+
+Lesson, and it is the practical one: **when `report.json` and `solo.py`
+disagree about a unit, the delta is the pool bucket and you should ignore it;
+when they agree, do not conclude the pool is being counted — look for the one
+non-pool row hiding among the pool rows and fix that instead.** Sorting a
+function's diff rows into pool vs non-pool before touching anything is worth
+more than any amount of pool archaeology.
+
+The two functions still short here (`zPlatformEventCB` 3192b at 99.098,
+`zPlatform_PaddleCollide` 888b at 99.865) are blocked by SCHED/REGS residue,
+not by the pool: a 180.0f/`toParam[1]` load permutation at six sites and an
+f3/f5 two-cycle respectively. So the displacement below is worth **zero
+`matched_functions`**, as originally priced. It is recorded because the
+fingerprint is the best one yet, not because it is billable.
+
+Both sections hold the *same 30 objects with the same values*; the whole
+difference is that the target creates `3.0f` (`@974`) and `1e-5f` (`@976`)
+between `zPlatform_PaddleStartRotate` and `zPlatform_PaddleCollide`, while we
+create `3.0f` last of all (`@1187`) and `1e-5f` inside `zPlatFM_Update`
+(`@696`). Seed those two, in that order, at that point and every other object
+in the section lands on the target's exact offset — head and tail both.
+
+What makes this witness better than the `zThrown`/`zShrapnel`/`zNPCTypeRobot`
+`0.5f` ones: it is **two constants, two ids apart, and it reuses a `2.0f` that
+already exists** at `@968`. That is a fingerprint, not a single float.
+`EASE()` in `xMathInlines.h` is `rhs * ((rhs*3.0f) - (rhs*2.0f)*rhs)` — it
+creates exactly `3.0f` and reuses `2.0f`. `1e-5f` occurs only in
+`xVec3NormalizeMacro`/`xfeq0`. So the missing construct plausibly eases a
+scalar and then normalises a vector, in that order.
+
+`zPlatform_PaddleStartRotate` is at **100.0%** for us and its last pool
+reference is `@875`, so the creator is not in its body — it sits textually
+between that function and `PaddleCollide` and emitted no surviving code, i.e.
+a link-deadstripped file-local. `dwarf/` has no `zPlatform` file and
+`solo.py --missing` reports 0, so the honest route is still blocked. **Do not
+fabricate a body here**: the constants are referenced, so condition 1 of the
+`__deadstripped_<unit>()` exception fails, exactly as for the other three.
+(Contrast `xCamera`, same day: there the ghost `.rodata` block *is* clean of
+inbound relocations — only `@405` is referenced, addend 0, as the materialised
+section base — so `__deadstripped_xCamera()` was legitimate and took `.rodata`
+to layout-identical. The two cases differ on condition 1, nothing else.)
+
+Helper: `scratchpad/zplat_pool.py` compiles a unit via `solo.py`'s own
+machinery and prints the `.sdata2` slot map with values — reusable for any 2a
+investigation.
+
 **RUN 2026-08-12. Repriced: 2a is worth ZERO `matched_functions`, because
 `report.json` is blind to literal-pool displacement.** Across the game units,
 545 functions differ *only* by a relocation whose target symbol name differs in
