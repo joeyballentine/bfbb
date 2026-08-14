@@ -2092,7 +2092,7 @@ static U32 SpatulaGrabCheck(xAnimTransition*, xAnimSingle*, void*)
     return sSpatulaGrabbed;
 }
 
-static S32 zEntPlayer_InBossBattle()
+S32 zEntPlayer_InBossBattle()
 {
     return (globals.sceneCur->sceneID == 'B101' || // Robo Sandy
             globals.sceneCur->sceneID == 'B201' || // Robo Patrick

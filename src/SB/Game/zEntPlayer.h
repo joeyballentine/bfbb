@@ -423,6 +423,7 @@ void zEntPlayer_ShadowModelDisable();
 
 void zEntPlayerJumpStart(class xEnt* ent, class zJumpParam* jump);
 S32 zEntPlayer_IsSneaking();
+S32 zEntPlayer_InBossBattle();
 
 void zEntPlayer_setBoulderMode(U32 mode);
 void zEntPlayer_GiveHealth(S32);
