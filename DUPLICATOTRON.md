@@ -19,12 +19,12 @@ is off-limits for upstream PRs.
 
 ## Status
 
-| metric | at branch point | now (2026-08-13) |
+| metric | at branch point | now (2026-08-14) |
 |---|---|---|
-| matched functions | 6491 / 10147 | 8045 / 10147 |
+| matched functions | 6491 / 10147 | 8051 / 10147 |
 | complete units | 195 / 543 | 232 / 543 |
-| **game code exact** | — | **67.548%** (bytes) |
-| **game code fuzzy** | — | **95.759%** (6876 / 7673 functions) |
+| **game code exact** | — | **67.750%** (bytes) |
+| **game code fuzzy** | — | **95.778%** (6882 / 7673 functions) |
 | **game units linked** | — | **91 / 224** |
 | SDK code | — | **90 / 90 units, 100.000% fuzzy — complete** |
 
@@ -682,6 +682,31 @@ machine to commit:
 
 ## Patterns that keep working
 
+- **Read the stack frame before guessing at the body.** The `stwu r1, -N`
+  in the prologue is a hard measurement of how much local storage the
+  original declared, and every `r1`-relative offset in the diff is a slot
+  map you can solve. `start_detaching` was 0xe0 against our 0xd0; the
+  missing 0x10 is exactly what `xMat4x3` adds over `xMat3x3` (`pos` plus
+  its padding), and because `xMat4x3 : xMat3x3` the `right`/`up`/`at`
+  offsets are shared, so nothing else in the function moved. Changing the
+  one declaration erased the whole prologue/epilogue diff. Before this,
+  look for the *smallest* type change that accounts for the delta — a
+  derived type, a bigger array bound — and only then consider an unused
+  local.
+- **CW numbers same-scope locals in reverse declaration order.** Slots go
+  up as declarations go back: the last-declared local gets the lowest
+  `r1` offset, the first-declared the highest. Given a target slot map
+  you can therefore read off the original declaration order directly and
+  reorder to match. In `start_detaching` the target's `eulerVec` at 0x50
+  and `world_loc` at 0x5c proved `eulerVec` was declared *after*
+  `world_loc`, i.e. down at its first use rather than at the top.
+- **Bind a `&` to an aggregate the target keeps in a callee-saved
+  register.** When the target computes an address once, holds it across a
+  call, and reaches everything through `rN+offset` while we recompute
+  `globals@ha`/`@l` at each use, the original bound a reference.
+  `xMat4x3& cam = globals.camera.mat;` took `start_detaching` from
+  94.097 to 99.172. Declaration point matters: placed before the call it
+  matches, placed after it costs 4 points.
 - A float compared against a literal zero: `if (speed)` gives
   `fcmpu speed, 0.0` — `if (speed != 0.0f)` gives the operands the other way.
 - Reusing a parameter as the destination (`f2 = tmp - f2;`) pins the result to
