@@ -1,3 +1,5 @@
+#include "xColor.h"
+#include "xDraw.h"
 #include "xMath.h"
 #include "xMathInlines.h"
 #include "zGlobals.h"
@@ -6,6 +8,8 @@
 #include "zNPCSupport.h"
 
 #include <types.h>
+
+void NPCC_GenSmooth(xVec3** pos_base, xVec3** pos_mid);
 
 xFactoryInst* GOALCreate_Standard(S32 who, RyzMemGrow* grow, void*)
 {
@@ -71,6 +75,13 @@ S32 zNPCGoalPushAnim::Exit(F32 dt, void* updCtxt)
     return xGoal::Exit(dt, updCtxt);
 }
 
+S32 zNPCGoalPushAnim::Resume(F32 dt, void* updCtxt)
+{
+    flg_pushanim |= (1 << 0);
+
+    return zNPCGoalCommon::Resume(dt, updCtxt);
+}
+
 S32 zNPCGoalPushAnim::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* scene)
 {
     S32 nextgoal = 0;
@@ -116,13 +127,6 @@ S32 zNPCGoalPushAnim::Process(en_trantype* trantype, F32 dt, void* updCtxt, xSce
     }
 
     return xGoal::Process(trantype, dt, updCtxt, scene);
-}
-
-S32 zNPCGoalPushAnim::Resume(F32 dt, void* updCtxt)
-{
-    flg_pushanim |= (1 << 0);
-
-    return zNPCGoalCommon::Resume(dt, updCtxt);
 }
 
 S32 zNPCGoalLoopAnim::Enter(F32 dt, void* updCtxt)
@@ -612,6 +616,208 @@ void zNPCGoalPatrol::PickTransition(S32* goal, en_trantype* trantype)
     }
 }
 
+void zNPCGoalPatrol::MoveNormal(F32 dt)
+{
+    zNPCCommon* npc = (zNPCCommon*)psyche->clt_owner;
+
+    // NOTE: faithful. The debug log test is retained but its body was stripped.
+    if (npc->DBG_IsNormLog(eNPCDCAT_Eleven, -1))
+    {
+    }
+
+    xVec3 dir_dest;
+    xVec3 vec_dest;
+
+    xVec3Copy(&dir_dest, npc->nav_dest->PosGet());
+    xVec3Sub(&vec_dest, &dir_dest, xEntGetPos(npc));
+
+    if (npc->flg_move & (1 << 1))
+    {
+        vec_dest.y = 0.0f;
+    }
+
+    npc->ThrottleAccel(dt, 1, 0.75f);
+
+    F32 velmag = vec_dest.length();
+
+    if (velmag < 0.001f)
+    {
+        if (npc->flg_move & (1 << 1))
+        {
+            dir_dest.y = npc->frame->mat.pos.y;
+        }
+
+        xVec3Copy(&npc->frame->mat.pos, &dir_dest);
+        npc->frame->mode |= 1;
+        npc->frame->dpos = g_O3;
+        npc->frame->mode |= 2;
+
+        DoOnArriveStuff();
+    }
+    else
+    {
+        xVec3 dir = vec_dest;
+
+        xVec3SMulBy(&vec_dest, 1.0f / velmag);
+
+        F32 spd = npc->spd_throttle;
+
+        if (velmag > 3.0f)
+        {
+            F32 rot = npc->frame->rot.angle + npc->TurnToFace(dt, &vec_dest, -1.0f);
+            xVec3 xzdir;
+            NPCC_ang_toXZDir(rot, &xzdir);
+            npc->ThrottleApply(dt, &xzdir, 0);
+
+            if (npc->flg_move & (1 << 2))
+            {
+                F32 rat = npc->spd_throttle * dt / velmag;
+
+                npc->frame->dpos.y += rat * dir.y;
+                npc->frame->mode |= 2;
+            }
+        }
+        else
+        {
+            // NOTE: faithful. The returned angle is deliberately discarded here.
+            npc->TurnToFace(dt, &vec_dest, 12.566371f);
+
+            if (dt * spd > velmag)
+            {
+                if (npc->flg_move & (1 << 1))
+                {
+                    dir_dest.y = npc->frame->mat.pos.y;
+                }
+
+                xVec3Copy(&npc->frame->mat.pos, &dir_dest);
+                npc->frame->mode |= 1;
+                npc->frame->dpos = g_O3;
+                npc->frame->mode |= 2;
+
+                DoOnArriveStuff();
+            }
+            else
+            {
+                npc->frame->dpos = vec_dest * spd * dt;
+                npc->frame->mode |= 2;
+            }
+        }
+    }
+}
+
+void zNPCGoalPatrol::MoveSpline(F32 dt)
+{
+    zNPCCommon* npc = (zNPCCommon*)psyche->clt_owner;
+    xSpline3* spl = npc->spl_mvptspline;
+
+    xMat3x3 tmpmat;
+    xVec3 tgt;
+    xVec3 pos_spl;
+    xVec3 dir;
+    xQuat quat;
+    xQuat qold;
+
+    if (spl == NULL)
+    {
+        MoveNormal(dt);
+        return;
+    }
+
+    // NOTE: faithful. The debug log test is retained but its body was stripped.
+    if (npc->DBG_IsNormLog(eNPCDCAT_Eleven, -1))
+    {
+    }
+
+    xVec3Copy(&npc->frame->vel, &g_O3);
+
+    F32 newdist = npc->spd_throttle * dt + npc->dst_curspline;
+
+    if (newdist >= npc->len_mvptspline)
+    {
+        xVec3Copy(&tgt, npc->nav_dest->PosGet());
+
+        npc->frame->mat.pos.x = tgt.x;
+        npc->frame->mat.pos.z = tgt.z;
+
+        if (!(npc->flg_move & (1 << 1)))
+        {
+            // NOTE: faithful retail bug. tgt.y is written into pos.x, not pos.y,
+            // so a spline patroller that may move vertically snaps its x instead.
+            npc->frame->mat.pos.x = tgt.y;
+        }
+
+        npc->frame->mode |= 1;
+
+        DoOnArriveStuff();
+    }
+    else
+    {
+        F32 u = xSpline3_EvalArcApprox(spl, newdist, 0, &pos_spl);
+
+        xSpline3_EvalSeg(spl, u, 1, &dir);
+
+        if (xVec3Length2(&dir) < 0.000001f)
+        {
+            if (u < 0.1f)
+            {
+                u += 0.01f;
+            }
+            else
+            {
+                u -= 0.01f;
+            }
+
+            xSpline3_EvalSeg(spl, u, 1, &dir);
+        }
+
+        xVec3Inv(&dir, &dir);
+        xMat3x3LookVec(&tmpmat, &dir);
+        xQuatFromMat(&quat, &tmpmat);
+        xQuatFromMat(&qold, &npc->frame->mat);
+
+        F32 qdot = xQuatDot(&quat, &qold);
+
+        if (qdot < 0.0f)
+        {
+            xQuatFlip(&quat, &quat);
+            qdot = -qdot;
+        }
+
+        if (qdot > 1.0f)
+        {
+            qdot = 1.0f;
+        }
+
+        F32 rotang = 2.0f * xacos(qdot);
+
+        if (rotang <= PI * dt)
+        {
+            npc->frame->mode |= 0x10;
+            (xMat3x3&)npc->frame->mat = tmpmat;
+        }
+        else
+        {
+            xQuatSlerp(&quat, &qold, &quat, PI * dt / rotang);
+            xQuatNormalize(&quat, &quat);
+            xQuatToMat(&quat, &npc->frame->mat);
+        }
+
+        if (qdot > 0.86f)
+        {
+            npc->frame->dpos.x = pos_spl.x - npc->frame->mat.pos.x;
+            npc->frame->dpos.z = pos_spl.z - npc->frame->mat.pos.z;
+
+            if (!(npc->flg_move & (1 << 1)))
+            {
+                npc->frame->dpos.y = pos_spl.y - npc->frame->mat.pos.y;
+            }
+
+            npc->frame->mode |= 2;
+            npc->dst_curspline = newdist;
+        }
+    }
+}
+
 // Equivalent: scheduling
 void zNPCGoalPatrol::Chk_AutoSmooth()
 {
@@ -662,6 +868,163 @@ void zNPCGoalPatrol::Chk_AutoSmooth()
     if (npc->XZDstSqToPos(npc->nav_dest->PosGet(), NULL, NULL) > ds2_min)
     {
         flg_patrol |= (1 << 4) | (1 << 3);
+    }
+}
+
+void zNPCGoalPatrol::MoveAutoSmooth(F32 dt)
+{
+    zNPCCommon* npc = (zNPCCommon*)psyche->clt_owner;
+
+    if (npc->nav_curr == NULL || npc->nav_dest == NULL || npc->nav_lead == NULL)
+    {
+        flg_patrol &= ~(1 << 3);
+        MoveNormal(dt);
+        return;
+    }
+
+    if (npc->DBG_IsNormLog(eNPCDCAT_Eleven, -1))
+    {
+        xDrawSetColor(g_ORANGE);
+
+        for (S32 i = 0; i < 4; i++)
+        {
+            xDrawSphere(&pos_midpnt[i], 0.1f, 0xC0006);
+        }
+    }
+
+    if (flg_patrol & (1 << 4))
+    {
+        xVec3* refbase[4];
+        xVec3* refmid[4];
+
+        refbase[0] = npc->nav_past->PosGet();
+        refbase[1] = npc->nav_curr->PosGet();
+        refbase[2] = npc->nav_dest->PosGet();
+        refbase[3] = npc->nav_lead->PosGet();
+
+        F32 ds2_CtoD = npc->XZDstSqToPos(npc->nav_dest->PosGet(), NULL, NULL);
+        F32 ds2_NtoD = NPCC_DstSq(npc->nav_curr->PosGet(), npc->nav_dest->PosGet(), NULL);
+
+        if (ds2_CtoD < ds2_NtoD)
+        {
+            refbase[1] = npc->Pos();
+        }
+
+        refmid[0] = &pos_midpnt[0];
+        refmid[1] = &pos_midpnt[1];
+        refmid[2] = &pos_midpnt[2];
+        refmid[3] = &pos_midpnt[3];
+
+        NPCC_GenSmooth(refbase, refmid);
+
+        flg_patrol &= ~(1 << 4);
+        idx_midpnt = 0;
+    }
+
+    xVec3 pos_dest;
+    xVec3 vec_dest;
+
+    xVec3Copy(&pos_dest, &pos_midpnt[idx_midpnt]);
+    xVec3Sub(&vec_dest, &pos_dest, xEntGetPos(npc));
+
+    if (npc->flg_move & (1 << 1))
+    {
+        vec_dest.y = 0.0f;
+    }
+
+    F32 dst_trav = dt * npc->spd_throttle;
+
+    npc->frame->mode = 0;
+
+    F32 dist = xVec3Length(&vec_dest);
+
+    if (dist < 0.001f || dist < dst_trav)
+    {
+        npc->frame->dpos.x = pos_dest.x - npc->frame->mat.pos.x;
+        npc->frame->dpos.z = pos_dest.z - npc->frame->mat.pos.z;
+
+        if (!(npc->flg_move & (1 << 1)))
+        {
+            npc->frame->dpos.y = pos_dest.y - npc->frame->mat.pos.y;
+        }
+
+        npc->frame->mode |= 2;
+
+        if (idx_midpnt == 3)
+        {
+            DoOnArriveStuff();
+            flg_patrol |= (1 << 4);
+        }
+        else
+        {
+            idx_midpnt = idx_midpnt + 1;
+        }
+    }
+    else if (idx_midpnt != 3 && dist > 2.0f)
+    {
+        xVec3 dir_dest = vec_dest / dist;
+        F32 rot = npc->frame->rot.angle + npc->TurnToFace(dt, &dir_dest, -1.0f);
+        xVec3 dir_travel;
+
+        NPCC_ang_toXZDir(rot, &dir_travel);
+
+        F32 dot = xVec3Dot(&dir_travel, NPCC_faceDir(npc));
+
+        if (dot > 0.86f)
+        {
+            npc->ThrottleAccel(dt, 1, 0.75f);
+        }
+        else
+        {
+            F32 rat = iabs(dir_dest.y);
+
+            if (rat > 0.1f)
+            {
+                npc->ThrottleAccel(dt, 1, 0.75f);
+            }
+            else
+            {
+                npc->ThrottleAccel(dt, 1, 0.25f);
+            }
+        }
+
+        npc->ThrottleApply(dt, &dir_travel, 0);
+
+        if (npc->flg_move & (1 << 2))
+        {
+            F32 rat = npc->spd_throttle * dt / dist;
+
+            npc->frame->dpos.y = rat * vec_dest.y;
+            npc->frame->mode |= 2;
+        }
+    }
+    else
+    {
+        xVec3 dir_dest = vec_dest / dist;
+
+        // NOTE: faithful. The returned angle is deliberately discarded here.
+        F32 rot = npc->TurnToFace(dt, &dir_dest, -1.0f);
+
+        if (xVec3Dot(&dir_dest, NPCC_faceDir(npc)) > 0.5f)
+        {
+            npc->ThrottleAccel(dt, 1, 0.75f);
+        }
+        else
+        {
+            npc->ThrottleAccel(dt, 1, 0.25f);
+        }
+
+        if (npc->flg_move & (1 << 1))
+        {
+            npc->frame->dpos.x = dir_dest.x * npc->spd_throttle * dt;
+            npc->frame->dpos.z = dir_dest.z * npc->spd_throttle * dt;
+        }
+        else
+        {
+            npc->frame->dpos = dir_dest * npc->spd_throttle * dt;
+        }
+
+        npc->frame->mode |= 2;
     }
 }
 
@@ -843,6 +1206,60 @@ S32 zNPCGoalWander::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene
     return xGoal::Process(trantype, dt, updCtxt, NULL);
 }
 
+void zNPCGoalWander::VerticalWander(F32 spd_dt, const xVec3* vec_dest)
+{
+    zNPCCommon* npc = (zNPCCommon*)psyche->clt_owner;
+
+    // NOTE: faithful retail bug. The missing parentheses make this
+    // ((flg_wand & (1<<2)) | (1<<3)), which is never zero, so the body is dead.
+    if (!(flg_wand & (1 << 2) | (1 << 3)))
+    {
+        flg_wand |= (1 << 2);
+    }
+
+    if (vec_dest->y > 0.0f)
+    {
+        npc->frame->dpos.y = spd_dt * vec_dest->y;
+        npc->frame->mode |= 2;
+        flg_wand &= ~((1 << 2) | (1 << 3));
+        flg_wand |= (1 << 2);
+    }
+    else if (2.25f + vec_dest->y < 0.0f)
+    {
+        npc->frame->dpos.y = spd_dt * vec_dest->y;
+        npc->frame->mode |= 2;
+        flg_wand &= ~((1 << 2) | (1 << 3));
+        flg_wand |= (1 << 3);
+    }
+    else
+    {
+        F32 rat_hyt = vec_dest->y / 2.25f;
+
+        if (flg_wand & (1 << 2))
+        {
+            F32 rat = MAX(0.0f, MIN(iabs(isin(PI * (0.5f * rat_hyt))), 1.0f));
+            npc->frame->mat.pos.y = 2.25f * rat + pos_home.y;
+            if (rat > 0.9f)
+            {
+                flg_wand &= ~((1 << 2) | (1 << 3));
+                flg_wand |= (1 << 3);
+            }
+        }
+        else if (flg_wand & (1 << 3))
+        {
+            F32 rat = MAX(0.0f, MIN(iabs(isin(PI * (0.5f * rat_hyt + 0.5f))), 1.0f));
+            npc->frame->mat.pos.y = 2.25f * rat + pos_home.y;
+            // NOTE: faithful retail bug. This re-sets (1<<3) rather than (1<<2),
+            // so the descending phase never returns to the ascending phase.
+            if (rat < 0.1f)
+            {
+                flg_wand &= ~((1 << 2) | (1 << 3));
+                flg_wand |= (1 << 3);
+            }
+        }
+    }
+}
+
 // Equivalent: regalloc
 void zNPCGoalWander::CalcNewDir()
 {
@@ -932,14 +1349,6 @@ S32 zNPCGoalWaiting::Enter(F32 dt, void* updCtxt)
     return zNPCGoalCommon::Enter(dt, updCtxt);
 }
 
-S32 zNPCGoalWaiting::Exit(F32 dt, void* updCtxt)
-{
-    zNPCCommon* npc = (zNPCCommon*)psyche->clt_owner;
-    npc->RestoreColFlags();
-
-    return xGoal::Exit(dt, updCtxt);
-}
-
 S32 zNPCGoalWaiting::Resume(F32 dt, void* updCtxt)
 {
     zNPCCommon* npc = (zNPCCommon*)psyche->clt_owner;
@@ -956,6 +1365,14 @@ S32 zNPCGoalWaiting::Resume(F32 dt, void* updCtxt)
         npc->cfg_npc->tym_fidget * (0.25f * (xurand() - 0.5f)) + npc->cfg_npc->tym_fidget;
 
     return zNPCGoalCommon::Resume(dt, updCtxt);
+}
+
+S32 zNPCGoalWaiting::Exit(F32 dt, void* updCtxt)
+{
+    zNPCCommon* npc = (zNPCCommon*)psyche->clt_owner;
+    npc->RestoreColFlags();
+
+    return xGoal::Exit(dt, updCtxt);
 }
 
 S32 zNPCGoalWaiting::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* scene)
