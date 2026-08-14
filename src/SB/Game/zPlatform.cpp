@@ -780,8 +780,8 @@ static void zPlatFM_Update(zPlatform* plat, xScene*, F32 dt)
                 pmat->at.y *= ats;
                 pmat->at.z *= ats;
     
-                fmrt->flags &= ~(1 << i);
                 fmrt->tmrs[i] = 0.0f;
+                fmrt->flags &= ~(1 << i);
                 fmrt->ttms[i] = 0.0f;
                 fmrt->atms[i] = 0.0f;
                 fmrt->dtms[i] = 0.0f;
