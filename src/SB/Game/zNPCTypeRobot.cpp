@@ -1722,11 +1722,12 @@ void zNPCRobot::LassoNotify(en_LASSO_EVENT event)
 
 void zNPCRobot::CollideReview()
 {
+    zNPCGoalCommon* goal;
     S32 goaldidit = 0;
     xEntCollis* npccol = collis;
     xVec3 vec_depen = {};
 
-    zNPCGoalCommon* goal = (zNPCGoalCommon*)psy_instinct->GetCurGoal();
+    goal = (zNPCGoalCommon*)psy_instinct->GetCurGoal();
 
     if (goal != NULL && (goal->flg_npcgable & 1))
     {
@@ -2564,18 +2565,20 @@ void zNPCFodBzzt::DiscoRender()
     RwRGBA rgba_disco = rgba_discoLight;
     RwRGBA rgba_top = rgba_discoLight;
     RwRGBA rgba_bot = rgba_discoLight;
-    F32 uv_top[2] = { 0.5f, 0.0f };
-    F32 uv_bot[2] = { 0.0f, 1.0f };
-    xVec3 pos_vtx;
-    xVec3 pos_bot = *Pos();
-    xVec3 vec_ray = { 0.0f, 0.0f, 1.0f };
-    xVec3 pos_top = pos_discoLight;
-    xMat3x3 mat_spin;
 
     rgba_bot.alpha = 0;
     rgba_top.alpha = rgba_top.alpha ? rgba_top.alpha : 0;
 
+    xVec3 pos_top = pos_discoLight;
+    xVec3 pos_bot = *Pos();
+    xVec3 vec_ray = { 0.0f, 0.0f, 1.0f };
+    xVec3 pos_vtx;
+    xMat3x3 mat_spin;
+
     pos_bot.y += 1.0f;
+
+    F32 uv_top[2] = { 0.5f, 0.0f };
+    F32 uv_bot[2] = { 0.0f, 1.0f };
 
     uv_top[0] = uv_discoLight[0] + 0.5f * uv_slice_discoLight[0];
     uv_top[1] = uv_discoLight[1];
@@ -2599,8 +2602,13 @@ void zNPCFodBzzt::DiscoRender()
                         rgba_top.alpha);
     RwIm3DVertexSetUV(&vert_list[0], uv_top[0], uv_top[1]);
 
+    F32 u_bot = uv_bot[0];
+    F32 v_bot = uv_bot[1];
+
     for (S32 i = 0; i < 8; i++)
     {
+        F32 uoff = 0.125f * i;
+
         xMat3x3Euler(&mat_spin, (PI / 4) * i, 0.0f, 0.0f);
         xMat3x3LMulVec(&pos_vtx, &mat_spin, &vec_ray);
         pos_vtx *= 0.2f;
@@ -2608,7 +2616,7 @@ void zNPCFodBzzt::DiscoRender()
 
         RwIm3DVertexSetPos(vtx, pos_vtx.x, pos_vtx.y, pos_vtx.z);
         RwIm3DVertexSetRGBA(vtx, rgba_bot.red, rgba_bot.green, rgba_bot.blue, rgba_bot.alpha);
-        RwIm3DVertexSetUV(vtx, uv_bot[0] + 0.125f * i, uv_bot[1]);
+        RwIm3DVertexSetUV(vtx, u_bot + uoff, v_bot);
 
         vtx++;
     }
@@ -3385,9 +3393,9 @@ void zNPCSleepy::Process(xScene* xscn, F32 dt)
 
         S32 gid = psy_instinct->GIDOfActive();
 
-        for (S32* state = g_sleepy_angryStates; *state; state++)
+        for (S32 i = 0; g_sleepy_angryStates[i]; i++)
         {
-            if (gid == *state)
+            if (gid == g_sleepy_angryStates[i])
             {
                 cnt_awake++;
                 break;
@@ -3447,8 +3455,8 @@ void zNPCSleepy::NightLightUVStep(F32 dt)
 
 void zNPCSleepy::SnoreNZeez(F32 dt)
 {
-    xVec3 dir_zeez;
     xVec3 pos_zeez;
+    xVec3 dir_zeez;
 
     F32 ds2_toCam = NPCC_ds2_toCam(Pos(), NULL);
 
