@@ -11,6 +11,7 @@
 #include "zNPCMgr.h"
 #include "zNPCTypeRobot.h"
 #include "zNPCFXCinematic.h"
+#include "zRenderState.h"
 
 #include "xMathInlines.h"
 #include "xMath3.h"
@@ -20,16 +21,13 @@
 
 #define MAX_FIREWORK 32
 
-NPCWidget g_npc_widgets[1] = {};
+static NPCWidget g_npc_widgets[1];
 static U32 g_hash_uiwidgets[1] = { 0 };
 static char* g_strz_uiwidgets[1] = { "MNU4 NPCTALK" };
 
 static U32 sNPCSndFx[eNPCSnd_Total] = {};
 static U32 sNPCSndID[eNPCSnd_Total] = {};
 static F32 sNPCSndFxVolume[eNPCSnd_Total] = {};
-
-S32 g_pc_playerInvisible;
-static Firework g_fireworks[32];
 
 F32 Firework::acc_thrust = 15.0f;
 F32 Firework::acc_gravity = -10.0f;
@@ -127,7 +125,7 @@ void NPCWidget::Reset()
 
 S32 NPCWidget::On(const zNPCCommon* npc, S32 theman)
 {
-    if ((!theman && !NPCIsTheLocker(npc)) && (((S32)IsLocked()) || (!Lock(npc))))
+    if ((!theman && !NPCIsTheLocker(npc)) && (((S32)IsLocked() != 0) || (!Lock(npc))))
     {
         return 0;
     }
@@ -376,194 +374,195 @@ S32 NPCTarget::IsDead()
     return dead;
 }
 
-// void NPCLaser::Render(xVec3* pos_src, xVec3* pos_tgt)
-// {
-//     xVec3 var_70;
-//     xVec3Copy(&var_70, pos_src);
+void NPCLaser::Render(xVec3* pos_src, xVec3* pos_tgt)
+{
+    xVec3 pos_beg;
+    xVec3Copy(&pos_beg, pos_src);
 
-//     xVec3 var_7C;
-//     xVec3Copy(&var_7C, pos_tgt);
+    xVec3 pos_end;
+    xVec3Copy(&pos_end, pos_tgt);
 
-//     xVec3 var_88;
-//     xVec3Sub(&var_88, &var_7C, &var_70);
-//     xVec3Normalize(&var_88, &var_88);
+    xVec3 dir_axis;
+    xVec3Sub(&dir_axis, &pos_end, &pos_beg);
+    xVec3Normalize(&dir_axis, &dir_axis);
 
-//     xVec3 var_94;
-//     xVec3Cross(&var_94, &globals.camera.mat.at, &var_88);
+    xVec3 dir_horz;
+    xVec3Cross(&dir_horz, &globals.camera.mat.at, &dir_axis);
 
-//     F32 f1 = xVec3Length2(&var_94);
-//     if (f1 < 0.00001f)
-//     {
-//         xVec3Copy(&var_94, &g_X3);
-//     }
-//     else
-//     {
-//         xVec3SMulBy(&var_94, 1.0f / xsqrt(f1));
-//     }
+    F32 ds2 = xVec3Length2(&dir_horz);
+    if (ds2 < 0.00001f)
+    {
+        xVec3Copy(&dir_horz, &g_X3);
+    }
+    else
+    {
+        xVec3SMulBy(&dir_horz, 1.0f / xsqrt(ds2));
+    }
 
-//     xVec3 var_A0;
-//     xVec3Cross(&var_A0, &var_94, &var_88);
+    xVec3 dir_vert;
+    xVec3Cross(&dir_vert, &dir_horz, &dir_axis);
 
-//     S32 i;
+    S32 i;
 
-//     static RwIm3DVertex laser_vtxbuf[2][14];
-//     RwIm3DVertex* vtx_horz = laser_vtxbuf[0];
-//     RwIm3DVertex* vtx_vert = laser_vtxbuf[1];
+    static RwIm3DVertex laser_vtxbuf[2][14];
+    RwIm3DVertex* vtx_horz = laser_vtxbuf[0];
+    RwIm3DVertex* vtx_vert = laser_vtxbuf[1];
 
-//     for (i = 0; i <= 6; i++)
-//     {
-//         F32 rat = (F32)i / 6.0f;
-//         F32 f29 = LERP(rat, this->radius[0], this->radius[1]);
+    for (i = 0; i <= 6; i++)
+    {
+        F32 rat = (F32)i / 6.0f;
+        F32 rad = LERP(rat, this->radius[0], this->radius[1]);
 
-//         xVec3 var_AC;
-//         var_AC.x = LERP(rat, var_70.x, var_7C.x);
-//         var_AC.y = LERP(rat, var_70.y, var_7C.y);
-//         var_AC.z = LERP(rat, var_70.z, var_7C.z);
+        xVec3 pos_lerp;
+        pos_lerp.x = LERP(rat, pos_beg.x, pos_end.x);
+        pos_lerp.y = LERP(rat, pos_beg.y, pos_end.y);
+        pos_lerp.z = LERP(rat, pos_beg.z, pos_end.z);
 
-//         U8 r22 = LERP(rat, this->rgba[0].red, this->rgba[1].red);
-//         U8 r23 = LERP(rat, this->rgba[0].green, this->rgba[1].green);
-//         U8 r24 = LERP(rat, this->rgba[0].blue, this->rgba[1].blue);
-//         U8 r25 = LERP(rat, this->rgba[0].alpha, this->rgba[1].alpha);
+        U8 cr = LERP(rat, this->rgba[0].red, this->rgba[1].red);
+        U8 cg = LERP(rat, this->rgba[0].green, this->rgba[1].green);
+        U8 cb = LERP(rat, this->rgba[0].blue, this->rgba[1].blue);
+        U8 ca = LERP(rat, this->rgba[0].alpha, this->rgba[1].alpha);
 
-//         F32 u = 1.0f - rat + this->uv_base[0];
-//         F32 v = 1.0f - rat + this->uv_base[1];
+        F32 fv = 1.0f - rat;
+        F32 u = this->uv_base[0] + fv;
+        F32 v = this->uv_base[1] + fv;
 
-//         while (u > 1.0f)
-//             u -= 1.0f;
-//         while (v > 1.0f)
-//             v -= 1.0f;
+        while (u > 1.0f)
+            u -= 1.0f;
+        while (v > 1.0f)
+            v -= 1.0f;
 
-//         xVec3 var_B8;
+        xVec3 pos_vtx;
 
-//         xVec3SMul(&var_B8, &var_94, f29);
-//         xVec3AddTo(&var_B8, &var_AC);
-//         RwIm3DVertexSetPos(&vtx_horz[0], var_B8.x, var_B8.y, var_B8.z);
-//         RwIm3DVertexSetRGBA(&vtx_horz[0], r22, r23, r24, r25);
-//         RwIm3DVertexSetU(&vtx_horz[0], 0.0f);
-//         RwIm3DVertexSetV(&vtx_horz[0], v);
+        xVec3SMul(&pos_vtx, &dir_horz, rad);
+        xVec3AddTo(&pos_vtx, &pos_lerp);
+        RwIm3DVertexSetPos(&vtx_horz[0], pos_vtx.x, pos_vtx.y, pos_vtx.z);
+        RwIm3DVertexSetRGBA(&vtx_horz[0], cr, cg, cb, ca);
+        vtx_horz[0].u = 0.0f;
+        vtx_horz[0].v = v;
 
-//         xVec3SMul(&var_B8, &var_94, -f29);
-//         xVec3AddTo(&var_B8, &var_AC);
-//         RwIm3DVertexSetPos(&vtx_horz[1], var_B8.x, var_B8.y, var_B8.z);
-//         RwIm3DVertexSetRGBA(&vtx_horz[1], r22, r23, r24, r25);
-//         RwIm3DVertexSetU(&vtx_horz[1], 1.0f);
-//         RwIm3DVertexSetV(&vtx_horz[1], v);
+        xVec3SMul(&pos_vtx, &dir_horz, -rad);
+        xVec3AddTo(&pos_vtx, &pos_lerp);
+        RwIm3DVertexSetPos(&vtx_horz[1], pos_vtx.x, pos_vtx.y, pos_vtx.z);
+        RwIm3DVertexSetRGBA(&vtx_horz[1], cr, cg, cb, ca);
+        vtx_horz[1].u = 1.0f;
+        vtx_horz[1].v = v;
 
-//         vtx_horz += 2;
+        vtx_horz += 2;
 
-//         xVec3SMul(&var_B8, &var_A0, f29);
-//         xVec3AddTo(&var_B8, &var_AC);
-//         RwIm3DVertexSetPos(&vtx_vert[0], var_B8.x, var_B8.y, var_B8.z);
-//         RwIm3DVertexSetRGBA(&vtx_vert[0], r22, r23, r24, r25);
-//         RwIm3DVertexSetU(&vtx_vert[0], 0.0f);
-//         RwIm3DVertexSetV(&vtx_vert[0], v);
+        xVec3SMul(&pos_vtx, &dir_vert, rad);
+        xVec3AddTo(&pos_vtx, &pos_lerp);
+        RwIm3DVertexSetPos(&vtx_vert[0], pos_vtx.x, pos_vtx.y, pos_vtx.z);
+        RwIm3DVertexSetRGBA(&vtx_vert[0], cr, cg, cb, ca);
+        vtx_vert[0].u = 0.0f;
+        vtx_vert[0].v = v;
 
-//         xVec3SMul(&var_B8, &var_A0, -f29);
-//         xVec3AddTo(&var_B8, &var_AC);
-//         RwIm3DVertexSetPos(&vtx_vert[1], var_B8.x, var_B8.y, var_B8.z);
-//         RwIm3DVertexSetRGBA(&vtx_vert[1], r22, r23, r24, r25);
-//         RwIm3DVertexSetU(&vtx_vert[1], 1.0f);
-//         RwIm3DVertexSetV(&vtx_vert[1], v);
+        xVec3SMul(&pos_vtx, &dir_vert, -rad);
+        xVec3AddTo(&pos_vtx, &pos_lerp);
+        RwIm3DVertexSetPos(&vtx_vert[1], pos_vtx.x, pos_vtx.y, pos_vtx.z);
+        RwIm3DVertexSetRGBA(&vtx_vert[1], cr, cg, cb, ca);
+        vtx_vert[1].u = 1.0f;
+        vtx_vert[1].v = v;
 
-//         vtx_vert += 2;
-//     }
+        vtx_vert += 2;
+    }
 
-//     SDRenderState old_rendstat = zRenderStateCurrent();
-//     if (old_rendstat == SDRS_Unknown)
-//     {
-//         old_rendstat = SDRS_Default;
-//     }
+    _SDRenderState old_rendstat = zRenderStateCurrent();
+    if (old_rendstat == SDRS_Unknown)
+    {
+        old_rendstat = SDRS_Default;
+    }
 
-//     zRenderState(SDRS_NPCVisual);
+    zRenderState(SDRS_NPCVisual);
 
-//     RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)this->rast_laser);
-//     RwIm3DTransform(laser_vtxbuf[0], 14, NULL,
-//                     rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA | rwIM3D_VERTEXUV);
-//     RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
-//     RwIm3DEnd();
+    RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)this->rast_laser);
+    RwIm3DTransform(laser_vtxbuf[0], 14, NULL,
+                    rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA | rwIM3D_VERTEXUV);
+    RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
+    RwIm3DEnd();
 
-//     RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)this->rast_laser);
-//     RwIm3DTransform(laser_vtxbuf[1], 14, NULL,
-//                     rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA | rwIM3D_VERTEXUV);
-//     RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
-//     RwIm3DEnd();
+    RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)this->rast_laser);
+    RwIm3DTransform(laser_vtxbuf[1], 14, NULL,
+                    rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA | rwIM3D_VERTEXUV);
+    RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
+    RwIm3DEnd();
 
-//     zRenderState(old_rendstat);
-// }
+    zRenderState(old_rendstat);
+}
 
-// void NPCCone::RenderCone(xVec3* pos_tiptop, xVec3* pos_botcenter)
-// {
-//     RwRGBA rgba_top = this->rgba_top;
-//     RwRGBA rgba_bot = this->rgba_bot;
-//     xVec3 pos_top = *pos_tiptop;
-//     xVec3 pos_bot = *pos_botcenter;
-//     F32 f29 = this->uv_tip[0] + 0.5f * this->uv_slice[0];
-//     F32 f28 = this->uv_tip[1];
-//     F32 f31 = this->uv_tip[0] + this->uv_slice[0];
-//     F32 f30 = this->uv_tip[1] + this->uv_slice[1];
+void NPCCone::RenderCone(xVec3* pos_tiptop, xVec3* pos_botcenter)
+{
+    F32 u_tip = this->uv_tip[0] + 0.5f * this->uv_slice[0];
+    F32 v_tip = this->uv_tip[1];
+    F32 u_base = this->uv_tip[0] + this->uv_slice[0];
+    F32 v_base = this->uv_tip[1] + this->uv_slice[1];
+    RwRGBA rgba_top = this->rgba_top;
+    RwRGBA rgba_bot = this->rgba_bot;
+    xVec3 pos_top = *pos_tiptop;
+    xVec3 pos_bot = *pos_botcenter;
 
-//     void* mem = xMemPushTemp(10 * sizeof(RwIm3DVertex));
-//     if (!mem)
-//     {
-//         return;
-//     }
+    void* mem = xMemPushTemp(10 * sizeof(RwIm3DVertex));
+    if (!mem)
+    {
+        return;
+    }
 
-//     memset(mem, 0, 10 * sizeof(RwIm3DVertex));
+    memset(mem, 0, 10 * sizeof(RwIm3DVertex));
 
-//     RwIm3DVertex* vert_list = (RwIm3DVertex*)mem;
-//     RwIm3DVertex* vtx = vert_list + 1;
+    RwIm3DVertex* vert_list = (RwIm3DVertex*)mem;
+    RwIm3DVertex* vtx = vert_list + 1;
 
-//     RwIm3DVertexSetPos(&vert_list[0], pos_top.x, pos_top.y, pos_top.z);
-//     RwIm3DVertexSetRGBA(&vert_list[0], rgba_top.red, rgba_top.green, rgba_top.blue, rgba_top.alpha);
-//     RwIm3DVertexSetU(&vert_list[0], f29);
-//     RwIm3DVertexSetV(&vert_list[0], f28);
+    RwIm3DVertexSetPos(&vert_list[0], pos_top.x, pos_top.y, pos_top.z);
+    RwIm3DVertexSetRGBA(&vert_list[0], rgba_top.red, rgba_top.green, rgba_top.blue, rgba_top.alpha);
+    vert_list[0].u = u_tip;
+    vert_list[0].v = v_tip;
 
-//     for (S32 i = 0; i < 8; i++)
-//     {
-//         F32 ang_seg = i * PI / 4;
-//         F32 f29 = isin(ang_seg);
-//         F32 f1 = icos(ang_seg);
+    for (S32 i = 0; i < 8; i++)
+    {
+        F32 ang_seg = i * (PI / 4);
+        F32 sn = isin(ang_seg);
+        F32 cs = icos(ang_seg);
 
-//         xVec3 var_A0;
-//         var_A0.x = f29;
-//         var_A0.y = 0.0f;
-//         var_A0.z = f1;
-//         var_A0 *= this->rad_cone;
-//         var_A0 += pos_bot;
+        xVec3 pos_vtx;
+        pos_vtx.x = sn;
+        pos_vtx.y = 0.0f;
+        pos_vtx.z = cs;
+        pos_vtx *= this->rad_cone;
+        pos_vtx += pos_bot;
 
-//         RwIm3DVertexSetPos(vtx, var_A0.x, var_A0.y, var_A0.z);
-//         RwIm3DVertexSetRGBA(vtx, rgba_bot.red, rgba_bot.green, rgba_bot.blue, rgba_bot.alpha);
+        RwIm3DVertexSetPos(vtx, pos_vtx.x, pos_vtx.y, pos_vtx.z);
+        RwIm3DVertexSetRGBA(vtx, rgba_bot.red, rgba_bot.green, rgba_bot.blue, rgba_bot.alpha);
 
-//         F32 f0 = 1 / 8.0f * i;
+        F32 u_off = 1 / 8.0f * i;
 
-//         RwIm3DVertexSetU(vtx, f31 + f0);
-//         RwIm3DVertexSetV(vtx, f30);
+        vtx->u = u_base + u_off;
+        vtx->v = v_base;
 
-//         vtx++;
-//     }
+        vtx++;
+    }
 
-//     *vtx = vert_list[1];
-//     RwIm3DVertexSetU(vtx, f31 + this->uv_slice[0]);
-//     RwIm3DVertexSetV(vtx, f30);
+    *vtx = vert_list[1];
+    vtx->u = u_base + this->uv_slice[0];
+    vtx->v = v_base;
 
-//     SDRenderState old_rendstat = zRenderStateCurrent();
-//     if (old_rendstat == SDRS_Unknown)
-//     {
-//         old_rendstat = SDRS_Default;
-//     }
+    _SDRenderState old_rendstat = zRenderStateCurrent();
+    if (old_rendstat == SDRS_Unknown)
+    {
+        old_rendstat = SDRS_Default;
+    }
 
-//     zRenderState(SDRS_NPCVisual);
+    zRenderState(SDRS_NPCVisual);
 
-//     RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-//     RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)this->rast_cone);
-//     RwIm3DTransform(vert_list, 10, NULL, rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA | rwIM3D_VERTEXUV);
-//     RwIm3DRenderPrimitive(rwPRIMTYPETRIFAN);
-//     RwIm3DEnd();
+    RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+    RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)this->rast_cone);
+    RwIm3DTransform(vert_list, 10, NULL, rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA | rwIM3D_VERTEXUV);
+    RwIm3DRenderPrimitive(rwPRIMTYPETRIFAN);
+    RwIm3DEnd();
 
-//     zRenderState(old_rendstat);
+    zRenderState(old_rendstat);
 
-//     xMemPopTemp(mem);
-// }
+    xMemPopTemp(mem);
+}
 
 void NPCBlinker::Reset()
 {
@@ -596,6 +595,121 @@ void NPCBlinker::IndexToUVCoord(S32 param_1, F32* param_2, F32* param_3)
     param_3[0] = param_2[0] + 0.5f;
     param_3[1] = param_2[1] + 0.5f;
 }
+
+void NPCBlinker::Render(const xVec3* pos_blink, F32 rad_blink, const RwRaster* rast_blink)
+{
+    static F32 dst_toCamMax = SQ(25.0f);
+
+    if (NPCC_ds2_toCam(pos_blink, NULL) > dst_toCamMax)
+    {
+        return;
+    }
+
+    xMat3x3 mat;
+    xVec3 dir_up;
+    xVec3 dir_card;
+    xVec3 dir_perp;
+    xVec3 pos_top;
+    xVec3 pos_bot;
+    xVec3 pos_lerp;
+    xVec3 pos_vtx;
+    F32 uv_lo[2];
+    F32 uv_hi[2];
+    RwRGBA rgba = { 255, 255, 255, 255 };
+
+    xMat3x3LookAt(&mat, pos_blink, &globals.camera.mat.pos);
+
+    xVec3Add(&dir_card, &mat.at, &mat.right);
+    xVec3Normalize(&dir_card, &dir_card);
+
+    xVec3Sub(&dir_perp, &mat.at, &mat.right);
+    xVec3Normalize(&dir_perp, &dir_perp);
+
+    xVec3Copy(&dir_up, &mat.up);
+
+    xVec3Copy(&pos_top, pos_blink);
+    xVec3Copy(&pos_bot, pos_blink);
+
+    xVec3AddScaled(&pos_top, &dir_up, rad_blink);
+    xVec3AddScaled(&pos_bot, &dir_up, -rad_blink);
+
+    IndexToUVCoord(idx_uvcell, uv_lo, uv_hi);
+
+    S32 i;
+
+    static RwIm3DVertex blink_vtxbuf[2][14];
+    RwIm3DVertex* vtx_horz = blink_vtxbuf[0];
+    RwIm3DVertex* vtx_vert = blink_vtxbuf[1];
+
+    for (i = 0; i <= 6; i++)
+    {
+        F32 rat = (F32)i / 6.0f;
+
+        pos_lerp.x = LERP(rat, pos_top.x, pos_bot.x);
+        pos_lerp.y = LERP(rat, pos_top.y, pos_bot.y);
+        pos_lerp.z = LERP(rat, pos_top.z, pos_bot.z);
+
+        F32 v = LERP(rat, uv_lo[1], uv_hi[1]);
+
+        pos_vtx = dir_card * rad_blink;
+        pos_vtx += pos_lerp;
+        RwIm3DVertexSetPos(&vtx_horz[0], pos_vtx.x, pos_vtx.y, pos_vtx.z);
+        RwIm3DVertexSetRGBA(&vtx_horz[0], rgba.red, rgba.green, rgba.blue, rgba.alpha);
+        vtx_horz[0].u = uv_lo[0];
+        vtx_horz[0].v = v;
+
+        pos_vtx = dir_card * -rad_blink;
+        pos_vtx += pos_lerp;
+        RwIm3DVertexSetPos(&vtx_horz[1], pos_vtx.x, pos_vtx.y, pos_vtx.z);
+        RwIm3DVertexSetRGBA(&vtx_horz[1], rgba.red, rgba.green, rgba.blue, rgba.alpha);
+        vtx_horz[1].u = uv_hi[0];
+        vtx_horz[1].v = v;
+
+        vtx_horz += 2;
+
+        pos_vtx = dir_perp * -rad_blink;
+        pos_vtx += pos_lerp;
+        RwIm3DVertexSetPos(&vtx_vert[0], pos_vtx.x, pos_vtx.y, pos_vtx.z);
+        RwIm3DVertexSetRGBA(&vtx_vert[0], rgba.red, rgba.green, rgba.blue, rgba.alpha);
+        vtx_vert[0].u = uv_lo[0];
+        vtx_vert[0].v = v;
+
+        pos_vtx = dir_perp * rad_blink;
+        pos_vtx += pos_lerp;
+        RwIm3DVertexSetPos(&vtx_vert[1], pos_vtx.x, pos_vtx.y, pos_vtx.z);
+        RwIm3DVertexSetRGBA(&vtx_vert[1], rgba.red, rgba.green, rgba.blue, rgba.alpha);
+        vtx_vert[1].u = uv_hi[0];
+        vtx_vert[1].v = v;
+
+        vtx_vert += 2;
+    }
+
+    _SDRenderState old_rendstat = zRenderStateCurrent();
+    if (old_rendstat == SDRS_Unknown)
+    {
+        old_rendstat = SDRS_Default;
+    }
+
+    zRenderState(SDRS_NPCVisual);
+
+    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
+
+    RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)rast_blink);
+    RwIm3DTransform(blink_vtxbuf[0], 14, NULL,
+                    rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA | rwIM3D_VERTEXUV);
+    RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
+    RwIm3DEnd();
+
+    RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)rast_blink);
+    RwIm3DTransform(blink_vtxbuf[1], 14, NULL,
+                    rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA | rwIM3D_VERTEXUV);
+    RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
+    RwIm3DEnd();
+
+    zRenderState(old_rendstat);
+}
+
+static Firework g_fireworks[MAX_FIREWORK];
 
 void Firework_Release(Firework* firework)
 {
@@ -837,6 +951,8 @@ void Firework_Timestep(F32 dt)
         }
     }
 }
+
+S32 g_pc_playerInvisible;
 
 S32 NPCC_LampStatus()
 {
