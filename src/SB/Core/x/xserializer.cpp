@@ -511,6 +511,25 @@ static S32 xSER_xsgclt_ldproc_clt(void*, st_XSAVEGAME_DATA* xsg, st_XSAVEGAME_RE
     return 1;
 }
 
+static S32 xSER_xsgclt_svinfo_fill(void*, st_XSAVEGAME_DATA*, S32* cur_space, S32* max_fullgame)
+{
+    st_XSERIAL_DATA_PRIV* xsd = &g_xserdata;
+    S32 i;
+    S32 tally = 0;
+    S32 size;
+
+    for (i = 0; i < xsd->cltlist.cnt; i++)
+    {
+        tally += ((st_SERIAL_CLIENTINFO*)xsd->cltlist.list[i])->actsize;
+    }
+
+    size = xsd->buf_bytcnt - tally + 8;
+    *cur_space = size;
+    *max_fullgame = size;
+
+    return 1;
+}
+
 static S32 xSER_xsgclt_svproc_fill(void*, st_XSAVEGAME_DATA* xsg, st_XSAVEGAME_WRITECONTEXT* wctxt)
 {
     char filbuf[9] = { 'R', 'y', 'a', 'n', 'N', 'e', 'i', 'l', '\x00' };
