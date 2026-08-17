@@ -766,6 +766,46 @@ U32 zNPCNeptune::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
     return da_anim;
 }
 
+void zNPCNeptune::Process(xScene* xscn, F32 dt)
+{
+    U32 anid;
+    xVec3 vec = { 0.0f, 0.0f, 0.0f };
+    S32 flg_fidget = (tmr_fidget < 0.0f) ? 1 : 0;
+
+    if (flg_fidget)
+    {
+        tmr_fidget =
+            cfg_npc->tym_fidget + cfg_npc->tym_fidget * (0.25f * (xurand() - 0.5f));
+
+        if (xrand() & 0x800000)
+        {
+            anid = AnimPick('NGN0', NPC_GSPOT_START, NULL);
+        }
+        else
+        {
+            anid = AnimPick('NGN3', NPC_GSPOT_START, NULL);
+        }
+
+        if (anid != 0)
+        {
+            AnimStart(anid, 0);
+        }
+    }
+    else
+    {
+        tmr_fidget = MAX(-1.0f, tmr_fidget - dt);
+    }
+
+    xVec3Sub(&vec, xEntGetPos(&globals.player.ent), xEntGetPos(this));
+    vec.y = 0.0f;
+    xVec3Normalize(&vec, &vec);
+
+    TurnToFace(dt, &vec, -1.0f);
+    VelStop();
+
+    zNPCAmbient::Process(xscn, dt);
+}
+
 U32 zNPCMimeFish::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
 {
     S32 idx;

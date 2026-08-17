@@ -68,6 +68,7 @@ struct zNPCNeptune : zNPCAmbient
     void ParseINI();
     void SelfSetup();
     void Reset();
+    void Process(xScene* xscn, F32 dt);
     U32 AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal);
 
     U8 ColChkFlags() const;
