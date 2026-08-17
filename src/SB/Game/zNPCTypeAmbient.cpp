@@ -27,6 +27,22 @@ extern F32 zNPCTypeAmbientx405f66f3;
 extern F32 zNPCTypeAmbientx3f400000;
 extern F32 zNPCTypeAmbientx3edf66f3;
 
+zNPCAmbient::zNPCAmbient(S32 myType) : zNPCCommon(myType)
+{
+}
+
+zNPCJelly::zNPCJelly(S32 myType) : zNPCAmbient(myType)
+{
+}
+
+zNPCNeptune::zNPCNeptune(S32 myType) : zNPCAmbient(myType)
+{
+}
+
+zNPCMimeFish::zNPCMimeFish(S32 myType) : zNPCAmbient(myType)
+{
+}
+
 void ZNPC_Ambient_Startup()
 {
     S32 i = 0;
