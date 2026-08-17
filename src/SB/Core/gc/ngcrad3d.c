@@ -1,6 +1,8 @@
 #include "ngcrad3d.h"
 
 #include <dolphin/gx.h>
+#include <dolphin/mtx.h>
+#include <dolphin/os.h>
 #include "iFMV.h"
 #include <bink/include/rad3d.h>
 
@@ -31,30 +33,59 @@ static void Setup_surface_array()
     Built_tables = 1;
 }
 
-// TODO:
-// Defining this struct locally because i believe this isnt 100% right. Or if it is right why isnt this in the bink.h or other headers?
-// inestigate this
-
 struct RAD3DIMAGE
 {
-    int a;
-    int b;
-    unsigned int c;
-    int d;
-    int e;
-    void* f;
-    int g;
-    int h;
+    U32 width;
+    U32 height;
+    S32 alpha_pixels;
+    U32 bytes_per_pixel;
+    U32 surface_type;
+    void* pixels;
+    U32 buffer_size;
+    GXTexObj tex_obj;
 };
+
+HRAD3DIMAGE Open_RAD_3D_image(HRAD3D rad_3d, U32 width, U32 height, U32 rad3d_surface_format)
+{
+    struct RAD3DIMAGE* image;
+    U32 bytes_per_pixel;
+
+    Setup_surface_array();
+
+    bytes_per_pixel = Pixel_info[rad3d_surface_format] & 0xff;
+
+    image = (struct RAD3DIMAGE*)iFMVmalloc(sizeof(struct RAD3DIMAGE));
+    if (image == 0)
+    {
+        return 0;
+    }
+
+    image->width = width;
+    image->height = height;
+    image->alpha_pixels = Pixel_info[rad3d_surface_format] >> 31;
+    image->bytes_per_pixel = bytes_per_pixel;
+    image->surface_type = rad3d_surface_format;
+
+    image->buffer_size = GXGetTexBufferSize(
+        width, height, D3D_surface_type[rad3d_surface_format], GX_FALSE, 0);
+    image->pixels = iFMVmalloc(image->buffer_size);
+
+    GXInitTexObj(&image->tex_obj, image->pixels, width, height,
+                 (GXTexFmt)D3D_surface_type[rad3d_surface_format], GX_CLAMP, GX_CLAMP, GX_FALSE);
+    GXInitTexObjLOD(&image->tex_obj, GX_LINEAR, GX_NEAR, 0.0f, 0.0f, 0.0f, GX_FALSE, GX_FALSE,
+                    GX_ANISO_1);
+
+    return image;
+}
 
 void Close_RAD_3D_image(struct RAD3DIMAGE* image)
 {
     if (image != 0)
     {
-        if (image->f != 0)
+        if (image->pixels != 0)
         {
-            iFMVfree(image->f);
-            image->f = 0;
+            iFMVfree(image->pixels);
+            image->pixels = 0;
         }
         iFMVfree(image);
     }
@@ -70,35 +101,122 @@ S32 Lock_RAD_3D_image(HRAD3DIMAGE rad_image, void* out_pixel_buffer, U32* out_bu
 
     if (out_pixel_buffer != 0)
     {
-        *(void**)(out_pixel_buffer) = rad_image->f;
+        *(void**)(out_pixel_buffer) = rad_image->pixels;
     }
 
     if (out_buffer_pitch != 0)
     {
-        *out_buffer_pitch = rad_image->a * rad_image->d;
+        *out_buffer_pitch = rad_image->width * rad_image->bytes_per_pixel;
     }
 
     if (arg3 != 0)
     {
-        *arg3 = rad_image->e;
+        *arg3 = rad_image->surface_type;
     }
 
     return 1;
 }
 
-static void GXColor4u8(int r3, int r4, int r5, int r6)
+void Unlock_RAD_3D_image(HRAD3DIMAGE rad_image)
 {
-    int ptr = 0xcc010000;
-    *((char*)(ptr)-0x8000) = r3;
-    *((char*)(ptr)-0x8000) = r4;
-    *((char*)(ptr)-0x8000) = r5;
-    *((char*)(ptr)-0x8000) = r6;
+    if (rad_image != 0)
+    {
+        DCStoreRange(rad_image->pixels, rad_image->buffer_size);
+    }
 }
 
-static void GXPosition3s16(int r3, int r4, int r5)
+// The 5th and 6th parameters were `S32` in the original, which RAD's radbase.h
+// defined as `signed long`; the mangled name records `l`, not `i`.
+static void Submit_vertices(F32 x_offset, F32 y_offset, F32 x_scale, F32 y_scale, long width,
+                            long height, F32 alpha_level)
 {
-    int ptr = 0xcc010000;
-    *(short*)((char*)(ptr)-0x8000) = r3;
-    *(short*)((char*)(ptr)-0x8000) = r4;
-    *(short*)((char*)(ptr)-0x8000) = r5;
+    s16 left;
+    s16 top;
+    s16 right;
+    u8 alpha;
+    s16 bottom;
+
+    GXSetCullMode(GX_CULL_NONE);
+    GXSetZMode(GX_TRUE, GX_ALWAYS, GX_TRUE);
+    GXSetColorUpdate(GX_TRUE);
+    GXBegin(GX_QUADS, GX_VTXFMT0, 4);
+
+    left = (long)x_offset;
+    bottom = (long)(height * y_scale + y_offset);
+    GXPosition3s16(left, bottom, 0);
+    alpha = (long)(255.0f * alpha_level);
+    GXColor4u8(255, 255, 255, alpha);
+    GXTexCoord2f32(0.0f, 1.0f);
+
+    top = (long)y_offset;
+    GXPosition3s16(left, top, 0);
+    GXColor4u8(255, 255, 255, alpha);
+    GXTexCoord2f32(0.0f, 0.0f);
+
+    right = (long)(width * x_scale + x_offset);
+    GXPosition3s16(right, top, 0);
+    GXColor4u8(255, 255, 255, alpha);
+    GXTexCoord2f32(1.0f, 0.0f);
+
+    GXPosition3s16(right, bottom, 0);
+    GXColor4u8(255, 255, 255, alpha);
+    GXTexCoord2f32(1.0f, 1.0f);
+
+    GXEnd();
+}
+
+void Blit_RAD_3D_image(HRAD3DIMAGE rad_image, F32 x_offset, F32 y_offset, F32 x_scale, F32 y_scale,
+                       F32 alpha_level)
+{
+    Mtx tex_mtx;
+    F32 screen_width;
+    F32 screen_height;
+
+    if (rad_image == 0)
+    {
+        return;
+    }
+
+    if (alpha_level >= 0.998f)
+    {
+        if (rad_image->alpha_pixels == 0)
+        {
+            GXSetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
+        }
+        else
+        {
+            GXSetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
+            GXSetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_TEXA, GX_CA_KONST, GX_CA_ZERO);
+        }
+    }
+    else
+    {
+        GXSetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
+
+        if (rad_image->alpha_pixels == 0)
+        {
+            GXSetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_RASA, GX_CA_KONST, GX_CA_ZERO);
+        }
+        else
+        {
+            GXSetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_TEXA, GX_CA_RASA, GX_CA_ZERO);
+        }
+    }
+
+    GXLoadTexObj(&rad_image->tex_obj, GX_TEXMAP0);
+
+    PSMTXScale(tex_mtx, 1.0f / rad_image->width, 1.0f / rad_image->height, 1.0f);
+    PSMTXScale(tex_mtx, 1.0f, 1.0f, 1.0f);
+    GXLoadTexMtxImm(tex_mtx, GX_TEXMTX0, GX_MTX2x4);
+
+    GXSetNumTexGens(1);
+    GXSetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_TEXMTX0);
+
+    // Retail ignores the caller's offsets and scales and always covers the
+    // whole 640x480 screen.
+    screen_width = 640.0f;
+    screen_height = 480.0f;
+    Submit_vertices(0.0f, 0.0f, 1.0f, 1.0f, screen_width, screen_height, alpha_level);
+
+    GXSetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
 }
