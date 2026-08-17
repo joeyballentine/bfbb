@@ -128,11 +128,6 @@ F32 zNPCSleepy::uv_slice_nightlight[2] = { 0.25f, 0.25f };
 
 F32 zNPCSleepy::uv_slice_deathcone[2] = { 0.25f, 0.25f };
 
-static S32 g_sleepy_NightLightStates[10] = { 'NGN0', 'NGN2', 'NGN1', 'NGN3', 'NGN4',
-                                             'NGR4', 'NGR=', 'NGR0', 'NGR1', 0 };
-
-static S32 g_sleepy_angryStates[5] = { 'NGR4', 'NGR0', 'NGRi', 'NGR=', 0 };
-
 NPCLaser zNPCTubeSlave::laser;
 
 void zNPCFodBzzt_DoTheHokeyPokey(F32 dt);
@@ -165,32 +160,34 @@ S32 zEntTeleportBox_playerIn();
 
 void ZNPC_Robot_Startup()
 {
-    for (S32 i = 0; i < 41; i++)
+    S32 i;
+
+    for (i = 0; i < 41; i++)
     {
         g_hash_roboanim[i] = xStrHash(g_strz_roboanim[i]);
     }
 
-    for (S32 i = 0; i < 2; i++)
+    for (i = 0; i < 2; i++)
     {
         g_hash_ttsanim[i] = xStrHash(g_strz_ttsanim[i]);
     }
 
-    for (S32 i = 0; i < 3; i++)
+    for (i = 0; i < 3; i++)
     {
         g_hash_cloudanim[i] = xStrHash(g_strz_cloudanim[i]);
     }
 
-    for (S32 i = 0; i < 2; i++)
+    for (i = 0; i < 2; i++)
     {
         g_hash_nytlytanim[i] = xStrHash(g_strz_nytlytanim[i]);
     }
 
-    for (S32 i = 0; i < 2; i++)
+    for (i = 0; i < 2; i++)
     {
         g_hash_flotanim[i] = xStrHash(g_strz_flotanim[i]);
     }
 
-    for (S32 i = 0; i < 2; i++)
+    for (i = 0; i < 2; i++)
     {
         g_hash_shieldanim[i] = xStrHash(g_strz_shieldanim[i]);
     }
@@ -945,6 +942,15 @@ F32 zNPCRobot::GenShadCacheRad()
     }
     rad_cache = zNPCCommon::BoundAsRadius(0);
     return (fac_use * rad_cache);
+}
+
+// This static was used in a function the retail link deadstripped: the target
+// .data holds a second, unreferenced `choices$NNNN` of { 20, 21, 22 } between
+// the jump tables of zNPCRobot::GenShadCacheRad and zNPCRobot::RoboHandleMail,
+// which offsets every later .data relocation.
+void __deadstripped_zNPCTypeRobot_2()
+{
+    static S32 choices[3] = { 20, 21, 22 };
 }
 
 void zNPCRobot::ParseINI()
@@ -2117,11 +2123,6 @@ void zNPCFodder::Stun(F32 stuntime)
 }
 */
 
-void zNPCFodBzzt_ResetDanceParty()
-{
-    zNPCFodBzzt::cnt_alerthokey = 0;
-}
-
 void zNPCFodder::Stun(F32 stuntime)
 {
     if (!IsWounded())
@@ -2249,7 +2250,7 @@ void zNPCFodBomb::BlinkerReset()
 
 void zNPCFodBomb::BlinkerUpdate(F32 dt, F32 pct_timeRemain)
 {
-    blinker.Update(dt, 1.0f - pct_timeRemain, 0.5f, 0.1f);
+    blinker.Update(dt, 1.0f - pct_timeRemain, 0.1f, 0.03f);
     flg_xtrarend |= 1;
 }
 
@@ -2444,6 +2445,11 @@ void zNPCFodBzzt::RenderExtra()
     zNPCCommon::RenderExtra();
 }
 
+void zNPCFodBzzt_ResetDanceParty()
+{
+    zNPCFodBzzt::cnt_alerthokey = 0;
+}
+
 void zNPCFodBzzt_DoTheHokeyPokey(F32 dt)
 {
     static S32 g_somebodyplay;
@@ -2463,7 +2469,7 @@ void zNPCFodBzzt_DoTheHokeyPokey(F32 dt)
             init = 1;
         }
 
-        if (!(zNPCFodBzzt::tmr_hokeypokey < 0.0f))
+        if (!((zNPCFodBzzt::tmr_hokeypokey < 0.0f) ? 1 : 0))
         {
             zNPCFodBzzt::tmr_hokeypokey = MAX(-1.0f, zNPCFodBzzt::tmr_hokeypokey - dt);
             zNPCFodBzzt::tmr_nexthokey = 16.0f * (0.25f * (xurand() - 0.5f)) + 16.0f;
@@ -2478,7 +2484,7 @@ void zNPCFodBzzt_DoTheHokeyPokey(F32 dt)
                 g_needMusician = 0;
             }
         }
-        else if (!(zNPCFodBzzt::tmr_nexthokey < 0.0f))
+        else if (!((zNPCFodBzzt::tmr_nexthokey < 0.0f) ? 1 : 0))
         {
             zNPCFodBzzt::tmr_nexthokey = MAX(-1.0f, zNPCFodBzzt::tmr_nexthokey - dt);
             g_somebodyplay = 0;
@@ -3248,6 +3254,11 @@ RwRaster* zNPCSleepy::rast_killcone;
 RwRaster* zNPCSleepy::rast_detectcone;
 
 volatile F32 zNPCSleepy::hyt_NightLightCurrent;
+
+static S32 g_sleepy_NightLightStates[10] = { 'NGN0', 'NGN2', 'NGN1', 'NGN3', 'NGN4',
+                                             'NGR4', 'NGR=', 'NGR0', 'NGR1', 0 };
+
+static S32 g_sleepy_angryStates[5] = { 'NGR4', 'NGR0', 'NGRi', 'NGR=', 0 };
 
 // Scheduling
 void zNPCSleepy_Timestep(F32 dt)
@@ -5229,7 +5240,7 @@ void zNPCSlick::SelfSetup()
 
 U32 zNPCSlick::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
 {
-    static S32 choices[3] = { 20, 21, 22 };
+    static S32 choices[3] = { 20, 22, 21 };
 
     S32 idx = -1;
     U32 hashid = 0;
@@ -5379,7 +5390,9 @@ void zNPCSlick::ShieldUpdate(F32 dt)
 
     alf_shieldCurrent = CLAMP(alf_shieldCurrent, 0.0f, 0.39215687f);
 
-    F32 rat_shield = alf_shieldCurrent / 0.39215687f;
+    F32 rat_shield = alf_shieldCurrent;
+
+    rat_shield /= 0.39215687f;
 
     rad_shield = SMOOTH(rat_shield, 0.3f, 2.5f);
 
@@ -5450,6 +5463,14 @@ static S32 WhereTheWildThingsAre(xModelInstance* mdl)
     }
 
     return 1;
+}
+
+// The target carries an unreferenced `offset$NNNN` of { 0.0f, 1.5f, 0.0f } in
+// .rodata between zNPCArfDog::BlinkRender's two bone offsets and the `smidge`
+// below, left behind by a function the retail link deadstripped.
+void __deadstripped_zNPCTypeRobot_4()
+{
+    static const xVec3 offset = { 0.0f, 1.5f, 0.0f };
 }
 
 void zNPCSlick::ShieldGeneratorDamaged()
@@ -5920,6 +5941,15 @@ void ROBO_InitEffects()
 
 void ROBO_KillEffects()
 {
+}
+
+// Two more unreferenced all-zero xVec3 templates the target holds between
+// zNPCSlick::ShieldGeneratorDamaged's `smidge` and the zeroed pos_emit of
+// zNPCRobot::DoFX_Motorboat below.
+void __deadstripped_zNPCTypeRobot_5()
+{
+    const char _4696[0x0C] = {};
+    const char _4697[0x0C] = {};
 }
 
 void zNPCRobot::DoFX_Motorboat(F32 dt)
