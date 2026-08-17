@@ -8,6 +8,7 @@
 #include "xTextAsset.h"
 #include "xModelBucket.h"
 
+#include "iSystem.h"
 #include "iTime.h"
 #include "zScene.h"
 
@@ -1272,14 +1273,85 @@ namespace
     tl_cache_entry tl_cache[TL_CACHE_COUNT];
 } // namespace
 
-#if 1
-
-#else
 xtextbox::layout& xtextbox::temp_layout(bool cache) const
 {
-    // todo: uses int-to-float conversion
+    iTime max_time = (iTime)(F32)(GET_BUS_FREQUENCY() / 4);
+    iTime cur_time = iTimeGet();
+    bool refresh = false;
+    U32 index = 0;
+
+    if (cache)
+    {
+        for (; index < TL_CACHE_COUNT; index++)
+        {
+            if (!tl_cache[index].tl.changed(*this))
+            {
+                break;
+            }
+        }
+    }
+    else
+    {
+        index = TL_CACHE_COUNT;
+    }
+
+    tweaker::log_cache(index < TL_CACHE_COUNT);
+
+    if (index >= TL_CACHE_COUNT)
+    {
+        S32 min_used = 1000000000;
+
+        refresh = true;
+        index = 0;
+
+        for (U32 i = 0; i < TL_CACHE_COUNT; i++)
+        {
+            if (cur_time - tl_cache[i].last_used > max_time)
+            {
+                index = i;
+                break;
+            }
+
+            S32 used = tl_cache[i].used;
+
+            if (tl_cache[i].tl.dynamics_size)
+            {
+                used -= 10;
+            }
+
+            if (tl_cache[i].tl.jots_size() > 50)
+            {
+                used += 10;
+            }
+
+            if (used < min_used)
+            {
+                min_used = used;
+                index = i;
+            }
+        }
+    }
+
+    tl_cache_entry& e = tl_cache[index];
+
+    if (refresh)
+    {
+        e.used = 0;
+        e.tl.refresh(*this, true);
+    }
+    else
+    {
+        e.tl.tb = *this;
+    }
+
+    if (cache)
+    {
+        e.used++;
+        e.last_used = cur_time;
+    }
+
+    return e.tl;
 }
-#endif
 
 void xtextbox::render(layout& l, S32 begin_jot, S32 end_jot) const
 {
