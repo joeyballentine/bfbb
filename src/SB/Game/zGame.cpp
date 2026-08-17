@@ -694,7 +694,10 @@ void zGameLoop()
             zGameSetOstrich(eGameOstrich_InScene);
 
             if ((gTrcPad[0].state != TRC_PadInserted) && (gBusStopIsRunning == 0) &&
-                (oob_state::IsPlayerInControl() || (globals.player.ControlOff & 0xb4)) &&
+                (oob_state::IsPlayerInControl() ||
+                 (globals.player.ControlOff &
+                  (CONTROL_OWNER_OOB | CONTROL_OWNER_TALK_BOX | CONTROL_OWNER_TAXI |
+                   CONTROL_OWNER_TELEPORT_BOX))) &&
                 (globals.dontShowPadMessageDuringLoadingOrCutScene == 0))
             {
                 globals.dontShowPadMessageDuringLoadingOrCutScene = 1;

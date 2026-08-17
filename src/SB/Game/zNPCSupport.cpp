@@ -438,15 +438,13 @@ void NPCLaser::Render(xVec3* pos_src, xVec3* pos_tgt)
         xVec3AddTo(&pos_vtx, &pos_lerp);
         RwIm3DVertexSetPos(&vtx_horz[0], pos_vtx.x, pos_vtx.y, pos_vtx.z);
         RwIm3DVertexSetRGBA(&vtx_horz[0], cr, cg, cb, ca);
-        vtx_horz[0].u = 0.0f;
-        vtx_horz[0].v = v;
+        RwIm3DVertexSetUV(&vtx_horz[0], 0.0f, v);
 
         xVec3SMul(&pos_vtx, &dir_horz, -rad);
         xVec3AddTo(&pos_vtx, &pos_lerp);
         RwIm3DVertexSetPos(&vtx_horz[1], pos_vtx.x, pos_vtx.y, pos_vtx.z);
         RwIm3DVertexSetRGBA(&vtx_horz[1], cr, cg, cb, ca);
-        vtx_horz[1].u = 1.0f;
-        vtx_horz[1].v = v;
+        RwIm3DVertexSetUV(&vtx_horz[1], 1.0f, v);
 
         vtx_horz += 2;
 
@@ -454,15 +452,13 @@ void NPCLaser::Render(xVec3* pos_src, xVec3* pos_tgt)
         xVec3AddTo(&pos_vtx, &pos_lerp);
         RwIm3DVertexSetPos(&vtx_vert[0], pos_vtx.x, pos_vtx.y, pos_vtx.z);
         RwIm3DVertexSetRGBA(&vtx_vert[0], cr, cg, cb, ca);
-        vtx_vert[0].u = 0.0f;
-        vtx_vert[0].v = v;
+        RwIm3DVertexSetUV(&vtx_vert[0], 0.0f, v);
 
         xVec3SMul(&pos_vtx, &dir_vert, -rad);
         xVec3AddTo(&pos_vtx, &pos_lerp);
         RwIm3DVertexSetPos(&vtx_vert[1], pos_vtx.x, pos_vtx.y, pos_vtx.z);
         RwIm3DVertexSetRGBA(&vtx_vert[1], cr, cg, cb, ca);
-        vtx_vert[1].u = 1.0f;
-        vtx_vert[1].v = v;
+        RwIm3DVertexSetUV(&vtx_vert[1], 1.0f, v);
 
         vtx_vert += 2;
     }
@@ -514,8 +510,7 @@ void NPCCone::RenderCone(xVec3* pos_tiptop, xVec3* pos_botcenter)
 
     RwIm3DVertexSetPos(&vert_list[0], pos_top.x, pos_top.y, pos_top.z);
     RwIm3DVertexSetRGBA(&vert_list[0], rgba_top.red, rgba_top.green, rgba_top.blue, rgba_top.alpha);
-    vert_list[0].u = u_tip;
-    vert_list[0].v = v_tip;
+    RwIm3DVertexSetUV(&vert_list[0], u_tip, v_tip);
 
     for (S32 i = 0; i < 8; i++)
     {
@@ -655,15 +650,13 @@ void NPCBlinker::Render(const xVec3* pos_blink, F32 rad_blink, const RwRaster* r
         pos_vtx += pos_lerp;
         RwIm3DVertexSetPos(&vtx_horz[0], pos_vtx.x, pos_vtx.y, pos_vtx.z);
         RwIm3DVertexSetRGBA(&vtx_horz[0], rgba.red, rgba.green, rgba.blue, rgba.alpha);
-        vtx_horz[0].u = uv_lo[0];
-        vtx_horz[0].v = v;
+        RwIm3DVertexSetUV(&vtx_horz[0], uv_lo[0], v);
 
         pos_vtx = dir_card * -rad_blink;
         pos_vtx += pos_lerp;
         RwIm3DVertexSetPos(&vtx_horz[1], pos_vtx.x, pos_vtx.y, pos_vtx.z);
         RwIm3DVertexSetRGBA(&vtx_horz[1], rgba.red, rgba.green, rgba.blue, rgba.alpha);
-        vtx_horz[1].u = uv_hi[0];
-        vtx_horz[1].v = v;
+        RwIm3DVertexSetUV(&vtx_horz[1], uv_hi[0], v);
 
         vtx_horz += 2;
 
@@ -671,15 +664,13 @@ void NPCBlinker::Render(const xVec3* pos_blink, F32 rad_blink, const RwRaster* r
         pos_vtx += pos_lerp;
         RwIm3DVertexSetPos(&vtx_vert[0], pos_vtx.x, pos_vtx.y, pos_vtx.z);
         RwIm3DVertexSetRGBA(&vtx_vert[0], rgba.red, rgba.green, rgba.blue, rgba.alpha);
-        vtx_vert[0].u = uv_lo[0];
-        vtx_vert[0].v = v;
+        RwIm3DVertexSetUV(&vtx_vert[0], uv_lo[0], v);
 
         pos_vtx = dir_perp * rad_blink;
         pos_vtx += pos_lerp;
         RwIm3DVertexSetPos(&vtx_vert[1], pos_vtx.x, pos_vtx.y, pos_vtx.z);
         RwIm3DVertexSetRGBA(&vtx_vert[1], rgba.red, rgba.green, rgba.blue, rgba.alpha);
-        vtx_vert[1].u = uv_hi[0];
-        vtx_vert[1].v = v;
+        RwIm3DVertexSetUV(&vtx_vert[1], uv_hi[0], v);
 
         vtx_vert += 2;
     }
