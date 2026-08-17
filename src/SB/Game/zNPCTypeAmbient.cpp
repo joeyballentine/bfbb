@@ -650,6 +650,90 @@ void zNPCJelly::PlayWithLightnin()
     }
 }
 
+S32 JELY_grul_getAngry(xGoal* rawgoal, void* p1, en_trantype* trantype, F32 f, void* p2)
+{
+    S32 nextgoal = 0;
+    zNPCJelly* npc = (zNPCJelly*)rawgoal->psyche->clt_owner;
+    S32 skipit = 0;
+    S32 angerThresh;
+    S32 selftype;
+    F32 dst_sq;
+
+    if (!*(U8*)(&npc->npcset.allowDetect))
+    {
+        skipit = 1;
+    }
+    else if (globals.player.Health < 1)
+    {
+        skipit = 1;
+    }
+    else if (globals.player.DamageTimer > 0.0f)
+    {
+        skipit = 1;
+    }
+    else if (npc->SomethingWonderful())
+    {
+        skipit = 1;
+    }
+
+    if (skipit)
+    {
+        npc->cnt_angerLevel = 0;
+        return 0;
+    }
+
+    selftype = npc->SelfType();
+
+    if (globals.sceneCur->sceneID == 'JF04')
+    {
+        angerThresh = 100;
+    }
+    else if (selftype == NPC_TYPE_JELLYPINK)
+    {
+        angerThresh = 300;
+    }
+    else if (selftype == NPC_TYPE_JELLYBLUE)
+    {
+        angerThresh = 150;
+    }
+    else
+    {
+        angerThresh = 300;
+    }
+
+    dst_sq = npc->XYZDstSqToPlayer(NULL);
+
+    if (dst_sq < SQ(5.0f))
+    {
+        npc->cnt_angerLevel++;
+    }
+    else
+    {
+        npc->cnt_angerLevel--;
+    }
+
+    if (npc->cnt_angerLevel < 0)
+    {
+        npc->cnt_angerLevel = 0;
+    }
+
+    // Retail bug: this clamps the anger level to *above* the threshold, so the
+    // test right below always succeeds once it has fired.
+    if (npc->cnt_angerLevel > angerThresh)
+    {
+        npc->cnt_angerLevel = angerThresh + 10;
+    }
+
+    if (npc->cnt_angerLevel > angerThresh && dst_sq < SQ(3.0f))
+    {
+        npc->cnt_angerLevel = 0;
+        *trantype = GOAL_TRAN_PUSH;
+        nextgoal = NPC_GOAL_JELLYATTACK;
+    }
+
+    return nextgoal;
+}
+
 U32 zNPCNeptune::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
 {
     S32 idx;
