@@ -916,8 +916,3 @@ U8 zNPCNeptune::ColPenByFlags() const
 void zNPCNeptune::SelfSetup()
 {
 }
-
-S32 zNPCAmbient::AmbiHandleMail(NPCMsg*)
-{
-    return 0;
-}
