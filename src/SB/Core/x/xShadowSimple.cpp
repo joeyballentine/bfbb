@@ -32,13 +32,13 @@ static RwRaster* sShadRaster;
 static u32 sShadVertCount;
 static RwMatrixTag* sModelMat;
 
-void xQuickCullForLine(xQCData* q, const xLine3* ln)
+inline void xQuickCullForLine(xQCData* q, const xLine3* ln)
 {
     xQuickCullForLine(&xqc_def_ctrl, q, ln);
 }
 
-RpCollisionTriangle* shadowRayCB(RpIntersection*, RpWorldSector*, RpCollisionTriangle* tri,
-                                 F32 dist, void* data)
+static RpCollisionTriangle* shadowRayCB(RpIntersection*, RpWorldSector*, RpCollisionTriangle* tri,
+                                        F32 dist, void* data)
 {
     xVec3 xformnorm;
     xVec3* norm = NULL;
@@ -73,8 +73,8 @@ RpCollisionTriangle* shadowRayCB(RpIntersection*, RpWorldSector*, RpCollisionTri
     return tri;
 }
 
-RpCollisionTriangle* shadowRayModelCB(RpIntersection* isx, RpCollisionTriangle* tri, F32 dist,
-                                      void* data)
+static RpCollisionTriangle* shadowRayModelCB(RpIntersection* isx, RpCollisionTriangle* tri,
+                                             F32 dist, void* data)
 {
     return shadowRayCB(isx, NULL, tri, dist, data);
 }
@@ -332,6 +332,9 @@ static void xShadowSimple_AddVerts(xShadowSimpleCache* cache)
 
     sShadRasters[sShadVertCount / 6] = (RwRaster*)cache->raster;
 
+    // NOTE: retail reloads sShadVertCount here (the reload-after-aliasing-store
+    // defect); the rest of the residual in this function is pure instruction
+    // scheduling.
     sShadVertCount += 6;
 }
 
@@ -348,32 +351,25 @@ void xShadowSimple_Init()
 
     memset(sShadVert, 0, sizeof(sShadVert));
 
+    // NOTE: retail reloads the 0.0f/1.0f literals from .sdata2 once per store
+    // (the reload-after-aliasing-store defect), which makes its loop body too
+    // big to unroll.  Ours CSEs them into two registers and unrolls x2.  Every
+    // store offset and value below is byte-for-byte what retail writes; the
+    // residual is compiler-side, not semantic.
     for (i = 0; i < 64; i++)
     {
-        sShadVert[i*6+1].u = 1.0f;
-        sShadVert[i*6+2].v = 1.0f;
-        sShadVert[i*6+3].u = 1.0f;
-        sShadVert[i*6+4].v = 1.0f;
-        sShadVert[i*6+5].u = 1.0f;
-        sShadVert[i*6+5].v = 1.0f;
-        sShadVert[i*6+0].nx = 0.0f;
-        sShadVert[i*6+0].ny = 1.0f;
-        sShadVert[i*6+0].nz = 0.0f;
-        sShadVert[i*6+1].nx = 0.0f;
-        sShadVert[i*6+1].ny = 1.0f;
-        sShadVert[i*6+1].nz = 0.0f;
-        sShadVert[i*6+2].nx = 0.0f;
-        sShadVert[i*6+2].ny = 1.0f;
-        sShadVert[i*6+2].nz = 0.0f;
-        sShadVert[i*6+3].nx = 0.0f;
-        sShadVert[i*6+3].ny = 1.0f;
-        sShadVert[i*6+3].nz = 0.0f;
-        sShadVert[i*6+4].nx = 0.0f;
-        sShadVert[i*6+4].ny = 1.0f;
-        sShadVert[i*6+4].nz = 0.0f;
-        sShadVert[i*6+5].nx = 0.0f;
-        sShadVert[i*6+5].ny = 1.0f;
-        sShadVert[i*6+5].nz = 0.0f;
+        sShadVert[i * 6 + 1].u = 1.0f;
+        sShadVert[i * 6 + 2].v = 1.0f;
+        sShadVert[i * 6 + 3].u = 1.0f;
+        sShadVert[i * 6 + 4].v = 1.0f;
+        sShadVert[i * 6 + 5].u = 1.0f;
+        sShadVert[i * 6 + 5].v = 1.0f;
+        RwIm3DVertexSetNormal(&sShadVert[i * 6 + 0], 0.0f, 1.0f, 0.0f);
+        RwIm3DVertexSetNormal(&sShadVert[i * 6 + 1], 0.0f, 1.0f, 0.0f);
+        RwIm3DVertexSetNormal(&sShadVert[i * 6 + 2], 0.0f, 1.0f, 0.0f);
+        RwIm3DVertexSetNormal(&sShadVert[i * 6 + 3], 0.0f, 1.0f, 0.0f);
+        RwIm3DVertexSetNormal(&sShadVert[i * 6 + 4], 0.0f, 1.0f, 0.0f);
+        RwIm3DVertexSetNormal(&sShadVert[i * 6 + 5], 0.0f, 1.0f, 0.0f);
     }
 }
 
@@ -462,6 +458,8 @@ void xShadowSimple_Add(xShadowSimpleCache* cache, xEnt* ent, F32 radius, F32 ecc
     xVec3 xformnorm;
     xEnt* castOnEnt;
     F32 poo;
+    F32 nx;
+    F32 nz;
     F32 pdot;
     xVec3* v0;
     xVec3* v1;
@@ -507,9 +505,13 @@ void xShadowSimple_Add(xShadowSimpleCache* cache, xEnt* ent, F32 radius, F32 ecc
                 xMat3x3RMulVec(&xformnorm, (xMat3x3*)castOnEnt->model->Mat, &cache->poly.norm);
                 xVec3Normalize(&xformnorm, &xformnorm);
 
+                // Retail bug, reproduced deliberately: xabs() is applied to the
+                // *boolean* (xformnorm.y > 1e-5f), so poo is 0.0f or 1.0f and the
+                // magnitude of y is never actually tested.  The target emits the
+                // full int->float conversion for the comparison result.
                 poo = xabs(xformnorm.y > 1e-5f);
 
-                if (poo != 0.0f)
+                if (poo)
                 {
                     cache->dydx = -xformnorm.x / xformnorm.y;
                     cache->dydz = -xformnorm.z / xformnorm.y;
@@ -544,9 +546,10 @@ void xShadowSimple_Add(xShadowSimpleCache* cache, xEnt* ent, F32 radius, F32 ecc
                 }
             }
 
-            cache->shadowHeight = vert[0].y +
-                                  cache->dydx * (ent->model->Mat->pos.x - vert[0].x) +
-                                  cache->dydz * (ent->model->Mat->pos.z - vert[0].z);
+            nx = ent->model->Mat->pos.x - vert[0].x;
+            nz = ent->model->Mat->pos.z - vert[0].z;
+
+            cache->shadowHeight = vert[0].y + cache->dydx * nx + cache->dydz * nz;
 
             if (moved)
             {
