@@ -58,6 +58,72 @@ typedef void (*tweak_change_cb)(tweak_info&);
 #define SOUND_TAUNT 9
 #define SOUND_WAVE_RING 10
 
+namespace auto_tweak
+{
+    template <>
+    inline void load_param<iColor_tag, S32>(iColor_tag& value, S32 scale, S32 lo, S32 hi,
+                                     xModelAssetParam* ap, U32 apsize, const char* name)
+    {
+        F32 def[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        F32 result[4];
+
+        def[0] = value.r;
+        def[1] = value.g;
+        def[2] = value.b;
+        def[3] = value.a;
+
+        zParamGetFloatList(ap, apsize, name, 4, def, result);
+
+        value.r = result[0];
+        value.g = result[1];
+        value.b = result[2];
+        value.a = result[3];
+    }
+
+    template <>
+    inline void load_param<bool, S32>(bool& value, S32 scale, S32 lo, S32 hi, xModelAssetParam* ap,
+                               U32 apsize, const char* name)
+    {
+        value = zParamGetInt(ap, apsize, name, value);
+    }
+
+    template <>
+    inline void load_param<F32, F32>(F32& value, F32 scale, F32 lo, F32 hi, xModelAssetParam* ap,
+                              U32 apsize, const char* name)
+    {
+        value = zParamGetFloat(ap, apsize, name, value);
+
+        if (value < lo)
+        {
+            value = lo;
+        }
+        else if (value > hi)
+        {
+            value = hi;
+        }
+
+        value = value * scale;
+    }
+
+    template <>
+    inline void load_param<S32, S32>(S32& value, S32 scale, S32 lo, S32 hi, xModelAssetParam* ap,
+                              U32 apsize, const char* name)
+    {
+        S32 v = zParamGetInt(ap, apsize, name, value);
+
+        if (v < lo)
+        {
+            v = lo;
+        }
+        else if (v > hi)
+        {
+            v = hi;
+        }
+
+        value = v * scale;
+    }
+} // namespace auto_tweak
+
 namespace
 {
     struct tweak_group
@@ -266,8 +332,15 @@ namespace
         { 0x18, 0x19, 0x1A, 0x1C },
     };
 
-    // TODO: Match the data
-    static xBinaryCamera boss_cam = {};
+    static xBinaryCamera boss_cam = { { { 8.0f, 4.0f, 3.0f },
+                                        { 0.2f, 2.2f, -1.0f },
+                                        { 1.0f, 0.2f, 1.5f },
+                                        10.0f,
+                                        10.0f,
+                                        10.0f,
+                                        10.0f,
+                                        50.0f,
+                                        0.0f } };
 }
 
 namespace
@@ -364,81 +437,15 @@ namespace
 
 } // namespace
 
-namespace auto_tweak
-{
-    template <>
-    void load_param<iColor_tag, S32>(iColor_tag& value, S32 scale, S32 lo, S32 hi,
-                                     xModelAssetParam* ap, U32 apsize, const char* name)
-    {
-        F32 def[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-        F32 result[4];
-
-        def[0] = value.r;
-        def[1] = value.g;
-        def[2] = value.b;
-        def[3] = value.a;
-
-        zParamGetFloatList(ap, apsize, name, 4, def, result);
-
-        value.r = result[0];
-        value.g = result[1];
-        value.b = result[2];
-        value.a = result[3];
-    }
-
-    template <>
-    void load_param<bool, S32>(bool& value, S32 scale, S32 lo, S32 hi, xModelAssetParam* ap,
-                               U32 apsize, const char* name)
-    {
-        value = zParamGetInt(ap, apsize, name, value);
-    }
-
-    template <>
-    void load_param<F32, F32>(F32& value, F32 scale, F32 lo, F32 hi, xModelAssetParam* ap,
-                              U32 apsize, const char* name)
-    {
-        value = zParamGetFloat(ap, apsize, name, value);
-
-        if (value < lo)
-        {
-            value = lo;
-        }
-        else if (value > hi)
-        {
-            value = hi;
-        }
-
-        value = value * scale;
-    }
-
-    template <>
-    void load_param<S32, S32>(S32& value, S32 scale, S32 lo, S32 hi, xModelAssetParam* ap,
-                              U32 apsize, const char* name)
-    {
-        S32 v = zParamGetInt(ap, apsize, name, value);
-
-        if (v < lo)
-        {
-            v = lo;
-        }
-        else if (v > hi)
-        {
-            v = hi;
-        }
-
-        value = v * scale;
-    }
-} // namespace auto_tweak
-
 namespace
 {
     static const S32 bored_anims[2] = { ANIM_Idle02, ANIM_Idle03 };
 
     S32 set_ring_segments(const xVec3& center, F32 radius, F32 segment_length)
     {
+        static U8 sclookup_inited = FALSE;
         static F32 sin_lookup[9];
         static F32 cos_lookup[9];
-        static U8 sclookup_inited = FALSE;
 
         if (!sclookup_inited)
         {
@@ -455,7 +462,7 @@ namespace
             }
         }
 
-        S32 size = 0.5f + ((2.0f * radius * PI) / segment_length);
+        S32 size = 0.99999f + ((2.0f * radius * PI) / segment_length);
         size = (size + 7) & ~7;
 
         if (size > 64)
@@ -467,9 +474,60 @@ namespace
             return 0;
         }
 
-        for (S32 i = 0; i < size; i++)
+        xVec3* it = ring_segments;
+        xVec3* end = &ring_segments[size / 8] + 1;
+        S32 step = 64 / size;
+        const F32* sin_it = sin_lookup;
+        const F32* cos_it = cos_lookup;
+        xVec3* dst;
+
+        // First octant, straight out of the lookup tables.
+        for (; it != end; it++)
         {
-            // TODO: what is here
+            it->x = radius * *sin_it;
+            it->z = radius * *cos_it;
+            sin_it += step;
+            cos_it += step;
+        }
+
+        // Second octant: mirror about the 45 degree line.
+        it = ring_segments;
+        dst = it + size / 4;
+        for (; it != &ring_segments[size / 8]; it++, dst--)
+        {
+            dst->x = it->z;
+            dst->z = it->x;
+        }
+
+        // Second quadrant: mirror about the x axis.
+        it = ring_segments;
+        dst = it + size / 2;
+        for (; it != &ring_segments[size / 4]; it++, dst--)
+        {
+            dst->x = it->x;
+            dst->z = -it->z;
+        }
+
+        // Lower half: mirror about the z axis.
+        dst = &ring_segments[size] - 1;
+        for (it = &ring_segments[1]; it != &ring_segments[size / 2]; it++, dst--)
+        {
+            dst->x = -it->x;
+            dst->z = it->z;
+        }
+
+        F32 cz;
+        F32 cy;
+        F32 cx;
+        cx = center.x;
+        cy = center.y;
+        cz = center.z;
+
+        for (it = ring_segments; it != &ring_segments[size]; it++)
+        {
+            it->x += cx;
+            it->y = cy;
+            it->z += cz;
         }
 
         return size;
@@ -482,9 +540,8 @@ namespace
 
         const F32 t = ring.current.time / ring.delay;
         const F32 range = ring.max_height - ring.min_height;
-        const F32 wave = 1.0f + isin(PI * t);
-
-        ring.current.height = ring.min_height + (0.5f * (range * wave));
+        ring.current.height =
+            ring.min_height + 0.5f * (range * (1.0f + isin((2.0f * PI) * t)));
     }
 
     void expand_ring_update(lightning_ring& ring, F32 dt)
@@ -1067,7 +1124,7 @@ namespace
         }
         if (init)
         {
-            blink.color.a = 0.0f;
+            blink.color.a = 1.0f;
             auto_tweak::load_param<F32, F32>(blink.color.a, 1.0f, 0.0f, 100000.0f, ap, apsize,
                                              "blink.color.a");
         }
@@ -1350,7 +1407,7 @@ namespace
         }
         if (init)
         {
-            wave_ring.unit[2].color = xColorFromRGBA(255, 255, 255, 255);
+            wave_ring.unit[2].color = xColorFromRGBA(155, 255, 255, 255);
             auto_tweak::load_param<iColor_tag, S32>(wave_ring.unit[2].color, 0, 0, 0, ap, apsize,
                                                     "wave_ring.unit[2].color");
         }
@@ -1435,7 +1492,7 @@ namespace
         if (init)
         {
             ambient_ring.segment_length = 1.0f;
-            auto_tweak::load_param<F32, F32>(ambient_ring.segment_length, 1.0f, 0.0f, 10.0f, ap,
+            auto_tweak::load_param<F32, F32>(ambient_ring.segment_length, 1.0f, 0.01f, 10.0f, ap,
                                              apsize, "ambient_ring.segment_length");
         }
         if (init)
@@ -1629,18 +1686,21 @@ namespace
             auto_tweak::load_param<F32, F32>(sound[SOUND_AMBIENT_RING].volume, 1.0f, 0.0f, 1.0f, ap,
                                              apsize, "sound[SOUND_AMBIENT_RING].volume");
         }
-        if (init)
-        {
-            sound[SOUND_AMBIENT_RING].delay = 0.0f;
-            auto_tweak::load_param<F32, F32>(sound[SOUND_AMBIENT_RING].delay, 1.0f, 0.0f, 100000.0f,
-                                             ap, apsize, "sound[SOUND_AMBIENT_RING].delay");
-        }
+        // Retail registers no "delay" tweak for SOUND_AMBIENT_RING; sound[0].delay
+        // is left at whatever the zero-initialised tweak block holds.
         if (init)
         {
             sound[SOUND_AMBIENT_RING].radius_inner = 0.0f;
             auto_tweak::load_param<F32, F32>(sound[SOUND_AMBIENT_RING].radius_inner, 1.0f, 0.0f,
                                              100000.0f, ap, apsize,
                                              "sound[SOUND_AMBIENT_RING].radius_inner");
+        }
+        if (init)
+        {
+            sound[SOUND_AMBIENT_RING].radius_outer = 25.0f;
+            auto_tweak::load_param<F32, F32>(sound[SOUND_AMBIENT_RING].radius_outer, 1.0f, 0.0f,
+                                             100000.0f, ap, apsize,
+                                             "sound[SOUND_AMBIENT_RING].radius_outer");
         }
         if (init)
         {
@@ -1929,12 +1989,15 @@ namespace
                                              100000.0f, ap, apsize,
                                              "sound[SOUND_WAVE_RING].radius_inner");
         }
+        // Retail copy/paste slip: this block re-registers radius_inner (same
+        // field, same tweak name) instead of radius_outer, so radius_inner ends
+        // up defaulting to 50 and radius_outer is never registered at all.
         if (init)
         {
-            sound[SOUND_WAVE_RING].radius_outer = 50.0f;
-            auto_tweak::load_param<F32, F32>(sound[SOUND_WAVE_RING].radius_outer, 1.0f, 0.0f,
+            sound[SOUND_WAVE_RING].radius_inner = 50.0f;
+            auto_tweak::load_param<F32, F32>(sound[SOUND_WAVE_RING].radius_inner, 1.0f, 0.0f,
                                              100000.0f, ap, apsize,
-                                             "sound[SOUND_WAVE_RING].radius_outer");
+                                             "sound[SOUND_WAVE_RING].radius_inner");
         }
         if (init)
         {
