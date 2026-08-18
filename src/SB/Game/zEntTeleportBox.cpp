@@ -106,7 +106,6 @@ static U32 CtoOCheck(xAnimTransition*, xAnimSingle*, void* object)
 
 static U32 CtoOCB(xAnimTransition*, xAnimSingle*, void* object)
 {
-    // non-matching: floats
     xVec3 tmp;
 
     xVec3Copy(&tmp, (xVec3*)&((_zEntTeleportBox*)object)->model->Mat->pos);
@@ -343,7 +342,8 @@ void zEntTeleportBox_Setup(_zEntTeleportBox* ent)
 
     ent->status = STATUS_CLOSED;
     ent->currPlrState = PLAYER_STATE_OUTSIDE;
-    ent->target = (zEnt*)zSceneFindObject(ent->tasset->targetID);
+    _zEntTeleportBox* target = (_zEntTeleportBox*)zSceneFindObject(ent->tasset->targetID);
+    ent->target = target;
     ent->jumpInAnim = 0;
     ent->jumpOutAnim = 0;
     ent->JOtoOpenAnim = 0;
@@ -352,43 +352,43 @@ void zEntTeleportBox_Setup(_zEntTeleportBox* ent)
     ent->plrCtrlTimer = -1.0f;
 
     xVec3 pos;
-    xBox box;
+    xBox wbox;
 
-    box.upper.x = 0.305f;
-    box.lower.x = -0.305f;
-    box.upper.z = 0.25f;
-    box.lower.z = -0.25f;
-    box.lower.y = -0.1f;
-    box.upper.y = 2.5f;
-
-    xVec3Copy(&pos, (xVec3*)&ent->model->Mat->pos);
-
-    box.upper.x += pos.x + 0.028f;
-    box.lower.x += pos.x + 0.028f;
-    box.lower.y += pos.y;
-    box.upper.y += pos.y;
-    box.upper.z += pos.z + -0.16f;
-    box.lower.z += pos.z + -0.16f;
-
-    ent->trig[0] = box;
-
-    box.upper.x = 0.61f;
-    box.lower.x = -0.61f;
-    box.upper.z = 0.5f;
-    box.lower.z = -0.5f;
-    box.lower.y = -0.1f;
-    box.upper.y = 1.2f;
+    wbox.upper.x = 0.305f;
+    wbox.lower.x = -0.305f;
+    wbox.upper.z = 0.25f;
+    wbox.lower.z = -0.25f;
+    wbox.lower.y = -0.1f;
+    wbox.upper.y = 2.5f;
 
     xVec3Copy(&pos, (xVec3*)&ent->model->Mat->pos);
 
-    box.upper.x += pos.x;
-    box.lower.x += pos.x;
-    box.lower.y += pos.y;
-    box.upper.y += pos.y;
-    box.upper.z += pos.z + -0.16f;
-    box.lower.z += pos.z + -0.16f;
+    wbox.upper.x += pos.x + 0.028f;
+    wbox.lower.x += pos.x + 0.028f;
+    wbox.upper.z += pos.z + -0.16f;
+    wbox.lower.z += pos.z + -0.16f;
+    wbox.lower.y += pos.y;
+    wbox.upper.y += pos.y;
 
-    ent->trig[1] = box;
+    ent->trig[0] = wbox;
+
+    wbox.upper.x = 0.61f;
+    wbox.lower.x = -0.61f;
+    wbox.upper.z = 0.5f;
+    wbox.lower.z = -0.5f;
+    wbox.lower.y = -0.1f;
+    wbox.upper.y = 1.2f;
+
+    xVec3Copy(&pos, (xVec3*)&ent->model->Mat->pos);
+
+    wbox.upper.x += pos.x;
+    wbox.lower.x += pos.x;
+    wbox.upper.z += pos.z + -0.16f;
+    wbox.lower.z += pos.z + -0.16f;
+    wbox.lower.y += pos.y;
+    wbox.upper.y += pos.y;
+
+    ent->trig[1] = wbox;
 
     sTeleportUI = (zUIFont*)zSceneFindObject(xStrHash("mnu4 teleport box"));
 }
@@ -498,6 +498,12 @@ void zEntTeleportBox_Update(xEnt* rawent, xScene* sc, F32 dt)
     {
         switch (ent->currPlrState)
         {
+        // The empty case is deliberate: the target's switch tree tests for 0
+        // explicitly, so the original enumerated PLAYER_STATE_OUTSIDE.
+        case PLAYER_STATE_OUTSIDE:
+        {
+            break;
+        }
         case PLAYER_STATE_INSIDE:
         {
             ent->chkby &= (U8)~XENT_COLLTYPE_PLYR;
@@ -553,9 +559,48 @@ void zEntTeleportBox_Update(xEnt* rawent, xScene* sc, F32 dt)
         case PLAYER_STATE_TELEPORTED:
         {
             ent->jumpOutAnim = 1;
+
+            sTeleportCamPitch = PI * ((ent->tasset->camAngle + 180) % 360) / 180.0f;
+
+            // COMPILER CEILING: the target re-loads sTeleportCamPitch here before
+            // storing it into the camera; mwcceppc 2.0p1a forwards the value it
+            // just stored, so we are one `lfs` short of byte-exact.
+            globals.camera.pgoal = sTeleportCamPitch;
+            globals.camera.pcur = sTeleportCamPitch;
+
+            break;
+        }
+        case PLAYER_STATE_EJECTING:
+        {
+            xVec3 dir;
+
+            globals.player.ent.frame->vel.y = 15.0f;
+
+            VecFromAngle(-1.0f * ent->tasset->launchAngle, &dir);
+
+            globals.player.ent.frame->vel.x = 2.7f * dir.x;
+            globals.player.ent.frame->vel.z = 2.7f * dir.z;
+
+            xSndPlay3D(xStrHash("Box_shuffle_open"), 0.77f, 0.0f, 128, 0,
+                       (xVec3*)&ent->model->Mat->pos, 0.0f, SND_CAT_GAME, 0.0f);
+            xSndPlay3D(xStrHash("Box_open"), 0.77f, 0.0f, 128, 0, (xVec3*)&ent->model->Mat->pos,
+                       0.0f, SND_CAT_GAME, 0.0f);
+            zRumbleStart(SDR_TeleportEject);
+
+            break;
         }
         }
     }
+
+    ent->prevPlrState = ent->currPlrState;
+
+    if (ent->lastdt > ent->plrCtrlTimer && ent->plrCtrlTimer > -ent->lastdt)
+    {
+        zEntPlayerControlOn(CONTROL_OWNER_TELEPORT_BOX);
+    }
+
+    ent->lastdt = dt;
+    ent->plrCtrlTimer -= dt;
 }
 
 void zEntTeleportBox_Save(_zEntTeleportBox* ent, xSerial* s)
