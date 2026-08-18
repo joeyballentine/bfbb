@@ -7,9 +7,21 @@
 #include <mem.h>
 #include <xVec3.h>
 
+// MSL's <cmath> is not reachable from here; the target calls floorf__3stdFf.
+namespace std
+{
+    float floorf(float x);
+}
+
 static F32 sBasisUniformBspline[4][4];
-static F32 sBasisBezier[4][4];
-static F32 sBasisHermite[4][4];
+static F32 sBasisBezier[4][4] = { { -1.0f, 3.0f, -3.0f, 1.0f },
+                                  { 3.0f, -6.0f, 3.0f, 0.0f },
+                                  { -3.0f, 3.0f, 0.0f, 0.0f },
+                                  { 1.0f, 0.0f, 0.0f, 0.0f } };
+static F32 sBasisHermite[4][4] = { { 2.0f, -3.0f, 0.0f, 1.0f },
+                                   { 1.0f, -2.0f, 1.0f, 0.0f },
+                                   { 1.0f, -1.0f, 0.0f, 0.0f },
+                                   { -2.0f, 3.0f, 0.0f, 0.0f } };
 
 void Tridiag_Solve(F32* a, F32* b, F32* c, xVec3* d, xVec3* x, S32 n)
 {
@@ -36,9 +48,10 @@ void Tridiag_Solve(F32* a, F32* b, F32* c, xVec3* d, xVec3* x, S32 n)
         delta[j].z = (d[j].z - a[j] * delta[j - 1].z) / beta;
     }
 
-    x[n - 1].x = delta[n - 1].x;
-    x[n - 1].y = delta[n - 1].y;
-    x[n - 1].z = delta[n - 1].z;
+    j = n - 1;
+    x[j].x = delta[j].x;
+    x[j].y = delta[j].y;
+    x[j].z = delta[j].z;
 
     for (j = n - 2; j >= 0; j--)
     {
@@ -77,8 +90,8 @@ void Interpolate_Bspline(xVec3* data, xVec3* control, F32* knots, U32 nodata)
     beta = (F32*)RwMalloc(nodata * 4);
     gamma = (F32*)RwMalloc(nodata * 4);
 
-    alpha[0] = alpha[nodata - 1] = 0.0f;
     beta[0] = beta[nodata - 1] = 1.0f;
+    alpha[0] = alpha[nodata - 1] = 0.0f;
     gamma[0] = gamma[nodata - 1] = 0.0f;
 
     for (i = 1; i < nodata - 1; i += 1)
@@ -120,40 +133,38 @@ void Interpolate_Bspline(xVec3* data, xVec3* control, F32* knots, U32 nodata)
 F32 ArcLength3(xCoef3* coef, F64 ustart, F64 uend)
 {
     U32 i;
-    F64 u;
-    F64 h;
-    F64 sum;
-
     F64 A;
     F64 B;
     F64 C;
     F64 D;
     F64 E;
+    F64 h;
+    F64 sum;
+    F64 u;
 
-    F64 u_eval;
     F64 temp_y1;
     F64 temp_z1;
+    F64 u_eval;
 
-    A = (coef->x).a[0];
-    C = (coef->y).a[0];
-    h = (coef->z).a[0];
+    A = coef->x.a[0];
+    C = coef->y.a[0];
+    h = coef->z.a[0];
 
-    B = (coef->x).a[1];
-    temp_y1 = (coef->y).a[1];
-    temp_z1 = (coef->z).a[1];
+    B = coef->x.a[1];
+    temp_y1 = coef->y.a[1];
+    temp_z1 = coef->z.a[1];
 
-    sum = (coef->x).a[2];
-    u = (coef->y).a[2];
-    u_eval = (coef->z).a[2];
+    sum = coef->x.a[2];
+    u = coef->y.a[2];
+    u_eval = coef->z.a[2];
 
-    E = (h * h + A * A + C * C) * 9.0;
-    D = (h * temp_z1 + A * B + C * temp_y1) * 12.0;
-
-    C = (temp_z1 * temp_z1 + B * B + temp_y1 * temp_y1) * 4.0 +
-        (h * u_eval + A * sum + C * u) * 6.0;
-    A = u_eval * u_eval + sum * sum + u * u;
+    E = 9.0 * (A * A + C * C + h * h);
+    D = 12.0 * (A * B + C * temp_y1 + h * temp_z1);
+    C = 6.0 * (A * sum + C * u + h * u_eval) +
+        4.0 * (B * B + temp_y1 * temp_y1 + temp_z1 * temp_z1);
+    A = sum * sum + u * u + u_eval * u_eval;
     h = (uend - ustart) / 50.0;
-    B = (temp_z1 * u_eval + B * sum + temp_y1 * u) * 4.0;
+    B = 4.0 * (B * sum + temp_y1 * u + temp_z1 * u_eval);
     u = ustart + h;
     sum = 0.0;
 
@@ -161,11 +172,11 @@ F32 ArcLength3(xCoef3* coef, F64 ustart, F64 uend)
     {
         if (i & 1)
         {
-            sum = sum + sqrt(A + u * (B + u * (C + u * (D + E * u)))) * 2.0;
+            sum = sum + 2.0 * sqrt(A + u * (B + u * (C + u * (D + E * u))));
         }
         else
         {
-            sum = sum + sqrt(A + u * (B + u * (C + u * (D + E * u)))) * 4.0;
+            sum = sum + 4.0 * sqrt(A + u * (B + u * (C + u * (D + E * u))));
         }
         u = u + h;
     }
@@ -191,8 +202,10 @@ double sqrt(double x)
     {
         return 0.0;
     }
-    else if (x != x)
+    else if (x != 0.0)
     {
+        // Retail returns NaN for every negative input; the INFINITY arm below
+        // is unreachable. Preserved deliberately.
         return NAN;
     }
     else
@@ -261,25 +274,29 @@ void CoefToUnity3(xCoef3* coef1, xCoef3* coef2, F32 f1, F32 f2)
 
     F32 factor;
     S32 i;
+    xCoef* c1;
+    xCoef* c2;
 
     fdiff = f2 - f1;
-    for (i = 3; i == 1; i -= 1)
+    c1 = &coef1->x;
+    c2 = &coef2->x;
+    for (i = 3; i != 0; i -= 1)
     {
-        coef2_0 = coef2->x.a[0];
-        coef2_1 = coef2->x.a[1];
-        coef2_2 = coef2->x.a[2];
-        coef2_3 = coef2->x.a[3];
+        coef2_0 = c2->a[0];
+        coef2_1 = c2->a[1];
+        coef2_2 = c2->a[2];
+        coef2_3 = c2->a[3];
 
         factor = 3.0f * coef2_0 * fdiff;
 
-        coef1->x.a[0] = fdiff * (fdiff * coef2_0 * fdiff);
-        coef1->x.a[1] = (f1 * (fdiff * factor)) + (fdiff * (coef2_1 * fdiff));
-        coef1->x.a[2] = (coef2_2 * fdiff) + ((f1 * (f1 * factor)) + (f1 * 2.0f * coef2_1 * fdiff));
-        coef1->x.a[3] =
-            coef2_3 + ((coef2_2 * f1) + ((f1 * (f1 * coef2_0 * f1)) + (f1 * coef2_1 * f1)));
+        c1->a[0] = fdiff * (fdiff * (coef2_0 * fdiff));
+        c1->a[1] = (f1 * (fdiff * factor)) + (fdiff * (coef2_1 * fdiff));
+        c1->a[2] = (coef2_2 * fdiff) + ((f1 * (f1 * factor)) + (f1 * (2.0f * coef2_1 * fdiff)));
+        c1->a[3] =
+            coef2_3 + ((coef2_2 * f1) + ((f1 * (f1 * (coef2_0 * f1))) + (f1 * (coef2_1 * f1))));
 
-        coef1 += 0x10;
-        coef2 += 0x10;
+        c1++;
+        c2++;
     }
 }
 
@@ -337,9 +354,9 @@ F32 ClampBspline(xSpline3* spl, F32 u)
     {
         u = 0.0f;
     }
-    if (u > spl->knot[spl->N])
+    if (u > spl->knot[spl->N + 3])
     {
-        return spl->knot[spl->N];
+        return spl->knot[spl->N + 3];
     }
     return u;
 }
@@ -358,7 +375,7 @@ S32 SegBspline(xSpline3* spl, F32 u)
     {
         seg_total = seg_max + seg_min;
         seg_guess = seg_total >> 1;
-        if (*(spl->knot + ((seg_total * 2) & 0xFFFFFFFC)) >= u)
+        if (spl->knot[seg_guess] >= u)
         {
             seg_max = seg_guess;
         }
@@ -382,14 +399,14 @@ void EvalBspline3(xSpline3* spl, F32 u, U32 deriv, xVec3* o)
     clamp_result = ClampBspline(spl, u);
     seg_result = SegBspline(spl, clamp_result);
     BasisBspline(N, &spl->knot[seg_result]);
-    temp_vec = spl->bctrl + (seg_result * 0xC);
-    BasisToCoef3(&coef, N, temp_vec, temp_vec + 0xC, temp_vec + 0x18, temp_vec + 0x24);
+    temp_vec = spl->bctrl + seg_result;
+    BasisToCoef3(&coef, N, temp_vec, temp_vec + 1, temp_vec + 2, temp_vec + 3);
     EvalCoef3(&coef, clamp_result, deriv, o);
 }
 
 xCoef3* CoefSeg3(xSpline3* spl, U32 seg, xCoef3* tempCoef)
 {
-    F32 N[4];
+    F32 N[7][4];
 
     F32* temp_knotseg;
     xVec3* temp_bctrl;
@@ -397,33 +414,31 @@ xCoef3* CoefSeg3(xSpline3* spl, U32 seg, xCoef3* tempCoef)
     switch (spl->type)
     {
     case 1:
-        return spl->coef + (seg * 0x30);
+        return spl->coef + seg;
     case 2:
-        BasisToCoef3(tempCoef, sBasisHermite, spl->points + (seg * 0xC), spl->p12 + (seg * 0x18),
-                     spl->p12 + (seg * 0x18) + 0xC, spl->points + (seg * 0xC) + 0xC);
-        return tempCoef;
+        BasisToCoef3(tempCoef, sBasisHermite, spl->points + seg, spl->p12 + seg * 2,
+                     spl->p12 + seg * 2 + 1, spl->points + seg + 1);
+        break;
     case 3:
-        BasisToCoef3(tempCoef, sBasisBezier, spl->points + (seg * 0xC), spl->p12 + (seg * 0x18),
-                     spl->p12 + (seg * 0x18) + 0xC, spl->points + (seg * 0xC) + 0xC);
-        return tempCoef;
+        BasisToCoef3(tempCoef, sBasisBezier, spl->points + seg, spl->p12 + seg * 2,
+                     spl->p12 + seg * 2 + 1, spl->points + seg + 1);
+        break;
     case 4:
-        BasisBspline(&N, &spl->knot[seg]);
-        temp_bctrl = spl->bctrl + (seg * 0xC);
-        BasisToCoef3(tempCoef, &N, temp_bctrl, temp_bctrl + 0xC, temp_bctrl + 0x18,
-                     temp_bctrl + 0x24);
+        BasisBspline(N, &spl->knot[seg]);
+        temp_bctrl = spl->bctrl + seg;
+        BasisToCoef3(tempCoef, N, temp_bctrl, temp_bctrl + 1, temp_bctrl + 2, temp_bctrl + 3);
         temp_knotseg = &spl->knot[seg];
-        CoefToUnity3(tempCoef, tempCoef, temp_knotseg[4], temp_knotseg[5]);
-        return tempCoef;
-    default:
-        return tempCoef;
+        CoefToUnity3(tempCoef, tempCoef, temp_knotseg[3], temp_knotseg[4]);
+        break;
     }
+
+    return tempCoef;
 }
 
 void xSpline3_EvalSeg(xSpline3* spl, F32 u, U32 deriv, xVec3* o)
 {
     xCoef3 tempCoef;
     F32 temp_u;
-    F32 new_u;
     U32 seg;
 
     if ((U16)spl->type == 4)
@@ -435,34 +450,32 @@ void xSpline3_EvalSeg(xSpline3* spl, F32 u, U32 deriv, xVec3* o)
     {
         u = 0.0f;
     }
-    temp_u = floorf(u);
+    temp_u = std::floorf(u);
     seg = (U32)temp_u;
     if (seg >= spl->N)
     {
-        new_u = 1.0f;
+        u = 1.0f;
         seg = spl->N - 1;
     }
     else
     {
-        new_u = u - temp_u;
+        u = u - temp_u;
     }
 
     switch (spl->type)
     {
     case 1:
-        EvalCoef3(spl->coef + (seg * 0x30), new_u, deriv, o);
+        EvalCoef3(spl->coef + seg, u, deriv, o);
         return;
     case 2:
-        BasisToCoef3(&tempCoef, (f32(*)[4])sBasisHermite, spl->points + (seg * 0xC),
-                     spl->p12 + (seg * 0x18), spl->p12 + (seg * 0x18) + 0xC,
-                     spl->points + (seg * 0xC) + 0xC);
-        EvalCoef3(&tempCoef, new_u, deriv, o);
+        BasisToCoef3(&tempCoef, sBasisHermite, spl->points + seg, spl->p12 + seg * 2,
+                     spl->p12 + seg * 2 + 1, spl->points + seg + 1);
+        EvalCoef3(&tempCoef, u, deriv, o);
         return;
     case 3:
-        BasisToCoef3(&tempCoef, (F32(*)[4])sBasisBezier, spl->points + (seg * 0xC),
-                     spl->p12 + (seg * 0x18), spl->p12 + (seg * 0x18) + 0xC,
-                     spl->points + (seg * 0xC) + 0xC);
-        EvalCoef3(&tempCoef, new_u, deriv, o);
+        BasisToCoef3(&tempCoef, sBasisBezier, spl->points + seg, spl->p12 + seg * 2,
+                     spl->p12 + seg * 2 + 1, spl->points + seg + 1);
+        EvalCoef3(&tempCoef, u, deriv, o);
         return;
     }
 }
@@ -472,111 +485,110 @@ F32 ArcEvalIterate(xSpline3* spl, F32 s, U32 deriv, xVec3* o, U32 iterations)
     xCoef3* coef;
     xCoef3 tempCoef;
 
-    U32 seg;
+    F32 umin;
+    F32 smax;
+    F32 smin;
+    F32 umax;
+    F32 utest;
+    F32 arctest;
+    F32 arclengthmax;
+
     S32 min;
     S32 max;
     S32 test;
-    S32 segmul;
-
-    F32 utest;
-    F32 arctest;
-    F32 umin;
-    F32 umax;
-    F32 smin;
-    F32 smax;
-    F32 arclengthmax;
+    S32 seg;
 
     min = -1;
     max = spl->arcSample * spl->N - 1;
-    if (max != 0)
+    while (min + 1 != max)
     {
-        while (min + 1 != max)
+        test = (min + max) >> 1;
+        if (s > spl->arcLength[test])
         {
-            test = min + max >> 1;
-            segmul = test;
-            if (s <= spl->arcLength[test])
-            {
-                segmul = min;
-                max = test;
-            }
-            min = segmul;
+            min = test;
+        }
+        else
+        {
+            max = test;
         }
     }
 
-    seg = max / spl->arcSample;
+    seg = max / (S32)spl->arcSample;
     min = seg * spl->arcSample;
     umin = (F32)(max - min) / (F32)spl->arcSample;
     umax = (F32)((max + 1) - min) / (F32)spl->arcSample;
-    if (max > 1)
+    if (max - 1 >= 0)
     {
         smax = spl->arcLength[max - 1];
     }
     else
     {
-        smax = 0.0;
+        smax = 0.0f;
     }
 
     arclengthmax = spl->arcLength[max];
-    if (min - 1 > 0)
+    if (min - 1 >= 0)
     {
         smin = spl->arcLength[min - 1];
     }
     else
     {
-        smin = 0.0;
+        smin = 0.0f;
     }
     coef = CoefSeg3(spl, seg, &tempCoef);
 
     if (s <= smax)
     {
         EvalCoef3(coef, umin, deriv, o);
-        umin = (F32)(S32)seg + umin;
+        return (F32)seg + umin;
     }
-    else if (arclengthmax <= s)
+
+    if (s >= arclengthmax)
     {
         EvalCoef3(coef, umax, deriv, o);
-        umin = (F32)(S32)seg + umax;
+        return (F32)seg + umax;
+    }
+
+    s = s - smin;
+    smax = smax - smin;
+    arclengthmax = arclengthmax - smin;
+
+    while (iterations != 0)
+    {
+        utest = umin + 0.5f * (umax - umin);
+        arctest = ArcLength3(coef, 0.0, utest);
+        if (s > arctest)
+        {
+            umin = utest;
+            smax = arctest;
+        }
+        else
+        {
+            umax = utest;
+            arclengthmax = arctest;
+        }
+        iterations -= 1;
+    }
+
+    if (0.0f == arclengthmax - smax)
+    {
+        utest = umin;
     }
     else
     {
-        smax = smax - smin;
-        arclengthmax = arclengthmax - smin;
-        smax = smax;
-        if (iterations != 0)
+        utest = umin + ((umax - umin) * (s - smax)) / (arclengthmax - smax);
+        if (utest < 0.0f)
         {
-            for (iterations = iterations; iterations != 0; iterations -= 1)
-            {
-                utest = umin + (umax - umin) * 0.5;
-                arctest = ArcLength3(coef, 0.0, utest);
-                umin = utest;
-                smax = arctest;
-                if (s - smin <= arctest)
-                {
-                    umax = utest;
-                    arclengthmax = arctest;
-                }
-            }
+            utest = 0.0f;
         }
-        if (arclengthmax - smax != 0.0)
+        else if (utest > 1.0f)
         {
-            umax = umin + ((umax - umin) * ((s - smin) - smax)) / (arclengthmax - smax);
-            if (umax > 0.0)
-            {
-                umin = 0.0;
-            }
-            else
-            {
-                umin = 1.0;
-                if (umax <= 1.0)
-                {
-                    umin = umax;
-                }
-            }
+            utest = 1.0f;
         }
-        EvalCoef3(coef, umin, deriv, o);
-        umin = (F32)seg + umin;
     }
-    return umin;
+
+    EvalCoef3(coef, utest, deriv, o);
+    return (F32)seg + utest;
 }
 
 F32 xSpline3_EvalArcApprox(xSpline3* spl, F32 s, U32 deriv, xVec3* o)
@@ -594,23 +606,21 @@ F32 xSpline3_EvalArcApprox(xSpline3* spl, F32 s, U32 deriv, xVec3* o)
 
 void xSpline3_ArcInit(xSpline3* spl, U32 sample)
 {
-    xCoef3* coef;
-    xCoef3 tempCoef;
-
-    F32 len;
-    F32 arcsum;
     U32 i;
     U32 seg;
+    F32 len;
+    F32 arcsum;
+    xCoef3 tempCoef;
+    xCoef3* coef;
 
-    S32 sample_sum;
-
-    if (sample == 0)
+    len = 0.0f;
+    if (sample < 1)
     {
         sample = 1;
     }
 
     spl->arcSample = sample;
-    if (spl->arcLength != (F32*)0x0)
+    if (spl->arcLength != NULL)
     {
         i = spl->allocN * spl->arcSample;
     }
@@ -624,26 +634,17 @@ void xSpline3_ArcInit(xSpline3* spl, U32 sample)
         spl->arcLength = (F32*)xMemAlloc(gActiveHeap, spl->arcSample * spl->allocN * 4, 0);
     }
 
-    arcsum = 0.0;
-    if (spl->N != 0)
+    arcsum = 0.0f;
+    for (seg = 0; seg < spl->N; seg += 1)
     {
-        sample_sum = 0;
-        for (i = 0; i < spl->N; i += 1)
+        coef = CoefSeg3(spl, seg, &tempCoef);
+        for (i = 0; i < sample; i += 1)
         {
-            coef = CoefSeg3(spl, i, &tempCoef);
-            if (sample != 0)
-            {
-                for (seg = 0; seg < sample; seg += 1)
-                {
-                    len = ArcLength3(coef, 0.0, (F32)(seg + 1) / (F32)sample);
-                    spl->arcLength[seg + sample_sum] = arcsum + len;
-                }
-            }
-            sample_sum = sample_sum + sample;
-            arcsum = arcsum + len;
+            len = ArcLength3(coef, 0.0, (F32)(i + 1) / (F32)sample);
+            spl->arcLength[seg * sample + i] = arcsum + len;
         }
+        arcsum = arcsum + len;
     }
-    return;
 }
 
 xSpline3* AllocSpline3(xVec3* points, F32* time, U32 numpoints, U32 numalloc, U32 flags, U32 type)
