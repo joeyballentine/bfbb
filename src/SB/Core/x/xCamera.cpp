@@ -658,7 +658,7 @@ static void _xCameraUpdate(xCamera* cam, F32 dt)
         pcv *= cam->pitch_ccv;
         rcv *= cam->roll_ccv;
 
-        cam->omat = cam->mat;
+        *(xMat3x3*)&cam->omat = *(xMat3x3*)&cam->mat;
         cam->yaw_cur += ycv * dt;
         cam->pitch_cur += pcv * dt;
         cam->roll_cur += rcv * dt;
@@ -759,7 +759,7 @@ static void _xCameraUpdate(xCamera* cam, F32 dt)
         rot_cv.angle *= m;
         rot_cv.angle = 0.0f; // lol
 
-        cam->omat = cam->mat;
+        *(xMat3x3*)&cam->omat = *(xMat3x3*)&cam->mat;
 
         xVec3 f;
         xMat3x3RMulVec(&f, cam->tgt_mat, &cam->focus);
