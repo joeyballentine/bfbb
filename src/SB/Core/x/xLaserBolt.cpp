@@ -129,15 +129,7 @@ void xLaserBoltEmitter::update(F32 dt)
 {
     debug_update(dt);
 
-    S32 ci;
-    if (this->cfg.hit_interval > 0)
-    {
-        ci = start_collide % this->cfg.hit_interval;
-    }
-    else
-    {
-        ci = -1000000000;
-    }
+    S32 ci = this->cfg.hit_interval > 0 ? start_collide % this->cfg.hit_interval : -1000000000;
 
     static_queue<bolt>::iterator it = this->bolts.begin();
     while (it != this->bolts.end())
@@ -205,26 +197,29 @@ void xLaserBoltEmitter::render()
 {
     debug_render();
 
-    RxObjSpace3DVertex* vert;
-    RxObjSpace3DVertex* v = get_vert_buffer(*(S32*)&vert);
+    S32 size;
+    RxObjSpace3DVertex* verts = get_vert_buffer(size);
+    RxObjSpace3DVertex* v = verts;
 
     RwRenderStateSet(rwRENDERSTATETEXTURERASTER, bolt_raster);
 
     static_queue<bolt>::iterator it = bolts.begin();
     while (it != bolts.end())
     {
-        if ((S32)(v - (v - vert)) < 6)
+        S32 used = v - verts;
+        if (size - used < 6)
         {
-            flush_verts(v, (S32)(v - (v - vert)));
+            flush_verts(verts, used);
+            v = verts;
         }
 
-        render(*it, v);
+        v = render(*it, v);
         ++it;
     }
-    
-    if (v != vert)
+
+    if (v != verts)
     {
-        flush_verts(v, vert - v);
+        flush_verts(verts, v - verts);
     }
 }
 
@@ -264,20 +259,19 @@ void xLaserBoltEmitter::pre_collide(bolt& b)
 void xLaserBoltEmitter::collide_update(bolt& b)
 {
     xScene& scene = *globals.sceneCur;
- 
-    // TODO: Investigate float regalloc mismatch
+
     xRay3 ray;
     ray.origin = b.origin;
     ray.dir = b.dir;
     ray.min_t = b.prev_check_dist - this->cfg.length;
     ray.max_t = b.dist;
     ray.flags = 0xC00;
-    
-    if (ray.max_t < this->cfg.safe_dist)
+
+    if (ray.min_t < this->cfg.safe_dist)
     {
-        ray.min_t = ray.max_t;
+        ray.min_t = this->cfg.safe_dist;
     }
-    
+
     xCollis player_coll;
     player_coll.flags = 0x300;
     xRayHitsBound(&ray, &globals.player.ent.bound, &player_coll);
@@ -317,6 +311,8 @@ RxObjSpace3DVertex* xLaserBoltEmitter::render(bolt& b, RxObjSpace3DVertex *vert)
         dist0 = 0.0f;
     }
 
+    // Both arms assigning is deliberate: the retail codegen has an empty
+    // "then" block here (bne/b pair), which only this shape reproduces.
     F32 dist1 = b.dist;
     if (dist1 <= b.hit_dist)
     {
@@ -486,6 +482,8 @@ void xLaserBoltEmitter::emit_particle(effect_data& effect, bolt& b, F32 from_dis
         xParEmitterEmit(&pe, dt);
         pea.pos = oldloc;
     }
+
+    pea.vel.y = velmag;
 }
 
 void xLaserBoltEmitter::emit_decal(effect_data& effect, bolt& b, F32 from_dist, F32 to_dist, F32 dt)
@@ -541,7 +539,7 @@ void xLaserBoltEmitter::emit_decal_dist(effect_data& effect, bolt& b, F32 from_d
 
     xVec3 dloc = b.dir * effect.irate;
     mat.pos = b.origin + b.dir * start_dist;
-    for (S32 i = 0; i < total; i++)
+    for (S32 i = 0; i < total; i++, mat.pos += dloc)
     {
         if (((xDecalEmitter*)effect.par)->full())
         {
@@ -549,6 +547,5 @@ void xLaserBoltEmitter::emit_decal_dist(effect_data& effect, bolt& b, F32 from_d
         }
 
         ((xDecalEmitter*)effect.par)->emit(mat, -1);
-        mat.pos += dloc;
     }
 }
