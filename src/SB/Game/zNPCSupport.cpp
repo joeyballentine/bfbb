@@ -723,7 +723,7 @@ void Firework::Cleanup()
 {
 }
 
-void NPAR_EmitFWExhaust(xVec3* pos, const xVec3* vel);
+void NPAR_EmitFWExhaust(const xVec3* pos, const xVec3* vel);
 
 void Firework::Update(F32 dt)
 {
