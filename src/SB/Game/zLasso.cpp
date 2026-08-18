@@ -58,15 +58,37 @@ void zLasso_Init(zLasso* lasso, xModelInstance* model, F32 x, F32 y, F32 z)
 
 void zLasso_AddGuide(xEnt* ent, xAnimState* lassoAnim, xModelInstance* lassoModel)
 {
+    U32 i;
     S32 givenSlot = -1;
-    for (U32 i = 0; i < sNumGuideLists; i++)
+
+    for (i = 0; i < sNumGuideLists; i++)
     {
+        if (sGuideList[i].target == ent)
+        {
+            givenSlot = i;
+            break;
+        }
     }
 
-    sGuideList[0].numGuides = sGuideList[0].numGuides + 1;
-    // sGuideList[0].guide[0].poly = lassoModel;
-    // sGuideList[0].guide[0].lassoAnim = lassoAnim;
-    initVertMap(sGuideList[0].guide);
+    if (givenSlot == -1)
+    {
+        givenSlot = sNumGuideLists++;
+        sGuideList[givenSlot].target = ent;
+        sGuideList[givenSlot].numGuides = 0;
+    }
+
+    for (i = 0; i < sGuideList[givenSlot].numGuides; i++)
+    {
+        if (sGuideList[givenSlot].guide[i].lassoAnim == lassoAnim)
+        {
+            return;
+        }
+    }
+
+    i = sGuideList[givenSlot].numGuides++;
+    sGuideList[givenSlot].guide[i].lassoAnim = lassoAnim;
+    sGuideList[givenSlot].guide[i].poly = lassoModel;
+    initVertMap(&sGuideList[givenSlot].guide[i]);
 
     bakeMorphAnim(lassoModel->Data->geometry, *lassoAnim->Data->RawData);
 }
@@ -1023,61 +1045,71 @@ void xMat4x3Rot(xMat4x3* m, const xVec3* v, F32 f)
 
 static void initVertMap(zLassoGuide* guide)
 {
-    RpGeometry* geom = guide->poly->Data->geometry;
-    RpTriangle* tris = geom->triangles;
-    S32 numTri = geom->numTriangles;
-
-    S32 center = tris->vertIndex[0];
-    S32 init = tris->vertIndex[0];
-    
-    if (((init != tris->vertIndex[4] && init != tris->vertIndex[5] && init != tris->vertIndex[6]) ||
-         (init != tris->vertIndex[8] && init != tris->vertIndex[9] && init != tris->vertIndex[10])) &&
-        ((init = tris->vertIndex[1], init != tris->vertIndex[4] && init != tris->vertIndex[5] && init != tris->vertIndex[6]) ||
-         (init != tris->vertIndex[8] && init != tris->vertIndex[9] && init != tris->vertIndex[10])))
-    {
-        init = tris->vertIndex[2];
-    }
-    
-    if (init == tris->vertIndex[0]) {
-        init = tris->vertIndex[1];
-    }
-    
-    S32 vertIdx = 0;
-    S32 curr = init;
+    S32 center;
+    S32 init;
+    S32 curr;
     S32 currTri;
-    ushort* puVar5;
-    
-    do {
-        vertIdx = vertIdx + 1;
-        guide->vertMap[vertIdx - 1] = curr;
-        
-        if (vertIdx == numTri) {
-            vertIdx = 0;
+    S32 i;
+    RpGeometry* geom = guide->poly->Data->geometry;
+    S32 numTri = geom->numTriangles;
+    RpTriangle* tris = geom->triangles;
+
+    // The hub vertex of the fan: the vertex of tris[0] that tris[1] and
+    // tris[2] both share.
+    for (i = 0; i < 3; i++)
+    {
+        center = tris[0].vertIndex[i];
+        if ((center == tris[1].vertIndex[0] || center == tris[1].vertIndex[1] ||
+             center == tris[1].vertIndex[2]) &&
+            (center == tris[2].vertIndex[0] || center == tris[2].vertIndex[1] ||
+             center == tris[2].vertIndex[2]))
+        {
+            break;
         }
-        
-        while (true) {
-            puVar5 = &tris->vertIndex[vertIdx];
-            currTri = puVar5[0];
-            
-            if (curr == currTri || curr == puVar5[1] || curr == puVar5[2]) {
-                break;
-            }
-            
-            vertIdx = vertIdx + 1;
-            if (vertIdx == numTri) {
-                vertIdx = 0;
+    }
+
+    if (center == tris[0].vertIndex[0])
+    {
+        init = tris[0].vertIndex[1];
+    }
+    else
+    {
+        init = tris[0].vertIndex[0];
+    }
+
+    // Walk the rim: from the current rim vertex find the next triangle of
+    // the fan that contains it, and step to that triangle's other rim vertex,
+    // until we are back at the start.
+    curr = init;
+    currTri = 0;
+    i = 0;
+    do
+    {
+        guide->vertMap[i] = curr;
+
+        currTri++;
+        if (currTri == numTri)
+        {
+            currTri = 0;
+        }
+
+        while (!(curr == tris[currTri].vertIndex[0] || curr == tris[currTri].vertIndex[1] ||
+                 curr == tris[currTri].vertIndex[2]))
+        {
+            currTri++;
+            if (currTri == numTri)
+            {
+                currTri = 0;
             }
         }
-        
-        if ((curr != currTri && center != currTri)) {
-            currTri = puVar5[1];            
-            if ((curr != currTri && center != currTri)) {
-                currTri = puVar5[2];
-            }
-        }
-        
-        curr = currTri;
-    } while (currTri != init);
+
+        curr = (curr != tris[currTri].vertIndex[0] && center != tris[currTri].vertIndex[0]) ?
+                   tris[currTri].vertIndex[0] :
+               (curr != tris[currTri].vertIndex[1] && center != tris[currTri].vertIndex[1]) ?
+                   tris[currTri].vertIndex[1] :
+                   tris[currTri].vertIndex[2];
+        i++;
+    } while (curr != init);
 }
 
 static void vec2vecMat(xMat4x3* m, xVec3* v1, xVec3* v2)
