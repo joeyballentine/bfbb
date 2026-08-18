@@ -444,8 +444,8 @@ namespace
 
 void xParEmitterEmitOCircle(xPar* p, xParEmitterAsset* a, F32 dt)
 {
-    F32 rad = xurand();
-    F32 scale = -((rad * rad) - 1.0f);
+    F32 rr = xurand();
+    F32 scale = -((rr * rr) - 1.0f);
 
     ocircle_emit(*p, *a, dt, scale * a->e_circle.radius);
 }
@@ -691,10 +691,6 @@ void xParEmitterEmitEntBound(xPar* p, xParEmitterAsset* a, F32 dt, const xEnt* e
 
 namespace
 {
-    // NOTE: retail wrote the two marked expressions with `xVec3::operator+(F32)`
-    // and `xVec3::operator*(const xVec3&)`, neither of which xVec3.h declares.
-    // The forms below are the same arithmetic written with what is declared.
-    // See the report for the header diff that restores the original shape.
     xVec3 get_random_offset(const xBound& b, F32 expand, U32 subtype)
     {
         xVec3 off;
@@ -718,8 +714,7 @@ namespace
         }
         case (0 << 3) | XBOUND_TYPE_BOX:
         {
-            off = b.box.box.upper - b.box.center;
-            off += expand; // retail: off = (upper - center) + expand;
+            off = (b.box.box.upper - b.box.center) + expand;
 
             off.x *= 2.0f * xurand() - 1.0f;
             off.y *= 2.0f * xurand() - 1.0f;
@@ -732,8 +727,7 @@ namespace
         }
         case (0 << 3) | XBOUND_TYPE_OBB:
         {
-            off = b.box.box.upper;
-            off += expand; // retail: off = upper + expand;
+            off = b.box.box.upper + expand;
 
             off.x *= 2.0f * xurand() - 1.0f;
             off.y *= 2.0f * xurand() - 1.0f;
@@ -746,8 +740,9 @@ namespace
         {
             F32 ang = 6.2831855f * xurand();
             F32 z = 2.0f * xurand() - 1.0f;
+            F32 up = xsqrt(-((z * z) - 1.0f));
             F32 rad = b.sph.r + expand;
-            F32 sc = rad * xsqrt(-((z * z) - 1.0f));
+            F32 sc = rad * up;
 
             off.assign(sc * icos(ang), sc * isin(ang), z * rad);
             break;
@@ -756,13 +751,14 @@ namespace
         {
             xVec3 face;
             U32 r = xrand() >> 13;
-            F32 sign = (r & 0x100) ? 1.0f : -1.0f;
+            U32 axis = r % 3;
+            F32 sign = (r & 4) ? 1.0f : -1.0f;
 
-            if (r % 3 == 0)
+            if (axis == 0)
             {
                 face.assign(sign, 2.0f * xurand() - 1.0f, 2.0f * xurand() - 1.0f);
             }
-            else if (r % 3 == 1)
+            else if (axis == 1)
             {
                 face.assign(2.0f * xurand() - 1.0f, sign, 2.0f * xurand() - 1.0f);
             }
@@ -771,13 +767,7 @@ namespace
                 face.assign(2.0f * xurand() - 1.0f, 2.0f * xurand() - 1.0f, sign);
             }
 
-            off = b.box.box.upper - b.box.center;
-            off += expand;
-
-            // retail: off = ((upper - center) + expand) * face;
-            off.x *= face.x;
-            off.y *= face.y;
-            off.z *= face.z;
+            off = ((b.box.box.upper - b.box.center) + expand) * face;
             break;
         }
         case (1 << 3) | XBOUND_TYPE_CYL:
@@ -788,13 +778,14 @@ namespace
         {
             xVec3 face;
             U32 r = xrand() >> 13;
-            F32 sign = (r & 0x100) ? 1.0f : -1.0f;
+            U32 axis = r % 3;
+            F32 sign = (r & 4) ? 1.0f : -1.0f;
 
-            if (r % 3 == 0)
+            if (axis == 0)
             {
                 face.assign(sign, 2.0f * xurand() - 1.0f, 2.0f * xurand() - 1.0f);
             }
-            else if (r % 3 == 1)
+            else if (axis == 1)
             {
                 face.assign(2.0f * xurand() - 1.0f, sign, 2.0f * xurand() - 1.0f);
             }
@@ -803,13 +794,7 @@ namespace
                 face.assign(2.0f * xurand() - 1.0f, 2.0f * xurand() - 1.0f, sign);
             }
 
-            off = b.box.box.upper;
-            off += expand;
-
-            // retail: off = (upper + expand) * face;
-            off.x *= face.x;
-            off.y *= face.y;
-            off.z *= face.z;
+            off = (b.box.box.upper + expand) * face;
 
             xMat3x3RMulVec(&off, b.mat, &off);
             break;
