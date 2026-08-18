@@ -27,9 +27,8 @@ void zNPCSpawner_ScenePrepare()
     XOrdInit(&depot->spawners, sizeof(g_smdepot), 0);
     for (S32 i = 0; i < 0x10; i++)
     {
-        // FIXME: operator new call
-        // zNPCSpawner* sm = RyzMemData::operator new((size_t)sizeof(zNPCSpawner), 'SPWN', NULL);
-        // XOrdAppend(&depot->spawners, sm);
+        zNPCSpawner* sm = new ('SPWN', NULL) zNPCSpawner;
+        XOrdAppend(&depot->spawners, sm);
     }
 }
 
@@ -106,12 +105,13 @@ S32 zNPCSpawner::AddSpawnNPC(zNPCCommon* npc)
         {
             npc_stat->npc = npc;
             ack = 1;
-            npc_stat->status = SM_NPC_READY;
+            npc_stat->status = SM_NPC_DEAD;
             npc_stat->sp_prefer = NULL;
             break;
         }
     }
-    // Need to figure out what it is calling here.
+
+    npc->DuploOwner(this->npc_owner);
     npc->DBG_Name();
     return ack;
 }
@@ -440,7 +440,7 @@ void zNPCSpawner::Notify(en_SM_NOTICES note, void* data)
         break;
     case SM_NOTE_DUPSETDELAY:
         tym_delay = *(F32*)npcdata;
-        tym_delay = tym_delay > -1.0f ? tym_delay : -1.0f;
+        tym_delay = tym_delay > 1.0f ? tym_delay : 1.0f;
 
         break;
     case SM_NOTE_DUPDEAD:
@@ -514,22 +514,17 @@ SMSPStatus* zNPCSpawner::SelectSP(const SMNPCStatus* npcstat)
     }
     else
     {
-        S32 rc = 0;
-        S32 cnt = 0;
-
         SMSPStatus* splist[16] = {};
+        S32 cnt = 0;
 
         for (S32 i = 0; i < 16; i++)
         {
             SMSPStatus* tmp_stat = &sppool[i];
-            if (tmp_stat->sp != NULL && tmp_stat->sp->on && splist[i] == NULL &&
-                IsSPLZClear(sppool[i].sp))
+            if (tmp_stat->sp != NULL && tmp_stat->sp->on && tmp_stat->npc_prefer == NULL &&
+                IsSPLZClear(tmp_stat->sp))
             {
-                splist[i] = tmp_stat;
-                cnt += 1;
+                splist[cnt++] = tmp_stat;
             }
-
-            rc++;
         }
 
         if (!cnt)
@@ -538,7 +533,7 @@ SMSPStatus* zNPCSpawner::SelectSP(const SMNPCStatus* npcstat)
         }
         else
         {
-            sp_stat = xUtil_select<SMSPStatus>(splist, rc, NULL);
+            sp_stat = xUtil_select<SMSPStatus>(splist, cnt, NULL);
         }
     }
 
@@ -547,24 +542,25 @@ SMSPStatus* zNPCSpawner::SelectSP(const SMNPCStatus* npcstat)
 
 SMNPCStatus* zNPCSpawner::NextPendingNPC(S32 arg0)
 {
-    S32 temp_r4;
-    const F32* temp_ptr = NULL;
+    S32 cnt = this->pendlist.cnt;
 
-    temp_r4 = this->pendlist.cnt;
-    if (temp_r4 < 1)
+    if (cnt < 1)
     {
         return NULL;
     }
-    return xUtil_select<SMNPCStatus>((SMNPCStatus**)this->pendlist.list, temp_r4, temp_ptr);
+
+    return xUtil_select<SMNPCStatus>((SMNPCStatus**)this->pendlist.list, cnt, NULL);
 }
 
 void zNPCSpawner::ClearActive()
 {
+    // NOTE: retail bug preserved deliberately - this walks actvlist.cnt entries
+    // but reads them out of pendlist.list.
     for (S32 i = 0; i < actvlist.cnt; i++)
     {
         if (pendlist.list[i] != NULL)
         {
-            ((st_XORDEREDARRAY*)pendlist.list[i])->cnt = 1;
+            ((SMNPCStatus*)pendlist.list[i])->status = SM_NPC_READY;
         }
     }
 
@@ -575,7 +571,7 @@ void zNPCSpawner::ClearPending()
 {
     for (S32 i = 0; i < pendlist.cnt; i++)
     {
-        ((st_XORDEREDARRAY*)pendlist.list[i])->cnt = 1;
+        ((SMNPCStatus*)pendlist.list[i])->status = SM_NPC_READY;
     }
 
     XOrdReset(&pendlist);
@@ -590,32 +586,28 @@ st_XORDEREDARRAY* zNPCSpawner::FillPending()
 
 st_XORDEREDARRAY* zNPCSpawner::ReFillPending()
 {
-    s32 var_r28;
-    zNPCCommon* temp_r29;
-    zNPCSpawner* var_r30;
+    SMNPCStatus* npc_stat;
+    S32 i;
 
-    var_r28 = 0;
-    var_r30 = this;
-    do
+    for (i = 0; i < 16; i++)
     {
-        temp_r29 = var_r30->npc_owner;
-        if (((zNPCCommon*)var_r30->npc_owner != NULL) && ((s32)temp_r29->flg_vuln == 1))
+        npc_stat = &npcpool[i];
+        if (npc_stat->npc != NULL && npc_stat->status == SM_NPC_READY)
         {
-            XOrdAppend(&this->pendlist, (void*)temp_r29);
-            temp_r29->flg_vuln = 2;
+            XOrdAppend(&pendlist, npc_stat);
+            npc_stat->status = SM_NPC_PENDING;
         }
-        var_r28 += 1;
-        var_r30 += 0xC;
-    } while (var_r28 < 0x10);
-    return &this->actvlist;
+    }
+
+    // NOTE: really returns pendlist.cnt; see FillPending.
+    return (st_XORDEREDARRAY*)pendlist.cnt;
 }
 
 S32 zNPCSpawner::IsSPLZClear(zMovePoint* sp)
 {
-    xVec3 pos_sp;
+    xVec3 pos_sp = { 0.0f, 0.0f, 0.0f };
     S32 rc;
     xBound bnd;
-    xVec3 delt;
 
     memset(&bnd, FALSE, sizeof(xBound));
 
@@ -639,6 +631,8 @@ S32 zNPCSpawner::IsSPLZClear(zMovePoint* sp)
         return 0;
     }
 
+    xVec3 delt = { 0.0f, 0.0f, 0.0f };
+
     xVec3Sub(&delt, xEntGetPos(&globals.player.ent), &pos_sp);
 
     if (SQ(delt.x) + SQ(delt.z) < SQ(3.5f))
@@ -646,7 +640,9 @@ S32 zNPCSpawner::IsSPLZClear(zMovePoint* sp)
         return 0;
     }
 
-    return IsNearbyMover(&bnd, TRUE, NULL);
+    rc = IsNearbyMover(&bnd, TRUE, NULL);
+
+    return rc ? 0 : 1;
 }
 
 S32 zNPCSpawner::IsNearbyMover(xBound* bnd, S32 usecyl, xCollis* caller_colrec)
@@ -654,16 +650,14 @@ S32 zNPCSpawner::IsNearbyMover(xBound* bnd, S32 usecyl, xCollis* caller_colrec)
     S32 hitthing = 0;
     zNPCCommon* npc;
     S32 i;
-    xCollis local_colrec;
-    xCollis* colrec = caller_colrec;
-    xVec3 delt = { 0.0f, 0.0f, 0.0f };
+    xCollis local_colrec = {};
+    xCollis* colrec;
 
-    for (i = 10; i > 0; i--)
+    if (caller_colrec != NULL)
     {
-        // ???
+        colrec = caller_colrec;
     }
-
-    if (caller_colrec == NULL)
+    else
     {
         colrec = &local_colrec;
     }
@@ -675,8 +669,14 @@ S32 zNPCSpawner::IsNearbyMover(xBound* bnd, S32 usecyl, xCollis* caller_colrec)
         {
             xBoundHitsBound(bnd, &npc->bound, colrec);
 
-            if (!(colrec->flags & 0x1) && !usecyl)
+            if (colrec->flags & 0x1)
             {
+                hitthing++;
+            }
+            else if (usecyl)
+            {
+                xVec3 delt = { 0.0f, 0.0f, 0.0f };
+
                 NPCC_pos_ofBase(npc, &delt);
 
                 xVec3SubFrom(&delt, &bnd->sph.center);
@@ -713,46 +713,43 @@ SMSPStatus* zNPCSpawner::StatForSP(zMovePoint* sp, S32 arg1)
     S32 i;
     for (i = 0; i < 16; i++)
     {
-        if (sppool[i].sp != NULL && sppool[i].sp == sp)
+        SMSPStatus* tmp_stat = &sppool[i];
+        if (tmp_stat->sp != NULL && tmp_stat->sp == sp)
         {
-            spstat = &sppool[i];
+            spstat = tmp_stat;
+            break;
         }
     }
 
     return spstat;
 }
 
-/* zNPCSpawner::StatForNPC (zNPCCommon *) */
 SMNPCStatus* zNPCSpawner::StatForNPC(zNPCCommon* npc)
 {
-    s32 var_ctr;
-    SMNPCStatus* var_r6;
-    zNPCCommon* temp_r0;
+    SMNPCStatus* tmp_stat;
+    SMNPCStatus* npc_stat = NULL;
+    S32 i;
 
-    var_r6 = NULL;
-    var_ctr = 2;
-
-    for (var_ctr = 0; var_ctr < 16; var_ctr++)
+    for (i = 0; i < 16; i++)
     {
-        temp_r0 = this->npcpool[var_ctr].npc;
-        if ((temp_r0 != NULL) && (temp_r0 == npc))
+        tmp_stat = &npcpool[i];
+        if (tmp_stat->npc != NULL && tmp_stat->npc == npc)
         {
-            var_r6 = &this->npcpool[var_ctr];
+            npc_stat = tmp_stat;
+            break;
         }
     }
 
-    return var_r6;
+    return npc_stat;
 }
 
 S32 zNPCSpawner::SpawnBeastie(SMNPCStatus* npcstat, SMSPStatus* spstat)
 {
-    zNPCCommon* npc;
-    zMovePoint* sp;
+    zNPCCommon* npc = npcstat->npc;
+    zMovePoint* sp = spstat->sp;
     xVec3 pos_sp = { 0, 0, 0 };
     zMovePoint* nav_dest = NULL;
 
-    npc = npcstat->npc;
-    sp = spstat->sp;
     zMovePointGetNext(sp, sp, &nav_dest, NULL);
 
     if (nav_dest == NULL)
@@ -798,7 +795,7 @@ void zNPCSpawner::ChildCleanup(F32 dt)
     {
         for (i = actvlist.cnt - 1; i >= 0; i--)
         {
-            zNPCCommon* npc = *(zNPCCommon**)actvlist.list[i];
+            zNPCCommon* npc = ((SMNPCStatus*)actvlist.list[i])->npc;
             npc->Damage(DMGTYP_INSTAKILL, NULL, NULL);
         }
 
