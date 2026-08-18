@@ -233,14 +233,48 @@ U32 zNPCAmbient::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
 
 S32 zNPCAmbient::NPCMessage(NPCMsg* mail)
 {
+    zNPCGoalCommon* curgoal;
+    zNPCGoalCommon* recgoal;
     xPsyche* psy = psy_instinct;
-    if (psy != NULL)
+    S32 handled;
+
+    if (psy)
     {
-        if (psy->GetCurGoal() != NULL)
+        curgoal = (zNPCGoalCommon*)psy->GetCurGoal();
+        if (curgoal)
         {
+            handled = curgoal->NPCMessage(mail);
+            if (handled)
+            {
+                return handled;
+            }
+        }
+
+        recgoal = (zNPCGoalCommon*)psy->GetPrevRecovery(0);
+        while (recgoal)
+        {
+            if (recgoal != curgoal)
+            {
+                handled = recgoal->NPCMessage(mail);
+                if (handled)
+                {
+                    return handled;
+                }
+            }
+
+            recgoal = (zNPCGoalCommon*)psy->GetPrevRecovery(recgoal->GetID());
         }
     }
-    return 0;
+
+    // Retail dispatches this through the vtable (slot 0xCC): AmbiHandleMail is
+    // virtual in zNPCAmbient so zNPCJelly's override handles NPC_MID_DAMAGE.
+    handled = AmbiHandleMail(mail);
+    if (!handled)
+    {
+        handled = zNPCCommon::NPCMessage(mail);
+    }
+
+    return handled;
 }
 
 void zNPCJelly::Init(xEntAsset* asset)
@@ -389,54 +423,41 @@ U32 zNPCJelly::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* goal)
     return da_anim;
 }
 
-// Non-match
 void zNPCJelly::BUpdate(xVec3*)
 {
-    xVec3 pos_bnd;
     static const xVec3 vec_offset = { 0.0f, 0.0f, 0.0f };
 
-    xVec3* pos = (xVec3*)this->zNPCCommon::BonePos(2);
-
-    // Not sure about this.
-    // zNPCCommon::BonePos is not in DWARF.
-    // The decompiled code looks like it returns a vec3
-    // So I assumed that was its return type
-    // and this code looks like it's using the x,y,z of that
-    // but for some reason the compiler generated lwz instead of lfs
-    // and stw instead of stfs
-    pos_bnd.x = pos->x;
-    pos_bnd.y = pos->y;
-    pos_bnd.z = pos->z;
-
+    xVec3 pos_bnd = *(const xVec3*)BonePos(2);
     pos_bnd += vec_offset;
+    xMat3x3RMulVec(&pos_bnd, (const xMat3x3*)BoneMat(0), &pos_bnd);
+    pos_bnd += *(const xVec3*)BonePos(0);
 
-    xMat3x3RMulVec(&pos_bnd, (xMat3x3*)this->zNPCCommon::BoneMat(0), pos);
-
-    pos_bnd += *((xVec3*)this->zNPCCommon::BonePos(0));
-    this->bound.sph.center = pos_bnd;
-
-    this->bound.sph.r = 0.5f; // @903 // Could be sph or cyl
-    xQuickCullForBound(&this->bound.qcd, &this->bound);
+    bound.sph.center = pos_bnd;
+    bound.sph.r = 0.5f;
+    xQuickCullForBound(&bound.qcd, &bound);
 
     zGridUpdateEnt(this);
 }
 
 void zNPCJelly::ActLikeOctopus()
 {
-    if ((int)this->model->Data->geometry->numVertices >= 1)
-    {
-        S32 supertemp = (this->model->Data->geometry->numVertices >> 4);
-        int tempvar;
-        if (supertemp >= 0)
-        {
-            tempvar = supertemp;
-        }
+    S32 num_vert;
+    S32 i;
+    S32 stride;
+    xVec3 pos_emit;
 
-        for (U32 i = 0; this->model->Data->geometry->numVertices > i; i = i + tempvar)
-        {
-            iModelVertEval(model->Data, i, 1, model->Mat, NULL, NULL);
-            zFX_SpawnBubbleTrail(&this->bound.sph.center, 4);
-        }
+    num_vert = model->Data->geometry->numVertices;
+    if (num_vert < 1)
+    {
+        return;
+    }
+
+    stride = MAX(1, num_vert / 16);
+
+    for (i = 0; i < num_vert; i += stride)
+    {
+        iModelVertEval(model->Data, i, 1, model->Mat, NULL, &pos_emit);
+        zFX_SpawnBubbleTrail(&pos_emit, 4);
     }
 }
 
@@ -572,20 +593,20 @@ void zNPCJelly::PlayWithAnimSpd()
 
 void zNPCJelly::PumpFaster()
 {
-    F32 spd = 4.0f;
+    F32 spd_max = 4.0f;
+    F32 pct_spd = spd_throttle;
+    F32 spd_move = cfg_npc->spd_moveMax;
 
-    F32 temp3;
-    F32 temp4;
-
-    if (cfg_npc->spd_moveMax > spd)
+    if (spd_move > spd_max)
     {
-        spd = cfg_npc->spd_moveMax;
+        spd_max = spd_move;
     }
-    temp3 = this->spd_throttle / spd;
-    temp4 = CLAMP(temp3, 0.0f, 1.0f);
-    temp4 = SMOOTH(temp4, 1.0f, 2.5f);
 
-    AnimCurSingle();
+    pct_spd /= spd_max;
+    pct_spd = CLAMP(pct_spd, 0.0f, 1.0f);
+    pct_spd = SMOOTH(pct_spd, 1.0f, 2.5f);
+
+    AnimCurSingle()->CurrentSpeed = pct_spd;
 }
 
 void zNPCJelly::JellyBoneWorldPos(xVec3* pos, S32 idx_request) const
@@ -830,11 +851,6 @@ U32 zNPCMimeFish::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
 
 void zNPCMimeFish::Process(xScene* xscn, F32 dt)
 {
-}
-
-S32 zNPCAmbient::AmbiHandleMail(NPCMsg msg)
-{
-    return 0;
 }
 
 S32 zNPCJelly::IsAlive()
