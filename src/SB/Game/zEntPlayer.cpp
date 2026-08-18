@@ -15291,7 +15291,7 @@ void zEntPlayer_SNDPlayRandom(_tagePlayerSnd player_snd_start, _tagePlayerSnd pl
 
         for (S32 i = 0; i < diff; i++)
         {
-            U32 j = rand() % diff;
+            U32 j = xrand() % diff;
             S32 swap = rand_array[i];
             rand_array[i] = rand_array[j];
             rand_array[j] = swap;
