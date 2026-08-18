@@ -103,6 +103,10 @@
 #include <string.h>
 #include <stdio.h>
 
+// Defined in zSurface.cpp but not declared in zSurface.h.
+// TODO: move this declaration into zSurface.h next to zSurfaceExit().
+void zSurfaceInit();
+
 U8 HACK_BASETYPE;
 static S32 bytesNeeded;
 static S32 availOnDisk;
@@ -710,9 +714,10 @@ static void PipeAddStuffCB(RpAtomic* data, U32 pipeFlags, U32)
 
 static void PipeForAllSceneModels(void (*pipeCB)(RpAtomic* data, U32 pipeFlags, U32 subObjects))
 {
-    // non-matching: wrong registers
+    // non-matching: k / model / remainSubObjBits get r23/r24/r25 in a
+    // different permutation from retail (register allocation only)
 
-    S32 i, j, k;
+    S32 i, j;
     S32 numModels = xSTAssetCountByType('MODL');
 
     for (i = 0; i < numModels; i++)
@@ -740,7 +745,7 @@ static void PipeForAllSceneModels(void (*pipeCB)(RpAtomic* data, U32 pipeFlags, 
 
             for (j = 0; j < xModelPipeNumTables; j++)
             {
-                for (k = 0; k < xModelPipeCount[j]; k++)
+                for (S32 k = 0; k < xModelPipeCount[j]; k++)
                 {
                     if (ainfo.aid == xModelPipeData[j][k].ModelHashID)
                     {
@@ -829,6 +834,9 @@ void zSceneInit(U32 theSceneID, S32 reloadInProgress)
     zScene* s;
     U32 i;
 
+    // Retail emits these four initialisations strictly in source order; our
+    // compiler hoists the loads for b above the rgba_bkgrd/gOccludeCount
+    // stores. Scheduling residual, not a source difference.
     U8 rgba_bkgrd[4] = { 0x0f, 0x0f, 0x0f, 0x00 };
 
     gTransitionSceneID = theSceneID;
@@ -883,9 +891,7 @@ void zSceneInit(U32 theSceneID, S32 reloadInProgress)
     }
 
     sMemDepthJustHIPStart = xMemPushBase();
-    s = (zScene*)xMemAllocSize(sizeof(zScene));
-
-    globals.sceneCur = s;
+    s = globals.sceneCur = (zScene*)xMemAllocSize(sizeof(zScene));
 
     xSceneInit(s, 200, 2048, 2068, 250);
 
@@ -1011,6 +1017,9 @@ void zSceneInit(U32 theSceneID, S32 reloadInProgress)
     ztextbox::init();
     ztalkbox::init();
     ztaskbox::init();
+    xCounterInit();
+    zSurfaceInit();
+    z_disco_floor::init();
 
     xModelInstStaticAlloc = 1;
     s->num_base = 0;
@@ -1058,6 +1067,8 @@ void zSceneInit(U32 theSceneID, S32 reloadInProgress)
 
     for (i = 0; sInitTable[i].name; i++)
     {
+        // Retail stores HACK_BASETYPE before loading sInitTable[i].func; our
+        // compiler hoists the load above the store. Scheduling residual.
         HACK_BASETYPE = sInitTable[i].baseType;
 
         if (sInitTable[i].func)
@@ -1080,13 +1091,13 @@ void zSceneInit(U32 theSceneID, S32 reloadInProgress)
 
     s->update_base = (xBase**)xMemAllocSize(s->num_update_base * sizeof(xBase*));
 
-    base_idx = 0;
+    U32 j = 0;
 
     for (i = 0; i < s->num_base; i++)
     {
         if (BaseTypeNeedsUpdate(s->base[i]->baseType))
         {
-            s->update_base[base_idx] = s->base[i];
+            s->update_base[j++] = s->base[i];
         }
     }
 
@@ -1109,7 +1120,7 @@ void zSceneInit(U32 theSceneID, S32 reloadInProgress)
     zCameraTweakGlobal_Reset();
     zActionLineInit();
     xScrFxLetterboxReset();
-    xShadowManager_Init(eBaseTypeNPC + 10);
+    xShadowManager_Init(s->baseCount[eBaseTypeNPC] + 10);
 
     S32 lkitCount = xSTAssetCountByType('LKIT');
     void* lkitData;
@@ -1250,9 +1261,7 @@ void zSceneUpdateSFXWidgets()
 
 static void HackSwapIt(char* buf, S32 size)
 {
-    // non-matching: r3 and r4 swapped
-    char* end = size + buf;
-    end--;
+    char* end = &buf[size - 1];
 
     for (S32 i = 0; i < size / 2; i++)
     {
@@ -2071,6 +2080,9 @@ void zSceneSetup()
             {
                 gCurEnv = (_zEnv*)s->base[i];
 
+                // Retail reloads gCurEnv from memory for this call instead of
+                // reusing the value it just stored; our compiler forwards the
+                // store. One-instruction scheduling residual.
                 zEnvSetup(gCurEnv);
                 xClimateInitAsset(&gClimate, gCurEnv->easset);
 
@@ -2254,7 +2266,7 @@ void zSceneSetup()
     }
 
     {
-        int max_drivensort_tiers = 256;
+        int max_drivensort_iters = 256;
         U32 driven_swapped;
         U32 i, j;
 
@@ -2264,13 +2276,13 @@ void zSceneSetup()
 
             for (i = 0; i < s->num_update_base; i++)
             {
-                if (s->update_base[i]->baseFlags & 0x20)
-                {
-                    xEnt* bdriven = (xEnt*)s->update_base[i];
+                xEnt* bdriven = (xEnt*)s->update_base[i];
 
+                if (bdriven->baseFlags & 0x20)
+                {
                     if (bdriven->driver)
                     {
-                        for (j = (i + 1) * 2; j < s->num_update_base; j++)
+                        for (j = i + 1; j < s->num_update_base; j++)
                         {
                             if (bdriven->driver == s->update_base[j])
                             {
@@ -2285,7 +2297,7 @@ void zSceneSetup()
                     }
                 }
             }
-        } while (--max_drivensort_tiers && driven_swapped);
+        } while (--max_drivensort_iters && driven_swapped);
     }
 
     {
@@ -2307,11 +2319,11 @@ void zSceneSetup()
             {
                 zScene* zsc = globals.sceneCur;
 
-                for (i = 0; i < s->num_base; i++)
+                for (i = 0; i < zsc->num_base; i++)
                 {
-                    if (s->base[i]->baseFlags & 0x20)
+                    if (zsc->base[i]->baseFlags & 0x20)
                     {
-                        xEnt* tgtent = (xEnt*)s->base[i];
+                        xEnt* tgtent = (xEnt*)zsc->base[i];
 
                         if (tgtent->model)
                         {
@@ -2367,20 +2379,20 @@ void zSceneSetup()
         }
     }
 
-    zEntSimpleObj_MgrInit((zEntSimpleObj**)s->act_ents + s->baseCount[eBaseTypeTrigger] +
-                              s->baseCount[eBaseTypePickup],
+    zEntSimpleObj_MgrInit((zEntSimpleObj**)(s->act_ents + (s->baseCount[eBaseTypeTrigger] +
+                                                           s->baseCount[eBaseTypePickup])),
                           s->baseCount[eBaseTypeStatic]);
 
     xEnt** entList =
-        s->act_ents + s->baseCount[eBaseTypeTrigger] + s->baseCount[eBaseTypePickup]; // r28
+        s->act_ents + (s->baseCount[eBaseTypeTrigger] + s->baseCount[eBaseTypePickup]); // r28
     U32 entCount = s->baseCount[eBaseTypeStatic] + s->baseCount[eBaseTypePlatform] +
                    s->baseCount[eBaseTypePendulum] + s->baseCount[eBaseTypeHangable] +
                    s->baseCount[eBaseTypeDestructObj] + s->baseCount[eBaseTypeBoulder] +
                    s->baseCount[eBaseTypeNPC] + s->baseCount[eBaseTypeButton]; // r27
 
     U32 i, j, k;
-    U32 numPrimeMovers = 0; // r24
-    U32 numDriven = 0; // r25
+    U32 numPrimeMovers = 0; // r25
+    U32 numDriven = 0; // r24
 
     for (i = 0; i < s->num_ents; i++)
     {
@@ -2394,15 +2406,15 @@ void zSceneSetup()
     {
         if (s->ents[i]->baseFlags & 0x20)
         {
-            if (s->ents[i]->driver)
+            xEnt* ent = s->ents[i];
+
+            if (ent->driver)
             {
-                if (!s->ents[i]->isCulled)
+                if (!ent->isCulled)
                 {
                     numDriven++;
-                    s->ents[i]->isCulled = 2;
+                    ent->isCulled = 2;
                 }
-
-                xEnt* ent = s->ents[i];
 
                 while (ent->driver)
                 {
@@ -2451,12 +2463,12 @@ void zSceneSetup()
                             {
                                 if (gent->isCulled == 1)
                                 {
-                                    numDriven--;
+                                    numPrimeMovers--;
                                 }
 
                                 if (gent->isCulled != 1)
                                 {
-                                    numPrimeMovers--;
+                                    numDriven--;
                                 }
 
                                 gent->isCulled = 0;
@@ -2470,19 +2482,19 @@ void zSceneSetup()
 
     xGroup* driveGroupList = NULL;
 
-    if (numDriven)
+    if (numPrimeMovers)
     {
-        U32 allocsize = numDriven * sizeof(xGroup) + numDriven * sizeof(xGroupAsset) +
-                        (numDriven + numPrimeMovers) * sizeof(xBase*);
+        U32 allocsize = numPrimeMovers * sizeof(xGroup) + numPrimeMovers * sizeof(xGroupAsset) +
+                        (numPrimeMovers + numDriven) * sizeof(xBase*);
 
         driveGroupList = (xGroup*)RwMalloc(allocsize);
 
         memset(driveGroupList, 0, allocsize);
 
-        xGroupAsset* grpAssetList = (xGroupAsset*)(driveGroupList + numDriven);
-        xBase** grpBaseList = (xBase**)(grpAssetList + numDriven);
+        xGroupAsset* grpAssetList = (xGroupAsset*)(driveGroupList + numPrimeMovers);
+        xBase** grpBaseList = (xBase**)(grpAssetList + numPrimeMovers);
 
-        for (i = 0; i < numDriven; i++)
+        for (i = 0; i < numPrimeMovers; i++)
         {
             driveGroupList[i].baseType = eBaseTypeGroup;
             driveGroupList[i].asset = &grpAssetList[i];
@@ -2511,16 +2523,14 @@ void zSceneSetup()
 
                             if (other->isCulled == 2)
                             {
-                                xEnt* r12 = other;
-
-                                while (r12->driver)
+                                while (other->driver)
                                 {
-                                    r12 = r12->driver;
+                                    other = other->driver;
                                 }
 
-                                if (ent == r12)
+                                if (ent == other)
                                 {
-                                    *grpBaseList++ = other;
+                                    *grpBaseList++ = s->base[k];
                                     gasset->itemCount++;
                                 }
                             }
@@ -2529,7 +2539,7 @@ void zSceneSetup()
 
                     if (gasset->itemCount > 1)
                     {
-                        numPrimeMovers++;
+                        numGroups++;
                     }
 
                     j++;
@@ -2566,7 +2576,7 @@ void zSceneSetup()
             }
         }
 
-        for (i = 0; i < numDriven; i++)
+        for (i = 0; i < numPrimeMovers; i++)
         {
             if (driveGroupList[i].asset->itemCount > 1)
             {
@@ -2579,6 +2589,9 @@ void zSceneSetup()
     globals.updateMgr->activateCB = (xUpdateCullActivateCallback)ActivateCB;
     globals.updateMgr->deactivateCB = (xUpdateCullDeactivateCallback)DeactivateCB;
 
+    // Retail hoists the second literal load above the first store here
+    // (lfs, lfs, stfs, stfs); our compiler keeps them interleaved.
+    // Scheduling residual, not a source difference.
     FloatAndVoid defaultDist;
     defaultDist.f = 4900.0f;
 
@@ -3144,9 +3157,12 @@ void zSceneRender()
 
 static void zSceneObjHashtableInit(S32 count)
 {
-    scobj_idbps = (IDBasePair*)xMemAllocSize(count * sizeof(IDBasePair));
+    scobj_idbps = (IDBasePair*)xMemAllocSize((U32)count * sizeof(IDBasePair));
 
-    memset(scobj_idbps, 0, count * sizeof(IDBasePair));
+    // Retail reloads scobj_idbps from memory for the memset instead of reusing the
+    // xMemAlloc return value; the volatile cast forces that reload (same idiom as
+    // xFFXPoolInit / zMovePoint_GetMemPool). Byte-exact with it, 95% without.
+    memset(*(IDBasePair* volatile*)&scobj_idbps, 0, count * sizeof(IDBasePair));
 
     scobj_size = count;
     nidbps = 0;
