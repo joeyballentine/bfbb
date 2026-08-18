@@ -213,19 +213,16 @@ namespace zhud
 
         for (i = 0; i < 5; i++)
         {
-            U32 updated_value = 1;
+            bool updated_value = true;
             if (old_value[i] == *value[i])
             {
-                updated_value = 0;
+                updated_value = false;
             }
-            
-            U32 another_updated_value = 0;
-            if (updated_value & 0xFF || (max_value[i] != 0 && old_max_value[i] != *max_value[i]))
-            {
-                another_updated_value = 1;
-            }
-            
-            if (another_updated_value & 0xFF)
+
+            bool another_updated_value =
+                updated_value || (max_value[i] != NULL && old_max_value[i] != *max_value[i]);
+
+            if (another_updated_value)
             {
                 S32 meter_idx = meter_widget_index[i];
                 if (widgets[meter_idx] != NULL) 
@@ -283,35 +280,43 @@ namespace zhud
 
     void zhud::show()
     {
-        U32 i = 0;
-        while (&widgets[i] < &widgets[6])
+        xhud::widget** it = widgets;
+        xhud::widget** end = widgets + 9;
+
+        while (it < end)
         {
-            if (widgets[i] != NULL)
+            xhud::widget* widget = *it;
+            if (widget != NULL)
             {
-                xhud::widget* widget = widgets[i];
                 widget->clear_motives(xhud::delay_motive_update, (void*)zhud::hide_widget);
-                if (!(widget->showing() & 0xFF)) 
+                if (!(widget->showing() & 0xFF))
                 {
                     widget->show();
                 }
             }
 
-            i++;
+            it++;
         }
 
-        for (i = 0; i < 5; i++)
         {
-            hiding[i] = FALSE;
+            U8* it = hiding;
+            U8* end = hiding + 5;
+            while (it != end)
+            {
+                *it = 0;
+                it++;
+            }
         }
     }
 
     void zhud::hide()
     {
-        U32 i = 0;
+        xhud::widget** it = widgets;
+        xhud::widget** end = widgets + 9;
 
-        while (&widgets[i] < &widgets[6])
+        while (it < end)
         {
-            xhud::widget* widget = widgets[i];
+            xhud::widget* widget = *it;
             if (widget != NULL)
             {
                 if (!(widget->hiding() & 0xFF))
@@ -319,12 +324,18 @@ namespace zhud
                     widget->hide();
                 }
             }
-            i++;
+
+            it++;
         }
 
-        for (i = 0; i < 5; i++)
         {
-            hiding[i] = FALSE;
+            U8* it = hiding;
+            U8* end = hiding + 5;
+            while (it != end)
+            {
+                *it = 1;
+                it++;
+            }
         }
     }
 } // namespace zhud
