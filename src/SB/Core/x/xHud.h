@@ -141,12 +141,12 @@ namespace xhud
             return flag.enabled;
         }
 
-        U32 showing() const
+        bool showing() const
         {
             return activity == ACT_SHOW;
         }
 
-        U32 hiding() const
+        bool hiding() const
         {
             return activity == ACT_HIDE;
         }
