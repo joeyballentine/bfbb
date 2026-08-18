@@ -12,6 +12,13 @@ tagiRenderInput gRenderBuffer;
 static S32 gColorTableInit;
 static F32 gColorTable[256];
 
+// mwcceppc 2.0p1/2.0p1a ceiling: retail reloads the int-to-float bias constant
+// and 255.0f from .sdata2 inside every one of the eight unrolled copies,
+// because its CSE treats the stfs to gColorTable as possibly aliasing the
+// literal pool. Both the stock and the patched compiler here hoist those two
+// loads out of the loop body instead, which is the only difference in the
+// function. Not reachable from the source: verified against a pointer walk,
+// a while loop, an unsigned induction variable and a volatile table.
 void iParMgrInit()
 {
     iRenderInit();
@@ -120,16 +127,38 @@ void iParMgrRenderParSys_Sprite(void* data, xParGroup* ps)
         F32 py = p->m_pos.y;
         F32 pz = p->m_pos.z;
 
-        for (S32 i = 0; i < 4; i++)
-        {
-            v3d[i].x = size * offset[i].x + px;
-            v3d[i].y = size * offset[i].y + py;
-            v3d[i].z = size * offset[i].z + pz;
-            v3d[i].r = r;
-            v3d[i].g = g;
-            v3d[i].b = b;
-            v3d[i].a = a;
-        }
+        // Written a component at a time across all four corners, not a corner
+        // at a time: retail loads offset[0..3].x, then [0..3].y, then [0..3].z,
+        // in exactly that order, and this compiler emits loads in source order.
+        v3d[0].x = offset[0].x * size + px;
+        v3d[1].x = offset[1].x * size + px;
+        v3d[2].x = offset[2].x * size + px;
+        v3d[3].x = offset[3].x * size + px;
+        v3d[0].y = offset[0].y * size + py;
+        v3d[1].y = offset[1].y * size + py;
+        v3d[2].y = offset[2].y * size + py;
+        v3d[3].y = offset[3].y * size + py;
+        v3d[0].z = offset[0].z * size + pz;
+        v3d[1].z = offset[1].z * size + pz;
+        v3d[2].z = offset[2].z * size + pz;
+        v3d[3].z = offset[3].z * size + pz;
+
+        v3d[0].r = r;
+        v3d[0].g = g;
+        v3d[0].b = b;
+        v3d[0].a = a;
+        v3d[1].r = r;
+        v3d[1].g = g;
+        v3d[1].b = b;
+        v3d[1].a = a;
+        v3d[2].r = r;
+        v3d[2].g = g;
+        v3d[2].b = b;
+        v3d[2].a = a;
+        v3d[3].r = r;
+        v3d[3].g = g;
+        v3d[3].b = b;
+        v3d[3].a = a;
 
         if (tex != NULL)
         {
@@ -220,6 +249,13 @@ void iRenderPushQuadStreak(xPar* p, xParCmdTex* tex)
     static RxObjSpace3DVertex v3d[4];
     static U16 i3d[6] = { 0, 1, 2, 0, 2, 3 };
 
+    // vertices/indices are bound to the two function-scope templates up here,
+    // not at the point of use: retail materialises both addresses in the entry
+    // block and keeps them in r28/r29 across the two iRenderFlush calls, which
+    // is what pushes the function to six callee-saved GPRs (stmw r26).
+    vertices = v3d;
+    indices = i3d;
+
     if (gRenderBuffer.m_indexCount + 6 > 960)
     {
         iRenderFlush();
@@ -245,22 +281,6 @@ void iRenderPushQuadStreak(xPar* p, xParCmdTex* tex)
     F32 dy = size * gRenderBuffer.m_camViewR.y;
     F32 dz = size * gRenderBuffer.m_camViewR.z;
 
-    v3d[0].x = px - dx;
-    v3d[0].y = py - dy;
-    v3d[0].z = pz - dz;
-
-    v3d[1].x = tx - dx;
-    v3d[1].y = ty - dy;
-    v3d[1].z = tz - dz;
-
-    v3d[2].x = tx + dx;
-    v3d[2].y = ty + dy;
-    v3d[2].z = tz + dz;
-
-    v3d[3].x = px + dx;
-    v3d[3].y = py + dy;
-    v3d[3].z = pz + dz;
-
     v3d[0].r = r;
     v3d[0].g = g;
     v3d[0].b = b;
@@ -277,6 +297,22 @@ void iRenderPushQuadStreak(xPar* p, xParCmdTex* tex)
     v3d[3].g = g;
     v3d[3].b = b;
     v3d[3].a = a;
+
+    v3d[0].x = px - dx;
+    v3d[0].y = py - dy;
+    v3d[0].z = pz - dz;
+
+    v3d[1].x = tx - dx;
+    v3d[1].y = ty - dy;
+    v3d[1].z = tz - dz;
+
+    v3d[2].x = tx + dx;
+    v3d[2].y = ty + dy;
+    v3d[2].z = tz + dz;
+
+    v3d[3].x = px + dx;
+    v3d[3].y = py + dy;
+    v3d[3].z = pz + dz;
 
     if (tex != NULL)
     {
@@ -309,17 +345,17 @@ void iRenderPushQuadStreak(xPar* p, xParCmdTex* tex)
         v3d[2].v = 1.0f;
     }
 
-    indices = &gRenderBuffer.m_index[gRenderBuffer.m_indexCount];
-    indices[0] = gRenderBuffer.m_vertexCount + i3d[0];
-    indices[1] = gRenderBuffer.m_vertexCount + i3d[1];
-    indices[2] = gRenderBuffer.m_vertexCount + i3d[2];
-    indices[3] = gRenderBuffer.m_vertexCount + i3d[3];
-    indices[4] = gRenderBuffer.m_vertexCount + i3d[4];
-    indices[5] = gRenderBuffer.m_vertexCount + i3d[5];
+    U16* dst = &gRenderBuffer.m_index[gRenderBuffer.m_indexCount];
+    dst[0] = gRenderBuffer.m_vertexCount + indices[0];
+    dst[1] = gRenderBuffer.m_vertexCount + indices[1];
+    dst[2] = gRenderBuffer.m_vertexCount + indices[2];
+    dst[3] = gRenderBuffer.m_vertexCount + indices[3];
+    dst[4] = gRenderBuffer.m_vertexCount + indices[4];
+    dst[5] = gRenderBuffer.m_vertexCount + indices[5];
 
-    vertices = (U8*)gRenderBuffer.m_vertex +
-               gRenderBuffer.m_vertexTypeSize * gRenderBuffer.m_vertexCount;
-    memcpy(vertices, v3d, gRenderBuffer.m_vertexTypeSize * 4);
+    memcpy((U8*)gRenderBuffer.m_vertex +
+               gRenderBuffer.m_vertexTypeSize * gRenderBuffer.m_vertexCount,
+           vertices, gRenderBuffer.m_vertexTypeSize * 4);
 
     gRenderBuffer.m_indexCount += 6;
     gRenderBuffer.m_vertexCount += 4;
@@ -331,6 +367,13 @@ static void iRenderPushFlat(xPar* p, xParCmdTex* tex)
     U16* indices;
     static RxObjSpace3DVertex v3d[4];
     static U16 i3d[6] = { 0, 1, 2, 0, 2, 3 };
+
+    // vertices/indices are bound to the two function-scope templates up here,
+    // not at the point of use: retail materialises both addresses in the entry
+    // block and keeps them in r28/r29 across the two iRenderFlush calls, which
+    // is what pushes the function to six callee-saved GPRs (stmw r26).
+    vertices = v3d;
+    indices = i3d;
 
     if (gRenderBuffer.m_indexCount + 6 > 960)
     {
@@ -365,22 +408,6 @@ static void iRenderPushFlat(xPar* p, xParCmdTex* tex)
     F32 zdx = groundmat.at.x * size;
     F32 zdz = groundmat.at.z * size;
 
-    v3d[0].x = px - xdx - zdx;
-    v3d[0].y = py;
-    v3d[0].z = pz - xdz - zdz;
-
-    v3d[1].x = px + xdx - zdx;
-    v3d[1].y = py;
-    v3d[1].z = pz + xdz - zdz;
-
-    v3d[2].x = px + xdx + zdx;
-    v3d[2].y = py;
-    v3d[2].z = pz + xdz + zdz;
-
-    v3d[3].x = px - xdx + zdx;
-    v3d[3].y = py;
-    v3d[3].z = pz - xdz + zdz;
-
     v3d[0].r = r;
     v3d[0].g = g;
     v3d[0].b = b;
@@ -397,6 +424,22 @@ static void iRenderPushFlat(xPar* p, xParCmdTex* tex)
     v3d[3].g = g;
     v3d[3].b = b;
     v3d[3].a = a;
+
+    v3d[0].x = px - xdx - zdx;
+    v3d[0].y = py;
+    v3d[0].z = pz - xdz - zdz;
+
+    v3d[1].x = px + xdx - zdx;
+    v3d[1].y = py;
+    v3d[1].z = pz + xdz - zdz;
+
+    v3d[2].x = px + xdx + zdx;
+    v3d[2].y = py;
+    v3d[2].z = pz + xdz + zdz;
+
+    v3d[3].x = px - xdx + zdx;
+    v3d[3].y = py;
+    v3d[3].z = pz - xdz + zdz;
 
     if (tex != NULL)
     {
@@ -426,17 +469,17 @@ static void iRenderPushFlat(xPar* p, xParCmdTex* tex)
         v3d[3].v = 1.0f;
     }
 
-    indices = &gRenderBuffer.m_index[gRenderBuffer.m_indexCount];
-    indices[0] = gRenderBuffer.m_vertexCount + i3d[0];
-    indices[1] = gRenderBuffer.m_vertexCount + i3d[1];
-    indices[2] = gRenderBuffer.m_vertexCount + i3d[2];
-    indices[3] = gRenderBuffer.m_vertexCount + i3d[3];
-    indices[4] = gRenderBuffer.m_vertexCount + i3d[4];
-    indices[5] = gRenderBuffer.m_vertexCount + i3d[5];
+    U16* dst = &gRenderBuffer.m_index[gRenderBuffer.m_indexCount];
+    dst[0] = gRenderBuffer.m_vertexCount + indices[0];
+    dst[1] = gRenderBuffer.m_vertexCount + indices[1];
+    dst[2] = gRenderBuffer.m_vertexCount + indices[2];
+    dst[3] = gRenderBuffer.m_vertexCount + indices[3];
+    dst[4] = gRenderBuffer.m_vertexCount + indices[4];
+    dst[5] = gRenderBuffer.m_vertexCount + indices[5];
 
-    vertices = (U8*)gRenderBuffer.m_vertex +
-               gRenderBuffer.m_vertexTypeSize * gRenderBuffer.m_vertexCount;
-    memcpy(vertices, v3d, gRenderBuffer.m_vertexTypeSize * 4);
+    memcpy((U8*)gRenderBuffer.m_vertex +
+               gRenderBuffer.m_vertexTypeSize * gRenderBuffer.m_vertexCount,
+           vertices, gRenderBuffer.m_vertexTypeSize * 4);
 
     gRenderBuffer.m_indexCount += 6;
     gRenderBuffer.m_vertexCount += 4;
@@ -659,12 +702,13 @@ void iParMgrRenderParSys_InvStreak(void* data, xParGroup* ps)
 void iParMgrRenderParSys_QuadStreak(void* data, xParGroup* ps)
 {
     xPar* idx = ps->m_root;
+    zParSys* s = (zParSys*)data;
     iRenderSetCameraViewMatrix(NULL);
-    RwTexture* texture = (RwTexture *)xSTFindAsset(*(U32 *)(*(S32 *)((S32)data + 0x10) + 0x10), NULL);
+    RwTexture* texture = (RwTexture*)xSTFindAsset(s->tasset->textureID, NULL);
     if (texture != NULL)
     {
         RwRaster* raster = texture->raster;
-        if (texture->raster != NULL)
+        if (raster != NULL)
         {
             RwRenderStateSet(rwRENDERSTATETEXTURERASTER, raster);
         }
@@ -676,7 +720,7 @@ void iParMgrRenderParSys_QuadStreak(void* data, xParGroup* ps)
 
     for (; idx != NULL; idx = idx->m_next)
     {
-        iRenderPushFlat(idx, *(xParCmdTex **)((S32)ps + 0x20));
+        iRenderPushQuadStreak(idx, ps->m_cmdTex);
     }
     iRenderFlush();
 }
@@ -753,22 +797,6 @@ void iParMgrRenderParSys_Ground(void* data, xParGroup* ps)
         F32 zdy = groundmat.at.y * size;
         F32 zdz = groundmat.at.z * size;
 
-        v3d[0].x = px - xdx - zdx;
-        v3d[0].y = py - xdy - zdy;
-        v3d[0].z = pz - xdz - zdz;
-
-        v3d[1].x = px + xdx + zdx;
-        v3d[1].y = py + xdy + zdy;
-        v3d[1].z = pz + xdz + zdz;
-
-        v3d[2].x = px + xdx - zdx;
-        v3d[2].y = py + xdy - zdy;
-        v3d[2].z = pz + xdz - zdz;
-
-        v3d[3].x = px - xdx + zdx;
-        v3d[3].y = py - xdy + zdy;
-        v3d[3].z = pz - xdz + zdz;
-
         v3d[0].r = r;
         v3d[0].g = g;
         v3d[0].b = b;
@@ -785,6 +813,22 @@ void iParMgrRenderParSys_Ground(void* data, xParGroup* ps)
         v3d[3].g = g;
         v3d[3].b = b;
         v3d[3].a = a;
+
+        v3d[0].x = px - xdx - zdx;
+        v3d[0].y = py - xdy - zdy;
+        v3d[0].z = pz - xdz - zdz;
+
+        v3d[1].x = px + xdx + zdx;
+        v3d[1].y = py + xdy + zdy;
+        v3d[1].z = pz + xdz + zdz;
+
+        v3d[2].x = px + xdx - zdx;
+        v3d[2].y = py + xdy - zdy;
+        v3d[2].z = pz + xdz - zdz;
+
+        v3d[3].x = px - xdx + zdx;
+        v3d[3].y = py - xdy + zdy;
+        v3d[3].z = pz - xdz + zdz;
 
         if (tex != NULL)
         {
@@ -836,19 +880,20 @@ void iParMgrRenderParSys_Ground(void* data, xParGroup* ps)
 void iParMgrRenderParSys_Flat(void* data, xParGroup* ps)
 {
     xPar* idx = ps->m_root;
+    zParSys* s = (zParSys*)data;
     iRenderSetCameraViewMatrix(NULL);
-    RwTexture* texture = (RwTexture *)xSTFindAsset(*(U32 *)(*(S32 *)((S32)data + 0x10) + 0x10), NULL);
+    RwTexture* texture = (RwTexture*)xSTFindAsset(s->tasset->textureID, NULL);
     if (texture != NULL)
     {
         RwRaster* raster = texture->raster;
-        if (texture->raster != NULL)
+        if (raster != NULL)
         {
             RwRenderStateSet(rwRENDERSTATETEXTURERASTER, raster);
         }
     }
     for (; idx != NULL; idx = idx->m_next)
     {
-        iRenderPushFlat(idx, *(xParCmdTex **)((S32)ps + 0x20));
+        iRenderPushFlat(idx, ps->m_cmdTex);
     }
     iRenderFlush();
 }
