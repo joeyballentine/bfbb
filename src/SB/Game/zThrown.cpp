@@ -18,6 +18,25 @@
 
 extern xEnt* gReticleTarget;
 
+static void zThrown_AddTempFrame(zThrownStruct* thrown);
+static void zFruit_ColorFade(zThrownStruct* thrown);
+static void zThrown_Update(xEnt* ent, xScene* sc, F32 dt);
+static S32 zThrownCollide_CauseDamage(zThrownStruct* thrown, xEntCollis* collis);
+static void zThrownCollide_ThrowFruit(zThrownStruct* thrown, xEntCollis* collis, F32* bounce,
+                                      F32* friction);
+static void zThrownCollide_ThrowFreeze(zThrownStruct* thrown, xEntCollis* collis, float* bounce,
+                                       float* friction);
+static void zThrownCollide_DestructObj(zThrownStruct* thrown, xEntCollis* collis, F32* bounce,
+                                       F32* friction);
+static void zThrownCollide_BSandyHead(zThrownStruct* thrown, xEntCollis* collis, F32* bounce,
+                                      F32* friction);
+static void zThrownCollide_Tiki(zThrownStruct* thrown, xEntCollis* collis, F32* bounce,
+                                F32* friction);
+static void zThrownCollide_StoneTiki(zThrownStruct* thrown, xEntCollis* collis, F32* bounce,
+                                     F32* friction);
+static void checkAgainstButtons(xEnt* ent);
+static xBase* zThrown_ButtonIteratorCB(xBase* b, zScene* scn, void* user);
+
 void zEntPlayer_PatrickLaunch(xEnt* patLauncher);
 void zFXGooFreeze(RpAtomic* atomic, const xVec3* center, xVec3* ref_parPosVec);
 
@@ -58,7 +77,7 @@ static ThrowableStats zThrowableModels[23] = {
     {},
 };
 
-void zFruit_Update(xEnt* ent, xScene* sc, F32 dt);
+static void zFruit_Update(xEnt* ent, xScene* sc, F32 dt);
 
 void zThrown_Setup(zScene* sc)
 {
@@ -90,15 +109,15 @@ void zThrown_Setup(zScene* sc)
 
     for (U32 i = 0; i < sc->num_ents; i++)
     {
-        xEnt* ent = (xEnt*)sc->base[i];
-        if (ent->baseType == eBaseTypeStatic || ent->baseType == eBaseTypeDestructObj)
+        if (((xEnt*)sc->base[i])->baseType == eBaseTypeStatic ||
+            ((xEnt*)sc->base[i])->baseType == eBaseTypeDestructObj)
         {
             for (stats = zThrowableModels; stats->name != NULL; stats++)
             {
-                U32 mid = ((xEnt*)sc->base[i])->asset->modelInfoID;
-                if (stats->nameHash == mid || stats->nameHashMINF == mid)
+                if (stats->nameHash == ((xEnt*)sc->base[i])->asset->modelInfoID ||
+                    stats->nameHashMINF == ((xEnt*)sc->base[i])->asset->modelInfoID)
                 {
-                    ent->moreFlags |= XENT_MORE_FLAGS_0x8;
+                    ((xEnt*)sc->base[i])->moreFlags |= XENT_MORE_FLAGS_0x8;
                     ((xEnt*)sc->base[i])->asset->moreFlags |= XENT_MORE_FLAGS_0x8;
                     break;
                 }
@@ -107,7 +126,7 @@ void zThrown_Setup(zScene* sc)
     }
 }
 
-void zThrown_AddTempFrame(zThrownStruct* thrown)
+static void zThrown_AddTempFrame(zThrownStruct* thrown)
 {
     xEnt* ent = thrown->ent;
     if (ent->frame == NULL)
@@ -118,7 +137,7 @@ void zThrown_AddTempFrame(zThrownStruct* thrown)
     }
 }
 
-void zFruit_ColorFade(zThrownStruct* thrown)
+static void zFruit_ColorFade(zThrownStruct* thrown)
 {
     static F32 fruitPattern[9][2] = { { 6.0f, 1.0f }, { 3.2f, 0.3f },  { 3.0f, 1.0f },
                                       { 2.2f, 0.3f }, { 2.0f, 1.0f },  { 1.2f, 0.3f },
@@ -144,7 +163,7 @@ void zFruit_ColorFade(zThrownStruct* thrown)
     }
 }
 
-void zFruit_Update(xEnt* ent, xScene* sc, F32 dt)
+static void zFruit_Update(xEnt* ent, xScene* sc, F32 dt)
 {
     U32 i;
 
@@ -243,7 +262,7 @@ void zFruit_Update(xEnt* ent, xScene* sc, F32 dt)
     }
 }
 
-void Recurse_TranslateStack(xEnt* ent, xVec3* delta)
+static void Recurse_TranslateStack(xEnt* ent, xVec3* delta)
 {
     sDebugDepth++;
     for (U32 i = 0; i < zThrownCount; i++)
@@ -259,7 +278,7 @@ void Recurse_TranslateStack(xEnt* ent, xVec3* delta)
     sDebugDepth--;
 }
 
-void zThrown_Update(xEnt* ent, xScene* sc, F32 dt)
+static void zThrown_Update(xEnt* ent, xScene* sc, F32 dt)
 {
     xEntCollis collis;
     xSweptSphere sws;
@@ -332,9 +351,10 @@ void zThrown_Update(xEnt* ent, xScene* sc, F32 dt)
     case XBOUND_TYPE_BOX:
     case XBOUND_TYPE_OBB:
     {
-        F32 rx = 0.5f * (bound.box.box.upper.x - bound.box.box.lower.x);
-        F32 rz = 0.5f * (bound.box.box.upper.z - bound.box.box.lower.z);
-        ent->bound.sph.r = (rx < rz) ? rx : rz;
+        ent->bound.sph.r = (0.5f * (bound.box.box.upper.x - bound.box.box.lower.x) <
+                            0.5f * (bound.box.box.upper.z - bound.box.box.lower.z))
+                               ? 0.5f * (bound.box.box.upper.x - bound.box.box.lower.x)
+                               : 0.5f * (bound.box.box.upper.z - bound.box.box.lower.z);
         ent->bound.sph.center.x = 0.5f * (bound.box.box.upper.x + bound.box.box.lower.x);
         ent->bound.sph.center.y = bound.box.box.lower.y + ent->bound.sph.r;
         ent->bound.sph.center.z = 0.5f * (bound.box.box.upper.z + bound.box.box.lower.z);
@@ -389,11 +409,9 @@ void zThrown_Update(xEnt* ent, xScene* sc, F32 dt)
                 dir.x * (tmat->pos.x - frame->mat.pos.x) + dir.z * (tmat->pos.z - frame->mat.pos.z);
             F32 nx = d * dir.x + frame->mat.pos.x;
             F32 nz = d * dir.z + frame->mat.pos.z;
-            F32 ex = nx - tmat->pos.x;
-            F32 ez = nz - tmat->pos.z;
-            F32 ex2 = ex * ex;
-            F32 ez2 = ez * ez;
-            if (ex2 + ez2 < 0.02f)
+            if ((nx - tmat->pos.x) * (nx - tmat->pos.x) +
+                    (nz - tmat->pos.z) * (nz - tmat->pos.z) <
+                0.02f)
             {
                 frame->mat.pos.x = nx;
                 ent->frame->mat.pos.z = nz;
@@ -930,7 +948,7 @@ void zThrown_LaunchStack(xEnt* ent, xEnt* target)
         break;
     }
 
-    pos.y = pos.y + 0.2f;
+    pos.y += 0.2f;
     pos.x = target->model->Mat->pos.x;
     pos.z = target->model->Mat->pos.z;
     dir.x = pos.x - ent->model->Mat->pos.x;
@@ -1005,24 +1023,26 @@ void zThrown_AddFruit(xEnt* ent)
         stats++;
     }
 
-    if (stats->name != NULL && stats->carry == &c_fruit)
+    if (stats->name == NULL || stats->carry != &c_fruit)
     {
-        newThrown = &zThrownList[zThrownCount];
-        zThrownCount++;
-        newThrown->killTimer = stats->carry->killTimer;
-        newThrown->stats = stats;
-        newThrown->oldupdate = ent->update;
-        newThrown->ent = ent;
-        newThrown->stackEnt = NULL;
-        newThrown->stackTgt = NULL;
-        newThrown->oldRecShadow = ent->baseFlags & 0x10;
-        ent->update = zFruit_Update;
-        ent->baseFlags |= 0x80;
-        zThrown_AddTempFrame(newThrown);
-        xEntDriveInit(&newThrown->drv, ent);
-        newThrown->driveDebounce = 0;
-        newThrown->driveLastFloor = NULL;
+        return;
     }
+
+    newThrown = &zThrownList[zThrownCount];
+    zThrownCount++;
+    newThrown->killTimer = stats->carry->killTimer;
+    newThrown->stats = stats;
+    newThrown->oldupdate = ent->update;
+    newThrown->ent = ent;
+    newThrown->stackEnt = NULL;
+    newThrown->stackTgt = NULL;
+    newThrown->oldRecShadow = ent->baseFlags & 0x10;
+    ent->update = zFruit_Update;
+    ent->baseFlags |= 0x80;
+    zThrown_AddTempFrame(newThrown);
+    xEntDriveInit(&newThrown->drv, ent);
+    newThrown->driveDebounce = 0;
+    newThrown->driveLastFloor = NULL;
 }
 
 void zThrown_Remove(xEnt* ent)
@@ -1088,7 +1108,7 @@ S32 zThrown_KillFruit(xEnt* ent)
     return 0;
 }
 
-S32 zThrownCollide_CauseDamage(zThrownStruct* thrown, xEntCollis* collis)
+static S32 zThrownCollide_CauseDamage(zThrownStruct* thrown, xEntCollis* collis)
 {
     S32 result = 0;
 
@@ -1153,14 +1173,10 @@ S32 zThrownCollide_CauseDamage(zThrownStruct* thrown, xEntCollis* collis)
     return result;
 }
 
-void zThrownCollide_ThrowFruit(zThrownStruct* thrown, xEntCollis* collis, F32* bounce,
+static void zThrownCollide_ThrowFruit(zThrownStruct* thrown, xEntCollis* collis, F32* bounce,
                                F32* friction)
 {
     U32 idx;
-    xEnt* other;
-    F32 stackHeight;
-    U32 i;
-    F32 killTimer;
 
     sThrowButtonMask = 0x80;
 
@@ -1174,41 +1190,45 @@ void zThrownCollide_ThrowFruit(zThrownStruct* thrown, xEntCollis* collis, F32* b
 
     if (collis->colls[0].flags & k_HIT_IT)
     {
-        F32 stackHeight0;
-        other = (xEnt*)collis->colls[0].optr;
-        if (other != NULL && other->baseType == eBaseTypeStatic &&
-            zThrown_IsFruit(other, &stackHeight0))
+        F32 stackHeight;
+        xEnt* landEnt = (xEnt*)collis->colls[0].optr;
+        if (landEnt != NULL && landEnt->baseType == eBaseTypeStatic &&
+            zThrown_IsFruit(landEnt, &stackHeight))
         {
-            killTimer = 1000.0f;
+            U32 i;
+            F32 killTimer = 1000.0f;
             for (i = 0; i < zThrownCount; i++)
             {
-                if (zThrownList[i].ent == other)
+                if (zThrownList[i].ent == landEnt)
                 {
                     killTimer = zThrownList[i].killTimer;
                 }
             }
 
-            xMat4x3* tmat = (xMat4x3*)thrown->ent->model->Mat;
-            xMat4x3* omat = (xMat4x3*)other->model->Mat;
-            F32 dz = tmat->pos.z - omat->pos.z;
-            F32 dx = tmat->pos.x - omat->pos.x;
+            F32 dx = ((xMat4x3*)thrown->ent->model->Mat)->pos.x -
+                     ((xMat4x3*)landEnt->model->Mat)->pos.x;
+            F32 dz = ((xMat4x3*)thrown->ent->model->Mat)->pos.z -
+                     ((xMat4x3*)landEnt->model->Mat)->pos.z;
             if (dx * dx + dz * dz < 0.0225f && killTimer > 0.1f)
             {
-                tmat->pos.y = omat->pos.y + stackHeight0;
+                ((xMat4x3*)thrown->ent->model->Mat)->pos.y =
+                    ((xMat4x3*)landEnt->model->Mat)->pos.y + stackHeight;
                 *bounce = 0.0f;
                 *friction = 0.0f;
-                thrown->stackEnt = other;
+                thrown->stackEnt = landEnt;
                 return;
             }
         }
 
-        if (collis->colls[0].optr != NULL &&
-            ((xEnt*)collis->colls[0].optr)->baseType == eBaseTypeButton &&
-            xabs(collis->colls[0].norm.y) < 0.9659258f)
         {
-            *friction = 1.0f;
-            *bounce = globals.player.carry.fruitWallBounce;
-            return;
+            xEnt* landEnt = (xEnt*)collis->colls[0].optr;
+            if (landEnt != NULL && landEnt->baseType == eBaseTypeButton &&
+                xabs(collis->colls[0].norm.y) < 0.9659258f)
+            {
+                *friction = 1.0f;
+                *bounce = globals.player.carry.fruitWallBounce;
+                return;
+            }
         }
 
         F32 speed = xVec3Length(&thrown->vel);
@@ -1249,31 +1269,33 @@ void zThrownCollide_ThrowFruit(zThrownStruct* thrown, xEntCollis* collis, F32* b
 
     if (idx != 0)
     {
-        other = (xEnt*)collis->colls[idx].optr;
-        if (other != NULL && other->baseType == eBaseTypeStatic &&
-            zThrown_IsFruit(other, &stackHeight))
+        F32 stackHeight;
+        xEnt* landEnt = (xEnt*)collis->colls[idx].optr;
+        if (landEnt != NULL && landEnt->baseType == eBaseTypeStatic &&
+            zThrown_IsFruit(landEnt, &stackHeight))
         {
-            killTimer = 1000.0f;
+            U32 i;
+            F32 killTimer = 1000.0f;
             for (i = 0; i < zThrownCount; i++)
             {
-                if (zThrownList[i].ent == other)
+                if (zThrownList[i].ent == landEnt)
                 {
                     killTimer = zThrownList[i].killTimer;
                 }
             }
 
-            xMat4x3* omat = (xMat4x3*)other->model->Mat;
-            F32 dx = thrown->oldcollpos.x - omat->pos.x;
-            F32 dz = thrown->oldcollpos.z - omat->pos.z;
-            F32 dy = thrown->oldcollpos.y - omat->pos.y;
+            F32 dx = thrown->oldcollpos.x - ((xMat4x3*)landEnt->model->Mat)->pos.x;
+            F32 dy = thrown->oldcollpos.y - ((xMat4x3*)landEnt->model->Mat)->pos.y;
+            F32 dz = thrown->oldcollpos.z - ((xMat4x3*)landEnt->model->Mat)->pos.z;
             if (dx * dx + dz * dz < 0.0225f && dy > 0.8f && killTimer > 0.1f)
             {
                 ((xMat4x3*)thrown->ent->model->Mat)->pos.x = thrown->oldcollpos.x;
-                ((xMat4x3*)thrown->ent->model->Mat)->pos.y = omat->pos.y + stackHeight;
+                ((xMat4x3*)thrown->ent->model->Mat)->pos.y =
+                    ((xMat4x3*)landEnt->model->Mat)->pos.y + stackHeight;
                 ((xMat4x3*)thrown->ent->model->Mat)->pos.z = thrown->oldcollpos.z;
                 *bounce = 0.0f;
                 *friction = 0.0f;
-                thrown->stackEnt = other;
+                thrown->stackEnt = landEnt;
                 return;
             }
         }
@@ -1295,7 +1317,7 @@ void zThrownCollide_ThrowFruit(zThrownStruct* thrown, xEntCollis* collis, F32* b
     }
 }
 
-void zThrownCollide_ThrowFreeze(zThrownStruct* thrown, xEntCollis* collis, float* bounce,
+static void zThrownCollide_ThrowFreeze(zThrownStruct* thrown, xEntCollis* collis, float* bounce,
                                 float* friction)
 {
     sFruitIsFreezy = 1;
@@ -1303,7 +1325,7 @@ void zThrownCollide_ThrowFreeze(zThrownStruct* thrown, xEntCollis* collis, float
     sFruitIsFreezy = 0;
 }
 
-void zThrownCollide_DestructObj(zThrownStruct* thrown, xEntCollis* collis, F32* bounce,
+static void zThrownCollide_DestructObj(zThrownStruct* thrown, xEntCollis* collis, F32* bounce,
                                 F32* friction)
 {
     sThrowButtonMask = 0x40;
@@ -1313,7 +1335,7 @@ void zThrownCollide_DestructObj(zThrownStruct* thrown, xEntCollis* collis, F32* 
     zEntEvent(thrown->ent, eEventDestroy);
 }
 
-void zThrownCollide_BSandyHead(zThrownStruct* thrown, xEntCollis* collis, F32* bounce,
+static void zThrownCollide_BSandyHead(zThrownStruct* thrown, xEntCollis* collis, F32* bounce,
                                F32* friction)
 {
     sThrowButtonMask = 0x40;
@@ -1322,7 +1344,7 @@ void zThrownCollide_BSandyHead(zThrownStruct* thrown, xEntCollis* collis, F32* b
     *friction = 0.0f;
 }
 
-void zThrownCollide_Tiki(zThrownStruct* thrown, xEntCollis* collis, F32* bounce, F32* friction)
+static void zThrownCollide_Tiki(zThrownStruct* thrown, xEntCollis* collis, F32* bounce, F32* friction)
 {
     sThrowButtonMask = 0x40;
     zThrownCollide_CauseDamage(thrown, collis);
@@ -1331,49 +1353,52 @@ void zThrownCollide_Tiki(zThrownStruct* thrown, xEntCollis* collis, F32* bounce,
     zEntEvent(thrown->ent, eEventDestroy);
 }
 
-void zThrownCollide_StoneTiki(zThrownStruct* thrown, xEntCollis* collis, F32* bounce, F32* friction)
+static void zThrownCollide_StoneTiki(zThrownStruct* thrown, xEntCollis* collis, F32* bounce, F32* friction)
 {
-    U32 idx;
+    U32 collidx;
+    xEnt* hitent;
+    U32 collfound;
 
     *bounce = 0.0f;
     *friction = 0.0f;
     sThrowButtonMask = 0x40;
     zThrownCollide_CauseDamage(thrown, collis);
 
-    for (U32 i = k_XCOLLS_IDX_COUNT; i < 18 && (collis->colls[i].flags & k_HIT_IT); i++)
+    for (collidx = k_XCOLLS_IDX_COUNT;
+         collidx < 18 && (collis->colls[collidx].flags & k_HIT_IT); collidx++)
     {
-        xEnt* other = (xEnt*)collis->colls[i].optr;
-        if (other != NULL)
+        hitent = (xEnt*)collis->colls[collidx].optr;
+        if (hitent != NULL)
         {
-            if (other->baseType == eBaseTypeNPC &&
-                (((zNPCCommon*)other)->SelfType() & 0xffffff00) == (NPC_TYPE_FISH & 0xffffff00))
+            if (hitent->baseType == eBaseTypeNPC &&
+                (((zNPCCommon*)hitent)->SelfType() & 0xffffff00) == (NPC_TYPE_FISH & 0xffffff00))
             {
                 zEntEvent(thrown->ent, eEventKill);
             }
-            if (other->baseType == eBaseTypeTeleportBox)
+            if (hitent->baseType == eBaseTypeTeleportBox)
             {
                 zEntEvent(thrown->ent, eEventKill);
             }
         }
     }
 
-    idx = 0;
+    collfound = 0;
     if (collis->env_eidx > collis->env_sidx)
     {
-        idx = collis->env_sidx;
+        collfound = collis->env_sidx;
     }
     else if (collis->dyn_eidx > collis->dyn_sidx)
     {
-        idx = collis->dyn_sidx;
+        collfound = collis->dyn_sidx;
     }
     else if (collis->stat_eidx > collis->stat_sidx)
     {
-        idx = collis->stat_sidx;
+        collfound = collis->stat_sidx;
     }
 
-    if (idx != 0)
+    if (collfound != 0)
     {
-        if (collis->colls[idx].norm.y < 0.707f)
+        if (collis->colls[collfound].norm.y < 0.707f)
         {
             *friction = 1.0f;
             *bounce = globals.player.carry.fruitWallBounce;
@@ -1427,7 +1452,7 @@ S32 zThrown_IsStacked(xEnt* ent)
     return 0;
 }
 
-void checkAgainstButtons(xEnt* ent)
+static void checkAgainstButtons(xEnt* ent)
 {
     struct
     {
@@ -1439,7 +1464,7 @@ void checkAgainstButtons(xEnt* ent)
     zSceneForAllBase(zThrown_ButtonIteratorCB, 0x18, (void*)&data);
 }
 
-xBase* zThrown_ButtonIteratorCB(xBase* b, zScene* scn, void* user)
+static xBase* zThrown_ButtonIteratorCB(xBase* b, zScene* scn, void* user)
 {
     xCollis coll;
 
