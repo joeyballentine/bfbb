@@ -1052,7 +1052,7 @@ static void SpringRender(SandyLimbSpring* spring)
     } while (!done);
 
     RwIm3DTransform(vert, numVerts, (RwMatrix*)spring->bound->mat,
-                    rwIM3D_VERTEXUV | rwIM3D_NOCLIP | rwIM3D_VERTEXRGBA);
+                    rwIM3D_ALLOPAQUE | rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA);
     RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
     RwIm3DEnd();
 
@@ -1523,7 +1523,7 @@ static void UpdateSandyBossCam(zNPCBSandy* sandy, F32 dt)
         }
 
         sandy->bossCam.set_targets(*((xVec3*)&globals.player.ent.model->Mat->pos), *sCamSubTarget,
-                                   10.0f);
+                                   2.0f);
 
         if (sandy->bossFlags & 0x4000)
         {
@@ -2052,11 +2052,14 @@ void zNPCBSandy::Process(xScene* xscn, F32 dt)
         this->curveNodeAlpha = base;
     }
 
-    this->curveNode[0].color.a = (U8)(255.0f * LERP(1.0f, base, this->curveNodeAlpha));
+    // Retail inlined LERP(x, y, z) == x * (z - y) + y here. This build compiles the
+    // game with -inline off, so calling LERP() would emit an out-of-line call the
+    // target object does not have; the arithmetic is written out instead.
+    this->curveNode[0].color.a = (U8)(255.0f * (1.0f * (this->curveNodeAlpha - base) + base));
     this->curveNode[0].color.r = (U8)(255.0f * this->curveNodeR);
     this->curveNode[0].color.g = (U8)(255.0f * this->curveNodeG);
     this->curveNode[0].color.b = (U8)(255.0f * this->curveNodeB);
-    this->curveNode[1].color.a = (U8)(255.0f * LERP(0.0f, base, this->curveNodeAlpha));
+    this->curveNode[1].color.a = (U8)(255.0f * (0.0f * (this->curveNodeAlpha - base) + base));
     this->curveNode[1].color.r = (U8)(255.0f * this->curveNodeR);
     this->curveNode[1].color.g = (U8)(255.0f * this->curveNodeG);
     this->curveNode[1].color.b = (U8)(255.0f * this->curveNodeB);
@@ -3422,7 +3425,7 @@ S32 zNPCGoalBossSandyNoHead::Process(en_trantype* trantype, F32 dt, void* updCtx
     }
     else if (stage == 2)
     {
-        if (timeInGoal > 4.0f)
+        if (timeInGoal > 3.0f)
         {
             stage = 3;
             sUseBossCam = TRUE;
@@ -4224,11 +4227,7 @@ S32 zNPCGoalBossSandyClothesline::Process(en_trantype* trantype, F32 dt, void* u
                                          xScene* xscn)
 {
     zNPCBSandy* sandy = (zNPCBSandy*)psyche->clt_owner;
-    S32 i;
     U32 flip;
-    xEnt* rope;
-    F32 animParam;
-    F32 frac;
     xVec3 newAt;
 
     timeInGoal += dt;
@@ -4409,6 +4408,10 @@ S32 zNPCGoalBossSandyClothesline::Process(en_trantype* trantype, F32 dt, void* u
             {
                 DoAutoAnim(NPC_GSPOT_START, FALSE);
 
+                F32 animParam;
+                S32 i;
+                xEnt* rope;
+
                 animParam = 3.0f;
 
                 for (i = 0; i < 4; i++)
@@ -4437,6 +4440,10 @@ S32 zNPCGoalBossSandyClothesline::Process(en_trantype* trantype, F32 dt, void* u
             {
                 playedAnimEarly = 1;
 
+                F32 animParam;
+                S32 i;
+                xEnt* rope;
+
                 animParam = 3.0f;
 
                 for (i = 0; i < 4; i++)
@@ -4452,7 +4459,7 @@ S32 zNPCGoalBossSandyClothesline::Process(en_trantype* trantype, F32 dt, void* u
                 DoAutoAnim(NPC_GSPOT_START, FALSE);
             }
 
-            frac = timeInGoal / totalHoverTime;
+            F32 frac = timeInGoal / totalHoverTime;
 
             xVec3SMul(&sandy->frame->mat.pos, &sandy->bouncePoint[sandy->toRope], frac);
             xVec3AddScaled(&sandy->frame->mat.pos, &sandy->bouncePoint[sandy->fromRope],
