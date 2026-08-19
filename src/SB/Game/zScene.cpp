@@ -62,7 +62,6 @@
 #include "zCollGeom.h"
 #include "zFeet.h"
 #include "zParCmd.h"
-#include "zAssetTypes.h"
 
 #include "xNPCBasic.h"
 #include "xString.h"
@@ -106,6 +105,17 @@
 // Defined in zSurface.cpp but not declared in zSurface.h.
 // TODO: move this declaration into zSurface.h next to zSurfaceExit().
 void zSurfaceInit();
+
+// Declared in zAssetTypes.h. That header is deliberately not included here: it
+// pulls in zNPCTypeBossPlankton.h -> xLaserBolt.h (`xVec3 temp = { 0, 0, 0 };`)
+// and zNPCTypeBossSB2.h (`xVec2 cur = { ..., ... };`), whose class-body
+// aggregate initialisers make mwcc emit two anonymous templates - 12 bytes at
+// .rodata+0 and 8 bytes at .sbss2+0 - that nothing in the object references and
+// that the retail zScene.o does not contain. They shift every .rodata and
+// .sbss2 relocation offset in this unit. (Rewriting those two initialisers as
+// plain declarations plus field assignments fixes it identically; that is a
+// change to shared headers, so it is left alone here.)
+void FootstepHackSceneEnter();
 
 U8 HACK_BASETYPE;
 static S32 bytesNeeded;
@@ -714,8 +724,9 @@ static void PipeAddStuffCB(RpAtomic* data, U32 pipeFlags, U32)
 
 static void PipeForAllSceneModels(void (*pipeCB)(RpAtomic* data, U32 pipeFlags, U32 subObjects))
 {
-    // non-matching: k / model / remainSubObjBits get r23/r24/r25 in a
-    // different permutation from retail (register allocation only)
+    // non-matching: model / remainSubObjBits / k get r24/r23/r25 in retail and
+    // r25/r24/r23 here - a permutation of the same register allocation.
+    // Declaring k at function scope, or ahead of model, measured worse.
 
     S32 i, j;
     S32 numModels = xSTAssetCountByType('MODL');
@@ -835,8 +846,9 @@ void zSceneInit(U32 theSceneID, S32 reloadInProgress)
     U32 i;
 
     // Retail emits these four initialisations strictly in source order; our
-    // compiler hoists the loads for b above the rgba_bkgrd/gOccludeCount
-    // stores. Scheduling residual, not a source difference.
+    // compiler hoists the loads for b above the rgba_bkgrd store. Scheduling
+    // residual - moving b's declaration next to rgba_bkgrd, or either global
+    // assignment, measured worse.
     U8 rgba_bkgrd[4] = { 0x0f, 0x0f, 0x0f, 0x00 };
 
     gTransitionSceneID = theSceneID;
@@ -2080,9 +2092,12 @@ void zSceneSetup()
             {
                 gCurEnv = (_zEnv*)s->base[i];
 
-                // Retail reloads gCurEnv from memory for this call instead of
-                // reusing the value it just stored; our compiler forwards the
-                // store. One-instruction scheduling residual.
+                // non-matching: retail reloads gCurEnv from memory for this
+                // call (stw/lwz of the same sda21 slot) instead of reusing the
+                // value it just stored; our compiler propagates the assigned
+                // value. This is the only instruction zSceneSetup is short of
+                // retail. Tried and measured no better: assignment-as-argument,
+                // a local temporary, a cast on the read, a type-punned store.
                 zEnvSetup(gCurEnv);
                 xClimateInitAsset(&gClimate, gCurEnv->easset);
 
@@ -2590,8 +2605,10 @@ void zSceneSetup()
     globals.updateMgr->deactivateCB = (xUpdateCullDeactivateCallback)DeactivateCB;
 
     // Retail hoists the second literal load above the first store here
-    // (lfs, lfs, stfs, stfs); our compiler keeps them interleaved.
-    // Scheduling residual, not a source difference.
+    // (lfs f1, lfs f0, stfs f1, stfs f0) and so needs two FPRs; our compiler
+    // keeps them interleaved in f0. Scheduling residual - splitting the
+    // declarations from the assignments, swapping the two, and union
+    // aggregate initialisers all measured the same or worse.
     FloatAndVoid defaultDist;
     defaultDist.f = 4900.0f;
 
