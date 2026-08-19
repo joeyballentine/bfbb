@@ -22,6 +22,8 @@ import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
+import cwexec
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NINJA = open(os.path.join(ROOT, "build.ninja")).read()
 
@@ -43,6 +45,7 @@ def build_rules():
         out[m.group("obj").replace("\\", "/")] = {
             "src": src.group(1).replace("\\", "/"),
             "mw": mw.group(1).replace("\\", "/"),
+            "rule": m.group("rule"),
             "flags": re.sub(r"\s+", " ", cf.group(1).replace("$\n", " ")).strip(),
         }
     return out
@@ -52,9 +55,8 @@ def work(item):
     obj, info = item
     td = tempfile.mkdtemp(prefix="smoke_")
     out = os.path.join(td, "o.o")
-    exe = os.path.join(ROOT, "build", "compilers", info["mw"], "mwcceppc.exe")
-    wrap = os.path.join(ROOT, "build", "tools", "sjiswrap.exe")
-    cmd = [wrap, exe] + shlex.split(info["flags"], posix=False) + \
+    cmd = cwexec.compile_prefix(NINJA, info["rule"], info["mw"]) + \
+        shlex.split(info["flags"], posix=False) + \
         ["-c", info["src"], "-o", out]
     cmd = [c.strip('"') if c.startswith('"') and c.endswith('"') else c for c in cmd]
     try:

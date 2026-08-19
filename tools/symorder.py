@@ -23,12 +23,13 @@ import subprocess
 import sys
 import tempfile
 
+import cwexec
+
 ROOT = os.getcwd()
-CLI = os.path.abspath(os.path.join("build", "tools", "objdiff-cli.exe"))
-WRAP = os.path.abspath(os.path.join("build", "tools", "sjiswrap.exe"))
+CLI = os.path.abspath(cwexec.objdiff_cli(ROOT))
 CFG = json.load(open("objdiff.json"))
 NINJA = open("build.ninja").read()
-TMP = os.path.join(os.environ.get("TEMP", "."), "symorder.json")
+TMP = os.path.join(tempfile.gettempdir(), "symorder.json")
 
 BUILD_RE = re.compile(
     r"^build (?P<obj>\S+\.o): (?P<rule>mwcc_sjis|mwcc) (?P<body>(?:.*\n)*?)  basedir",
@@ -46,6 +47,7 @@ for _m in BUILD_RE.finditer(NINJA):
         RULES[_m.group("obj").replace("\\", "/")] = {
             "src": _sr.group(1).replace("\\", "/"),
             "mw": _mw.group(1).replace("\\", "/"),
+            "rule": _m.group("rule"),
             "flags": re.sub(r"\s+", " ", _cf.group(1).replace("$\n", " ")).strip(),
         }
 
@@ -59,8 +61,8 @@ def compile_fresh(unit):
     argv = shlex.split(info["flags"], posix=False)
     argv = [a.strip('"') if a.startswith('"') and a.endswith('"') else a
             for a in argv]
-    exe = os.path.join(ROOT, "build", "compilers", info["mw"], "mwcceppc.exe")
-    subprocess.run([WRAP, exe] + argv + ["-c", info["src"], "-o", tmp],
+    cmd = cwexec.compile_prefix(NINJA, info["rule"], info["mw"])
+    subprocess.run(cmd + argv + ["-c", info["src"], "-o", tmp],
                    cwd=ROOT, capture_output=True)
     objs = [f for f in os.listdir(tmp) if f.endswith(".o")]
     return os.path.join(tmp, objs[0]) if objs else None

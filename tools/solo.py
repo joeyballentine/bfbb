@@ -37,7 +37,7 @@ conclusion you draw from a diff, so it is worth re-checking if something is
 not making sense.
 
 Requires a configured tree: run `configure.py` first so build.ninja exists, and
-have build/tools/objdiff-cli.exe downloaded (any prior `ninja` does that).
+have build/tools/objdiff-cli downloaded (any prior `ninja` does that).
 """
 import json
 import os
@@ -47,8 +47,10 @@ import subprocess
 import sys
 import tempfile
 
+import cwexec
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CLI = os.path.join(ROOT, "build", "tools", "objdiff-cli.exe")
+CLI = cwexec.objdiff_cli(ROOT)
 CFG = json.load(open(os.path.join(ROOT, "objdiff.json")))
 NINJA = open(os.path.join(ROOT, "build.ninja")).read()
 
@@ -74,6 +76,7 @@ def build_rules():
         out[m.group("obj").replace("\\", "/")] = {
             "src": src.group(1).replace("\\", "/"),
             "mw": mw.group(1).replace("\\", "/"),
+            "rule": m.group("rule"),
             "flags": flags,
         }
     return out
@@ -100,9 +103,8 @@ def compile_unit(unit):
         raise SystemExit("no build rule for %s - is the source file missing?" % obj)
     td = tempfile.mkdtemp(prefix="solo_")
     out = os.path.join(td, "o.o")
-    exe = os.path.join(ROOT, "build", "compilers", info["mw"], "mwcceppc.exe")
-    wrap = os.path.join(ROOT, "build", "tools", "sjiswrap.exe")
-    cmd = [wrap, exe] + shlex.split(info["flags"], posix=False) + \
+    cmd = cwexec.compile_prefix(NINJA, info["rule"], info["mw"]) + \
+        shlex.split(info["flags"], posix=False) + \
         ["-c", info["src"], "-o", out]
     cmd = [c.strip('"') if c.startswith('"') and c.endswith('"') else c for c in cmd]
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=600)

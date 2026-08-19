@@ -10,11 +10,16 @@ Build plumbing plus the analysis tools used to work the decompilation.
 | `patch_compiler.py` | derives the scheduler-patched CodeWarrior at build time |
 | `decompctx.py` | flattens a translation unit and its includes into one file |
 | `download_tool.py`, `transform_dep.py` | fetch pinned tools, rewrite depfiles |
+| `cwexec.py` | reads the CodeWarrior launch command out of `build.ninja`, so the analysis tools compile the way ninja does |
 | `report.py`, `upload_progress.py` | progress reporting |
 
 ## Analysis
 
 These read `objdiff.json` and `build.ninja`, so run `configure.py` first.
+They compile through `cwexec.py`, which takes the launcher, the sjiswrap
+wrapper and the compiler path from the `mwcc`/`mwcc_sjis` rules rather than
+assuming them - so they work on Linux (where the `.exe` files run under
+`wibo`) and with `configure.py --compilers <dir>`.
 
 ### `solo.py` — compile and diff one unit, without touching the build
 
