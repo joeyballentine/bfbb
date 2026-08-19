@@ -28,11 +28,13 @@ import re
 import subprocess
 import sys
 import tempfile
+
+import cwexec
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CLI = os.path.join(ROOT, "build", "tools", "objdiff-cli.exe")
+CLI = cwexec.objdiff_cli(ROOT)
 CFG = json.load(open(os.path.join(ROOT, "objdiff.json")))
 
 REG = re.compile(r"\b[rf]\d{1,2}\b")
