@@ -55,7 +55,6 @@ void zAssetShutdown();
 #include "zCutsceneMgr.h"
 #include "zEntPlayerBungeeState.h"
 #include "zEntPlayerOOBState.h"
-#include "zMenu.h"
 #include "iTime.h"
 #include "xstransvc.h"
 
@@ -85,6 +84,14 @@ void zMenuInit(U32 theSceneID);
 void zMenuSetup();
 U32 zMenuLoop();
 void zMenuExit();
+// zMenu.cpp defines this returning bool; zMain sees it as S32. The mangled name
+// carries no return type, so the two declarations name the same symbol - and the
+// retail zMain.o assigns the result with a plain `mr`, which only an int-typed
+// declaration produces.
+S32 zMenuCardCheckStartup(S32* bytesNeeded, S32* availOnDisk, S32* neededFiles);
+S32 zMenuGetBadCard();
+U32 zMenuGetCorruptFiles(char name[][64]);
+S32 zMenuIsFirstBoot();
 void zGameInit(U32 theSceneID);
 void zGameSetup();
 void zGameLoop();
@@ -177,9 +184,7 @@ void zLedgeAdjust(zLedgeGrabParams* params)
 
 void zMainParseINIGlobals(xIniFile* ini)
 {
-    F32 fVar1;
     U32 use_degrees;
-    F32 dVar7;
 
     globals.player.g.AnalogMin = xIniGetInt(ini, "g.AnalogMin", 0x20);
     globals.player.g.AnalogMax = xIniGetInt(ini, "g.AnalogMax", 0x6e);
@@ -359,20 +364,10 @@ void zMainParseINIGlobals(xIniFile* ini)
     zcam_overrot_mid = DEG2RAD(zcam_overrot_mid);
     zcam_overrot_max = DEG2RAD(zcam_overrot_max);
 
-    // tgsm: this seems fucky
     gSkipTimeCutscene = xIniGetFloat(ini, "gSkipTimeCutscene", gSkipTimeCutscene);
-    dVar7 = xIniGetFloat(ini, "gSkipTimeFlythrough", gSkipTimeFlythrough);
-    fVar1 = 1.0f; // @ 1002
-    if (1.0f < gSkipTimeCutscene)
-    {
-        fVar1 = gSkipTimeCutscene;
-    }
-    gSkipTimeFlythrough = 0.0f;
-    if (0.0f < dVar7)
-    {
-        gSkipTimeFlythrough = dVar7;
-    }
-    gSkipTimeCutscene = fVar1;
+    gSkipTimeFlythrough = xIniGetFloat(ini, "gSkipTimeFlythrough", gSkipTimeFlythrough);
+    gSkipTimeCutscene = (gSkipTimeCutscene > 1.0f) ? gSkipTimeCutscene : 1.0f; // @ 1002
+    gSkipTimeFlythrough = (gSkipTimeFlythrough > 0.0f) ? gSkipTimeFlythrough : 0.0f; // @ 1001
 
     globals.player.carry.minDist = xIniGetFloat(ini, "carry.minDist", 0.675f); // @1024;
     globals.player.carry.maxDist = xIniGetFloat(ini, "carry.maxDist", 1.9f); // @1025;
@@ -966,11 +961,11 @@ void zMainMemCardSpaceQuery()
     S32 availOnDisk = 0;
     S32 neededFiles = 0;
     S32 do_chk = 1;
-    S32 fullCard = -1;
+    S32 status = 1;
     U8 formatInProgress = 0;
     U8 formatFailed = 0;
     eStartupErrors startupError = eNoError;
-    S32 status = 1;
+    S32 fullCard = -1;
     S32 startBytes = 0;
     void* workArea = RwMalloc(CARD_WORKAREA_SIZE);
 
@@ -1220,7 +1215,7 @@ static void zMainMemCardQueryPost(S32 needed, S32 available, S32 neededFiles, S3
     cam = iCameraCreate(640, 480, 0);
     RwCameraClear(cam, &colour, clearMode);
     RwCameraBeginUpdate(cam);
-    render_mem_card_no_space(needed, available, neededFiles, unk0);
+    render_mem_card_no_space(needed, available, neededFiles, unk0 != 0);
     RwCameraEndUpdate(cam);
     RwCameraShowRaster(cam, NULL, 1);
     iCameraDestroy(cam);
