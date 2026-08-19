@@ -92,7 +92,9 @@ static void lightningTweakStart(const tweak_info& t)
 
 void zLightningInit()
 {
-    for (S32 i = 0; i < NUM_LIGHTNING; i++)
+    S32 i;
+
+    for (i = 0; i < NUM_LIGHTNING; i++)
     {
         sLightning[i] = NULL;
     }
@@ -104,7 +106,7 @@ void zLightningInit()
         sLightningRaster = tex->raster;
     }
 
-    for (S32 i = 0; i < 9; i++)
+    for (i = 0; i < 9; i++)
     {
         sLFuncX[i].next = &sLFuncX[i + 1];
         sLFuncY[i].next = &sLFuncY[i + 1];
@@ -115,7 +117,7 @@ void zLightningInit()
     sLFuncY[9].next = NULL;
     sLFuncZ[9].next = NULL;
 
-    for (S32 i = 0; i < 10; i++) {
+    for (i = 0; i < 10; i++) {
         xVec3Init(&sLFuncVal[i], 2.0f * (xurand() - 0.5f), 2.0f * (xurand() - 0.5f), 2.0f * (xurand() - 0.5f));
         xVec3Init(&sLFuncSlope[i][0], sLFuncSlopeRange * (2.0f * (xurand() - 0.5f)), sLFuncSlopeRange * (2.0f * (xurand() - 0.5f)), sLFuncSlopeRange * (2.0f * (xurand() - 0.5f)));
         xVec3Init(&sLFuncSlope[i][1], sLFuncSlopeRange * (2.0f * (xurand() - 0.5f)), sLFuncSlopeRange * (2.0f * (xurand() - 0.5f)), sLFuncSlopeRange * (2.0f * (xurand() - 0.5f)));
@@ -125,7 +127,7 @@ void zLightningInit()
 
     sLFuncEnd[9] = 10.0f;
 
-    for (S32 i = 0; i < 10; i++)
+    for (i = 0; i < 10; i++)
     {
         S32 j;
         F32 prevEnd;
@@ -154,7 +156,7 @@ void zLightningInit()
     xVec3Init(&sTweakEnd, -5.0f, 2.0f, 0.0f);
     gLightningTweakAddInfo.color.r = 0xC8;
     gLightningTweakAddInfo.color.g = 0xC8;
-    gLightningTweakAddInfo.color.b = 0xC8;
+    gLightningTweakAddInfo.color.b = 0xFF;
     gLightningTweakAddInfo.color.a = 0xC8;
     gLightningTweakAddInfo.arc_height = 0.5f;
     gLightningTweakAddInfo.rot_radius = 0.15f;
@@ -168,7 +170,7 @@ void zLightningInit()
     gLightningTweakAddInfo.zeus_side_offset = 0.0f;
 
     sLightningStartCB.on_change = (void (*)(tweak_info&))&lightningTweakStart;
-    sLightningChangeCB.on_change = &lightningTweakChangeType;
+    sLightningChangeCB.on_change = (void (*)(tweak_info&))&lightningTweakChangeType;
 
     xDebugAddTweak("Lightning|\01\01Go", "Start Lightning", &sLightningStartCB, NULL, 0x2);
     xDebugAddTweak("Lightning|\01Globals|\01\01JerkFrequency", &sLFuncJerkFreq, 0.0f, 1000000000.0f, NULL, NULL, 0x2);
@@ -188,7 +190,7 @@ void zLightningInit()
     xDebugAddSelectTweak("Lightning|\01Type", &gLightningTweakAddInfo.type, lightning_type_names, NULL, 4, &sLightningChangeCB, NULL, 0x2);
     
     tweak_info info;
-    lightningTweakChangeType((const tweak_info&)info);
+    lightningTweakChangeType(info);
 
     xDebugAddFlagTweak("Lightning|\02Flag|Rot Scalar", &gLightningTweakAddInfo.flags, 0x8, NULL, NULL, 0x2);
     xDebugAddFlagTweak("Lightning|\02Flag|No Fade Out", &gLightningTweakAddInfo.flags, 0x1000, NULL, NULL, 0x2);
@@ -843,7 +845,7 @@ void RenderLightning(zLightning* l)
             fade = (l->time_left / l->time_total) * l->color.a;
         }
 
-        S32 alpha = 0.5f + fade;
+        U8 alpha = 0.5f + fade;
         S32 i;
         U32 nvert = 2;
         U8 cr;
@@ -933,31 +935,33 @@ void RenderLightning(zLightning* l)
             cb = l->color.b;
             RwIm3DVertexSetRGBA(&sStripVert[nvert], cr, cg, cb, alpha);
 
+            nvert++;
+
             if (flip)
             {
-                RwIm3DVertexSetPos(&sStripVert[nvert + 1], pt1.x, pt1.y, pt1.z);
+                RwIm3DVertexSetPos(&sStripVert[nvert], pt1.x, pt1.y, pt1.z);
             }
             else
             {
-                RwIm3DVertexSetPos(&sStripVert[nvert + 1], pt2.x, pt2.y, pt2.z);
+                RwIm3DVertexSetPos(&sStripVert[nvert], pt2.x, pt2.y, pt2.z);
             }
 
             if (i & 1)
             {
-                sStripVert[nvert + 1].u = 1.0f;
+                sStripVert[nvert].u = 1.0f;
             }
             else
             {
-                sStripVert[nvert + 1].u = 0.0f;
+                sStripVert[nvert].u = 0.0f;
             }
 
-            sStripVert[nvert + 1].v = 1.0f;
+            sStripVert[nvert].v = 1.0f;
             cr = l->color.r;
             cg = l->color.g;
             cb = l->color.b;
-            RwIm3DVertexSetRGBA(&sStripVert[nvert + 1], cr, cg, cb, alpha);
+            RwIm3DVertexSetRGBA(&sStripVert[nvert], cr, cg, cb, alpha);
 
-            nvert += 2;
+            nvert++;
             if (nvert >= 128)
             {
                 nvert = 128;
@@ -989,24 +993,26 @@ void RenderLightning(zLightning* l)
             cb = l->color.b;
             RwIm3DVertexSetRGBA(&sStripVert[nvert], cr, cg, cb, alpha);
 
-            RwIm3DVertexSetPos(&sStripVert[nvert + 1], pt2.x, pt2.y, pt2.z);
+            nvert++;
+
+            RwIm3DVertexSetPos(&sStripVert[nvert], pt2.x, pt2.y, pt2.z);
 
             if (i & 1)
             {
-                sStripVert[nvert + 1].u = 1.0f;
+                sStripVert[nvert].u = 1.0f;
             }
             else
             {
-                sStripVert[nvert + 1].u = 0.0f;
+                sStripVert[nvert].u = 0.0f;
             }
 
-            sStripVert[nvert + 1].v = 1.0f;
+            sStripVert[nvert].v = 1.0f;
             cr = l->color.r;
             cg = l->color.g;
             cb = l->color.b;
-            RwIm3DVertexSetRGBA(&sStripVert[nvert + 1], cr, cg, cb, alpha);
+            RwIm3DVertexSetRGBA(&sStripVert[nvert], cr, cg, cb, alpha);
 
-            nvert += 2;
+            nvert++;
         }
 
     render:
@@ -1095,31 +1101,33 @@ void RenderLightning(zLightning* l)
             cb = l->color.b;
             RwIm3DVertexSetRGBA(&sStripVert[nvert], cr, cg, cb, alpha);
 
+            nvert++;
+
             if (flip)
             {
-                RwIm3DVertexSetPos(&sStripVert[nvert + 1], pt1.x, pt1.y, pt1.z);
+                RwIm3DVertexSetPos(&sStripVert[nvert], pt1.x, pt1.y, pt1.z);
             }
             else
             {
-                RwIm3DVertexSetPos(&sStripVert[nvert + 1], pt2.x, pt2.y, pt2.z);
+                RwIm3DVertexSetPos(&sStripVert[nvert], pt2.x, pt2.y, pt2.z);
             }
 
             if (i & 1)
             {
-                sStripVert[nvert + 1].u = 1.0f;
+                sStripVert[nvert].u = 1.0f;
             }
             else
             {
-                sStripVert[nvert + 1].u = 0.0f;
+                sStripVert[nvert].u = 0.0f;
             }
 
-            sStripVert[nvert + 1].v = 1.0f;
+            sStripVert[nvert].v = 1.0f;
             cr = l->color.r;
             cg = l->color.g;
             cb = l->color.b;
-            RwIm3DVertexSetRGBA(&sStripVert[nvert + 1], cr, cg, cb, alpha);
+            RwIm3DVertexSetRGBA(&sStripVert[nvert], cr, cg, cb, alpha);
 
-            nvert += 2;
+            nvert++;
             if (nvert >= 128)
             {
                 nvert = 128;
@@ -1151,24 +1159,26 @@ void RenderLightning(zLightning* l)
             cb = l->color.b;
             RwIm3DVertexSetRGBA(&sStripVert[nvert], cr, cg, cb, alpha);
 
-            RwIm3DVertexSetPos(&sStripVert[nvert + 1], pt2.x, pt2.y, pt2.z);
+            nvert++;
+
+            RwIm3DVertexSetPos(&sStripVert[nvert], pt2.x, pt2.y, pt2.z);
 
             if (i & 1)
             {
-                sStripVert[nvert + 1].u = 1.0f;
+                sStripVert[nvert].u = 1.0f;
             }
             else
             {
-                sStripVert[nvert + 1].u = 0.0f;
+                sStripVert[nvert].u = 0.0f;
             }
 
-            sStripVert[nvert + 1].v = 1.0f;
+            sStripVert[nvert].v = 1.0f;
             cr = l->color.r;
             cg = l->color.g;
             cb = l->color.b;
-            RwIm3DVertexSetRGBA(&sStripVert[nvert + 1], cr, cg, cb, alpha);
+            RwIm3DVertexSetRGBA(&sStripVert[nvert], cr, cg, cb, alpha);
 
-            nvert += 2;
+            nvert++;
         }
 
         if (RwIm3DTransform(sStripVert, nvert, NULL,
