@@ -18,7 +18,7 @@ static zLODManager sManagerList[2048];
 // Float memes
 void AddToLODList(xModelInstance* model)
 {
-    for (S32 i = 0; i < sManagerCount; i++)
+    for (U32 i = 0; i < sManagerCount; i++)
     {
         if (sManagerList[i].model == model)
         {
@@ -26,7 +26,7 @@ void AddToLODList(xModelInstance* model)
         }
     }
 
-    for (S32 i = 0; i < sTableCount; i++)
+    for (U32 i = 0; i < sTableCount; i++)
     {
         if (sTableList[i].baseBucket != NULL &&
             (*sTableList[i].baseBucket)->OriginalData == model->Data)
@@ -96,21 +96,27 @@ xEnt* AddToLODList(xEnt* ent, xScene* scene, void* v)
 // WIP
 void zLOD_Setup(void)
 {
+    U32 tmpSize;
+    U32 i;
+    U32 j;
+    void* data;
+    U32 assetCount;
+    zLODTable* tableCurr;
+
     sTableCount = 0;
     sTableList = NULL;
     sManagerCount = 0;
 
-    U32 assetCount = xSTAssetCountByType('LODT');
+    assetCount = xSTAssetCountByType('LODT');
     if (assetCount == 0)
     {
         return;
     }
 
-    for (U32 i = 0; i < assetCount; i++)
+    for (i = 0; i < assetCount; i++)
     {
-        U32 tmpSize;
-        S32* asset = (S32*)xSTFindAssetByType('LODT', i, &tmpSize);
-        sTableCount += *asset;
+        data = xSTFindAssetByType('LODT', i, &tmpSize);
+        sTableCount += *(S32*)data;
     }
 
     if (sTableCount == 0)
@@ -118,36 +124,48 @@ void zLOD_Setup(void)
         return;
     }
 
-    zLODTable* tableCurr = (zLODTable*)xMemAlloc(gActiveHeap, sTableCount * sizeof(zLODTable), 0);
-    sTableList = tableCurr;
+    sTableList = (zLODTable*)xMemAlloc(gActiveHeap, sTableCount * sizeof(zLODTable), 0);
+    tableCurr = sTableList;
 
-    for (U32 i = 0; i < assetCount; i++)
+    for (i = 0; i < assetCount; i++)
     {
-        U32 tmpSize;
-        S32* asset = (S32*)xSTFindAssetByType('LODT', i, &tmpSize);
-        memcpy(tableCurr, asset + 1, (*asset) * sizeof(zLODTable));
-        tableCurr += *asset;
+        data = xSTFindAssetByType('LODT', i, &tmpSize);
+        memcpy(tableCurr, (S32*)data + 1, (*(S32*)data) * sizeof(zLODTable));
+        tableCurr += *(S32*)data;
     }
 
-    tableCurr = sTableList;
-    for (U32 i = 0; i < sTableCount; i++, tableCurr++)
+    for (i = 0; i < sTableCount; i++)
     {
-        tableCurr->noRenderDist *= tableCurr->noRenderDist;
+        sTableList[i].noRenderDist *= sTableList[i].noRenderDist;
 
-        if (tableCurr->baseBucket)
+        if (sTableList[i].baseBucket)
         {
-            RpAtomic* model = (RpAtomic*)xSTFindAsset((U32)tableCurr->baseBucket, NULL);
-            tableCurr->baseBucket = model ? xModelBucket_GetBuckets(model) : NULL;
+            RpAtomic* model = (RpAtomic*)xSTFindAsset((U32)sTableList[i].baseBucket, NULL);
+            if (model)
+            {
+                sTableList[i].baseBucket = xModelBucket_GetBuckets(model);
+            }
+            else
+            {
+                sTableList[i].baseBucket = NULL;
+            }
         }
 
-        for (U32 j = 0; j < 3; j++)
+        for (j = 0; j < 3; j++)
         {
-            if (tableCurr->lodBucket[j])
+            if (sTableList[i].lodBucket[j])
             {
-                RpAtomic* model = (RpAtomic*)xSTFindAsset((U32)tableCurr->lodBucket[j], NULL);
-                tableCurr->lodBucket[j] = model ? xModelBucket_GetBuckets(model) : NULL;
+                RpAtomic* model = (RpAtomic*)xSTFindAsset((U32)sTableList[i].lodBucket[j], NULL);
+                if (model)
+                {
+                    sTableList[i].lodBucket[j] = xModelBucket_GetBuckets(model);
+                }
+                else
+                {
+                    sTableList[i].lodBucket[j] = NULL;
+                }
             }
-            tableCurr->lodDist[j] *= tableCurr->lodDist[j];
+            sTableList[i].lodDist[j] *= sTableList[i].lodDist[j];
         }
     }
 
@@ -171,7 +189,7 @@ void zLOD_Update(U32 percent_update)
         numUpdates++;
     }
 
-    for (U32 i = 0; i < numUpdates; i++)
+    while (numUpdates--)
     {
         sManagerIndex++;
         if (sManagerIndex >= sManagerCount)
@@ -185,18 +203,18 @@ void zLOD_Update(U32 percent_update)
             continue;
         }
 
-        RwMatrix* mat = model->Mat;
-        F32 distscale =
-            mat->right.x * mat->right.x + mat->right.y * mat->right.y + mat->right.z * mat->right.z;
+        F32 camdist2 = 0.0f;
+        F32 distscale = model->Mat->right.x * model->Mat->right.x +
+                        model->Mat->right.y * model->Mat->right.y +
+                        model->Mat->right.z * model->Mat->right.z;
         if (distscale < 0.0001f)
             distscale = 1.0f;
 
-        F32 camdist2 = 0.0f;
-        if (mat)
+        if (model->Mat)
         {
-            camdist2 = ((camPos->x - mat->pos.x) * (camPos->x - mat->pos.x) +
-                        (camPos->y - mat->pos.y) * (camPos->y - mat->pos.y) +
-                        (camPos->z - mat->pos.z) * (camPos->z - mat->pos.z)) /
+            camdist2 = ((camPos->x - model->Mat->pos.x) * (camPos->x - model->Mat->pos.x) +
+                        (camPos->y - model->Mat->pos.y) * (camPos->y - model->Mat->pos.y) +
+                        (camPos->z - model->Mat->pos.z) * (camPos->z - model->Mat->pos.z)) /
                        distscale;
         }
 
@@ -212,6 +230,8 @@ void zLOD_Update(U32 percent_update)
         }
         else
         {
+            S32 lodIndex = 0;
+
             model->Flags &= (U16)~0x400;
 
             if (lod->baseBucket)
@@ -220,9 +240,7 @@ void zLOD_Update(U32 percent_update)
                 model->Data = (*model->Bucket)->OriginalData;
             }
 
-            S32 lodIndex;
-            for (lodIndex = 0;
-                 lodIndex < 3 && lod->lodBucket[lodIndex] && camdist2 > lod->lodDist[lodIndex];
+            for (; lodIndex < 3 && lod->lodBucket[lodIndex] && camdist2 > lod->lodDist[lodIndex];
                  lodIndex++)
             {
                 model->Bucket = lod->lodBucket[lodIndex];
@@ -269,9 +287,10 @@ zLODTable* zLOD_Get(xEnt* ent)
 // WIP
 void zLOD_UseCustomTable(xEnt* ent, zLODTable* lod)
 {
+    U32 i;
     xModelInstance* model = ent->model;
 
-    for (U32 i = 0; i < sManagerCount; i++)
+    for (i = 0; i < sManagerCount; i++)
     {
         if (sManagerList[i].model == model)
         {
@@ -281,19 +300,19 @@ void zLOD_UseCustomTable(xEnt* ent, zLODTable* lod)
 
             xVec3* camPos = &globals.camera.mat.pos;
             F32 camdist2 = 0.0f;
-            RwMatrix* mat = model->Mat;
-            F32 distscale = mat->right.x * mat->right.x + mat->right.y * mat->right.y +
-                            mat->right.z * mat->right.z;
+            F32 distscale = model->Mat->right.x * model->Mat->right.x +
+                            model->Mat->right.y * model->Mat->right.y +
+                            model->Mat->right.z * model->Mat->right.z;
             if (distscale < 0.0001f)
             {
                 distscale = 1.0f;
             }
 
-            if (mat)
+            if (model->Mat)
             {
-                camdist2 = ((camPos->x - mat->pos.x) * (camPos->x - mat->pos.x) +
-                            (camPos->y - mat->pos.y) * (camPos->y - mat->pos.y) +
-                            (camPos->z - mat->pos.z) * (camPos->z - mat->pos.z)) /
+                camdist2 = ((camPos->x - model->Mat->pos.x) * (camPos->x - model->Mat->pos.x) +
+                            (camPos->y - model->Mat->pos.y) * (camPos->y - model->Mat->pos.y) +
+                            (camPos->z - model->Mat->pos.z) * (camPos->z - model->Mat->pos.z)) /
                            distscale;
             }
 
@@ -311,6 +330,8 @@ void zLOD_UseCustomTable(xEnt* ent, zLODTable* lod)
             }
             else
             {
+                S32 lodIndex = 0;
+
                 model->Flags &= (U16)~0x400;
 
                 if (lod->baseBucket)
@@ -319,8 +340,7 @@ void zLOD_UseCustomTable(xEnt* ent, zLODTable* lod)
                     model->Data = (*model->Bucket)->OriginalData;
                 }
 
-                S32 lodIndex;
-                for (lodIndex = 0;
+                for (;
                      lodIndex < 3 && lod->lodBucket[lodIndex] && camdist2 > lod->lodDist[lodIndex];
                      lodIndex++)
                 {
