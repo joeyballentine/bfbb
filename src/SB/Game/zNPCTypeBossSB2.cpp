@@ -271,7 +271,17 @@ namespace
 
     static response_curve rc_scale;
 
-    static xBinaryCamera boss_cam;
+    static xBinaryCamera boss_cam = {
+        { { 6.0f, 3.0f, 2.0f },
+          { 0.2f, 2.2f, -1.0f },
+          { 1.0f, 0.2f, 1.5f },
+          10.0f,
+          10.0f,
+          10.0f,
+          10.0f,
+          50.0f,
+          -PI },
+    };
 
     static const sound_asset sound_assets[12] = {
         { 0, "RSB_laugh", 0, 0 },      { 1, "RSB_kah", 0, 0 },      { 2, "RSB_chop_windup", 0, 0 },
@@ -569,49 +579,53 @@ namespace
 
     void parallelepiped_to_obb(xBound& obb, xVec3* loc)
     {
-        xVec3* tail = loc + 4;
+        xVec3* head_loc = loc;
+        xVec3* tail_loc = loc + 4;
 
         obb.type = XBOUND_TYPE_OBB;
 
-        xVec3 head_sum = loc[0] + loc[1] + loc[2] + loc[3];
-        xVec3 tail_sum = tail[0] + tail[1] + tail[2] + tail[3];
+        xVec3 head_sum = head_loc[0] + head_loc[1] + head_loc[2] + head_loc[3];
+        xVec3 tail_sum = tail_loc[0] + tail_loc[1] + tail_loc[2] + tail_loc[3];
         xVec3& center = obb.box.center;
 
         center = (head_sum + tail_sum) * 0.125f;
 
-        loc[0] -= center;
-        loc[1] -= center;
-        loc[2] -= center;
-        loc[3] -= center;
-        tail[0] -= center;
-        tail[1] -= center;
-        tail[2] -= center;
-        tail[3] -= center;
+        head_loc[0] -= center;
+        head_loc[1] -= center;
+        head_loc[2] -= center;
+        head_loc[3] -= center;
+        tail_loc[0] -= center;
+        tail_loc[1] -= center;
+        tail_loc[2] -= center;
+        tail_loc[3] -= center;
 
         xMat4x3& mat = *obb.mat;
 
         mat.right = head_sum - tail_sum;
-        mat.at = loc[0] + loc[1] + tail[0] + tail[1];
-        mat.at -= loc[2] + loc[3] + tail[2] + tail[3];
+        mat.at = head_loc[0] + head_loc[1] + tail_loc[0] + tail_loc[1];
+        mat.at -= head_loc[2] + head_loc[3] + tail_loc[2] + tail_loc[3];
         mat.right.normalize();
         mat.up = mat.at.cross(mat.right).normal();
         mat.at = mat.right.cross(mat.up);
         mat.pos = center;
 
-        xVec3& ext = obb.box.box.upper;
+        xVec3& upper = obb.box.box.upper;
         xVec3& lower = obb.box.box.lower;
 
-        ext.assign(mat.right.dot(loc[0]), mat.up.dot(loc[0]), mat.at.dot(loc[0]));
-        ext.set_abs();
+        upper.assign(mat.right.dot(head_loc[0]), mat.up.dot(head_loc[0]), mat.at.dot(head_loc[0]));
+        upper.set_abs();
 
-        for (const xVec3* it = loc + 1; it != loc + 8; it++)
+        const xVec3* it = head_loc + 1;
+        const xVec3* end = head_loc + 8;
+
+        for (; it != end; it++)
         {
-            ext.x = max(ext.x, xabs(mat.right.dot(*it)));
-            ext.y = max(ext.y, xabs(mat.up.dot(*it)));
-            ext.z = max(ext.z, xabs(mat.at.dot(*it)));
+            upper.x = max(upper.x, xabs(mat.right.dot(*it)));
+            upper.y = max(upper.y, xabs(mat.up.dot(*it)));
+            upper.z = max(upper.z, xabs(mat.at.dot(*it)));
         }
 
-        lower = -ext;
+        lower = -upper;
     }
 
     F32 max(F32 f0, F32 f1)
@@ -984,8 +998,8 @@ namespace
         if (init)
         {
             karate.fire_vel = 5.0f;
-            auto_tweak::load_param<F32, F32>(karate.fire_vel, 1.0f, 0.01f, 100000000.0f, ap, apsize,
-                                             "karate.fire_vel");
+            auto_tweak::load_param<F32, F32>(karate.fire_vel, 1.0f, 0.01f, 1000000000.0f, ap,
+                                             apsize, "karate.fire_vel");
         }
         if (init)
         {
@@ -2162,7 +2176,8 @@ void zNPCB_SB2::update_turn(F32 dt)
     }
 
     F32 start = xatan2(cur.x, cur.y);
-    F32 diff = xatan2(turn.dir.x, turn.dir.y) - start;
+    F32 end = xatan2(turn.dir.x, turn.dir.y);
+    F32 diff = end - start;
 
     if (diff > PI)
     {
@@ -2175,7 +2190,7 @@ void zNPCB_SB2::update_turn(F32 dt)
 
     F32 yaw = start;
 
-    xAccelMove(yaw, turn.vel, turn.accel, dt, start + diff, turn.max_vel);
+    xAccelMove(yaw, turn.vel, turn.accel, dt, yaw + diff, turn.max_vel);
     set_yaw_matrix(frame->mat, yaw);
 }
 
@@ -2572,7 +2587,7 @@ void zNPCB_SB2::check_life()
             zEntEvent(this, this, 0x1d7);
         }
 
-        if (life < 1)
+        if (life <= 0)
         {
             zEntEvent(this, this, 0x24);
         }
@@ -2735,31 +2750,34 @@ void zNPCB_SB2::spin_platform(zNPCB_SB2::platform_data& p, const xVec3& axis, F3
 
 void zNPCB_SB2::check_platform_smack(zNPCB_SB2::hand_data& hand)
 {
-    for (platform_data* it = platforms; it != platforms + 16; it++)
-    {
-        xEnt* pent = it->ent;
+    platform_data* it = platforms;
+    platform_data* end = it + 16;
 
-        if (pent == NULL || it->spin.accel > 0.0f)
+    for (; it != end; it++)
+    {
+        if (it->ent == NULL || it->spin.accel > 0.0f)
         {
             continue;
         }
 
-        xEnt& ent = *hand.ent;
-        xVec3 offset = pent->bound.sph.center - ent.bound.sph.center;
+        xBound& hand_bound = hand.ent->bound;
+        xBound& plat_bound = it->ent->bound;
+        xVec3 offset = plat_bound.sph.center - hand_bound.sph.center;
 
         if (offset.length2() > (hand.radius + it->radius) * (hand.radius + it->radius))
         {
             continue;
         }
 
-        if (!xOBBHitsOBB(ent.bound.box.box, *ent.bound.mat, pent->bound.box.box, *pent->bound.mat))
+        if (!xOBBHitsOBB(hand_bound.box.box, *hand_bound.mat, plat_bound.box.box, *plat_bound.mat))
         {
             continue;
         }
 
+        F32 min_xzdist = tweak.spin.min_dist;
         xVec3 axis;
 
-        if (offset.x * offset.x + offset.z * offset.z > tweak.spin.min_dist * tweak.spin.min_dist)
+        if (offset.x * offset.x + offset.z * offset.z > min_xzdist * min_xzdist)
         {
             axis = it->mat.right;
 
@@ -4168,7 +4186,9 @@ namespace auto_tweak
             v = hi;
         }
 
-        value = v * scale;
+        v *= scale;
+
+        value = v;
     }
 
     template <>
@@ -4232,22 +4252,6 @@ void zNPCB_SB2::set_location(const xVec2& loc)
     // really does aim the second one at &pos.z rather than at &pos.
     (xVec3&)model->Mat->pos.x = frame->mat.pos.x = loc.x;
     (xVec3&)model->Mat->pos.z = frame->mat.pos.z = loc.y;
-}
-
-bool zNPCB_SB2::turning() const
-{
-    bool result = FALSE;
-    xVec2 cur = { model->Mat->at.x, model->Mat->at.z };
-
-    if (!xfeq0(turn.vel) ||
-        (!xfeq0(turn.accel) &&
-         (!(turn.dir.x > turn.dir.y) || !(xabs(turn.dir.x - cur.x) < 0.001f)) &&
-         (!(turn.dir.x < turn.dir.y) || !(xabs(turn.dir.y - cur.y) < 0.001f))))
-    {
-        result = TRUE;
-    }
-
-    return result;
 }
 
 void zNPCB_SB2::set_location(const xVec3& loc)

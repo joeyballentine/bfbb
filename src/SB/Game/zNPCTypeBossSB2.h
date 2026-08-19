@@ -281,7 +281,21 @@ struct zNPCB_SB2 : zNPCBoss
     S32 platform_index(const zNPCB_SB2::platform_data& p) const;
     void set_location(const xVec2& loc);
     void set_location(const xVec3& loc);
-    bool turning() const;
+    bool turning() const
+    {
+        bool result = FALSE;
+        xVec2 cur = { model->Mat->at.x, model->Mat->at.z };
+
+        if (!xfeq0(turn.vel) ||
+            (!xfeq0(turn.accel) &&
+             (!(turn.dir.x > turn.dir.y) || !(xabs(turn.dir.x - cur.x) < 0.001f)) &&
+             (!(turn.dir.x < turn.dir.y) || !(xabs(turn.dir.y - cur.y) < 0.001f))))
+        {
+            result = TRUE;
+        }
+
+        return result;
+    }
     xVec3& location() const;
     xVec3& get_home() const;
     xVec3& start_location() const;
