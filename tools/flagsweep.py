@@ -26,8 +26,10 @@ import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
+import cwexec
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CLI = os.path.join(ROOT, "build", "tools", "objdiff-cli.exe")
+CLI = cwexec.objdiff_cli(ROOT)
 CFG = json.load(open(os.path.join(ROOT, "objdiff.json")))
 NINJA = open(os.path.join(ROOT, "build.ninja")).read()
 

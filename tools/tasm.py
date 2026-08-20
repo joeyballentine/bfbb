@@ -31,8 +31,10 @@ import re
 import subprocess
 import sys
 
+import cwexec
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DTK = os.path.join(ROOT, "build", "tools", "dtk.exe")
+DTK = cwexec.dtk(ROOT)
 CFG = json.load(open(os.path.join(ROOT, "objdiff.json")))
 CACHE = os.path.join(ROOT, "build", ".tasm-cache")
 

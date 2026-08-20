@@ -19,7 +19,7 @@ import os
 import re
 import shlex
 
-__all__ = ["compile_prefix", "objdiff_cli"]
+__all__ = ["compile_prefix", "objdiff_cli", "dtk"]
 
 _CONT = re.compile(r"\$\n\s*")
 
@@ -50,3 +50,12 @@ def objdiff_cli(root):
         if os.path.exists(path):
             return path
     raise SystemExit("build/tools/objdiff-cli not found - run `ninja` once")
+
+
+def dtk(root):
+    """Path to decomp-toolkit, which download_tool.py names per platform."""
+    for name in ("dtk.exe", "dtk"):
+        path = os.path.join(root, "build", "tools", name)
+        if os.path.exists(path):
+            return path
+    raise SystemExit("build/tools/dtk not found - run `ninja` once")

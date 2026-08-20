@@ -29,8 +29,10 @@ import re
 import subprocess
 from collections import Counter
 
+import cwexec
+
 ROOT = r"C:\Users\joeyj\Documents\Git\bfbb_"
-CLI = os.path.join(ROOT, "build", "tools", "objdiff-cli.exe")
+CLI = cwexec.objdiff_cli(ROOT)
 SP = r"C:\Users\joeyj\AppData\Local\Temp\claude\C--Users-joeyj-Documents-Git-bfbb-\458c7547-ca83-49e5-8c1d-e42d1a0ce65d\scratchpad"
 
 LOADS = {"lwz", "lwzu", "lfs", "lfsu", "lfd", "lfdu", "lha", "lhau", "lbz",
