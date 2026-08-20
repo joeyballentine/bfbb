@@ -736,6 +736,62 @@ machine to commit:
 
 ## Patterns that keep working
 
+- **`const` on a read-only local aggregate changes the copy expansion.** A
+  12-byte `xVec3` copy-init emits `lwz/lwz/stw/stw/lwz/stw` with two scratch
+  registers when the local is non-const, and `lwz/lwz/lwz/stw/stw/stw` with
+  three when it is `const` -- the latter interleaves freely with surrounding
+  FP work, which is what retail does. Same for `xVec2`. In
+  `zNPCTypeBossPlankton` this was the *sole* change needed for
+  `update_follow_camera` (83.784 -> 100) and `Enter__22zNPCGoalBPlanktonFlank`
+  (94.435 -> 100), and it carried four more functions. Cheap to test on any
+  unit with local vector copies.
+
+- **An array element bound to a reference addresses differently.** Retail
+  emits `mulli / addi <member offset> / lwzx` for `territory[i].timer`; the
+  plain subscript emits `mulli / add / lwz <disp>`. Writing
+  `territory_data& t = territory[active_territory];` then `t.timer`
+  reproduces retail's form, and was the only change `stun` needed to reach
+  100.0.
+
+- **Locals that never existed are the single most productive find, every
+  time.** A pointer temp (`xMat4x3* mat = ent->model->Mat`) the original did
+  not have changes register allocation and suppresses the reload the target
+  performs. `dwarf/` lists the real set. The inverse matters as much: a local
+  that *should* exist, e.g. `F32 fadeDist = 0.0f;`, because mwcc folds a
+  literal `0.0f + x` and the target does not fold.
+
+- **Cross products take `xVec3` struct operands, not six `F32` scalars.**
+  Scalars give the right relative register order rotated by one
+  (`ax=f4..bz=f3` instead of `f3..f8`). Worth 1,924 bytes on
+  `xShadowReceiveShadow`.
+
+- **`x / 2.0f` is not `x * 0.5f`.** mwcc canonicalises a multiply so the
+  constant loads first (`fmadds f0, 0.5, x, y`); a divide by an exact power of
+  two folds to the same pool entry but cannot commute, giving retail's
+  `fmadds f0, x, 0.5, y`. All three multiply spellings were measured and
+  produce the wrong order.
+
+- **`if (len)` is not `if (len != 0.0f)`.** Written against a literal, mwcc
+  emits `fcmpu cr0, const, len`; the implicit test emits `fcmpu cr0, len,
+  const`, which is retail's order.
+
+- **`x OP= c` is not `x = x OP c`.** mwcc evaluates the constant first for the
+  second form and the destination first for the compound assignment. If the
+  target loads the memory operand before the literal in an `fadds`/`fsubs`,
+  the source used `+=`. Timers are the usual site.
+
+- **A countdown loop on the parameter** (`while (numTriangles--)`) rather than
+  an index loop: the index form costs a callee-saved register and shifts the
+  whole file. Worth 83.611 -> 100.0 on `shadowCacheLeafCB`.
+
+- **One shared loop counter per function**, not one `S32 i` per `for`-init.
+  mwcc allocates a fresh register per declaration; this took five functions to
+  100.0 in `zNPCHazard` alone.
+
+- **Evaluate all components into temporaries, then store.** The target
+  computes three sums into `t0x/t0y/t0z` and stores after; a per-component
+  load/add/store makes the store to `.x` kill the cached `.y`/`.z`.
+
 - **Read the stack frame before guessing at the body.** The `stwu r1, -N`
   in the prologue is a hard measurement of how much local storage the
   original declared, and every `r1`-relative offset in the diff is a slot
