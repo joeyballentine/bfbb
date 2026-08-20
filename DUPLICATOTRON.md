@@ -950,6 +950,78 @@ confirming before anyone builds a strategy on either model.
   further down as a recommended fix. It has not been measured this way. Do that
   before applying it.
 
+- **`xVec3::cross` zero-template: same family, same result, DO NOT APPLY.**
+  In the target, `cross` copies its 12 zero bytes from a *local anonymous*
+  `.rodata` template (`@410`), not from the external `m_Null__5xVec3`, so
+  `xVec3 v = { 0.0f, 0.0f, 0.0f };` instead of `= xVec3::m_Null;` makes the
+  function byte-exact: `cross__5xVec3CFRC5xVec3` 59.355 -> **100.0**.
+
+  A full build then gives **-4 functions, exact 71.410 -> 71.304, and DOL
+  `ef8df9bd7b548636bb5b2380faeb61969725c308`**. Five functions fall off 100.0
+  and they are *the same five* the `xVec3::create` entry above names --
+  `xMath3Init`, `xParEmitterEmitSphereEdge`, `get_triangle_area` (`zFX`),
+  `zVarGameSlotInfo` (`zVar`), `FodBombBubbles` (`zNPCHazard`) -- plus six more
+  regressions in `xCamera`, `zNPCGoalRobo`, `zNPCTypeRobot`, `zNPCHazard`,
+  `xCM`. Adding an anonymous template to *any* `xVec3` inline reshuffles
+  `.sbss2`/`.rodata` in every TU that instantiates it, and the victim list is
+  a property of the class, not of which method you touched.
+
+  **The blast-radius estimate that justified trying it was wrong in an
+  instructive way.** It was measured as "`cross__5xVec3CFRC5xVec3` appears in
+  exactly one unit in `report.json`, so only that object changes". That counts
+  where the *out-of-line body* is emitted; it does not count where the inline
+  is *instantiated*, which is every TU that calls it. For a header change,
+  grep the call sites, never the symbol table.
+
+- **Making `xsqrt` an `inline` in `xMathInlines.h` does not compile.** The
+  hypothesis is well-evidenced -- `xsqrt__Ff` is STB_WEAK in retail's
+  `xBound.o`, and the four literals it creates (0.5, 3.0, 100000, 1e-5) are
+  exactly the group missing from six of our objects (`xBound`,
+  `zNPCTypeBossSB2`, `zNPCTypeBossPlankton`, `zEntCruiseBubble`,
+  `zEntPlayerBungeeState`, `zNPCTypePrawn`). But `isinf` lives in MSL's
+  `math_api.h`, which `xMathInlines.h` does not include, so ~250 TUs fail with
+  `undefined identifier 'isinf'` (10 of 451 units before smoke.py aborted).
+  Adding that include shifts include order, and therefore anonymous pool
+  serials, project-wide. Anyone retrying this needs an answer for `isinf`
+  first.
+
+- **Stripping the dead aggregate initialisers out of `xLaserBolt.h:160`
+  (`xVec3 temp = { 0, 0, 0 }`) and `zNPCTypeBossSB2.h:287` (`xVec2 cur = {..}`)
+  is wrong.** Those templates leak into every TU that includes the headers and
+  shift `.rodata`/`.sbss2`, which is real -- `zScene.o` carried both -- but
+  removing them costs **exact 70.659 -> 70.648, -1 function**, and breaks the
+  two functions that own them: `perturb_dir` 100.0 -> 80.889 and `turning`
+  87.87 -> 65.833. The initialisers are what retail wrote. Fix the *consumer*
+  by dropping the unnecessary `#include` (see `zScene.cpp`), not the header.
+
+- **`solo.py`'s `@NNN` ordinals are not comparable to the target's, and a
+  large finding was built on the assumption that they are.** solo compiles into
+  a private temp dir where mwcc numbers anonymous literals differently from the
+  real build. An agent measured "32 functions / 28,840 bytes in `zEntPlayer`
+  blocked by a two-slot `.sdata2` misalignment", proposed a third `float_fix`
+  shim to create the slots, and reported solo going 80 -> 48 non-matching. On a
+  real build the payoff was **exactly zero**: `zSandy_AnimTable` (14,188b),
+  `zEntPlayerVelUpdate`, `CheckObjectAgainstMeleeBound` and `zEntPlayer_Damage`
+  were already at 100.0 in `report.json`, and `matched_code`/`matched_data`
+  were unchanged to four decimal places.
+
+  Rule: **use `solo.py` for code shape, never for pool questions.** To test a
+  suspected pool mismatch, diff the object the real build produced:
+  `objdiff-cli diff -1 build/GQPE78/obj/<unit>.o -2 build/GQPE78/src/<unit>.o`.
+  A useful cross-check is that `matched_code` equals the sum of the sizes of
+  the functions at exactly 100.0 in `report.json`.
+
+- **A second compiler defect, sibling to 2b: a small loop bound that retail
+  keeps in a callee-saved register, mwcc folds into `cmpwi`.**
+  `iSndWaitForDeadSounds` wants `li r31, 0x8c` / `cmpw r0, r31`;
+  `iSndSceneExit` wants `li r30, 0x190` / `cmpw r0, r30`. Seventeen source
+  spellings were measured (plain/`const`/`register`/`static` locals, separate
+  assignment, `for`-init, `do/while`, `goto`, reversed and negated compares,
+  `long`/`U32` types, redundant self-assignment, extra break test) under
+  GC/2.0p1, GC/2.0p1a and GC/2.6 -- **every one folds**. The `i = 0x8c;`
+  re-assignment hack currently in `iSndWaitForDeadSounds` buys 95.455 against
+  80.636 for the honest form and no matched function.
+
 - **`ninja` does not track every header dependency. Incremental builds after a
   header edit can be measured on stale objects.** `zNPCGoalRobo.cpp` includes
   `xEnt.h` on line 5; `ninja -t deps` lists 180 dependencies for its object and
