@@ -141,21 +141,23 @@ void zNPCHazard_Shutdown()
 
 void zNPCHazard_ScenePrepare()
 {
+    S32 i;
+
     memset(g_hazards, 0, sizeof(g_hazards));
     g_cnt_activehaz = 0;
-    for (S32 i = 0; i < 27; i++)
+    for (i = 0; i < 27; i++)
     {
         g_haz_uvAnimQue[i] = NULL;
     }
-    for (S32 i = 0; i < 30; i++)
+    for (i = 0; i < 30; i++)
     {
         g_haz_uvAnimInfo[i].Clear();
     }
-    for (S32 i = 0; i < 27; i++)
+    for (i = 0; i < 27; i++)
     {
         g_haz_animTable[i] = NULL;
     }
-    for (S32 i = 0; i < 30; i++)
+    for (i = 0; i < 30; i++)
     {
         g_hazard_rawModel[i] = NULL;
     }
@@ -163,25 +165,27 @@ void zNPCHazard_ScenePrepare()
 
 void zNPCHazard_SceneFinish()
 {
+    S32 i;
+
     zNPCHazard_SceneReset();
     zNPCHazard_KillEffects();
 
     memset(g_hazards, 0, sizeof(g_hazards));
     g_cnt_activehaz = 0;
 
-    for (S32 i = 0; i < 27; i++)
+    for (i = 0; i < 27; i++)
     {
         g_haz_uvAnimQue[i] = NULL;
     }
-    for (S32 i = 0; i < 30; i++)
+    for (i = 0; i < 30; i++)
     {
         g_haz_uvAnimInfo[i].Hemorrage();
     }
-    for (S32 i = 0; i < 27; i++)
+    for (i = 0; i < 27; i++)
     {
         g_haz_animTable[i] = NULL;
     }
-    for (S32 i = 0; i < 30; i++)
+    for (i = 0; i < 30; i++)
     {
         g_hazard_rawModel[i] = NULL;
     }
@@ -206,6 +210,8 @@ void zNPCHazard_ScenePostInit()
 
 void zNPCHazard_InitEffects()
 {
+    S32 i;
+
     g_pemit_default = zParEmitterFind("PAREMIT_CLOUD");
     g_pemit_zapwarn = zParEmitterFind("PAREMIT_ROMON_ZAPWARN");
     g_pemit_zapwave = zParEmitterFind("PAREMIT_ROMON_ZAPWAVE");
@@ -220,7 +226,7 @@ void zNPCHazard_InitEffects()
     g_parf_zaprain.custom_flags = 0x100;
     xVec3Copy(&g_parf_zaprain.pos, &g_O3);
 
-    for (S32 i = 0; i < 30; i++)
+    for (i = 0; i < 30; i++)
     {
         char* namez = g_strz_hazModel[i];
 
@@ -234,10 +240,10 @@ void zNPCHazard_InitEffects()
         }
     }
 
-    en_hazmodel* uvtype = g_haz_uvModelTypes;
-    for (S32 i = 0; *uvtype != NPC_HAZMDL_FORCE; i++, uvtype++)
+    i = 0;
+    while (g_haz_uvModelTypes[i] != NPC_HAZMDL_FORCE)
     {
-        en_hazmodel which = g_haz_uvModelTypes[i];
+        en_hazmodel which = g_haz_uvModelTypes[i++];
         RpAtomic* raw_model = g_hazard_rawModel[which];
 
         if (raw_model != NULL)
@@ -249,11 +255,11 @@ void zNPCHazard_InitEffects()
         }
     }
 
-    for (S32 i = 0; i < 5; i++)
+    for (i = 0; i < 5; i++)
     {
-        char* namez = g_strz_hazshrap[i];
-
         g_data_hazshrap[i] = NULL;
+
+        char* namez = g_strz_hazshrap[i];
         if (namez != NULL && namez[0] != '\0')
         {
             U32 hashy = xStrHash(namez);
@@ -270,11 +276,11 @@ void zNPCHazard_InitEffects()
         }
     }
 
-    for (S32 i = 0; i < 30; i++)
+    for (i = 0; i < 30; i++)
     {
-        const char* namez = g_strz_hazshad[i];
-
         g_rast_hazshad[i] = NULL;
+
+        const char* namez = g_strz_hazshad[i];
         if (namez != NULL && namez[0] != '\0')
         {
             g_rast_hazshad[i] = NPCC_FindRWRaster(namez);
@@ -311,6 +317,9 @@ S32 HAZ_ord_sorttest(void* vkey, void* vitem)
 // Close, kind of.
 void zNPCHazard_Timestep(F32 dt)
 {
+    NPCHazard* haz;
+    S32 i;
+
     if (g_cnt_activehaz < 1)
     {
         return;
@@ -319,19 +328,19 @@ void zNPCHazard_Timestep(F32 dt)
     st_XORDEREDARRAY ord_haz;
     XOrdInit(&ord_haz, 64, 1);
 
-    NPCHazard* haz = g_hazards;
-    for (S32 i = 0; i < 64; i++)
+    for (i = 0; i < 64; i++)
     {
+        haz = &g_hazards[i];
+
         if (haz->flg_hazard & 1)
         {
             XOrdAppend(&ord_haz, haz);
         }
-        haz++;
     }
 
     XOrdSort(&ord_haz, HAZ_ord_sorttest);
 
-    for (S32 i = 0; i < ord_haz.cnt; i++)
+    for (i = 0; i < ord_haz.cnt; i++)
     {
         NPCHazard* hz = (NPCHazard*)ord_haz.list[i];
         S32 flg = hz->flg_hazard;
@@ -383,7 +392,7 @@ void zNPCHazard_Timestep(F32 dt)
 
     XOrdDone(&ord_haz, 1);
 
-    for (S32 i = 0; i < 27; i++)
+    for (i = 0; i < 27; i++)
     {
         NPCHazard* hz = g_haz_uvAnimQue[i];
         if (hz != NULL)
@@ -400,6 +409,8 @@ void zNPCHazard_Timestep(F32 dt)
 
 void zNPCCommon_Hazards_RenderAll(S32 doOpaqueStuff)
 {
+    S32 i;
+
     if (g_cnt_activehaz < 1)
     {
         return;
@@ -421,20 +432,20 @@ void zNPCCommon_Hazards_RenderAll(S32 doOpaqueStuff)
     st_XORDEREDARRAY ord_haz;
     XOrdInit(&ord_haz, 64, 1);
 
-    NPCHazard* haz = g_hazards;
-    for (S32 i = 0; i < 64; i++)
+    for (i = 0; i < 64; i++)
     {
+        NPCHazard* haz = &g_hazards[i];
         S32 flg = haz->flg_hazard;
+
         if ((flg & 1) && (flg & 0x102) && !(flg & 0xc))
         {
             XOrdAppend(&ord_haz, haz);
         }
-        haz++;
     }
 
     XOrdSort(&ord_haz, HAZ_ord_sorttest);
 
-    for (S32 i = 0; i < ord_haz.cnt; i++)
+    for (i = 0; i < ord_haz.cnt; i++)
     {
         NPCHazard* hz = (NPCHazard*)ord_haz.list[i];
 
@@ -476,11 +487,12 @@ void zNPCCommon_Hazards_RenderAll(S32 doOpaqueStuff)
 
 NPCHazard* HAZ_Acquire()
 {
-    NPCHazard* da_haz = g_hazards;
     NPCHazard* haz_found = NULL;
 
     for (S32 i = 0; i < 64; i++)
     {
+        NPCHazard* da_haz = &g_hazards[i];
+
         if (!(da_haz->flg_hazard & 1))
         {
             da_haz->WipeIt();
@@ -489,7 +501,6 @@ NPCHazard* HAZ_Acquire()
             g_cnt_activehaz++;
             break;
         }
-        da_haz++;
     }
     return haz_found;
 }
@@ -1119,7 +1130,9 @@ void NPCHazard::PosSet(const xVec3* pos)
 
 void NPCHazard::Timestep(F32 dt)
 {
-    this->pam_interp = CLAMP(1.0f - this->tmr_remain / this->tym_lifespan, 0.0f, 1.0f);
+    F32 rat = 1.0f - this->tmr_remain / this->tym_lifespan;
+
+    this->pam_interp = CLAMP(rat, 0.0f, 1.0f);
 
     if (this->mdl_hazard != NULL && (this->flg_hazard & 0x4000) &&
         (this->flg_hazard & 0x8000))
@@ -1367,12 +1380,11 @@ void NPCHazard::Render()
                 break;
             }
 
-            ds2 = NPCC_ds2_toCam(&this->pos_hazard, NULL);
-            if (ds2 < SQ(20.0f))
+            F32 ds2_cam = NPCC_ds2_toCam(&this->pos_hazard, NULL);
+            if (ds2_cam < SQ(20.0f))
             {
-                F32 alfa = 0.3f + (1.0f - ds2 / SQ(20.0f));
-
-                alpha = CLAMP(alfa, 0.0f, 1.0f);
+                F32 rat_sq = ds2_cam / SQ(20.0f);
+                F32 alf_shadow = CLAMP(0.3f + (1.0f - rat_sq), 0.0f, 1.0f);
 
                 mat.right = *(xVec3*)this->Right();
                 mat.at = g_NY3;
@@ -1381,7 +1393,7 @@ void NPCHazard::Render()
 
                 static S32 skipfill = 0;
 
-                NPCC_RenderProjTexture(rast, alpha, &mat, 1.2f, 10.0f, this->shadowCache,
+                NPCC_RenderProjTexture(rast, alf_shadow, &mat, 1.2f, 10.0f, this->shadowCache,
                                        !skipfill, NULL);
 
                 if (skipfill++ > 12)
@@ -1494,20 +1506,19 @@ void NPCHazard::Render()
                 this->SetAlpha(0.75f * MAX(0.0f, this->tmr_remain / 0.35f));
             }
 
-            F32 pam = this->pam_interp;
             F32 scaleit = 2.0f * this->custdata.typical.rad_cur;
             xVec3 scl_a = { 0.75f, 0.1f, 0.5f };
             xVec3 scl_b = { 0.25f, 1.5f, 0.25f };
             xVec3 scl_c = { 1.5f, 0.75f, 1.5f };
             xVec3 scl_now;
 
-            if (pam <= 0.25f)
+            if (this->pam_interp <= 0.25f)
             {
-                SMOOTH(pam / 0.25f, &scl_now, &scl_a, &scl_b);
+                SMOOTH(this->pam_interp / 0.25f, &scl_now, &scl_a, &scl_b);
             }
             else
             {
-                SMOOTH((pam - 0.25f) / 0.75f, &scl_now, &scl_b, &scl_c);
+                SMOOTH((this->pam_interp - 0.25f) / 0.75f, &scl_now, &scl_b, &scl_c);
             }
 
             xVec3SMul(&this->mdl_hazard->Scale, &scl_now, scaleit);
@@ -1530,31 +1541,39 @@ void NPCHazard::Render()
         if (this->mdl_hazard != NULL)
         {
             F32 rad = this->custdata.typical.rad_cur;
-            F32 alpha = CLAMP(xabs(isin(3.1415927f * this->pam_interp)), 0.0f, 1.0f);
-            F32 pam;
+            F32 fx = CLAMP(xabs(isin(3.1415927f * this->pam_interp)), 0.0f, 1.0f);
 
-            this->SetAlpha(alpha);
+            this->SetAlpha(fx);
 
-            xVec3 splash = { 2.0f, 0.0f, 2.0f };
-            splash.y = 1.2f * alpha;
-            xVec3SMul(&this->mdl_hazard->Scale, &splash, rad);
-            xModelRender(this->mdl_hazard);
-
-            if (this->pam_interp <= 0.15f)
             {
-                pam = this->pam_interp / 0.15f;
-            }
-            else
-            {
-                pam = 1.0f - (this->pam_interp - 0.15f) / 0.85f;
+                F32 dim_flux = 1.2f * fx;
+                xVec3 scl_wave = { 2.0f, 0.0f, 2.0f };
+
+                scl_wave.y = dim_flux;
+                xVec3SMul(&this->mdl_hazard->Scale, &scl_wave, rad);
+                xModelRender(this->mdl_hazard);
             }
 
-            pam = EASE(pam);
+            {
+                F32 rat_ff;
 
-            xVec3 ripple = { 1.0f, 0.0f, 1.0f };
-            ripple.y = 3.75f * pam;
-            xVec3SMul(&this->mdl_hazard->Scale, &ripple, rad);
-            xModelRender(this->mdl_hazard);
+                if (this->pam_interp <= 0.15f)
+                {
+                    rat_ff = this->pam_interp / 0.15f;
+                }
+                else
+                {
+                    rat_ff = 1.0f - (this->pam_interp - 0.15f) / 0.85f;
+                }
+
+                F32 arch = EASE(rat_ff);
+                F32 dim_flux = 3.75f * arch;
+                xVec3 scl_fount = { 1.0f, 0.0f, 1.0f };
+
+                scl_fount.y = dim_flux;
+                xVec3SMul(&this->mdl_hazard->Scale, &scl_fount, rad);
+                xModelRender(this->mdl_hazard);
+            }
         }
         break;
     case NPC_HAZ_CHUCKBLOOSH:
@@ -1597,31 +1616,39 @@ void NPCHazard::Render()
         if (this->mdl_hazard != NULL)
         {
             F32 rad = this->custdata.typical.rad_cur;
-            F32 alpha = CLAMP(xabs(isin(3.1415927f * this->pam_interp)), 0.0f, 1.0f);
-            F32 pam;
+            F32 fx = CLAMP(xabs(isin(3.1415927f * this->pam_interp)), 0.0f, 1.0f);
 
-            this->SetAlpha(alpha);
+            this->SetAlpha(fx);
 
-            xVec3 splash = { 2.0f, 0.0f, 2.0f };
-            splash.y = 1.2f * alpha;
-            xVec3SMul(&this->mdl_hazard->Scale, &splash, rad);
-            xModelRender(this->mdl_hazard);
-
-            if (this->pam_interp <= 0.15f)
             {
-                pam = this->pam_interp / 0.15f;
-            }
-            else
-            {
-                pam = 1.0f - (this->pam_interp - 0.15f) / 0.85f;
+                F32 dim_flux = 1.2f * fx;
+                xVec3 scl_wave = { 2.0f, 0.0f, 2.0f };
+
+                scl_wave.y = dim_flux;
+                xVec3SMul(&this->mdl_hazard->Scale, &scl_wave, rad);
+                xModelRender(this->mdl_hazard);
             }
 
-            pam = EASE(pam);
+            {
+                F32 rat_ff;
 
-            xVec3 ripple = { 1.0f, 0.0f, 1.0f };
-            ripple.y = 3.75f * pam;
-            xVec3SMul(&this->mdl_hazard->Scale, &ripple, rad);
-            xModelRender(this->mdl_hazard);
+                if (this->pam_interp <= 0.15f)
+                {
+                    rat_ff = this->pam_interp / 0.15f;
+                }
+                else
+                {
+                    rat_ff = 1.0f - (this->pam_interp - 0.15f) / 0.85f;
+                }
+
+                F32 arch = EASE(rat_ff);
+                F32 dim_flux = 3.75f * arch;
+                xVec3 scl_fount = { 1.0f, 0.0f, 1.0f };
+
+                scl_fount.y = dim_flux;
+                xVec3SMul(&this->mdl_hazard->Scale, &scl_fount, rad);
+                xModelRender(this->mdl_hazard);
+            }
         }
         break;
     case NPC_HAZ_PATRIOT:
@@ -2708,7 +2735,7 @@ void NPCHazard::TarTarSplash(const xVec3* dir_norm)
             direction = -1.0f;
         }
 
-        vel_emit += at * direction * (0.4f * (2.0f * (xurand() - 0.5f)) + 0.25f);
+        vel_emit += rt * direction * (0.4f * (2.0f * (xurand() - 0.5f)) + 0.25f);
         vel_emit.normalize();
         vel_emit *= 15.0f;
 
@@ -3972,8 +3999,8 @@ void UVAModelInfo::Update(F32 dt, const xVec2* uvoff)
 void UVAModelInfo::Refresh()
 {
     RpGeometry* geo = this->model->geometry;
-    RwTexCoords* dst = geo->texCoords[0];
     RwTexCoords* src = this->uv;
+    RwTexCoords* dst = geo->texCoords[0];
     RwTexCoords* end = &this->uv[this->uvsize];
 
     // 0x10 is rpGEOMETRYLOCKTEXCOORDS1; the enum is not declared in any header here.
