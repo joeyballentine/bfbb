@@ -15,13 +15,14 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 
 import cwexec
 
 ROOT = os.getcwd()
 CLI = os.path.abspath(cwexec.objdiff_cli(ROOT))
 CFG = json.load(open("objdiff.json"))
-TMP = os.path.join(os.environ.get("TEMP", "."), "stubs.json")
+TMP = os.path.join(tempfile.gettempdir(), "stubs.json")
 MIN = int(sys.argv[1]) if len(sys.argv) > 1 else 40
 
 rows = []
