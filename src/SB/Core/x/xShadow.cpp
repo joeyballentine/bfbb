@@ -165,6 +165,11 @@ static S32 ShadowRender(RwCamera* shadowCamera, RwRaster* shadowRast, RpIntersec
 
 void xShadowRenderWorld(xVec3* center, F32 radius, F32 max_dist)
 {
+    RwFrame* camFrame = (RwFrame*)ShadowCamera->object.object.parent;
+    RwMatrixTag* camMatrix = &camFrame->modelling;
+    xVec3* at = (xVec3*)&camMatrix->at;
+    xVec3* up = (xVec3*)&camMatrix->up;
+    xVec3* rt = (xVec3*)&camMatrix->right;
     xCollis entcoll[1];
     xCollis envcoll[1];
     xRay3 R[1];
@@ -181,16 +186,10 @@ void xShadowRenderWorld(xVec3* center, F32 radius, F32 max_dist)
     S32 i;
 
     gShadowFlags = 0;
-    hit_ent = 0;
     hit_env = 0;
+    hit_ent = 0;
     ent_dist = 100.0f;
     env_dist = 100.0f;
-
-    RwFrame* camFrame = (RwFrame*)ShadowCamera->object.object.parent;
-    RwMatrixTag* camMatrix = &camFrame->modelling;
-    xVec3* rt = (xVec3*)&camMatrix->right;
-    xVec3* up = (xVec3*)&camMatrix->up;
-    xVec3* at = (xVec3*)&camMatrix->at;
 
     xVec3Init(&ent_pos, 0.0f, 0.0f, 0.0f);
     xVec3Init(&env_pos, 0.0f, 0.0f, 0.0f);
@@ -407,19 +406,25 @@ void xShadowReceiveShadow(xEnt* ent, F32 shadowFactor, S32 shadowMode, RwMatrixT
     at = shadowMatrix->at;
 
     F32 radius = gShadowObjectRadius;
+    F32 fadeDist = 0.0f;
 
     RwMatrixInvert(&invMatrix, shadowMatrix);
 
     scl.x = scl.y = -0.5f / radius;
-    scl.z = 1.0f / (0.0f + radius);
+    scl.z = 1.0f / (fadeDist + radius);
     RwMatrixScale(&invMatrix, &scl, rwCOMBINEPOSTCONCAT);
 
     tr.x = tr.y = 0.5f;
     tr.z = 0.0f;
     RwMatrixTranslate(&invMatrix, &tr, rwCOMBINEPOSTCONCAT);
 
-    U32 max_verts = 0;
     xModelInstance* model;
+    U32 i;
+    xVec3* xvert;
+    RpTriangle* tri;
+    RpGeometry* geom;
+    U8 val;
+    U32 max_verts = 0;
 
     for (model = ent->model; model != NULL; model = model->Next)
     {
@@ -436,21 +441,21 @@ void xShadowReceiveShadow(xEnt* ent, F32 shadowFactor, S32 shadowMode, RwMatrixT
         }
     }
 
-    xVec3* xvert = (xVec3*)xMemPushTemp(max_verts * sizeof(xVec3));
+    xvert = (xVec3*)xMemPushTemp(max_verts * sizeof(xVec3));
     if (xvert != NULL)
     {
         Im3DBuffer = gRenderBuffer.m_vertex;
 
         for (model = ent->model; model != NULL; model = model->Next)
         {
-            RpGeometry* geom = model->Data->geometry;
+            geom = model->Data->geometry;
 
             iModelVertEval(model->Data, 0, geom->numVertices, model->Mat, NULL, xvert);
 
-            U8 val = (U8)(255.0f * shadowFactor);
-            RpTriangle* tri = geom->triangles;
+            val = (U8)(255.0f * shadowFactor);
+            tri = geom->triangles;
 
-            for (U32 i = 0; i < geom->numTriangles; i++, tri++)
+            for (i = 0; i < geom->numTriangles; i++, tri++)
             {
                 if (Im3DBufferPos > 0x1dd)
                 {
@@ -483,16 +488,19 @@ void xShadowReceiveShadow(xEnt* ent, F32 shadowFactor, S32 shadowMode, RwMatrixT
                     continue;
                 }
 
-                F32 ax = v1->x - v0->x;
-                F32 bx = v2->x - v0->x;
-                F32 ay = v1->y - v0->y;
-                F32 by = v2->y - v0->y;
-                F32 az = v1->z - v0->z;
-                F32 bz = v2->z - v0->z;
+                xVec3 a;
+                xVec3 b;
 
-                normal.x = ay * bz - az * by;
-                normal.y = az * bx - ax * bz;
-                normal.z = ax * by - ay * bx;
+                a.x = v1->x - v0->x;
+                a.y = v1->y - v0->y;
+                a.z = v1->z - v0->z;
+                b.x = v2->x - v0->x;
+                b.y = v2->y - v0->y;
+                b.z = v2->z - v0->z;
+
+                normal.x = a.y * b.z - a.z * b.y;
+                normal.y = a.z * b.x - a.x * b.z;
+                normal.z = a.x * b.y - a.y * b.x;
 
                 F32 len = RwV3dLength(&normal);
                 if (xabs(len) < 1e-05f)
@@ -508,8 +516,8 @@ void xShadowReceiveShadow(xEnt* ent, F32 shadowFactor, S32 shadowMode, RwMatrixT
                 }
 
                 F32 scale = 0.008f / len;
-                normal.y *= scale;
                 normal.x *= scale;
+                normal.y *= scale;
                 normal.z *= scale;
 
                 if (normal.x * at.x + normal.y * at.y + normal.z * at.z > -0.00069724565f)
@@ -517,15 +525,26 @@ void xShadowReceiveShadow(xEnt* ent, F32 shadowFactor, S32 shadowMode, RwMatrixT
                     continue;
                 }
 
-                imv[0].x = v0->x + normal.x;
-                imv[0].y = v0->y + normal.y;
-                imv[0].z = v0->z + normal.z;
-                imv[1].x = v1->x + normal.x;
-                imv[1].y = v1->y + normal.y;
-                imv[1].z = v1->z + normal.z;
-                imv[2].x = v2->x + normal.x;
-                imv[2].y = v2->y + normal.y;
-                imv[2].z = v2->z + normal.z;
+                F32 t0x = v0->x + normal.x;
+                F32 t0y = v0->y + normal.y;
+                F32 t0z = v0->z + normal.z;
+                imv[0].x = t0x;
+                imv[0].y = t0y;
+                imv[0].z = t0z;
+
+                F32 t1x = v1->x + normal.x;
+                F32 t1y = v1->y + normal.y;
+                F32 t1z = v1->z + normal.z;
+                imv[1].x = t1x;
+                imv[1].y = t1y;
+                imv[1].z = t1z;
+
+                F32 t2x = v2->x + normal.x;
+                F32 t2y = v2->y + normal.y;
+                F32 t2z = v2->z + normal.z;
+                imv[2].x = t2x;
+                imv[2].y = t2y;
+                imv[2].z = t2z;
 
                 imv[0].u = vShadOut[0].x;
                 imv[1].u = vShadOut[1].x;
@@ -830,21 +849,10 @@ static S32 CmpShadowMgr(const void* a, const void* b)
     xEnt* entA = ((const xShadowMgr*)a)->ent;
     xEnt* entB = ((const xShadowMgr*)b)->ent;
 
-    U8 typeA = entA->baseType;
-    U8 flagA = 0;
-    if ((typeA == eBaseTypePlayer) || (typeA == eBaseTypeBoulder))
-    {
-        flagA = 1;
-    }
-    S32 isPlayerA = flagA;
-
-    U8 typeB = entB->baseType;
-    U8 flagB = 0;
-    if ((typeB == eBaseTypePlayer) || (typeB == eBaseTypeBoulder))
-    {
-        flagB = 1;
-    }
-    S32 isPlayerB = flagB;
+    S32 isPlayerA =
+        (entA->baseType == eBaseTypePlayer) || (entA->baseType == eBaseTypeBoulder);
+    S32 isPlayerB =
+        (entB->baseType == eBaseTypePlayer) || (entB->baseType == eBaseTypeBoulder);
 
     if (isPlayerA && !isPlayerB)
     {
@@ -921,28 +929,36 @@ static RpCollisionTriangle* ShadowRenderTriangleCB(RpIntersection* isx, RpWorldS
         Im3DBufferPos = 0;
     }
 
+    RwV3d* v = collTriangle->vertices[0];
+    RxObjSpace3DVertex* imv = &Im3DBuffer[Im3DBufferPos];
     xVec3 c;
 
     c.x = 0.008f * collTriangle->normal.x;
     c.y = 0.008f * collTriangle->normal.y;
     c.z = 0.008f * collTriangle->normal.z;
 
-    RwV3d* v = collTriangle->vertices[0];
-    RxObjSpace3DVertex* imv = &Im3DBuffer[Im3DBufferPos];
-
-    imv[0].x = v->x + c.x;
-    imv[0].y = v->y + c.y;
-    imv[0].z = v->z + c.z;
+    F32 t0x = v->x + c.x;
+    F32 t0y = v->y + c.y;
+    F32 t0z = v->z + c.z;
+    imv[0].x = t0x;
+    imv[0].y = t0y;
+    imv[0].z = t0z;
 
     v = collTriangle->vertices[1];
-    imv[1].x = v->x + c.x;
-    imv[1].y = v->y + c.y;
-    imv[1].z = v->z + c.z;
+    F32 t1x = v->x + c.x;
+    F32 t1y = v->y + c.y;
+    F32 t1z = v->z + c.z;
+    imv[1].x = t1x;
+    imv[1].y = t1y;
+    imv[1].z = t1z;
 
     v = collTriangle->vertices[2];
-    imv[2].x = v->x + c.x;
-    imv[2].y = v->y + c.y;
-    imv[2].z = v->z + c.z;
+    F32 t2x = v->x + c.x;
+    F32 t2y = v->y + c.y;
+    F32 t2z = v->z + c.z;
+    imv[2].x = t2x;
+    imv[2].y = t2y;
+    imv[2].z = t2z;
 
     imv[0].u = vShadOut[0].x;
     imv[1].u = vShadOut[1].x;
@@ -975,6 +991,8 @@ static S32 ShadowRender(RwCamera* shadowCamera, RwRaster* shadowRast, RpIntersec
                         F32 shadowFactor, F32 fadeDist)
 {
     _ProjectionParam param;
+    RwMatrixTag* shadowMatrix;
+    F32 radius;
     RwV3d scl;
     RwV3d tr;
     xVec3 A;
@@ -996,11 +1014,11 @@ static S32 ShadowRender(RwCamera* shadowCamera, RwRaster* shadowRast, RpIntersec
         RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCCOLOR);
     }
 
-    RwMatrixTag* shadowMatrix = &((RwFrame*)shadowCamera->object.object.parent)->modelling;
+    shadowMatrix = &((RwFrame*)shadowCamera->object.object.parent)->modelling;
 
     param.at = shadowMatrix->at;
 
-    F32 radius = gShadowObjectRadius;
+    radius = gShadowObjectRadius;
 
     RwMatrixInvert(&param.invMatrix, shadowMatrix);
 
@@ -1010,12 +1028,11 @@ static S32 ShadowRender(RwCamera* shadowCamera, RwRaster* shadowRast, RpIntersec
 
     param.fade = (fadeDist > 0.0f) ? 1 : 0;
 
-    param.numIm3DBatch = 0;
+    param.shadowValue = (S32)(255.0f * shadowFactor);
+    param.shadowWord = (param.shadowValue << 24) | (param.shadowValue << 16) |
+                       (param.shadowValue << 8) | param.shadowValue;
 
-    S32 val = (S32)(255.0f * shadowFactor);
-    param.shadowValue = val;
-    param.shadowWord = (val << 24) | (param.shadowValue << 16) | (param.shadowValue << 8) |
-                       param.shadowValue;
+    param.numIm3DBatch = 0;
 
     Im3DBuffer = gRenderBuffer.m_vertex;
     Im3DBufferPos = 0;
@@ -1158,7 +1175,8 @@ static RpCollisionTriangle* shadowCacheEnvCB(RpIntersection* isx, RpWorldSector*
         return collTriangle;
     }
 
-    xShadowPoly* poly = &cache->poly[cache->polyCount++];
+    xShadowPoly* poly = &cache->poly[cache->polyCount];
+    cache->polyCount++;
 
     poly->vert[0] = *(xVec3*)collTriangle->vertices[0];
     poly->vert[1] = *(xVec3*)collTriangle->vertices[1];
@@ -1167,8 +1185,8 @@ static RpCollisionTriangle* shadowCacheEnvCB(RpIntersection* isx, RpWorldSector*
 
     F32 dydx = -collTriangle->normal.x / collTriangle->normal.y;
     F32 dydz = -collTriangle->normal.z / collTriangle->normal.y;
-    F32 depth0 = poly->vert[0].y + dydx * (cache->pos.x - poly->vert[0].x) +
-                 dydz * (cache->pos.z - poly->vert[0].z);
+    F32 depth0 = poly->vert[0].y + (dydx * (cache->pos.x - poly->vert[0].x) +
+                                    dydz * (cache->pos.z - poly->vert[0].z));
     F32 n0x = poly->vert[0].z - poly->vert[1].z;
     F32 n0z = poly->vert[1].x - poly->vert[0].x;
     F32 n0d = n0x * (cache->pos.x - poly->vert[0].x) + n0z * (cache->pos.z - poly->vert[0].z);
@@ -1181,14 +1199,14 @@ static RpCollisionTriangle* shadowCacheEnvCB(RpIntersection* isx, RpWorldSector*
 
     if ((n0d <= 1e-05f) && (n1d <= 1e-05f) && (n2d <= 1e-05f))
     {
-        cache->polyRayDepth[0] = MAX(cache->polyRayDepth[0], depth0);
+        cache->polyRayDepth[0] = MAX(depth0, cache->polyRayDepth[0]);
     }
 
     if ((0.5f * n0x * cache->radius + n0d <= 1e-05f) &&
         (0.5f * n1x * cache->radius + n1d <= 1e-05f) &&
         (0.5f * n2x * cache->radius + n2d <= 1e-05f))
     {
-        cache->polyRayDepth[1] = MAX(cache->polyRayDepth[1], 0.5f * dydx * cache->radius + depth0);
+        cache->polyRayDepth[1] = MAX(0.5f * dydx * cache->radius + depth0, cache->polyRayDepth[1]);
     }
 
     if ((-(0.5f * n0x * cache->radius - n0d) <= 1e-05f) &&
@@ -1196,14 +1214,14 @@ static RpCollisionTriangle* shadowCacheEnvCB(RpIntersection* isx, RpWorldSector*
         (-(0.5f * n2x * cache->radius - n2d) <= 1e-05f))
     {
         cache->polyRayDepth[2] =
-            MAX(cache->polyRayDepth[2], -(0.5f * dydx * cache->radius - depth0));
+            MAX(-(0.5f * dydx * cache->radius - depth0), cache->polyRayDepth[2]);
     }
 
     if ((0.5f * n0z * cache->radius + n0d <= 1e-05f) &&
         (0.5f * n1z * cache->radius + n1d <= 1e-05f) &&
         (0.5f * n2z * cache->radius + n2d <= 1e-05f))
     {
-        cache->polyRayDepth[3] = MAX(cache->polyRayDepth[3], 0.5f * dydz * cache->radius + depth0);
+        cache->polyRayDepth[3] = MAX(0.5f * dydz * cache->radius + depth0, cache->polyRayDepth[3]);
     }
 
     if ((-(0.5f * n0z * cache->radius - n0d) <= 1e-05f) &&
@@ -1211,7 +1229,7 @@ static RpCollisionTriangle* shadowCacheEnvCB(RpIntersection* isx, RpWorldSector*
         (-(0.5f * n2z * cache->radius - n2d) <= 1e-05f))
     {
         cache->polyRayDepth[4] =
-            MAX(cache->polyRayDepth[4], -(0.5f * dydz * cache->radius - depth0));
+            MAX(-(0.5f * dydz * cache->radius - depth0), cache->polyRayDepth[4]);
     }
 
     return collTriangle;
@@ -1219,16 +1237,19 @@ static RpCollisionTriangle* shadowCacheEnvCB(RpIntersection* isx, RpWorldSector*
 
 static S32 shadowCacheLeafCB(S32 numTriangles, S32 triOffset, void* data)
 {
+    xVec3* wv;
     ShadowCBParam* cbparam = (ShadowCBParam*)data;
     xShadowCache* cache = cbparam->cache;
     RpGeometry* geometry = cbparam->geom;
     RwV3d* vertices = geometry->morphTarget->verts;
     RpTriangle* triangles = geometry->triangles;
+    S32 triSlot;
     U16* triIndex = RpCollisionGeometryGetData(geometry)->triangleMap + triOffset;
 
-    for (S32 i = 0; i < numTriangles; i++)
+    while (numTriangles--)
     {
-        S32 triSlot = *triIndex++;
+        triSlot = *triIndex;
+        triIndex++;
 
         RpTriangle* tri = &triangles[triSlot];
         S32 vertIndex0 = tri->vertIndex[0];
@@ -1243,19 +1264,25 @@ static S32 shadowCacheLeafCB(S32 numTriangles, S32 triOffset, void* data)
         xMat4x3Toworld(&worldV[1], cbparam->modelMat, (xVec3*)v1);
         xMat4x3Toworld(&worldV[2], cbparam->modelMat, (xVec3*)v2);
 
+        F32 startX = cbparam->capsuleStart.x;
+        F32 startZ = cbparam->capsuleStart.z;
+
+        wv = worldV;
+
         U32 j;
         for (j = 0; j < 3; j++)
         {
             U32 k = (j == 2) ? 0 : j + 1;
-            F32 nx = worldV[k].x - worldV[j].x;
-            F32 nz = worldV[j].z - worldV[k].z;
-            F32 pdot = nz * (cbparam->capsuleStart.x - worldV[j].x) +
-                       nx * (cbparam->capsuleStart.z - worldV[j].z);
-            F32 plen = nz * nz + nx * nx;
+            F32 posX = startX - wv[j].x;
+            F32 posZ = startZ - wv[j].z;
+            F32 nz = wv[j].z - worldV[k].z;
+            F32 nx = worldV[k].x - wv[j].x;
+            F32 nmag2 = nz * nz + nx * nx;
+            F32 pdot = nz * posX + nx * posZ;
 
             if ((pdot > 0.0f) &&
                 (pdot * pdot >=
-                 plen * (cbparam->capsuleRadius * cbparam->capsuleRadius)))
+                 nmag2 * (cbparam->capsuleRadius * cbparam->capsuleRadius)))
             {
                 goto next_tri;
             }
@@ -1263,16 +1290,17 @@ static S32 shadowCacheLeafCB(S32 numTriangles, S32 triOffset, void* data)
 
         for (S32 k = 0; k < 3; k++)
         {
-            F32 posX = cbparam->capsuleStart.x - worldV[k].x;
-            F32 posZ = cbparam->capsuleStart.z - worldV[k].z;
-            F32 dotA = (worldV[(k + 1) % 3].x - worldV[k].x) * posX +
-                       (worldV[(k + 1) % 3].z - worldV[k].z) * posZ;
-            F32 dotBx = (worldV[(k + 2) % 3].x - worldV[k].x) * posX;
-            F32 dotBz = (worldV[(k + 2) % 3].z - worldV[k].z) * posZ;
+            xVec3* vert0 = &worldV[(k + 1) % 3];
+            xVec3* vert1 = &worldV[(k + 2) % 3];
+            F32 dotA = (vert0->x - wv[k].x) * (startX - wv[k].x) +
+                       (vert0->z - wv[k].z) * (startZ - wv[k].z);
+            F32 dotBx = (vert1->x - wv[k].x) * (startX - wv[k].x);
+            F32 dotBz = (vert1->z - wv[k].z) * (startZ - wv[k].z);
             F32 dotB = dotBx + dotBz;
 
             if ((dotA < 0.0f) && (dotB < 0.0f) &&
-                (posX * posX + posZ * posZ >
+                ((startX - wv[k].x) * (startX - wv[k].x) +
+                     (startZ - wv[k].z) * (startZ - wv[k].z) >
                  cbparam->capsuleRadius * cbparam->capsuleRadius))
             {
                 goto next_tri;
@@ -1285,22 +1313,17 @@ static S32 shadowCacheLeafCB(S32 numTriangles, S32 triOffset, void* data)
             xVec3 aa;
             xVec3 bb;
             xVec3 trinorm;
-
             xVec3Sub(&aa, (xVec3*)v1, (xVec3*)v0);
             xVec3Sub(&bb, (xVec3*)v2, (xVec3*)v0);
             xVec3Cross(&trinorm, &aa, &bb);
             xVec3Normalize(&trinorm, &trinorm);
 
-            F32 depthtest = 1e-05f;
-            if (xabs(trinorm.y) > 1e-05f)
-            {
-                depthtest = trinorm.y;
-            }
+            F32 depthtest = (xabs(trinorm.y) > 1e-05f) ? trinorm.y : 1e-05f;
 
             F32 dydx = -trinorm.x / depthtest;
             F32 dydz = -trinorm.z / depthtest;
-            F32 depth0 = worldV[0].y + dydx * (cache->pos.x - worldV[0].x) +
-                         dydz * (cache->pos.z - worldV[0].z);
+            F32 depth0 = worldV[0].y + (dydx * (cache->pos.x - worldV[0].x) +
+                                        dydz * (cache->pos.z - worldV[0].z));
             F32 n0x = worldV[0].z - worldV[1].z;
             F32 n0z = worldV[1].x - worldV[0].x;
             F32 n0d = n0x * (cache->pos.x - worldV[0].x) + n0z * (cache->pos.z - worldV[0].z);
@@ -1312,7 +1335,7 @@ static S32 shadowCacheLeafCB(S32 numTriangles, S32 triOffset, void* data)
             F32 n2d = n2x * (cache->pos.x - worldV[2].x) + n2z * (cache->pos.z - worldV[2].z);
 
             if ((n0d <= 1e-05f) && (n1d <= 1e-05f) && (n2d <= 1e-05f) &&
-                (cache->polyRayDepth[0] < depth0))
+                (depth0 > cache->polyRayDepth[0]))
             {
                 cbparam->rayCloser[0] = cbparam->ent;
                 cache->polyRayDepth[0] = depth0;
@@ -1320,38 +1343,54 @@ static S32 shadowCacheLeafCB(S32 numTriangles, S32 triOffset, void* data)
 
             if ((0.5f * n0x * cache->radius + n0d <= 1e-05f) &&
                 (0.5f * n1x * cache->radius + n1d <= 1e-05f) &&
-                (0.5f * n2x * cache->radius + n2d <= 1e-05f) &&
-                (cache->polyRayDepth[1] < 0.5f * dydx * cache->radius + depth0))
+                (0.5f * n2x * cache->radius + n2d <= 1e-05f))
             {
-                cbparam->rayCloser[1] = cbparam->ent;
-                cache->polyRayDepth[1] = 0.5f * dydx * cache->radius + depth0;
+                F32 depth1 = 0.5f * dydx * cache->radius + depth0;
+
+                if (depth1 > cache->polyRayDepth[1])
+                {
+                    cbparam->rayCloser[1] = cbparam->ent;
+                    cache->polyRayDepth[1] = depth1;
+                }
             }
 
             if ((-(0.5f * n0x * cache->radius - n0d) <= 1e-05f) &&
                 (-(0.5f * n1x * cache->radius - n1d) <= 1e-05f) &&
-                (-(0.5f * n2x * cache->radius - n2d) <= 1e-05f) &&
-                (cache->polyRayDepth[2] < -(0.5f * dydx * cache->radius - depth0)))
+                (-(0.5f * n2x * cache->radius - n2d) <= 1e-05f))
             {
-                cbparam->rayCloser[2] = cbparam->ent;
-                cache->polyRayDepth[2] = -(0.5f * dydx * cache->radius - depth0);
+                F32 depth2 = -(0.5f * dydx * cache->radius - depth0);
+
+                if (depth2 > cache->polyRayDepth[2])
+                {
+                    cbparam->rayCloser[2] = cbparam->ent;
+                    cache->polyRayDepth[2] = depth2;
+                }
             }
 
             if ((0.5f * n0z * cache->radius + n0d <= 1e-05f) &&
                 (0.5f * n1z * cache->radius + n1d <= 1e-05f) &&
-                (0.5f * n2z * cache->radius + n2d <= 1e-05f) &&
-                (cache->polyRayDepth[3] < 0.5f * dydz * cache->radius + depth0))
+                (0.5f * n2z * cache->radius + n2d <= 1e-05f))
             {
-                cbparam->rayCloser[3] = cbparam->ent;
-                cache->polyRayDepth[3] = 0.5f * dydz * cache->radius + depth0;
+                F32 depth3 = 0.5f * dydz * cache->radius + depth0;
+
+                if (depth3 > cache->polyRayDepth[3])
+                {
+                    cbparam->rayCloser[3] = cbparam->ent;
+                    cache->polyRayDepth[3] = depth3;
+                }
             }
 
             if ((-(0.5f * n0z * cache->radius - n0d) <= 1e-05f) &&
                 (-(0.5f * n1z * cache->radius - n1d) <= 1e-05f) &&
-                (-(0.5f * n2z * cache->radius - n2d) <= 1e-05f) &&
-                (cache->polyRayDepth[4] < -(0.5f * dydz * cache->radius - depth0)))
+                (-(0.5f * n2z * cache->radius - n2d) <= 1e-05f))
             {
-                cbparam->rayCloser[4] = cbparam->ent;
-                cache->polyRayDepth[4] = -(0.5f * dydz * cache->radius - depth0);
+                F32 depth4 = -(0.5f * dydz * cache->radius - depth0);
+
+                if (depth4 > cache->polyRayDepth[4])
+                {
+                    cbparam->rayCloser[4] = cbparam->ent;
+                    cache->polyRayDepth[4] = depth4;
+                }
             }
         }
 
@@ -1489,6 +1528,8 @@ void xShadowVertical_FillCache(xShadowCache* cache, xVec3* pos, F32 r, F32 depth
     cache->polyRayDepth[3] = -1e38f;
     cache->polyRayDepth[4] = -1e38f;
 
+    xEnv* env = globals.sceneCur->env;
+
     isx.type = rpINTERSECTBOX;
     isx.t.box.sup.x = pos->x + r;
     isx.t.box.sup.y = pos->y + r;
@@ -1497,10 +1538,8 @@ void xShadowVertical_FillCache(xShadowCache* cache, xVec3* pos, F32 r, F32 depth
     isx.t.box.inf.y = (pos->y - r) - depth;
     isx.t.box.inf.z = pos->z - r;
 
-    context.minNormY = minNormY;
     context.cache = cache;
-
-    xEnv* env = globals.sceneCur->env;
+    context.minNormY = minNormY;
 
     if (env->geom->jsp != NULL)
     {
@@ -1648,12 +1687,11 @@ void xShadowVertical_DrawCache(xShadowCache* cache, F32 shadowFactor, F32 fadeDi
 
     param.fade = (fadeDist > 0.0f) ? 1 : 0;
 
-    param.numIm3DBatch = 0;
+    param.shadowValue = (S32)(255.0f * shadowFactor);
+    param.shadowWord = (param.shadowValue << 24) | (param.shadowValue << 16) |
+                       (param.shadowValue << 8) | param.shadowValue;
 
-    S32 val = (S32)(255.0f * shadowFactor);
-    param.shadowValue = val;
-    param.shadowWord = (val << 24) | (param.shadowValue << 16) | (param.shadowValue << 8) |
-                       param.shadowValue;
+    param.numIm3DBatch = 0;
 
     Im3DBuffer = gRenderBuffer.m_vertex;
     Im3DBufferPos = 0;
@@ -1866,17 +1904,20 @@ void xShadowManager_Render()
         F32 radius;
         xShadowMgr* mgr_best;
         F32 dst_depth;
+        xEnt* ep;
 
         zEntGetShadowParams(sMgrList[bestIndex].ent, &center, &radius, xEntShadow::RADIUS_CACHE);
 
         mgr_best = &sMgrList[bestIndex];
-        sEntSelf = mgr_best->ent;
+        ep = mgr_best->ent;
 
         dst_depth = 10.0f;
-        if (sEntSelf->entShadow->dst_cast > 0.0f)
+        if (ep->entShadow->dst_cast > 0.0f)
         {
-            dst_depth = sEntSelf->entShadow->dst_cast;
+            dst_depth = ep->entShadow->dst_cast;
         }
+
+        sEntSelf = ep;
 
         xShadowVertical_FillCache(mgr_best->cache, &center, radius, dst_depth, 0.0871557f);
 
