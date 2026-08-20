@@ -2044,17 +2044,18 @@ void xFXShineRender()
     S32 shine;
     xFXShine* s;
     S32 j;
+    RxObjSpace3DVertex* vert;
     RwFrame* frame;
-    xMat3x3 mat;
     xVec3 v;
     xVec3 w;
     xVec3 w2;
     F32 uoff;
+    xMat3x3 mat;
 
-    s = sShineList;
-
-    for (shine = 0; shine < 2; shine++, s++)
+    for (shine = 0; shine < 2; shine++)
     {
+        s = &sShineList[shine];
+
         if (s->flags == 0)
         {
             continue;
@@ -2068,6 +2069,8 @@ void xFXShineRender()
             {
                 continue;
             }
+
+            vert = blah_2485;
 
             if (globals.camera.lo_cam)
             {
@@ -2089,24 +2092,24 @@ void xFXShineRender()
             xMat3x3Transpose(&mat, (xMat3x3*)frame);
             xMat3x3LMulVec(&v, &mat, &v);
 
-            RwIm3DVertexSetPos(&blah_2485[0], s->pos.x, s->pos.y, s->pos.z);
-            RwIm3DVertexSetUV(&blah_2485[0], uoff, 0.0f);
-            RwIm3DVertexSetRGBA(&blah_2485[0], e->cola.r, e->cola.g, e->cola.b, 0);
+            RwIm3DVertexSetPos(&vert[0], s->pos.x, s->pos.y, s->pos.z);
+            RwIm3DVertexSetUV(&vert[0], uoff, 0.0f);
+            RwIm3DVertexSetRGBA(&vert[0], e->cola.r, e->cola.g, e->cola.b, 0);
 
-            RwIm3DVertexSetPos(&blah_2485[1], s->pos.x, s->pos.y, s->pos.z);
-            RwIm3DVertexSetUV(&blah_2485[1], uoff, 1.0f);
-            RwIm3DVertexSetRGBA(&blah_2485[1], e->cola.r, e->cola.g, e->cola.b, 0);
+            RwIm3DVertexSetPos(&vert[1], s->pos.x, s->pos.y, s->pos.z);
+            RwIm3DVertexSetUV(&vert[1], uoff, 1.0f);
+            RwIm3DVertexSetRGBA(&vert[1], e->cola.r, e->cola.g, e->cola.b, 0);
 
-            RwIm3DVertexSetPos(&blah_2485[2], s->pos.x + v.x - w.x, s->pos.y + v.y - w.y,
+            RwIm3DVertexSetPos(&vert[2], s->pos.x + v.x - w.x, s->pos.y + v.y - w.y,
                                s->pos.z + v.z - w.z);
-            RwIm3DVertexSetUV(&blah_2485[2], 1.0f + uoff, 0.0f);
-            RwIm3DVertexSetRGBA(&blah_2485[2], e->cola.r, e->cola.g, e->cola.b,
+            RwIm3DVertexSetUV(&vert[2], 1.0f + uoff, 0.0f);
+            RwIm3DVertexSetRGBA(&vert[2], e->cola.r, e->cola.g, e->cola.b,
                                 (U8)(255.0f * e->a));
 
-            RwIm3DVertexSetPos(&blah_2485[3], w.x + (s->pos.x + v.x), w.y + (s->pos.y + v.y),
+            RwIm3DVertexSetPos(&vert[3], w.x + (s->pos.x + v.x), w.y + (s->pos.y + v.y),
                                w.z + (s->pos.z + v.z));
-            RwIm3DVertexSetUV(&blah_2485[3], 1.0f + uoff, 1.0f);
-            RwIm3DVertexSetRGBA(&blah_2485[3], e->cola.r, e->cola.g, e->cola.b,
+            RwIm3DVertexSetUV(&vert[3], 1.0f + uoff, 1.0f);
+            RwIm3DVertexSetRGBA(&vert[3], e->cola.r, e->cola.g, e->cola.b,
                                 (U8)(255.0f * e->a));
 
             RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)s->textureRasterPtr);
@@ -2118,24 +2121,26 @@ void xFXShineRender()
                 RwIm3DEnd();
             }
 
-            RwIm3DVertexSetPos(&blah_2485[0], s->pos.x, s->pos.y, s->pos.z);
-            RwIm3DVertexSetUV(&blah_2485[0], uoff, 0.0f);
-            RwIm3DVertexSetRGBA(&blah_2485[0], e->colb.r, e->colb.g, e->colb.b, 0);
+            vert = blah_2485;
 
-            RwIm3DVertexSetPos(&blah_2485[1], s->pos.x, s->pos.y, s->pos.z);
-            RwIm3DVertexSetUV(&blah_2485[1], 0.0f, 1.0f);
-            RwIm3DVertexSetRGBA(&blah_2485[1], e->colb.r, e->colb.g, e->colb.b, 0);
+            RwIm3DVertexSetPos(&vert[0], s->pos.x, s->pos.y, s->pos.z);
+            RwIm3DVertexSetUV(&vert[0], uoff, 0.0f);
+            RwIm3DVertexSetRGBA(&vert[0], e->colb.r, e->colb.g, e->colb.b, 0);
 
-            RwIm3DVertexSetPos(&blah_2485[2], s->pos.x + v.x - w2.x, s->pos.y + v.y - w2.y,
+            RwIm3DVertexSetPos(&vert[1], s->pos.x, s->pos.y, s->pos.z);
+            RwIm3DVertexSetUV(&vert[1], 0.0f, 1.0f);
+            RwIm3DVertexSetRGBA(&vert[1], e->colb.r, e->colb.g, e->colb.b, 0);
+
+            RwIm3DVertexSetPos(&vert[2], s->pos.x + v.x - w2.x, s->pos.y + v.y - w2.y,
                                s->pos.z + v.z - w2.z);
-            RwIm3DVertexSetUV(&blah_2485[2], 1.0f, 0.0f);
-            RwIm3DVertexSetRGBA(&blah_2485[2], e->colb.r, e->colb.g, e->colb.b,
+            RwIm3DVertexSetUV(&vert[2], 1.0f, 0.0f);
+            RwIm3DVertexSetRGBA(&vert[2], e->colb.r, e->colb.g, e->colb.b,
                                 (U8)(255.0f * e->a));
 
-            RwIm3DVertexSetPos(&blah_2485[3], w2.x + (s->pos.x + v.x), w2.y + (s->pos.y + v.y),
+            RwIm3DVertexSetPos(&vert[3], w2.x + (s->pos.x + v.x), w2.y + (s->pos.y + v.y),
                                w2.z + (s->pos.z + v.z));
-            RwIm3DVertexSetUV(&blah_2485[3], 1.0f, 1.0f);
-            RwIm3DVertexSetRGBA(&blah_2485[3], e->colb.r, e->colb.g, e->colb.b,
+            RwIm3DVertexSetUV(&vert[3], 1.0f, 1.0f);
+            RwIm3DVertexSetRGBA(&vert[3], e->colb.r, e->colb.g, e->colb.b,
                                 (U8)(255.0f * e->a));
 
             RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)s->textureRasterPtr);
