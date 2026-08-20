@@ -307,22 +307,12 @@ static S32 zCameraFlyUpdate(xCamera* cam, F32 dt)
         return 0;
     }
 
-    flyIdx = numKeys;
-    if (numKeys - 1 >= 0)
-    {
-        flyIdx = numKeys - 1;
-    }
-
+    flyIdx = numKeys - 1 >= 0 ? numKeys - 1 : numKeys;
     keys[0] = *((zFlyKey*)zcam_flydata + flyIdx);
     keys[1] = *((zFlyKey*)zcam_flydata + numKeys);
     keys[2] = *((zFlyKey*)zcam_flydata + (numKeys + 1));
 
-    flyIdx = numKeys + 1;
-    if (numKeys + 2 < flySize)
-    {
-        flyIdx = numKeys + 2;
-    }
-
+    flyIdx = numKeys + 2 < flySize ? numKeys + 2 : numKeys + 1;
     keys[3] = *((zFlyKey*)zcam_flydata + flyIdx);
 
     // Reverses the byte order (endianness) of 64 4-byte blocks
@@ -597,7 +587,7 @@ void zCameraFreeLookSetGoals(xCamera* cam, F32 pitch_s, F32& dgoal, F32& hgoal, 
             bool lenValid = false;
             if (zcam_playervel != NULL)
             {
-                if (len != 0.0f)
+                if (len)
                 {
                     lenValid = true;
                 }
@@ -843,13 +833,9 @@ void zCameraUpdate(xCamera* cam, F32 dt)
 
     if (vertical_lerp)
     {
-        delta.x = cam->tgt_mat->pos.x - cam->tgt_omat->pos.x - tran_accum.x;
-        delta.y = cam->tgt_mat->pos.y - cam->tgt_omat->pos.y - tran_accum.y;
-        delta.z = cam->tgt_mat->pos.z - cam->tgt_omat->pos.z - tran_accum.z;
-
-        delta.x = vertical_lerp * delta.x;
-        delta.y = vertical_lerp * delta.y;
-        delta.z = vertical_lerp * delta.z;
+        delta.x = vertical_lerp * (cam->tgt_mat->pos.x - cam->tgt_omat->pos.x - tran_accum.x);
+        delta.y = vertical_lerp * (cam->tgt_mat->pos.y - cam->tgt_omat->pos.y - tran_accum.y);
+        delta.z = vertical_lerp * (cam->tgt_mat->pos.z - cam->tgt_omat->pos.z - tran_accum.z);
 
         cam->mat.pos.x += delta.x;
         cam->mat.pos.y += delta.y;
@@ -1143,7 +1129,7 @@ void zCameraUpdate(xCamera* cam, F32 dt)
         xVec3SMul(&destPosition, &wall_jump_view, -cam->dcur);
         xVec3Add(&destPosition, &destPosition, (xVec3*)&globals.player.ent.model->Mat->pos);
 
-        destPosition.y += hgoal * 0.5f;
+        destPosition.y += hgoal / 2.0f;
 
         xCameraMove(cam, destPosition, 25.0f * dt);
 
@@ -1263,7 +1249,7 @@ void zCameraSetConvers(S32 on)
 
     if (on)
     {
-        cam = zcam_backupconvers;
+        zcam_backupconvers = cam;
         saved = 1;
         zcam_dest = NULL;
         zcam_tmr = 0.0f;
