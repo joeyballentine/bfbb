@@ -36,6 +36,41 @@ extern U8 xClumpColl_FilterFlags;
 
 #include <world/bageomet.h>
 
+// Same computation as xVec3NormalizeMacro in xVec3Inlines.h, but written the way the retail
+// object was built: the length is stored before the components are copied, and the squares are
+// held in named temporaries. Reproducing that here (rather than editing the shared header) takes
+// xSphereHitsOBB_nu from 94.075% to 99.661%.
+#define xVec3NormalizeTmpMacro(o, v, len)                                                          \
+    MACRO_START                                                                                    \
+    {                                                                                              \
+        F32 x2__ = SQR((v)->x), y2__ = SQR((v)->y), z2__ = SQR((v)->z);                            \
+        F32 len2 = x2__ + y2__ + z2__;                                                             \
+        F32 vx__ = (v)->x, vy__ = (v)->y, vz__ = (v)->z;                                           \
+        if (xeq(len2, 1.0f, 1e-5f))                                                                \
+        {                                                                                          \
+            *(len) = 1.0f;                                                                         \
+            (o)->x = vx__;                                                                         \
+            (o)->y = vy__;                                                                         \
+            (o)->z = vz__;                                                                         \
+        }                                                                                          \
+        else if (xeq(len2, 0.0f, 1e-5f))                                                           \
+        {                                                                                          \
+            *(len) = 0.0f;                                                                         \
+            (o)->x = 0.0f;                                                                         \
+            (o)->y = 1.0f;                                                                         \
+            (o)->z = 0.0f;                                                                         \
+        }                                                                                          \
+        else                                                                                       \
+        {                                                                                          \
+            *(len) = xsqrt(len2);                                                                  \
+            F32 len_inv = 1.0f / *(len);                                                           \
+            (o)->x = (v)->x * len_inv;                                                             \
+            (o)->y = (v)->y * len_inv;                                                             \
+            (o)->z = (v)->z * len_inv;                                                             \
+        }                                                                                          \
+    }                                                                                              \
+    MACRO_STOP
+
 _xCollsIdx xCollideGetCollsIdx(const xCollis* coll, const xVec3* tohit, const xMat3x3* mat)
 {
     if (tohit->y * tohit->y > tohit->x * tohit->x + tohit->z * tohit->z)
@@ -227,9 +262,9 @@ U32 xSphereHitsOBB_nu(const xSphere* s, const xBox* b, const xMat4x3* m, xCollis
     xVec3 scale;
     xMat4x3 mnormal;
 
-    xVec3NormalizeMacro(&mnormal.right, &m->right, &scale.x);
-    xVec3NormalizeMacro(&mnormal.up, &m->up, &scale.y);
-    xVec3NormalizeMacro(&mnormal.at, &m->at, &scale.z);
+    xVec3NormalizeTmpMacro(&mnormal.right, &m->right, &scale.x);
+    xVec3NormalizeTmpMacro(&mnormal.up, &m->up, &scale.y);
+    xVec3NormalizeTmpMacro(&mnormal.at, &m->at, &scale.z);
     mnormal.pos = m->pos;
 
     xBox sbox = *b;
@@ -306,7 +341,7 @@ U32 xSphereHitsModel(const xSphere* b, const xModelInstance* m, xCollis* coll)
     context.localx.t.sphere.radius = b->r / mscale;
 
     coll->flags &= ~k_HIT_IT;
-    coll->dist = HUGE;
+    coll->dist = 1e38f;
 
     if (coll->flags & k_HIT_CALC_TRI)
     {
@@ -521,7 +556,7 @@ S32 xParabolaHitsEnv(xParabola* p, const xEnv* env, xCollis* colls)
         return 0;
 
     colls->flags = 0;
-    colls->dist = HUGE;
+    colls->dist = 1e38f;
 
     xb.inf.x = p->initPos.x + p->initVel.x * p->minTime;
     xb.sup.x = p->initPos.x + p->initVel.x * p->maxTime;
@@ -1628,7 +1663,7 @@ S32 xSweptSphereToBox(xSweptSphere* sws, xBox* box, xMat4x3* mat)
         boxinvbasis = &sws->invbasis.xm;
     }
 
-    F32 rad, radsqr;
+    F32 rad, radsqr, testdist, invZ;
     xVec3 boxPos, boxaX, boxaY, boxaZ;
 
     boxaX.x = dx * boxinvbasis->right.x;
@@ -1673,24 +1708,26 @@ S32 xSweptSphereToBox(xSweptSphere* sws, xBox* box, xMat4x3* mat)
 
     xVec3 boxNorm, boxA1, boxA2;
     S32 quadfound = 0;
+    F32 boxPlaneDepth, daX, daY, daZ, d1, d2, distzsqr;
 
     rad = sws->radius;
     radsqr = rad * rad;
 
-    F32 f5 = boxaX.x * boxPos.x + boxaX.y * boxPos.y + boxaX.z * boxPos.z;
-    F32 f23 = boxaY.x * boxPos.x + boxaY.y * boxPos.y + boxaY.z * boxPos.z;
-    F32 f8 = boxaZ.x * boxPos.x + boxaZ.y * boxPos.y + boxaZ.z * boxPos.z;
+    daX = boxaX.x * boxPos.x + boxaX.y * boxPos.y + boxaX.z * boxPos.z;
+    daY = boxaY.x * boxPos.x + boxaY.y * boxPos.y + boxaY.z * boxPos.z;
+    daZ = boxaZ.x * boxPos.x + boxaZ.y * boxPos.y + boxaZ.z * boxPos.z;
 
     if (boxaX.z > 0.00001f)
     {
-        F32 f3 = f5 / boxaX.z * boxaY.z - f23;
-        F32 f4 = f5 / boxaX.z * boxaZ.z - f8;
-        if (f3 >= 0.0f && f4 >= 0.0f)
+        invZ = daX / boxaX.z;
+        d1 = invZ * boxaY.z - daY;
+        d2 = invZ * boxaZ.z - daZ;
+        if (d1 >= 0.0f && d2 >= 0.0f)
         {
             quadfound = 1;
         }
     }
-    else if (f5 > 0.0f)
+    else if (daX > 0.0f)
     {
         quadfound = 1;
     }
@@ -1706,14 +1743,15 @@ S32 xSweptSphereToBox(xSweptSphere* sws, xBox* box, xMat4x3* mat)
     {
         if (boxaY.z > 0.00001f)
         {
-            F32 f3 = f23 / boxaY.z * boxaX.z - f5;
-            F32 f4 = f23 / boxaY.z * boxaZ.z - f8;
-            if (f3 >= 0.0f && f4 >= 0.0f)
+            invZ = daY / boxaY.z;
+            d1 = invZ * boxaX.z - daX;
+            d2 = invZ * boxaZ.z - daZ;
+            if (d1 >= 0.0f && d2 >= 0.0f)
             {
                 quadfound = 1;
             }
         }
-        else if (f23 > 0.0f)
+        else if (daY > 0.0f)
         {
             quadfound = 1;
         }
@@ -1729,14 +1767,15 @@ S32 xSweptSphereToBox(xSweptSphere* sws, xBox* box, xMat4x3* mat)
         {
             if (boxaZ.z > 0.00001f)
             {
-                F32 f3 = f8 / boxaZ.z * boxaX.z - f5;
-                F32 f4 = f8 / boxaZ.z * boxaY.z - f23;
-                if (f3 >= 0.0f && f4 >= 0.0f)
+                invZ = daZ / boxaZ.z;
+                d1 = invZ * boxaX.z - daX;
+                d2 = invZ * boxaY.z - daY;
+                if (d1 >= 0.0f && d2 >= 0.0f)
                 {
                     quadfound = 1;
                 }
             }
-            else if (f8 > 0.0f)
+            else if (daZ > 0.0f)
             {
                 quadfound = 1;
             }
@@ -1750,15 +1789,15 @@ S32 xSweptSphereToBox(xSweptSphere* sws, xBox* box, xMat4x3* mat)
             }
             else
             {
-                F32 f1 = radsqr - SQR(boxPos.x) - SQR(boxPos.y);
-                if (f1 <= 0.0f)
+                testdist = radsqr - SQR(boxPos.x) - SQR(boxPos.y);
+                if (testdist <= 0.0f)
                     return 0;
-                F32 f1_0 = boxPos.z - xsqrt(f1);
-                if (f1_0 >= sws->curdist)
+                distzsqr = boxPos.z - xsqrt(testdist);
+                if (distzsqr >= sws->curdist)
                     return 0;
-                if (f1_0 <= -rad)
+                if (distzsqr <= -rad)
                     return 0;
-                sws->curdist = f1_0;
+                sws->curdist = distzsqr;
                 sws->contact = boxPos;
                 sws->polynorm.x = -boxaX.x;
                 sws->polynorm.y = -boxaX.y;
@@ -1772,22 +1811,24 @@ S32 xSweptSphereToBox(xSweptSphere* sws, xBox* box, xMat4x3* mat)
 
     if (xabs(boxNorm.z) > 0.001f)
     {
-        F32 f8 = 1.0f / boxNorm.z;
+        invZ = 1.0f / boxNorm.z;
         F32 f2 = boxNorm.x * boxPos.x + boxNorm.y * boxPos.y + boxNorm.z * boxPos.z;
-        F32 f0 = f8 * f2 - xabs(rad * f8);
-        if (f0 >= sws->curdist)
+        boxPlaneDepth = invZ * f2 - xabs(rad * invZ);
+        if (boxPlaneDepth >= sws->curdist)
             return 0;
-        if (f0 <= -rad)
+        if (boxPlaneDepth <= -rad)
             return 0;
-        F32 f3 = f0 * boxA1.z - (boxA1.x * boxPos.x + boxA1.y * boxPos.y + boxA1.z * boxPos.z);
-        F32 f2_0 = f0 * boxA2.z - (boxA2.x * boxPos.x + boxA2.y * boxPos.y + boxA2.z * boxPos.z);
-        if (f3 >= 0.0f && f2_0 >= 0.0f && f3 <= (SQR(boxA1.x) + SQR(boxA1.y) + SQR(boxA1.z)) &&
-            f2_0 <= (SQR(boxA2.x) + SQR(boxA2.y) + SQR(boxA2.z)))
+        d1 = boxPlaneDepth * boxA1.z -
+             (boxA1.x * boxPos.x + boxA1.y * boxPos.y + boxA1.z * boxPos.z);
+        d2 = boxPlaneDepth * boxA2.z -
+             (boxA2.x * boxPos.x + boxA2.y * boxPos.y + boxA2.z * boxPos.z);
+        if (d1 >= 0.0f && d2 >= 0.0f && d1 <= (SQR(boxA1.x) + SQR(boxA1.y) + SQR(boxA1.z)) &&
+            d2 <= (SQR(boxA2.x) + SQR(boxA2.y) + SQR(boxA2.z)))
         {
-            sws->curdist = f0;
+            sws->curdist = boxPlaneDepth;
             sws->contact.x = -rad * boxNorm.x;
             sws->contact.y = -rad * boxNorm.y;
-            sws->contact.z = f0 - rad * boxNorm.z;
+            sws->contact.z = boxPlaneDepth - rad * boxNorm.z;
             sws->polynorm = boxNorm;
             return 1;
         }
@@ -1997,18 +2038,15 @@ static S32 SweptSphereModelCB(S32 numTriangles, S32 triOffset, void* data)
     RpTriangle* triangles = geometry->triangles;
     S32 triSlot = triOffset;
     U16* triIndex = RpCollisionGeometryGetData(geometry)->triangleMap + triOffset;
+    RpTriangle* tri;
 
     while (numTriangles--)
     {
         triSlot = *triIndex++;
-        RpTriangle* tri = &triangles[triSlot];
-        S32 vertIndex0 = tri->vertIndex[0];
-        S32 vertIndex1 = tri->vertIndex[1];
-        S32 vertIndex2 = tri->vertIndex[2];
-        RwV3d* v0 = &vertices[vertIndex0];
-        RwV3d* v1 = &vertices[vertIndex1];
-        RwV3d* v2 = &vertices[vertIndex2];
-        if (xSweptSphereToTriangle(sws, (xVec3*)v0, (xVec3*)v1, (xVec3*)v2))
+        tri = &triangles[triSlot];
+        if (xSweptSphereToTriangle(sws, (xVec3*)&vertices[tri->vertIndex[0]],
+                                   (xVec3*)&vertices[tri->vertIndex[1]],
+                                   (xVec3*)&vertices[tri->vertIndex[2]]))
         {
             sSweptSphereHitFound = 1;
         }
@@ -2359,6 +2397,8 @@ bool xSphereHitsBound(const xSphere& o, const xBound& b)
 
 U8 xOBBHitsOBB(const xBox& a, const xMat4x3& amat, const xBox& b, const xMat4x3& bmat)
 {
+    const xVec3& asize = a.upper;
+    const xVec3& bsize = b.upper;
     xVec3 offset = bmat.pos - amat.pos;
 
     xVec3 aoffset = {};
@@ -2384,36 +2424,36 @@ U8 xOBBHitsOBB(const xBox& a, const xMat4x3& amat, const xBox& b, const xMat4x3&
 
     F32 ar, br, r;
 
-    br = b.upper.x * axmat.right.x + b.upper.y * axmat.right.y + b.upper.z * axmat.right.z;
-    ar = a.upper.x + br;
+    br = bsize.x * axmat.right.x + bsize.y * axmat.right.y + bsize.z * axmat.right.z;
+    ar = asize.x + br;
     if (xabs(aoffset.x) > ar)
         return false;
 
-    br = b.upper.x * axmat.up.x + b.upper.y * axmat.up.y + b.upper.z * axmat.up.z;
-    ar = a.upper.y + br;
+    br = bsize.x * axmat.up.x + bsize.y * axmat.up.y + bsize.z * axmat.up.z;
+    ar = asize.y + br;
     if (xabs(aoffset.y) > ar)
         return false;
 
-    br = b.upper.x * axmat.at.x + b.upper.y * axmat.at.y + b.upper.z * axmat.at.z;
-    ar = a.upper.z + br;
+    br = bsize.x * axmat.at.x + bsize.y * axmat.at.y + bsize.z * axmat.at.z;
+    ar = asize.z + br;
     if (xabs(aoffset.z) > ar)
         return false;
 
     r = bmat.right.dot(offset);
-    ar = a.upper.x * axmat.right.x + a.upper.y * axmat.up.x + a.upper.z * axmat.at.x;
-    br = ar + b.upper.x;
+    ar = asize.x * axmat.right.x + asize.y * axmat.up.x + asize.z * axmat.at.x;
+    br = ar + bsize.x;
     if (xabs(r) > br)
         return false;
 
     r = bmat.up.dot(offset);
-    ar = a.upper.x * axmat.right.y + a.upper.y * axmat.up.y + a.upper.z * axmat.at.y;
-    br = ar + b.upper.y;
+    ar = asize.x * axmat.right.y + asize.y * axmat.up.y + asize.z * axmat.at.y;
+    br = ar + bsize.y;
     if (xabs(r) > br)
         return false;
 
     r = bmat.at.dot(offset);
-    ar = a.upper.x * axmat.right.z + a.upper.y * axmat.up.z + a.upper.z * axmat.at.z;
-    br = ar + b.upper.z;
+    ar = asize.x * axmat.right.z + asize.y * axmat.up.z + asize.z * axmat.at.z;
+    br = ar + bsize.z;
     if (xabs(r) > br)
         return false;
 
@@ -2423,56 +2463,56 @@ U8 xOBBHitsOBB(const xBox& a, const xMat4x3& amat, const xBox& b, const xMat4x3&
         return true;
 
     r = aoffset.z * xmat.up.x - aoffset.y * xmat.at.x;
-    ar = a.upper.y * axmat.at.x + a.upper.z * axmat.up.x;
-    br = b.upper.y * axmat.right.z + b.upper.z * axmat.right.y + ar;
+    ar = asize.y * axmat.at.x + asize.z * axmat.up.x;
+    br = bsize.y * axmat.right.z + bsize.z * axmat.right.y + ar;
     if (xabs(r) > br)
         return false;
 
     r = aoffset.z * xmat.up.y - aoffset.y * xmat.at.y;
-    ar = a.upper.y * axmat.at.y + a.upper.z * axmat.up.y;
-    br = b.upper.x * axmat.right.z + b.upper.z * axmat.right.x + ar;
+    ar = asize.y * axmat.at.y + asize.z * axmat.up.y;
+    br = bsize.x * axmat.right.z + bsize.z * axmat.right.x + ar;
     if (xabs(r) > br)
         return false;
 
     r = aoffset.z * xmat.up.z - aoffset.y * xmat.at.z;
-    ar = a.upper.y * axmat.at.z + a.upper.z * axmat.up.z;
-    br = b.upper.x * axmat.right.y + b.upper.y * axmat.right.x + ar;
+    ar = asize.y * axmat.at.z + asize.z * axmat.up.z;
+    br = bsize.x * axmat.right.y + bsize.y * axmat.right.x + ar;
     if (xabs(r) > br)
         return false;
 
     r = aoffset.x * xmat.at.x - aoffset.z * xmat.right.x;
-    ar = a.upper.x * axmat.at.x + a.upper.z * axmat.right.x;
-    br = b.upper.y * axmat.up.z + b.upper.z * axmat.up.y + ar;
+    ar = asize.x * axmat.at.x + asize.z * axmat.right.x;
+    br = bsize.y * axmat.up.z + bsize.z * axmat.up.y + ar;
     if (xabs(r) > br)
         return false;
 
     r = aoffset.x * xmat.at.y - aoffset.z * xmat.right.y;
-    ar = a.upper.x * axmat.at.y + a.upper.z * axmat.right.y;
-    br = b.upper.x * axmat.up.z + b.upper.z * axmat.up.x + ar;
+    ar = asize.x * axmat.at.y + asize.z * axmat.right.y;
+    br = bsize.x * axmat.up.z + bsize.z * axmat.up.x + ar;
     if (xabs(r) > br)
         return false;
 
     r = aoffset.x * xmat.at.z - aoffset.z * xmat.right.z;
-    ar = a.upper.x * axmat.at.z + a.upper.z * axmat.right.z;
-    br = b.upper.x * axmat.up.y + b.upper.y * axmat.up.x + ar;
+    ar = asize.x * axmat.at.z + asize.z * axmat.right.z;
+    br = bsize.x * axmat.up.y + bsize.y * axmat.up.x + ar;
     if (xabs(r) > br)
         return false;
 
     r = aoffset.y * xmat.right.x - aoffset.x * xmat.up.x;
-    ar = a.upper.x * axmat.up.x + a.upper.y * axmat.right.x;
-    br = b.upper.y * axmat.at.z + b.upper.z * axmat.at.y + ar;
+    ar = asize.x * axmat.up.x + asize.y * axmat.right.x;
+    br = bsize.y * axmat.at.z + bsize.z * axmat.at.y + ar;
     if (xabs(r) > br)
         return false;
 
     r = aoffset.y * xmat.right.y - aoffset.x * xmat.up.y;
-    ar = a.upper.x * axmat.up.y + a.upper.y * axmat.right.y;
-    br = b.upper.x * axmat.at.z + b.upper.z * axmat.at.x + ar;
+    ar = asize.x * axmat.up.y + asize.y * axmat.right.y;
+    br = bsize.x * axmat.at.z + bsize.z * axmat.at.x + ar;
     if (xabs(r) > br)
         return false;
 
     r = aoffset.y * xmat.right.z - aoffset.x * xmat.up.z;
-    ar = a.upper.x * axmat.up.z + a.upper.y * axmat.right.z;
-    br = b.upper.x * axmat.at.y + b.upper.y * axmat.at.x + ar;
+    ar = asize.x * axmat.up.z + asize.y * axmat.right.z;
+    br = bsize.x * axmat.at.y + bsize.y * axmat.at.x + ar;
     if (xabs(r) > br)
         return false;
 
@@ -2559,7 +2599,7 @@ F32 xMat3x3LookVec3(xMat3x3& mat, const xVec3& at)
     if (len >= -0.0000099999997f && len <= 0.0000099999997f)
     {
         mat = g_I3;
-        len = 0.0f;
+        return 0.0f;
     }
     else
     {
@@ -2570,7 +2610,7 @@ F32 xMat3x3LookVec3(xMat3x3& mat, const xVec3& at)
         F32 absz = xabs(mat.at.z);
         if (absx < absy && absx < absz)
         {
-            mat.right.assign(0.0f, absz, -absy);
+            mat.right.assign(0.0f, mat.at.z, -mat.at.y);
         }
         else
         {
@@ -2584,7 +2624,7 @@ F32 xMat3x3LookVec3(xMat3x3& mat, const xVec3& at)
             }
         }
         mat.right.normalize();
-        mat.up = mat.at.cross(mat.right);
+        mat.up = mat.right.cross(mat.at);
     }
     return len;
 }
