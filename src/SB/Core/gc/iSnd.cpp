@@ -294,13 +294,7 @@ static void arqcb(u32 pointerToARQRequest)
     xSTAssetName(data->vinf.aid);
     dump_flags(data->vinf.flags);
     last_ar = (ARQRequest*)pointerToARQRequest;
-    if (last_ar->length == 0)
-    {
-        return;
-    }
-
-    // FIXME: the target has a redundant bne/b pair here that this shape folds away
-    if (data->vinf.voice == NULL)
+    if (last_ar->length == 0 || data->vinf.voice == NULL)
     {
         return;
     }
@@ -1094,10 +1088,11 @@ static void iSndUpdateStreams()
         BOOL enabled = OSDisableInterrupts();
         if (streams[i].vinf.flags & 0x4)
         {
+            u32 src = streams[i].source_b;
             streams[i].vinf.flags |= 0x200;
             streams[i].vinf.flags |= 0x400;
-            ARQPostRequest(&streams[i].request, (u32)&streams[i], 0, 1, streams[i].source_b,
-                           streams[i].dest_a, 0x8000, arqcb);
+            ARQPostRequest(&streams[i].request, (u32)&streams[i], 0, 1, src, streams[i].dest_a,
+                           0x8000, arqcb);
             streams[i].x108 = 0;
         }
         else
@@ -1847,7 +1842,7 @@ S32 iSndLoadSounds(void* data)
         p->total_size = total;
 
         u32 aram = ARAlloc(total);
-        S32 delta = (aram - min) * 2;
+        S32 delta = (-min + aram) * 2;
 
         sndhdr* e2 = entries;
         for (U32 i = 0; i < p->num_sfx; i++)
