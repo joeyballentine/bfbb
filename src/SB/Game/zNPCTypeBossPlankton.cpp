@@ -496,7 +496,7 @@ inline void zNPCBPlankton::render_debug()
 inline U8 zNPCBPlankton::turning() const
 {
     U8 result = 0;
-    xVec2 at = { model->Mat->at.x, model->Mat->at.z };
+    const xVec2 at = { model->Mat->at.x, model->Mat->at.z };
 
     if (!xfeq0(turn.vel) ||
         (!xfeq0(turn.accel) &&
@@ -1661,7 +1661,7 @@ void zNPCBPlankton::refresh_orbit()
     {
         if (flag.hunt)
         {
-            xVec3 oldcenter = orbit.center;
+            const xVec3 oldcenter = orbit.center;
 
             orbit.center = *get_player_loc();
             orbit.center.y = tweak.arena.center.y + tweak.hunt.height;
@@ -1683,10 +1683,11 @@ void zNPCBPlankton::refresh_orbit()
     }
     else
     {
-        xMovePointAsset* mp = territory[active_territory].origin->asset;
+        territory_data& t = territory[active_territory];
+        xMovePointAsset& mp = *t.origin->asset;
 
-        orbit.center = mp->pos;
-        orbit.radius = mp->zoneRadius;
+        orbit.center = mp.pos;
+        orbit.radius = mp.zoneRadius;
 
         if (flag.attacking)
         {
@@ -1752,8 +1753,8 @@ namespace
     void update_move_orbit(xVec3& loc, zNPCBPlankton::move_info& move, const xVec3& center, F32 dt,
                            bool clamp)
     {
-        xVec3 loc_pt = { loc.x, center.y, loc.z };
-        xVec3 dest_pt = { move.dest.x, center.y, move.dest.z };
+        const xVec3 loc_pt = { loc.x, center.y, loc.z };
+        const xVec3 dest_pt = { move.dest.x, center.y, move.dest.z };
         xVec3 loc_flat = loc_pt - center;
         xVec3 dest_flat = dest_pt - center;
 
@@ -1989,7 +1990,7 @@ void zNPCBPlankton::update_follow_player(F32 dt)
 
 void zNPCBPlankton::update_follow_camera(F32 dt)
 {
-    xVec3 target = orbit.center + globals.camera.mat.at * orbit.radius;
+    const xVec3 target = orbit.center + globals.camera.mat.at * orbit.radius;
 
     follow.delay = follow.delay + dt;
 
@@ -2275,9 +2276,11 @@ void zNPCBPlankton::stun()
     }
     else
     {
-        if (territory[active_territory].timer != NULL)
+        territory_data& t = territory[active_territory];
+
+        if (t.timer != NULL)
         {
-            zEntEvent(this, territory[active_territory].timer, 0x12);
+            zEntEvent(this, t.timer, 0x12);
         }
 
         psy_instinct->GoalSet(NPC_GOAL_BPLANKTONFALL, 1);
@@ -2344,8 +2347,8 @@ void zNPCBPlankton::impart_velocity(const xVec3& vel)
 
         add.y = 0.0f;
 
-        xVec2 diff = { location().x - orbit.center.x, location().z - orbit.center.z };
-        F32 max_dist = orbit.radius + tweak.hit_max_dist;
+        const xVec2 diff = { location().x - orbit.center.x, location().z - orbit.center.z };
+        const F32 max_dist = orbit.radius + tweak.hit_max_dist;
 
         if (diff.length2() > max_dist * max_dist)
         {
@@ -2412,18 +2415,19 @@ U8 zNPCBPlankton::move_to_player_territory()
 U8 zNPCBPlankton::player_left_territory() const
 {
     const territory_data& t = territory[active_territory];
-    xEnt* platform = (xEnt*)globals.player.ent.collis->colls[0].optr;
+    const xCollis& coll = globals.player.ent.collis->colls[0];
+    xEnt* platform = (xEnt*)coll.optr;
 
-    if (t.crony_size > 0 || t.platform == platform ||
-        !(globals.player.ent.collis->colls[0].flags & 1) || platform == NULL)
+    if (t.crony_size > 0 || t.platform == platform || !(coll.flags & 1) || platform == NULL)
     {
         return 0;
     }
 
     for (S32 i = 0; i < territory_size; i++)
     {
-        if (!(territory[i].crony_size > 0) && platform == territory[i].platform &&
-            i != active_territory)
+        const territory_data& t = territory[i];
+
+        if (!(t.crony_size > 0) && platform == t.platform && i != active_territory)
         {
             return 1;
         }
@@ -2742,7 +2746,7 @@ S32 zNPCGoalBPlanktonFlank::Enter(F32 dt, void* updCtxt)
     owner.reappear();
     owner.flag.attacking = true;
 
-    xVec3 target = owner.orbit.center + globals.camera.mat.at * owner.orbit.radius;
+    const xVec3 target = owner.orbit.center + globals.camera.mat.at * owner.orbit.radius;
     owner.set_location(owner.random_orbit(target, 0.0f, tweak.follow.min_ang));
 
     owner.refresh_orbit();
