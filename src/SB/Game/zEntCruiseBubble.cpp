@@ -408,8 +408,7 @@ namespace cruise_bubble
             case eBaseTypeNPC:
                 if (explosive)
                 {
-                    // fuck this... weird scheduling
-                    xVec3 edir = (*xEntGetCenter(&ent) - loc).up_normal();
+                    const xVec3 edir = (*xEntGetCenter(&ent) - loc).up_normal();
                     ((zNPCCommon*)&ent)->Damage(DMGTYP_CRUISEBUBBLE, &base, &edir);
                 }
                 else
@@ -702,8 +701,7 @@ namespace cruise_bubble
 
         void update_player(xScene& s, F32 dt)
         {
-            // register usage and stack scheduling differing
-            xVec3 pre_update_loc = cruise_bubble::get_player_loc();
+            const xVec3 pre_update_loc = cruise_bubble::get_player_loc();
             xVec3 drive_motion;
 
             bool stop = zEntPlayer_MinimalUpdate(&globals.player.ent, &s, dt, drive_motion) ||
@@ -1183,24 +1181,28 @@ namespace cruise_bubble
             }
         }
 
-        void render_glow(xModelInstance* model, const basic_rect<F32>& rect, F32 glow, F32 alpha)
+        void render_glow(xModelInstance* model, const basic_rect<F32>& r, F32 glow, F32 alpha)
         {
-            F32 a = alpha * glow;
-            F32 grow = (1.0f / 3.0f) * (glow * current_tweak->hud.glow_size);
-            F32 shift = 0.5f * -grow;
-            F32 fade = 0.25f * -a;
+            alpha *= glow;
 
-            basic_rect<F32> r = rect;
+            // SCHED: the target keeps all three constants live at once (f4/f1/f2)
+            // and computes dalpha before dsize; mwcc reuses f1 for two of them.
+            // Statement order, split declarations and const were all measured.
+            F32 dsize = (1.0f / 3.0f) * (glow * current_tweak->hud.glow_size);
+            F32 dloc = 0.5f * -dsize;
+            F32 dalpha = 0.25f * -alpha;
+
+            basic_rect<F32> bound = r;
 
             for (S32 i = 0; i < 3; i++)
             {
-                render_model_2d(model, r, a);
+                render_model_2d(model, bound, alpha);
 
-                r.x += shift;
-                r.y += shift;
-                r.w += grow;
-                r.h += grow;
-                a += fade;
+                bound.x += dloc;
+                bound.y += dloc;
+                bound.w += dsize;
+                bound.h += dsize;
+                alpha += dalpha;
             }
         }
 
@@ -1356,7 +1358,7 @@ namespace cruise_bubble
             cruise_bubble::lerp(font.color, glow, lo, hi);
             font.color.a = (S32)(255.0f * alpha + 0.5f);
 
-            basic_rect<F32> bound = font.bounds(buffer);
+            const basic_rect<F32> bound = font.bounds(buffer);
             F32 x = current_tweak->hud.timer.x - bound.x - 0.5f * bound.w;
             F32 y = current_tweak->hud.timer.y - bound.y - 0.5f * bound.h;
 
@@ -1423,7 +1425,8 @@ namespace cruise_bubble
             hud.model.wind->Alpha = vel_frac;
             hud.uv_wind.update(dt);
 
-            // sheduling off for i and zEntCruiseBubble_f_n1_0
+            // SCHED: the target loads the -1.0f inside the loop; mwcc hoists it out
+            // of the loop here. Loop shape and shared-counter forms were measured.
             for (S32 i = 1; i < hud.gizmos_used; ++i)
             {
                 if (!(hud.gizmo[i].flags & 0x1))
@@ -3133,10 +3136,9 @@ namespace cruise_bubble
         bool cruise_bubble::state_missle_fly::hazard_check(NPCHazard& haz, void* context)
         {
             const xVec3& mpos = get_missle_mat()->pos;
-            xVec3 vvar = haz.pos_hazard - mpos;
+            const xVec3 vvar = haz.pos_hazard - mpos;
             F32 fvar = current_tweak->missle.hit_dist + haz.custdata.typical.rad_cur;
 
-            // scheduling for implicit copy ctor off
             if (vvar.length2() < fvar * fvar)
             {
                 ((NPCHazard**)context)[0] = &haz;
@@ -3215,26 +3217,22 @@ namespace cruise_bubble
         U8 cruise_bubble::state_missle_fly::hit_test(xVec3& hit_loc, xVec3& hit_norm,
                                                      xVec3& hit_depen, xEnt*& hit_ent) const
         {
-            xScene* s = globals.sceneCur;
-            xVec3* loc = &get_missle_mat()->pos;
+            xScene& s = *globals.sceneCur;
+            xVec3& loc = get_missle_mat()->pos;
             xSweptSphere ss;
-            xSweptSpherePrepare(&ss, (xVec3*)&this->last_loc, loc, current_tweak->missle.hit_dist);
+            xSweptSpherePrepare(&ss, (xVec3*)&this->last_loc, &loc,
+                                current_tweak->missle.hit_dist);
             ss.optr = NULL;
-            if (!xSweptSphereToScene(&ss, s, NULL, 0x10))
+            if (!xSweptSphereToScene(&ss, &s, NULL, 0x10))
             {
                 return false;
             }
 
             xSweptSphereGetResults(&ss);
-            // SCHED: the target computes all three subtractions before storing any of
-            // them; we store each as it is computed. Not reachable from source -
-            // brace-init and scalar temps were both measured and are no better.
-            xVec3 overshoot = {};
-            overshoot.x = loc->x - ss.worldPos.x;
-            overshoot.y = loc->y - ss.worldPos.y;
-            overshoot.z = loc->z - ss.worldPos.z;
+            const xVec3 overshoot = { loc.x - ss.worldPos.x, loc.y - ss.worldPos.y,
+                                      loc.z - ss.worldPos.z };
             hit_loc = ss.worldPos + ss.worldTangent * overshoot.dot(ss.worldTangent);
-            hit_depen = hit_loc - *loc;
+            hit_depen = hit_loc - loc;
             hit_norm = ss.worldNormal;
             hit_ent = (xEnt*)ss.optr;
 
@@ -3255,14 +3253,20 @@ namespace cruise_bubble
 
         void cruise_bubble::state_missle_fly::update_turn(F32 dt)
         {
+            xVec2& sp = shared.sp;
+            xVec2& last_sp = shared.last_sp;
             tweak_group* tweak = current_tweak;
 
-            F32 ybound = tweak->missle.fly.turn.ybound;
+            // ybound is declared first (that is what puts it in f31) but loaded
+            // last, which is the order the target emits the six tweak loads in.
+            F32 ybound;
             F32 xdelta = -tweak->missle.fly.turn.xdelta;
             F32 ydelta = -tweak->missle.fly.turn.ydelta;
             F32 roll_frac = -tweak->missle.fly.turn.roll_frac;
             F32 xdecay = tweak->missle.fly.turn.xdecay;
             F32 ydecay = tweak->missle.fly.turn.ydecay;
+
+            ybound = tweak->missle.fly.turn.ybound;
 
             xVec2 d0, d1, v0, v1, a0, a1;
 
@@ -3273,7 +3277,7 @@ namespace cruise_bubble
             v0.y = this->rot_vel.y * xpow(1.0f - ydecay, dt);
 
             F32 damp;
-            if (d0.y * (ydelta * shared.sp.y) <= 0.0f)
+            if (d0.y * (ydelta * sp.y) <= 0.0f)
             {
                 damp = 1.0f;
             }
@@ -3282,10 +3286,10 @@ namespace cruise_bubble
                 damp = 1.0f - xabs(d0.y) / ybound;
             }
 
-            a0.x = xdelta * shared.last_sp.x;
-            a0.y = damp * (ydelta * shared.last_sp.y);
-            a1.x = xdelta * shared.sp.x;
-            a1.y = damp * (ydelta * shared.sp.y);
+            a0.x = xdelta * last_sp.x;
+            a0.y = damp * (ydelta * last_sp.y);
+            a1.x = xdelta * sp.x;
+            a1.y = damp * (ydelta * sp.y);
 
             this->calculate_rotation(d1, v1, dt, d0, v0, a0, a1);
 
@@ -3334,10 +3338,8 @@ namespace cruise_bubble
 
         void cruise_bubble::state_missle_explode::start_effects()
         {
-            U32 rand;
             U32 emit;
             U32 emit_max;
-            zShrapnelAsset* shrap;
 
             zFX_SpawnBubbleBlast(&get_missle_mat()->pos, current_tweak->blast.emit,
                                  current_tweak->blast.radius, current_tweak->blast.vel,
@@ -3347,7 +3349,7 @@ namespace cruise_bubble
 
             explode_decal.emit(*get_missle_mat(), scale, -1);
 
-            shrap = shared.droplet_shrapnel;
+            zShrapnelAsset* shrap = shared.droplet_shrapnel;
             if ((shrap != NULL) && (shrap->initCB != NULL))
             {
                 emit = current_tweak->droplet.emit_min;
@@ -3359,7 +3361,7 @@ namespace cruise_bubble
                 }
                 else
                 {
-                    rand = xrand();
+                    U32 rand = xrand();
                     emit += (rand / 0x2000) -
                             ((rand / 0x2000) / (emit_max - emit)) * (emit_max - emit);
                 }
@@ -3532,11 +3534,9 @@ namespace cruise_bubble
         {
             F32 radius = *(F32*)&context;
 
-            xVec3 vvar = haz.pos_hazard - shared.hit_loc;
+            const xVec3 vvar = haz.pos_hazard - shared.hit_loc;
             F32 fvar = radius + haz.custdata.typical.rad_cur;
 
-            // SCHED: the target interleaves the `fadds` for fvar with the implicit
-            // xVec3 copy that feeds length2(); we emit it after the copy.
             if (vvar.length2() < fvar * fvar)
             {
                 haz.MarkForRecycle();
@@ -3579,9 +3579,7 @@ namespace cruise_bubble
             xVec3& ploc = get_player_loc();
             F32 x = mat->pos.x - ploc.x;
             F32 y = mat->pos.z - ploc.z;
-            xVec2 offset = {};
-            offset.x = x;
-            offset.y = y;
+            const xVec2 offset = { x, y };
 
             this->phi = xatan2(offset.x, offset.y);
             this->height = mat->pos.y - ploc.y;
@@ -3664,6 +3662,7 @@ namespace cruise_bubble
 
         void cruise_bubble::state_camera_aim::collide_inward()
         {
+            zGlobals& g = globals;
             xSweptSphere sws;
 
             xVec3 tgtpos = get_player_loc();
@@ -3696,9 +3695,9 @@ namespace cruise_bubble
             if (sws.curdist != sws.dist)
             {
                 F32 stopdist = MAX(sws.curdist, 0.5f);
-                globals.camera.mat.pos.x = ray.origin.x + stopdist * ray.dir.x;
-                globals.camera.mat.pos.y = ray.origin.y + stopdist * ray.dir.y;
-                globals.camera.mat.pos.z = ray.origin.z + stopdist * ray.dir.z;
+                g.camera.mat.pos.x = ray.origin.x + stopdist * ray.dir.x;
+                g.camera.mat.pos.y = ray.origin.y + stopdist * ray.dir.y;
+                g.camera.mat.pos.z = ray.origin.z + stopdist * ray.dir.z;
             }
         }
 
@@ -3901,15 +3900,15 @@ namespace cruise_bubble
         {
             bound.type = XBOUND_TYPE_BOX;
 
+            xMat4x3& mat = globals.camera.mat;
             F32 dist = current_tweak->reticle.dist_max - current_tweak->reticle.dist_min;
             F32 s = isin(current_tweak->reticle.ang_hide);
             F32 r1 = s * current_tweak->reticle.dist_min;
             F32 r2 = s * current_tweak->reticle.dist_max;
 
-            xVec3 center =
-                globals.camera.mat.pos + globals.camera.mat.at * current_tweak->reticle.dist_min;
+            xVec3 center = mat.pos + mat.at * current_tweak->reticle.dist_min;
 
-            xBoxFromCone(bound.box.box, center, globals.camera.mat.at, dist, r1, r2);
+            xBoxFromCone(bound.box.box, center, mat.at, dist, r1, r2);
             bound.box.center = (bound.box.box.upper + bound.box.box.lower) * 0.5f;
 
             xQuickCullForBox(&bound.qcd, &bound.box.box);
