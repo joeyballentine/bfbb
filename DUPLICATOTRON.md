@@ -1351,6 +1351,27 @@ blind to definition order.
   degenerate two-branch form means two guards in the original were one
   condition. Merging them closed `repel_player`.
 
+- **One scheduler rule accounts for most of what is left in zEntPlayer:
+  our scheduler always fills a float-load latency slot with an already-ready
+  store, where retail leaves the stall.** Confirmed as the same single site in
+  `BoulderRollCB`, `BoulderRollDoneCB`, `SlideTrackUpdate`,
+  `zEntPlayer_SpringboardFX` and two of `zEntPlayerFloorUpdate`'s clusters --
+  **3,232 bytes of otherwise-clean functions**. The canonical shape is three
+  constant stores to adjacent members where retail emits
+  `lfs f1,<0> / stfs f1,x / lfs f0,<3> / stfs f0,y / stfs f1,z` and we hoist
+  `stfs f1,z` into the `lfs f0` shadow. Roughly ten source spellings have been
+  measured against it across two passes; none reaches it. If a scheduler
+  clause is ever extended, this is the highest-value single shape on the
+  board and these five functions are its witnesses.
+
+- **`zEntPlayer_SpringboardFX` is the sharpest `volatile` near-miss recorded.**
+  Marking its function-local `static F32 sLastSpringboardBubbleEmit` volatile
+  takes it from 12 differing rows to **2** -- fixing both the reload and an
+  f30/f31 swap -- but scores 98.361 rather than 100.0, because the moved store
+  scores worse than the substitutions it replaces. Reverted under the
+  install-only-at-100.0 rule. Its last row is the scheduler shape above, so it
+  closes for free if that is ever fixed.
+
 - **A countdown loop on the parameter** (`while (numTriangles--)`) rather than
   an index loop: the index form costs a callee-saved register and shifts the
   whole file. Worth 83.611 -> 100.0 on `shadowCacheLeafCB`.
