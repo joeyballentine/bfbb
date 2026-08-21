@@ -476,9 +476,9 @@ U32 zPlatform_PaddleCollide(xCollis* coll, const xVec3* hitsource, const xVec3* 
     hitsrcray.origin.x = hitsrcbot.x;
     hitsrcray.origin.y = hitsrcbot.y;
     hitsrcray.origin.z = hitsrcbot.z;
-    hitsrcray.dir.x = hitsrctop.x - hitsrcbot.x;
-    hitsrcray.dir.y = hitsrctop.y - hitsrcbot.y;
-    hitsrcray.dir.z = hitsrctop.z - hitsrcbot.z;
+    hitsrcray.dir.x = hitsrctop.x - hitsrcray.origin.x;
+    hitsrcray.dir.y = hitsrctop.y - hitsrcray.origin.y;
+    hitsrcray.dir.z = hitsrctop.z - hitsrcray.origin.z;
     hitsrcray.min_t = 0.0f;
     hitsrcray.max_t = xVec3Normalize(&hitsrcray.dir, &hitsrcray.dir);
     hitsrcray.flags = XRAY3_USE_MIN | XRAY3_USE_MAX;
