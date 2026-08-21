@@ -1295,7 +1295,7 @@ void NPCHazard::Render()
         {
             F32 alpha = 0.2f * (1.0f - this->pam_interp);
             F32 scaleit = 2.0f * this->custdata.typical.rad_cur;
-            xVec3 tallish = { 1.0f, 2.0f, 1.0f };
+            const xVec3 tallish = { 1.0f, 2.0f, 1.0f };
 
             this->SetAlpha(alpha);
             xVec3SMul(&this->mdl_hazard->Scale, &tallish, scaleit);
@@ -1488,7 +1488,7 @@ void NPCHazard::Render()
             this->SetAlpha(0.75f * (1.0f - this->pam_interp));
 
             F32 scaleit = 2.0f * this->custdata.typical.rad_cur;
-            xVec3 uni = { 1.0f, 1.0f, 1.0f };
+            const xVec3 uni = { 1.0f, 1.0f, 1.0f };
 
             xVec3SMul(&this->mdl_hazard->Scale, &uni, scaleit);
             xModelRender(this->mdl_hazard);
@@ -1507,9 +1507,9 @@ void NPCHazard::Render()
             }
 
             F32 scaleit = 2.0f * this->custdata.typical.rad_cur;
-            xVec3 scl_a = { 0.75f, 0.1f, 0.5f };
-            xVec3 scl_b = { 0.25f, 1.5f, 0.25f };
-            xVec3 scl_c = { 1.5f, 0.75f, 1.5f };
+            const xVec3 scl_a = { 0.75f, 0.1f, 0.5f };
+            const xVec3 scl_b = { 0.25f, 1.5f, 0.25f };
+            const xVec3 scl_c = { 1.5f, 0.75f, 1.5f };
             xVec3 scl_now;
 
             if (this->pam_interp <= 0.25f)
@@ -2128,7 +2128,12 @@ void NPCHazard::DeathStar()
 
     if (this->pam_interp < 0.16f)
     {
-        F32 spd = 0.4f * this->custdata.typical.rad_max;
+        // Two statements, per the target: `lfs <member>` issues before
+        // `lfs 0.4f`, and the fmuls writes the constant's register
+        // (`fmuls f0, f0, f1`). `F32 spd = 0.4f * rad_max;` swaps both, and
+        // `spd *= 0.4f;` fixes the loads but not the multiply.
+        F32 spd = this->custdata.typical.rad_max;
+        spd = 0.4f * spd;
         xVec3 vel_bub = { spd, spd, spd };
         xVec3 vel_rnd = { 2.0f, 2.0f, 2.0f };
 
@@ -3068,11 +3073,13 @@ S32 NPCHazard::KickBlooshBlob(const xVec3* vel_flight)
     HAZTarTar* tartar = &haz->custdata.tartar;
     tartar->vel = *(xVec3*)this->Up() * (5.0f * xurand() + 5.0f);
 
-    F32 spd_factor = 3.5f * xurand() + 2.5f;
-    tartar->vel += *(xVec3*)this->At() * ((2.0f * (xurand() - 0.5f)) * spd_factor);
-
-    spd_factor = 3.5f * xurand() + 2.5f;
-    tartar->vel += *(xVec3*)this->Right() * ((2.0f * (xurand() - 0.5f)) * spd_factor);
+    // One expression, not a `spd_factor` local: mwcc evaluates the RIGHT
+    // operand of `*` first, so `3.5f * xurand() + 2.5f` still runs before
+    // `xurand() - 0.5f` (same RNG order as the two-statement form) while the
+    // final multiply keeps the target's `fmuls f31, f0, f31` operand order.
+    tartar->vel += *(xVec3*)this->At() * (2.0f * (xurand() - 0.5f) * (3.5f * xurand() + 2.5f));
+    tartar->vel +=
+        *(xVec3*)this->Right() * (2.0f * (xurand() - 0.5f) * (3.5f * xurand() + 2.5f));
 
     if (xVec3Dot(&g_Y3, (xVec3*)this->Up()) > 0.86f)
     {
