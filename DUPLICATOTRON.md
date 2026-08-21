@@ -452,6 +452,17 @@ because the `volatile` device means we now emit the reload; its residual is the
 `xFXAuraUpdate` and `NPCHazard::Discard` (NAMED), plus `xFXRingCreate` and
 `LightResetFrame` (ANON, float-literal reloads).
 
+**The store-then-reload shape appears three times in `zNPCTypeTiki` alone**
+(`numTikisOnScreen` in `Process`, `cloudEmitter` in `zNPCTiki_InitFX`, and a
+literal-inside-an-unrolled-loop variant in `SetCarryState`). Fourteen
+non-volatile source spellings and eleven compiler-flag settings were measured
+against it; nothing but `volatile` reproduces it. Note also that for
+`numTikisOnScreen` a *whole-variable* `volatile` is disproven by the target --
+it takes `zNPCTiki_PickTikisToAnimate` from 100.0 to 97.806, because the
+volatile store stops mwcc sinking `li r0, 0` -- so the pointer-cast spelling is
+the minimum-blast-radius form of the same fact, not a weaker one. Whatever the
+real construct is, it is neither a statement-level rewrite nor a flag.
+
 **`NPCHazard::Discard` re-measured 2026-08-21, after clause V shipped: the
 `volatile` on `g_cnt_activehaz` is still load-bearing.** Removing it drops
 `Discard` from 100.0 to **90.161** — mwcc collapses the
@@ -1080,6 +1091,27 @@ blind to definition order.
   instead (a *different* register, as in `DeathStar`) there is no clustering
   and the asymmetry inverts -- which is why `DeathStar` is solvable and these
   five are not. Treat this shape as blocked, not as unfinished work.
+
+- **`MAX(k, expr)` has a distinctive signature** and is often mistaken for an
+  `if`-clamp: the literal is loaded into the *result* register before the
+  compare, the compare is `fcmpo cr0, <literal>, value` (literal first), and
+  there is an `ble L / b L2 / L: fmr` pair with an empty then-arm. If the store
+  comes from the literal's register, the source used the macro. Worth
+  94.245 -> 94.858 on `thunderCountCB` by itself.
+
+- **A two-statement fract idiom tells you which variable retail assigned to.**
+  `x = x - (F32)(S32)x;` emits `fsubs f5, f5, f3` (writes back into its own
+  register); assigning into a *different* variable emits `fsubs f3, f5, f3`.
+  Read the overwritten register in the target and you know the destination.
+  Same family as the `x OP= c` note, applied to the destination rather than
+  the operand order.
+
+- **When the only diff is a commuted `fmuls`/`fmadds` and NEITHER operand has
+  side effects, swapping the source operands is not the fix** -- it moves the
+  evaluation order too and just trades one wrong row for another. Make one
+  operand already-computed instead: `factor = xurand() - 0.5f;` then
+  `ePos.x += (1.0f - gfactor) * factor;`. This is the other half of the
+  right-operand-first note above, which covers only the side-effecting case.
 
 - **A countdown loop on the parameter** (`while (numTriangles--)`) rather than
   an index loop: the index form costs a callee-saved register and shifts the
