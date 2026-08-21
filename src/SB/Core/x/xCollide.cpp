@@ -2445,37 +2445,40 @@ U8 xOBBHitsOBB(const xBox& a, const xMat4x3& amat, const xBox& b, const xMat4x3&
 
     F32 ar, br, r;
 
+    r = xabs(aoffset.x);
     br = bsize.x * axmat.right.x + bsize.y * axmat.right.y + bsize.z * axmat.right.z;
     ar = asize.x + br;
-    if (xabs(aoffset.x) > ar)
+    if (r > ar)
         return false;
 
+    r = xabs(aoffset.y);
     br = bsize.x * axmat.up.x + bsize.y * axmat.up.y + bsize.z * axmat.up.z;
     ar = asize.y + br;
-    if (xabs(aoffset.y) > ar)
+    if (r > ar)
         return false;
 
+    r = xabs(aoffset.z);
     br = bsize.x * axmat.at.x + bsize.y * axmat.at.y + bsize.z * axmat.at.z;
     ar = asize.z + br;
-    if (xabs(aoffset.z) > ar)
+    if (r > ar)
         return false;
 
-    r = bmat.right.dot(offset);
+    r = xabs(bmat.right.dot(offset));
     ar = asize.x * axmat.right.x + asize.y * axmat.up.x + asize.z * axmat.at.x;
     br = ar + bsize.x;
-    if (xabs(r) > br)
+    if (r > br)
         return false;
 
-    r = bmat.up.dot(offset);
+    r = xabs(bmat.up.dot(offset));
     ar = asize.x * axmat.right.y + asize.y * axmat.up.y + asize.z * axmat.at.y;
     br = ar + bsize.y;
-    if (xabs(r) > br)
+    if (r > br)
         return false;
 
-    r = bmat.at.dot(offset);
+    r = xabs(bmat.at.dot(offset));
     ar = asize.x * axmat.right.z + asize.y * axmat.up.z + asize.z * axmat.at.z;
     br = ar + bsize.z;
-    if (xabs(r) > br)
+    if (r > br)
         return false;
 
     if (axmat.right.x > 0.999f || axmat.right.y > 0.999f || axmat.right.z > 0.999f ||
@@ -2483,58 +2486,58 @@ U8 xOBBHitsOBB(const xBox& a, const xMat4x3& amat, const xBox& b, const xMat4x3&
         axmat.at.y > 0.999f || axmat.at.z > 0.999f)
         return true;
 
-    r = aoffset.z * xmat.up.x - aoffset.y * xmat.at.x;
+    r = xabs(aoffset.z * xmat.up.x - aoffset.y * xmat.at.x);
     ar = asize.y * axmat.at.x + asize.z * axmat.up.x;
     br = bsize.y * axmat.right.z + bsize.z * axmat.right.y + ar;
-    if (xabs(r) > br)
+    if (r > br)
         return false;
 
-    r = aoffset.z * xmat.up.y - aoffset.y * xmat.at.y;
+    r = xabs(aoffset.z * xmat.up.y - aoffset.y * xmat.at.y);
     ar = asize.y * axmat.at.y + asize.z * axmat.up.y;
     br = bsize.x * axmat.right.z + bsize.z * axmat.right.x + ar;
-    if (xabs(r) > br)
+    if (r > br)
         return false;
 
-    r = aoffset.z * xmat.up.z - aoffset.y * xmat.at.z;
+    r = xabs(aoffset.z * xmat.up.z - aoffset.y * xmat.at.z);
     ar = asize.y * axmat.at.z + asize.z * axmat.up.z;
     br = bsize.x * axmat.right.y + bsize.y * axmat.right.x + ar;
-    if (xabs(r) > br)
+    if (r > br)
         return false;
 
-    r = aoffset.x * xmat.at.x - aoffset.z * xmat.right.x;
+    r = xabs(aoffset.x * xmat.at.x - aoffset.z * xmat.right.x);
     ar = asize.x * axmat.at.x + asize.z * axmat.right.x;
     br = bsize.y * axmat.up.z + bsize.z * axmat.up.y + ar;
-    if (xabs(r) > br)
+    if (r > br)
         return false;
 
-    r = aoffset.x * xmat.at.y - aoffset.z * xmat.right.y;
+    r = xabs(aoffset.x * xmat.at.y - aoffset.z * xmat.right.y);
     ar = asize.x * axmat.at.y + asize.z * axmat.right.y;
     br = bsize.x * axmat.up.z + bsize.z * axmat.up.x + ar;
-    if (xabs(r) > br)
+    if (r > br)
         return false;
 
-    r = aoffset.x * xmat.at.z - aoffset.z * xmat.right.z;
+    r = xabs(aoffset.x * xmat.at.z - aoffset.z * xmat.right.z);
     ar = asize.x * axmat.at.z + asize.z * axmat.right.z;
     br = bsize.x * axmat.up.y + bsize.y * axmat.up.x + ar;
-    if (xabs(r) > br)
+    if (r > br)
         return false;
 
-    r = aoffset.y * xmat.right.x - aoffset.x * xmat.up.x;
+    r = xabs(aoffset.y * xmat.right.x - aoffset.x * xmat.up.x);
     ar = asize.x * axmat.up.x + asize.y * axmat.right.x;
     br = bsize.y * axmat.at.z + bsize.z * axmat.at.y + ar;
-    if (xabs(r) > br)
+    if (r > br)
         return false;
 
-    r = aoffset.y * xmat.right.y - aoffset.x * xmat.up.y;
+    r = xabs(aoffset.y * xmat.right.y - aoffset.x * xmat.up.y);
     ar = asize.x * axmat.up.y + asize.y * axmat.right.y;
     br = bsize.x * axmat.at.z + bsize.z * axmat.at.x + ar;
-    if (xabs(r) > br)
+    if (r > br)
         return false;
 
-    r = aoffset.y * xmat.right.z - aoffset.x * xmat.up.z;
+    r = xabs(aoffset.y * xmat.right.z - aoffset.x * xmat.up.z);
     ar = asize.x * axmat.up.z + asize.y * axmat.right.z;
     br = bsize.x * axmat.at.y + bsize.y * axmat.at.x + ar;
-    if (xabs(r) > br)
+    if (r > br)
         return false;
 
     return true;
