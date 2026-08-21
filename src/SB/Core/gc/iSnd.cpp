@@ -366,6 +366,7 @@ static void fcb()
     for (i = 0; i < 6; i++)
     {
         U32 orig_flags = streams[i].vinf.flags;
+        u32 addr;
         xSndVoiceInfo* gsnd_voice = &gSnd.voice[i];
         if (streams[i].vinf.voice == NULL)
         {
@@ -377,7 +378,7 @@ static void fcb()
         {
             continue;
         }
-        u32 addr = addrHi << 16;
+        addr = addrHi << 16;
         addr += streams[i].vinf.voice->pb.addr.currentAddressLo;
         U32 dest = streams[i].dest_b;
         dump_flags(orig_flags);
@@ -409,7 +410,8 @@ static void fcb()
         if ((orig_flags & 0x20) && (orig_flags & 0x4000))
         {
             streams[i].vinf.flags &= ~0x20;
-            dest = streams[i].dest_a * 2;
+            dest = streams[i].dest_a;
+            dest *= 2;
             dest += streams[i].hdr.num_nibbles & 0xFFFF;
             AXSetVoiceLoopAddr(streams[i].vinf.voice, zero_point);
             AXSetVoiceEndAddr(streams[i].vinf.voice, dest - 1);
