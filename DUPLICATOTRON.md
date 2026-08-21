@@ -945,6 +945,41 @@ function-scope locals in declaration order; retail puts `workArea` and
 automated hill-climb over ~600 declaration orders plateaus at 97.803% and
 never reaches 100.
 
+### Clause E3n's load-side size bound widened to 8 (SHIPPED 2026-08-21)
+
+Clause E3n reads "an `stfs` to a declared frame local may not be crossed by a
+*later* small static load". Its load-side test was `sizeof(B) <= 4`, which
+declined on the one object that matters most for this shape: the
+unsigned-int-to-float magic double `0x4330000000000000`, an **8-byte**
+`.sdata2` object. With the clause declining, our scheduler hoisted that `lfd`
+above a run of stores to declared frame locals; retail leaves it at its first
+use.
+
+The fix is one byte in the cave -- `cmp ecx, 4` -> `cmp ecx, 8` at `0x57eb75`,
+same instruction length, no reflow. Tree-wide measurement against the
+otherwise identical build:
+
+    main.dol   306526d90b48e99894c3138f5fc8f2716d9fecf6  (unchanged)
+    GAME exact 76.523 -> 76.639   (+0.116)
+    GAME fuzzy 98.9078 -> 98.9106 (+0.0028)
+    exact functions +3, -0
+
+Gains: `xFX::DrawRing`, `zNPCTypeKingJelly::load_param<iColor_tag,int>`, and
+`zNPCBalloonBoy::PlatAnimSet` (48.419 -> 100.0). Only `DrawRing` was
+predicted; the other two were found by the sweep, which is the usual argument
+for measuring these tree-wide rather than on the witness unit alone.
+
+Three functions get *worse* in fuzzy without crossing 100 -- `xFont::get_bounds`
+61.827 -> 49.423, `cruise_bubble::add_trail_sample` 97.661 -> 91.516,
+`zUI_Render` 91.348 -> 90.159 -- so they cost no `matched_code` and the net is
++3/-0 on the metric that counts.
+
+**`xFX::eval_joint` was predicted to flip and did not** (98.077, unchanged).
+Its `lfd` crosses `stfs f0, 0x8(r1)` *and* `stw r5, 0x14(r1)`; the surviving
+defect is presumably the `stw`, so the store-side of the clause is what
+declines there. Do NOT widen A's test to match -- that is the symmetric rule
+the clause-C notes measure at -50 exact functions. Only the load side moved.
+
 ### Measured NO-GOs, so nobody re-opens them
 
 - **Relaxing the static-storage gate on the store side: -80 (+29/-109), and

@@ -116,7 +116,7 @@ entries 1/3.
 Clause E3n -- entry 3 only, replacing clause C there:
 
     the first instruction is a plain store and the second a plain load
-    and sizeof(A) <= 4 and sizeof(B) <= 4
+    and sizeof(A) <= 4 and sizeof(B) <= 8
     and A's base expression is a declared frame object (word 0x00010005)
         with a non-zero field at +0x18
     and B's base expression is a plain static object (word 5)
@@ -126,6 +126,25 @@ A directional rule: an stfs to a declared frame local may not be crossed by a
 net against the same build with entry 3 back on clause C (measured 2026-08-21:
 removing it is +6/-88), so despite the earlier warning about refitting this
 shape it stays.
+
+The load-side size bound is 8, not 4, and the difference is load-bearing.
+The unsigned-int-to-float conversion sequence loads the magic double
+0x4330000000000000 from .sdata2, which is an 8-byte object; at `<= 4` the
+clause declined on it and our scheduler hoisted that `lfd` above a run of
+stores to declared frame locals, where retail leaves it at its first use.
+Widening only B's test (the load side) to 8 measures, tree-wide against the
+otherwise identical build: **+3 exact functions, -0 exact functions**, DOL
+still 306526d9..., game exact 76.523 -> 76.639, game fuzzy 98.9078 ->
+98.9106 (measured 2026-08-21). The three gains are `xFX::DrawRing`,
+`zNPCTypeKingJelly::load_param<iColor_tag,int>` and
+`zNPCBalloonBoy::PlatAnimSet` (the last from 48.419). Three functions get
+*fuzzier*-worse without crossing 100 -- `xFont::get_bounds` 61.827 ->
+49.423, `cruise_bubble::add_trail_sample` 97.661 -> 91.516 and `zUI_Render`
+91.348 -> 90.159 -- which costs no matched_code and is why the net is +3/-0.
+
+Do NOT widen A's test (the store side) the same way: that direction is the
+symmetric rule the clause-C notes warn about. Only the load side was
+changed.
 
 Clause V -- the redundant-load path, value-numbering store kill, entry 0 of
 the table at 0x5bd068 only:
@@ -242,7 +261,7 @@ BASE_VERSION = "GC/2.0p1"
 PATCHED_VERSION = "GC/2.0p1a"
 
 BASE_SHA1 = "74bc177b10d1bbe8a60a21a6c0aa86d2dd9c0668"
-PATCHED_SHA1 = "918652d8063c37ff4d172244f4fcbfa88e0ea062"
+PATCHED_SHA1 = "94dfeddc33719d3cc5ea4b6d24e37ee43c24c3fc"
 
 # Everything the patch injects, assembled as one position-independent block at
 # VA 0x57ea4c -- the whole of the .text tail padding. 413 bytes of 436. The
@@ -277,7 +296,7 @@ CAVE_BYTES = bytes.fromhex(
     "508b4e14f7c159ffffff7545f6c10475088b481883f90477388b481085c97431"
     "833905752c8b4d14f7c159ffffff7521f6c10475088b4a1883f90477148b4a10"
     "85c9740d833905750883c404e92435f9ffc3837e1404753c837d140275368b48"
-    "1883f904772e8b4a1883f90477268b481085c9741f8139050001007517837918"
+    "1883f904772e8b4a1883f90877268b481085c9741f8139050001007517837918"
     "0074118b4a1085c9740a8339057505e9e134f9ffe92cffffff8b4b1085c97438"
     "833905753355e8000000005d8bad2134060085ed7421837d180477168b4d1085"
     "c9740f833905750a6a0055e8e4b6f8ff59598b6d00ebdb5de96a2ef9ff"
