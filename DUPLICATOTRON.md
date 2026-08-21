@@ -814,6 +814,40 @@ belongs to a complete unit.
 
 `PATCHED_SHA1 = 918652d8063c37ff4d172244f4fcbfa88e0ea062`.
 
+### Clause V does NOT need a same-object size exemption -- measured, inert
+
+`xFXAuraUpdate`'s `sAuraPulseAng[0] += ..; [1] += ..; if ([0] > k)` looked like
+a clause-V gap: retail reloads `[0]` after the store to `[1]`, the array is
+`static F32[2]`, and clause V only kills statics of size <= 4. **The premise is
+false.** Both `[0]` and `[1]` are *subrange* memrefs (kind 1), so the store
+dispatches to VN table **entry 1**, and clause V (entry 0) is never consulted.
+Proved by pointing each VN entry in turn at a kill-all stub on a 20-line repro:
+only entry 1 changes the output. Adding a same-object exemption to clause V
+measures **+0/-0, zero of 451 objects changed**.
+
+The correctly-targeted version is worse. Stock entry 1 at `0x511b0e` already
+walks the other subranges of the same object and kills each one whose
+`[offset,size)` **overlaps** the store; `[0]` and `[1]` do not overlap, so it
+declines -- correctly, by C semantics. Retail kills anyway. Defeating that
+overlap gate (two bytes, `je` -> `nop nop` at `0x511bb3`) measures
+**+0/-47**, and `xFXAuraUpdate` itself drops 85.294 -> 80.537. Losses include
+`xShadowReceiveShadow`, `xBoxInitBoundOBB`, `zEntPickup_GivePickup`,
+`zGridInit`, six `xFont` functions and five `xClumpColl`/`xScene` routines.
+
+And even that is only half: the stored value is still forwarded. The other
+half lives on **scheduler entry 4** (subrange x subrange). Entry-1 no-overlap
+plus entry 4 answering may-alias *does* reproduce retail's sequence exactly on
+the repro -- and measures **+16/-560** tree-wide, matching the docstring's
+existing -199 warning for entry 4. `xFXAuraUpdate` still does not reach 100.
+**This direction is dead.**
+
+**`gFrameCount` hoisting is a THIRD site, reachable from neither table.** With
+all nine scheduler entries answering may-alias unconditionally *and* all three
+VN entries killing everything, the `lwz r4, gFrameCount@sda21` is still hoisted
+out of the 8-unrolled loop, byte-identical to stock. It is decided in
+loop-invariant motion or global CSE. Anyone chasing it needs to find that site
+first, the way `ValueNumbering.c` was found.
+
 ### Two corrections this forced
 
 - **`zEntPlayer_SNDInit` was not the prize.** It was dispatched as a
