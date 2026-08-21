@@ -35,8 +35,8 @@ const char* lightning_type_names[4] = { "Line", "Rotating", "Zeus", "Func" };
 
 static zParEmitter* sSparkEmitter;
 static RwRaster* sLightningRaster;
-static F32 sLFuncJerkTime;
-static F32 sLFuncUVOffset;
+static volatile F32 sLFuncJerkTime;
+static volatile F32 sLFuncUVOffset;
 
 static F32 sLFuncJerkFreq = 20.0f;
 static F32 sLFuncShift = 15.0f;
@@ -466,9 +466,10 @@ static void UpdateLightning(zLightning* l, F32 seconds)
                 if (l->flags & 0x20)
                 {
                     F32 sc1 = (F32)i / (F32)l->legacy.total_points;
+                    F32 sc2 = 4.0f * sc1 + -4.0f * (sc1 * sc1);
 
                     xVec3AddScaled(&l->legacy.point[i], &l->legacy.arc_normal,
-                                   (4.0f * sc1 + -4.0f * (sc1 * sc1)) * l->legacy.arc_height);
+                                   sc2 * l->legacy.arc_height);
                 }
             }
         }
@@ -534,8 +535,8 @@ static void UpdateLightning(zLightning* l, F32 seconds)
             xParEmitterCustomSettings info;
             info.custom_flags = 0xD00;
 
-            U32 rand = xrand();
-            info.pos = l->legacy.point[rand % l->legacy.total_points];
+            S32 i = xrand() % l->legacy.total_points;
+            info.pos = l->legacy.point[i];
             xrand();
 
             xParEmitterEmitCustom(sSparkEmitter, seconds, &info);
@@ -580,9 +581,11 @@ void zLightningUpdate(F32 seconds)
     }
 
     sLFuncUVOffset += sLFuncUVSpeed * seconds;
-    if (sLFuncUVOffset > 1.0f)
+
+    F32 uvOffset = sLFuncUVOffset;
+    if (uvOffset > 1.0f)
     {
-        sLFuncUVOffset -= 1.0f;
+        sLFuncUVOffset = uvOffset - 1.0f;
     }
 
     sLFuncJerkTime = sLFuncJerkFreq * seconds + sLFuncJerkTime;
@@ -632,6 +635,8 @@ void zLightningUpdate(F32 seconds)
 
 void zLightningFunc_Render(zLightning* l)
 {
+    F32 t = 0.0f;
+    F32 pstep = 1.0f;
     xVec3 funcVal[2];
     xVec3 side[2];
     xVec3 lastPos;
@@ -642,9 +647,6 @@ void zLightningFunc_Render(zLightning* l)
     xFuncPiece* pieceY[2];
     xFuncPiece* pieceZ[2];
     RwIm3DVertex* vert[2];
-
-    F32 t = 0.0f;
-    F32 pstep = 1.0f;
 
     if (l->func.length > 0.00001f)
     {
@@ -663,10 +665,10 @@ void zLightningFunc_Render(zLightning* l)
 
     for (S32 i = 0; i < 2; i++)
     {
+        param[i] = l->func.endParam[i];
         pieceX[i] = sLFuncX;
         pieceY[i] = sLFuncY;
         pieceZ[i] = sLFuncZ;
-        param[i] = l->func.endParam[i];
     }
 
     vert[0] = gRenderArr.m_vertex;
@@ -691,6 +693,7 @@ void zLightningFunc_Render(zLightning* l)
 
     U8 alpha = xrand();
     S32 tex = 0;
+    U32 nvert = 0;
 
     for (S32 i = 0; i < 2; i++)
     {
@@ -699,25 +702,25 @@ void zLightningFunc_Render(zLightning* l)
         F32 vx = vpos.x;
         F32 vy = vpos.y;
         F32 vz = vpos.z;
-        RwIm3DVertexSetPos(&vert[i][0], vx, vy, vz);
+        RwIm3DVertexSetPos(&vert[i][nvert], vx, vy, vz);
         U8 cr = l->color.r;
         U8 cg = l->color.g;
         U8 cb = l->color.b;
-        RwIm3DVertexSetRGBA(&vert[i][0], cr, cg, cb, alpha);
-        RwIm3DVertexSetUV(&vert[i][0], tex + sLFuncUVOffset, 0.0f);
+        RwIm3DVertexSetRGBA(&vert[i][nvert], cr, cg, cb, alpha);
+        RwIm3DVertexSetUV(&vert[i][nvert], tex + sLFuncUVOffset, 0.0f);
 
         vx = vpos.x;
         vy = vpos.y;
         vz = vpos.z;
-        RwIm3DVertexSetPos(&vert[i][1], vx, vy, vz);
+        RwIm3DVertexSetPos(&vert[i][nvert + 1], vx, vy, vz);
         cr = l->color.r;
         cg = l->color.g;
         cb = l->color.b;
-        RwIm3DVertexSetRGBA(&vert[i][1], cr, cg, cb, alpha);
-        RwIm3DVertexSetUV(&vert[i][1], tex + sLFuncUVOffset, 1.0f);
+        RwIm3DVertexSetRGBA(&vert[i][nvert + 1], cr, cg, cb, alpha);
+        RwIm3DVertexSetUV(&vert[i][nvert + 1], tex + sLFuncUVOffset, 1.0f);
     }
 
-    S32 nvert = 2;
+    nvert += 2;
     tex = 1;
 
     while (t < 1.0f)
@@ -824,7 +827,15 @@ void RenderLightning(zLightning* l)
 {
     static RwIm3DVertex sStripVert[128];
 
-    xCamera* cam = &globals.camera;
+    xMat4x3* cam = &globals.camera.mat;
+    F32 fade;
+    U8 alpha;
+    S32 i;
+    U32 nvert;
+    U8 cr;
+    U8 cg;
+    U8 cb;
+    S32 last;
 
     xVec3 up;
     xVec3 dir;
@@ -835,23 +846,18 @@ void RenderLightning(zLightning* l)
 
     if (l->type != LYT_TYPE_FUNC)
     {
-        F32 fade;
         if (l->flags & 0x1000)
         {
             fade = l->color.a;
         }
         else
         {
-            fade = (l->time_left / l->time_total) * l->color.a;
+            fade = l->time_left / l->time_total;
+            fade *= l->color.a;
         }
 
-        U8 alpha = 0.5f + fade;
-        S32 i;
-        U32 nvert = 2;
-        U8 cr;
-        U8 cg;
-        U8 cb;
-        S32 last;
+        alpha = 0.5f + fade;
+        nvert = 2;
 
         if (l->flags & 0x200)
         {
@@ -861,13 +867,13 @@ void RenderLightning(zLightning* l)
         else
         {
             last = l->legacy.total_points - 1;
-            xVec3Copy(&up, &cam->mat.at);
+            xVec3Copy(&up, &cam->at);
             xVec3Sub(&tmp, &l->legacy.point[1], &l->legacy.point[0]);
-            xVec3AddScaled(&tmp, &cam->mat.at,
-                           -xVec3Dot(&tmp, &cam->mat.at));
+            xVec3AddScaled(&tmp, &cam->at,
+                           -xVec3Dot(&tmp, &cam->at));
             if (xVec3Normalize(&dir, &tmp) > 0.00001f)
             {
-                xVec3Cross(&up, &dir, &cam->mat.at);
+                xVec3Cross(&up, &dir, &cam->at);
             }
         }
 
@@ -892,11 +898,11 @@ void RenderLightning(zLightning* l)
             {
                 xVec3Copy(&lastdir, &dir);
                 xVec3Sub(&tmp, &l->legacy.point[i + 1], &l->legacy.point[i]);
-                xVec3AddScaled(&tmp, &cam->mat.at,
-                               -xVec3Dot(&tmp, &cam->mat.at));
+                xVec3AddScaled(&tmp, &cam->at,
+                               -xVec3Dot(&tmp, &cam->at));
                 if (xVec3Normalize(&dir, &tmp) > 0.00001f)
                 {
-                    xVec3Cross(&up, &dir, &cam->mat.at);
+                    xVec3Cross(&up, &dir, &cam->at);
                 }
             }
             else
@@ -1023,21 +1029,22 @@ void RenderLightning(zLightning* l)
             RwIm3DEnd();
         }
 
-        fade = (l->time_left / l->time_total) * (0.5f * l->color.a);
+        fade = l->time_left / l->time_total;
+        fade *= 0.5f * l->color.a;
         alpha = 0.5f + fade;
-        nvert = 2;
 
         F32 width = 1.5f + xurand();
+        nvert = 2;
 
         if (!(l->flags & 0x200))
         {
-            xVec3Copy(&up, &cam->mat.at);
+            xVec3Copy(&up, &cam->at);
             xVec3Sub(&tmp, &l->legacy.point[1], &l->legacy.point[0]);
-            xVec3AddScaled(&tmp, &cam->mat.at,
-                           -xVec3Dot(&tmp, &cam->mat.at));
+            xVec3AddScaled(&tmp, &cam->at,
+                           -xVec3Dot(&tmp, &cam->at));
             if (xVec3Normalize(&dir, &tmp) > 0.00001f)
             {
-                xVec3Cross(&up, &dir, &cam->mat.at);
+                xVec3Cross(&up, &dir, &cam->at);
             }
         }
 
@@ -1062,11 +1069,11 @@ void RenderLightning(zLightning* l)
             {
                 xVec3Copy(&lastdir, &dir);
                 xVec3Sub(&tmp, &l->legacy.point[i + 1], &l->legacy.point[i]);
-                xVec3AddScaled(&tmp, &cam->mat.at,
-                               -xVec3Dot(&tmp, &cam->mat.at));
+                xVec3AddScaled(&tmp, &cam->at,
+                               -xVec3Dot(&tmp, &cam->at));
                 if (xVec3Normalize(&dir, &tmp) > 0.00001f)
                 {
-                    xVec3Cross(&up, &dir, &cam->mat.at);
+                    xVec3Cross(&up, &dir, &cam->at);
                 }
             }
 
@@ -1271,11 +1278,12 @@ void zLightningModifyEndpoints(zLightning* l, xVec3* start, xVec3* end)
 
         xVec3Cross(&side, &l->legacy.arc_normal, &dir);
 
+        S32 i;
         S32 zeusOnStraightPoint = 1;
         F32 pos = 0.0f;
         F32 inc = 1.0f / (l->legacy.total_points - 1.0f);
 
-        for (S32 i = 0; i < l->legacy.total_points; i++)
+        for (i = 0; i < l->legacy.total_points; i++)
         {
             if (l->flags & 0x80)
             {
@@ -1327,9 +1335,10 @@ void zLightningModifyEndpoints(zLightning* l, xVec3* start, xVec3* end)
             pos += inc;
         }
 
+        S32 lastPoint = l->legacy.total_points - 1;
+
         l->legacy.point[0] = l->legacy.base_point[0];
-        l->legacy.point[l->legacy.total_points - 1] =
-            l->legacy.base_point[l->legacy.total_points - 1];
+        l->legacy.point[lastPoint] = l->legacy.base_point[lastPoint];
     }
     else
     {
