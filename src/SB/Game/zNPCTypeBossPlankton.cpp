@@ -493,20 +493,14 @@ inline void zNPCBPlankton::render_debug()
 {
 }
 
-inline U8 zNPCBPlankton::turning() const
+inline bool zNPCBPlankton::turning() const
 {
-    U8 result = 0;
     const xVec2 at = { model->Mat->at.x, model->Mat->at.z };
 
-    if (!xfeq0(turn.vel) ||
-        (!xfeq0(turn.accel) &&
-         !(turn.dir.x > turn.dir.y && xabs(turn.dir.x - at.x) < 0.001f) &&
-         !(turn.dir.x < turn.dir.y && xabs(turn.dir.y - at.y) < 0.001f)))
-    {
-        result = 1;
-    }
-
-    return result;
+    return !xfeq0(turn.vel) ||
+           (!xfeq0(turn.accel) &&
+            !(turn.dir.x > turn.dir.y && xabs(turn.dir.x - at.x) < 0.001f) &&
+            !(turn.dir.x < turn.dir.y && xabs(turn.dir.y - at.y) < 0.001f));
 }
 
 inline void zNPCBPlankton::take_control()
@@ -1450,35 +1444,38 @@ namespace
         if (init)
         {
             sound[SOUND_HOVER].asset = sound_asset_ids[0][4];
-            sound_data[SOUND_HOVER].id = xStrHash(sound_assets[sound[SOUND_HOVER].asset].name);
+            const sound_asset& asset = sound_assets[sound[SOUND_HOVER].asset];
+            sound_data[SOUND_HOVER].id = xStrHash(asset.name);
         }
         if (init)
         {
             sound[SOUND_HIT].asset = sound_asset_ids[1][3];
-            sound_data[SOUND_HIT].id = xStrHash(sound_assets[sound[SOUND_HIT].asset].name);
+            const sound_asset& asset = sound_assets[sound[SOUND_HIT].asset];
+            sound_data[SOUND_HIT].id = xStrHash(asset.name);
         }
         if (init)
         {
             sound[SOUND_BOLT_FIRE].asset = sound_asset_ids[2][0];
-            sound_data[SOUND_BOLT_FIRE].id =
-                xStrHash(sound_assets[sound[SOUND_BOLT_FIRE].asset].name);
+            const sound_asset& asset = sound_assets[sound[SOUND_BOLT_FIRE].asset];
+            sound_data[SOUND_BOLT_FIRE].id = xStrHash(asset.name);
         }
         if (init)
         {
             sound[SOUND_BOLT_FLY].asset = sound_asset_ids[3][3];
-            sound_data[SOUND_BOLT_FLY].id =
-                xStrHash(sound_assets[sound[SOUND_BOLT_FLY].asset].name);
+            const sound_asset& asset = sound_assets[sound[SOUND_BOLT_FLY].asset];
+            sound_data[SOUND_BOLT_FLY].id = xStrHash(asset.name);
         }
         if (init)
         {
             sound[SOUND_BOLT_HIT].asset = sound_asset_ids[4][3];
-            sound_data[SOUND_BOLT_HIT].id =
-                xStrHash(sound_assets[sound[SOUND_BOLT_HIT].asset].name);
+            const sound_asset& asset = sound_assets[sound[SOUND_BOLT_HIT].asset];
+            sound_data[SOUND_BOLT_HIT].id = xStrHash(asset.name);
         }
         if (init)
         {
             sound[SOUND_CHARGE].asset = sound_asset_ids[5][3];
-            sound_data[SOUND_CHARGE].id = xStrHash(sound_assets[sound[SOUND_CHARGE].asset].name);
+            const sound_asset& asset = sound_assets[sound[SOUND_CHARGE].asset];
+            sound_data[SOUND_CHARGE].id = xStrHash(asset.name);
         }
     }
 

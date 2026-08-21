@@ -171,7 +171,7 @@ struct zNPCBPlankton : zNPCBoss
     xVec3& location() const;
     void face_player();
     void render_debug();
-    U8 turning() const;
+    bool turning() const;
     void take_control();
     F32 get_orbit_yaw(const xVec3&) const;
     void set_location(const xVec3&);
