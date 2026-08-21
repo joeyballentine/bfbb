@@ -27,7 +27,8 @@ static _tagLightningAdd sThunderLightningInfo;
 // .sbss
 static zNPCTiki* orphanList;
 static S32 numTikisOnScreen;
-static zParEmitter* cloudEmitter;
+// volatile: retail reloads this from memory right after storing it in zNPCTiki_InitFX.
+static zParEmitter* volatile cloudEmitter;
 static RwRaster* sHelmetRast;
 // .sdata
 extern U32 g_hash_tikianim[ANIM_COUNT] = { 0, 0 };
@@ -96,7 +97,6 @@ void zNPCTiki_InitStacking(zScene* zsc)
     orphanList = NULL;
 }
 
-// float scheduling issue
 void zNPCTiki_InitFX(zScene* scene)
 {
     cloudEmitter = zParEmitterFind("PAREMIT_THUNDER_CLOUD");
@@ -513,8 +513,9 @@ S32 zNPCTiki::SetCarryState(en_NPC_CARRY_STATE cs)
     case zNPCCARRY_ATTEMPTPICKUP:
         if (this->numChildren != 0)
         {
-            // non-matching: lfs for 0.2f only happens once, should be
-            // showing up multiple times as this gets unrolled
+            // non-matching: mwcc unrolls this exactly as retail does, but keeps
+            // the 0.2f in f1 across all four unrolled blocks; retail reloads it
+            // in each one. Statement/loop-form rewrites all measured inert.
             for (S32 i = 0; i < 4; i++)
             {
                 if (this->children[i] != NULL)
@@ -862,7 +863,10 @@ void zNPCTiki::Process(xScene* xscn, F32 dt)
         if (400.0f > offset && !this->isCulled)
         {
             numTikisOnScreen++;
-            if (numTikisOnScreen == whichTikiToAnimate)
+            // volatile read: retail reloads numTikisOnScreen from memory here, right
+            // after the increment stores it. Declaring the variable volatile would do it
+            // too, but that costs zNPCTiki_PickTikisToAnimate its match.
+            if (*(volatile S32*)&numTikisOnScreen == whichTikiToAnimate)
             {
                 this->tikiFlag &= ~0xC0;
             }
@@ -1576,12 +1580,7 @@ static S32 thunderCountCB(xGoal* rawgoal, void*, en_trantype* trantype, F32 dt, 
 
     nextgoal = 0;
 
-    factor = goal->tmr_count - dt;
-    if (factor < -1.0f)
-    {
-        factor = -1.0f;
-    }
-    goal->tmr_count = factor;
+    goal->tmr_count = MAX(-1.0f, goal->tmr_count - dt);
 
     if (goal->tmr_count < 0.0f)
     {
@@ -1599,12 +1598,15 @@ static S32 thunderCountCB(xGoal* rawgoal, void*, en_trantype* trantype, F32 dt, 
     factor = (-1.0f / gfactor) + 1.0f;
     hght = 8.0f * factor;
 
-    gfactor = factor - (F32)(S32)factor;
-    factor = hght - (F32)(S32)hght;
+    factor = factor - (F32)(S32)factor;
+    hght = hght - (F32)(S32)hght;
 
-    tiki->model->RedMultiplier = factor * 0.75f + 0.25f;
-    tiki->model->BlueMultiplier = 1.0f - tiki->model->RedMultiplier;
-    tiki->model->GreenMultiplier = gfactor * 0.75f + 0.25f;
+    factor = factor * 0.75f + 0.25f;
+    hght = hght * 0.75f + 0.25f;
+
+    tiki->model->RedMultiplier = hght;
+    tiki->model->BlueMultiplier = 1.0f - hght;
+    tiki->model->GreenMultiplier = factor;
 
     tiki->tikiFlag &= ~0xC0;
 
@@ -1630,8 +1632,8 @@ static S32 thunderCountCB(xGoal* rawgoal, void*, en_trantype* trantype, F32 dt, 
         gfactor = xurand();
         ePos.y += gfactor;
 
-        factor = xurand();
-        ePos.x += (factor - 0.5f) * (1.0f - gfactor);
+        factor = xurand() - 0.5f;
+        ePos.x += (1.0f - gfactor) * factor;
 
         hght = xurand();
         ePos.z += (1.0f - gfactor) * (hght - 0.5f);
