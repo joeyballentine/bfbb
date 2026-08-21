@@ -1669,7 +1669,7 @@ S32 zNPCGoalAlertChomper::CalcEvadePos(xVec3* pos)
     zNPCRobot* npc = (zNPCRobot*)this->psyche->clt_owner;
 
     F32 rad_arena = npc->arena.Radius(1.0f);
-    xVec3 pos_home = *npc->arena.Pos();
+    const xVec3 pos_home = *npc->arena.Pos();
     F32 rad_evade = MIN(10.0f, rad_arena - 2.0f);
 
     if (rad_evade < 2.0f)
@@ -2522,7 +2522,6 @@ static S32 g_idx_handbone[6] = { 10, 15, 25, 35, 40, -1 };
 
 void zNPCGoalAlertGlove::FXTurbulence()
 {
-    S32* pbone;
     zNPCRobot* npc = (zNPCRobot*)(psyche->clt_owner);
 
     if (xrand() & 0x800000)
@@ -2530,14 +2529,13 @@ void zNPCGoalAlertGlove::FXTurbulence()
         return;
     }
 
-    xVec3 pos_npc = *npc->Pos();
+    const xVec3 pos_npc = *npc->Pos();
     S32 idx_bone;
+    S32 i = 0;
 
-    pbone = g_idx_handbone;
-
-    while ((idx_bone = *pbone) >= 0)
+    while ((idx_bone = g_idx_handbone[i]) >= 0)
     {
-        pbone++;
+        i++;
 
         if (xrand() & 0x800000)
         {
@@ -2574,21 +2572,20 @@ void zNPCGoalAlertGlove::FXTurbulence()
 void zNPCGoalAlertGlove::FXWhirlwind()
 {
     zNPCCommon* npc = (zNPCCommon*)(psyche->clt_owner);
-    xVec3 pos_npc = *npc->Pos();
+    const xVec3 pos_npc = *npc->Pos();
     xVec3 pos;
-    F32 hyt_base;
+    S32 i;
 
-    hyt_base = pos_npc.y;
     pos.x = pos_npc.x;
     pos.y = 0.0f;
     pos.z = pos_npc.z;
 
-    for (S32 i = 0; i < 4.0f; i++)
+    for (i = 0; i < 4.0f; i++)
     {
         F32 pct = xurand();
         F32 inv = 1.0f - pct;
 
-        pos.y = hyt_base + 0.55f * pct;
+        pos.y = pos_npc.y + 0.55f * pct;
 
         F32 spd = LERP(inv, 0.4f, 3.4f);
 
@@ -2668,12 +2665,12 @@ S32 zNPCGoalAlertGlove::CheckHandBones()
 
     bnd.sph.r = npc->cfg_npc->rad_dmgSize;
 
-    S32* pbone = g_idx_handbone;
     S32 idx_bone;
+    S32 i = 0;
 
-    while ((idx_bone = *pbone) >= 0)
+    while ((idx_bone = g_idx_handbone[i]) >= 0)
     {
-        pbone++;
+        i++;
 
         xVec3 pos = *(const xVec3*)npc->BonePos(idx_bone);
         pos *= 0.75f;
@@ -2726,7 +2723,7 @@ S32 zNPCGoalAlertGlove::CollReview(void*)
 {
     zNPCRobot* npc = (zNPCRobot*)(psyche->clt_owner);
     xEntCollis* npccol = npc->collis;
-    xCollis* colrec;
+    xCollis* colrec = NULL;
     xVec3 vec_depen = { 0.0f, 0.0f, 0.0f };
     S32 hitstuff = 0;
     S32 i;
@@ -2957,10 +2954,9 @@ S32 zNPCGoalAlertMonsoon::Process(en_trantype* trantype, F32 dt, void* updCtxt, 
         }
         break;
     case MONSOON_ALERT_SPITCLOUD:
-        F32 rand = xurand();
-        nextgoal = NPC_GOAL_ATTACKMONSOON;
-        tmr_reload = tym_reload + (tym_reload * (0.25f * (rand - 0.5f)));
+        tmr_reload = tym_reload + (tym_reload * (0.25f * (xurand() - 0.5f)));
         alertmony = MONSOON_ALERT_READY;
+        nextgoal = NPC_GOAL_ATTACKMONSOON;
         *trantype = GOAL_TRAN_PUSH;
         break;
     }
@@ -4012,9 +4008,8 @@ S32 zNPCGoalAlertSlick::Process(en_trantype* trantype, F32 dt, void* updCtxt, xS
     case SLICK_ALERT_READY:
         if (((tmr_reload < 0.0f) ? 1 : 0) && !(globals.player.DamageTimer > 0.0f))
         {
-            F32 rand = xurand();
+            tmr_reload = tym_reload + (tym_reload * (0.25f * (xurand() - 0.5f)));
             nextgoal = NPC_GOAL_ATTACKSLICK;
-            tmr_reload = tym_reload + (tym_reload * (0.25f * (rand - 0.5f))); // Regalloc
             *trantype = GOAL_TRAN_PUSH;
         }
         else
@@ -4438,18 +4433,28 @@ S32 zNPCGoalAttackHammer::Process(en_trantype* trantype, F32 dt, void* updCtxt, 
     F32 tym_animCurr = npc->AnimTimeCurrent();
     S32 doPLYRTests = (tym_animCurr > 1.0f);
     S32 doCHCKTests = (tym_animCurr > 1.15f);
-    S32 inDamageWindow =
+    S32 zapidx =
         (bool)((tym_animCurr > tym_animDamage[0]) && (tym_animCurr < tym_animDamage[1]));
 
-    if (doPLYRTests && inDamageWindow && !(flg_attack & 3) && PlayerTests(&pos_vert, dt))
+    if (doPLYRTests && zapidx && !(flg_attack & 3))
     {
-        flg_attack |= 3;
+        S32 rc = PlayerTests(&pos_vert, dt);
+
+        if (rc)
+        {
+            flg_attack |= 3;
+        }
     }
 
-    if (doCHCKTests && inDamageWindow && !(flg_attack & 4) && ShockwaveTests(&pos_vert, dt))
+    if (doCHCKTests && zapidx && !(flg_attack & 4))
     {
-        flg_attack |= 3;
-        TellBunnies();
+        S32 rc = ShockwaveTests(&pos_vert, dt);
+
+        if (rc)
+        {
+            flg_attack |= 3;
+            TellBunnies();
+        }
     }
 
     if ((tym_animCurr > tym_streakBetween[0]) && (tym_animCurr < tym_streakBetween[1]))
@@ -4463,6 +4468,7 @@ S32 zNPCGoalAttackHammer::Process(en_trantype* trantype, F32 dt, void* updCtxt, 
             xVec3 pos_mid[4];
             xVec3* pos_midref[4] = {};
             xVec3* pos_ref[4] = {};
+            S32 i;
 
             pos_midref[0] = &pos_mid[0];
             pos_midref[1] = &pos_mid[1];
@@ -4476,7 +4482,7 @@ S32 zNPCGoalAttackHammer::Process(en_trantype* trantype, F32 dt, void* updCtxt, 
 
             NPCC_GenSmooth(pos_ref, pos_midref);
 
-            for (S32 i = 0; i < 3; i++)
+            for (i = 0; i < 3; i++)
             {
                 FXStreakUpdate(&pos_mid[i]);
             }
@@ -5029,7 +5035,7 @@ void zNPCGoalAttackArfMelee::FXStreakUpdate()
         const xMat4x3* mat = (const xMat4x3*)npc->BoneMat(idxlist[i]);
         S32 idx = 2 * i;
 
-        xVec3 wide = mat->right * 0.7f;
+        const xVec3 wide = mat->right * 0.7f;
         xVec3 high = mat->up * 0.7f;
         xVec3 a = mat->pos + wide;
         xVec3 b = mat->pos - wide;
@@ -5211,7 +5217,9 @@ S32 zNPCGoalAttackChuck::Process(en_trantype* trantype, F32 dt, void* updCtxt, x
     {
         npc->ModelAtomicShow(1, 0);
     }
-    if (idx_launch == npc->IsAttackFrame(-1.0f, 0))
+    S32 zapidx = npc->IsAttackFrame(-1.0f, 0);
+
+    if (zapidx == idx_launch)
     {
         if (BombzAway(dt))
         {
@@ -6100,11 +6108,14 @@ void zNPCGoalLassoGrab::DoTurnAway(F32 dt)
 
     S32 ntyp = npc->SelfType();
     S32 faceAway = 1;
+    S32 type;
     S32 i = 0;
 
     while (ntlist_towards[i] != 0)
     {
-        if (ntlist_towards[i++] == ntyp)
+        type = ntlist_towards[i++];
+
+        if (type == ntyp)
         {
             faceAway = 0;
             break;
@@ -6234,7 +6245,7 @@ S32 zNPCGoalLassoThrow::CollReview(void*)
 {
     zNPCRobot* npc = (zNPCRobot*)(psyche->clt_owner);
     xEntCollis* npccol = npc->collis;
-    xCollis* colrec;
+    xCollis* colrec = NULL;
     xVec3 vec_depen = { 0.0f, 0.0f, 0.0f };
     S32 hitstuff = 0;
     S32 i;
@@ -6603,7 +6614,7 @@ S32 zNPCGoalWound::CollReview(void*)
     zNPCRobot* npc = (zNPCRobot*)(psyche->clt_owner);
     NPCConfig* cfg = npc->cfg_npc;
     xEntCollis* npccol = npc->collis;
-    xCollis* colrec;
+    xCollis* colrec = NULL;
     xVec3 vec_depen = { 0.0f, 0.0f, 0.0f };
     S32 hitstuff = 0;
     S32 i;
@@ -6683,8 +6694,8 @@ S32 zNPCGoalWound::CollReview(void*)
         colrec = &npccol->colls[i];
 
         xVec3AddTo(&vec_depen, &colrec->depen);
-        tgt = (zNPCCommon*)colrec->optr;
         hitstuff++;
+        tgt = (zNPCCommon*)colrec->optr;
 
         xVec3Normalize(&pump, &colrec->tohit);
         xVec3SMulBy(&pump, spd);
@@ -6846,7 +6857,7 @@ S32 zNPCGoalKnock::CollReview(void*)
     zNPCRobot* npc = (zNPCRobot*)(psyche->clt_owner);
     NPCConfig* cfg = npc->cfg_npc;
     xEntCollis* npccol = npc->collis;
-    xCollis* colrec;
+    xCollis* colrec = NULL;
     xVec3 vec_depen = { 0.0f, 0.0f, 0.0f };
     S32 hitstuff = 0;
     S32 i;
@@ -7177,7 +7188,7 @@ F32 zNPCGoalRespawn::LaunchRoboBits()
     xMat3x3RMulVec(&pos_bone, (const xMat3x3*)duplo->BoneMat(0), &pos_bone);
     pos_bone += *(const xVec3*)duplo->BonePos(0);
 
-    xVec3 pos_tgt = pos_poofHere;
+    const xVec3 pos_tgt = pos_poofHere;
     xVec3 vec_toss = pos_tgt - pos_bone;
 
     F32 dst_toss = xVec3Length(&vec_toss);
@@ -7284,8 +7295,9 @@ void zNPCGoalRespawn::DoAppearFX(F32 dt)
 
     npc->VFXStarTrek(dt, &pos_poof, &vel_poof);
 
-    pos_poof.x -= fv * 2.0f;
-    pos_poof.z -= fv * 2.0f;
+    fv *= 2.0f;
+    pos_poof.x -= fv;
+    pos_poof.z -= fv;
 
     npc->VFXStarTrek(dt, &pos_poof, &vel_poof);
 }
@@ -7594,7 +7606,9 @@ void zNPCGoalTubeDuckling::MoveFrolic(F32 dt)
     vec_offset = g_Z3 * (dst_horz * factor);
     vec_offset += g_X3 * (dst_horz * factor2);
 
-    vec_offset.y = rat_inv * (isin(PI * tmr_hoverCycle) * (0.35f * vertDampen)) + dst_vert;
+    factor = isin(PI * tmr_hoverCycle);
+
+    vec_offset.y = rat_inv * (factor * (0.35f * vertDampen)) + dst_vert;
 
     if (rat_inv < 1.0f)
     {
