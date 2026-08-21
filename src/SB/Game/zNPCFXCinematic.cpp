@@ -27,7 +27,6 @@
 // relocation. Same idiom as zVar.cpp.
 void __deadstripped_zNPCFXCinematic()
 {
-    const char _405[0x0C] = {};
     const char _406[0x0C] = {};
     const char _410[0x0C] = {};
     const char _441[0x0C] = {};
@@ -2195,10 +2194,10 @@ static void NCIN_HammerStreak_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic
         mat_hamBone[i] = (xMat4x3*)&animMat[idx_hamBone[i]];
     }
 
-    xVec3 left = mat_hamBone[0]->pos + mat_root->pos;
-    xVec3 right = mat_hamBone[1]->pos + mat_root->pos;
-    xVec3 top = mat_hamBone[2]->pos + mat_root->pos;
-    xVec3 bottom = mat_hamBone[3]->pos + mat_root->pos;
+    const xVec3 left = mat_hamBone[0]->pos + mat_root->pos;
+    const xVec3 right = mat_hamBone[1]->pos + mat_root->pos;
+    const xVec3 top = mat_hamBone[2]->pos + mat_root->pos;
+    const xVec3 bottom = mat_hamBone[3]->pos + mat_root->pos;
 
     NCINStrk* strkdat = &fxrec->fxdata.strkdata;
 
@@ -2427,7 +2426,7 @@ static void NCIN_TTGunSmoke_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpA
 
     spd_blow += spd_blow * (0.25f * (xurand() - 0.5f));
 
-    xVec3 dir_blow = fxrec->pos_B[0];
+    const xVec3 dir_blow = fxrec->pos_B[0];
     xVec3 vel_smoke;
 
     vel_smoke = g_Y3 * 2.0f;
@@ -2548,18 +2547,14 @@ static void NCIN_SleepyLamp_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpA
         SMOOTH(CLAMP(pct, 0.0f, 1.0f), &rgb_current, &rgb_peace, &rgb_anger);
     }
 
-    U8 red = (U8)(255.0f * rgb_current.x);
-    U8 green = (U8)(255.0f * rgb_current.y);
-    U8 blue = (U8)(255.0f * rgb_current.z);
-
-    rgba_top.red = red;
-    rgba_top.green = green;
-    rgba_top.blue = blue;
+    rgba_top.red = (U8)(255.0f * rgb_current.x);
+    rgba_top.green = (U8)(255.0f * rgb_current.y);
+    rgba_top.blue = (U8)(255.0f * rgb_current.z);
     rgba_top.alpha = 96;
 
-    rgba_bot.red = red;
-    rgba_bot.green = green;
-    rgba_bot.blue = blue;
+    rgba_bot.red = rgba_top.red;
+    rgba_bot.green = rgba_top.green;
+    rgba_bot.blue = rgba_top.blue;
     rgba_bot.alpha = 16;
 
     memset(&cone, 0, sizeof(NPCCone));
@@ -2588,9 +2583,6 @@ static void NCIN_SleepyDRay_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killi
 static void NCIN_SleepyDRay_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpAtomic*,
                         RwMatrixTag* animMat, U32 animIndex, U32 dataIndex)
 {
-    RwRGBA rgba_top = { 255, 255, 255, 255 };
-    RwRGBA rgba_bot = { 255, 255, 255, 255 };
-
     static const F32 uv_scroll_dray[2] = { 0.0f, -4.55f };
     static const F32 uv_slice_dray[2] = { 0.25f, 0.25f };
 
@@ -2616,6 +2608,9 @@ static void NCIN_SleepyDRay_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpA
     }
 
     xVec3 pos_top = *(const xVec3*)&animMat[16].pos + *(const xVec3*)&animMat->pos;
+
+    const RwRGBA rgba_top = { 255, 255, 255, 255 };
+    const RwRGBA rgba_bot = { 255, 255, 255, 255 };
 
     F32 tym = csnmgr->csn->Time - fxrec->tym_beg;
     F32 uv_u = tym * uv_scroll_dray[0];
@@ -2754,7 +2749,7 @@ static void NCIN_OilHazard(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
         return;
     }
 
-    xVec3 pos_emit = fxrec->pos_A[0];
+    const xVec3 pos_emit = fxrec->pos_A[0];
     xVec3 vel_emit;
 
     for (i = 0; i < 16; i++)
@@ -2949,7 +2944,7 @@ static void NCIN_FodProdBone_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*
         return;
     }
 
-    static xVec3 vec_offset = fxrec->pos_A[0];
+    static const xVec3 vec_offset = fxrec->pos_A[0];
 
     xVec3 pos_poke = mat_bone->pos;
 
@@ -3616,7 +3611,7 @@ static void NCIN_EntityBonePar_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomi
 
     get_bone_matrix(bone_mat, fxrec, animMat);
 
-    xVec3 oldloc = fxrec->pos_B[0];
+    const xVec3 oldloc = fxrec->pos_B[0];
     xVec3 loc;
     xVec3 vel;
 
@@ -3842,22 +3837,24 @@ static void NCIN_SBBNode_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* mod
         }
     }
 
+    NCINMat& data = fxrec->fxdata.matdata;
+
     if (fxrec->flg_stat & 8)
     {
-        fxrec->fxdata.matdata.mat = (RwMatrixTag*)xMemPushTemp((bones + 1) * sizeof(RwMatrixTag));
+        data.mat = (RwMatrixTag*)xMemPushTemp((bones + 1) * sizeof(RwMatrixTag));
     }
 
-    sb2->rebind_nodes(model, fxrec->fxdata.matdata.mat);
+    sb2->rebind_nodes(model, data.mat);
 
     xMat3x3Transpose(&imat, (const xMat3x3*)animMat);
 
     for (i = 1; i < bones; i++)
     {
-        xMat3x3Mul((xMat3x3*)&fxrec->fxdata.matdata.mat[i], (const xMat3x3*)&animMat[i], &imat);
-        fxrec->fxdata.matdata.mat[i].pos = animMat[i].pos;
+        xMat3x3Mul((xMat3x3*)&data.mat[i], (const xMat3x3*)&animMat[i], &imat);
+        data.mat[i].pos = animMat[i].pos;
     }
 
-    *fxrec->fxdata.matdata.mat = *animMat;
+    *data.mat = *animMat;
 
     sb2->move_nodes();
     sb2->render_nodes();
