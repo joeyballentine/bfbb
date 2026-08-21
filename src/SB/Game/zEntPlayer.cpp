@@ -6577,6 +6577,10 @@ static void zEntPlayer_BoulderVehicleUpdate(xEnt* ent, xScene* sc, F32 dt)
             zCameraSetPlayerVel(&boulderVehicle->vel);
             sCameraLastMat = *(xMat4x3*)ent->model->Mat;
         }
+        else
+        {
+            goto boulder_roll_continue;
+        }
     }
 
     if (boulderVehicle == NULL || globals.player.ControlOff != FALSE)
@@ -6595,6 +6599,7 @@ static void zEntPlayer_BoulderVehicleUpdate(xEnt* ent, xScene* sc, F32 dt)
     }
     else
     {
+    boulder_roll_continue:
         ent->collis->chk = chkBackup;
         ent->collis->pen = penBackup;
 
@@ -16193,6 +16198,7 @@ static void dont_move(xEnt* ent, xScene* scene, F32 dt, xEntFrame* frame)
 U8 zEntPlayer_MinimalUpdate(xEnt* ent, xScene* sc, F32 dt, xVec3& drive_motion)
 {
     U8 hit_goo = 0;
+    xEntCollis* fcoll;
 
     if (oob_state::update(*sc, dt))
     {
@@ -16254,7 +16260,7 @@ U8 zEntPlayer_MinimalUpdate(xEnt* ent, xScene* sc, F32 dt, xVec3& drive_motion)
     xEntBoulder_ApplyForces(ent->collis);
     zGooCollsEnd();
 
-    xEntCollis* fcoll = ent->collis;
+    fcoll = ent->collis;
 
     if (fcoll->colls[0].flags & 1)
     {

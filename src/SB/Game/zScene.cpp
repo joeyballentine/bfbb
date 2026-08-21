@@ -724,9 +724,14 @@ static void PipeAddStuffCB(RpAtomic* data, U32 pipeFlags, U32)
 
 static void PipeForAllSceneModels(void (*pipeCB)(RpAtomic* data, U32 pipeFlags, U32 subObjects))
 {
-    // non-matching: model / remainSubObjBits / k get r24/r23/r25 in retail and
-    // r25/r24/r23 here - a permutation of the same register allocation.
-    // Declaring k at function scope, or ahead of model, measured worse.
+    // non-matching: identical instructions throughout; model /
+    // remainSubObjBits / k get r24/r23/r25 in retail and r25/r24/r23 here - a
+    // three-way permutation of the same register allocation. Declaring k at
+    // function scope, or ahead of model, measured worse (98.765% against
+    // 99.176%) and pushes k below pipeCB into r22 instead of lifting it into
+    // r25 - note dwarf/SB/Game/zScene.cpp does list k with i and j at function
+    // scope, so the DWARF shape is measurably not what our compiler wants.
+    // Allocator tie-break residual.
 
     S32 i, j;
     S32 numModels = xSTAssetCountByType('MODL');
@@ -845,10 +850,18 @@ void zSceneInit(U32 theSceneID, S32 reloadInProgress)
     zScene* s;
     U32 i;
 
-    // Retail emits these four initialisations strictly in source order; our
-    // compiler hoists the loads for b above the rgba_bkgrd store. Scheduling
-    // residual - moving b's declaration next to rgba_bkgrd, or either global
-    // assignment, measured worse.
+    // non-matching (cluster 1 of 2 in zSceneInit): retail emits these four
+    // initialisations strictly in source order -
+    //     lwz <rgba template> / stw 0x8(r1) / stw gTransitionSceneID /
+    //     stw gOccludeCount / lwz <b template> / stw 0xc(r1) / lbz / stb
+    // - while our compiler hoists both of b's template loads above the
+    // rgba_bkgrd store, so the two aggregate initialisations end up batched
+    // (three values live at once instead of one). Declaration order and slot
+    // assignment already match retail (rgba_bkgrd at 0x8, b at 0xc) and agree
+    // with dwarf/SB/Game/zScene.cpp. Measured and rejected: moving b's
+    // declaration next to rgba_bkgrd, moving either global assignment (both
+    // worse), 'char b[5] = { 0 }' (inert), and a 3-element rgba initialiser
+    // (inert). Scheduler residual.
     U8 rgba_bkgrd[4] = { 0x0f, 0x0f, 0x0f, 0x00 };
 
     gTransitionSceneID = theSceneID;
@@ -1079,8 +1092,17 @@ void zSceneInit(U32 theSceneID, S32 reloadInProgress)
 
     for (i = 0; sInitTable[i].name; i++)
     {
-        // Retail stores HACK_BASETYPE before loading sInitTable[i].func; our
-        // compiler hoists the load above the store. Scheduling residual.
+        // non-matching (cluster 2 of 2 in zSceneInit): retail emits
+        //     lwz r0, 0x4(r29) / stb r0, HACK_BASETYPE / lwz r12, 0x10(r29) /
+        //     cmplwi r12, 0x0
+        // i.e. two load-use stalls; our compiler schedules them away as
+        //     lwz r12, 0x10(r29) / lwz r0, 0x4(r29) / cmplwi r12, 0x0 /
+        //     stb r0, HACK_BASETYPE
+        // Same instructions, different order. Measured and rejected (both
+        // byte-identical to the above): binding &sInitTable[i] to a
+        // zSceneObjectInstanceDesc* temp and reaching through it, and hoisting
+        // sInitTable[i].func into a named function-pointer local after the
+        // HACK_BASETYPE store. Scheduler residual.
         HACK_BASETYPE = sInitTable[i].baseType;
 
         if (sInitTable[i].func)
@@ -2092,12 +2114,21 @@ void zSceneSetup()
             {
                 gCurEnv = (_zEnv*)s->base[i];
 
-                // non-matching: retail reloads gCurEnv from memory for this
-                // call (stw/lwz of the same sda21 slot) instead of reusing the
-                // value it just stored; our compiler propagates the assigned
-                // value. This is the only instruction zSceneSetup is short of
-                // retail. Tried and measured no better: assignment-as-argument,
-                // a local temporary, a cast on the read, a type-punned store.
+                // Retail genuinely reloads gCurEnv from memory before this
+                // call - the target object contains, in this order:
+                //     stw  r3, gCurEnv@sda21
+                //     lwz  r3, gCurEnv@sda21
+                //     bl   zEnvSetup__FP5_zEnv
+                // Our compiler propagates the value it just stored and drops
+                // the lwz. Plain source spellings do not bring it back
+                // (assignment-as-argument, a local temporary, a cast on the
+                // read, a type-punned store, a pointer temp - all measured and
+                // all identical). Reading through a volatile lvalue does
+                // reproduce exactly that one lwz (99.618% -> 99.743%), but it
+                // is NOT used here: the second cluster below still blocks this
+                // function from reaching 100.0, so the device would bank no
+                // bytes, and every volatile installed for this defect masks
+                // the compiler-side fix (see the census in DUPLICATOTRON.md).
                 zEnvSetup(gCurEnv);
                 xClimateInitAsset(&gClimate, gCurEnv->easset);
 
@@ -2604,11 +2635,19 @@ void zSceneSetup()
     globals.updateMgr->activateCB = (xUpdateCullActivateCallback)ActivateCB;
     globals.updateMgr->deactivateCB = (xUpdateCullDeactivateCallback)DeactivateCB;
 
-    // Retail hoists the second literal load above the first store here
-    // (lfs f1, lfs f0, stfs f1, stfs f0) and so needs two FPRs; our compiler
-    // keeps them interleaved in f0. Scheduling residual - splitting the
-    // declarations from the assignments, swapping the two, and union
-    // aggregate initialisers all measured the same or worse.
+    // non-matching (the last 3 rows of zSceneSetup): retail issues both
+    // literal loads before either store and therefore needs two FPRs -
+    //     lfs f1, <4900.0f> / lfs f0, <0.0f> / stfs f1, 0x14(r1) /
+    //     stfs f0, 0x10(r1)
+    // - while our compiler emits lfs f0 / stfs f0 / lfs f0 / stfs f0, i.e.
+    // strictly one statement at a time through the single scratch f0.
+    // Emission here follows source statement order exactly (swapping the two
+    // assignments swaps the two stores), so no ordering of these statements
+    // reaches retail's shape. Measured and rejected: declarations split from
+    // assignments (inert), named F32 temps feeding the two stores (inert,
+    // constants get folded), union aggregate initialisers
+    // "FloatAndVoid x = { 4900.0f }" (99.700), and the same with const on
+    // defaultDist (99.668). Treat as a scheduler/allocator residual.
     FloatAndVoid defaultDist;
     defaultDist.f = 4900.0f;
 

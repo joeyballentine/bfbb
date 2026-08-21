@@ -501,6 +501,14 @@ as zero. Keep this list current.
     zNPCTypeTiki.cpp  numTikisOnScreen                 (pointer-cast at the use)
     zNPCHazard.cpp    g_cnt_activehaz                  (file-scope static)
     zEntPlayer.cpp    sPlayerIgnoreSound, bbash_start_ht, idle_tmr
+    zScene.cpp        oldOffsetx, oldOffsety, scobj_idbps (pointer-cast)
+
+One site was deliberately NOT added: `zSceneSetup`'s `gCurEnv`. Reading it
+through a volatile lvalue does reproduce retail's `stw`/`lwz` pair and moves
+the function 99.618 -> 99.743, but a second, scheduler-class cluster still
+blocks it from 100.0, so the device would bank no bytes while adding to the
+masking problem. The rule that follows: install this device only where it
+takes a function ALL the way to 100.0.
 
 Clause V does not fire on these. Clause V kills the *literal pool* across a
 store to a small static; this defect is the compiler forwarding the *stored
