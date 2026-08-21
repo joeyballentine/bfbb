@@ -191,11 +191,14 @@ Measured tree-wide, DOL still 306526d9...:
     gained: xSweptSphereToTriangle (2092 b)
     lost:   update_trail  (536 b, 100.0 -> 99.142)
 
-It is a genuine trade, not a free win. It ships because exact bytes are the
-project's goal metric and the net is +1556, and because
-`xSweptSphereToTriangle` is unreachable from source while `update_trail`'s
-regression may not be. `xSweptSphereToBox` also improved 98.587 -> 99.158
-without crossing.
+**The cost was repaid the same day and this is now a clean +2092 / -0.**
+`update_trail` was recovered to 100.0 in source: the widened clause kills the
+value number that let the member re-read forward from its store, so hoisting
+the stored expression into a named local removes the memory round-trip
+entirely and the value stays in a register across the branch. That is the
+general remedy whenever this widening costs a function -- look for a member
+written and then re-read in the same function, and bind it to a local.
+`xSweptSphereToBox` also improved 98.587 -> 99.158 without crossing.
 
 Collateral worth knowing before extending this further: four functions get
 substantially fuzzier without ever having been matched --
