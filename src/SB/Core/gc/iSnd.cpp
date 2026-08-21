@@ -131,8 +131,8 @@ sinfo sinfo_array[12];
 
 sndlookup snd;
 
-U32* ua_stream_buffer = NULL; //unaligned stream buffer
-U32* stream_buffer = 0;
+U32* volatile ua_stream_buffer = NULL; //unaligned stream buffer
+U32* volatile stream_buffer = 0;
 u32 silence_buffer = 0;
 volatile u32 zero_point = 0;
 volatile u32 zero_end = 0;
@@ -504,8 +504,8 @@ static void fcb()
         }
         if ((orig_flags & 0x800) || (orig_flags & 0x4000000))
         {
-            U32 length;
             U32 source;
+            U32 length;
             if (orig_flags & 0x800)
             {
                 length = 0x4000;
@@ -521,10 +521,10 @@ static void fcb()
                 source = streams[i].source_b;
             }
 
-            U32 flags_bit_12;
             U32 flags_bit_10;
             U32 flags_bit_13;
             U32 flags_bit_9;
+            U32 flags_bit_12;
             flags_bit_9 = orig_flags & 0x200;
             flags_bit_12 = orig_flags & 0x1000;
             flags_bit_10 = orig_flags & 0x400;
@@ -755,8 +755,8 @@ static S32 sound_stream;
 
 iSndFileInfo* iSndLookup(U32 id)
 {
-    static S32 strm_id = 1;
-    static S32 snd_id = 0x1000;
+    static volatile S32 strm_id = 1;
+    static volatile S32 snd_id = 0x1000;
 
     sound_stream = 0;
 
@@ -1745,8 +1745,9 @@ void sndloadcb(tag_xFile* tag)
 S32 iSndLoadSounds(void* data)
 {
     sndinfo* p = (sndinfo*)data;
-    U32 min = -1;
+    U32 i;
     U32 max = 0;
+    U32 min = -1;
 
     if (p->num_sfx == 0 && p->num_streams == 0 && p->num_cutscene == 0)
     {
@@ -1770,7 +1771,7 @@ S32 iSndLoadSounds(void* data)
     iFileSeek(&si->file, 0, 0);
 
     sndhdr* e = entries;
-    for (U32 i = 0; i < p->num_sfx; i++)
+    for (i = 0; i < p->num_sfx; i++)
     {
         st_PKR_ASSET_TOCINFO xinfo;
 
@@ -1799,7 +1800,7 @@ S32 iSndLoadSounds(void* data)
     }
 
     U32 memstream = 0;
-    for (U32 i = 0; i < p->num_streams; i++)
+    for (i = 0; i < p->num_streams; i++)
     {
         st_PKR_ASSET_TOCINFO xinfo;
 
@@ -1847,7 +1848,7 @@ S32 iSndLoadSounds(void* data)
         S32 delta = (-min + aram) * 2;
 
         sndhdr* e2 = entries;
-        for (U32 i = 0; i < p->num_sfx; i++)
+        for (i = 0; i < p->num_sfx; i++)
         {
             e2->loop_start += delta;
             e2->loop_end += delta;
@@ -1858,7 +1859,7 @@ S32 iSndLoadSounds(void* data)
 
         if (!memstream)
         {
-            for (U32 i = 0; i < p->num_streams; i++)
+            for (i = 0; i < p->num_streams; i++)
             {
                 entries[i + p->num_sfx].loop_start += delta;
                 entries[i + p->num_sfx].loop_end += delta;

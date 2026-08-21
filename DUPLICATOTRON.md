@@ -1148,6 +1148,20 @@ blind to definition order.
   `ePos.x += (1.0f - gfactor) * factor;`. This is the other half of the
   right-operand-first note above, which covers only the side-effecting case.
 
+- **Binding store-macro arguments to named temps works, but the temps must be
+  INTERLEAVED so only two are live at once.** This is the rule that took
+  `SandyLimbSpring::SpringRender` 92.635 -> 100.0 (844 b), and the failed
+  intermediate is the instructive half. `RwIm3DVertexSetPos` is a
+  three-statement macro; with the products written inline each `->y =`/`->z =`
+  is its own statement, mwcc gives each one `f0`, and it therefore reloads the
+  `0.9f`/`1.1f` literal per component. Retail loads the literal once and keeps
+  two products live. Declaring **all four** temps up front only reaches 97.370:
+  with sin/cos in `f2`/`f3` and the first pair in `f0`/`f1` there is no scratch
+  left, so mwcc re-materialises the second pair at the use site and the second
+  vertex keeps the reload/interleave shape. Declaring the second pair *below*
+  the first macro call is the last 2.6 points. So when this lever half-works,
+  the fix is usually to move declarations down, not to add more of them.
+
 - **A countdown loop on the parameter** (`while (numTriangles--)`) rather than
   an index loop: the index form costs a callee-saved register and shifts the
   whole file. Worth 83.611 -> 100.0 on `shadowCacheLeafCB`.

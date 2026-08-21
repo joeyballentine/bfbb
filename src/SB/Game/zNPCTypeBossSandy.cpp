@@ -986,10 +986,15 @@ static void SpringRender(SandyLimbSpring* spring)
             done = 1;
         }
 
-        RwIm3DVertexSetPos(&verts[numVerts], curr, radius * (0.9f * sSinTable[currSin]),
-                           radius * (0.9f * sSinTable[currCos]));
-        RwIm3DVertexSetPos(&verts[numVerts + 1], curr, radius * (1.1f * sSinTable[currSin]),
-                           radius * (1.1f * sSinTable[currCos]));
+        F32 y0 = radius * (0.9f * sSinTable[currSin]);
+        F32 z0 = radius * (0.9f * sSinTable[currCos]);
+
+        RwIm3DVertexSetPos(&verts[numVerts], curr, y0, z0);
+
+        F32 y1 = radius * (1.1f * sSinTable[currSin]);
+        F32 z1 = radius * (1.1f * sSinTable[currCos]);
+
+        RwIm3DVertexSetPos(&verts[numVerts + 1], curr, y1, z1);
         RwIm3DVertexSetRGBA(&verts[numVerts], 0x80, 0x80, 0x80, 0xff);
         RwIm3DVertexSetRGBA(&verts[numVerts + 1], 0x80, 0x80, 0x80, 0xff);
 
@@ -2091,10 +2096,12 @@ void zNPCBSandy::Process(xScene* xscn, F32 dt)
     this->laserShow.insert(point, normal, 1.0f, 1.0f, 0);
 
     spread = 2.0f * (xurand() - 0.5f);
-    point.x = 20.0f * (spread * (1.5f - (0.5f * spread) * spread));
+    spread = spread * (1.5f - (0.5f * spread) * spread);
+    point.x = 20.0f * spread;
 
     spread = 2.0f * (xurand() - 0.5f);
-    point.z = 20.0f * (spread * (1.5f - (0.5f * spread) * spread));
+    spread = spread * (1.5f - (0.5f * spread) * spread);
+    point.z = 20.0f * spread;
     point.y = 40.0f;
 
     this->laserShow.insert(point, normal, 1.0f, 1.0f, 0);
