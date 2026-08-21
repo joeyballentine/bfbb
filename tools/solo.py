@@ -26,6 +26,8 @@ agent's context when it is iterating):
                      of context (default 3). A 99.8% function prints two rows
                      instead of five hundred.
   --full             in a symbol diff, print every row (the old behaviour)
+  --relocs           count @NNN relocation-name rows as differences;
+                     off by default because report.json does not count them
 
 Truncation is always reported, never silent.
 
@@ -117,6 +119,17 @@ def diff(unit, obj, symbol=None):
     out = os.path.join(os.path.dirname(obj), "d.json")
     args = [CLI, "diff", "-1", os.path.join(ROOT, unit["target_path"]),
             "-2", obj, "-o", out, "--format", "json"]
+    # `objdiff-cli diff` defaults to functionRelocDiffs=name_address, but
+    # `report generate` -- which writes the report.json the project is scored
+    # on -- uses `none`. Under the default, every anonymous @NNN relocation
+    # whose ordinal differs counts as a differing row, and solo compiles into
+    # a private temp dir where mwcc numbers those differently from the real
+    # build, so the rows are an artifact of the measurement rather than of the
+    # source. On zNPCTypeBossSB2 that was the difference between 27
+    # non-matching and 9. Score what the project scores; --relocs restores the
+    # old behaviour for the rare case where you are chasing a real relocation.
+    if "--relocs" not in sys.argv:
+        args += ["-c", "functionRelocDiffs=none"]
     if symbol:
         args.append(symbol)
     subprocess.run(args, cwd=ROOT, capture_output=True)
