@@ -270,12 +270,13 @@ void zFXGooEnable(RpAtomic* atomic, S32 freezeGroup)
     if (geom->preLitLum == NULL)
     {
         RpGeometry* new_geom = RpGeometryCreate(numVertices, numTriangles, 0x7E);
+        RpMorphTarget* new_morph = new_geom->morphTarget;
         RwV3d* verts = geom->morphTarget->verts;
+        RwV3d* new_verts = new_morph->verts;
         RwV3d* normals = geom->morphTarget->normals;
-        RwTexCoords* texCoords = geom->texCoords[0];
-        RwV3d* new_verts = new_geom->morphTarget->verts;
-        RwV3d* new_normals = new_geom->morphTarget->normals;
+        RwV3d* new_normals = new_morph->normals;
         RwRGBA* new_preLitLum = new_geom->preLitLum;
+        RwTexCoords* texCoords = geom->texCoords[0];
         RwTexCoords* new_texCoords = new_geom->texCoords[0];
         for (i = 0; i < numVertices; i++, verts++, new_verts++, normals++, new_normals++,
             new_preLitLum++, texCoords++, new_texCoords++)
@@ -304,8 +305,8 @@ void zFXGooEnable(RpAtomic* atomic, S32 freezeGroup)
         }
 
         RwSphere boundingSphere;
-        RpMorphTargetCalcBoundingSphere(new_geom->morphTarget, &boundingSphere);
-        new_geom->morphTarget->boundingSphere = boundingSphere;
+        RpMorphTargetCalcBoundingSphere(new_morph, &boundingSphere);
+        new_morph->boundingSphere = boundingSphere;
         RpGeometryUnlock(new_geom);
         RpAtomicSetGeometry(atomic, new_geom, 0);
         geom = new_geom;
@@ -314,9 +315,9 @@ void zFXGooEnable(RpAtomic* atomic, S32 freezeGroup)
     xVec3* orig_verts = (xVec3*)xMemAllocSize(sizeof(xVec3) * numVertices);
     RwRGBA* orig_colors = (RwRGBA*)xMemAllocSize(sizeof(RwRGBA) * numVertices);
     RwTexCoords* orig_uvs = (RwTexCoords*)xMemAllocSize(sizeof(RwTexCoords) * numVertices);
-    memcpy(orig_verts, geom->morphTarget->verts, sizeof(xVec3) * numVertices);
-    memcpy(orig_colors, geom->preLitLum, sizeof(RwRGBA) * numVertices);
-    memcpy(orig_uvs, geom->texCoords[0], sizeof(RwTexCoords) * numVertices);
+    memcpy(orig_verts, geom->morphTarget->verts, (S32)sizeof(xVec3) * numVertices);
+    memcpy(orig_colors, geom->preLitLum, (S32)sizeof(RwRGBA) * numVertices);
+    memcpy(orig_uvs, geom->texCoords[0], (S32)sizeof(RwTexCoords) * numVertices);
     RpAtomicSetRenderCallBack(atomic, &zFXGooRenderAtomic);
     goo->atomic = atomic;
     goo->orig_verts = orig_verts;
@@ -384,9 +385,9 @@ void zFXGoo_SceneExit()
     }
 }
 
-// Regalloc
 void zFXGooUpdateInstance(zFXGooInstance* goo, F32 dt)
 {
+    S32 s;
     zFXGooState old_state = goo->state;
     if (goo->state != zFXGooStateNormal)
     {
@@ -460,7 +461,7 @@ void zFXGooUpdateInstance(zFXGooInstance* goo, F32 dt)
             F32 warb_time = goo->warb_time;
             xVec3* verts = goo->orig_verts;
             RwV3d* morphVerts = geom->morphTarget->verts;
-            for (S32 s = 0; s < geom->numVertices; s++, verts++, morphVerts++)
+            for (s = 0; s < geom->numVertices; s++, verts++, morphVerts++)
             {
                 F32 a = xfmod(goo->warbc[1] * (verts->x + warb_time), 2 * PI);
                 F32 b = xfmod(goo->warbc[3] * (verts->z + warb_time), 2 * PI);
@@ -554,6 +555,7 @@ RpAtomic* zFXGooRenderAtomic(class RpAtomic* atomic)
     {
         RwIm3DVertex* vertexBuffer = gRenderBuffer.m_vertex;
         U32 numVerts = 0;
+        RwIm3DVertex* currentVertBuf;
         if (g_txtr_gooFrozen != NULL)
         {
             RwRenderStateSet(rwRENDERSTATETEXTURERASTER, ((RwRaster*)g_txtr_gooFrozen)->parent);
@@ -565,8 +567,8 @@ RpAtomic* zFXGooRenderAtomic(class RpAtomic* atomic)
         RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
 
         RpGeometry* geom = RpAtomicGetGeometry(atomic);
-        RwRGBA* preLitLum = geom->preLitLum;
         RwV3d* verts = geom->morphTarget->verts;
+        RwRGBA* preLitLum = geom->preLitLum;
         if (xabs(goo->max - goo->min) < 1e-5f)
         {
             goo->max += 1e-5f;
@@ -599,7 +601,7 @@ RpAtomic* zFXGooRenderAtomic(class RpAtomic* atomic)
                 numVerts = 0;
             }
 
-            RwIm3DVertex* currentVertBuf = &vertexBuffer[numVerts];
+            currentVertBuf = &vertexBuffer[numVerts];
             xVec3 a = *(xVec3*)&verts[tri->vertIndex[0]];
             xVec3 b = *(xVec3*)&verts[tri->vertIndex[1]];
             xVec3 c = *(xVec3*)&verts[tri->vertIndex[2]];
@@ -609,22 +611,39 @@ RpAtomic* zFXGooRenderAtomic(class RpAtomic* atomic)
             c += refPos;
             numVerts += 3;
 
-            // This part needs to be rewritten somehow, I think it's correct logic though.
-            RwIm3DVertexSetPos(&currentVertBuf[0], a.x, 0.02f + a.y, a.z);
-            RwIm3DVertexSetPos(&currentVertBuf[1], b.x, 0.02f + b.y, b.z);
-            RwIm3DVertexSetPos(&currentVertBuf[2], c.x, 0.02f + c.y, c.z);
+            F32 ax = a.x;
+            F32 ay = 0.02f + a.y;
+            F32 az = a.z;
+            RwIm3DVertexSetPos(&currentVertBuf[0], ax, ay, az);
+            F32 bx = b.x;
+            F32 by = 0.02f + b.y;
+            F32 bz = b.z;
+            RwIm3DVertexSetPos(&currentVertBuf[1], bx, by, bz);
+            F32 cx = c.x;
+            F32 cy = 0.02f + c.y;
+            F32 cz = c.z;
+            RwIm3DVertexSetPos(&currentVertBuf[2], cx, cy, cz);
 
-            RwRGBA* a_color = &preLitLum[tri->vertIndex[0]];
-            RwIm3DVertexSetRGBA(&currentVertBuf[0], a_color->red, a_color->blue, a_color->red,
-                                bytes[tri->vertIndex[0]]);
+            RwUInt16 ai = tri->vertIndex[0];
+            U8 ar = preLitLum[ai].red;
+            U8 ag = preLitLum[ai].green;
+            U8 ab = preLitLum[ai].blue;
+            U8 aa = bytes[ai];
+            RwIm3DVertexSetRGBA(&currentVertBuf[0], ar, ag, ab, aa);
 
-            RwRGBA* b_color = &preLitLum[tri->vertIndex[1]];
-            RwIm3DVertexSetRGBA(&currentVertBuf[1], b_color->red, b_color->blue, b_color->red,
-                                bytes[tri->vertIndex[1]]);
+            RwUInt16 bi = tri->vertIndex[1];
+            U8 br = preLitLum[bi].red;
+            U8 bg = preLitLum[bi].green;
+            U8 bb = preLitLum[bi].blue;
+            U8 ba = bytes[bi];
+            RwIm3DVertexSetRGBA(&currentVertBuf[1], br, bg, bb, ba);
 
-            RwRGBA* c_color = &preLitLum[tri->vertIndex[2]];
-            RwIm3DVertexSetRGBA(&currentVertBuf[2], c_color->red, c_color->blue, c_color->red,
-                                bytes[tri->vertIndex[2]]);
+            RwUInt16 ci = tri->vertIndex[2];
+            U8 cr = preLitLum[ci].red;
+            U8 cg = preLitLum[ci].green;
+            U8 cb = preLitLum[ci].blue;
+            U8 ca = bytes[ci];
+            RwIm3DVertexSetRGBA(&currentVertBuf[2], cr, cg, cb, ca);
 
             currentVertBuf[0].u = goo->orig_uvs[tri->vertIndex[0]].u;
             currentVertBuf[1].u = goo->orig_uvs[tri->vertIndex[1]].u;
@@ -1199,16 +1218,17 @@ void zFX_SpawnBubbleSlam(const xVec3* pos, U32 num, F32 rang, F32 bvel, F32 rvel
 
 void zFX_SpawnBubbleBlast(const xVec3* pos, U32 num, F32 radius, F32 blast_vel, F32 rand_vel)
 {
+    xVec3* end;
     xVec3* buffer = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
-    xVec3* vbuf = buffer + num;
     if (buffer == NULL)
     {
         return;
     }
 
-    xVec3* end = buffer + num;
+    end = buffer + num;
+    xVec3* itl = buffer;
     xVec3* itv = end;
-    for (xVec3* itl = buffer; itl != end; itl++)
+    for (; itl != end; itl++, itv++)
     {
         F32 ang = 2 * PI * xurand();
         F32 uz = 2.0f * xurand() - 1.0f;
@@ -1222,7 +1242,6 @@ void zFX_SpawnBubbleBlast(const xVec3* pos, U32 num, F32 radius, F32 blast_vel, 
         rvel.y = xurand() - 0.5f;
         rvel.z = xurand() - 0.5f;
         *itv += rvel * rand_vel;
-        itv++;
     }
 
     zParPTankSpawnBubbles(buffer, end, num, 1.0f);
@@ -1438,40 +1457,43 @@ namespace
                                 const xVec3* normals, const xMat4x3* mat, const xMat4x3* bone_mats,
                                 const F32* weights, const U32* bone_idx, const U16* idx, U32 count)
     {
-        xMat4x3* scratch = (xMat4x3*)giAnimScratch;
+        U32 shift;
+        U32 mask;
         U32 done[2] = { 0, 0 };
+        xMat4x3* scratch = (xMat4x3*)giAnimScratch;
 
         for (; count != 0; count--)
         {
             U16 vidx = *idx;
-            U32 bones = bone_idx[vidx];
             const xVec3* vert = &verts[vidx];
             const xVec3* norm = &normals[vidx];
+            U32 bones = bone_idx[vidx];
             const F32* wt = &weights[vidx * 4];
 
-            U32 shift = 0;
+            shift = 0;
             for (U32 j = 0; j < 4; j++, shift += 8)
             {
                 U32 b = bones >> shift;
-                U32 word = (b >> 3) & 0x1c;
-                U32 mask = 1 << (b & 0x1f);
-                if (!(mask & *(U32*)((U8*)done + word)))
+                U32 word = (b >> 5) & 7;
+                mask = 1 << (b & 0x1f);
+                U32 bi = b & 0xff;
+                if (!(mask & done[word]))
                 {
-                    U32 bi = b & 0xff;
                     xMat4x3Mul(&scratch[bi], &bone_mats[bi], &mat[bi] + 1);
-                    *(U32*)((U8*)done + word) |= mask;
+                    done[word] |= mask;
                 }
             }
 
             xVec3 acc = { 0.0f, 0.0f, 0.0f };
 
-            U32 bits = bones;
+            U32 nbones = bones;
             const F32* w = wt;
-            for (U32 k = 4; *w != 0.0f && k != 0; k--)
+            for (U32 k = 4; *w && k != 0; k--)
             {
                 xVec3 tmp;
-                xMat4x3Toworld(&tmp, &scratch[bits & 0xff], vert);
-                bits >>= 8;
+                U32 bi = bones & 0xff;
+                bones >>= 8;
+                xMat4x3Toworld(&tmp, &scratch[bi], vert);
                 tmp *= *w;
                 acc += tmp;
                 w++;
@@ -1479,13 +1501,13 @@ namespace
             xMat4x3Toworld(dst_verts, mat, &acc);
 
             acc = 0.0f;
-            bits = bones;
             w = wt;
-            for (U32 k = 4; *w != 0.0f && k != 0; k--)
+            for (U32 k = 4; *w && k != 0; k--)
             {
                 xVec3 tmp;
-                xMat3x3RMulVec(&tmp, &scratch[bits & 0xff], norm);
-                bits >>= 8;
+                U32 bi = nbones & 0xff;
+                nbones >>= 8;
+                xMat3x3RMulVec(&tmp, &scratch[bi], norm);
                 tmp *= *w;
                 acc += tmp;
                 w++;
@@ -1532,11 +1554,12 @@ namespace
         for (; a != end; a++)
         {
             geom = (*a)->geometry;
-            if (which < geom->numTriangles)
+            S32 size = geom->numTriangles;
+            if (which < size)
             {
                 break;
             }
-            which -= geom->numTriangles;
+            which -= size;
         }
 
         xVec3 v[3];
@@ -1614,15 +1637,16 @@ namespace
             emit = max_emit;
         }
 
+        xVec3* end_loc;
         xVec3* buffer = (xVec3*)xMemPushTemp(2 * sizeof(xVec3) * emit);
         if (buffer == NULL)
         {
             return;
         }
 
-        xVec3* vbuf = buffer + emit;
+        end_loc = buffer + emit;
         xVec3* loc = buffer;
-        xVec3* v = vbuf;
+        xVec3* v = end_loc;
         xModelInstance* model = popper.ent->model;
 
         xMat3x3 oldmat;
@@ -1639,7 +1663,7 @@ namespace
         F32 rloc = popper.rloc * scale;
         F32 rvel = popper.rvel * scale;
 
-        for (; loc != vbuf; loc++)
+        for (; loc != end_loc; loc++, v++)
         {
             random_surface_point(*loc, *v, popper);
             *v *= svel;
@@ -1656,7 +1680,6 @@ namespace
                 v->y = rvel * (xurand() - 0.5f) + v->y;
                 v->z = rvel * (xurand() - 0.5f) + v->z;
             }
-            v++;
         }
 
         if (model->Scale.x != 0.0f)
@@ -1664,7 +1687,7 @@ namespace
             *(xMat3x3*)model->Mat = oldmat;
         }
 
-        zParPTankSpawnBubbles(buffer, vbuf, emit, scale);
+        zParPTankSpawnBubbles(buffer, end_loc, emit, scale);
         xMemPopTemp(buffer);
     }
 
@@ -1729,15 +1752,15 @@ namespace
         }
 
         F32 size;
-        F32 emit;
+        F32 emit = rate;
         if (area <= 4.0f)
         {
-            emit = rate * area;
+            emit *= area;
             size = 1.0f;
         }
         else
         {
-            emit = rate * 4.0f;
+            emit *= 4.0f;
             size = 0.5f * xsqrt(area);
         }
 
@@ -1922,9 +1945,8 @@ void zFXPopOn(xEnt& ent, F32 rate, F32 time)
         popper->emitted = 0.0f;
         popper->model_scale = ent.model->Scale;
 
-        xEnt* pent = popper->ent;
-        xVec3 tiny = { 0.001f, 0.001f, 0.001f };
-        xModelSetScale(pent->model, tiny);
+        const xVec3 tiny = { 0.001f, 0.001f, 0.001f };
+        xModelSetScale(popper->ent->model, tiny);
     }
 }
 
@@ -2066,7 +2088,7 @@ namespace
         F32 dx = campos.x - frame->pos.x;
         F32 dy = campos.y - frame->pos.y;
         F32 dz = campos.z - frame->pos.z;
-        xVec3 dist = { dx, dy, dz };
+        const xVec3 dist = { dx, dy, dz };
 
         if (dist.length2() > t.cull_dist * t.cull_dist)
         {
