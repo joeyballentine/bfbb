@@ -1360,9 +1360,19 @@ blind to definition order.
   constant stores to adjacent members where retail emits
   `lfs f1,<0> / stfs f1,x / lfs f0,<3> / stfs f0,y / stfs f1,z` and we hoist
   `stfs f1,z` into the `lfs f0` shadow. Roughly ten source spellings have been
-  measured against it across two passes; none reaches it. If a scheduler
-  clause is ever extended, this is the highest-value single shape on the
-  board and these five functions are its witnesses.
+  measured against it across two passes; none reaches it.
+
+  **This is scheduler entry 4, and entry 4 is DEAD -- do not re-open it.**
+  The two reordered stores are subranges of the SAME aggregate
+  (`info.vel.y` vs `info.vel.z`), which is exactly the subrange x subrange
+  query on entry 4, measured **+16/-560 tree-wide** above. The same shape was
+  independently reached from `xCollide` (`xParabolaHitsEnv` 576 b,
+  `xSphereHitsOBB_nu` 956 b), so the true witness set is at least seven
+  functions and about 4,764 bytes -- all of it behind a predicate that costs
+  560 exact functions to satisfy. Recognise this shape and STOP: it is not an
+  opportunity, it is the single largest confirmed dead end in the project.
+  It was briefly written up as "the highest-value single shape on the board"
+  before the entry-4 connection was made; that reading was wrong.
 
 - **`zEntPlayer_SpringboardFX` is the sharpest `volatile` near-miss recorded.**
   Marking its function-local `static F32 sLastSpringboardBubbleEmit` volatile
