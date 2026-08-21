@@ -99,6 +99,27 @@ inline void xBoxFromSphere(xBox& box, const xSphere& o)
     box.lower -= o.r;
 }
 
+// These structs were used in deadstripped functions.
+// This function is here to force the symbols to be linked.
+void __deadstripped_zEntPlayerBungeeState()
+{
+    const char _405[0x0C] = {};
+    const char _406[0x0C] = {};
+    const char _410[0x0C] = {};
+    const char _441[0x0C] = {};
+
+    const char _624[0x28] = {};
+    const char _625[0x28] = {};
+    const char _626[0x28] = {};
+    const char _627[0x28] = {};
+    const char _628[0x28] = {};
+    const char _629[0x28] = {};
+    const char _630[0x28] = {};
+}
+
+const basic_rect<F32> screen_bounds = { 0.0f, 0.0f, 1.0f, 1.0f };
+const basic_rect<F32> default_adjust = { 0.0f, 0.0f, 1.0f, 1.0f };
+
 namespace bungee_state
 {
     namespace
@@ -896,17 +917,14 @@ namespace bungee_state
             }
 
             xEnt& player = globals.player.ent;
-            bool found = false;
             const char* anim_name = player.model->Anim->Single->State->Name;
-            if (shared.hook == NULL && globals.player.s->pcType == ePlayer_SB &&
+            bool found =
+                shared.hook == NULL && globals.player.s->pcType == ePlayer_SB &&
                 (strcmp(anim_name, "JumpStart01") || strcmp(anim_name, "JumpLift01") ||
                  strcmp(anim_name, "JumpApex01") || strcmp(anim_name, "DJumpStart01") ||
                  strcmp(anim_name, "DJumpLift01") || strcmp(anim_name, "Fall01") ||
                  strcmp(anim_name, "FallHigh01")) &&
-                globals.player.cheat_mode == 0 && (globals.player.ControlOff & ~0x4000) == 0)
-            {
-                found = true;
-            }
+                globals.player.cheat_mode == 0 && (globals.player.ControlOff & ~0x4000) == 0;
 
             shared.hook = NULL;
             if (found)
@@ -1094,6 +1112,7 @@ namespace bungee_state
         void hanging_state_type::calc_movement(F32& r4, F32& r5, F32& r6, F32 f1, F32 f2, F32 f3,
                                                F32 f4, F32 f5, F32 f6)
         {
+            F32 dVar11;
             F32 dVar1;
             F32 dVar2;
             F32 dVar3;
@@ -1101,10 +1120,9 @@ namespace bungee_state
             F32 dVar5;
             F32 dVar6;
             F32 dVar7;
-            F32 dVar8;
-            F32 dVar9;
             F32 dVar10;
-            F32 dVar11;
+            F32 dVar9;
+            F32 dVar8;
 
             dVar7 = f6;
             dVar6 = f5;
@@ -1803,6 +1821,93 @@ namespace bungee_state
             render_player(FALSE);
         }
 
+        // NOTE: defined here, ahead of hanging_state_type::start(), because the target
+        // object creates this function's anonymous 12-byte { 0, -1, 0 } .rodata template
+        // (@1502) *before* start()'s four static tweak_callback objects (@1766-@1769).
+        // .rodata is laid out in object-id (parse) order, so the definition has to be
+        // parsed first or every later .rodata offset shifts by 12 and start() cannot
+        // match. The target's .text order puts this function after collide_start().
+        void hanging_state_type::update_camera(F32 dt)
+        {
+            if (update_free_look(dt))
+            {
+                return;
+            }
+
+            xMat3x3 m;
+            xVec3 dir;
+            xVec3 offset;
+            xVec3 up;
+            xVec3 goal;
+            xVec3 down = { 0.0f, -1.0f, 0.0f };
+
+            if (loc.y >= 0.0f)
+            {
+                dir = down;
+            }
+            else
+            {
+                F32 dist = loc.length();
+                if (dist < h.camera.rest_dist)
+                {
+                    if (dist < 0.01f)
+                    {
+                        dir = down;
+                    }
+                    else
+                    {
+                        F32 frac = dist / h.camera.rest_dist;
+                        dir = down * (1.0f - frac) + loc * (frac / dist);
+                        dir.normalize();
+                    }
+                }
+                else
+                {
+                    dir = loc * (1.0f / dist);
+                }
+            }
+
+            F32 vscale = (vel.y >= 0.0f) ? 0.0f : -vel.y * h.camera.vel_scale;
+
+            offset = dir * -(h.camera.rest_dist + vscale);
+
+            up.x = 0.0f;
+            up.y = dir.z;
+            up.z = -dir.y;
+            up.normalize();
+
+            xMat3x3Rot(&m, &dir, h.camera.offset_dir);
+            xMat3x3RMulVec(&up, &m, &up);
+
+            offset += up * h.camera.offset;
+
+            goal = loc + offset;
+
+            if ((goal - cam_loc).length2() > 0.0001f)
+            {
+                xVec3 v = cam_dir;
+
+                interpolate_camera_loc(goal, dt);
+
+                const xVec3 dv = cam_dir - v;
+                if (((dv.x < 0.0f) ? 1 : 0) != ((vel.x < 0.0f) ? 1 : 0))
+                {
+                    cam_dir.x = v.x;
+                }
+                if (((dv.y < 0.0f) ? 1 : 0) != ((vel.y < 0.0f) ? 1 : 0))
+                {
+                    cam_dir.y = v.y;
+                }
+                if (((dv.z < 0.0f) ? 1 : 0) != ((vel.z < 0.0f) ? 1 : 0))
+                {
+                    cam_dir.z = v.z;
+                }
+            }
+
+            xCameraMove(&globals.camera, local_to_world(cam_loc));
+            update_camera_direction(dt);
+        }
+
         void hanging_state_type::start()
         {
             static const tweak_callback vertical_cb = { (void (*)(tweak_info&))on_tweak_vertical };
@@ -1926,7 +2031,7 @@ namespace bungee_state
             roll_offset = xrmod(PI + roll_offset);
             if (roll_offset < 0.0f)
             {
-                roll_offset = roll_offset + 2.0f * PI;
+                roll_offset += 2.0f * PI;
             }
             roll_offset = roll_offset - PI;
 
@@ -1944,36 +2049,30 @@ namespace bungee_state
             can_dive = allowed;
 
             ztextbox* tb = (ztextbox*)zSceneFindObject(xStrHash("TEXTBOX_BUNGEE_HELP"));
-            if (tb != NULL)
+            if (tb == NULL || tb->baseType != eBaseTypeTextBox)
             {
-                switch (tb->baseType)
-                {
-                case eBaseTypeTextBox:
-                    if (can_dive)
-                    {
-                        tb->set_text(xStrHash("text_bungee_help"));
-                    }
-                    else
-                    {
-                        tb->set_text(xStrHash("text_bungee_help_nodive"));
-                    }
-                    break;
-                }
+                return;
+            }
+
+            if (can_dive)
+            {
+                tb->set_text(xStrHash("text_bungee_help"));
+            }
+            else
+            {
+                tb->set_text(xStrHash("text_bungee_help_nodive"));
             }
         }
 
         void hanging_state_type::show_help()
         {
             xBase* base = zSceneFindObject(xStrHash("TEXTBOX_BUNGEE_HELP"));
-            if (base != NULL)
+            if (base == NULL || base->baseType != eBaseTypeTextBox)
             {
-                switch (base->baseType)
-                {
-                case eBaseTypeTextBox:
-                    ((ztextbox*)base)->activate();
-                    break;
-                }
+                return;
             }
+
+            ((ztextbox*)base)->activate();
         }
 
         void hanging_state_type::stop()
@@ -2011,15 +2110,12 @@ namespace bungee_state
         void hanging_state_type::hide_help()
         {
             xBase* base = zSceneFindObject(xStrHash("TEXTBOX_BUNGEE_HELP"));
-            if (base != NULL)
+            if (base == NULL || base->baseType != eBaseTypeTextBox)
             {
-                switch (base->baseType)
-                {
-                case eBaseTypeTextBox:
-                    ((ztextbox*)base)->deactivate();
-                    break;
-                }
+                return;
             }
+
+            ((ztextbox*)base)->deactivate();
         }
 
         state_enum hanging_state_type::update(xScene& s, F32& dt)
@@ -2325,22 +2421,16 @@ namespace bungee_state
 
         void hanging_state_type::ouchie(bool thump)
         {
-            if (globals.player.DamageTimer > 0.0f)
+            if (globals.player.DamageTimer > 0.0f || dying || !globals.player.g.TakeDamage)
             {
                 return;
             }
-            if (dying)
+
+            if (globals.player.Health != 0)
             {
-                return;
+                globals.player.Health--;
             }
-            if (globals.player.g.TakeDamage)
-            {
-                if (globals.player.Health != 0)
-                {
-                    globals.player.Health--;
-                }
-                check_damage(thump);
-            }
+            check_damage(thump);
         }
 
         bool hanging_state_type::ents_repath(const xScene&)
@@ -2485,87 +2575,6 @@ namespace bungee_state
         {
         }
 
-        void hanging_state_type::update_camera(F32 dt)
-        {
-            if (update_free_look(dt))
-            {
-                return;
-            }
-
-            xMat3x3 m;
-            xVec3 dir;
-            xVec3 offset;
-            xVec3 up;
-            xVec3 goal;
-            xVec3 down = { 0.0f, -1.0f, 0.0f };
-
-            if (loc.y >= 0.0f)
-            {
-                dir = down;
-            }
-            else
-            {
-                F32 dist = loc.length();
-                if (dist < h.camera.rest_dist)
-                {
-                    if (dist < 0.01f)
-                    {
-                        dir = down;
-                    }
-                    else
-                    {
-                        F32 frac = dist / h.camera.rest_dist;
-                        dir = down * (1.0f - frac) + loc * (frac / dist);
-                        dir.normalize();
-                    }
-                }
-                else
-                {
-                    dir = loc * (1.0f / dist);
-                }
-            }
-
-            F32 vscale = (vel.y >= 0.0f) ? 0.0f : -vel.y * h.camera.vel_scale;
-
-            offset = dir * -(h.camera.rest_dist + vscale);
-
-            up.x = 0.0f;
-            up.y = dir.z;
-            up.z = -dir.y;
-            up.normalize();
-
-            xMat3x3Rot(&m, &dir, h.camera.offset_dir);
-            xMat3x3RMulVec(&up, &m, &up);
-
-            offset += up * h.camera.offset;
-
-            goal = loc + offset;
-
-            if ((goal - cam_loc).length2() > 0.0001f)
-            {
-                xVec3 v = cam_dir;
-
-                interpolate_camera_loc(goal, dt);
-
-                xVec3 dv = cam_dir - v;
-                if (((dv.x < 0.0f) ? 1 : 0) != ((vel.x < 0.0f) ? 1 : 0))
-                {
-                    cam_dir.x = v.x;
-                }
-                if (((dv.y < 0.0f) ? 1 : 0) != ((vel.y < 0.0f) ? 1 : 0))
-                {
-                    cam_dir.y = v.y;
-                }
-                if (((dv.z < 0.0f) ? 1 : 0) != ((vel.z < 0.0f) ? 1 : 0))
-                {
-                    cam_dir.z = v.z;
-                }
-            }
-
-            xCameraMove(&globals.camera, local_to_world(cam_loc));
-            update_camera_direction(dt);
-        }
-
         void hanging_state_type::update_camera_direction(F32)
         {
             xVec3 start = cam_dir;
@@ -2618,9 +2627,9 @@ namespace bungee_state
             xMat3x3RMulVec(&goal, &m, &dest);
 
             F32 s = 1.0f - xexp(-fixed.camera.speed * dt);
-            curr.x = s * (goal.x - curr.x) + curr.x;
-            curr.y = s * (goal.y - curr.y) + curr.y;
-            curr.z = s * (goal.z - curr.z) + curr.z;
+            curr.x += s * (goal.x - curr.x);
+            curr.y += s * (goal.y - curr.y);
+            curr.z += s * (goal.z - curr.z);
 
             xMat3x3Transpose(&im, &m);
             xMat3x3RMulVec(&cam_loc, &im, &curr);
