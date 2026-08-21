@@ -452,6 +452,38 @@ because the `volatile` device means we now emit the reload; its residual is the
 `xFXAuraUpdate` and `NPCHazard::Discard` (NAMED), plus `xFXRingCreate` and
 `LightResetFrame` (ANON, float-literal reloads).
 
+### symorder's "SAME SET, WRONG ORDER" is not evidence on its own
+
+`tools/symorder.py zPlatform` reports `.sdata2: SAME SET, WRONG ORDER`, and a
+2026-08-21 pass read that as a fourth witness of the "dead constants created
+early" problem alongside `zThrown`, `zShrapnel` and `zNPCTypeRobot`, with the
+conclusion that the unit "will not link byte-identically even at 24/24".
+
+**That conclusion is contradicted by the DOL hash and must not be repeated.**
+`build/GQPE78/main.dol` is byte-exact against
+`306526d90b48e99894c3138f5fc8f2716d9fecf6`. The shipped image therefore
+already contains the correct `.sdata2` bytes for this unit; a real pool defect
+here would make the whole DOL differ.
+
+Two things make the report misleading for a unit like this, and both are
+visible in the same output:
+
+  * `.text: different sets` -- our object also carries inline/weak functions
+    retail dead-strips (`__as__5xVec3`, `xVec3SMulBy`, `xModelGetFrame`,
+    `xEntERIs*`, `xBoundCenter`, ...). Those extras own pool entries, so the
+    two objects' pool ORDINALS are not comparable directly.
+  * the only ordering difference is where the single 8-byte magic double sits
+    among the 4-byte entries, and the 8-byte object is 8-aligned, so the
+    alignment padding absorbs the difference and both land at the same offset.
+
+objdiff agrees: the agent confirmed the relocation targets are identical
+(`.sdata2` offset 0x58 on both sides). So references resolve to the same
+place.
+
+Before treating a symorder pool warning as real, check the DOL hash first,
+and check whether `.text` sets differ. It is genuine evidence only for units
+whose object is otherwise a set-match.
+
 ### The switch-tree pivot convention: real, but MUCH narrower than it looks
 
 `zEntPlayerEventCB` was simulated instruction-by-instruction: our 43 case
