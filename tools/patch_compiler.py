@@ -3,24 +3,34 @@
 
 GC/2.0p1a
 ---------
-mwcceppc.exe GC/2.0p1 disambiguates memory references in the instruction
-scheduler through a 3x3 operand-kind dispatch table at VA 0x5bd0bc, consulted by
-the may-alias predicate at 0x511fc0. Case 0 -- both references opaque -- answers
-"may alias" only when the two descriptors are literally the same object. That is
-more aggressive than the compiler that built the retail DOL: a float constant
-loaded from the .sdata2 literal pool gets hoisted above a store it is assumed not
-to touch. This is the long-standing "float meme", e.g. in zEntCruiseBubble's
-hide_hud:
+mwcceppc.exe GC/2.0p1 answers memory-disambiguation questions in two places,
+and this patch narrows both. Both live in Alias.c (the file names are still in
+the binary, in the CError_FATAL call sites, which is how the modules below
+were identified):
+
+  * the **instruction scheduler**'s may-alias predicate at 0x511fc0, which
+    dispatches through a 3x3 operand-kind table at VA 0x5bd0bc. Clauses A, B,
+    C, C+ and E3n below all hang off that table.
+  * the **code generator's redundant-load elimination** -- local value
+    numbering, ValueNumbering.c around 0x509010 -- whose store-kill routine is
+    0x511a30, dispatching through a *3*-entry table at VA 0x5bd068 keyed on the
+    stored memref's kind. Clause V hangs off that table.
+
+The scheduler's case 0 -- both references opaque -- answers "may alias" only
+when the two descriptors are literally the same object. That is more
+aggressive than the compiler that built the retail DOL: a float constant
+loaded from the .sdata2 literal pool gets hoisted above a store it is assumed
+not to touch. This is the long-standing "float meme", e.g. in
+zEntCruiseBubble's hide_hud:
 
     retail  lis li addi stw lwz lfs stfs blr
     stock   lis li addi lfs stw lwz stfs blr
 
 Answering "may alias" unconditionally for case 0 recovers most of the retail
-schedules but costs eleven translation units. tools/patch_compiler.py instead
-installs a narrower predicate and points three dispatch entries at it: entry 0
-(whole-object vs whole-object) and entries 1 and 3 (whole-object vs subrange,
-in both operand orders). Anything not matching a clause falls through to the
-stock test for that entry, which the stubs replicate exactly.
+schedules but costs eleven translation units, so the patch installs narrow
+predicates instead and points selected dispatch entries at them. Anything not
+matching a clause falls through to the stock test for that entry, which the
+injected code replicates exactly.
 
 Clause A -- differing opcodes, entry 0 only:
 
@@ -45,7 +55,8 @@ carry the same clause because the same shape occurs when one side is a whole
 object and the other a subrange of one -- zGameExtras_NewGameReset stores an
 SDA static and five members of a large global, and lands on entry 1.
 
-Clause C -- clause A for static storage; all three entries, checked first:
+Clause C -- clause A for static storage; reached on entry 1, and on entry 3
+when clause E3n declines. Entry 0 runs clause C+ instead. Checked first:
 
     both memrefs carry a base expression whose first word is exactly 5
         (an object node with no storage flags: globals, SDA scalars and
@@ -87,11 +98,12 @@ excludes (0x08, 0x10, 0x20, 0x40) only 0x20 unlocks anything, and every site
 it unlocks is an indirect store. Clause C's "flags & ~0x86 == 0" and
 "sizeof <= 4" each independently reject those pairs (measured: adding either
 one back to clause C+ costs all 19 functions), which is why retail's refusal
-to hoist a small static load across such a store was not reproduced. Tolerating 0x20 and capping only
-the load's size recovers 19 functions (xFXShineUpdate, xFXRingUpdate,
-xFXAuraAdd, xFXStreakUpdate, xPadUpdate, xSndPlayInternal, HAZ_Acquire,
-zLOD_UseCustomTable, ...) with no function dropping from 100.0 anywhere in
-the tree, and no object of any complete unit changing at all.
+to hoist a small static load across such a store was not reproduced.
+Tolerating 0x20 and capping only the load's size recovers 19 functions
+(xFXShineUpdate, xFXRingUpdate, xFXAuraAdd, xFXStreakUpdate, xPadUpdate,
+xSndPlayInternal, HAZ_Acquire, zLOD_UseCustomTable, ...) with no function
+dropping from 100.0 anywhere in the tree, and no object of any complete unit
+changing at all.
 
 It is entry 0 only because the same relaxation on entries 1 and 3 measures
 +0/-3: it drops zPickupTableInit, iSndPrepStream and zEntPlayer_SNDStop, all
@@ -100,6 +112,73 @@ scheduled that load earlier, and the extra edge loses it a tiebreak. The
 split was measured by installing the relaxed clause on one entry at a time:
 every one of the 19 gains is on entry 0 and every one of the 3 losses is on
 entries 1/3.
+
+Clause E3n -- entry 3 only, replacing clause C there:
+
+    the first instruction is a plain store and the second a plain load
+    and sizeof(A) <= 4 and sizeof(B) <= 4
+    and A's base expression is a declared frame object (word 0x00010005)
+        with a non-zero field at +0x18
+    and B's base expression is a plain static object (word 5)
+
+A directional rule: an stfs to a declared frame local may not be crossed by a
+*later* small static load. Installed on entry 3; worth +82 exact functions
+net against the same build with entry 3 back on clause C (measured 2026-08-21:
+removing it is +6/-88), so despite the earlier warning about refitting this
+shape it stays.
+
+Clause V -- the redundant-load path, value-numbering store kill, entry 0 of
+the table at 0x5bd068 only:
+
+    the stored memref's base expression is a plain static object (word 5)
+    ->  bump the value number of *every* object in the value-numbering
+        object list (head at 0x5e1fd8) that is <= 4 bytes and whose base
+        expression is likewise a plain static object
+
+The scheduler patch cannot reach this: a load hoisted by the *scheduler* is a
+reordering, but the defect here is that consecutive statements share one
+literal load. A 20-line repro (`extern F32 a1..a3;` + `a1 = DEG2RAD(a1); a2 =
+...`) shows it: retail emits `lfs f2,@PI / lfs f1,val / lfs f0,@180 / fmuls /
+fdivs / stfs` per statement, stock loads @PI and @180 once for the whole
+block. mwcc's local value numbering caches each object's value number in
+memref+0x1c; a store bumps its own object's number (and its precomputed alias
+sets) through 0x511a30, so the constant pool entry survives the store and the
+second statement reuses the register. Retail's compiler kills it. Clause V
+makes a store to a small static do so, and only then.
+
+Both halves of clause V are needed and both are narrow:
+
+  * gating the *store* on a static base is what admits the interesting
+    population. Gating it on "size <= 4" instead measures +11 rather than
+    +25; adding "size <= 4 or the store is indirect" on top of the static
+    gate changes nothing (measured identical), so it is not shipped.
+  * filtering the *killed* objects to small statics is what makes it free.
+    Killing the whole list (i.e. calling the stock kill-everything routine at
+    0x511a00) measures +26/-24; killing every static regardless of size is
+    +10/-0 -- it spares the constants, which are what the gains need;
+    filtering on size alone without the static test is +25/-5, losing
+    iSphereHitsEnv x3, xPadUpdate and xtextbox::read_tag, all of which cache a
+    load through a pointer across a store to a small static, which retail also
+    keeps. Filtering on the object's kind byte (+0x2c == 0) instead of its
+    base expression is +25/-1 (xPadUpdate).
+
+Entry 0 (a whole object) only. Entry 1 -- a subrange of a larger object, i.e.
+`globals.player.g.slideAngle = DEG2RAD(...)` -- measures +1/-30, which is the
+compiler agreeing with the observation that made this clause findable: retail
+shares the two literals across three consecutive stores into a large named
+object and reloads them for stores into small statics. Entry 2 is inert
+(measured: no object in the tree changes).
+
+Clause V is worth +25 exact functions and -0 (measured 2026-08-21 over all
+451 units): zMainParseINIGlobals, zEntPlayerReset, zEntPlayerDriveUpdate,
+LCopterCB, BubbleBounceCB, zEntPlayer_SNDPlayDelayed, zCameraReset,
+xScrFxLetterBoxInit, xScrFxLetterboxReset, xScrFxDistortionUpdate,
+xSndDelayedUpdate, xSndPlay3DFade, xSndStopFade, xCameraFXAlloc,
+xCutscene_Init, xDecal's register_emitter, xFX's activate_ribbon,
+xFXStreakStart, xShadowSimple_Init, zEntPickup_UpdateFlyToInterface,
+AddToLODList, zNPCBPatrick::Reset, zNPCFodBzzt::Init,
+zParCmdFindClipVolumes and zFruit_Update. 27 of 451 objects change and none
+belongs to a complete unit.
 
 Do not relax clause C's static-storage gate on the store side. "Skip the
 base-expression test for whichever operand is the store, keep it for the
@@ -119,41 +198,34 @@ condition in clause A is likewise fitted, and clause C is clause A plus a
 fitted storage-class gate. Extending clause B to entries 1 and 3
 adds no new condition -- it is the same predicate on two more dispatch cases.
 
-Do not refit the obvious next clause. A directional rule -- an `stfs` to a
-declared frame local may not be crossed by a *later* small static load, on
-entry 3 only -- looks compelling, because four otherwise-finished functions
-reduce to exactly that motion. It measures +22 functions to 100% against 18
-functions whose match percent drops, one of them (xFont's get_texture_size)
-from 100%. The gain and loss populations are indistinguishable in every field
-the predicate can see: same opcodes, same sizes, overlapping offsets, same
-storage classes, same base-expression words. What separates them is ready-time
-and pick-order context -- whether the stored slots are reloaded in the same
-block, whether the literal feeds arithmetic or a store -- none of which the
-alias predicate is given. stfs-only, the declared-local gate, entry-3-only,
-offset thresholds and a literal-only static side were all measured; none
-separates them.
-
 The predicate is assembled into the run of zero padding at the tail of .text:
 the section declares VirtualSize 0x17da4c but occupies 0x17dc00 bytes on disk,
 leaving file 0x17de4c..0x17e000 (VA 0x57ea4c, 436 bytes) mapped executable,
 zeroed and unreachable. Writing there leaves the file size, the section table
 and every existing address untouched.
 
-The injected code is position-independent: it inlines the stock identity test
-rather than re-entering it, and reaches the epilogue through rel32 jumps. The
-only absolute value written is the
-dispatch table entry itself, and all nine entries in that table already carry
-HIGHLOW relocations, so the new one is fixed up exactly as its neighbours are.
+The injected code is position-independent, and has to be: sjiswrap loads the
+image at 0x110000 rather than its preferred 0x400000, so an absolute address
+written into the cave is not relocated and faults. It inlines the stock tests
+rather than re-entering them, reaches the epilogue through rel32 jumps, and
+clause V reads the object-list head through a `call/pop` PC-relative
+displacement. The only absolute values written are the dispatch table entries
+themselves, and every entry in both tables already carries a HIGHLOW
+relocation, so the new ones are fixed up exactly as their neighbours are.
 
-Padding is the binding constraint -- 436 bytes for everything -- so clause C
-is not duplicated per entry any more. Its body is shared, entered by CALL
-from a 10-byte stub per entry that supplies the fall-through, and it answers
-by discarding the return address; entries 1/3 reach the strict conditions
-first and fall into the shared body, entry 0 enters the body directly. The
-predicate runs with esp inside the may-alias frame, which has no locals live
-at the dispatch, so the pushed return address is harmless. Shared this way,
-clause C and clause C+ together cost 146 bytes where the two literal copies
-of clause C alone cost 164.
+Padding is the binding constraint -- 436 bytes for everything, 413 in use --
+so nothing is duplicated. Clause B's six tests are one body reached by CALL
+from the entry-0 and entry-1/3 handlers, clause C's strict conditions are one
+body shared by the two stubs, and the two stock answers share one
+`sete bl / and ebx,1 / jmp` tail. A clause answers "may alias" by discarding
+its return address and jumping to the caller's epilogue, and declines with
+`ret`. The predicates run with esp inside the may-alias frame, which has no
+locals live at the dispatch, so the pushed return address is harmless.
+
+That compaction was validated before clause V was added: rebuilt from
+GC/2.0p1 with the new layout and the same three scheduler entries, all 451
+units compile to objects with **identical SHA-1s** and not one symbol's match
+percentage moves.
 
 Both writes are guarded by the SHA-1 of the input and by the expected bytes at
 each offset, so an unexpected build fails loudly instead of being corrupted.
@@ -170,68 +242,67 @@ BASE_VERSION = "GC/2.0p1"
 PATCHED_VERSION = "GC/2.0p1a"
 
 BASE_SHA1 = "74bc177b10d1bbe8a60a21a6c0aa86d2dd9c0668"
-PATCHED_SHA1 = "9d88969d70e0f3d0cea91d9b35cbfb34015c1395"  # EXPERIMENT: E3n + clause C+
+PATCHED_SHA1 = "918652d8063c37ff4d172244f4fcbfa88e0ea062"
 
-# Narrow may-alias predicate, assembled at VA 0x57ea50.
-CAVE_OFFSET = 0x17DE50
-CAVE_BYTES = bytes.fromhex(
-    "8b481883f904775a8b4a1883f9047752"
-    "668b4e20663b4d2074188b4e14f7c1f9"
-    "ffffff753d8b4d14f7c1f9ffffff7532"
-    "eb26837e1404752a837d140475248378"
-    "0800741e837a0800741883780c007512"
-    "837a0c00750ceb00bb01000000e95936"
-    "f9ff39d00f94c383e301e94c36f9ff83"
-    "7e14047528837d140475228378080074"
-    "1c837a0800741683780c007510837a0c"
-    "00750abb01000000e91e36f9ff8b5810"
-    "3b5a100f94c383e301e90d36f9ff"
-)
-
-# Clauses C and C+, assembled at VA 0x57eb00, immediately after the first cave
-# block. Two 10-byte stubs, then the two bodies:
-#   0x57eb00  dispatch entries 1 and 3 (and the tail of clause D): call the
-#             strict extra conditions at 0x57eb14, then fall through to the
-#             clause-B handler at 0x57eabf
-#   0x57eb0a  dispatch entry 0: call clause C+ at 0x57eb37, then fall through
-#             to the entry-0 handler at 0x57ea50
-#   0x57eb14  clause C's conditions that clause C+ drops (neither instruction
-#             indirect, both memrefs <= 4 bytes); falls into clause C+, whose
-#             remaining conditions are the ones the two clauses share
-#   0x57eb37  clause C+: differing opcodes, plain load/store with the indirect
+# Everything the patch injects, assembled as one position-independent block at
+# VA 0x57ea4c -- the whole of the .text tail padding. 413 bytes of 436. The
+# layout, in order:
+#
+#   0x57ea4c  entry-0 handler: clause A inline, clause B by CALL, then the
+#             stock reference-identity test
+#   0x57ea85  the shared `sete bl / and ebx,1 / jmp 0x51210b` answer tail
+#   0x57ea90  the shared "may alias" answer (mov ebx,1)
+#   0x57ea9a  entry-1/3 handler: clause B by CALL, then the stock same-base
+#             test
+#   0x57eaa7  clause B, shared; answers by discarding the return address
+#   0x57ead1  entry-1/3 stub: CALL clause C's strict conditions, else fall
+#             through to the entry-1/3 handler
+#   0x57ead8  entry-0 stub: CALL clause C+, else fall through to the entry-0
+#             handler
+#   0x57eae2  clause C's conditions that clause C+ drops (neither instruction
+#             indirect, both memrefs <= 4 bytes); falls into clause C+
+#   0x57eb03  clause C+: differing opcodes, plain load/store with the indirect
 #             bit tolerated, load-side size <= 4, static base on both sides
-# A body answers "may alias" by dropping the return address and jumping to
-# 0x512081, and declines with `ret` into its stub's fall-through jump.
-CAVE2_OFFSET = 0x17DF00
-CAVE2_BYTES = bytes.fromhex(
-    "e80f000000e9b5ffffffe828000000e9"
-    "3cffffff8b4e14f6c120751a8b4d14f6"
-    "c12075128b481883f904770a8b4a1883"
-    "f9047702eb01c3668b4e20663b4d2074"
-    "508b4e14f7c159ffffff7545f6c10475"
-    "088b481883f90477388b481085c97431"
-    "833905752c8b4d14f7c159ffffff7521"
-    "f6c10475088b4a1883f90477148b4a10"
-    "85c9740d833905750883c404e9f034f9"
-    "ffc3"
+#   0x57eb5e  clause E3n (entry 3); declines into the entry-1/3 stub
+#   0x57eba5  clause V: the value-numbering store kill, which falls through to
+#             the stock whole-object kill at 0x511a53 either way
+CAVE_OFFSET = 0x17DE4C
+CAVE_BYTES = bytes.fromhex(
+    "8b481883f904772f8b4a1883f9047727668b4e20663b4d2074188b4e14f7c1f9"
+    "ffffff75128b4d14f7c1f9ffffff7507eb12e82400000039d00f94c383e301e9"
+    "7b36f9ffbb01000000e97136f9ffe8080000008b58103b5a10ebde837e140475"
+    "23837d1404751d837808007417837a0800741183780c00750b837a0c00750583"
+    "c404ebc0c3e80c000000ebc2e826000000e96affffff8b4e14f6c12075188b4d"
+    "14f6c12075108b481883f90477088b4a1883f9047601c3668b4e20663b4d2074"
+    "508b4e14f7c159ffffff7545f6c10475088b481883f90477388b481085c97431"
+    "833905752c8b4d14f7c159ffffff7521f6c10475088b4a1883f90477148b4a10"
+    "85c9740d833905750883c404e92435f9ffc3837e1404753c837d140275368b48"
+    "1883f904772e8b4a1883f90477268b481085c9741f8139050001007517837918"
+    "0074118b4a1085c9740a8339057505e9e134f9ffe92cffffff8b4b1085c97438"
+    "833905753355e8000000005d8bad2134060085ed7421837d180477168b4d1085"
+    "c9740f833905750a6a0055e8e4b6f8ff59598b6d00ebdb5de96a2ef9ff"
 )
 
-# EXPERIMENT (E3n): new clause at VA 0x57EBA4, entry 3 only.
-CAVE3_OFFSET = 0x17DFA4
-CAVE3_BYTES = bytes.fromhex(
-    "837e1404753c837d140275368b481883f904772e8b4a1883f90477268b481085c9741f81390500010075178379180074118b4a1085c9740a8339057505e99b34f9ffe915ffffff"
-)
-
-# Entries of the dispatch table at VA 0x5bd0bc that get redirected, as
-# (index, expected stock handler, replacement). Entry 0 is whole-object vs
-# whole-object; entries 1 and 3 are whole-object vs subrange, in both operand
-# orders. Cases 2 and 4-8 are left alone (extending clause B to entry 4 was
-# measured at -199 exact functions; even gated to static storage it loses 21).
+# Entries of the scheduler's may-alias dispatch table at VA 0x5bd0bc that get
+# redirected, as (index, expected stock handler, replacement). Entry 0 is
+# whole-object vs whole-object; entries 1 and 3 are whole-object vs subrange,
+# in both operand orders. Cases 2 and 4-8 are left alone (extending clause B
+# to entry 4 was measured at -199 exact functions; even gated to static
+# storage it loses 21).
 DISPATCH_OFFSET = 0x1BA6BC
 DISPATCH = (
-    (0, 0x00511FF2, 0x0057EB0A),  # stock: cmp eax,edx; sete bl  (ref identity)
-    (1, 0x00511FFF, 0x0057EB00),  # stock: same base object
-    (3, 0x00511FFF, 0x0057EBA4),  # EXPERIMENT: E3n clause instead of clause C
+    (0, 0x00511FF2, 0x0057EAD8),  # stock: cmp eax,edx; sete bl  (ref identity)
+    (1, 0x00511FFF, 0x0057EAD1),  # stock: same base object
+    (3, 0x00511FFF, 0x0057EB5E),  # clause E3n instead of clause C
+)
+
+# Entries of the value-numbering store-kill dispatch table at VA 0x5bd068,
+# consulted by 0x511a30 on the kind byte of the stored memref. Entry 0 is a
+# whole object; entry 1 (a subrange) measures +1/-30 and entry 2 is inert, so
+# both are left alone.
+VN_DISPATCH_OFFSET = 0x1BA668
+VN_DISPATCH = (
+    (0, 0x00511A53, 0x0057EBA5),  # stock: kill this object and its alias sets
 )
 
 
@@ -268,21 +339,22 @@ def patch_compiler(compilers: Path) -> bool:
 
     data = bytearray(src.read_bytes())
 
-    for off, blob in ((CAVE_OFFSET, CAVE_BYTES), (CAVE2_OFFSET, CAVE2_BYTES),
-                      (CAVE3_OFFSET, CAVE3_BYTES)):
-        if any(data[off:off + len(blob)]):
-            sys.exit(f"{src}: padding at {off:#x} is not zero, refusing to overwrite")
-        data[off:off + len(blob)] = blob
+    off, blob = CAVE_OFFSET, CAVE_BYTES
+    if any(data[off:off + len(blob)]):
+        sys.exit(f"{src}: padding at {off:#x} is not zero, refusing to overwrite")
+    data[off:off + len(blob)] = blob
 
-    for index, stock, replacement in DISPATCH:
-        offset = DISPATCH_OFFSET + 4 * index
-        found = struct.unpack_from("<I", data, offset)[0]
-        if found != stock:
-            sys.exit(
-                f"{src}: dispatch entry {index} at {offset:#x} is {found:#x}, "
-                f"expected {stock:#x}"
-            )
-        struct.pack_into("<I", data, offset, replacement)
+    for table, entries in ((DISPATCH_OFFSET, DISPATCH),
+                           (VN_DISPATCH_OFFSET, VN_DISPATCH)):
+        for index, stock, replacement in entries:
+            offset = table + 4 * index
+            found = struct.unpack_from("<I", data, offset)[0]
+            if found != stock:
+                sys.exit(
+                    f"{src}: dispatch entry {index} at {offset:#x} is "
+                    f"{found:#x}, expected {stock:#x}"
+                )
+            struct.pack_into("<I", data, offset, replacement)
 
     tmp = dst.with_suffix(".exe.tmp")
     tmp.write_bytes(bytes(data))
