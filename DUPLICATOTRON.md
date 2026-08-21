@@ -452,6 +452,39 @@ because the `volatile` device means we now emit the reload; its residual is the
 `xFXAuraUpdate` and `NPCHazard::Discard` (NAMED), plus `xFXRingCreate` and
 `LightResetFrame` (ANON, float-literal reloads).
 
+### The switch-tree pivot convention: real, but MUCH narrower than it looks
+
+`zEntPlayerEventCB` was simulated instruction-by-instruction: our 43 case
+values and their body order in `.text` are IDENTICAL to retail, and all 70
+differing rows are in the binary search tree. At every node both compilers
+choose the same partition and differ only in the pivot -- retail takes the
+max of the lower half, we take the min of the upper half.
+
+A standalone repro confirms our side. Eight sparse cases
+(3, 9, 37, 205, 300, 449, 488, 500) give a root of `cmpwi r3, 0x12c` (300),
+i.e. element n/2 of the sorted list; retail's convention would root at 205,
+element n/2 - 1. So it is an off-by-one in median selection, not a different
+tree shape.
+
+**But the "this costs every function with a deep switch" reading is wrong,
+and was checked before anyone spends a session on it.** Of the 41 `*EventCB`
+functions in game code, **38 already match at 100.0**. The largest matching
+one is `zEntDestructObjEventCB` at 1,184 b; the only non-matching ones are
+`zVolumeEventCB` (268 b, 89.179 -- small, so almost certainly a different
+defect), `zEntPlayerEventCB` (2,624 b) and `zPlatformEventCB` (3,192 b),
+which are the two largest such functions in the game. The divergence
+therefore appears only once the case count is large enough, and total
+exposure is about **5,816 bytes in two functions**, not a project-wide tax.
+
+Weigh that against the cost: locating median selection in a 6 MB stripped
+binary with no debugger is open-ended, unlike clause E3n which was a
+one-byte change at an address an agent had already pinpointed. Left as a
+lead, not scheduled.
+
+One thing it DOES settle: `xEvent.h`'s enum is correct. The case values match
+retail exactly, so any future "the event enum is shifted" reading of that
+diff is wrong and must not be acted on.
+
 ### The store-to-load forwarding defect: isolated, and DEPRIORITISED
 
 A 30-line repro reproduces it standalone with the shipped 2.0p1a compiler and
