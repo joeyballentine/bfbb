@@ -120,7 +120,8 @@ namespace auto_tweak
             v = hi;
         }
 
-        value = v * scale;
+        v = v * scale;
+        value = v;
     }
 } // namespace auto_tweak
 
@@ -457,8 +458,7 @@ namespace
                 sin_lookup[i] = isin(angle);
                 cos_lookup[i] = icos(angle);
 
-                const F32 angle_step = PI / 32.0f;
-                angle += angle_step;
+                angle += PI / 32.0f;
             }
         }
 
@@ -509,8 +509,10 @@ namespace
         }
 
         // Lower half: mirror about the z axis.
+        it = &ring_segments[1];
+        end = it + size / 2 - 1;
         dst = &ring_segments[size] - 1;
-        for (it = &ring_segments[1]; it != &ring_segments[size / 2]; it++, dst--)
+        for (; it != end; it++, dst--)
         {
             dst->x = -it->x;
             dst->z = it->z;
@@ -2331,12 +2333,7 @@ void zNPCKingJelly::repel_player()
         radius = tweak.repel_radius;
     }
 
-    if (imag >= -0.00001f && imag <= 0.00001f)
-    {
-        return;
-    }
-
-    if (imag >= radius * radius)
+    if ((imag >= -0.00001f && imag <= 0.00001f) || imag >= radius * radius)
     {
         return;
     }
@@ -2518,11 +2515,12 @@ bool zNPCKingJelly::apply_wave_damage()
     xEnt& player = globals.player.ent;
     xSphere& o = player.bound.sph;
 
+    xSphere inner;
     xSphere outer;
+
     outer.center = ring.center;
     outer.r = ring.current.radius;
 
-    xSphere inner;
     inner.center = outer.center;
     inner.r = outer.r - tweak.wave_ring.damage_width;
     if (inner.r < 0.0f)
@@ -2566,7 +2564,7 @@ bool zNPCKingJelly::apply_ambient_damage()
 {
     xEnt& player = globals.player.ent;
 
-    xVec3 center = get_center();
+    const xVec3 center = get_center();
     xVec3 offset = (xVec3&)player.model->Mat->pos - center;
 
     F32 r = ambient_rings[0].current.radius;
@@ -2728,15 +2726,15 @@ void zNPCKingJelly::update_tentacle_lightning(F32 dt)
 
         if (zap != NULL)
         {
-            if ((zap->flags & 0x1) && (zap->flags & 0x40))
-            {
-                refresh_tentacle_points(i);
-                zLightningModifyEndpoints(zap, &tentacle_points[i][0], NULL);
-            }
-            else
+            if (!(zap->flags & 0x1) || !(zap->flags & 0x40))
             {
                 zLightningKill(zap);
                 zap = NULL;
+            }
+            else
+            {
+                refresh_tentacle_points(i);
+                zLightningModifyEndpoints(zap, &tentacle_points[i][0], NULL);
             }
         }
     }
@@ -2819,9 +2817,11 @@ void zNPCKingJelly::generate_zap_particles(const zLightning& zap, F32 amount, F3
         frac = zap.time_left / zap.time_total;
     }
 
+    S32 points;
     S32 total = frac * (amount * dt) * xurand() + 0.5f;
     S32 emitted = 0;
-    S32 points = zap.legacy.total_points - 1;
+
+    points = zap.legacy.total_points - 1;
 
     for (S32 j = 0; j < points; j++)
     {
@@ -3050,9 +3050,9 @@ void zNPCKingJelly::generate_thump_particles()
     s.pos.y += tweak.thump.voffset;
 
     s.rate.val[0] = 59.999996f * tweak.thump.particles;
-    F32 drate = s.rate.val[0] * (-tweak.thump.particle_drop_off * iring);
-
     s.vel.y = tweak.thump.vel;
+
+    F32 drate = s.rate.val[0] * (-tweak.thump.particle_drop_off * iring);
     F32 dvel = s.vel.y * (-tweak.thump.vel_drop_off * iring);
 
     F32 dradius = tweak.thump.width * iring;
@@ -3127,9 +3127,9 @@ void zNPCKingJelly::update_charge(F32 frac)
 
     for (S32 i = 0; i < 3; i++)
     {
+        ambient_rings[i].current.accel = speed;
         ambient_rings[i].current.radius = radius;
         ambient_rings[i].max_height = max_height;
-        ambient_rings[i].current.accel = speed;
         ambient_rings[i].property.thickness = thickness2;
         ambient_rings[i].property.color = color2;
     }
