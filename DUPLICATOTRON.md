@@ -787,6 +787,44 @@ blind to definition order.
 
 ## Patterns that keep working
 
+- **A same-value expression used as both an allocation size and a copy size
+  gets CSE'd into a callee-saved register and wrecks the register map.**
+  Retail's is *signed* at one site and unsigned at the other:
+  `(S32)sizeof(xVec3) * numVertices` for the `memcpy`, plain
+  `sizeof(xVec3) * numVertices` for the `xMemAllocSize` argument. Different
+  result type, different tree, no CSE -- retail recomputes `mulli`/`slwi` at
+  each site. This took `zFXGooEnable` from 93.296 to exactly 100 (1,000 bytes)
+  and was the only thing that did.
+
+- **Bind each argument of a store macro to a named temp first.**
+  `RwIm3DVertexSetPos`/`SetRGBA` written with expressions inline emits
+  load/store/load/store; retail emits all loads then all stores. Our compiler
+  will not reorder a load across a store through a pointer, so the temps have
+  to impose the order from the source side. Worth ~9 points on
+  `zFXGooRenderAtomic`, whose position blocks became byte-exact.
+
+- **Declaration ORDER alone can be the entire residual.** In
+  `zNPCBSandy_BossDamageEffect`, `S32 j;` before `S32 i;` -- with every use
+  unchanged -- flipped which subscript mwcc materialises with `slwi` and which
+  rides the induction variable, and took the function from 97.971 to 100.
+  Cheap to try, and it costs nothing to be wrong.
+
+- **`x = !(flags & bit)` narrows to 8 bits because C++ `!` yields `bool`.**
+  Written as an explicit `if/else` assigning 1 and 0, mwcc if-converts to the
+  same `cntlzw`/shift pair with no `bool->int` conversion node, giving
+  retail's full-32-bit `srwi`/`extlwi`. Keep the variable `S32`: making it
+  `bool` fixes the shift and breaks every later use of it.
+
+- **Retail does not always fold a literal multiply.** Its inliner emits
+  `fmadds f0, <1.0f>, (a-b), b` for `LERP(1.0f, b, a)`; written as a literal,
+  mwcc folds `1.0f*x` to `fadds` and folds the `0.0f` case away entirely.
+  Routing the blend factor through a local reproduces the unfolded form.
+
+- **CAVEAT on the const-aggregate rule below: it is not unconditional.** It
+  did not fire on `zFX`'s `validate_popper`, where the 12-byte copy still used
+  two scratch registers with `const` applied; an intermediate model local was
+  also measured and rejected. Try it, measure it, drop it if it does nothing.
+
 - **`const` on a read-only local aggregate changes the copy expansion.** A
   12-byte `xVec3` copy-init emits `lwz/lwz/stw/stw/lwz/stw` with two scratch
   registers when the local is non-const, and `lwz/lwz/lwz/stw/stw/stw` with
