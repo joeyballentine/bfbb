@@ -758,6 +758,78 @@ padding went from 25 bytes to 43. The refactor was validated before any
 semantic change -- the deduped *strict* clause C produced 8060 exact and not
 one changed function across all 451 units.
 
+### Clause V: the value-numbering store kill (SHIPPED)
+
+The site above was found and patched, 2026-08-21. **+25 functions to exactly
+100.0, zero lost, DOL unchanged, game exact 74.511 -> 75.732** -- the largest
+single change in this project's history.
+
+**How it was located, since the method generalises.** `mwcceppc.exe` still
+contains its `__FILE__` strings (`Alias.c`, `ValueNumbering.c`, `Scheduler.c`
+...) for the `CError_FATAL` call sites. Scanning `.text` for the *address
+constants* of those strings gives a module map; a naive `E8`-scan call graph
+then answers "who calls what, from which module". That separates two Alias.c
+entry points:
+
+| routine | table | called from |
+|---|---|---|
+| `0x511fc0` | 3x3 at `0x5bd0bc` | Scheduler.c, CodeMotion.c -- clauses A/B/C/C+/E3n |
+| `0x511a30` | 3-entry at `0x5bd068` | **ValueNumbering.c only** -- clause V |
+
+`0x511a30(memref, instr)` is the **store kill for local value numbering**: it
+dispatches on the stored memref's kind byte (`+0x2c`) and stamps a fresh value
+number via `0x50a2c0`. Stock kills only the stored object and its precomputed
+alias sets, so a `.sdata2` constant survives the store and the next statement
+reuses it. Verified under gdb (wibo maps the PE at 0x400000; sjiswrap
+relocates to 0x110000): the repro shows nine loads in value-numbering pass 1
+and five in pass 2 -- the literal loads die there, not in the scheduler.
+
+**Clause V, entry 0 only:** when the store's base expression is a plain static
+object, walk the value-number list and also kill every object that is itself a
+plain static of size <= 4. Both halves are load-bearing; each was measured
+tree-wide:
+
+| variant | result |
+|---|---|
+| shipped (static base + static <=4 kill) | **+25 / -0** |
+| gate the store on size <=4 instead of static base | +11 |
+| kill the whole list (`call 0x511a00`) | +26 / **-24** |
+| kill every static regardless of size | +10 / -0 |
+| filter killed objects on size alone | +25 / **-5** |
+| filter on the kind byte instead of base expression | +25 / **-1** |
+| entry 1 (subrange stores) | +1 / **-30** |
+| entry 2 | inert |
+
+Entry 1's -30 is the compiler agreeing with the large-object contrast above:
+retail deliberately does *not* kill on large-object stores, and killing there
+changes CodeWarrior's unroll factor.
+
+The cave was re-assembled as one 413-byte position-independent block at
+0x57ea4c (68 new bytes did not fit in 45 fragmented free ones): clause B is
+now a single body reached by `CALL` from both handlers, and the two stock
+answers share one tail. **The refactor was validated before clause V was
+added** -- rebuilt from clean `GC/2.0p1`, all 451 units produced identical
+object SHA-1s and not one symbol moved. 27 of 451 objects change and none
+belongs to a complete unit.
+
+`PATCHED_SHA1 = 918652d8063c37ff4d172244f4fcbfa88e0ea062`.
+
+### Two corrections this forced
+
+- **`zEntPlayer_SNDInit` was not the prize.** It was dispatched as a
+  10,160-byte function whose residual was "about 400 of 403 rows missing `lfs`
+  reloads"; clause V moved it 90.519 -> 91.947 and `PlayerTeeterCheck` not at
+  all. **That is the second per-unit attribution to collapse on contact with
+  the compiler** (the first was the 1.750pp alias-predicate estimate). Agent
+  reports are good at *characterising* a residual and bad at predicting what a
+  compiler change will pay. Verify before promising.
+- **The docstring's warning against E3n on scheduler entry 3 was stale.**
+  Reverting entry 3 to clause C measures **+6/-88**, so E3n is worth +82 net
+  in the current tree, not the "+22/-18" recorded against it.
+
+**Every unit's residuals now need re-measuring.** Attributions recorded before
+2026-08-21 were made against a compiler that has since changed twice.
+
 ### The redundant-load path is a SECOND patch site, and it is untouched
 
 `zMainParseINIGlobals` (8,980b, 99.276%) is capped by a defect the installed
