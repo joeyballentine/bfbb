@@ -150,6 +150,7 @@ Clause V -- the redundant-load path, value-numbering store kill, entry 0 of
 the table at 0x5bd068 only:
 
     the stored memref's base expression is a plain static object (word 5)
+        OR a declared frame object (word 0x00010005)
     ->  bump the value number of *every* object in the value-numbering
         object list (head at 0x5e1fd8) that is <= 4 bytes and whose base
         expression is likewise a plain static object
@@ -164,6 +165,43 @@ memref+0x1c; a store bumps its own object's number (and its precomputed alias
 sets) through 0x511a30, so the constant pool entry survives the store and the
 second statement reuses the register. Retail's compiler kills it. Clause V
 makes a store to a small static do so, and only then.
+
+The store-side gate was widened from "plain static" to "plain static OR
+declared frame object" on 2026-08-21. The witness is
+`xCollide::xSweptSphereToTriangle`: retail reloads the `0.000001f` literal
+for its second test because f0 was reused for `1.0f`, and the store that
+should kill the value number is `stfs f1, 0x8(r1)` into an address-taken
+frame local, not into a static, so the original static-only gate never fired.
+
+Implemented as a jump to a two-value discriminant in the cave's spare bytes
+(cave grew 413 -> 428 of 436 available), NOT as a byte-compare on the low
+byte. Both spellings were measured and are IDENTICAL in effect, which is
+itself the finding: the function this change costs, `update_trail` in
+zEntCruiseBubble, has a store base of the same kind 0x00010005, so the two
+sites cannot be told apart by base kind and the trade is inherent to the
+predicate rather than a defect in it. The exact form is kept because it says
+what it means.
+
+Measured tree-wide, DOL still 306526d9...:
+
+    GAME exact  76.982 -> 77.077   (+0.095, net +1556 bytes)
+    GAME fuzzy  98.922 -> 98.876   (-0.046)
+    exact functions +1 / -1
+
+    gained: xSweptSphereToTriangle (2092 b)
+    lost:   update_trail  (536 b, 100.0 -> 99.142)
+
+It is a genuine trade, not a free win. It ships because exact bytes are the
+project's goal metric and the net is +1556, and because
+`xSweptSphereToTriangle` is unreachable from source while `update_trail`'s
+regression may not be. `xSweptSphereToBox` also improved 98.587 -> 99.158
+without crossing.
+
+Collateral worth knowing before extending this further: four functions get
+substantially fuzzier without ever having been matched --
+`xScrFXGlareRender` 93.287 -> 40.465, `xFXStreakRender` 93.415 -> 65.481,
+`xFXShineRender` 98.219 -> 90.425, `NCIN_SleepyLamp_AR` 98.280 -> 87.567.
+They cost no matched_code, but they are further from closable than they were.
 
 Both halves of clause V are needed and both are narrow:
 
@@ -261,7 +299,7 @@ BASE_VERSION = "GC/2.0p1"
 PATCHED_VERSION = "GC/2.0p1a"
 
 BASE_SHA1 = "74bc177b10d1bbe8a60a21a6c0aa86d2dd9c0668"
-PATCHED_SHA1 = "94dfeddc33719d3cc5ea4b6d24e37ee43c24c3fc"
+PATCHED_SHA1 = "19480c5dcb2c3de3b870c1fb29db73f14f7b2889"
 
 # Everything the patch injects, assembled as one position-independent block at
 # VA 0x57ea4c -- the whole of the .text tail padding. 413 bytes of 436. The
@@ -298,8 +336,9 @@ CAVE_BYTES = bytes.fromhex(
     "85c9740d833905750883c404e92435f9ffc3837e1404753c837d140275368b48"
     "1883f904772e8b4a1883f90877268b481085c9741f8139050001007517837918"
     "0074118b4a1085c9740a8339057505e9e134f9ffe92cffffff8b4b1085c97438"
-    "833905753355e8000000005d8bad2134060085ed7421837d180477168b4d1085"
-    "c9740f833905750a6a0055e8e4b6f8ff59598b6d00ebdb5de96a2ef9ff"
+    "e93800000055e8000000005d8bad2134060085ed7421837d180477168b4d1085"
+    "c9740f833905750a6a0055e8e4b6f8ff59598b6d00ebdb5de96a2ef9ff833905"
+    "740881390500010075eeebb9"
 )
 
 # Entries of the scheduler's may-alias dispatch table at VA 0x5bd0bc that get
