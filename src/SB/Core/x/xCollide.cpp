@@ -1601,13 +1601,16 @@ void xsqrtfast(F32& out, F32 in)
 // We don't have the implementation provided
 F32 std::sqrtf(F32 x)
 {
+    volatile F32 y;
+
     if (x > 0.0f)
     {
         F64 guess = __frsqrte(x);
         guess = 0.5 * guess * -(guess * guess * x - 3);
         guess = 0.5 * guess * -(guess * guess * x - 3);
         guess = 0.5 * guess * -(guess * guess * x - 3);
-        return x * guess;
+        y = x * guess;
+        return y;
     }
     else
     {
