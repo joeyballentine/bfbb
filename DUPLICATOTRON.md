@@ -1323,6 +1323,34 @@ blind to definition order.
   the first macro call is the last 2.6 points. So when this lever half-works,
   the fix is usually to move declarations down, not to add more of them.
 
+- **The `const` lever does NOT extend to scalar locals -- there it can HURT.**
+  Measured on `lightning_ring::set_ring_segments`: a `const F32 angle_step =
+  PI / 32.0f;` inside the init loop was the function's ENTIRE residual,
+  because the const pulled the constant's `lfs` up into the `icos` return
+  shadow. Replacing it with `angle += PI / 32.0f;` took the function to
+  100.0. The lever is specifically about read-only local AGGREGATES, where it
+  buys the three-register copy form; on a scalar there is no copy form to
+  buy and all it does is move a load.
+
+- **CW numbers same-scope locals in REVERSE declaration order.** So when the
+  target's frame slots are the giveaway, the local that wants the HIGHER slot
+  must be declared LAST. `apply_wave_damage` needed `xSphere inner; xSphere
+  outer;` to put `outer` at 0x14 and `inner` at 0x24, and closed on that
+  alone.
+
+- **Declare-first-assign-later is a distinct lever from move-the-computation.**
+  In `generate_zap_particles` retail's colouring wanted `points` created
+  before `emitted`. Moving the whole `points` computation first measured
+  **92.135** (it forces the source object into a callee-saved register early);
+  declaring `S32 points;` first and assigning it after `emitted` measured
+  100.0. The virtual register is created at the DECLARATION; the load stays
+  where the assignment is.
+
+- **Retail's `bne .+8 / b exit` is the shape CW emits for the LAST operand of
+  an `||` chain**, not for a standalone `if (cond) return;`. Seeing that
+  degenerate two-branch form means two guards in the original were one
+  condition. Merging them closed `repel_player`.
+
 - **A countdown loop on the parameter** (`while (numTriangles--)`) rather than
   an index loop: the index form costs a callee-saved register and shifts the
   whole file. Worth 83.611 -> 100.0 on `shadowCacheLeafCB`.
