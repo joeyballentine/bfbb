@@ -34,5 +34,11 @@ compile_commands.json
 /*.txt
 *.exe
 
+# ProDG scratch: ngccc writes <basename><pid>.i / .s into the cwd for every
+# bink translation unit and does not clean them up. Root only - real .s
+# sources live under src/.
+/*.i
+/*.s
+
 # Analysis output
 classify.json
