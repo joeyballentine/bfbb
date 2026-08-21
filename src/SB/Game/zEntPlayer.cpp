@@ -8205,7 +8205,7 @@ catchtunnel_done:
             {
                 zNPCCommon* npc = (zNPCCommon*)destructent;
                 npc->Damage(DMGTYP_BELOW, &globals.player.ent, &ceil->tohit);
-                if (!npc->IsAlive())
+                if (!npc->IsHealthy())
                 {
                     destroyed = 1;
                 }
@@ -8280,7 +8280,7 @@ catchtunnel_done:
             {
                 zNPCCommon* npc = (zNPCCommon*)destructent;
                 npc->Damage(DMGTYP_ABOVE, &globals.player.ent, &floor->tohit);
-                if (!npc->IsAlive())
+                if (!npc->IsHealthy())
                 {
                     destroyed = 1;
                 }
@@ -8436,7 +8436,7 @@ catchtunnel_done:
 
                 F32 size = 0.15f * xurand() + 0.05f;
                 info.size_birth.set(size, size, 1.0f, 0);
-                size = size * 1.2f;
+                size *= 1.2f;
                 info.size_death.set(size, size, 1.0f, 0);
 
                 xParEmitterEmitCustom(sEmitSpinBubbles, dt, &info);
@@ -8611,7 +8611,7 @@ catchtunnel_done:
             if (globals.player.carry.grabbed->baseType == eBaseTypeNPC)
             {
                 zNPCCommon* npc = (zNPCCommon*)globals.player.carry.grabbed;
-                if ((((xNPCBasic*)npc)->SelfType() & 0xffffff00) == 'NTT\0' && !npc->IsAlive())
+                if ((((xNPCBasic*)npc)->SelfType() & 0xffffff00) == 'NTT\0' && !npc->IsHealthy())
                 {
                     globals.player.carry.grabbed->chkby = 0;
                 }
@@ -9225,7 +9225,7 @@ catchtunnel_done:
 
     *ent->model->Mat = rootOldMat;
 
-    if (dt != 0.0f)
+    if (dt)
     {
         tslide_lastrealvel.x =
             (ent->model->Mat->pos.x - ent->frame->oldmat.pos.x) / dt;
@@ -9887,10 +9887,10 @@ void zEntPlayer_Render(zEnt* ent)
                       globals.player.model_wand->Mat, &b);
 
         xVec3 center;
-        center.x = (a.x + b.x) * 0.5f;
-        center.y = (a.y + b.y) * 0.5f;
-        center.z = (a.z + b.z) * 0.5f;
-        center.y = (a.y + b.y) * 0.5f - 0.15f;
+        center.x = (a.x + b.x) / 2.0f;
+        center.y = (a.y + b.y) / 2.0f;
+        center.z = (a.z + b.z) / 2.0f;
+        center.y = (a.y + b.y) / 2.0f - 0.15f;
 
         if (!gPTankDisable && strcmp(playerAnim->State->Name, "BbashStart01") == 0)
         {
@@ -10509,8 +10509,8 @@ static F32 CalcJumpImpulse_Smooth(F32 g, F32 j, F32 h, F32 Tgc, F32 Tgs)
 
     F32 b0 = 0.0f;
     F32 b1 = 0.0f;
-    F32 b2 = -j * 0.5f;
-    F32 c2 = -g * 0.5f;
+    F32 b2 = -j / 2.0f;
+    F32 c2 = -g / 2.0f;
     F32 A = (j - g) / (6.0f * Tgs);
     F32 B = (g * Tgc - j * Tgc - j * Tgs) / (2.0f * Tgs);
     F32 T1 = Tgc + Tgs;
@@ -14325,8 +14325,8 @@ static void PlayerRotMatchUpdateEnt(xEnt* ent, xScene* sc, F32 dt, void* fdata)
             rms->tmr = 0.0f;
         }
 
-        xVec3* fup = &globals.player.floor_norm;
         xVec3* eup = &globals.player.RootUpTarget;
+        xVec3* fup = &globals.player.floor_norm;
         xVec3 nfup;
         xVec3 neup;
 
@@ -16214,8 +16214,8 @@ U8 zEntPlayer_MinimalUpdate(xEnt* ent, xScene* sc, F32 dt, xVec3& drive_motion)
 
     ent->move = oldmove;
 
-    xVec3 req_motion = ent->frame->dpos;
-    xVec3 predrive_pos = ent->frame->mat.pos;
+    const xVec3 req_motion = ent->frame->dpos;
+    const xVec3 predrive_pos = ent->frame->mat.pos;
 
     xEntDriveUpdate(&globals.player.drv, sc, dt, NULL);
 
