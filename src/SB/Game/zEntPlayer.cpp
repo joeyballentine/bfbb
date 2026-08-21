@@ -1289,7 +1289,7 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
                             }
 
                             // xVec3* vel;
-                            // F32 accelMag;
+                            F32 accelMag;
                             // F32 peakLerp;
                             // F32 slickLerp;
                             if (surfSlickRatio && !globals.player.ControlOff)
@@ -1304,17 +1304,17 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
 
                                 if (moveFlag == 0x4 || moveFlag == 2)
                                 {
-                                    rot = surfAccelWalk * s;
+                                    accelMag = surfAccelWalk * s;
                                     surfMaxSpeed = maxVelmag * surfPeakRatio;
                                 }
                                 else
                                 {
-                                    rot = surfAccelRun * s;
+                                    accelMag = surfAccelRun * s;
                                     surfMaxSpeed = maxVelmag * surfPeakRatio;
                                 }
 
-                                ent->frame->vel.x += rot * isin(stackAng) * dt;
-                                ent->frame->vel.z += rot * icos(stackAng) * dt;
+                                ent->frame->vel.x += accelMag * isin(stackAng) * dt;
+                                ent->frame->vel.z += accelMag * icos(stackAng) * dt;
 
                                 s = 2.5f * surfSlipTimer;
                                 if (s >= 1.0f)
@@ -1422,8 +1422,9 @@ static void InvReset()
             continue;
         }
 
+        const sock* s = patsock_totals;
         U32 level_mask = level_prefix[0] << 0x18 | level_prefix[1] << 0x10;
-        for (const sock* s = patsock_totals; s->level != 0; s++)
+        for (; s->level != 0; s++)
         {
             if (level_mask == s->level)
             {
@@ -2325,8 +2326,8 @@ static void DoWallJumpCheck()
             if (xVec3Dot(&sws.worldNormal, &sws.worldPolynorm) > 0.999f)
             {
                 sWallNormal = sws.worldNormal;
-                sWallJumpResult = WallJumpResult_Jump;
                 sWallCollisionSurface = surfaceProperties;
+                sWallJumpResult = WallJumpResult_Jump;
             }
         }
     }
@@ -3090,7 +3091,7 @@ static xEnt* GetPatrickTarget(xEnt* ent)
         }
         else if (tgtent->baseType == eBaseTypeDestructObj)
         {
-            if (((zEntDestructObj*)globals.player.carry.grabbed)->throw_target == 0)
+            if (((zEntDestructObj*)tgtent)->throw_target == 0)
             {
                 continue;
             }
@@ -3098,7 +3099,7 @@ static xEnt* GetPatrickTarget(xEnt* ent)
         else if (tgtent->baseType == eBaseTypeNPC)
         {
             // FIXME: This comparison looks like a fakematch
-            U32 t = ((xNPCBasic*)globals.player.carry.grabbed)->SelfType();
+            U32 t = ((xNPCBasic*)tgtent)->SelfType();
             if (t - NPC_TYPE_JELLYPINK <= 2 || t == NPC_TYPE_MIMEFISH)
             {
                 continue;
@@ -6744,7 +6745,9 @@ static S32 zEntPlayerKnockToSafety(xEnt* ent)
             ttot = diffY + 2.65f;
             diffY = xsqrt(2.0f * (ttot - popheight) / globals.player.g.Gravity);
             popheight = xsqrt(2.0f * (ttot - floor_safe_vec.y) / globals.player.g.Gravity);
+            ttot = diffY + popheight;
             ent->frame->vel.y = diffY * globals.player.g.Gravity;
+            popheight = velXZ / ttot;
             if (velXZ < 1e-5f)
             {
                 ent->frame->vel.x = 0.0f;
@@ -6752,11 +6755,11 @@ static S32 zEntPlayerKnockToSafety(xEnt* ent)
             }
             else
             {
-                velXZ = velXZ / velXZ;
+                velXZ = popheight / velXZ;
                 ent->frame->vel.x = diffX * velXZ;
                 ent->frame->vel.z = diffZ * velXZ;
             }
-            globals.player.KnockBackTimer = diffY + popheight;
+            globals.player.KnockBackTimer = ttot;
             globals.player.KnockIntoAirTimer = 0.0f;
             return 1;
         }
@@ -6768,10 +6771,12 @@ static S32 zEntPlayerKnockToSafety(xEnt* ent)
 static xEnt* zEntPlayer_FindGrabEnt(xEnt* ent, zScene* zsc, S32* failed)
 {
     U32 i;
+    xEnt* e;
+    F32 dx, dy, dz;
 
     for (i = 0; i < zsc->num_ents; i++)
     {
-        xEnt* e = (xEnt*)zsc->ents[i];
+        e = (xEnt*)zsc->ents[i];
 
         if (!(e->baseFlags & 0x20))
         {
@@ -6793,8 +6798,6 @@ static xEnt* zEntPlayer_FindGrabEnt(xEnt* ent, zScene* zsc, S32* failed)
             continue;
         }
 
-        F32 dx, dy, dz;
-
         if (e->baseType != 0x2f)
         {
             dx = e->model->Mat->pos.x - ent->model->Mat->pos.x;
@@ -6803,9 +6806,11 @@ static xEnt* zEntPlayer_FindGrabEnt(xEnt* ent, zScene* zsc, S32* failed)
         }
         else
         {
-            dx = e->bound.sph.center.x - ent->model->Mat->pos.x;
-            dy = (e->bound.sph.center.y - e->bound.sph.r) - ent->model->Mat->pos.y;
-            dz = e->bound.sph.center.z - ent->model->Mat->pos.z;
+            xEntBoulder* boul = (xEntBoulder*)e;
+
+            dx = boul->bound.sph.center.x - ent->model->Mat->pos.x;
+            dy = (boul->bound.sph.center.y - boul->bound.sph.r) - ent->model->Mat->pos.y;
+            dz = boul->bound.sph.center.z - ent->model->Mat->pos.z;
         }
 
         F32 dist2 = dx * dx + dz * dz;
@@ -9842,7 +9847,7 @@ void zEntPlayer_Render(zEnt* ent)
         lerp = -0.6f * (1.0f - single->BlendFactor * single->Tran->BlendRecip);
     }
 
-    if (lerp != 0.0f)
+    if (lerp)
     {
         xVec3 f = { 0.0f, 0.0f, 0.0f };
         f.z = lerp;
@@ -9855,7 +9860,7 @@ void zEntPlayer_Render(zEnt* ent)
 
     *(xMat4x3*)ent->model->Mat = rendermat;
 
-    if (1.0f != globals.player.RootUp.y || 0.0f != lerp)
+    if (1.0f != globals.player.RootUp.y || lerp)
     {
         xModelInstance* m = ent->model->Next;
         while (m)
@@ -11515,7 +11520,7 @@ static void zEntPlayerFloorUpdate(xEnt* ent, xScene* sc, F32 dt)
             surfSlipTimer = 0.0f;
         }
 
-        if (surfSlipTimer != 0.0f)
+        if (surfSlipTimer)
         {
             surfSlipTimer += dt;
             if (surfSlipTimer >= 0.75f)
@@ -11524,7 +11529,7 @@ static void zEntPlayerFloorUpdate(xEnt* ent, xScene* sc, F32 dt)
             }
         }
 
-        if (surfSlipTimer == 0.0f)
+        if (!surfSlipTimer)
         {
             surfSlickness = 1;
         }
@@ -11589,11 +11594,11 @@ static void zEntPlayerFloorUpdate(xEnt* ent, xScene* sc, F32 dt)
         }
     }
 
-    if (surfSlickRatio != 0.0f)
+    if (surfSlickRatio)
     {
         F32 speed2 = frame->vel.x * frame->vel.x + frame->vel.z * frame->vel.z;
 
-        if (surfMaxSpeed != 0.0f)
+        if (surfMaxSpeed)
         {
             if (speed2 > surfMaxSpeed * surfMaxSpeed)
             {
@@ -11615,8 +11620,8 @@ static void zEntPlayerFloorUpdate(xEnt* ent, xScene* sc, F32 dt)
                 decel = surfDecelSkid * dt;
             }
 
-            F32 drop = (4.0f / 3.0f) * surfSlipTimer * 20.0f * decel +
-                       (1.0f - (4.0f / 3.0f) * surfSlipTimer) * decel;
+            F32 drop = (1.0f - (4.0f / 3.0f) * surfSlipTimer) * decel +
+                       (4.0f / 3.0f) * surfSlipTimer * 20.0f * decel;
             F32 speed = xsqrt(speed2);
 
             if (speed <= drop)
@@ -12031,11 +12036,13 @@ static void PlayerMountHackTakeAction(xEnt* ent, U32 type)
 
 static void zEntPlayerDriveUpdate(xEnt* ent, xScene* sc, F32 dt)
 {
-    zPlatform* plat;
     xCollis* coll;
+    zPlatform* plat;
     xEntDrive* drv;
+    zPlatform* oplat;
     xSurface* surf;
     zJumpParam jump;
+    F32 jmph;
     U32 superbounce;
     F32* jmphs;
     xVec3* jmpdir;
@@ -12069,21 +12076,21 @@ static void zEntPlayerDriveUpdate(xEnt* ent, xScene* sc, F32 dt)
         }
         else
         {
-            plat = (zPlatform*)drv->odriver;
+            oplat = (zPlatform*)drv->odriver;
 
             if (!drv->os)
             {
                 drv->otm = 0.0f;
                 drv->odriver = NULL;
 
-                if (plat->subType == ZPLATFORM_SUBTYPE_BREAKAWAY)
+                if (oplat->subType == ZPLATFORM_SUBTYPE_BREAKAWAY)
                 {
-                    zPlatform_Dismount(plat);
+                    zPlatform_Dismount(oplat);
                 }
 
-                if (plat->passet->flags & 0x1)
+                if (oplat->passet->flags & 0x1)
                 {
-                    zPlatform_Shake(plat, dt, 0.2f, 12.0f * PI);
+                    zPlatform_Shake(oplat, dt, 0.2f, 12.0f * PI);
                 }
             }
         }
@@ -12156,7 +12163,7 @@ static void zEntPlayerDriveUpdate(xEnt* ent, xScene* sc, F32 dt)
             return;
         }
 
-        if (plat->baseType == eBaseTypeStatic && plat->ffx)
+        if (plat->baseType == eBaseTypeStatic && plat->driver)
         {
             xEntDriveMount(drv, (xEnt*)plat, -1.0f, coll);
             return;
@@ -12228,18 +12235,19 @@ do_bounce:
     superbounce = 0;
 
     if (strcmp(ent->model->Anim->Single->State->Name, "BbounceAttack01") == 0 &&
-        plat->passet->sb.jmpbounce != 0.0f)
+        plat->passet->sb.jmpbounce)
     {
-        jump.PeakHeight = plat->passet->sb.jmpbounce;
+        jmph = plat->passet->sb.jmpbounce;
         superbounce = 1;
     }
     else
     {
         jmphs = plat->passet->sb.jmph;
-        jump.PeakHeight = MAX(MAX(jmphs[0], jmphs[1]), jmphs[2]);
+        jmph = MAX(MAX(jmphs[0], jmphs[1]), jmphs[2]);
     }
 
     jmpdir = &plat->passet->sb.jmpdir;
+    jump.PeakHeight = jmph;
     jump.TimeHold = 0.0f;
     jump.TimeGravChange = 0.3f;
     CalcJumpImpulse(&jump, NULL);
@@ -12262,8 +12270,8 @@ do_bounce:
 
     globals.player.Jump_CanDouble = 0;
     globals.player.Jump_CanFloat = 1;
-    globals.player.Jump_SpringboardStart = 1;
     globals.player.Jump_Springboard = plat;
+    globals.player.Jump_SpringboardStart = 1;
 
     if (plat->passet->sb.springflags & 0x4)
     {
@@ -12284,8 +12292,12 @@ do_bounce:
     globals.player.Bounced = 1;
     zCameraSetBbounce(1);
 
-    if (!(plat->passet->sb.springflags & 0x1) ||
-        ((plat->passet->sb.springflags & 0x2) && !superbounce))
+    if ((plat->passet->sb.springflags & 0x1) &&
+        (!(plat->passet->sb.springflags & 0x2) || superbounce))
+    {
+        zCameraSetHighbounce(1);
+    }
+    else
     {
         if (jmpdir->x * jmpdir->x + jmpdir->z * jmpdir->z > jmpdir->y * jmpdir->y)
         {
@@ -12296,14 +12308,10 @@ do_bounce:
             zCameraSetHighbounce(0);
         }
     }
-    else
-    {
-        zCameraSetHighbounce(1);
-    }
 
-    tslide_ground = 0;
-    tslide_dbl_tmr = 0.0f;
     tslide_inair_tmr = 0.0f;
+    tslide_dbl_tmr = 0.0f;
+    tslide_ground = 0;
     globals.player.SlideTrackDecay = 0.0f;
 }
 
@@ -12338,7 +12346,7 @@ static U32 sTrackHash[10][2] = { { 0x5904a48f, 0x5904a498 }, { 0x5904a512, 0x590
                                  { 0x5904a7a1, 0x5904a7aa }, { 0x5904a824, 0x5904a82d },
                                  { 0x5904a8a7, 0x5904a8b0 }, { 0x5904a92a, 0x5904a933 } };
 
-U32 zEntPlayer_ObjIDIsTrack(U32 objID)
+S32 zEntPlayer_ObjIDIsTrack(U32 objID)
 {
     S32 i;
 
@@ -12626,7 +12634,7 @@ void zEntPlayerReset(xEnt* ent)
         xBase* base = globals.sceneCur->base[j];
 
         if ((base->baseType == eBaseTypeStatic || base->baseType == eBaseTypePlatform) &&
-            (S32)zEntPlayer_ObjIDIsTrack(base->id))
+            zEntPlayer_ObjIDIsTrack(base->id))
         {
             xEnt* track = (xEnt*)globals.sceneCur->base[j];
 
@@ -13817,7 +13825,7 @@ S32 zEntPlayerEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam, x
             {
                 if (0.0f == toParam[1])
                 {
-                    if (amount != -666 && 0.0f != globals.player.g.DamageGiveHealthKnock)
+                    if (amount != -666 && globals.player.g.DamageGiveHealthKnock)
                     {
                         zEntPlayer_DamageKnockIntoAir(globals.player.g.DamageGiveHealthKnock);
                     }
@@ -13983,7 +13991,7 @@ S32 zEntPlayerEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam, x
         zRumbleStart((_tagSDRumbleType)1);
         break;
     case eEventPlayerRumbleLight:
-        if (toParam[0] != 0.0f)
+        if (toParam[0])
         {
             zPadAddRumble((_tagRumbleType)5, toParam[0], 0, 0);
         }
@@ -13994,7 +14002,7 @@ S32 zEntPlayerEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam, x
 
         break;
     case eEventPlayerRumbleMedium:
-        if (toParam[0] != 0.0f)
+        if (toParam[0])
         {
             zPadAddRumble((_tagRumbleType)7, toParam[0], 0, 0);
         }
@@ -14005,7 +14013,7 @@ S32 zEntPlayerEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam, x
 
         break;
     case eEventPlayerRumbleHeavy:
-        if (toParam[0] != 0.0f)
+        if (toParam[0])
         {
             zPadAddRumble((_tagRumbleType)9, toParam[0], 0, 0);
         }
