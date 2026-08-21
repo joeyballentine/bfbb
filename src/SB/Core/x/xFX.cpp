@@ -29,6 +29,7 @@
 #define ID_rainbowfilm_smooth32 0x741B0566
 
 /* Global variables from .comm segment */
+tier_queue_allocator xFXRibbon::joint_alloc;
 xFXRing ringlist[RING_COUNT];
 xFXStreak sStreakList[10];
 xFXShine sShineList[2];
@@ -1746,7 +1747,9 @@ void xFXStreakRender()
 
         count = s->head;
 
-        for (j = 49; j > 0; j--)
+        j = 49;
+
+        while (j > 0)
         {
             e = &s->elem[count];
 
@@ -1799,6 +1802,7 @@ void xFXStreakRender()
             }
 
             count--;
+            j--;
 
             if (count < 0)
             {
@@ -1893,7 +1897,10 @@ void xFXStreakStop(U32 id)
 
     xFXStreak* s = &sStreakList[id];
 
-    if (!s->flags)
+    // The `& 1` is redundant -- `(x == 0)` is already 0 or 1 -- but the target
+    // narrows the comparison to a single bit (`extrwi. 1,26` off the `cntlzw`),
+    // which only this spelling reproduces. `!s->flags` gives `cmplwi/beqlr`.
+    if ((s->flags == 0) & 1)
     {
         return;
     }
@@ -2185,14 +2192,13 @@ namespace
 
     void sort_ribbons()
     {
-        if (ribbons_dirty)
+        if (!ribbons_dirty || !active_ribbons_size)
         {
-            if (active_ribbons_size)
-            {
-                qsort(active_ribbons, active_ribbons_size, sizeof(xFXRibbon*), compare_ribbons);
-                ribbons_dirty = false;
-            }
+            return;
         }
+
+        qsort(active_ribbons, active_ribbons_size, sizeof(xFXRibbon*), compare_ribbons);
+        ribbons_dirty = false;
     }
 
     void activate_ribbon(xFXRibbon* ribbon)
