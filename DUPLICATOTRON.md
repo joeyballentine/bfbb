@@ -452,6 +452,16 @@ because the `volatile` device means we now emit the reload; its residual is the
 `xFXAuraUpdate` and `NPCHazard::Discard` (NAMED), plus `xFXRingCreate` and
 `LightResetFrame` (ANON, float-literal reloads).
 
+**`NPCHazard::Discard` re-measured 2026-08-21, after clause V shipped: the
+`volatile` on `g_cnt_activehaz` is still load-bearing.** Removing it drops
+`Discard` from 100.0 to **90.161** — mwcc collapses the
+`subi r0,r3,1 / stw / lwz` triple into a single `subi r3,r3,1` and reorders
+the store past the `srawi`. Retail genuinely stores and reloads the counter,
+so this site is outside clause V's reach and the device stays. It also has no
+measurable effect on `zNPCHazard_ScenePrepare`/`SceneFinish`, whose own
+residual (a `stw` to the same symbol sinking past 24 unrolled null stores) is
+a separate, unsolved issue.
+
 Most-reloaded symbols, in case the trigger is narrower than "any global":
 `__ctype_map` (7), `RwEngineInstance` (6), `cb_bink_sound` (6), `globals` (5),
 `cb_bink_IO` (4), `gTRKCPUState` (3).
@@ -1034,6 +1044,42 @@ blind to definition order.
   second form and the destination first for the compound assignment. If the
   target loads the memory operand before the literal in an `fadds`/`fsubs`,
   the source used `+=`. Timers are the usual site.
+
+- **A three-way ladder, not a two-way one: `x = c * x` / `x *= c` / `x = c
+  * expr`.** The refinement of the note above, measured on
+  `NPCHazard::DeathStar`. With `F32 spd = 0.4f * this->custdata.typical.rad_max;`
+  mwcc issues `lfs <0.4f>` before `lfs <member>` and lands the product with
+  `fmuls f1, f1, f0`. Splitting into a load then `spd *= 0.4f;` fixes the load
+  order but keeps the wrong destination register (99.565). Only
+  `F32 spd = member; spd = 0.4f * spd;` gives both, and it is 100.0. So the
+  choice is not merely which operand issues first -- it also decides which
+  register the result is written to, and the two are set independently.
+
+- **mwcc evaluates the RIGHT operand of a binary `*` first when both sides
+  have side effects.** This is why folding a `spd_factor` temp back into one
+  expression in `NPCHazard::KickBlooshBlob` left the emitted `xurand()` call
+  order untouched while flipping `fmuls f31, f31, f0` into the target's
+  `fmuls f31, f0, f31` (99.868 -> 100.0). Useful whenever the only diff is a
+  commuted `fmuls` and the operands are calls: fold the temp away rather than
+  swapping the operands in the source, which is inert. The inverse move --
+  hoisting a *named* temp out of such an expression -- sinks the multiply past
+  the call and is much worse (93.649 measured).
+
+- **The `const`-aggregate lever does not fire on aggregates that already emit
+  the three-register form**, so apply it one declaration at a time and keep
+  only the ones that move. In `NPCHazard::Render` three of five candidates
+  paid (93.330 -> 94.930) and two were inert.
+
+- **A member load and an adjacent aggregate copy sharing a base register get
+  clustered, and then load order and copy position cannot both be had.**
+  Measured across `Upd_OilOoze`, `Upd_OilGlob`, `TarTarLinger`,
+  `Upd_ChuckBloosh` and `StagColGeneral`: declaring the scalar before the
+  vector gives retail's multiply-before-copy position but the wrong load
+  order; swapping gives retail's load order but sinks the multiply below the
+  copy. No source form yields both. When the copy source is a `.rodata` base
+  instead (a *different* register, as in `DeathStar`) there is no clustering
+  and the asymmetry inverts -- which is why `DeathStar` is solvable and these
+  five are not. Treat this shape as blocked, not as unfinished work.
 
 - **A countdown loop on the parameter** (`while (numTriangles--)`) rather than
   an index loop: the index form costs a callee-saved register and shifts the
