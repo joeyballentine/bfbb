@@ -452,6 +452,28 @@ because the `volatile` device means we now emit the reload; its residual is the
 `xFXAuraUpdate` and `NPCHazard::Discard` (NAMED), plus `xFXRingCreate` and
 `LightResetFrame` (ANON, float-literal reloads).
 
+**Census of `volatile` sites installed for the store-then-reload defect.**
+These are all reproductions of a reload retail genuinely performs, each
+evidenced against the target, and each is file-local. But they MASK the
+compiler-side fix: if the value-numbering path is ever widened to cover this
+class, every one of these must be reverted first or the measurement will read
+as zero. Keep this list current.
+
+    iSnd.cpp          ua_stream_buffer, stream_buffer  (file-scope globals)
+    iSnd.cpp          sinfo_array_max                  (file-scope global)
+    iSnd.cpp          snd_id, strm_id                  (function-local statics)
+    zNPCTypeTiki.cpp  cloudEmitter                     (file-scope static)
+    zNPCTypeTiki.cpp  numTikisOnScreen                 (pointer-cast at the use)
+    zNPCHazard.cpp    g_cnt_activehaz                  (file-scope static)
+    zEntPlayer.cpp    sPlayerIgnoreSound, bbash_start_ht, idle_tmr
+
+Clause V does not fire on these. Clause V kills the *literal pool* across a
+store to a small static; this defect is the compiler forwarding the *stored
+value itself* to a following load of the same static. That is store-to-load
+forwarding, a different transform, and it is reachable from neither patched
+dispatch table. Eight-plus witnesses across four units now, which is the
+argument for finding it rather than qualifying more variables.
+
 **The store-then-reload shape appears three times in `zNPCTypeTiki` alone**
 (`numTikisOnScreen` in `Process`, `cloudEmitter` in `zNPCTiki_InitFX`, and a
 literal-inside-an-unrolled-loop variant in `SetCarryState`). Fourteen

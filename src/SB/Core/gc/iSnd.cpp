@@ -136,7 +136,7 @@ U32* volatile stream_buffer = 0;
 u32 silence_buffer = 0;
 volatile u32 zero_point = 0;
 volatile u32 zero_end = 0;
-S32 sinfo_array_max = 0;
+volatile S32 sinfo_array_max = 0;
 volatile U32 SoundFlags = 0;
 volatile S32 fc = 0;
 static char soundInited = 0;
@@ -521,10 +521,10 @@ static void fcb()
                 source = streams[i].source_b;
             }
 
+            U32 flags_bit_12;
             U32 flags_bit_10;
             U32 flags_bit_13;
             U32 flags_bit_9;
-            U32 flags_bit_12;
             flags_bit_9 = orig_flags & 0x200;
             flags_bit_12 = orig_flags & 0x1000;
             flags_bit_10 = orig_flags & 0x400;
@@ -597,6 +597,8 @@ static void fcb()
 
 void iSndInit()
 {
+    S32 i;
+
     soundInited = 1;
     AIInit(NULL);
     ARInit(aram_array, 40);
@@ -604,13 +606,13 @@ void iSndInit()
     AXInit();
     MIXInit();
 
-    for (S32 i = 0; i < 58; i++)
+    for (i = 0; i < 58; i++)
     {
         voices[i].voice = NULL;
         voices[i].flags = 0;
     }
 
-    for (S32 i = 0; i < 6; i++)
+    for (i = 0; i < 6; i++)
     {
         streams[i].vinf.voice = 0;
         streams[i].vinf.flags = 0;
@@ -625,7 +627,7 @@ void iSndInit()
     ua_stream_buffer = (U32*)OSAllocFromHeap(the_heap, 0x18100);
     stream_buffer = (U32*)(((U32)ua_stream_buffer + 0x1f) & ~0x1f);
     U32* local_buffer = stream_buffer;
-    for (S32 i = 0; i < 0x100; i++)
+    for (i = 0; i < 0x100; i++)
     {
         local_buffer[i] = NULL;
     }
@@ -650,7 +652,7 @@ void iSndInit()
     char str_buf[0x20];
     U32 offset = 0;
 
-    for (S32 i = 0; i < 6; i++)
+    for (i = 0; i < 6; i++)
     {
         u32 buf = ARAlloc(0x8000);
         sprintf(str_buf, "streaming channel %d\n", i);
@@ -1657,9 +1659,9 @@ void iSndSuspendCD(U32)
 
 void iSndSceneExit()
 {
+    BOOL enabled = OSDisableInterrupts();
     S32 done = 0;
 
-    BOOL enabled = OSDisableInterrupts();
     ARQFlushQueue();
     DVDCancelAll();
 
