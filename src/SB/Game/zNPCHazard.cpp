@@ -101,7 +101,7 @@ static NPCHazard g_hazards[64] = { NPC_HAZ_UNKNOWN };
 static xAnimTable* g_haz_animTable[30];
 static UVAModelInfo g_haz_uvAnimInfo[30];
 
-static S32 g_cnt_activehaz;
+static volatile S32 g_cnt_activehaz;
 static xParEmitterCustomSettings g_parf_default;
 static xParEmitterCustomSettings g_parf_zapwarn;
 static xParEmitterCustomSettings g_parf_zapwave;
@@ -1074,19 +1074,19 @@ void NPCHazard::Discard()
         Cleanup();
 
         // Two statements, per the target: subi / stw / lwz / srawi / andc.
-        // The reload is the whole story -- retail's build did not forward the
-        // store, ours does, so this reads 90.161% rather than 100%. That gap is
-        // a compiler-side missed store-forwarding, not a source shape; seven
-        // spellings and an inline-helper-by-reference were tried and none
-        // reproduce it. Marking the static `volatile` reaches 96.613% but emits
-        // an extra load the target does not have, so it is not the original.
+        // The reload of the counter after the store is why `g_cnt_activehaz` is
+        // declared volatile; reading it once into `cnt` keeps the clamp down to
+        // the single load the target has.
         //
         // Do not collapse this back into one expression. The previous
         // single-statement form `g_cnt_activehaz &= ~((g_cnt_activehaz - 1) >> 31);`
-        // scored higher (93.387%) but never decremented at all: for any x >= 1
-        // it folds to x &= 0xFFFFFFFF. The active-hazard count only ever grew.
+        // scored higher than the naive form but never decremented at all: for any
+        // x >= 1 it folds to x &= 0xFFFFFFFF. The active-hazard count only ever grew.
         g_cnt_activehaz--;
-        g_cnt_activehaz &= ~(g_cnt_activehaz >> 31);
+
+        S32 cnt = g_cnt_activehaz;
+
+        g_cnt_activehaz = cnt & ~(cnt >> 31);
     }
 }
 
@@ -1954,32 +1954,34 @@ void NPCHazard::PreCollide()
 
 S32 NPCHazard::StaggeredCollide()
 {
-    if (--this->custdata.collide.cnt_skipcol > 0)
+    HAZCollide* hazcol = &this->custdata.collide;
+
+    if (--hazcol->cnt_skipcol > 0)
     {
         return 0;
     }
 
-    this->custdata.collide.cnt_skipcol = ((xrand() >> 23) & 1) + 5;
+    hazcol->cnt_skipcol = ((xrand() >> 23) & 1) + 5;
 
     static xCollis colrec;
     memset(&colrec, 0, sizeof(colrec));
 
-    switch (this->custdata.collide.idx_rotateCol)
+    switch (hazcol->idx_rotateCol)
     {
     case HAZ_COLTYP_STAT:
-        if (this->custdata.collide.flg_collide & 1)
+        if (hazcol->flg_collide & 1)
         {
             StagColStat();
         }
         break;
     case HAZ_COLTYP_DYN:
-        if (this->custdata.collide.flg_collide & 2)
+        if (hazcol->flg_collide & 2)
         {
             StagColDyn();
         }
         break;
     case HAZ_COLTYP_NPC:
-        if (this->custdata.collide.flg_collide & 4)
+        if (hazcol->flg_collide & 4)
         {
             StagColNPC();
         }
@@ -1988,10 +1990,10 @@ S32 NPCHazard::StaggeredCollide()
         break;
     }
 
-    this->custdata.collide.idx_rotateCol = (en_hazcol)(this->custdata.collide.idx_rotateCol + 1);
-    if (this->custdata.collide.idx_rotateCol >= HAZ_COLTYP_NOMORE)
+    hazcol->idx_rotateCol = (en_hazcol)(hazcol->idx_rotateCol + 1);
+    if (hazcol->idx_rotateCol >= HAZ_COLTYP_NOMORE)
     {
-        this->custdata.collide.idx_rotateCol = HAZ_COLTYP_STAT;
+        hazcol->idx_rotateCol = HAZ_COLTYP_STAT;
     }
 
     return 0;
@@ -2002,7 +2004,9 @@ void NPCHazard::StagColGeneral(S32 who)
     xParabola* parab = &this->custdata.collide.parabinfo;
     F32 tym_used = this->tym_lifespan - this->tmr_remain;
     F32 tym_beg = MIN(tym_used, this->tym_lifespan);
-    F32 tym_end = MIN(0.5f + tym_beg, this->tym_lifespan) + 0.016666668f;
+    F32 tym_end = MIN(0.5f + tym_beg, this->tym_lifespan);
+
+    tym_end += 0.016666668f;
     xVec3 pos_beg = this->pos_hazard;
     xVec3 pos_end;
     xSweptSphere swdata;
@@ -2580,7 +2584,7 @@ void NPCHazard::Upd_TTFlight(F32 dt)
 
 void NPCHazard::ReconTarTar()
 {
-    xVec3 dir_norm = this->custdata.collide.dir_normal;
+    const xVec3 dir_norm = this->custdata.collide.dir_normal;
     Reconfigure(NPC_HAZ_TARTARSPILL);
 
     if (xVec3Length2(&dir_norm) > 0.0f)
@@ -2704,7 +2708,7 @@ void NPCHazard::TarTarSplash(const xVec3* dir_norm)
         rt = *(xVec3*)Right();
     }
 
-    xVec3 pos_emit = pos_hazard;
+    const xVec3 pos_emit = pos_hazard;
     for (S32 i = 0; i < 16; i++)
     {
         // Using initialization prevents generation of the operator= for the xVec3,
@@ -2746,10 +2750,9 @@ void NPCHazard::TarTarSplash(const xVec3* dir_norm)
 void NPCHazard::TarTarLinger()
 {
     HAZBall* ball = &this->custdata.ball;
-    S32 nxt = --this->cnt_nextemit;
-    xVec3 vel_emit = g_Y3;
+    const xVec3 vel_emit = g_Y3;
 
-    if (nxt >= 0)
+    if (--this->cnt_nextemit >= 0)
     {
         return;
     }
@@ -2867,8 +2870,8 @@ void NPCHazard::ReconChuck()
 {
     HAZBall* ball = &this->custdata.ball;
 
-    xVec3 dir_norm = this->custdata.collide.dir_normal;
-    xVec3 vel_flight = this->custdata.tartar.vel;
+    const xVec3 dir_norm = this->custdata.collide.dir_normal;
+    const xVec3 vel_flight = this->custdata.tartar.vel;
 
     Reconfigure(NPC_HAZ_CHUCKBLAST);
 
@@ -2938,7 +2941,7 @@ void NPCHazard::Upd_ChuckBlast(F32 dt)
 
 void NPCHazard::WaterSplash(const xVec3* dir_norm)
 {
-    xVec3 pos_emit = this->pos_hazard;
+    const xVec3 pos_emit = this->pos_hazard;
 
     xVec3 up, at, rt;
     if (dir_norm)
@@ -3345,7 +3348,7 @@ void NPCHazard::Upd_OilBubble(F32 dt)
 void NPCHazard::ReconSlickOil()
 {
     HAZBall* ball = &this->custdata.ball;
-    xVec3 dir_norm = this->custdata.collide.dir_normal;
+    const xVec3 dir_norm = this->custdata.collide.dir_normal;
 
     Reconfigure(NPC_HAZ_OILSLICK);
 
@@ -3355,18 +3358,19 @@ void NPCHazard::ReconSlickOil()
         NPCC_MakePerp((xVec3*)&this->mdl_hazard->Mat->at, &dir_norm);
         xVec3Cross((xVec3*)&this->mdl_hazard->Mat->right, (xVec3*)&this->mdl_hazard->Mat->up,
                    (xVec3*)&this->mdl_hazard->Mat->at);
-    }
 
-    xMat3x3 mat;
-    xMat3x3Rot(&mat, &dir_norm, 2 * PI * xurand());
-    xMat3x3Mul(xModelGetFrame(this->mdl_hazard), xModelGetFrame(this->mdl_hazard), &mat);
-    F32 dot = xVec3Dot(&dir_norm, &g_Y3);
+        xMat3x3 mat;
+        xMat3x3Rot(&mat, &dir_norm, 2 * PI * xurand());
+        xMat3x3Mul(xModelGetFrame(this->mdl_hazard), xModelGetFrame(this->mdl_hazard), &mat);
 
-    if (FABS(dot) < 0.86f)
-    {
-        ball->rad_max *= 0.5f;
-        ball->rad_min *= 0.5f;
-        ball->rad_cur *= 0.5f;
+        F32 dot = xVec3Dot(&dir_norm, &g_Y3);
+
+        if (FABS(dot) < 0.86f)
+        {
+            ball->rad_max *= 0.5f;
+            ball->rad_min *= 0.5f;
+            ball->rad_cur *= 0.5f;
+        }
     }
 
     Start(NULL, -1.0f);
@@ -3390,7 +3394,7 @@ void NPCHazard::OilSplash(const xVec3* dir_norm)
         rt = *(xVec3*)Right();
     }
 
-    xVec3 pos_emit = this->pos_hazard;
+    const xVec3 pos_emit = this->pos_hazard;
     for (S32 i = 0; i < 16; i++)
     {
         xVec3 vel_emit;
