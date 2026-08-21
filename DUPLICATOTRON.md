@@ -517,6 +517,37 @@ One thing it DOES settle: `xEvent.h`'s enum is correct. The case values match
 retail exactly, so any future "the event enum is shifted" reading of that
 diff is wrong and must not be acted on.
 
+### A THIRD alias lead: pointer loads killed by a store to a file-scope static
+
+`zThrown_LaunchVel` (91.934) and `zThrown_AddFruit` (88.657) share one root
+cause, and it is the cleanest compiler-side witness pair currently on the
+board. Both do:
+
+```c
+newThrown = &zThrownList[zThrownCount];
+zThrownCount++;
+newThrown->killTimer = stats->carry->killTimer;
+```
+
+Retail issues the `lwz` of `stats->carry` **after** the `stw` of
+`zThrownCount` -- the store to the static kills the load. Our mwcc proves
+`zThrowableModels` and `zThrownCount` cannot alias, and then either hoists
+the load above the store (`LaunchVel`) or reuses the value already computed
+for the earlier `stats->carry != &c_fruit` test (`AddFruit`). Every other
+differing row in both functions -- the r7/r8 and r8/r9 renumbering, the
+li/lis scheduling swaps, the extra live register -- is downstream of that
+single decision.
+
+This is adjacent to but OUTSIDE clause V. Clause V kills the literal pool
+across a store to a small static; what is wanted here is killing
+**pointer-dereference loads** across a store to a file-scope static.
+
+Two things make this a good candidate if anyone extends the alias predicate:
+856 bytes across two functions, and **no masking to unwind first** -- a
+whole-variable `volatile` on `zThrownCount` is firmly disproven by the
+target (it breaks six other functions in the unit and creates four new
+non-matching ones), so nothing has been papered over here.
+
 ### The store-to-load forwarding defect: isolated, and DEPRIORITISED
 
 A 30-line repro reproduces it standalone with the shipped 2.0p1a compiler and
@@ -1407,6 +1438,16 @@ blind to definition order.
   non-matching to **9** - nine functions flip at once. That is measured, not
   theorised, and it was removed again because shipping dead code to shift a
   pool is not decompiling.
+
+**Scope check, 2026-08-21: zThrown's REMAINING functions are not pool-blocked.**
+The unit is down to four non-matching from the eighteen that motivated the
+probe experiment, and every diff row in all four was re-examined: the
+anonymous `.sdata2` rows (`@844`, `@257` and friends) all render as
+*identical*, so pool ordering is not what holds any of them back. Their
+causes are register colouring (`ThrowFruit`, `zThrown_Update` cluster A),
+store-to-load forwarding (`zThrown_Update` cluster B) and the alias question
+below. So do not reach for the pool explanation here by reflex -- it was true
+of the unit as a whole once and is not true of what is left.
 
 **Seen in three units now.** `zThrown` (`0.5f`), `zShrapnel` (`0.5f`), and
 `zNPCTypeRobot`, whose `.rodata` opens with **eleven zero-filled objects we do
