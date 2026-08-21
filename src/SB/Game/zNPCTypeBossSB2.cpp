@@ -721,7 +721,7 @@ xAnimTable* ZNPC_AnimTable_BossSB2()
 
     anim_list[n++] = 0;
 
-    NPCC_BuildStandardAnimTran(table, g_strz_bossanim, anim_list, 1, 0.2);
+    NPCC_BuildStandardAnimTran(table, g_strz_bossanim, anim_list, 1, 0.2f);
 
     xAnimTableNewTransition(table, g_strz_bossanim[ANIM_SmackLeft01], g_strz_bossanim[ANIM_Dizzy01],
                             0, 0, 0x10, 0, 0, 0, 0, 0, 0.1, 0);
@@ -1523,59 +1523,62 @@ namespace
         if (init)
         {
             sound[SOUND_TAUNT].asset = sound_asset_ids[0][0];
-            sound_data[SOUND_TAUNT].id = xStrHash(sound_assets[sound[SOUND_TAUNT].asset].name);
+            const sound_asset& asset = sound_assets[sound[SOUND_TAUNT].asset];
+            sound_data[SOUND_TAUNT].id = xStrHash(asset.name);
         }
         if (init)
         {
             sound[SOUND_KARATE].asset = sound_asset_ids[1][0];
-            sound_data[SOUND_KARATE].id = xStrHash(sound_assets[sound[SOUND_KARATE].asset].name);
+            const sound_asset& asset = sound_assets[sound[SOUND_KARATE].asset];
+            sound_data[SOUND_KARATE].id = xStrHash(asset.name);
         }
         if (init)
         {
             sound[SOUND_CHOP_WINDUP].asset = sound_asset_ids[2][0];
-            sound_data[SOUND_CHOP_WINDUP].id =
-                xStrHash(sound_assets[sound[SOUND_CHOP_WINDUP].asset].name);
+            const sound_asset& asset = sound_assets[sound[SOUND_CHOP_WINDUP].asset];
+            sound_data[SOUND_CHOP_WINDUP].id = xStrHash(asset.name);
         }
         if (init)
         {
             sound[SOUND_CHOP_SWING].asset = sound_asset_ids[3][0];
-            sound_data[SOUND_CHOP_SWING].id =
-                xStrHash(sound_assets[sound[SOUND_CHOP_SWING].asset].name);
+            const sound_asset& asset = sound_assets[sound[SOUND_CHOP_SWING].asset];
+            sound_data[SOUND_CHOP_SWING].id = xStrHash(asset.name);
         }
         if (init)
         {
             sound[SOUND_SWIPE].asset = sound_asset_ids[4][0];
-            sound_data[SOUND_SWIPE].id = xStrHash(sound_assets[sound[SOUND_SWIPE].asset].name);
+            const sound_asset& asset = sound_assets[sound[SOUND_SWIPE].asset];
+            sound_data[SOUND_SWIPE].id = xStrHash(asset.name);
         }
         if (init)
         {
             sound[SOUND_KARATE_SLUG].asset = sound_asset_ids[5][0];
-            sound_data[SOUND_KARATE_SLUG].id =
-                xStrHash(sound_assets[sound[SOUND_KARATE_SLUG].asset].name);
+            const sound_asset& asset = sound_assets[sound[SOUND_KARATE_SLUG].asset];
+            sound_data[SOUND_KARATE_SLUG].id = xStrHash(asset.name);
         }
         if (init)
         {
             sound[SOUND_CHOP_HIT].asset = sound_asset_ids[6][0];
-            sound_data[SOUND_CHOP_HIT].id =
-                xStrHash(sound_assets[sound[SOUND_CHOP_HIT].asset].name);
+            const sound_asset& asset = sound_assets[sound[SOUND_CHOP_HIT].asset];
+            sound_data[SOUND_CHOP_HIT].id = xStrHash(asset.name);
         }
         if (init)
         {
             sound[SOUND_KARATE_HIT].asset = sound_asset_ids[7][1];
-            sound_data[SOUND_KARATE_HIT].id =
-                xStrHash(sound_assets[sound[SOUND_KARATE_HIT].asset].name);
+            const sound_asset& asset = sound_assets[sound[SOUND_KARATE_HIT].asset];
+            sound_data[SOUND_KARATE_HIT].id = xStrHash(asset.name);
         }
         if (init)
         {
             sound[SOUND_HIT_SLAP].asset = sound_asset_ids[8][0];
-            sound_data[SOUND_HIT_SLAP].id =
-                xStrHash(sound_assets[sound[SOUND_CHOP_HIT].asset].name);
+            const sound_asset& asset = sound_assets[sound[SOUND_HIT_SLAP].asset];
+            sound_data[SOUND_HIT_SLAP].id = xStrHash(asset.name);
         }
         if (init)
         {
             sound[SOUND_HIT_FLAIL].asset = sound_asset_ids[9][0];
-            sound_data[SOUND_HIT_FLAIL].id =
-                xStrHash(sound_assets[sound[SOUND_HIT_FLAIL].asset].name);
+            const sound_asset& asset = sound_assets[sound[SOUND_HIT_FLAIL].asset];
+            sound_data[SOUND_HIT_FLAIL].id = xStrHash(asset.name);
         }
     }
 
@@ -2167,15 +2170,16 @@ void zNPCB_SB2::update_turn(F32 dt)
         turn.dir.normalize();
     }
 
-    xVec3& loc = location();
-    xVec2 cur = { model->Mat->at.x, model->Mat->at.z };
+    xVec3& loc3 = location();
+    xVec3& start3 = (xVec3&)model->Mat->at;
+    xVec2 start_dir = { start3.x, start3.z };
 
     if (!turning())
     {
         return;
     }
 
-    F32 start = xatan2(cur.x, cur.y);
+    F32 start = xatan2(start_dir.x, start_dir.y);
     F32 end = xatan2(turn.dir.x, turn.dir.y);
     F32 diff = end - start;
 
@@ -2190,7 +2194,9 @@ void zNPCB_SB2::update_turn(F32 dt)
 
     F32 yaw = start;
 
-    xAccelMove(yaw, turn.vel, turn.accel, dt, yaw + diff, turn.max_vel);
+    diff += yaw;
+
+    xAccelMove(yaw, turn.vel, turn.accel, dt, diff, turn.max_vel);
     set_yaw_matrix(frame->mat, yaw);
 }
 
@@ -2483,11 +2489,9 @@ void zNPCB_SB2::bind_nodes()
         }
         else
         {
-            xModelInstance* model = models[node_hooks[i].model];
-
             ent->baseFlags &= 0xfff7;
-            nodes[i].skin_model = model->Data;
-            nodes[i].skin_mat = model->Mat;
+            nodes[i].skin_model = models[node_hooks[i].model]->Data;
+            nodes[i].skin_mat = models[node_hooks[i].model]->Mat;
         }
     }
 
@@ -2690,7 +2694,7 @@ void zNPCB_SB2::move_hand(zNPCB_SB2::hand_data& hand, F32 dt)
     }
 
     xBound& obb = hand.ent->bound;
-    xVec3 old_loc = obb.mat->pos;
+    const xVec3 old_loc = obb.mat->pos;
 
     parallelepiped_to_obb(obb, loc);
     xQuickCullForBound(&obb.qcd, &obb);
@@ -2703,7 +2707,7 @@ void zNPCB_SB2::move_hand(zNPCB_SB2::hand_data& hand, F32 dt)
         return;
     }
 
-    xVec3 offset = obb.mat->pos - old_loc;
+    const xVec3 offset = obb.mat->pos - old_loc;
     xVec3 player_offset = (const xVec3&)globals.player.ent.model->Mat->pos - old_loc;
 
     if (offset.dot(player_offset) > 0.0f &&
@@ -3153,7 +3157,7 @@ namespace
         F32 t0 = n1->t;
         F32 dt = n2->t - t0;
 
-        if (-1e-5f <= dt && dt <= 1e-5f)
+        if (dt >= -1e-5f && dt <= 1e-5f)
         {
             for (F32* v1 = n1->value; value != end; value++, v1++)
             {
@@ -3266,19 +3270,21 @@ namespace
             else if (index != 0)
             {
                 F32* p = curve[index - 1].value;
+                F32 cb = c1 + cp;
 
                 for (F32 *a = n0->value, *b = n1->value; value != end; value++, a++, b++, p++)
                 {
-                    *value = cm * *p + c0 * *a + (c1 + cp) * *b;
+                    *value = cm * *p + c0 * *a + cb * *b;
                 }
             }
             else
             {
-                F32* p = curve[index + 2].value;
+                F32 ca = cm + c0;
 
-                for (F32 *a = n0->value, *b = n1->value; value != end; value++, a++, b++, p++)
+                for (F32 *a = n0->value, *b = n1->value, *p = curve[index + 2].value;
+                     value != end; value++, a++, b++, p++)
                 {
-                    *value = (cm + c0) * *a + c1 * *b + cp * *p;
+                    *value = ca * *a + c1 * *b + cp * *p;
                 }
             }
         }

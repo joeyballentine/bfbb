@@ -283,18 +283,12 @@ struct zNPCB_SB2 : zNPCBoss
     void set_location(const xVec3& loc);
     bool turning() const
     {
-        bool result = FALSE;
-        xVec2 cur = { model->Mat->at.x, model->Mat->at.z };
+        const xVec2 cur = { model->Mat->at.x, model->Mat->at.z };
 
-        if (!xfeq0(turn.vel) ||
-            (!xfeq0(turn.accel) &&
-             (!(turn.dir.x > turn.dir.y) || !(xabs(turn.dir.x - cur.x) < 0.001f)) &&
-             (!(turn.dir.x < turn.dir.y) || !(xabs(turn.dir.y - cur.y) < 0.001f))))
-        {
-            result = TRUE;
-        }
-
-        return result;
+        return !xfeq0(turn.vel) ||
+               (!xfeq0(turn.accel) &&
+                (!(turn.dir.x > turn.dir.y) || !(xabs(turn.dir.x - cur.x) < 0.001f)) &&
+                (!(turn.dir.x < turn.dir.y) || !(xabs(turn.dir.y - cur.y) < 0.001f)));
     }
     xVec3& location() const;
     xVec3& get_home() const;
