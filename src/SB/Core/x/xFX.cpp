@@ -334,7 +334,9 @@ xFXRing* xFXRingCreate(const xVec3* pos, const xFXRing* params)
     {
         if (ring->time <= 0.0f)
         {
-            // non-matching: 1.0f is only loaded once
+            // non-matching: our compiler hoists the `lfs 0.0f` of the `ring->time <=
+            // 0.0f` test out of the loop; retail reloads it every iteration. The three
+            // `1.0f / ring->lifetime` divides are not CSE'd in either object.
 
             memcpy(ring, params, sizeof(xFXRing));
 
