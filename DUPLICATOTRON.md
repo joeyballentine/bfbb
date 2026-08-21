@@ -734,6 +734,57 @@ machine to commit:
   project file). Batch 10-20 names per invocation; one call costs the same as
   twenty.
 
+## The alias patch: clause C+, and what the predicate cannot reach
+
+Shipped 2026-08-21. **Clause C+ on dispatch entry 0: +19 functions to exactly
+100.0, 9,400 bytes, zero functions lost, DOL unchanged.** Game exact
+73.214 -> 73.786 in one change.
+
+Clause C excluded these sites through the **size test and the flags mask**,
+not the storage gate. Of the four bits it excludes (0x08/0x10/0x20/0x40) only
+**0x20** unlocks anything, and every site it unlocks is an indirect store such
+as `stw r0, 0x4(r31)` whose memref reports the *pointee's* size rather than
+the access width -- so `flags & ~0x86 == 0` and `sizeof <= 4` each
+independently reject the pair. Clause C+ tolerates 0x20 and drops the size cap
+on the store side only, keeping both static-storage gates and the
+differing-opcode test.
+
+**Entry 0 only.** On entries 1/3 as well it is +19/-3, and one loss is
+`zPickupTableInit` in a *complete* unit, which breaks the link.
+
+Space came from **deduplication**: the two literal copies of clause C are now
+one shared body reached by a 10-byte `call` stub per entry, so free `.text`
+padding went from 25 bytes to 43. The refactor was validated before any
+semantic change -- the deduped *strict* clause C produced 8060 exact and not
+one changed function across all 451 units.
+
+### Measured NO-GOs, so nobody re-opens them
+
+- **Relaxing the static-storage gate on the store side: -80 (+29/-109), and
+  none of the intended functions move.** The premise -- "the load side
+  qualifies, the store side is pointer-based and fails the gate" -- is FALSE.
+  Two probes prove it: allowing the store side only when its base expr is not
+  a frame object, and only when it has no base expr, **both change nothing
+  anywhere**, so those pointer-based stores never reach clause C at all. The
+  only population the relaxation admits is stack traffic, i.e. exactly what
+  the gate exists to exclude (the docstring's -50).
+- **The whole avenue is bounded.** With **all nine dispatch entries answering
+  "may alias" unconditionally**, only 5 of the 21 functions this project had
+  attributed to the alias predicate reach 100.0, and most get *worse*. A
+  1.750pp attribution built from per-unit agent reports did not survive
+  contact with the compiler. Treat "blocked on the reload defect" as a
+  hypothesis to test, not a diagnosis.
+- Also measured full-tree and rejected: store side gated on computed-address
+  -5; on object-link no gains; dropping the differing-opcode test +21/-7;
+  requiring the load side to be a whole object +19/-8; requiring load-side
+  offset 0 +19/-7.
+
+**Method note worth copying.** The agent hashed every compiled object before
+and after: 28 of 451 changed and none belonged to a complete unit, which is
+how it predicted the DOL would survive before any link was run. That is a
+better proxy than percentages, because objdiff pairs symbols by name and is
+blind to definition order.
+
 ## Patterns that keep working
 
 - **`const` on a read-only local aggregate changes the copy expansion.** A
