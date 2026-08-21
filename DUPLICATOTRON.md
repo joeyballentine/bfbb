@@ -452,6 +452,41 @@ because the `volatile` device means we now emit the reload; its residual is the
 `xFXAuraUpdate` and `NPCHazard::Discard` (NAMED), plus `xFXRingCreate` and
 `LightResetFrame` (ANON, float-literal reloads).
 
+### The store-to-load forwarding defect: isolated, and DEPRIORITISED
+
+A 30-line repro reproduces it standalone with the shipped 2.0p1a compiler and
+the project's own cflags. All three field shapes fall out of it:
+
+```c
+S32 g_cnt, g_max, g_out, g_arr[64];
+void a(void) { g_cnt++; if (g_cnt == g_max) g_out = 1; }     /* Tiki Process */
+void b(void) { g_max--; g_out = g_arr[g_max]; }              /* iSndSceneExit */
+extern S32 find(void); S32* g_ptr;
+void c(void) { g_ptr = (S32*)find(); if (g_ptr == 0) g_out = 2; } /* InitFX */
+```
+
+We emit, for `a`, `lwz r3,g_cnt / addi / stw r3,g_cnt / lwz r0,g_max / cmpw
+r3,r0` -- the compare uses the forwarded `r3`. Retail reloads `g_cnt`. In `c`
+the compare is even hoisted ABOVE the store (`bl find / cmplwi r3,0 / stw
+r3,g_ptr`), where retail is `stw / lwz / cmplwi`.
+
+Flag sweep on the repro: **no named `-opt no*` switch disables it** --
+`nocse`, `nopropagation`, `nolifetimes`, `noglobal_optimizer`, `nopeephole`,
+`noschedule`, `nodeadcode`, `nostrength`, `noloopinvariants` all still
+forward. It turns on at the `-O2` threshold (`-O0`/`-O1` reload, `-O2`
+upward forward). So it is gated by opt level inside the optimizer, not by a
+flag, and there is no cheap toggle to bisect it with.
+
+**Deprioritised on cost/benefit, not on difficulty.** Nearly every known
+witness is ALREADY matched via the `volatile` device -- Tiki's `Process` and
+`zNPCTiki_InitFX`, `NPCHazard::Discard`, and the iSnd sites. Fixing the
+compiler would mostly let those `volatile` qualifiers be deleted, which is a
+source-fidelity gain rather than exact bytes. Before anyone spends a session
+on it, re-check the census below and count how many functions would actually
+CROSS 100.0 as a result; when that count was last taken it was approximately
+zero. Note also `xFXAuraUpdate` (85.294) is a *different* sub-case -- there
+the killing store is indirect (`0x4(r31)`), not a plain static.
+
 **Census of `volatile` sites installed for the store-then-reload defect.**
 These are all reproductions of a reload retail genuinely performs, each
 evidenced against the target, and each is file-local. But they MASK the
