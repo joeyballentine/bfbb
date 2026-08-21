@@ -967,7 +967,8 @@ void zThrown_LaunchStack(xEnt* ent, xEnt* target)
                 break;
             }
         }
-        zThrownList[i].stackTgt = target;
+        zThrownStruct* listInd = &zThrownList[i];
+        listInd->stackTgt = target;
     }
 }
 
@@ -1355,8 +1356,8 @@ static void zThrownCollide_Tiki(zThrownStruct* thrown, xEntCollis* collis, F32* 
 
 static void zThrownCollide_StoneTiki(zThrownStruct* thrown, xEntCollis* collis, F32* bounce, F32* friction)
 {
-    U32 collidx;
     xEnt* hitent;
+    U32 collidx;
     U32 collfound;
 
     *bounce = 0.0f;
