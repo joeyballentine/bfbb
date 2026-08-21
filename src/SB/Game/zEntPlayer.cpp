@@ -2511,7 +2511,7 @@ static U32 DblJumpCB(xAnimTransition*, xAnimSingle*, void*)
 
         F32 speed;
         F32 dblspeed;
-        F32 len2 = dbldirx + dbldirz;
+        F32 len2 = dbldirz + dbldirx;
         if (xabs(len2 - 1.0f) <= 0.00001f)
         {
             dirx = update_motion.x;
@@ -14239,7 +14239,9 @@ static void PlayerSwingUpdate(xEnt* ent, F32 mag, F32 angle, F32 dt)
     F32 lerpDiff = 1.0f - mag * xVec3Dot(&unitAccel, &unitVel);
     F32 lerp = ent->model->Anim->Single->BilinearLerp[0];
 
-    lerpDiff = 6.0f * (dt * (lerpDiff - lerp));
+    lerpDiff -= lerp;
+    lerpDiff = dt * lerpDiff;
+    lerpDiff = 6.0f * lerpDiff;
 
     ent->model->Anim->Single->BilinearLerp[0] += lerpDiff;
     ent->model->Anim->Single->Blend->BilinearLerp[0] += lerpDiff;
@@ -14255,8 +14257,9 @@ static void PlayerSwingUpdate(xEnt* ent, F32 mag, F32 angle, F32 dt)
 
     F32 curFactor = zCameraGetLassoCamFactor();
 
-    zCameraSetLassoCamFactor(
-        0.8f * curFactor + 0.2f * (0.5f - 0.5f * xVec3Dot(&globals.camera.mat.at, &unitHang)));
+    F32 camDot = xVec3Dot(&globals.camera.mat.at, &unitHang);
+
+    zCameraSetLassoCamFactor(0.8f * curFactor + 0.2f * (0.5f - 0.5f * camDot));
 }
 
 static void PlayerTeeterCheck(xEnt* ent, xScene* sc, F32 dt)
