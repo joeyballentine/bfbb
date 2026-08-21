@@ -1031,9 +1031,16 @@ namespace cruise_bubble
             U32 bubbles = (U32)shared.trail.bubbles;
             if (bubbles != 0)
             {
-                xVec3 vel_rnd = { 0.0f, 0.0f, 0.0f };
-
                 shared.trail.bubbles -= bubbles;
+
+                // The residue here is NOT source shape: every remaining differing row is a
+                // .rodata displacement (target reaches these templates as base+0x230/0x23c/
+                // 0x254, we reach them at +0x98/0xa4/0xbc). The 0x198 gap is exactly the 356
+                // bytes of unreferenced .rodata the retail link deadstripped (@410, @441,
+                // @624-@630, @822, @881) plus the 52 bytes of the hit_test/start_effects/
+                // perturb_direction/cb_damage_ent literal group, which the target emits
+                // BEFORE these. Both must be fixed together; neither is local to this body.
+                xVec3 vel_rnd = { 0.0f, 0.0f, 0.0f };
                 zFX_SpawnBubbleTrail(&loc0, &loc1, bubbles, &vel_rnd, NULL);
 
                 xVec3 off0 = dir0 * current_tweak->trail.bubble_emit_radius;
@@ -1059,8 +1066,9 @@ namespace cruise_bubble
                 return;
             }
 
-            shared.trail.samples += dt * current_tweak->trail.sample_rate;
-            S32 samples = (S32)shared.trail.samples;
+            F32 nsamples = shared.trail.samples + dt * current_tweak->trail.sample_rate;
+            shared.trail.samples = nsamples;
+            S32 samples = (S32)nsamples;
 
             if (samples <= 0)
             {
@@ -1070,7 +1078,7 @@ namespace cruise_bubble
             else
             {
                 // float cast
-                shared.trail.samples -= (F32)samples;
+                shared.trail.samples = nsamples - (F32)samples;
             }
 
             xMat4x3 end_mat;
@@ -1187,7 +1195,11 @@ namespace cruise_bubble
 
             // SCHED: the target keeps all three constants live at once (f4/f1/f2)
             // and computes dalpha before dsize; mwcc reuses f1 for two of them.
-            // Statement order, split declarations and const were all measured.
+            // Statement order, split declarations and const were all measured, and
+            // re-measured after the clause-V compiler patch: bound-first 73.043,
+            // dalpha-before-dloc 81.957, all-decl-then-assign 82.101; every other
+            // spelling of the three products is inert. The constant order (1/3, 0.25,
+            // 0.5) already matches -- only the allocation and the fmuls interleave differ.
             F32 dsize = (1.0f / 3.0f) * (glow * current_tweak->hud.glow_size);
             F32 dloc = 0.5f * -dsize;
             F32 dalpha = 0.25f * -alpha;
@@ -1425,8 +1437,11 @@ namespace cruise_bubble
             hud.model.wind->Alpha = vel_frac;
             hud.uv_wind.update(dt);
 
-            // SCHED: the target loads the -1.0f inside the loop; mwcc hoists it out
-            // of the loop here. Loop shape and shared-counter forms were measured.
+            // SCHED: the target loads the -1.0f inside the loop; mwcc hoists it into the
+            // preheader here, and that single misplaced `lfs` is the whole residue. Loop
+            // shape and shared-counter forms were measured; re-measured after the clause-V
+            // compiler patch: U32 index 85.706, gizmo reference 95.832, tweak local 96.891,
+            // and continue / i++ / while / value-temp / divisor-temp forms are all inert.
             for (S32 i = 1; i < hud.gizmos_used; ++i)
             {
                 if (!(hud.gizmo[i].flags & 0x1))
@@ -3340,10 +3355,10 @@ namespace cruise_bubble
         {
             U32 emit;
             U32 emit_max;
+            tweak_group* tweak = current_tweak;
 
-            zFX_SpawnBubbleBlast(&get_missle_mat()->pos, current_tweak->blast.emit,
-                                 current_tweak->blast.radius, current_tweak->blast.vel,
-                                 current_tweak->blast.rand_vel);
+            zFX_SpawnBubbleBlast(&get_missle_mat()->pos, tweak->blast.emit, tweak->blast.radius,
+                                 tweak->blast.vel, tweak->blast.rand_vel);
 
             xVec3 scale = { 1.0f, 1.0f, 1.0f };
 
@@ -3472,18 +3487,26 @@ namespace cruise_bubble
 
         void cruise_bubble::state_missle_explode::reset_quadrants(U32 size, F32 ring)
         {
+            // SCHED: the residue is the prologue only -- the target defers `stw <0x43300000>`
+            // past the qzone.index store, so it needs a second GPR for the zero (r5) and a
+            // free f1 for the u32->double magic; we emit the magic store immediately after
+            // its `lis` and cascade into r0/f2. Measured and rejected: count-before-index
+            // 92.785, a `U32 count` local 77.892, an `F32` local for the cast inert, and
+            // dropping the `c` local inert. Everything after `bl xsqrt` matches.
             qzone.index = 0;
             qzone.count = (U32)xsqrt((F32)size);
 
             U32 rows = (size + qzone.count - 1) / qzone.count;
             F32 c = icos(ring);
-            U32 total = rows * qzone.count;
 
             qzone.dz = (1.0f - c) / rows;
-            qzone.mask = (1 << total) - 1;
             qzone.da = 6.28318548f / qzone.count;
 
-            for (U32 i = 0; i < total - size; i++)
+            U32 total = rows * qzone.count;
+
+            qzone.mask = (1 << total) - 1;
+
+            for (U32 i = 0, end = total - size; i < end; i++)
             {
                 U32 k = (xrand() >> 13) % (total - i);
                 U32 j = 0;
