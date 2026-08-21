@@ -758,6 +758,66 @@ padding went from 25 bytes to 43. The refactor was validated before any
 semantic change -- the deduped *strict* clause C produced 8060 exact and not
 one changed function across all 451 units.
 
+### The redundant-load path is a SECOND patch site, and it is untouched
+
+`zMainParseINIGlobals` (8,980b, 99.276%) is capped by a defect the installed
+patch cannot reach, and the third pass on it pinned down why.
+
+A 20-line standalone repro (`extern F32 a1..a6;` + `if (u) { a1 = DEG2RAD(a1);
+... }`) reproduces the **entire** residual under this unit's exact flags:
+
+- **One statement alone compiles to retail's sequence exactly**, register roles
+  included (`lfs f2,@PI / lfs f1,val / lfs f0,@180 / fmuls / fdivs / stfs`).
+  The arithmetic, operand order and allocation are already right; the sole
+  defect is that *consecutive* statements share the two literal loads.
+- The reuse is **strictly basic-block-local** -- a `goto`/label between two
+  statements reloads both literals and restores retail's roles at zero
+  instruction cost. The retail block is one basic block of 36 straight-line
+  instructions, so there is no free second boundary to exploit.
+- **It is not the global optimizer.** `#pragma opt_common_subs off` and
+  `#pragma global_optimizer off` change nothing (both verified accepted with
+  `#pragma warn_illpragma on`). It is the **code generator's redundant-load
+  elimination**.
+- **It is governed by an alias query.** Inserting `*p = 1.0f;` through an
+  `F32*` parameter between two statements makes the next statement reload both
+  literals and revert to retail's exact `f2/f1/f0` roles. The query exists; our
+  compiler simply answers "no alias".
+- **The contrast is inside the same function.** The three
+  `globals.player.g.*SlideAngle = DEG2RAD(...)` statements sixty lines earlier
+  share their literals and are byte-identical to ours. The nine `zcam_*`
+  statements do not share. The only difference is the store: a 4-byte
+  `@sda21` scalar with an opaque `extern` definition versus a member of a
+  large named object reached through a base register. Retail answers
+  **may-alias** for (`lfs` of a <=4-byte anonymous `.sdata2` constant) x
+  (`stfs` to a <=4-byte opaque named static) and no-alias for the large-object
+  store; we answer no-alias for both. A `v_big` probe reproduces retail's
+  large-object behaviour exactly, so **only the small-static case is wrong**.
+
+That is the clause-A/clause-C predicate shape -- two <=4-byte statics,
+differing opcodes, plain load/store -- but applied in the **code generator's
+redundant-load path**, not the instruction scheduler's may-alias predicate.
+`patch_compiler.py` only redirects the scheduler dispatch table at 0x5bd0bc,
+which is exactly why clause C+ moved 19 functions tree-wide and moved this one
+by zero. Whoever extends the patch next should look for the second query site.
+
+Ruled out beyond the earlier lists: an `inline F32 d2r(F32)` helper (emits a
+real `bl`; the unit is `-inline off`), per-statement braced temps, unused
+labels (stripped before the optimizer), `extern F32 a[]` with `a[0]`, the
+`(&a1)[0]` spelling, and a double-precision spelling (wrong shape entirely).
+
+**`zMainMemCardSpaceQuery`'s pool ceiling is real but is NOT its blocker.**
+Our object does emit out-of-line `NSCREENX`/`NSCREENY` bodies (declared
+`inline` in `xFont.h`, not inlined because the unit is `-inline off`) which
+intern 1/640 and 1/480; retail's zMain.o has neither, and across the six
+target objects referencing them only `xDebug.o` defines them. But
+`solo.py --relocs` costs just 0.049 pp here and `report.json` does not count
+relocation rows at all -- the blocker is register allocation. Our allocator
+always gives r31/r30 to the two block-scope values and r29..r22 to the
+function-scope locals in declaration order; retail puts `workArea` and
+`startBytes` *above* those, which no declaration permutation can reach. An
+automated hill-climb over ~600 declaration orders plateaus at 97.803% and
+never reaches 100.
+
 ### Measured NO-GOs, so nobody re-opens them
 
 - **Relaxing the static-storage gate on the store side: -80 (+29/-109), and
