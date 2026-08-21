@@ -73,6 +73,45 @@ functions; with it the whole tree shows +41 exact functions and no losses.
 The frame-object encoding of the gate (base-expr word 0x00010005 vs
 0x00000005) was read out of a live compile with the query logger.
 
+Clause C+ -- clause C with the indirect-access bit tolerated, entry 0 only:
+
+    as clause C, except that flags bit 0x20 is permitted (mask ~0xa6) and
+    the size test applies only to the operand that is not the store
+
+Instruction flags bit 0x20 appears on an access made *through* a base object
+rather than at a fixed offset in one -- `stw r0, 0x4(r31)`, r31 loaded from a
+static pointer, sets it -- and such a memref reports the size of the whole
+pointee rather than the width of the access. That reading is inferred from
+the measurement, not read out of the compiler: of the four bits clause C
+excludes (0x08, 0x10, 0x20, 0x40) only 0x20 unlocks anything, and every site
+it unlocks is an indirect store. Clause C's "flags & ~0x86 == 0" and
+"sizeof <= 4" each independently reject those pairs (measured: adding either
+one back to clause C+ costs all 19 functions), which is why retail's refusal
+to hoist a small static load across such a store was not reproduced. Tolerating 0x20 and capping only
+the load's size recovers 19 functions (xFXShineUpdate, xFXRingUpdate,
+xFXAuraAdd, xFXStreakUpdate, xPadUpdate, xSndPlayInternal, HAZ_Acquire,
+zLOD_UseCustomTable, ...) with no function dropping from 100.0 anywhere in
+the tree, and no object of any complete unit changing at all.
+
+It is entry 0 only because the same relaxation on entries 1 and 3 measures
++0/-3: it drops zPickupTableInit, iSndPrepStream and zEntPlayer_SNDStop, all
+three by *sinking* a `lwz` of a pointer field out of a global -- retail
+scheduled that load earlier, and the extra edge loses it a tiebreak. The
+split was measured by installing the relaxed clause on one entry at a time:
+every one of the 19 gains is on entry 0 and every one of the 3 losses is on
+entries 1/3.
+
+Do not relax clause C's static-storage gate on the store side. "Skip the
+base-expression test for whichever operand is the store, keep it for the
+load" is the obvious reading of the retail behaviour above, and it measures
+-80 (+29/-109) across the tree. The reason is that it cannot reach the
+motion it was aimed at: the indirect stores in question never satisfy clause
+C's size and flags tests in the first place (see clause C+), and a store that
+does reach clause C with a non-static base is always a declared frame object
+(measured: allowing every non-frame store changes nothing at all, allowing a
+store with no base expression changes nothing at all). All the relaxation
+admits is stack traffic, which is the population the gate exists to exclude.
+
 The object-link and computed-address conditions are fitted: they separate named
 objects from spill slots and computed-address locals, which is a coherent
 reading, but it was not derived from the retail compiler. The differing-opcode
@@ -106,6 +145,16 @@ only absolute value written is the
 dispatch table entry itself, and all nine entries in that table already carry
 HIGHLOW relocations, so the new one is fixed up exactly as its neighbours are.
 
+Padding is the binding constraint -- 436 bytes for everything -- so clause C
+is not duplicated per entry any more. Its body is shared, entered by CALL
+from a 10-byte stub per entry that supplies the fall-through, and it answers
+by discarding the return address; entries 1/3 reach the strict conditions
+first and fall into the shared body, entry 0 enters the body directly. The
+predicate runs with esp inside the may-alias frame, which has no locals live
+at the dispatch, so the pushed return address is harmless. Shared this way,
+clause C and clause C+ together cost 146 bytes where the two literal copies
+of clause C alone cost 164.
+
 Both writes are guarded by the SHA-1 of the input and by the expected bytes at
 each offset, so an unexpected build fails loudly instead of being corrupted.
 """
@@ -121,7 +170,7 @@ BASE_VERSION = "GC/2.0p1"
 PATCHED_VERSION = "GC/2.0p1a"
 
 BASE_SHA1 = "74bc177b10d1bbe8a60a21a6c0aa86d2dd9c0668"
-PATCHED_SHA1 = "e1269faf6cba69cb7ed97c9de40bb2cf37e4ffe0"  # EXPERIMENT: E3n
+PATCHED_SHA1 = "9d88969d70e0f3d0cea91d9b35cbfb34015c1395"  # EXPERIMENT: E3n + clause C+
 
 # Narrow may-alias predicate, assembled at VA 0x57ea50.
 CAVE_OFFSET = 0x17DE50
@@ -139,24 +188,32 @@ CAVE_BYTES = bytes.fromhex(
     "3b5a100f94c383e301e90d36f9ff"
 )
 
-# Clause C, assembled at VA 0x57eb00, immediately after the first cave block:
-# the entries 1/3 copy first, falling through (rel32 jump) to the clause-B
-# handler at 0x57eabf, then the entry 0 copy at 0x57eb52, falling through to
-# the shipped entry-0 handler at 0x57ea50. Both copies end in the stock test
-# for their entry.
+# Clauses C and C+, assembled at VA 0x57eb00, immediately after the first cave
+# block. Two 10-byte stubs, then the two bodies:
+#   0x57eb00  dispatch entries 1 and 3 (and the tail of clause D): call the
+#             strict extra conditions at 0x57eb14, then fall through to the
+#             clause-B handler at 0x57eabf
+#   0x57eb0a  dispatch entry 0: call clause C+ at 0x57eb37, then fall through
+#             to the entry-0 handler at 0x57ea50
+#   0x57eb14  clause C's conditions that clause C+ drops (neither instruction
+#             indirect, both memrefs <= 4 bytes); falls into clause C+, whose
+#             remaining conditions are the ones the two clauses share
+#   0x57eb37  clause C+: differing opcodes, plain load/store with the indirect
+#             bit tolerated, load-side size <= 4, static base on both sides
+# A body answers "may alias" by dropping the return address and jumping to
+# 0x512081, and declines with `ret` into its stub's fall-through jump.
 CAVE2_OFFSET = 0x17DF00
 CAVE2_BYTES = bytes.fromhex(
-    "8b481085c9744683390575418b4a1085"
-    "c9743a83390575358b481883f904772d"
-    "8b4a1883f9047725668b4e20663b4d20"
-    "741b8b4e14f7c179ffffff75108b4d14"
-    "f7c179ffffff7505e93435f9ffe96dff"
-    "ffff8b481085c9744683390575418b4a"
-    "1085c9743a83390575358b481883f904"
-    "772d8b4a1883f9047725668b4e20663b"
-    "4d20741b8b4e14f7c179ffffff75108b"
-    "4d14f7c179ffffff7505e9e234f9ffe9"
-    "acfeffff"
+    "e80f000000e9b5ffffffe828000000e9"
+    "3cffffff8b4e14f6c120751a8b4d14f6"
+    "c12075128b481883f904770a8b4a1883"
+    "f9047702eb01c3668b4e20663b4d2074"
+    "508b4e14f7c159ffffff7545f6c10475"
+    "088b481883f90477388b481085c97431"
+    "833905752c8b4d14f7c159ffffff7521"
+    "f6c10475088b4a1883f90477148b4a10"
+    "85c9740d833905750883c404e9f034f9"
+    "ffc3"
 )
 
 # EXPERIMENT (E3n): new clause at VA 0x57EBA4, entry 3 only.
@@ -172,7 +229,7 @@ CAVE3_BYTES = bytes.fromhex(
 # measured at -199 exact functions; even gated to static storage it loses 21).
 DISPATCH_OFFSET = 0x1BA6BC
 DISPATCH = (
-    (0, 0x00511FF2, 0x0057EB52),  # stock: cmp eax,edx; sete bl  (ref identity)
+    (0, 0x00511FF2, 0x0057EB0A),  # stock: cmp eax,edx; sete bl  (ref identity)
     (1, 0x00511FFF, 0x0057EB00),  # stock: same base object
     (3, 0x00511FFF, 0x0057EBA4),  # EXPERIMENT: E3n clause instead of clause C
 )
