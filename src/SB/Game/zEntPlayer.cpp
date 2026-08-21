@@ -2503,18 +2503,15 @@ static U32 DblJumpCB(xAnimTransition*, xAnimSingle*, void*)
 
     if (tslide_inair_tmr)
     {
-        // load order swap
-        F32 dirx = update_motion.x;
-        F32 dirz = update_motion.z;
-        F32 dbldirx = SQR(dirx);
-        F32 dbldirz = SQR(dirz);
-
+        F32 dirx;
+        F32 dirz;
         F32 speed;
-        F32 dblspeed;
-        F32 len2 = dbldirz + dbldirx;
+        F32 len2 = SQR(update_motion.x) + SQR(update_motion.z);
+
         if (xabs(len2 - 1.0f) <= 0.00001f)
         {
             dirx = update_motion.x;
+            dirz = update_motion.z;
             speed = 1.0f;
         }
         else if (xabs(len2) <= 0.00001f)
@@ -2525,18 +2522,19 @@ static U32 DblJumpCB(xAnimTransition*, xAnimSingle*, void*)
         }
         else
         {
-            speed = xsqrt(dbldirx + dbldirz);
-            dirx = update_motion.x * (1.0f / speed);
-            dirz = update_motion.z * (1.0f / speed);
+            speed = xsqrt(len2);
+            F32 len_inv = 1.0f / speed;
+            dirx = update_motion.x * len_inv;
+            dirz = update_motion.z * len_inv;
         }
 
-        F32 len_inv = speed / update_dt;
+        speed /= update_dt;
         if (globals.player.g.SlideVelDblBoost *
                 (dirx * globals.player.SlideTrackDir.x + dirz * globals.player.SlideTrackDir.z) >
-            len_inv)
+            speed)
         {
-            globals.player.ent.frame->vel.x += dirx * len_inv;
-            globals.player.ent.frame->vel.z += dirz * len_inv;
+            globals.player.ent.frame->vel.x += dirx * speed;
+            globals.player.ent.frame->vel.z += dirz * speed;
             tslide_dbl_tmr = update_dt;
         }
     }
@@ -3064,11 +3062,12 @@ static xEnt* GetPatrickTarget(xEnt* ent)
         }
     }
 
+    U32 i;
     F32 bestTargetDot = -1.0f;
     xVec3* bestTargetPos;
     zScene* zsc = globals.sceneCur;
     S32 grabbedIsFruit = zThrown_IsFruit(globals.player.carry.grabbed, NULL);
-    for (U32 i = 0; i < zsc->num_ents; i++)
+    for (i = 0; i < zsc->num_ents; i++)
     {
         xEnt* tgtent = zsc->ents[i];
         if (tgtent == globals.player.carry.grabbed || (tgtent->flags & 1) == 0)
@@ -6742,12 +6741,12 @@ static S32 zEntPlayerKnockToSafety(xEnt* ent)
         else
         {
             popheight = ent->model->Mat->pos.y;
-            diffY = floor_safe_vec.y;
-            if (popheight > floor_safe_vec.y)
+            F32 highest = floor_safe_vec.y;
+            if (popheight > highest)
             {
-                diffY = popheight;
+                highest = popheight;
             }
-            ttot = diffY + 2.65f;
+            ttot = highest + 2.65f;
             diffY = xsqrt(2.0f * (ttot - popheight) / globals.player.g.Gravity);
             popheight = xsqrt(2.0f * (ttot - floor_safe_vec.y) / globals.player.g.Gravity);
             ttot = diffY + popheight;
@@ -9486,10 +9485,10 @@ static void zEntPlayer_ReticleRender(zEnt* ent)
 
         F32 scale = 4.0f * (1.0f - sReticleAlpha) + 1.0f;
 
-        xVec3 tocam;
-        xVec3Sub(&tocam, &globals.camera.mat.pos, (xVec3*)&gReticleTarget->model->Mat->pos);
+        xVec3 fromcam;
+        xVec3Sub(&fromcam, (xVec3*)&gReticleTarget->model->Mat->pos, &globals.camera.mat.pos);
 
-        scale = scale * (0.2f * xVec3Length(&tocam));
+        scale = scale * (0.2f * xVec3Length(&fromcam));
 
         if (scale < 1.0f)
         {
@@ -9526,8 +9525,8 @@ static void zEntPlayer_ReticleRender(zEnt* ent)
         }
 
         sReticleMat.up.y = -scale;
-        sReticleMat.right.z = -sReticleMat.right.z;
         sReticleMat.right.x = -sReticleMat.right.x;
+        sReticleMat.right.z = -sReticleMat.right.z;
         sReticleMat.pos.y -= 2.0f * (radius + bob);
 
         if (!iModelCull(sReticleModel, (RwMatrixTag*)&sReticleMat))
@@ -11486,6 +11485,7 @@ static void zEntPlayerFloorUpdate(xEnt* ent, xScene* sc, F32 dt)
     xVec3 axis;
     xVec3 downhill;
     xVec3 slidedir;
+    xEnt* oent;
     S32 i;
     F32 total;
     S32 count;
@@ -11687,7 +11687,7 @@ static void zEntPlayerFloorUpdate(xEnt* ent, xScene* sc, F32 dt)
     total = 0.0f;
     count = 0;
 
-    xEnt* oent = (xEnt*)coll->optr;
+    oent = (xEnt*)coll->optr;
     if (oent)
     {
         for (i = 0; i < 4; i++)
@@ -11782,9 +11782,9 @@ static void zEntPlayerFloorUpdate(xEnt* ent, xScene* sc, F32 dt)
         if (((coll->flags & 0x1) &&
              (fnorm->y > icos(surfSlideStop) ||
               (surf && (surf->state || !zSurfaceGetSlide(surf))))) ||
-            frame->vel.y > 0.0f || surfSlickRatio != 0.0f)
+            frame->vel.y > 0.0f || surfSlickRatio)
         {
-            if (surfSlickRatio != 0.0f)
+            if (surfSlickRatio)
             {
                 globals.player.SlideTimer = 0.0f;
             }
