@@ -956,102 +956,101 @@ U32 zNPCBSandy::AnimPick(S32 gid, en_NPC_GOAL_SPOT param_2, xGoal* rawgoal)
 
 static void SpringRender(SandyLimbSpring* spring)
 {
-    RxObjSpace3DVertex* vert = gRenderArr.m_vertex;
-    F32 minX = spring->bound->box.box.lower.x;
-    F32 maxX = spring->bound->box.box.upper.x;
-    F32 len = maxX - minX;
+    F32 end1 = spring->bound->box.box.lower.x;
+    F32 end2 = spring->bound->box.box.upper.x;
+    F32 curr;
+    F32 percent;
+    F32 len = end2 - end1;
     F32 radius = spring->bound->box.box.upper.y;
-    F32 maxStep = 0.1f * (4.0f * (2.0f * len)) / (478.0f - 0.6f * (2.0f * len) / 0.1f);
-    S32 numVerts = 0;
-    S32 done = 0;
-    S32 i = 0;
-    S32 j = 4;
-    RxObjSpace3DVertex* v;
-    F32 x;
-    F32 t;
-    F32 d1;
-    F32 d2;
+    F32 minStep = 0.1f * (4.0f * (2.0f * len)) / (478.0f - 0.6f * (2.0f * len) / 0.1f);
     F32 step;
+    F32 node1Dist;
+    F32 node2Dist;
+    RxObjSpace3DVertex* verts = gRenderArr.m_vertex;
+    U32 numVerts = 0;
+    S32 done = 0;
+    S32 currSin = 0;
+    S32 currCos = 4;
 
     RwRenderStateSet(rwRENDERSTATETEXTURERASTER, NULL);
 
-    x = minX;
-    t = 0.0f;
-    v = vert;
+    curr = end1;
+    percent = 0.0f;
 
     do
     {
-        if (!done && x > maxX)
+        if (!done && curr > end2)
         {
-            x = maxX;
-            t = 1.0f;
+            curr = end2;
+            percent = 1.0f;
             done = 1;
         }
 
-        RwIm3DVertexSetPos(&v[0], x, radius * (0.9f * sSinTable[i]), radius * (0.9f * sSinTable[j]));
-        RwIm3DVertexSetPos(&v[1], x, radius * (1.1f * sSinTable[i]), radius * (1.1f * sSinTable[j]));
-        RwIm3DVertexSetRGBA(&v[0], 0x80, 0x80, 0x80, 0xff);
-        RwIm3DVertexSetRGBA(&v[1], 0x80, 0x80, 0x80, 0xff);
+        RwIm3DVertexSetPos(&verts[numVerts], curr, radius * (0.9f * sSinTable[currSin]),
+                           radius * (0.9f * sSinTable[currCos]));
+        RwIm3DVertexSetPos(&verts[numVerts + 1], curr, radius * (1.1f * sSinTable[currSin]),
+                           radius * (1.1f * sSinTable[currCos]));
+        RwIm3DVertexSetRGBA(&verts[numVerts], 0x80, 0x80, 0x80, 0xff);
+        RwIm3DVertexSetRGBA(&verts[numVerts + 1], 0x80, 0x80, 0x80, 0xff);
 
         numVerts += 2;
-        v += 2;
 
-        d1 = spring->node1 - t;
-        if (d1 < 0.0f)
+        node1Dist = spring->node1 - percent;
+        if (node1Dist < 0.0f)
         {
-            d1 = -d1;
+            node1Dist = -node1Dist;
         }
-        if (d1 > 0.1f)
+        if (node1Dist > 0.1f)
         {
             step = 1.0f;
         }
         else
         {
-            step = 10.0f * d1;
+            step = 10.0f * node1Dist;
         }
 
-        d2 = spring->node2 - t;
-        if (d2 < 0.0f)
+        node2Dist = spring->node2 - percent;
+        if (node2Dist < 0.0f)
         {
-            d2 = -d2;
+            node2Dist = -node2Dist;
         }
-        if (d2 > 0.1f)
+        if (node2Dist > 0.1f)
         {
-            d2 = 1.0f;
+            node2Dist = 1.0f;
         }
         else
         {
-            d2 = 10.0f * d2;
+            node2Dist = 10.0f * node2Dist;
         }
 
-        if (d2 < step)
+        if (node2Dist < step)
         {
-            step = d2;
+            step = node2Dist;
         }
 
         step = 0.1f * step;
-        if (step < maxStep)
+        if (step < minStep)
         {
-            step = maxStep;
+            step = minStep;
         }
 
-        x += step;
-        t = (x - minX) / len;
+        curr += step;
+        percent = (curr - end1) / len;
 
-        i++;
-        if (i == 16)
+        currSin++;
+        if (currSin == 16)
         {
-            i = 0;
+            currSin = 0;
         }
 
-        j++;
-        if (j == 16)
+        currCos++;
+        if (currCos == 16)
         {
-            j = 0;
+            currCos = 0;
         }
     } while (!done);
 
-    RwIm3DTransform(vert, numVerts, (RwMatrix*)spring->bound->mat,
+    RwIm3DTransform(verts, numVerts, (RwMatrix*)spring->bound->mat,
                     rwIM3D_ALLOPAQUE | rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA);
     RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
     RwIm3DEnd();
@@ -1081,67 +1080,66 @@ void zNPCBSandy_BossDamageEffect_Init()
     }
 }
 
-static void zNPCBSandy_BossDamageEffect(xModelInstance* minst, U32 remove)
+static void zNPCBSandy_BossDamageEffect(xModelInstance* minst, U32 turnOff)
 {
-    S32 idx;
+    S32 j;
     S32 i;
-    xModelInstance* m;
 
-    if (remove)
+    if (turnOff)
     {
-        for (idx = 0; idx < 4; idx++)
+        for (i = 0; i < 4; i++)
         {
-            if (BDErecord[idx].BDEminst == minst)
+            if (BDErecord[i].BDEminst == minst)
             {
                 break;
             }
         }
 
-        if (idx >= 4)
+        if (i >= 4)
         {
             return;
         }
 
-        i = 0;
-        minst = BDErecord[idx].BDEminst;
-        BDErecord[idx].BDEtimer = 0.0f;
+        j = 0;
+        minst = BDErecord[i].BDEminst;
+        BDErecord[i].BDEtimer = 0.0f;
 
         while (minst != NULL)
         {
-            minst->RedMultiplier = BDErecord[idx].save_F32[i++];
-            minst->GreenMultiplier = BDErecord[idx].save_F32[i++];
-            minst->BlueMultiplier = BDErecord[idx].save_F32[i++];
+            minst->RedMultiplier = BDErecord[i].save_F32[j++];
+            minst->GreenMultiplier = BDErecord[i].save_F32[j++];
+            minst->BlueMultiplier = BDErecord[i].save_F32[j++];
             minst = minst->Next;
         }
 
-        BDErecord[idx].BDEminst = NULL;
+        BDErecord[i].BDEminst = NULL;
     }
     else
     {
-        for (idx = 0; idx < 4; idx++)
+        for (i = 0; i < 4; i++)
         {
-            if (BDErecord[idx].BDEminst == NULL)
+            if (BDErecord[i].BDEminst == NULL)
             {
                 break;
             }
         }
 
-        if (idx >= 4)
+        if (i >= 4)
         {
             return;
         }
 
-        i = 0;
-        BDErecord[idx].BDEminst = minst;
-        BDErecord[idx].BDEtimer = 3.0f;
+        j = 0;
+        BDErecord[i].BDEminst = minst;
+        BDErecord[i].BDEtimer = 3.0f;
 
         while (minst != NULL)
         {
-            BDErecord[idx].save_F32[i++] = minst->RedMultiplier;
+            BDErecord[i].save_F32[j++] = minst->RedMultiplier;
             minst->RedMultiplier = 1.0f;
-            BDErecord[idx].save_F32[i++] = minst->GreenMultiplier;
+            BDErecord[i].save_F32[j++] = minst->GreenMultiplier;
             minst->GreenMultiplier = 0.0f;
-            BDErecord[idx].save_F32[i++] = minst->BlueMultiplier;
+            BDErecord[i].save_F32[j++] = minst->BlueMultiplier;
             minst->BlueMultiplier = 0.0f;
             minst = minst->Next;
         }
@@ -1422,7 +1420,14 @@ void zNPCBSandy::UpdateFX(F32 dt)
         return;
     }
 
-    board = !(this->bustedScoreboard->flags & 0x1);
+    if (!(this->bustedScoreboard->flags & 0x1))
+    {
+        board = 1;
+    }
+    else
+    {
+        board = 0;
+    }
 
     for (i = 0; i < 2; i++)
     {
@@ -1639,12 +1644,14 @@ void zNPCBSandy::Process(xScene* xscn, F32 dt)
     S32 wasBeat;
     S32 idx;
     S32 jawLen;
+    S32 whichPoint;
     F32 fadeRate;
     F32 amp;
     F32 base;
     F32 spread;
     F32 distSq;
     F32 radSq;
+    F32 lerpAmt;
     xEnt* rope;
     xVec3 toEdge;
     F32 color[3];
@@ -2005,7 +2012,7 @@ void zNPCBSandy::Process(xScene* xscn, F32 dt)
 
     if (60.0f * this->jawTime > jawLen)
     {
-        this->jawTime = this->jawTime - jawLen / 60.0f;
+        this->jawTime -= jawLen / 60.0f;
     }
 
     amp = xJaw_EvalData(this->jawData, this->jawTime);
@@ -2034,18 +2041,18 @@ void zNPCBSandy::Process(xScene* xscn, F32 dt)
 
         idx = (S32)(2.95f * xurand());
 
-        this->curveNodeAlpha = 1.0f;
-
         color[idx] += 0.5f;
+
+        this->curveNodeAlpha = 1.0f;
 
         this->curveNodeR = color[0];
         this->curveNodeG = color[1];
         this->curveNodeB = color[2];
     }
 
-    this->curveNodeAlpha -= dt;
-
     base = 0.25f * this->jawLevel + 0.25f;
+
+    this->curveNodeAlpha -= dt;
 
     if (this->curveNodeAlpha < 0.5f * this->jawLevel)
     {
@@ -2054,19 +2061,26 @@ void zNPCBSandy::Process(xScene* xscn, F32 dt)
 
     // Retail inlined LERP(x, y, z) == x * (z - y) + y here. This build compiles the
     // game with -inline off, so calling LERP() would emit an out-of-line call the
-    // target object does not have; the arithmetic is written out instead.
-    this->curveNode[0].color.a = (U8)(255.0f * (1.0f * (this->curveNodeAlpha - base) + base));
+    // target object does not have; the arithmetic is written out instead. The
+    // blend factor goes through lerpAmt because the target keeps the multiply by
+    // 1.0f/0.0f -- as an inlined parameter it was never constant-folded -- and a
+    // literal there folds the fmadds away.
+    lerpAmt = 1.0f;
+    this->curveNode[0].color.a = (U8)(255.0f * (lerpAmt * (this->curveNodeAlpha - base) + base));
     this->curveNode[0].color.r = (U8)(255.0f * this->curveNodeR);
     this->curveNode[0].color.g = (U8)(255.0f * this->curveNodeG);
     this->curveNode[0].color.b = (U8)(255.0f * this->curveNodeB);
-    this->curveNode[1].color.a = (U8)(255.0f * (0.0f * (this->curveNodeAlpha - base) + base));
+    lerpAmt = 0.0f;
+    this->curveNode[1].color.a = (U8)(255.0f * (lerpAmt * (this->curveNodeAlpha - base) + base));
     this->curveNode[1].color.r = (U8)(255.0f * this->curveNodeR);
     this->curveNode[1].color.g = (U8)(255.0f * this->curveNodeG);
     this->curveNode[1].color.b = (U8)(255.0f * this->curveNodeB);
 
     this->laserShow.set_curve(&this->curveNode[0], 2);
 
-    xVec3Copy(&point, &this->laserPoint[(S32)(15.5f * xurand())]);
+    whichPoint = (S32)(15.5f * xurand());
+
+    xVec3Copy(&point, &this->laserPoint[whichPoint]);
 
     normal.x = -point.z;
     normal.y = 0.0f;
