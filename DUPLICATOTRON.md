@@ -452,6 +452,54 @@ because the `volatile` device means we now emit the reload; its residual is the
 `xFXAuraUpdate` and `NPCHazard::Discard` (NAMED), plus `xFXRingCreate` and
 `LightResetFrame` (ANON, float-literal reloads).
 
+### Entry 4: the decisive test is whether SOURCE ORDER MOVES THE ROWS AT ALL
+
+Two more entry-4 confirmations in `xCollide` (2026-08-22), and one of them
+supplies the cleanest diagnostic yet for telling entry 4 apart from an
+ordinary source-order problem.
+
+`xSphereHitsOBB_nu` (99.849): **writing the three stores in the source as
+`y, x, z` produces BYTE-IDENTICAL output.** The scheduler emits `y, x, z`
+whatever the source says, so no spelling can reach it. That is the test to
+run first on any transposed-store pair -- permute the source statements and
+see whether the emitted rows move. If the output is bit-identical under
+permutation, the reorder is happening below the source level and you are
+looking at entry 4; stop. If the rows DO move (as in `xParabolaHitsEnv`,
+where swapping made it 98.569 and moved a different row), you are at least
+in contact with the scheduler, though it may still be unreachable.
+
+Also measured and rejected on these two: binding `xVec3& N = data.N;` across
+the whole block (byte-inert), and `(o)->assign(0.0f, 1.0f, 0.0f)` (96.109).
+
+### `xSweptSphereToBox` re-characterised: the precondition WAS satisfied
+
+An earlier pass recorded this function as blocked pending
+`xSweptSphereToTriangle`, which shares its inlined `xsqrtfast` block.
+`xSweptSphereToTriangle` is now 100.0, and re-measurement confirms **the
+whole `xsqrtfast` region is byte-identical** -- that blocker is genuinely
+gone. The remaining 45 rows are one basic block, the nine
+`d? x boxinvbasis` products, and they are two separate defects:
+
+  1. A rotation. The triple belonging to the FIRST STORE statement sinks to
+     the end of the block and takes f0; the other eight are emitted in
+     ascending matrix-offset order. Verified by prediction: changing the
+     store order to `y,z,x` made `aXy` sink instead. Temp *assignment* order
+     is irrelevant (inert).
+  2. A one-instruction interleave offset. Retail issues two loads before the
+     first `fmuls`; every one of eleven variants issued three, and the shift
+     then propagates through the block.
+
+The diagnostic that separates them: storing `boxaZ.z` first reproduces
+retail's load order AND its `f8..f0` product order exactly, and still scores
+99.163, because defect 2 eats the gain.
+
+**Do not delete the `aXx..aZz` temps.** The DWARF-implied temp-free spelling
+measures 96.842 and emits a fully serial `lfs/fmuls/stfs` chain through f0:
+mwcc will not hoist a load from `boxinvbasis` over a store to a stack
+`xVec3`. The temps are a WORKAROUND for that alias defect, and the workaround
+is what introduces the rotation. So the honest summary is that this function
+is blocked on the load-hoist alias defect, not on a source shape.
+
 ### symorder's "SAME SET, WRONG ORDER" is not evidence on its own
 
 `tools/symorder.py zPlatform` reports `.sdata2: SAME SET, WRONG ORDER`, and a

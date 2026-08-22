@@ -2668,12 +2668,12 @@ void xModelAnimCollApply(const xModelInstance& cm)
     if (xModelAnimCollDirty(cm))
     {
         xModelAnimCollRefresh(cm);
-
-        RpMorphTarget* mt = cm.Data->geometry->morphTarget;
-
-        anim_coll_old_mt.verts = mt->verts;
-        mt->verts = (RwV3d*)cm.anim_coll.verts;
     }
+
+    RpMorphTarget* mt = cm.Data->geometry->morphTarget;
+
+    anim_coll_old_mt.verts = mt->verts;
+    mt->verts = (RwV3d*)cm.anim_coll.verts;
 }
 
 bool xModelAnimCollDirty(const xModelInstance& cm)
