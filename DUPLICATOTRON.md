@@ -452,6 +452,51 @@ because the `volatile` device means we now emit the reload; its residual is the
 `xFXAuraUpdate` and `NPCHazard::Discard` (NAMED), plus `xFXRingCreate` and
 `LightResetFrame` (ANON, float-literal reloads).
 
+### `zThrown_Update` cluster A: two ANTI-CORRELATED halves, 34 variants deep
+
+3,784 bytes, 20 rows, and the most thoroughly bounded REGS case in the file
+after `_xCameraUpdate`. Cluster A (16 rows, the bounce/friction reflection
+loop) is a pure colouring difference that splits into two halves which cannot
+be satisfied at once:
+
+  * **GPR half (6 rows) -- SOLVED in principle.** Writing the negated headings
+    as three named locals in x,y,z order (`F32 nx = -collis.colls[i].hdng.x;`
+    ...) makes all six GPR rows byte-identical, including retail's
+    `addi r4,r1,0x224 / addi r5,r1,0x220 / addi r3,r1,0x228` and the three
+    `lfsx`.
+  * **FP half (10 rows) -- then gets WORSE.** With `nx/ny/nz` as real two-use
+    locals mwcc gives them fresh f6/f7/f8 and recycles the dead load registers
+    for the `vel` loads; retail does the exact opposite (negations recycle
+    f3/f6/f2 in place, including an in-place `fneg f2,f2`, and the vel loads
+    take fresh f8/f9). The BASELINE spelling gets the negation colours exactly
+    right and misses only the 3-cycle `{vel.y,vel.x,pz}`.
+
+Net: baseline 99.794, named-locals 99.730. Thirty-four variants measured; the
+two halves are anti-correlated in every partial hoist (99.736 gets the GPRs
+right but commutes the `fmuls`). Retail hands its `{f7,f8,f9}` pool to the
+LONGEST-lived value first (`pz`); we allocate in definition order. That is a
+priority-vs-linear tie-break in the allocator, same family as
+`_xCameraUpdate`.
+
+**Two negative results from this pass that close off searches:**
+
+  * **The residual is decided LOCALLY.** Adding an extra FP temp upstream (in
+    the swept-sphere block) changed that block and left every cluster-A row
+    bit-for-bit unchanged. So the "an allocator cursor set earlier in the
+    function rotates everything downstream" reading is DEAD -- do not go
+    hunting upstream for this class.
+  * **The `zThrownCount` alias defect is NOT escape analysis.** Adding
+    `U32* probe = &zThrownCount;` at file scope changed nothing at all, in any
+    of the four functions. mwcc is not reasoning "this static's address is
+    never taken"; it simply does not treat a store to an sda21 static as
+    killing a pointer load. Note also that the same defect surfaces as
+    *scheduling* in `zThrown_LaunchVel` and as *CSE* in `zThrown_AddFruit`.
+
+Also settled here: the six `px/py/pz/tx/ty/tz` temps are real and must all be
+computed before the first store (dropping them is 98.330; computing `t`
+between the stores is 98.646), but their statement ORDER is completely inert
+-- mwcc canonicalises it, so spend no measurements there.
+
 ### `_xCameraUpdate`: 3,560 bytes behind ONE binary FP colour tie-break
 
 The single cheapest compiler-side witness currently known. `_xCameraUpdate`
@@ -1547,6 +1592,14 @@ blind to definition order.
   constraint removed 16 of 22 differing rows (99.792 -> 99.949). Look for a
   target `fmadds` whose destination equals one of its source registers; that
   is an accumulate in the original, not a fused expression.
+
+- **`A + B + C` emits `fmuls(B) / fmadds(A) / fmadds(C)`** -- mwcc evaluates
+  the RIGHT operand of the inner `+` first, so the MIDDLE term's multiply
+  issues first. Source order `y,x,z` gives `fmuls(x)` first; right-associating
+  as `A + (B + C)` gives `fmuls(z)` first. If the target's first `fmuls` is
+  the middle term of a three-term dot product, your source order is already
+  right -- measured on `zThrown_Update`, where only `x,y,z` reproduces
+  retail's `fmuls f1,f6,f8`.
 
 - **A countdown loop on the parameter** (`while (numTriangles--)`) rather than
   an index loop: the index form costs a callee-saved register and shifts the
@@ -2850,6 +2903,24 @@ Verified with a compile of all 343 units the build knows about: 0 failures.
 `ctbsp` is the worked example: 8 non-matching -> 4 in one pass, straight from
 `gh.sh` output read against `rpcollbsptree.h`. The rwsdk headers are good
 enough that struct offsets mostly just line up.
+
+## Queued: dwarf identifier-name recovery for zThrown
+
+Byte-neutral (locals do not affect codegen), recovered from
+`dwarf/SB/Game/zThrown.cpp`, not yet applied. Worth a dedicated pass:
+
+    zThrown_Update:  killIt->removethis, bound->oldbound, pos->oldpos,
+                     delta->stackDelta, dir->velunit, oldGravity->oldgrav,
+                     stackTgt-block d->posdot, sws t->lerp, lim->lerpdist,
+                     reflection-loop d->dothdng,
+                     hx/hy/hz->boxX/boxYupper/boxZ
+    ThrowFruit:      idx->collfound, speed->velmag, pct->lerp
+
+Caveat recorded with them: dwarf OMITS about ten float locals in
+`zThrown_Update` (all of `px..tz`, `nx/nz`, `r`, `center`) that the asm proves
+must exist. So for this unit dwarf is name evidence only, and is NOT a
+completeness oracle -- consistent with it having pointed the wrong way five
+times this week.
 
 ## Queued shared-header changes
 
