@@ -542,6 +542,65 @@ computed before the first store (dropping them is 98.330; computing `t`
 between the stores is 98.646), but their statement ORDER is completely inert
 -- mwcc canonicalises it, so spend no measurements there.
 
+### The register allocator is NOT patchable -- and here is its actual mechanism
+
+**Do not re-open "patch the FP colour tie-break". There is no tie-break.**
+Investigated 2026-08-22 by locating `Coloring.c`'s assertion strings
+(`0x5bcbe8`) and following their three cross-references into the module at
+roughly **`0x508680`-`0x508c60`**.
+
+Map of the module:
+
+  * `0x508680` -- the colouring driver. Loops over the five register classes
+    (`cmp byte [esp+4], 5`), class in `byte [0x5ea299]`, per-class register
+    counts at `[cls*4 + 0x5e9800]` and node counts at `[cls*4 + 0x5e9b04]`.
+  * `0x508a20` -- **simplify**. Walks nodes in INDEX order, repeating to
+    fixpoint; a node with degree (`word [n+0x12]`) < k goes on the stack
+    (flagged `or word [n+0x16], 2`) and its neighbours' degrees are
+    decremented; otherwise it goes on the spill-candidate list. If that list
+    is non-empty it computes the classic Chaitin ratio at `0x508ad2`
+    (`fild [n+0xc]` / `fild degree`, `fdivrp`) to pick a spill.
+  * `0x508900` -- **select**. Builds the free mask by clearing each coloured
+    neighbour's bit (`mov eax, 0xFFFFFFFE / rol eax, cl / and edx, eax`),
+    then:
+
+        xor ecx, ecx
+        mov eax, 1 / shl eax, cl / and eax, edx
+        jne -> mov word [node+0x14], cx      ; assign
+        inc ecx / cmp ecx, numregs / jl
+
+    i.e. **scan colours from 0 upward, take the first free one.** No
+    preference, no coalescing hint, no cost term. There is nothing to flip.
+
+And retail was built with this SAME binary (unpatched GC/2.0p1), so the
+algorithm cannot be the difference -- only the input graph can be.
+
+**Our patches are not the cause either, they are a large help.** The
+`_xCameraUpdate` witness form measures **99.949 with GC/2.0p1a and 98.416
+with unpatched GC/2.0p1**; clause C+/V/E3n are worth 1.5 points on that one
+function.
+
+### What this buys instead: the exact rule for every REGS-class residual
+
+Because select is lowest-free in stack order, a value can only receive a
+HIGHER colour than another if the lower colour is **already taken when it is
+coloured**. So when the target gives value X a higher register than we do,
+retail coloured its competitor Y FIRST. Colouring pops LIFO off the simplify
+stack, so Y was **pushed LATER** -- meaning Y kept degree >= k through more
+simplify rounds, or sits later in node index order.
+
+Concretely for `_xCameraUpdate`: retail has `dpv`->f7, `vax`->f5; we have the
+reverse. So retail colours `vax` before `dpv`, i.e. **`vax` is pushed later
+than `dpv`**. The lever is therefore `vax`'s INTERFERENCE DEGREE, not its
+statement position -- which is why a ~950-build sweep over statement
+orderings, operand orders and accumulate masks bottomed out at 6 rows without
+touching it. Lengthen `vax`'s live range, or shorten `dpv`'s, so `vax`
+survives more simplify rounds.
+
+That rule applies to every REGS-class case in this file, including
+`zThrown_Update` cluster A (retail hands `{f7,f8,f9}` to `pz` first; we
+allocate in definition order) and `zThrownCollide_ThrowFruit`.
+
 ### `_xCameraUpdate`: 3,560 bytes behind ONE binary FP colour tie-break
 
 The single cheapest compiler-side witness currently known. `_xCameraUpdate`
