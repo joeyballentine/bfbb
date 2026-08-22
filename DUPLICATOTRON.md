@@ -1188,6 +1188,12 @@ as zero. Keep this list current.
 qualifies -- it takes that function (1,460 b) all the way to exactly 100.000%
 -- and it must be reverted before any measurement of a compiler-side fix.
 
+**ADDED 2026-08-22: `iModel.cpp` `sEmptyAmbientLight`** (in `iModelInit`, 192 b)
+**and `instance_camera`** (in `iModelStreamRead`, 628 b). Each takes its
+function all the way to exactly 100.000% and each carries an in-source comment
+saying it is a matching device. Three honest spellings were measured against
+each (`*&`, cast, temp-then-assign) and all were bit-identical to baseline.
+
 Two sites deliberately NOT added in the same unit, both by the same rule:
 `zEntPlayerFloorUpdate`'s three store-then-reload clusters (`surfSlickTimer`,
 `surfSlipTimer`, `surfFriction`), because a fourth entry-4 subrange x subrange
@@ -2572,6 +2578,102 @@ E3n is worth +1.00 pp on QuadStreak, +0.78 on Ground, +0.95 on Flat. On
   component-major compute order with vertex-major store order. Reproducing that
   with 12 named temps works structurally but measures **85.795**, below the
   inline form, because our allocator then places them badly. Not shipped.
+
+### `--relocs` IS NOT EVIDENCE ABOUT THE POOL. Read section sizes instead.
+
+`iModel.cpp` carried `__deadstripped_sdata2_hack()`, a **fabricated** dead
+function seeding `0.0f` that a previous pass had installed. Under
+`solo.py --relocs`, removing it made five extra functions non-matching, which
+reads convincingly as real pool work.
+
+**It was not.** `readelf` shows `.sdata2` is 0x24 **with and without** it
+(target 0x28). It moved anonymous *numbering* only -- cosmetic by this file's
+own layout-not-numbering rule -- and banked zero under report.json semantics,
+while emitting a surplus strong global the target does not have. Removed; the
+DOL is unchanged by its removal, which confirms it was dead weight.
+
+**Rule: to test a pool hypothesis, compare section sizes with `readelf`, never
+`--relocs` row counts.** And a fabricated function that does not move the number
+must come out, however convincing the wrong measurement looks.
+
+### `>=` has its own branch signature (sibling to the `a <= b` note)
+
+    MAX2(a,b) with `>=`  ->  fcmpo / cror eq,gt,eq / bne
+    MAX2(a,b) with `>`   ->  fcmpo / ble
+
+**A `cror` in a max-chain means the source used `>=`.** This caught a real
+defect: `iModelCull` selected the max scale with `MAX` (`>`, from `macros.h`)
+where the target uses the `>=` form of the file-local `MAX3` -- and its own
+sibling `iModelCullPlusShadow` already used `MAX3` and matched that block
+byte-for-byte.
+
+### NAMED SHAPE: "the target unrolls a loop and we do not"
+
+`iModelCullPlusShadow` sat at 74.45% because our loop body contained the entire
+shadow-test block, so mwcc would not unroll it. Retail's `bgt` jumps **out** of
+the loop to a block placed after the loop's `return 0`, leaving a small body it
+unrolls 3x. Rewriting the `if` as `goto shadow_test;` with the block after the
+loop was **+23.5 points in one edit**.
+
+**The tell is `li r0,<n/3> / mtctr` in the target against our `li r0,<n>`**, and
+the branch polarity says which side is cold. When you see it, ask whether the
+`if` body inside our loop belongs outside it.
+
+### COUNTER-EXAMPLE: a tiny residual is NOT evidence against source-reachability
+
+These notes advise working one-away units in ascending percentage. In `iModel`
+two of the three easiest closes were the **highest**-percentage entries --
+`iModelVertEval` (99.831, 2 rows) and `iModelStreamRead` (99.522) -- and both
+were genuine source bugs. The ascending-percentage heuristic would have
+deprioritised exactly those. It is not reliable in `Core/gc`.
+
+### `iModelMaterialMulCB`: another entry-0 pair, same shape as `eval_joint`
+
+244 b, 95.738%, patch-insensitive. 4 rows of 61, all in the first of three
+`U8_COLOR_CLAMP` blocks, where our scheduler hoists the u32->double magic `lfd`
+above `stw r4,0x8(r1)` (the `col` struct copy). That pair is an 8-byte **whole**
+`.sdata2` load x a **whole** 4-byte frame object = **dispatch entry 0**, so E3n
+(entry 3) is never consulted. Second witness for the "E3n's rule on the
+whole x whole entry" candidate clause, after `eval_joint`. Source permutations
+do move rows (94.180, 90.738), so it is in contact with the scheduler, but
+baseline is the best form.
+
+### iModel: E3n witnesses in both directions, in one file
+
+Over-fire, neither bankable: `SkinXform` (520 b) tree 96.600 / `no3` 98.138;
+`SkinNormals` (632 b) 96.424 / 97.177. Counterweight from the same file:
+`iModelAnimMatrices` is a strong E3n **winner** -- 95.107 tree against 83.467
+stock and `no3`. A reminder that E3n's price is per-pair, not per-unit.
+
+### iModel: the five left
+
+- `iModelCullPlusShadow` 636 b, 97.906 -- **unfinished, not proven blocked**,
+  patch-insensitive. Retail CSEs only `shadowVec->x` into loop 2 and reloads
+  `->y`/`->z`; we hoist all three (f9/f10/f11) and the register map cascades.
+  10 spellings all bit-identical. Naming all three reaches 98.000 but invents
+  locals for +0.09, so not installed.
+- `SkinXform` / `SkinNormals` -- **BLOCKED**. Multisets identical (pool id
+  only); callee-saved GPR rotation (r26-r29), the `xShadowSimple_Add` class,
+  plus two ALU-past-ALU swaps.
+- `iModelAnimMatrices` 300 b, 95.107 -- **BLOCKED**, three clusters: a
+  callee-saved r27/r28 swap (six declaration positions, all <= baseline, two
+  bit-identical), a `stw` of `matrixStack[0].flags` scheduled among nine `stfs`
+  to the same aggregate (**entry 4**), and an `addi`-past-`addi` pick swap.
+
+Unit `.sdata2` remains 0x24 against the target's 0x28 (`.sbss` 0x2c vs 0x30) --
+a genuine Phase-2a shortfall with **no honest route available**: nothing is
+missing from `.text` and dwarf names no extra function (`solo.py --missing` = 0).
+
+### A retail out-of-bounds read, reproduced deliberately (PCPORT)
+
+`iModelCullPlusShadow`'s first frustum loop is unrolled 3x by mwcc, and mwcc
+updates the secondary induction variable (`numPlanes`, r4) **wrongly**:
+`subi r4,r4,1` sits after copy B's exit branch and `subi r4,r4,2` at the latch,
+so at the six exits r4 is 5,5,4,2,2,1 where the correct remaining-plane counts
+are 5,4,3,2,1,0. **On four of six exits the second loop runs one iteration too
+many and reads `cam->frustumPlanes[6]`, past the array.** Verified against raw
+bytes at `800C8484`-`800C84EC`. Our code reproduces it exactly, because it must.
+Flag for PCPORT.
 
 ### THE CHEAPEST QUESTION IN THIS PROJECT: patch, or source?
 
