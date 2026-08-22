@@ -1757,9 +1757,28 @@ Binding the conversion result to a named local blocks the hoist:
     dp = 0.016666668f * (dp * zcam_pad_pyaw_scale);
 
 Four sites, **+0.95 pp**. The `fmuls` operand order corrects as a consequence.
-**Retry this on `eval_joint` and anywhere an `lfs <named global>` sits at the
-head of a clamp block instead of at its use site.** Do not assume the store
-side of a clause declining means the function is compiler-track.
+**Retry this anywhere an `lfs <named global>` sits at the head of a clamp block
+instead of at its use site.** Do not assume the store side of a clause
+declining means the function is compiler-track.
+
+**REFUTED FOR `eval_joint` SPECIFICALLY (2026-08-22, same day).** I predicted
+the transfer in this very section and it does not hold. Binding the conversion
+results to named `F32` locals in `eval_joint` is **bit-identical** (same diff
+sha1), as are `(F32)` casting, bare-decl-then-assign, and adjacency changes.
+Structural permutations do move rows (82.865, 64.250), so it is not entry 4 --
+the baseline is simply already the best form.
+
+The reason is worth more than the lead was. `eval_joint` is 105 rows,
+byte-identical except that the `lfd` of the u32->float magic double sits after
+`stw r5,0x14(r1)` in retail and five instructions earlier in ours. The pair is
+(8-byte **whole** `.sdata2` load) x (**whole** 4-byte declared frame local
+`alpha`), which dispatches to the **whole x whole** entry -- and E3n lives on
+entry 3. The old note guessed "the store side of the clause declines"; the
+truth is the clause is never *consulted*. Precisely-shaped candidate: **E3n's
+rule applied to the whole x whole entry**, worth 416 b.
+
+Generalise the method, not the fix: check which dispatch entry a pair actually
+reaches before predicting that a source lever will move it.
 
 ### The E3n `const` lever is a GAIN lever, not only loss-recovery
 
@@ -1842,6 +1861,108 @@ from the frame local `info` above `stw r0, zcam_flypaused@sda21`. Frame-load x
 static-store is exactly what clause C's static-storage gate excludes on purpose.
 NOT entry 4 -- source permutation does move the rows -- so it is in contact with
 the scheduler, but no faithful spelling reaches it.
+
+### SECOND patch-cost witness, on entry 0: `xFXRenderProximityFade`
+
+Verified by me, not taken on report. 1,612 bytes, `src/SB/Core/x/xFX.cpp`:
+
+    tree (2.0p1a)      95.273%      2.0p1a-no1     95.273%
+    control (chk)      95.273%      2.0p1a-no3     94.814%
+    stock GC/2.0p1     99.504%      2.0p1a-noV     95.273%
+    2.0p1a-no0        100.000%
+
+Note the shape, which is unlike `zEntPlayer_AnimTable`: it reaches 100.0 ONLY
+with **entry 0 ablated and the rest of the patch still on**. Stock is 99.504
+and the full patch is 95.273, so the other clauses are worth +0.5 here while
+entry 0's clause costs the last stretch. **Do not touch this `.cpp`** -- the
+source is correct.
+
+**Do not ablate entry 0 either.** Within xFX.cpp alone that trade is +1/-10
+(losing `activate_ribbon`, `xFXShinyRender`, `xFXRingUpdate`,
+`xFXFireworksUpdate`, `render_strip`, `xFXBubbleRender`, `xFXAuraAdd`,
+`xFXShineUpdate`, `xFXStreakStart`, `xFXStreakUpdate`). Entry 0, like E3n, is
+a **narrowing** target.
+
+So there are now two independent dispatch entries with measured over-fire
+costs. When a near-100% function resists source work, run the full matrix --
+`tree / stock / no0 / no1 / no3 / noV / chk` -- not just stock.
+
+Clause V has two cost witnesses in this unit as well, neither bankable:
+`xFXShineRender` 90.425 -> **98.219** and `xFXStreakRender` 65.481 -> **93.415**
+under `noV`.
+
+### xFX: what is blocked, with the stop tests run
+
+Six functions in this unit are completely patch-insensitive (identical under
+all seven compilers) and therefore pure source-track: `RenderRotatedBillboard`,
+`eval_joint`, `tri_data::init`, `MaterialSetEnvMap2`, `get_normal`, and both
+`xFXanimUV*SetAngle`.
+
+- **`xFXanimUVSetAngle` / `xFXanimUV2PSetAngle`** (92 b each, 83.478). One
+  instruction moved: retail issues `stfs f1, xFXanimUVRotMat0@sda21` into the
+  `icos` return shadow, before both `li` address materialisations; ours issues
+  the ready `li`s first. **All 24 store permutations measured**; the natural
+  `abcd` order is what the source has and the best distorted form is `dcba` at
+  90.870. Same multiset, same registers. SCHED, blocked. Fixing one fixes both.
+- **`tri_data::init`** (164 b, 97.439). Callee-saved GPR permutation (r27-r30).
+  `vi`-before-`v`, no-reference and bare-pointer forms are all bit-identical to
+  each other -- inert, confirming the `xShadowSimple_Add` rule that declaration
+  order does not reach callee-saved GPRs.
+- **`MaterialSetEnvMap2`** (180 b, 95.444). 3 rows: two adjacent independent
+  instructions swapped (`mr r31,r4` vs `lis r4,@stringBase0@ha`), the r5-vs-r4
+  choice a consequence of r4 still being live. Same shape as the recorded
+  `iPadUpdate` SCHED case.
+- **`RenderRotatedBillboard`** (1,440 b, 99.389). The **entire** residual is 44
+  rows of 360, **all `lbz`/`stb`**: the four colour bytes get r0,r3,r4,r5
+  ascending in retail and r5,r4,r3,r0 in ours, at six sites. All 16 subsets of
+  naming the macro arguments were swept. Naming `_r` is always inert
+  (copy-propagated). **Naming `_a` alone -> 99.694**, fixing alpha *and* green
+  and leaving only r<->b. Naming all four fixes the RGBA cluster but trades it
+  for a whole-function callee-saved permutation (98.181). This is direct
+  evidence on the open question of whether the real `RwIm3DVertexSetRGBA` macro
+  binds `_a` to a temp: **it does something that binds `_a`.** That is a
+  shared-header change in `include/rwsdk/rwcore.h` and needs a tree-wide sweep
+  before anyone believes it.
+
+### `get_normal`: a REAL numerical defect, kept even though it banks zero
+
+`xFXRibbon::get_normal` (432 b) 90.046 -> 99.769, from two genuine source
+defects, both confirmed against the target's own asm:
+
+**Retail rounds each square to single before adding; we fuse.**
+
+    8002AABC  fmuls f2, f8, f8
+    8002AAC0  fmuls f0, f7, f7
+    8002AACC  fadds f5, f2, f0
+
+Our `dir.y * dir.y + dir.z * dir.z` compiles to `fmuls` + `fmadds`, keeping the
+first product at full internal precision. That is a real difference in shipped
+arithmetic. Naming the two products forces the rounding. **Flag for PCPORT, and
+do not "simplify" the named products back into one expression** -- they are
+load-bearing for numerical fidelity, not for the percentage.
+
+Also: retail loads `dir.x/y/z` into f9/f8/f7 and reuses them **in arm 1 only**
+(arms 2-3 reload in retail too, and binding them in all three arms measures
+78.935). The final +0.46 came from the bare-declaration loophole, `F32 dz, dy,
+dx;` then assigning `dx,dy,dz` -- the FP rule predicted the target's ascending
+dz=f7, dy=f8, dx=f9 exactly.
+
+**This was initially reverted on the "install only at 100.0" rule and that was
+wrong.** That rule exists to stop *hacks* being left in at sub-100 (volatile
+probes, dead code to shift a pool). It does not cover faithful source. A change
+that makes our arithmetic bit-match retail's belongs in the tree whether or not
+it banks a function -- correctness outranks the percentage, in both directions.
+
+Blocked at 4 rows: an f5/f6 swap between the anonymous `-a` temp and the
+`dy2+dz2` sum. Naming the sum is *worse* (98.935, three spellings), and
+operand permutations (`(dy2+dz2) * -a`, `(0.0f-a)*...`) are bit-identical --
+canonicalised.
+
+### The scratchpad is SHARED between concurrent agents, not per-session
+
+Two agents running in the same session get the same scratchpad directory, and
+one overwrote another's `vary.py` mid-run. **Namespace scratch files** under a
+per-agent subdirectory. Brief agents accordingly.
 
 ### THE CHEAPEST QUESTION IN THIS PROJECT: patch, or source?
 
