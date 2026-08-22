@@ -1958,6 +1958,50 @@ Blocked at 4 rows: an f5/f6 swap between the anonymous `-a` temp and the
 operand permutations (`(dy2+dz2) * -a`, `(0.0f-a)*...`) are bit-identical --
 canonicalised.
 
+### HAZARD: a stale `.bak` in the shared scratchpad silently reverts a file
+
+This actually happened on 2026-08-22 and cost real time, so it is written down
+in full. `src/SB/Core/x/xFX.cpp` was found mid-session holding the blob of
+commit `4e30d04`, **two commits behind HEAD**, silently discarding `e1b2c66`
+and `ae45307`. Measured cost while it was in that state: 16 non-matching
+instead of 12, with `DrawRing` knocked from 100 to 89.674.
+
+**Cause.** A variant harness stored its baseline at
+`<scratchpad>/xFX.cpp.bak` -- a generic name in a directory the agent believed
+was session-private -- behind this guard:
+
+    BAK = ".../scratchpad/xFX.cpp.bak"
+    if not os.path.exists(BAK):
+        shutil.copyfile(SRC, BAK)      # <-- silently reuses a STALE file
+
+`xFX.cpp.bak` already existed, left by an **earlier session's** xFX agent whose
+work predates those two commits. The guard declined to overwrite it, so the
+harness's "baseline" was two-commit-old content, and its first `restore()`
+wrote that over HEAD's.
+
+**Why it is nasty:** a reverted file shows in `git status` as an ordinary
+` M src/...`, indistinguishable from a live edit. Nothing warns you.
+
+**Two mitigations, both cheap:**
+1. Harnesses must derive their baseline from `git show HEAD:<path>`, never from
+   a filesystem snapshot taken at unknown time.
+2. Namespace scratch files per agent (`scratchpad/<agent>/`), never a bare
+   `<unit>.cpp.bak` at the top level.
+
+The scratchpad currently contains this exact hazard for several other units --
+`xCollide.cpp.bak`, `zScene.cpp.bak`, `iSnd.cpp.orig`, `iSnd.cpp.base`,
+`zLightning.cpp.base`, `zLightning.cpp.orig`, `zNPCTypeRobot.cpp.orig`,
+`zCamera.cpp.orig`, `zThrown.cpp.orig`, `xFX.cpp.bak` -- all of unknown vintage.
+**Assume every one of them is stale.**
+
+**Gating rule this forces.** When gating an agent's work, do not accept that a
+file changed; read the diff and confirm it is the change the agent described.
+A silent revert and a real edit look identical in `git status`, and only the
+diff distinguishes them. Also attribute report.json deltas to units: a build
+picks up every modified file in the tree, including other agents' in-flight
+work, so a gain measured after a build is not necessarily the gain of the unit
+you are gating.
+
 ### The scratchpad is SHARED between concurrent agents, not per-session
 
 Two agents running in the same session get the same scratchpad directory, and
