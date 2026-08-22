@@ -495,7 +495,7 @@ void NPCCone::RenderCone(xVec3* pos_tiptop, xVec3* pos_botcenter)
     RwRGBA rgba_top = this->rgba_top;
     RwRGBA rgba_bot = this->rgba_bot;
     xVec3 pos_top = *pos_tiptop;
-    xVec3 pos_bot = *pos_botcenter;
+    const xVec3 pos_bot = *pos_botcenter;
 
     void* mem = xMemPushTemp(10 * sizeof(RwIm3DVertex));
     if (!mem)
@@ -525,7 +525,10 @@ void NPCCone::RenderCone(xVec3* pos_tiptop, xVec3* pos_botcenter)
         pos_vtx *= this->rad_cone;
         pos_vtx += pos_bot;
 
-        RwIm3DVertexSetPos(vtx, pos_vtx.x, pos_vtx.y, pos_vtx.z);
+        F32 px = pos_vtx.x;
+        F32 py = pos_vtx.y;
+        F32 pz = pos_vtx.z;
+        RwIm3DVertexSetPos(vtx, px, py, pz);
         RwIm3DVertexSetRGBA(vtx, rgba_bot.red, rgba_bot.green, rgba_bot.blue, rgba_bot.alpha);
 
         F32 u_off = 1 / 8.0f * i;
@@ -556,7 +559,7 @@ void NPCCone::RenderCone(xVec3* pos_tiptop, xVec3* pos_botcenter)
 
     zRenderState(old_rendstat);
 
-    xMemPopTemp(mem);
+    xMemPopTemp(vert_list);
 }
 
 void NPCBlinker::Reset()
@@ -639,6 +642,7 @@ void NPCBlinker::Render(const xVec3* pos_blink, F32 rad_blink, const RwRaster* r
     for (i = 0; i <= 6; i++)
     {
         F32 rat = (F32)i / 6.0f;
+        F32 px, py, pz;
 
         pos_lerp.x = LERP(rat, pos_top.x, pos_bot.x);
         pos_lerp.y = LERP(rat, pos_top.y, pos_bot.y);
@@ -648,13 +652,19 @@ void NPCBlinker::Render(const xVec3* pos_blink, F32 rad_blink, const RwRaster* r
 
         pos_vtx = dir_card * rad_blink;
         pos_vtx += pos_lerp;
-        RwIm3DVertexSetPos(&vtx_horz[0], pos_vtx.x, pos_vtx.y, pos_vtx.z);
+        px = pos_vtx.x;
+        py = pos_vtx.y;
+        pz = pos_vtx.z;
+        RwIm3DVertexSetPos(&vtx_horz[0], px, py, pz);
         RwIm3DVertexSetRGBA(&vtx_horz[0], rgba.red, rgba.green, rgba.blue, rgba.alpha);
         RwIm3DVertexSetUV(&vtx_horz[0], uv_lo[0], v);
 
         pos_vtx = dir_card * -rad_blink;
         pos_vtx += pos_lerp;
-        RwIm3DVertexSetPos(&vtx_horz[1], pos_vtx.x, pos_vtx.y, pos_vtx.z);
+        px = pos_vtx.x;
+        py = pos_vtx.y;
+        pz = pos_vtx.z;
+        RwIm3DVertexSetPos(&vtx_horz[1], px, py, pz);
         RwIm3DVertexSetRGBA(&vtx_horz[1], rgba.red, rgba.green, rgba.blue, rgba.alpha);
         RwIm3DVertexSetUV(&vtx_horz[1], uv_hi[0], v);
 
@@ -662,13 +672,19 @@ void NPCBlinker::Render(const xVec3* pos_blink, F32 rad_blink, const RwRaster* r
 
         pos_vtx = dir_perp * -rad_blink;
         pos_vtx += pos_lerp;
-        RwIm3DVertexSetPos(&vtx_vert[0], pos_vtx.x, pos_vtx.y, pos_vtx.z);
+        px = pos_vtx.x;
+        py = pos_vtx.y;
+        pz = pos_vtx.z;
+        RwIm3DVertexSetPos(&vtx_vert[0], px, py, pz);
         RwIm3DVertexSetRGBA(&vtx_vert[0], rgba.red, rgba.green, rgba.blue, rgba.alpha);
         RwIm3DVertexSetUV(&vtx_vert[0], uv_lo[0], v);
 
         pos_vtx = dir_perp * rad_blink;
         pos_vtx += pos_lerp;
-        RwIm3DVertexSetPos(&vtx_vert[1], pos_vtx.x, pos_vtx.y, pos_vtx.z);
+        px = pos_vtx.x;
+        py = pos_vtx.y;
+        pz = pos_vtx.z;
+        RwIm3DVertexSetPos(&vtx_vert[1], px, py, pz);
         RwIm3DVertexSetRGBA(&vtx_vert[1], rgba.red, rgba.green, rgba.blue, rgba.alpha);
         RwIm3DVertexSetUV(&vtx_vert[1], uv_hi[0], v);
 
@@ -749,7 +765,8 @@ void Firework::Update(F32 dt)
 
 void Firework::FlyFlyFly(F32 dt)
 {
-    F32 pam_life = 1.0f - CLAMP(this->tmr_remain / this->tym_lifespan, 0.0f, 1.0f);
+    F32 ratio = this->tmr_remain / this->tym_lifespan;
+    F32 pam_life = 1.0f - CLAMP(ratio, 0.0f, 1.0f);
     if (pam_life < 0.75f)
     {
         xVec3 dir_trav = this->vel;
@@ -788,12 +805,17 @@ F32 NPCC_aimMiss(xVec3* dir_aim, xVec3* pos_src, xVec3* pos_tgt, F32 dst_miss, x
 F32 NPCC_aimVary(xVec3* dir_aim, xVec3* pos_src, xVec3* pos_tgt, F32 dst_vary, S32 flg_vary,
                  xVec3* pos_aimPoint)
 {
-    F32 dst_toFake = 0.0f;
+    F32 mag_toFake;
+    F32 mag_updown;
+    F32 mag_vary;
+    F32 dst_toFake;
     xVec3 dir_left = {};
     xVec3 dir_toFake = {};
     xVec3 dir_toReal = {};
     xVec3 vec_offset = {};
     xVec3 pos_tgtFake = {};
+
+    dst_toFake = 0.0f;
 
     xVec3Sub(&dir_toReal, pos_tgt, pos_src);
 
@@ -802,7 +824,7 @@ F32 NPCC_aimVary(xVec3* dir_aim, xVec3* pos_src, xVec3* pos_tgt, F32 dst_vary, S
         dir_toReal.y = 0.0f;
     }
 
-    F32 mag_vary = xVec3Length(&dir_toReal);
+    mag_vary = xVec3Length(&dir_toReal);
     if (mag_vary < 0.001f)
     {
         if (mag_vary > 0.0f)
@@ -826,7 +848,6 @@ F32 NPCC_aimVary(xVec3* dir_aim, xVec3* pos_src, xVec3* pos_tgt, F32 dst_vary, S
     xVec3SMulBy(&dir_toReal, 1.0f / mag_vary);
     xVec3Cross(&dir_left, &g_Y3, &dir_toReal);
 
-    F32 mag_updown;
     if (flg_vary & 0x8)
     {
         mag_updown = dst_vary;
@@ -861,14 +882,14 @@ F32 NPCC_aimVary(xVec3* dir_aim, xVec3* pos_src, xVec3* pos_tgt, F32 dst_vary, S
     xVec3Add(&pos_tgtFake, pos_tgt, &vec_offset);
     xVec3Sub(&dir_toFake, &pos_tgtFake, pos_src);
 
-    F32 f31 = xVec3Normalize(&dir_toFake, dir_aim);
+    mag_toFake = xVec3Normalize(dir_aim, &dir_toFake);
 
     if (pos_aimPoint)
     {
         xVec3Copy(pos_aimPoint, &pos_tgtFake);
     }
 
-    return (flg_vary & 0x4) ? f31 : mag_vary;
+    return (flg_vary & 0x4) ? mag_toFake : mag_vary;
 }
 
 S32 NPCC_chk_hitEnt(xEnt* tgt, xBound* bnd, xCollis* collide)
@@ -883,7 +904,7 @@ S32 NPCC_chk_hitEnt(xEnt* tgt, xBound* bnd, xCollis* collide)
 
     if (collide)
     {
-        colrec->flags = ((U32)(1 << 9)) | ((U32)(1 << 12));
+        colrec->flags = k_HIT_0xF00 | k_HIT_CALC_HDNG;
     }
     else
     {
@@ -998,14 +1019,16 @@ void NPCC_GenSmooth(xVec3** pos_base, xVec3** pos_mid)
 
         for (i = 0; i < 4; i++)
         {
-            F32 u = yews[i];
-            F32 u2 = u * u;
-            F32 u3 = u * u2;
+            F32 u2, u, u3;
+            F32* pre = prepute[i];
+            u = yews[i];
+            u2 = u * u;
+            u3 = u * u2;
 
-            prepute[i][0] = u2 + -0.5f * u3 + -0.5f * u;
-            prepute[i][1] = -2.5f * u2 + 1.5f * u3 + 1.0f;
-            prepute[i][2] = 2.0f * u2 + -1.5f * u3 + 0.5f * u;
-            prepute[i][3] = -0.5f * u2 + 0.5f * u3;
+            pre[0] = u2 + -0.5f * u3 + -0.5f * u;
+            pre[1] = 1.5f * u3 + -2.5f * u2 + 1.0f;
+            pre[2] = -1.5f * u3 + 2.0f * u2 + 0.5f * u;
+            pre[3] = 0.5f * u3 + -0.5f * u2;
         }
     }
 
@@ -1082,8 +1105,8 @@ U32 NPCC_LineHitsBound(xVec3* a, xVec3* b, xBound* bnd, xCollis* callers_colrec)
     xVec3Copy(&ray.origin, a);
     xVec3SMul(&ray.dir, &vec, (1.0f / len));
 
-    ray.max_t = len;
     ray.min_t = 0.1f;
+    ray.max_t = len;
     ray.flags = 3072;
 
     xRayHitsBound(&ray, bnd, colrec);
@@ -1223,20 +1246,16 @@ S32 NPCC_HaveLOSToPos(xVec3* pos_src, xVec3* pos_tgt, F32 dst_max, xBase* tgt, x
     }
     else
     {
-        static xCollis localCollis = { (((U32)(1 << 8)) | ((U32)(1 << 9)) | ((U32)(1 << 10)) |
-                                        ((U32)(1 << 11))) |
-                                       ((U32)(1 << 12)) };
+        static xCollis localCollis = { k_HIT_0xF00 | k_HIT_CALC_HDNG };
 
         memset(&localCollis, 0, sizeof(xCollis));
-        localCollis.flags =
-            (((U32)(1 << 8)) | ((U32)(1 << 9)) | ((U32)(1 << 10)) | ((U32)(1 << 11))) |
-            ((U32)(1 << 12)) | ((U32)(1 << 12));
+        localCollis.flags = k_HIT_0xF00 | k_HIT_CALC_HDNG;
 
         colrec = &localCollis;
     }
 
-    ray.min_t = 0.0f;
     ray.max_t = dst_max;
+    ray.min_t = 0.0f;
 
     xVec3Sub(&ray.dir, pos_tgt, pos_src);
     xVec3Normalize(&ray.dir, &ray.dir);
