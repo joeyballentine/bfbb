@@ -892,13 +892,13 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
                     {
                         F32 t = xatan2(gPlayerAbsMat.right.z, gPlayerAbsMat.right.x);
                         stackAng -= t;
-                        if (stackAng > 3.1415927f)
+                        if (stackAng > 2 * 3.1415927f)
                         {
                             stackAng -= 2 * 3.1415927f;
                         }
-                        else if (stackAng < -3.1415927f)
+                        else if (stackAng < 0.0f)
                         {
-                            stackAng = stackAng + 2 * 3.1415927f;
+                            stackAng += 2 * 3.1415927f;
                         }
 
                         rot = angle;
@@ -3005,10 +3005,11 @@ void zEntPlayerSpeakStart(U32 sndid, U32, S32 anim)
         player_talk.time = 0.0f;
         if (anim < 0 || anim >= globals.player.s->talk_anims)
         {
-            // wtf is happening here
-            U8 filter_size = globals.player.s->talk_filter_size;
-            U32 which = (xrand() >> 13); // / filter_size;
-            player_talk.anim = globals.player.s->talk_filter[which % filter_size];
+            U8 filter_size;
+            U8* filter = globals.player.s->talk_filter;
+            filter_size = globals.player.s->talk_filter_size;
+            U32 which = xrand() >> 13;
+            player_talk.anim = filter[which % filter_size];
         }
         else
         {
@@ -7502,7 +7503,7 @@ void zEntPlayer_Update(xEnt* ent, xScene* sc, F32 dt)
     U8 hitting_floor = 0;
     U8 hitting_wall = 0;
 
-    if (strcmp(astate->Name, "Bspin01") == 0 && single->CurrentSpeed != 0.0f)
+    if (strcmp(astate->Name, "Bspin01") == 0 ? single->CurrentSpeed != 0.0f : 0)
     {
         if (single->Time >= globals.player.g.BSpinMinFrame)
         {
@@ -9893,8 +9894,8 @@ void zEntPlayer_Render(zEnt* ent)
         xVec3 center;
         center.x = (a.x + b.x) / 2.0f;
         center.y = (a.y + b.y) / 2.0f;
-        center.z = (a.z + b.z) / 2.0f;
         center.y = (a.y + b.y) / 2.0f - 0.15f;
+        center.z = (a.z + b.z) / 2.0f;
 
         if (!gPTankDisable && strcmp(playerAnim->State->Name, "BbashStart01") == 0)
         {
@@ -10111,8 +10112,8 @@ static void zEntPlayer_Move(xEnt* ent, xScene*, F32 dt, xEntFrame* frame)
         strcmp(ent->model->Anim->Single->State->Name, "Melee01") == 0 ||
         strcmp(ent->model->Anim->Single->State->Name, "JumpMelee01") == 0)
     {
-        xVec3 damp = { globals.player.sb.spin_damp_xz, globals.player.sb.spin_damp_y,
-                       globals.player.sb.spin_damp_xz };
+        const zPlayerSettings& sb = globals.player.sb;
+        const xVec3 damp = { sb.spin_damp_xz, sb.spin_damp_y, sb.spin_damp_xz };
 
         dampen_velocity(ent->frame->vel, damp, dt);
         dampen_velocity(ent->frame->dpos, damp, dt);
@@ -10664,7 +10665,9 @@ static void zEntPlayerJumpUpdate(xEnt* ent, xScene* sc, F32 dt)
             {
                 bbash_tmr += dt;
 
-                if (bbash_tmr >= 0.0f)
+                // The target reloads bbash_tmr after the store; mwcc forwards the
+                // stored value. Read through a volatile lvalue to reproduce it.
+                if (*(volatile F32*)&bbash_tmr >= 0.0f)
                 {
                     ent->frame->vel.y = bbash_vel;
                 }
@@ -13252,7 +13255,10 @@ static void CalcCombinedDepen(F32& dx, F32& dz, F32 ax, F32 az, F32 bx, F32 bz, 
                 dz = 0.5f * (az + bz);
             }
 
-            dot2 = MAX(dot2, 0.25f);
+            if (dot2 < 0.25f)
+            {
+                dot2 = 0.25f;
+            }
             dx = dx + (la * nby) / dot2;
             dz = dz + (la * ubx) / dot2;
             dx = dx * fudge + 0.5f * (ax + bx) * (1.0f - fudge);
