@@ -38,16 +38,15 @@ void xParEmitterEmitPoint(xPar* p, xParEmitterAsset* a, F32 dt)
 
 void xParEmitterAngleVariation(xPar* p, xParEmitterAsset* a)
 {
-    F32 vary = a->vel_angle_variation;
-
-    if (vary != 0.0f)
+    if (a->vel_angle_variation != 0.0f)
     {
-        xMat3x3 mat = { 0 };
-        F32 ang[3] = { vary * (xurand() - 0.5f), vary * (xurand() - 0.5f),
-                       vary * (xurand() - 0.5f) };
+        xMat3x3 mat_rot = { 0 };
+        F32 ang_debrisCone = a->vel_angle_variation;
+        F32 ang[3] = { ang_debrisCone * (xurand() - 0.5f), ang_debrisCone * (xurand() - 0.5f),
+                       ang_debrisCone * (xurand() - 0.5f) };
 
-        xMat3x3Euler(&mat, ang[0], ang[1], ang[2]);
-        xMat3x3LMulVec(&p->m_vel, &mat, &p->m_vel);
+        xMat3x3Euler(&mat_rot, ang[0], ang[1], ang[2]);
+        xMat3x3LMulVec(&p->m_vel, &mat_rot, &p->m_vel);
     }
 }
 
@@ -119,7 +118,9 @@ void xParEmitterEmitCircle(xPar* p, xParEmitterAsset* a, F32 dt)
         xVec2 dir = { 0.0f, 1.0f };
         F32 rad = xurand();
 
-        dir.y = -((rad * rad) - 1.0f) * a->e_circle.radius;
+        rad = -((rad * rad) - 1.0f);
+
+        dir.y = rad * a->e_circle.radius;
 
         dx = xVec2Dot(&rmat[0], &dir);
         dz = xVec2Dot(&rmat[1], &dir);
@@ -215,8 +216,9 @@ void xParEmitterEmitLine(xPar* p, xParEmitterAsset* a, F32 dt)
         xVec3 off = { -sy, cy * sp, cy * cp };
 
         rad = xurand();
+        rad = -((rad * (rad * rad)) - 1.0f);
 
-        p->m_pos += off * (a->e_line.radius * -((rad * (rad * rad)) - 1.0f));
+        p->m_pos += off * (a->e_line.radius * rad);
     }
 
     xParEmitterAngleVariation(p, a);
@@ -447,7 +449,9 @@ void xParEmitterEmitOCircle(xPar* p, xParEmitterAsset* a, F32 dt)
     F32 rr = xurand();
     F32 scale = -((rr * rr) - 1.0f);
 
-    ocircle_emit(*p, *a, dt, scale * a->e_circle.radius);
+    scale *= a->e_circle.radius;
+
+    ocircle_emit(*p, *a, dt, scale);
 }
 
 namespace
@@ -566,15 +570,17 @@ namespace
         }
         case 1:
         {
+            F32 sc;
+            F32 rad;
             F32 ang = 6.2831855f * xurand();
             F32 z = 2.0f * xurand() - 1.0f;
             F32 up = xsqrt(-((z * z) - 1.0f));
             F32 rr = xurand();
-            F32 rad = -((rr * (rr * rr)) - 1.0f);
 
+            rad = -((rr * (rr * rr)) - 1.0f);
             rad *= eb.radius;
 
-            F32 sc = rad * up;
+            sc = rad * up;
 
             off.assign(sc * icos(ang), sc * isin(ang), rad * z);
             break;
@@ -695,19 +701,21 @@ namespace
     {
         xVec3 off;
 
-        switch ((subtype << 3) | b.type)
+        switch (b.type | (subtype << 3))
         {
         case (0 << 3) | XBOUND_TYPE_SPHERE:
         {
+            F32 sc;
+            F32 rad;
             F32 ang = 6.2831855f * xurand();
             F32 z = 2.0f * xurand() - 1.0f;
             F32 up = xsqrt(-((z * z) - 1.0f));
             F32 rr = xurand();
-            F32 rad = -((rr * (rr * rr)) - 1.0f);
 
+            rad = -((rr * (rr * rr)) - 1.0f);
             rad *= b.sph.r + expand;
 
-            F32 sc = rad * up;
+            sc = rad * up;
 
             off.assign(sc * icos(ang), sc * isin(ang), rad * z);
             break;
@@ -741,8 +749,10 @@ namespace
             F32 ang = 6.2831855f * xurand();
             F32 z = 2.0f * xurand() - 1.0f;
             F32 up = xsqrt(-((z * z) - 1.0f));
+            F32 sc;
             F32 rad = b.sph.r + expand;
-            F32 sc = rad * up;
+
+            sc = rad * up;
 
             off.assign(sc * icos(ang), sc * isin(ang), z * rad);
             break;
