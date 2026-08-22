@@ -2271,6 +2271,115 @@ variant, so it is pure source track.
   `bl` instructions, so it is IR-level, not the scheduler.** Seven source shapes
   measured; baseline is best.
 
+### WARNING: the `const` lever can INVERT an E3n verdict. Re-measure old ones.
+
+Measured on `DiscoRender__10zNPCSleepyFv` (zNPCTypeRobot):
+
+    before `const vec_ray`:   tree 72.850   stock 76.904   no3 76.904
+    after  `const vec_ray`:   tree 81.053   stock 75.016   no3 75.016
+
+Before the fix this is a textbook E3n over-fire. After it, **the over-fire is
+gone and E3n is +6 points on the same function.** The `const` removes the
+declared-frame-object store that E3n was gating on, so the clause stops firing
+there at all.
+
+**Consequence: any E3n over-fire recorded BEFORE the const lever was applied to
+that function is suspect and must be re-measured.** A patch-or-source verdict is
+only valid for the source as it stood when the matrix was run. Re-run the matrix
+after every source change that touches a frame aggregate.
+
+### SECOND entry-0 over-fire witness: `Setup__11zNPCFodBzztFv`
+
+Verified here, not taken on report. 288 b, `src/SB/Game/zNPCTypeRobot.cpp`:
+
+    tree 95.347 | stock GC/2.0p1 100.000 | no0 100.000 | no3 95.347 | noV 95.347
+
+**Source-perfect; do not touch it.** Note it is NOT quite the same shape as
+`xFXRenderProximityFade`, which needed `no0` *specifically* (stock gave only
+99.504). This one reaches 100 under stock and `no0` alike, so it is a plain
+entry-0 over-fire rather than a patch-interaction case.
+
+Ablating entry 0 is not free even locally: within `zNPCTypeRobot` alone the
+trade is +1/-2 (`RendConeOfDeath` 89.515->87.767, `RendConeRange`
+87.884->87.054). Entry 0 remains a narrowing target, not an ablation target.
+
+A **fourth E3n witness**, not bankable but worth the file: `RendConeOfDeath`
+(808 b) is tree 90.777 / no3 92.762 / stock 91.163. Callee-saved GPR
+permutation underneath, so it never reaches 100 either way.
+
+### METHOD: compare the instruction MULTISET before reading the diff at all
+
+The single most productive move of a recent session. Normalise registers and
+pool ids, then compare the multiset of instructions on each side:
+
+- multisets **equal** -> pure REGS/SCHED. Go straight to the allocator and
+  scheduler sections; do not read the diff line by line looking for a source
+  bug that is not there.
+- multisets **differ** -> a real source difference, and the *difference itself*
+  names it (an extra `fmadds` against a `fmuls`+`fadds` pair; a missing switch
+  dispatch; an extra `mr`).
+
+It separated three real-source cases from six pure REGS/SCHED cases in about a
+minute each, and it surfaced a fused-multiply defect that reading the diff
+top-to-bottom had missed. Script at `scratchpad/robot/ms.py`; solo.py's column
+split is at character 50.
+
+### OPEN LEAD: the construct that keeps a fully-degenerate switch alive
+
+`DoAliveStuff__11zNPCTubeletFf` (384 b, 91.667%) is a SIZE difference with a
+understood cause and an unknown cure. The target emits a live 6-instruction
+switch dispatch (`lbz 0x84(r3)` / `cmplwi 1,beq` / `cmplwi 2,beq` / `cmplwi 4`)
+whose case bodies are **all empty** -- every arm branches to the instruction
+after the switch. The switched-on value is dead in retail too (the `AdjustHome`
+third argument is a `.sdata2` literal, not `wid`). Our mwcc deletes the entire
+switch once dead-store elimination empties the bodies.
+
+Ruled out: writing the cases explicitly empty (91.667, unchanged), adding
+`default:`, and grouping BOX/OBB. The two extra `lwz` reloading
+`drv_data->driver` afterwards are a *consequence* -- the live switch splits the
+basic block and kills the CSE. **The construct that keeps a degenerate switch
+alive in CW is unknown.** Whoever finds it also gets the reload behaviour free.
+
+### More dwarf counter-evidence (zNPCTypeRobot)
+
+Wrong twice: `zNPCTubelet::ParseChild`'s dwarf lists a `zNPCTubeSlave* slave`
+local, and writing it **costs** 1.07 points (96.395 -> 95.326).
+`zNPCSleepy::RendConeRange`'s dwarf entry is a *different function* -- it has
+`rad_fadeinInner`/`rad_fadeinOuter` statics and none of `pos_top`/`pos_bot`/
+`rgba_*`, so the PS2 and GC bodies genuinely diverge there. Correct once, and
+decisively: `TurnThemHeads`' missing `pos` local is what closed it.
+
+### zNPCTypeRobot: remaining classification
+
+- `Unbonk` 116 b 99.586 -- **BLOCKED**, the known epilogue `lwz r31`-before-
+  `lwz r0` class; 3 permutations, baseline best.
+- `ParseChild` 344 b 96.395 -- **BLOCKED**, callee-saved permutation
+  (`xShadowSimple_Add` class), 4 shapes all <= baseline.
+- `NightLightUVStep` 200 b 60.700 -- **BLOCKED**, entry 4: `lfs uv_nightlight[1]`
+  hoisted over `stfs uv_nightlight[0]`, i.e. subrange x subrange. Rewriting
+  `+=` as `x = x + y` measures 65.800 and narrows it to that one hoist, but was
+  NOT installed: that is not a fidelity question and it banks nothing.
+- `ConeOfRange` 324 b 95.802 -- unfinished. We hoist an extra `lfs 0.0f` to the
+  head of the `MAX(0.0f, MIN(pct,1.0f))` clamp to fill the `fdivs` latency;
+  retail loads it once at the use site into f31 after `rad2` dies, serving as
+  both compare operand and result. 4 spellings, none moved it.
+- `DiscoUpdate` 468 b 95.769 -- unfinished, same shape (two
+  `uv_discoLight[i]` loads hoisting above `stb rgba_discoLight.alpha`),
+  patch-insensitive across all five compilers.
+- `RendConeOfDeath` 808 b 90.777 -- near-blocked. FP set is a clean descending
+  declaration-order sequence except `sn`, defined inside the loop, colours
+  third; bare-declaration hoists are byte-inert exactly as the rule predicts for
+  a value redefined every iteration. Confirmed again here: naming the four RGBA
+  macro arguments does NOT buy retail's all-loads-then-all-stores order when the
+  temps are single-use -- they are copy-propagated away.
+- `RendConeRange` 964 b 87.884 -- unfinished. `pos_vtx` and `vec_ray` occupy
+  each other's frame slots (target 0x10/0x1c, ours 0x1c/0x10) but the
+  reverse-declaration lever does NOT reach it: three placements cost 4.5 points,
+  scoping buys +0.05, `const pos_bot` is -2.0. 8 shapes.
+- `DiscoRender` 748 b 81.053 -- unfinished, improved 8.2 points. Remaining is
+  the setup block's load order plus retail keeping `mem` and `vert_list` in two
+  registers (`mr r26,r27`) where we coalesce.
+
 ### THE CHEAPEST QUESTION IN THIS PROJECT: patch, or source?
 
 Before spending a session on any near-100% residual, compile the unit with
