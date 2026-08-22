@@ -2214,6 +2214,63 @@ A harness that assumed otherwise gave a false reading for an iteration. Filter
 on `match_percent < 100.0` yourself if you write against it (this is what
 `verify_mw.run(..., None)` returns too).
 
+### NEW LEVER: `j = i, i++` -> `j = i++`. It LOOKS like SCHED and is not.
+
+`PointWithinTriangle` (672 b) closed to 100.000% on this alone, at three sites.
+The loop was `for (i = 0, j = 2; i < 3; j = i, i++)`; the target emits
+`addi i,1` **before** `addi ptr,4` and we emitted them the other way round.
+The comma form cannot reach it; `j = i++` can.
+
+**Why this matters beyond one function:** the residual presents as *two adjacent
+independent instructions swapped*, which these notes elsewhere tell you to
+classify as SCHED and stop on. That guidance is right in general and wrong
+here. **Before writing off a transposed `addi` pair in a loop increment as
+blocked, try re-spelling the increment.**
+
+### dwarf's PS2 sibling for iCollide: right twice, wrong three times
+
+`dwarf/SB/Core/p2/iCollide.cpp` exists and is the PS2 counterpart of the GC
+file. Decisive-CORRECT on `iSphereHitsModel3` and `sphereHitsEnv3CB` (local sets
+match ours exactly). Decisive-WRONG on `FindNearestPointOnLine` and both ray
+functions: it lists no `dx/dy/dz`, no `sx/sy/sz` and no `RwV3d temp` in
+`iRayHitsEnv`, yet the GC target's asm proves all of them must exist. Another
+entry for "dwarf is not an oracle" -- hypothesis generator only.
+
+### iCollide: what is left, and why
+
+The unit is patch-insensitive where it matters: `PointWithinTriangle`,
+`FindNearestPointOnLine`, `iRayHitsEnv` and `iRayHitsModel` are identical under
+all of `- / 2.0p1 / no0 / no3 / noV`. `sphereHitsEnv3CB` and `iSphereHitsModel3`
+*gain* 4-5 points from the patch. Nothing in the unit reaches 100 under any
+variant, so it is pure source track.
+
+- **`iSphereHitsModel3`** 98.913% (920 b) -- BLOCKED. All 9 rows are in the
+  64-bit `collide_rwtime += t1 - t0` accumulate: same multiset, different
+  registers, and the target interleaves `stw` between `addc` and `adde`.
+  `= a + (b-c)`, `+= named delta` and reversed operands are all bit-identical
+  (canonicalised); split-into-two is 96.174. dwarf's local list matches ours.
+- **`sphereHitsEnv3CB`** 97.427% (1,228 b) -- three residual shapes. (a) A
+  `mr r31, rN` at the three `idx = X = cbnumcs++` sites: retail keeps the load
+  in a scratch and copies into `idx`'s callee-saved register, we coalesce;
+  three spellings bit-identical. (b) Retail reloads `NEXT2` after storing it and
+  reloads `cbnumcs` after `cbnumcs--` where we forward + `clrlwi` -- the
+  store-to-load forwarding defect, `volatile`-only, not installed. (c) Two
+  f0/f1/f2 transpositions.
+- **`FindNearestPointOnLine`** 97.903% (248 b) -- UNFINISHED, one FP tie-break.
+  Naming `dx/dy/dz` fixed the load order; also naming `sx/sy/sz` snapped both
+  register groups onto the target's (`dx,dy,dz`->f4,f5,f6; `sy,sx,sz`->f7,f8,f9)
+  and `dx * mu` fixed the operand order. What remains is `mu` getting f1 where
+  retail gets f2, with both candidates dying at the `fsubs` -- the
+  `_xCameraUpdate` one-bit shape. Four declaration positions byte-identical.
+- **`iRayHitsEnv`** 94.139% / **`iRayHitsModel`** 91.824% -- ONE shared root
+  cause, blocked. 51 of 58 rows in the former are a callee-saved permutation:
+  we materialise `&isx.t.line.end` early (`addi r31, r1, 0x20`) and hold it
+  across six calls; retail materialises it at the swap. In `iRayHitsModel` that
+  costs a fifth callee-saved register (`stmw r27` vs the target's four) because
+  retail reuses r28 for `mat` and then `&end`. **The `addi` is hoisted across
+  `bl` instructions, so it is IR-level, not the scheduler.** Seven source shapes
+  measured; baseline is best.
+
 ### THE CHEAPEST QUESTION IN THIS PROJECT: patch, or source?
 
 Before spending a session on any near-100% residual, compile the unit with
