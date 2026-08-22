@@ -484,29 +484,55 @@ Before treating a symorder pool warning as real, check the DOL hash first,
 and check whether `.text` sets differ. It is genuine evidence only for units
 whose object is otherwise a set-match.
 
-### The switch-tree pivot convention: real, but MUCH narrower than it looks
+### The switch-tree "pivot convention" was WRONG. It is missing `case` labels.
 
-`zEntPlayerEventCB` was simulated instruction-by-instruction: our 43 case
-values and their body order in `.text` are IDENTICAL to retail, and all 70
-differing rows are in the binary search tree. At every node both compilers
-choose the same partition and differ only in the pivot -- retail takes the
-max of the lower half, we take the min of the upper half.
+**DISPROVEN 2026-08-22, and this is the correction that matters most in this
+file.** `zEntPlayerEventCB` was closed to 100.0 by adding four `case X:`
+labels that fall straight to `break`. There is no pivot defect and no
+compiler patch to write -- do not spend a session on one.
 
-A standalone repro confirms our side. Eight sparse cases
-(3, 9, 37, 205, 300, 449, 488, 500) give a root of `cmpwi r3, 0x12c` (300),
-i.e. element n/2 of the sorted list; retail's convention would root at 205,
-element n/2 - 1. So it is an off-by-one in median selection, not a different
-tree shape.
+What the earlier pass got right: our emitted case values, the case-body
+order, and the body offsets were all identical to retail, and all 70
+differing rows were in the search tree. What it got wrong was the inference.
+It concluded both compilers partition identically and differ only in choosing
+max-of-lower vs min-of-upper as the pivot. The real cause is that **retail's
+case LIST was longer than ours**. Cases whose body is just `break` emit no
+body and no `cmpwi` of their own, so they are invisible in a value-set
+comparison -- but they change the shape of the tree CW builds.
 
-**But the "this costs every function with a deep switch" reading is wrong,
-and was checked before anyone spends a session on it.** Of the 41 `*EventCB`
-functions in game code, **38 already match at 100.0**. The largest matching
-one is `zEntDestructObjEventCB` at 1,184 b; the only non-matching ones are
-`zVolumeEventCB` (268 b, 89.179 -- small, so almost certainly a different
-defect), `zEntPlayerEventCB` (2,624 b) and `zPlatformEventCB` (3,192 b),
-which are the two largest such functions in the game. The divergence
-therefore appears only once the case count is large enough, and total
-exposure is about **5,816 bytes in two functions**, not a project-wide tax.
+The tell was there all along and was read past: **the target's dispatch was
+one instruction LARGER than ours** (108 vs 107). A pure pivot-selection
+difference cannot change the instruction count. A longer case list can.
+
+Diagnostics, now that the shape is understood -- use these on any large CW
+switch whose value set, body sizes and body order match but whose tree does
+not:
+
+  * the target's dispatch is BIGGER than yours -> you are missing labels.
+  * a pivot `cmpwi V` with **no** `beq`: CW elides the equality test when the
+    pivot tops a consecutive run of default-mapped cases and emits the
+    boundary as `max+1`. So V-1 is the top of a run you have not written.
+  * a **four**-instruction leaf `cmpwi / beq body / blt default / b default`
+    where you emit three: that node has an all-default sibling child.
+  * a lone default-mapped case shows up as a stray `beq <default>`; pairing
+    it with its neighbour removes that row.
+
+Add one probe case at a time and watch which subtree snaps into place. On
+`zEntPlayerEventCB` fourteen case-set combinations localised it to exactly
+{51, 52, 284, 285}; a single case at 285 scored 99.488 and at 286 scored
+99.489, both carrying the stray `beq`, and only the two-element run [284,285]
+removed it.
+
+**Source POSITION of an empty case has zero effect on codegen**, so it cannot
+be recovered from the object -- put such labels wherever reads best.
+
+Still open on this shape: `zPlatformEventCB` (3,192 b). Note its residual was
+separately measured and is NOT this defect -- zero of its rows are in the
+search tree; all 12 are in case bodies, one motif across the six
+`eEventRot*` cases. So the two big EventCB functions had two different
+causes, which is exactly why the "deep switches cost us everywhere" reading
+never held up.
+
 
 Weigh that against the cost: locating median selection in a 6 MB stripped
 binary with no debugger is open-ended, unlike clause E3n which was a
