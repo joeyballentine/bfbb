@@ -1382,6 +1382,26 @@ blind to definition order.
   install-only-at-100.0 rule. Its last row is the scheduler shape above, so it
   closes for free if that is ever fixed.
 
+- **Two independent agents have now reconstructed the SAME
+  `RwIm3DVertexSetRGBA` from dwarf, so the header form is probably real.**
+  `dwarf/` lists, for both `xFX::RenderRotatedBillboard`/`DrawRing` and
+  `xShadowSimple_AddVerts`, exactly one `class RwRGBA* _col;` local per
+  invocation of that macro -- and none for `SetPos`/`SetUV`. The stock
+  RenderWare form introduces that temp:
+
+      RwRGBA* _col = (RwRGBA*)&((_vert)->r);
+      _col->red = (_r); _col->green = (_g); ...
+
+  Our `include/rwsdk/rwcore.h` has the flattened `(_vert)->r = _r;` form.
+  **Measured, hand-expanded in xFX: the `_col` form alone is byte-for-byte
+  INERT.** So on its own it is a fidelity/naming change for zero match gain,
+  reached by two routes. The open question is whether the real macro also
+  binds `_a` to a temp, or is an inline FUNCTION (whose argument evaluation
+  would hoist the `lbz` naturally) -- `xShadowSimple_AddVerts` needed six
+  explicit `alpha = cache->alpha;` re-reads to reproduce retail, which an
+  inline function's argument evaluation would give for free. That variant has
+  NOT been measured tree-wide and is the thing to test if anyone opens this.
+
 - **A countdown loop on the parameter** (`while (numTriangles--)`) rather than
   an index loop: the index form costs a callee-saved register and shifts the
   whole file. Worth 83.611 -> 100.0 on `shadowCacheLeafCB`.
