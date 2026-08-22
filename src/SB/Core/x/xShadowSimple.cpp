@@ -300,41 +300,49 @@ static void xShadowSimple_CalcCorners(xShadowSimpleCache* cache, xEnt* ent, F32 
 
 static void xShadowSimple_AddVerts(xShadowSimpleCache* cache)
 {
-    if (1e38f == cache->shadowHeight)
+    F32 y;
+    F32 z;
+    U8 alpha;
+
+    if (1e38f == cache->shadowHeight || sShadVertCount >= 384)
     {
         return;
     }
 
-    if (sShadVertCount >= 384)
-    {
-        return;
-    }
+    y = cache->corner[0].y;
+    z = cache->corner[0].z;
+    RwIm3DVertexSetPos(&sShadVert[sShadVertCount + 0], cache->corner[0].x, y, z);
+    y = cache->corner[1].y;
+    z = cache->corner[1].z;
+    RwIm3DVertexSetPos(&sShadVert[sShadVertCount + 1], cache->corner[1].x, y, z);
+    y = cache->corner[2].y;
+    z = cache->corner[2].z;
+    RwIm3DVertexSetPos(&sShadVert[sShadVertCount + 2], cache->corner[2].x, y, z);
+    y = cache->corner[1].y;
+    z = cache->corner[1].z;
+    RwIm3DVertexSetPos(&sShadVert[sShadVertCount + 3], cache->corner[1].x, y, z);
+    y = cache->corner[2].y;
+    z = cache->corner[2].z;
+    RwIm3DVertexSetPos(&sShadVert[sShadVertCount + 4], cache->corner[2].x, y, z);
+    y = cache->corner[3].y;
+    z = cache->corner[3].z;
+    RwIm3DVertexSetPos(&sShadVert[sShadVertCount + 5], cache->corner[3].x, y, z);
 
-    RwIm3DVertexSetPos(&sShadVert[sShadVertCount + 0], cache->corner[0].x, cache->corner[0].y,
-                       cache->corner[0].z);
-    RwIm3DVertexSetPos(&sShadVert[sShadVertCount + 1], cache->corner[1].x, cache->corner[1].y,
-                       cache->corner[1].z);
-    RwIm3DVertexSetPos(&sShadVert[sShadVertCount + 2], cache->corner[2].x, cache->corner[2].y,
-                       cache->corner[2].z);
-    RwIm3DVertexSetPos(&sShadVert[sShadVertCount + 3], cache->corner[1].x, cache->corner[1].y,
-                       cache->corner[1].z);
-    RwIm3DVertexSetPos(&sShadVert[sShadVertCount + 4], cache->corner[2].x, cache->corner[2].y,
-                       cache->corner[2].z);
-    RwIm3DVertexSetPos(&sShadVert[sShadVertCount + 5], cache->corner[3].x, cache->corner[3].y,
-                       cache->corner[3].z);
-
-    RwIm3DVertexSetRGBA(&sShadVert[sShadVertCount + 0], 0, 0, 0, cache->alpha);
-    RwIm3DVertexSetRGBA(&sShadVert[sShadVertCount + 1], 0, 0, 0, cache->alpha);
-    RwIm3DVertexSetRGBA(&sShadVert[sShadVertCount + 2], 0, 0, 0, cache->alpha);
-    RwIm3DVertexSetRGBA(&sShadVert[sShadVertCount + 3], 0, 0, 0, cache->alpha);
-    RwIm3DVertexSetRGBA(&sShadVert[sShadVertCount + 4], 0, 0, 0, cache->alpha);
-    RwIm3DVertexSetRGBA(&sShadVert[sShadVertCount + 5], 0, 0, 0, cache->alpha);
+    alpha = cache->alpha;
+    RwIm3DVertexSetRGBA(&sShadVert[sShadVertCount + 0], 0, 0, 0, alpha);
+    alpha = cache->alpha;
+    RwIm3DVertexSetRGBA(&sShadVert[sShadVertCount + 1], 0, 0, 0, alpha);
+    alpha = cache->alpha;
+    RwIm3DVertexSetRGBA(&sShadVert[sShadVertCount + 2], 0, 0, 0, alpha);
+    alpha = cache->alpha;
+    RwIm3DVertexSetRGBA(&sShadVert[sShadVertCount + 3], 0, 0, 0, alpha);
+    alpha = cache->alpha;
+    RwIm3DVertexSetRGBA(&sShadVert[sShadVertCount + 4], 0, 0, 0, alpha);
+    alpha = cache->alpha;
+    RwIm3DVertexSetRGBA(&sShadVert[sShadVertCount + 5], 0, 0, 0, alpha);
 
     sShadRasters[sShadVertCount / 6] = (RwRaster*)cache->raster;
 
-    // NOTE: retail reloads sShadVertCount here (the reload-after-aliasing-store
-    // defect); the rest of the residual in this function is pure instruction
-    // scheduling.
     sShadVertCount += 6;
 }
 
@@ -351,11 +359,6 @@ void xShadowSimple_Init()
 
     memset(sShadVert, 0, sizeof(sShadVert));
 
-    // NOTE: retail reloads the 0.0f/1.0f literals from .sdata2 once per store
-    // (the reload-after-aliasing-store defect), which makes its loop body too
-    // big to unroll.  Ours CSEs them into two registers and unrolls x2.  Every
-    // store offset and value below is byte-for-byte what retail writes; the
-    // residual is compiler-side, not semantic.
     for (i = 0; i < 64; i++)
     {
         sShadVert[i * 6 + 1].u = 1.0f;
@@ -391,42 +394,34 @@ void xShadowSimple_CacheInit(xShadowSimpleCache* cache, xEnt* ent, U8 alpha)
     cache->flags = 4;
     cache->alpha = alpha;
 
-    if (ent->model == NULL)
+    if (ent->model == NULL || ent->model->shadowID != 0xDEADBEEF)
     {
         return;
     }
 
-    if (ent->model->shadowID == 0xDEADBEEF)
+    raster = NULL;
+    flags = 0;
+
+    n = xSTAssetCountByType('SHDW');
+
+    for (i = 0; i < n; i++)
     {
-        raster = NULL;
-        flags = 0;
+        sst = (zSimpleShadowTableHeader*)xSTFindAssetByType('SHDW', i, &size);
 
-        n = xSTAssetCountByType('SHDW');
-
-        for (i = 0; i < n; i++)
+        for (j = 0; j < sst->num; j++)
         {
-            sst = (zSimpleShadowTableHeader*)xSTFindAssetByType('SHDW', i, &size);
-
-            for (j = 0; j < sst->num; j++)
+            if (ent->model->modelID == ((U32*)sst)[3 * j + 1])
             {
-                if (ent->model->modelID == ((U32*)sst)[3 * j + 1])
-                {
-                    tex = (RwTexture*)xSTFindAsset(((U32*)sst)[3 * j + 2], NULL);
+                tex = (RwTexture*)xSTFindAsset(((U32*)sst)[3 * j + 2], NULL);
 
-                    if (tex != NULL)
-                    {
-                        raster = tex->raster;
-                        flags = ((U32*)sst)[3 * j + 3];
-                    }
-                    else
-                    {
-                        raster = (RwRaster*)0xDEADBEEF;
-                    }
+                if (tex != NULL)
+                {
+                    raster = tex->raster;
+                    flags = ((U32*)sst)[3 * j + 3];
                 }
-
-                if (raster != NULL)
+                else
                 {
-                    break;
+                    raster = (RwRaster*)0xDEADBEEF;
                 }
             }
 
@@ -436,15 +431,20 @@ void xShadowSimple_CacheInit(xShadowSimpleCache* cache, xEnt* ent, U8 alpha)
             }
         }
 
-        if (raster == NULL || raster == (RwRaster*)0xDEADBEEF)
+        if (raster != NULL)
         {
-            raster = sShadRaster;
+            break;
         }
-
-        cache->raster = (U32)raster;
-        cache->flags |= (U16)flags;
-        ent->model->shadowID = (U32)raster;
     }
+
+    if (raster == NULL || raster == (RwRaster*)0xDEADBEEF)
+    {
+        raster = sShadRaster;
+    }
+
+    cache->raster = (U32)raster;
+    cache->flags |= (U16)flags;
+    ent->model->shadowID = (U32)raster;
 }
 
 void xShadowSimple_Add(xShadowSimpleCache* cache, xEnt* ent, F32 radius, F32 ecc)
