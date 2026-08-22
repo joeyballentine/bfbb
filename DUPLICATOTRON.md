@@ -1649,13 +1649,37 @@ clause-C, solo basis): removing E3n is **+6 functions / +25,924 bytes** and
 2380 b.
 
 **E3n stays.** But the narrowing is now the single largest identified win on
-the board. E3n's motivating shape is an **`stfs` to a scalar declared frame
-local**; the zEntPlayer case is an **`stw` of a pointer into a 32-byte frame
-array**. Two candidate gates separate them -- store opcode class (float vs
-integer), or the size of the declared frame object itself (the `sizeof(A) <= 4`
-test is on the *memref*, which is 4 in both cases, so it does not). NOT YET
-ATTEMPTED: it means writing new x86 into the cave against struct fields nobody
-has identified, and a guessed gate recorded as a rule is worse than no rule.
+the board. NOT YET ACHIEVED: it means writing new x86 into the cave against
+struct fields nobody has identified, and a guessed gate recorded as a rule is
+worse than no rule.
+
+**Both obvious gates are DEAD. Measured, three witnesses:**
+
+    zEntPlayer_AnimTable     stw  into a 32-byte frame array     over-fires
+    zLightningFunc_Render    stfs into a stack array element     over-fires
+    turning__12zNPCDutchmanCFv  stfs/stw into an 8-byte xVec2    over-fires
+    E3n's 19 motivating wins stfs to a scalar frame local        CORRECT
+
+- **Store-opcode class (float vs integer) is dead:** the over-fire cases span
+  both `stw` and `stfs`.
+- **Frame-object size is dead:** the third witness is an 8-byte aggregate,
+  which sits *between* the scalar wins and the arrays. No threshold at 4 or 8
+  separates them. I promoted this gate on two witnesses and the third refuted
+  it -- recorded so nobody re-promotes it.
+
+**UNTESTED hypothesis, explicitly flagged as such:** what the three over-fire
+cases share is that the store is one of SEVERAL stores into DIFFERENT PARTS of
+the same declared frame object -- `tranTbl1[i]`, `param[0]`/`param[1]`, an
+xVec2's `.x`/`.z` -- whereas the motivating shape writes a **whole** scalar. If
+the frame-object descriptor distinguishes a whole-object memref from a
+partial/offset one, that is where to look. This may also connect to the
+whole x whole dispatch entry that `eval_joint` reaches. Do not record this as a
+rule until it is measured.
+
+**Source-side mitigation that works today:** `const` on the read-only frame
+aggregate cleared the gate entirely on the third witness -- 87.870% patched
+before, 99.259% under every compiler after. Verified by checking out the
+pre-fix blob and measuring both ways.
 
 ### zLightning: BOTH functions blocked. Do not send another agent at this file.
 
@@ -2007,6 +2031,69 @@ you are gating.
 Two agents running in the same session get the same scratchpad directory, and
 one overwrote another's `vary.py` mid-run. **Namespace scratch files** under a
 per-agent subdirectory. Brief agents accordingly.
+
+### `const` on a read-only local aggregate: a lever that keeps paying
+
+It paid **five separate times in one unit** (zNPCTypeDutchman), worth +3.5 to
++11 points each, and it cleared an E3n over-fire outright. These notes framed
+it as the 12-byte three-register `xVec3` copy form. It is broader:
+
+- it applies to **8-byte `xVec2`** as well;
+- it applies to aggregates whose initialisers are **non-constant expressions**,
+  where CW still copies an anonymous zero template in before overwriting.
+
+**Scan for `xVecN local = {...};` that is never written afterwards.** The
+`const` is correct on its own merits in every such case, so this is a free
+correctness-and-percentage lever, not a trade.
+
+### Permuting sibling `const T&` binding declarations is a cheap mechanical lever
+
+Six builds, ~15 seconds, and it closed two functions. `play_sound` went
+96.458 -> 100.000 by swapping two of three reference declarations (2 of the 6
+permutations hit 100), and `Initiate::Enter` 99.394 -> 100.000 by moving one
+reference below two others. Worth trying before any deeper analysis on a
+function whose residual is REGS and whose head is a run of reference bindings.
+
+### CORRECTION: `LassoNotify`'s dead branch IS source-reachable
+
+These notes list it as "one unreachable branch instruction... documented dead
+ends, not open puzzles". Too strong. Adding `case LASS_EVNT_BEGIN: break;`
+**does** produce the second `b` and takes it 96.429 -> 99.393. It still does not
+close, because that case also reshapes the pivot tree (`cmpwi 3/beq/bge/cmpwi
+2/bge` becomes `cmpwi 2/beq/bge/cmpwi 0/beq`). Correct framing: *the dead branch
+is reachable, but not simultaneously with the target's tree.* The change was
+reverted because the label is invented and it banks nothing.
+
+### RE-PRICE the `xVec2::create` header change before spending a session on it
+
+The `.sbss2` entry names five functions "whose *entire* residue is that shift",
+`clip_outside_circle` among them. **`clip_outside_circle` (xVec2 overload) was
+closed to 100.000% from source alone, with no header change.** So whatever holds
+`create__5xVec2Fff` (44 b, 63.636%) back is not a shift that also gates its
+neighbours, and the "five functions unblocked by one header change" pricing is
+wrong. Re-derive it.
+
+### Lead: retail's `xatan2` may return `double`
+
+`update_turn__12zNPCDutchmanFf` (260 b, 94.308%, 8 rows): the target emits an
+extra `frsp f0, f31` narrowing `angle` before `angle + diff`; we forward `f31`
+unrounded. Eight source shapes measured, all <= baseline.
+
+A redundant `frsp` is what CW emits when the value's producer is **double**-typed.
+So the lead is that retail's `xatan2` returns `double`, not `F32`. The mangled
+name `xatan2__Fff` encodes only parameters, so the return type is invisible to
+the linker and this is testable without breaking anything. `xMathInlines.h` is
+shared, so it needs a tree-wide sweep. **Unfinished, not blocked.**
+
+### dwarf, both directions, in a single unit
+
+Decisive and CORRECT three times in zNPCTypeDutchman: `update_wave` has no
+`tanx`/`tanz`, `update_flames` no `gx`/`gz`/`tanx`/`tanz`, `Initiate::Enter` no
+`ox`/`oz` -- inlining each was part of every fix. WRONG twice in the same unit:
+`add_spray`'s dwarf omits `mult`, yet naming `mult` *and declaring it first* is
+exactly what reaches 100.000%; and `check_player_damage`'s dwarf lists no `xBox`
+locals at all though the GC target plainly has two on the stack. Use it as a
+hypothesis generator, never as an oracle.
 
 ### THE CHEAPEST QUESTION IN THIS PROJECT: patch, or source?
 
