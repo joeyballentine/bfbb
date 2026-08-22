@@ -471,7 +471,6 @@ void SweptSphereHitsCameraEnt(xScene*, xRay3* ray, xQCData* qcd, xEnt* ent, void
 }
 
 static void _xCameraUpdate(xCamera* cam, F32 dt)
-// NONMATCH("https://decomp.me/scratch/2q6zO")
 {
     if (!cam->tgt_mat)
         return;
@@ -541,12 +540,16 @@ static void _xCameraUpdate(xCamera* cam, F32 dt)
                 hsv = (2.0f * htg - (htg * ot + cam->hepv) * 0.5f * it - hcv * dt) * T_inv;
                 psv = (2.0f * ptg - (ptg * ot + cam->pepv) * 0.5f * it - pcv * dt) * T_inv;
             }
-            F32 dpv = dsv - dcv;
             F32 hpv = hsv - hcv;
             F32 ppv = psv - pcv;
-            F32 vax = cam->mbasis.right.x * ppv + cam->mbasis.at.x * dpv;
-            F32 vay = cam->mbasis.right.y * ppv + hpv;
-            F32 vaz = cam->mbasis.right.z * ppv + cam->mbasis.at.z * dpv;
+            F32 vax, vay;
+            F32 dpv = dsv - dcv;
+            vax = cam->mbasis.at.x * dpv;
+            vay = hpv;
+            F32 vaz = cam->mbasis.at.z * dpv;
+            vax += cam->mbasis.right.x * ppv;
+            vay += cam->mbasis.right.y * ppv;
+            vaz += cam->mbasis.right.z * ppv;
             vax *= dt;
             vay *= dt;
             vaz *= dt;

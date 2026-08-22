@@ -580,7 +580,69 @@ algorithm cannot be the difference -- only the input graph can be.
 with unpatched GC/2.0p1**; clause C+/V/E3n are worth 1.5 points on that one
 function.
 
-### What this buys instead: the exact rule for every REGS-class residual
+### THE RULE: colour order = SOURCE DECLARATION ORDER
+
+**This supersedes the interference-degree hypothesis below, which was wrong.**
+Established 2026-08-22 by closing `_xCameraUpdate` (3,560 b) from 99.792 to
+**exactly 100.0, 0 differing rows of 890**, with a rule that predicted every
+one of ~270 builds.
+
+In these blocks `k` for the FP class is far above every node's degree, so
+simplify pushes every node in ONE pass in index order and select pops LIFO.
+The net effect is simply:
+
+    Values are coloured in the order they are DECLARED in the source, each
+    taking the lowest colour not blocked by an already-coloured neighbour.
+
+So the method for any REGS-class residual is mechanical, not a search:
+
+  1. Read the target diff and note which physical register each value should
+     get.
+  2. Sort those values by target register ASCENDING.
+  3. That is the order they must be DECLARED in.
+
+`_xCameraUpdate` wanted `ppv`->f4, `vax`->f5, `vay`->f6, `dpv`->f7,
+`vaz`->f3, so the declaration order had to be `ppv, vax, vay, dpv` with
+`vaz` last (it is coloured last and takes the lowest colour the f0/f1/f2 load
+temps leave free). We had been declaring `dpv` first, which pinned it to f5.
+
+**The corollary that makes otherwise-impossible orders reachable:
+DECLARATION order beats DEFINITION order.** A bare `F32 vax, vay;` declared
+early but ASSIGNED later still colours in declaration order. That matters
+because `vax = at.x * dpv;` cannot be *defined* before `dpv` -- but `vax` can
+be *declared* before it. Use bare declarations to place a value early in the
+colour order without moving its computation.
+
+Measured ladder on this one function, all predicted correctly in advance:
+
+    ppv, dpv, vay, vax   -> dpv=f5 vax=f7   99.949   6 rows
+    ppv, dpv, vax, vay   -> dpv=f5 vax=f6   99.916  10 rows
+    dpv, ppv, vay, vax   -> dpv=f4 ppv=f5   99.927   9 rows
+    vay, ppv, dpv, vax   -> vay=f4 dpv=f6   99.893  12 rows
+    ppv, vax, vay, dpv   -> 4,5,6,7 retail  100.000  0 rows
+
+**Fidelity caveat, unresolved.** `dwarf/` lists this block as
+`dpv, hpv, ppv, vax, vay, vaz`, and the dwarf order IS declaration order
+elsewhere in this same file (it reproduces our already-matching `wcvx..psv`
+and `it, ot, T_inv` orders). The 100% form contradicts it on `dpv`'s
+position, and 20 builds failed to reconcile the two: with `dpv` declared
+first the colouring pins at f4 or f5 across every structural spelling. Under
+the rule the target permutation and the dwarf permutation are disjoint, so
+no source with `dpv` first can produce retail's registers. Either the dwarf
+order is not declaration order for this block, or there is one more input to
+the node index. **A direct oracle exists if anyone wants it**: dwarf also
+annotates `dpv // r4, hpv // r7, ppv // r1, vax // r5, vay // r7, vaz // r4`,
+which are NOT physical registers (`hpv`/`vay` share, `dpv`/`vaz` share) and
+so look like pre-allocation VIRTUAL register numbers. Emitting DWARF from our
+own build and comparing vreg numbers would settle the node index directly.
+
+Note the change also CORRECTS the rounding: the old
+`right.x * ppv + at.x * dpv` rounds the `right.x` product and fuses the
+other; retail's `fmuls f5, f0, f7` / `fmadds f5, f2, f4, f5` rounds
+`at.x * dpv` and fuses `right.x * ppv`. The new source reproduces retail's
+rounding exactly.
+
+### Superseded: the interference-degree reading
 
 Because select is lowest-free in stack order, a value can only receive a
 HIGHER colour than another if the lower colour is **already taken when it is
