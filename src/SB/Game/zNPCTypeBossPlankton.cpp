@@ -1646,7 +1646,7 @@ S32 zNPCBPlankton::next_goal()
             return NPC_GOAL_BPLANKTONHUNT;
         }
 
-        return NPC_GOAL_BPLANKTONATTACK - (crony_attacking() != 0);
+        return crony_attacking() ? NPC_GOAL_BPLANKTONATTACK - 1 : NPC_GOAL_BPLANKTONATTACK;
     }
 
     return NPC_GOAL_BPLANKTONEVADE;

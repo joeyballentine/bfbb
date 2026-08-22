@@ -452,6 +452,51 @@ because the `volatile` device means we now emit the reload; its residual is the
 `xFXAuraUpdate` and `NPCHazard::Discard` (NAMED), plus `xFXRingCreate` and
 `LightResetFrame` (ANON, float-literal reloads).
 
+### A SECOND witness for "what creates a literal before its first .text use?"
+
+`zNPCTypeBossPlankton::update_move_orbit` (752 b, 99.936) is the cleanest
+instance yet of the project's sharpest open problem, and it was measured to
+the byte.
+
+Every differing row is a `lwz rN, 0xNNN(r31)` whose DISPLACEMENT differs --
+the code is otherwise byte-identical. Both objects anchor at `.rodata + 0`,
+so those are absolute offsets for four zero-templates.
+
+  * The target opens `.rodata` with **13 all-zero anonymous templates nothing
+    references** -- `@405 @406 @410 @441` (0x0C), `@607..@613` (0x28), `@781`
+    (0x0C), `@842` (0x10) = **356 bytes**. Note `@405/@406/@410/@441/@607-613`
+    are the SAME ids already reproduced in `zNPCTypeRobot`.
+  * Adding the sanctioned `__deadstripped_` block lands `sound_assets`,
+    `beam_ring_curve`, `beam_glow_curve` and all `say_*` at the target's exact
+    offsets (`beam_ring_curve` 0x340, `say_set` ending 0x42c -- both exact).
+  * We are then **exactly 12 bytes short**: our templates land at 0x438,
+    retail's at 0x444. Confirmed by throwaway probe -- one 12-byte dummy
+    immediately before the function takes it to **100.000**. Probe removed.
+
+Where the 12 bytes come from, and why it is blocked: the target's `.rodata`
+order is NOT its definition order. `ring_to_world_vel` (`.text` 0x3834) and
+`world_to_ring_loc` (later still) have their `xVec3 out = {...}` templates
+created BEFORE `update_move_orbit`'s, though that function sits at `.text`
+0x32c0; `register_tweaks`'s `@896` is created early and its body emitted at
+`.text` index 25. Ours is definition order, and so is `zNPCTypeRobot`'s, so
+mwcc is order-consistent and retail is not.
+
+**This extends the open problem in a useful direction: it is not only
+`.sdata2` scalars, it is LOCAL AGGREGATE TEMPLATES too**, and in every case
+here the function's body is emitted at a call site rather than at its
+definition. That is the signature of an implicitly-inline (in-class or
+`inline`-keyword) definition -- which would explain `register_tweaks` if
+retail defined it inside the class body, with the class placed between
+`sound_assets` and `beam_ring_curve` (dwarf's declaration order agrees). It
+does NOT explain `ring_to_world_vel`, whose emitted position matches its
+definition position in both objects.
+
+The `__deadstripped_` block was REMOVED per the "must move the number" rule --
+its contents are verified and recorded in the agent report, one paste from
+being re-added the day the construct is understood. One loose end: we emit an
+unexplained 12-byte template `@254` at `.rodata` 0 that `zNPCTypeRobot` does
+not have, created during header parsing and referenced by nothing.
+
 ### `zThrown_Update` cluster A: two ANTI-CORRELATED halves, 34 variants deep
 
 3,784 bytes, 20 rows, and the most thoroughly bounded REGS case in the file
@@ -1600,6 +1645,17 @@ blind to definition order.
   the middle term of a three-term dot product, your source order is already
   right -- measured on `zThrown_Update`, where only `x,y,z` reproduces
   retail's `fmuls f1,f6,f8`.
+
+- **`c ? K-1 : K` is not `K - (c != 0)`.** Retail materialises the boolean
+  SIGN-extended (`neg / or / srawi 31`, giving 0/-1) and ADDs it to a
+  separately materialised constant (`lis/addi` then `add r3, r0, r3`); the
+  subtraction form gives the LOGICAL 0/1 (`srwi`) plus `subf`. The
+  ternary-with-two-constants is what makes mwcc build the constant as a value
+  and fold the delta into a 0/-1 mask. Closed `zNPCBPlankton::next_goal`
+  (95.185 -> 100.0). **Write `K - 1` literally** -- spelling it as the
+  enumerator with the same value measured 87.407, and
+  `K + -(c != 0)` measured 85.926 because the constant then folds into
+  `addis/addi`.
 
 - **A countdown loop on the parameter** (`while (numTriangles--)`) rather than
   an index loop: the index form costs a callee-saved register and shifts the
