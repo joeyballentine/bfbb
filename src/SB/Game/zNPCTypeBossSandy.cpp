@@ -68,8 +68,8 @@ static BossDamageEffectRecord BDErecord[4];
 static U8 sOthersHaventBeenAdded;
 static U8 sPCWasBubbleBouncing;
 static F32 sRadiusOfRing;
-static volatile F32 sElbowDropTimer;
-static volatile F32 sChaseTimer;
+static F32 sElbowDropTimer;
+static F32 sChaseTimer;
 static S32 sNumAttacks;
 static S32 sDidClothesline;
 static volatile F32 sElbowDropThreshold;
@@ -3632,9 +3632,9 @@ S32 zNPCGoalBossSandyLeap::Enter(F32 dt, void* updCtxt)
     mag = endX * endX + endZ * endZ;
     if (mag > 100.0f)
     {
-        mag = 10.0f * (1.0f / xsqrt(mag));
-        endX = endX * mag;
-        endZ = endZ * mag;
+        mag = 1.0f / xsqrt(mag);
+        endX = endX * (10.0f * mag);
+        endZ = endZ * (10.0f * mag);
     }
 
     startX = sandy->model->Mat->pos.x - endX;

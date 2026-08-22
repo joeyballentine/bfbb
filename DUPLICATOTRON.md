@@ -598,6 +598,12 @@ as zero. Keep this list current.
     zNPCHazard.cpp    g_cnt_activehaz                  (file-scope static)
     zEntPlayer.cpp    sPlayerIgnoreSound, bbash_start_ht, idle_tmr
     zScene.cpp        oldOffsetx, oldOffsety, scobj_idbps (pointer-cast)
+    zNPCTypeBossSandy sElbowDropThreshold -- masks a DIFFERENT defect: it
+                      suppresses cross-block constant CSE (LICM), not
+                      store-to-load forwarding. Kept because it is the closer
+                      form (99.364 with, 99.349 without) and Process is
+                      blocked by entry 4 regardless, so neither form banks
+                      bytes. Revert it before measuring any LICM fix.
 
 One site was deliberately NOT added: `zSceneSetup`'s `gCurEnv`. Reading it
 through a volatile lvalue does reproduce retail's `stw`/`lwz` pair and moves
@@ -1401,6 +1407,33 @@ blind to definition order.
   explicit `alpha = cache->alpha;` re-reads to reproduce retail, which an
   inline function's argument evaluation would give for free. That variant has
   NOT been measured tree-wide and is the thing to test if anyone opens this.
+
+- **Distribute a constant to the USE site rather than folding it into the
+  expression -- the constant's register is decided by which temp's live range
+  STARTS first.** `zNPCGoalBossSandyLeap::Enter` 99.586 -> 100.0 (532 b) on
+  exactly this. Retail allocates `10.0f`->f0 and `1.0f`->f2 so `fdivs` writes
+  into the *numerator's* register; we allocated the reverse. Written as one
+  statement, `mag = 10.0f * (1.0f / xsqrt(mag));`, mwcc evaluates the
+  call-bearing operand first, so the `1.0f` temp is created first and takes
+  f0 -- and once f0 holds a value dying at the `fdivs`, the divide targets f1
+  and every downstream register follows. The fix:
+
+      mag = 1.0f / xsqrt(mag);
+      endX = endX * (10.0f * mag);
+      endZ = endZ * (10.0f * mag);
+
+  Now the `10.0f` temp is created after the reciprocal is already a plain
+  variable, so it takes f0 and pushes `1.0f` to f2. Eleven other spellings
+  measured, including every obvious split; ALL of them scored 99.586 or
+  worse. Note especially that `mag = 1.0f / xsqrt(mag); mag *= 10.0f;` gives
+  99.624 with retail's operands REVERSED -- higher number, wrong code.
+
+  **The control that proves it**: `zNPCTypeKingJelly::get_away` is 100.0
+  today and contains literally
+  `F32 scale = 0.70710677f * (1.0f / xsqrt(dist2));` -- the folded spelling --
+  and compiles to OUR pattern. So the folded form is provably not what
+  Sandy's retail source had. When two call sites of the same idiom want
+  different register maps, the difference is where the constant lives.
 
 - **A countdown loop on the parameter** (`while (numTriangles--)`) rather than
   an index loop: the index form costs a callee-saved register and shifts the
