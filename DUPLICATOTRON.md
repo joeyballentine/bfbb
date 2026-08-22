@@ -642,6 +642,57 @@ other; retail's `fmuls f5, f0, f7` / `fmadds f5, f2, f4, f5` rounds
 `at.x * dpv` and fuses `right.x * ppv`. The new source reproduces retail's
 rounding exactly.
 
+### CORRECTION: FP orders by DECLARATION, GPR orders by DEFINITION
+
+**This corrects the corollary stated below.** "Declaration order beats
+definition order" was measured on the FP class in `_xCameraUpdate` and it is
+true THERE. It is FALSE for the GPR class, measured on
+`PlayerCollsSelectDepen` (2026-08-22):
+
+    bare `xCollis* c; xCollis* cend;` declared before colls/mat,
+        assigned after            -> 99.818, 15 rows, BIT-IDENTICAL to baseline
+    swap the two INITIALISED declarations colls/mat
+                                  -> 98.662, registers swapped as predicted
+    swap the two INITIALISED declarations c/cend
+                                  -> 99.486, registers permuted as predicted
+
+Moving a bare declaration is inert; moving the INITIALISER moves the colour.
+So the ordering key differs by class:
+
+    FP class   -> DECLARATION point   (bare-declaration loophole available)
+    GPR class  -> DEFINITION point    (loophole NOT available)
+
+**This reconciles the `xShadowSimple_Add` result** recorded below as "the rule
+does not reach callee-saved GPRs at all": that pass moved sixteen
+DECLARATION shapes, which for GPRs is exactly the inert dimension. The two
+findings agree -- GPRs order by definition point.
+
+**The GPR colour-index table is also not what you would assume.** Derived and
+confirmed against two independently predicted permutations:
+
+    colour index:  0    1    2    3    4    5    6    7
+    register:     r27  r29  r28  r26  r30  r31  r25  r24
+
+Values are coloured in definition order, each taking the lowest-index free
+colour. It is NOT descending r31, r30, ... Anyone reasoning about GPR colours
+must use this table, not intuition.
+
+**`PlayerCollsSelectDepen` (1,868 b) is ARITHMETICALLY UNREACHABLE, proven.**
+Target wants `c`=r25, `cend`=r26, `idx`=r30; we get r26, r30, r31. Sorted
+ascending, the target order is `c, cend, idx` -- which is ALREADY our
+definition order. It is a uniform shift within the free list, not a
+permutation. The loop-1 trio interferes only with `{ent, colls, mat}`
+(r27/r28/r29, identical on both sides), and everything else holding
+r24/r25/r26/r30/r31 has a disjoint live range and can never block it. So the
+trio always takes colour indices 3,4,5 = {r26, r30, r31} in whatever order
+their definitions appear. Retail's {r25, r26, r30} = indices 6,3,4 SKIPS
+index 5 (r31), which requires a coloured neighbour holding r31 -- and no such
+neighbour exists in our graph. **Retail's source creates one extra
+interference across loop 1 that ours does not.** That is an interference-graph
+difference, not an ordering one, and it is the crisp falsifiable statement of
+what retail's source must do: keep a value live across loop 1 that shares r31
+with the loop-2 iterator.
+
 ### THE RULE, REFINED TWICE (2026-08-22, xShadowSimple)
 
 Two refinements from closing `xShadowSimple_CalcCorners` (484 b) to
@@ -3187,6 +3238,21 @@ Verified with a compile of all 343 units the build knows about: 0 failures.
 `ctbsp` is the worked example: 8 non-matching -> 4 in one pass, straight from
 `gh.sh` output read against `rpcollbsptree.h`. The rwsdk headers are good
 enough that struct offsets mostly just line up.
+
+## Lead: the `$localstaticN$` counter says zEntPlayer's TU is missing an entity
+
+The target names the Chuck offset vector
+`offsetChuck$localstatic4$get_reticle_bound__FR5xVec3Rf`; ours is
+`$localstatic3$`. CW's `$localstaticN$` counter runs over function-scope
+statics in inline/instantiated functions in the TU, so **retail's translation
+unit has one more such static before that point than ours** -- most likely
+inside an inlined function pulled in from a header, since none of our own
+file-local statics before that point use the `localstatic` mangling.
+
+objdiff scores those rows as identical (it pairs relocations by offset), so
+it costs nothing today. But it is a genuine missing entity in the TU, it is
+the same family as the `.rodata`-ordering problem, and unlike that one it
+names a specific counter you can check.
 
 ## Queued: dwarf identifier-name recovery for zThrown
 
