@@ -1657,6 +1657,92 @@ test is on the *memref*, which is 4 in both cases, so it does not). NOT YET
 ATTEMPTED: it means writing new x86 into the cave against struct fields nobody
 has identified, and a guessed gate recorded as a rule is worse than no rule.
 
+### zLightning: BOTH functions blocked. Do not send another agent at this file.
+
+`RenderLightning` (2,948 b, 99.028%) and `zLightningFunc_Render` (1,580 b,
+96.886%) were worked hard on 2026-08-22 and neither is source-reachable.
+**Identical instruction counts on both sides** in both functions (737/737 and
+395/395) -- there is no missing `case`, no wrong operand, no fused-vs-rounded
+multiply anywhere. Every differing row is register renaming or ordering.
+
+- `RenderLightning`: 106 rows in four clusters, the largest (63 rows) being a
+  single cyclic rotation of the volatile register pool by two positions.
+  **The decisive fact:** the function's FIRST `for (i = 1; i < last; i++)` loop
+  is byte-exact, including `srwi. r0` for `flip` and `clrlwi. r5` for `i & 1`.
+  The SECOND loop is the same source shape, and retail allocates it
+  *differently from its own first loop* (`srwi. r3`, `clrlwi. r0`) while our
+  compiler makes the same choice in both. Retail's compiler is not consistent
+  with itself across two structurally identical loops in one function, so no
+  single source spelling can satisfy both -- and we already match the first.
+- `zLightningFunc_Render`: a callee-saved GPR permutation (r16/r17 and
+  r24/r25/r26), which `xShadowSimple_Add` already established is not reachable
+  from declaration order, plus an entry-4 same-array subrange store reorder.
+
+Twelve source variants measured, all <= baseline; the two best were
+bit-identical and the rest lost ground (worst: removing the `cr/cg/cb` temps,
+-5.7 points).
+
+**E3n over-fires here too** (measured with `verify_mw.py`): `zLightningFunc_Render`
+is 96.886% patched and 98.635% under both stock `2.0p1` and `2.0p1a-no3`,
+with entries 0, 1 and V all inert. It does not reach 100 either way so it is
+not bankable, but it is the SECOND witness that E3n's over-firing is real and
+recurring -- and its store site is `stfs` into `param[]`, an element of a stack
+**array**, matching zEntPlayer's `stw` into the `tranTbl` **array**. Both
+over-fire sites are frame arrays; E3n's motivating shape is a frame **scalar**.
+That is the evidence behind the frame-object-size gate proposed above, and it
+is evidence *against* a store-opcode-class gate, since one witness is an
+integer store and the other a float store.
+
+### The GPR scope hypothesis is now TESTED, and the answer is NO
+
+The "OPEN CONFLICT" section below asks whether a bare declaration moves a GPR
+colour *when it crosses a scope boundary* -- `PlayerCollsSelectDepen` said no,
+`PipeForAllSceneModels` said yes -- and marks it untested.
+
+It is now tested, from the other direction. Moving three initialised `U8`
+declarations in `RenderLightning` from **function scope into an inner block** --
+a real scope change with the definition point held fixed -- is **byte-identical**:
+same percentage, and every objdiff relocation index unchanged, with only
+anonymous pool ids renumbering. **A scope change on its own does not move a GPR
+colour.** Whatever produced the `zScene` result depends on something else, and
+the scope-crossing hypothesis should not be carried forward as the explanation.
+
+### CAVEAT: naming an anonymous temp does not always pull it into the ordered set
+
+These notes record "give the value a name" as *the* escape from the rule's
+limit, on the strength of `xShadowSimple_CalcCorners`. It is not unconditional.
+In `RenderLightning` the mis-coloured values `cg`/`cb` are **already** named
+locals; the rule says defining them first should order them first; and defining
+them first (two separate variants) moves only `cr` into the low pool while
+`cg`/`cb` stay at r23/r24. So mwcc's live range for a local that is just a load
+from a global does **not** reliably start at its source definition point -- it
+behaves as though rematerialised at the use. Naming is necessary, not sufficient.
+
+### Do not optimise on DIFFERING ROW COUNT. Use the percentage.
+
+objdiff gives partial credit per instruction, so the two disagree. A measured
+case: a `zLightningFunc_Render` variant produced **fewer** differing rows (43 vs
+45) at a **lower** percentage (96.486 vs 96.886). Row counts are for cluster
+bookkeeping only; `match_percent` is the thing report.json is built from.
+
+### More dwarf counter-evidence (add to "dwarf is not an oracle")
+
+For `zLightningFunc_Render`, dwarf lists a single function-scope `signed int i`
+where four separate `for`-init counters measure 0.46 points better, and its
+declaration order `numVerts, u, aVal` measures 0.05 points worse than our
+`alpha, tex, nvert`. Separately it lists **no** `cr/cg/cb` locals at all, yet
+removing ours costs 5.7 points -- so the GameCube build needs temps the PS2
+DWARF has no name for. On the other side of the ledger, `dwarf/SB/Game/zLightning.cpp`
+gives a third and fourth witness for the `RwRGBA* _col` macro form, listing
+exactly one `class RwRGBA * _col;` per `RwIm3DVertexSetRGBA` invocation (12 and
+4 respectively), matching our call sites one-for-one.
+
+**Retail quirk, verified faithful rather than ours:** `RenderLightning`'s second
+`for` loop has no `else { lastdir = dir = up; }` arm where the first loop does,
+so in the `flags & 0x200` case it computes `flip` from values left over from the
+first pass. Instruction counts match exactly, so retail shipped that asymmetry.
+Flagged for PCPORT, not to be "fixed" here.
+
 ### THE CHEAPEST QUESTION IN THIS PROJECT: patch, or source?
 
 Before spending a session on any near-100% residual, compile the unit with
