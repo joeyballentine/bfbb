@@ -200,7 +200,7 @@ void iParMgrRenderParSys_Sprite(void* data, xParGroup* ps)
         indexCount += 6;
         vertexCount += 4;
 
-        if ((indexCount + 6 > 960) || (vertexCount + 4 > 480))
+        if ((indexCount > 960 - 6) || (vertexCount > 480 - 4))
         {
             gRenderBuffer.m_indexCount = indexCount;
             gRenderBuffer.m_vertexCount = vertexCount;
@@ -270,16 +270,31 @@ void iRenderPushQuadStreak(xPar* p, xParCmdTex* tex)
     U8 g = p->m_c[1];
     U8 b = p->m_c[2];
     U8 a = p->m_c[3];
-    F32 px = p->m_pos.x;
-    F32 py = p->m_pos.y;
-    F32 pz = p->m_pos.z;
-    F32 tx = px - 5.0f * p->m_vel.x;
-    F32 ty = py - 5.0f * p->m_vel.y;
-    F32 tz = pz - 5.0f * p->m_vel.z;
-    F32 size = p->m_size;
-    F32 dx = size * gRenderBuffer.m_camViewR.x;
-    F32 dy = size * gRenderBuffer.m_camViewR.y;
-    F32 dz = size * gRenderBuffer.m_camViewR.z;
+    // Declared bare and assigned below: mwcc colours FP values in declaration
+    // order, and retail's register map needs d before t before the t copies
+    // before p.  The copies are what retail's `fmr f9,f6` trio encodes -- the
+    // trailing vertex is computed by subtracting from the tail in place while
+    // the leading vertex adds into a copy of it, so the copy cannot be
+    // propagated away.
+    F32 dx, dy, dz;
+    F32 tx, ty, tz;
+    F32 ax, ay, az;
+    F32 px, py, pz;
+    F32 size;
+
+    px = p->m_pos.x;
+    py = p->m_pos.y;
+    pz = p->m_pos.z;
+    tx = px - 5.0f * p->m_vel.x;
+    ty = py - 5.0f * p->m_vel.y;
+    tz = pz - 5.0f * p->m_vel.z;
+    ax = tx;
+    ay = ty;
+    az = tz;
+    size = p->m_size;
+    dx = size * gRenderBuffer.m_camViewR.x;
+    dy = size * gRenderBuffer.m_camViewR.y;
+    dz = size * gRenderBuffer.m_camViewR.z;
 
     v3d[0].r = r;
     v3d[0].g = g;
@@ -302,13 +317,20 @@ void iRenderPushQuadStreak(xPar* p, xParCmdTex* tex)
     v3d[0].y = py - dy;
     v3d[0].z = pz - dz;
 
-    v3d[1].x = tx - dx;
-    v3d[1].y = ty - dy;
-    v3d[1].z = tz - dz;
+    tx -= dx;
+    ty -= dy;
+    tz -= dz;
+    ax += dx;
+    ay += dy;
+    az += dz;
 
-    v3d[2].x = tx + dx;
-    v3d[2].y = ty + dy;
-    v3d[2].z = tz + dz;
+    v3d[1].x = tx;
+    v3d[1].y = ty;
+    v3d[1].z = tz;
+
+    v3d[2].x = ax;
+    v3d[2].y = ay;
+    v3d[2].z = az;
 
     v3d[3].x = px + dx;
     v3d[3].y = py + dy;
@@ -400,13 +422,19 @@ static void iRenderPushFlat(xPar* p, xParCmdTex* tex)
 
     xMat3x3Euler(&groundmat, yaw, 0.0f, 0.0f);
 
-    F32 xdx = groundmat.right.x * size;
-    F32 xdz = groundmat.right.z * size;
-    F32 px = p->m_pos.x;
-    F32 py = p->m_pos.y;
-    F32 pz = p->m_pos.z;
-    F32 zdx = groundmat.at.x * size;
-    F32 zdz = groundmat.at.z * size;
+    // See iParMgrRenderParSys_Ground: declared bare so the "at" row's products
+    // colour ahead of the "right" row's, which is retail's FP register order.
+    F32 zdx, zdz;
+    F32 xdx, xdz;
+    F32 px, py, pz;
+
+    xdx = groundmat.right.x * size;
+    xdz = groundmat.right.z * size;
+    px = p->m_pos.x;
+    py = p->m_pos.y;
+    pz = p->m_pos.z;
+    zdx = groundmat.at.x * size;
+    zdz = groundmat.at.z * size;
 
     v3d[0].r = r;
     v3d[0].g = g;
@@ -425,21 +453,26 @@ static void iRenderPushFlat(xPar* p, xParCmdTex* tex)
     v3d[3].b = b;
     v3d[3].a = a;
 
-    v3d[0].x = px - xdx - zdx;
+    F32 mx = px - xdx;
+    F32 mz = pz - xdz;
+    F32 sx = px + xdx;
+    F32 sz = pz + xdz;
+
+    v3d[0].x = mx - zdx;
     v3d[0].y = py;
-    v3d[0].z = pz - xdz - zdz;
+    v3d[0].z = mz - zdz;
 
-    v3d[1].x = px + xdx - zdx;
+    v3d[1].x = sx - zdx;
     v3d[1].y = py;
-    v3d[1].z = pz + xdz - zdz;
+    v3d[1].z = sz - zdz;
 
-    v3d[2].x = px + xdx + zdx;
+    v3d[2].x = zdx + sx;
     v3d[2].y = py;
-    v3d[2].z = pz + xdz + zdz;
+    v3d[2].z = zdz + sz;
 
-    v3d[3].x = px - xdx + zdx;
+    v3d[3].x = zdx + mx;
     v3d[3].y = py;
-    v3d[3].z = pz - xdz + zdz;
+    v3d[3].z = zdz + mz;
 
     if (tex != NULL)
     {
@@ -543,24 +576,43 @@ void iParMgrRenderParSys_Streak(void* data, xParGroup* ps)
 
     for (; idx != NULL; idx = idx->m_next)
     {
-        F32 px = idx->m_pos.x;
-        F32 py = idx->m_pos.y;
-        F32 pz = idx->m_pos.z;
-        F32 tx = px - 5.0f * idx->m_vel.x;
-        F32 ty = py - 5.0f * idx->m_vel.y;
-        F32 tz = pz - 5.0f * idx->m_vel.z;
-        F32 size = idx->m_size;
-        F32 dx = size * gRenderBuffer.m_camViewR.x;
-        F32 dy = size * gRenderBuffer.m_camViewR.y;
-        F32 dz = size * gRenderBuffer.m_camViewR.z;
+        // See iRenderPushQuadStreak: the tail is walked in place for one edge
+        // and added into a copy of itself for the other, which is what retail's
+        // three `fmr` copies encode.  Declaration order is the FP colour order.
+        F32 dx, dy, dz;
+        F32 tx, ty, tz;
+        F32 ax, ay, az;
+        F32 px, py, pz;
+        F32 size;
 
-        v3d[0].x = tx + dx;
-        v3d[0].y = ty + dy;
-        v3d[0].z = tz + dz;
+        px = idx->m_pos.x;
+        py = idx->m_pos.y;
+        pz = idx->m_pos.z;
+        tx = px - 5.0f * idx->m_vel.x;
+        ty = py - 5.0f * idx->m_vel.y;
+        tz = pz - 5.0f * idx->m_vel.z;
+        ax = tx;
+        ay = ty;
+        az = tz;
+        size = idx->m_size;
+        dx = size * gRenderBuffer.m_camViewR.x;
+        dy = size * gRenderBuffer.m_camViewR.y;
+        dz = size * gRenderBuffer.m_camViewR.z;
 
-        v3d[1].x = tx - dx;
-        v3d[1].y = ty - dy;
-        v3d[1].z = tz - dz;
+        tx -= dx;
+        ty -= dy;
+        tz -= dz;
+        ax += dx;
+        ay += dy;
+        az += dz;
+
+        v3d[0].x = ax;
+        v3d[0].y = ay;
+        v3d[0].z = az;
+
+        v3d[1].x = tx;
+        v3d[1].y = ty;
+        v3d[1].z = tz;
 
         v3d[2].x = px;
         v3d[2].y = py;
@@ -637,24 +689,43 @@ void iParMgrRenderParSys_InvStreak(void* data, xParGroup* ps)
 
     for (; idx != NULL; idx = idx->m_next)
     {
-        F32 px = idx->m_pos.x;
-        F32 py = idx->m_pos.y;
-        F32 pz = idx->m_pos.z;
-        F32 tx = px - 5.0f * idx->m_vel.x;
-        F32 ty = py - 5.0f * idx->m_vel.y;
-        F32 tz = pz - 5.0f * idx->m_vel.z;
-        F32 size = idx->m_size;
-        F32 dx = size * gRenderBuffer.m_camViewR.x;
-        F32 dy = size * gRenderBuffer.m_camViewR.y;
-        F32 dz = size * gRenderBuffer.m_camViewR.z;
+        // See iRenderPushQuadStreak: the tail is walked in place for one edge
+        // and added into a copy of itself for the other, which is what retail's
+        // three `fmr` copies encode.  Declaration order is the FP colour order.
+        F32 dx, dy, dz;
+        F32 tx, ty, tz;
+        F32 ax, ay, az;
+        F32 px, py, pz;
+        F32 size;
 
-        v3d[0].x = tx + dx;
-        v3d[0].y = ty + dy;
-        v3d[0].z = tz + dz;
+        px = idx->m_pos.x;
+        py = idx->m_pos.y;
+        pz = idx->m_pos.z;
+        tx = px - 5.0f * idx->m_vel.x;
+        ty = py - 5.0f * idx->m_vel.y;
+        tz = pz - 5.0f * idx->m_vel.z;
+        ax = tx;
+        ay = ty;
+        az = tz;
+        size = idx->m_size;
+        dx = size * gRenderBuffer.m_camViewR.x;
+        dy = size * gRenderBuffer.m_camViewR.y;
+        dz = size * gRenderBuffer.m_camViewR.z;
 
-        v3d[1].x = tx - dx;
-        v3d[1].y = ty - dy;
-        v3d[1].z = tz - dz;
+        tx -= dx;
+        ty -= dy;
+        tz -= dz;
+        ax += dx;
+        ay += dy;
+        az += dz;
+
+        v3d[0].x = ax;
+        v3d[0].y = ay;
+        v3d[0].z = az;
+
+        v3d[1].x = tx;
+        v3d[1].y = ty;
+        v3d[1].z = tz;
 
         v3d[2].x = px;
         v3d[2].y = py;
@@ -766,9 +837,9 @@ void iParMgrRenderParSys_Ground(void* data, xParGroup* ps)
         U8 a = idx->m_c[3];
         F32 size = 0.5f * idx->m_size;
         xMat3x3 groundmat;
-        F32 angx = 0.0f;
-        F32 angy = 0.0f;
         F32 angz = 0.0f;
+        F32 angy = 0.0f;
+        F32 angx = 0.0f;
 
         if (idx->m_rotdeg[0])
         {
@@ -787,15 +858,23 @@ void iParMgrRenderParSys_Ground(void* data, xParGroup* ps)
 
         xMat3x3Euler(&groundmat, angx, angy, angz);
 
-        F32 xdx = groundmat.right.x * size;
-        F32 xdy = groundmat.right.y * size;
-        F32 xdz = groundmat.right.z * size;
-        F32 px = idx->m_pos.x;
-        F32 py = idx->m_pos.y;
-        F32 pz = idx->m_pos.z;
-        F32 zdx = groundmat.at.x * size;
-        F32 zdy = groundmat.at.y * size;
-        F32 zdz = groundmat.at.z * size;
+        // Declared bare: mwcc colours FP values in declaration order and retail
+        // needs the "at" row's products coloured before the "right" row's.
+        // Declared in definition order they spill one extra callee-saved FPR
+        // and the frame grows by 0x10.
+        F32 zdx, zdy, zdz;
+        F32 xdx, xdy, xdz;
+        F32 px, py, pz;
+
+        xdx = groundmat.right.x * size;
+        xdy = groundmat.right.y * size;
+        xdz = groundmat.right.z * size;
+        px = idx->m_pos.x;
+        py = idx->m_pos.y;
+        pz = idx->m_pos.z;
+        zdx = groundmat.at.x * size;
+        zdy = groundmat.at.y * size;
+        zdz = groundmat.at.z * size;
 
         v3d[0].r = r;
         v3d[0].g = g;
@@ -814,21 +893,28 @@ void iParMgrRenderParSys_Ground(void* data, xParGroup* ps)
         v3d[3].b = b;
         v3d[3].a = a;
 
-        v3d[0].x = px - xdx - zdx;
-        v3d[0].y = py - xdy - zdy;
-        v3d[0].z = pz - xdz - zdz;
+        F32 mx = px - xdx;
+        F32 my = py - xdy;
+        F32 mz = pz - xdz;
+        F32 sx = px + xdx;
+        F32 sy = py + xdy;
+        F32 sz = pz + xdz;
 
-        v3d[1].x = px + xdx + zdx;
-        v3d[1].y = py + xdy + zdy;
-        v3d[1].z = pz + xdz + zdz;
+        v3d[0].x = mx - zdx;
+        v3d[0].y = my - zdy;
+        v3d[0].z = mz - zdz;
 
-        v3d[2].x = px + xdx - zdx;
-        v3d[2].y = py + xdy - zdy;
-        v3d[2].z = pz + xdz - zdz;
+        v3d[1].x = zdx + sx;
+        v3d[1].y = zdy + sy;
+        v3d[1].z = zdz + sz;
 
-        v3d[3].x = px - xdx + zdx;
-        v3d[3].y = py - xdy + zdy;
-        v3d[3].z = pz - xdz + zdz;
+        v3d[2].x = sx - zdx;
+        v3d[2].y = sy - zdy;
+        v3d[2].z = sz - zdz;
+
+        v3d[3].x = zdx + mx;
+        v3d[3].y = zdy + my;
+        v3d[3].z = zdz + mz;
 
         if (tex != NULL)
         {
