@@ -698,6 +698,14 @@ patches. Measured directly, same source, both compilers:
 The patches are worth +3.5 points on the very function that raised the
 suspicion. Claim disproven; do not re-open it.
 
+**Scope note added 2026-08-22.** That disproof is about `zScene`, and it is
+sound there. It is NOT a general exoneration of the patch clauses, and it had
+started to be read as one. Clause E3n costs `zEntPlayer_AnimTable` **23,820
+bytes** -- the largest single-function patch cost on record, and 92% of
+everything removing E3n would win back. The honest framing: E3n is strongly
+net-positive by function count while being byte-negative in its largest
+individual case. Always price a clause both ways.
+
 ### CORRECTION: FP orders by DECLARATION, GPR orders by DEFINITION
 
 **This corrects the corollary stated below.** "Declaration order beats
@@ -1606,6 +1614,127 @@ out of the 8-unrolled loop, byte-identical to stock. It is decided in
 loop-invariant motion or global CSE. Anyone chasing it needs to find that site
 first, the way `ValueNumbering.c` was found.
 
+### VERIFIED: `zEntPlayer_AnimTable` is source-correct; clause E3n breaks it
+
+Measured 2026-08-22, and then re-measured independently by me rather than
+taken on report. 23,820 bytes, the largest single non-exact game function.
+
+    zEntPlayer_AnimTable__Fv   tree (GC/2.0p1a)     97.249%
+                               stock GC/2.0p1      100.000%
+                               entry-3 ablated     100.000%
+                               control (chk)        97.249%
+
+The control is the whole patch rebuilt from pristine `2.0p1` by
+`patch_compiler.py`'s own constants; it reproduces `PATCHED_SHA1`
+`19480c5d...` byte-for-byte, so the ablations differ from the shipped
+compiler by exactly one dispatch entry and nothing else.
+
+**Nothing in `zEntPlayer.cpp` needs to change.** All 452 differing rows sit in
+blocks that store a call result into the frame arrays `tranTbl1`/`tranTbl2`
+(`stw r3, 0x18(r1)`, `0x1c(r1)`, ...). E3n pins that `stw` ahead of the
+block's `lfs @NNN@sda21` / `lwz 0(rN)` static loads. Retail sinks it thirteen
+instructions, to just before `mr r3, r31`, which keeps **r3 live** across the
+whole argument setup; retail's allocator therefore cannot use r3 as scratch
+and takes r4/r5/r6/r9, while ours frees r3 immediately and takes r3/r4/r5/r8.
+One root cause, 452 rows.
+
+**Re-priced tree-wide** (all 224 `main/SB/*` units, `2.0p1a` vs entry-3-on-
+clause-C, solo basis): removing E3n is **+6 functions / +25,924 bytes** and
+**-107 functions / -77,224 bytes**. `zEntPlayer_AnimTable` is 23,820 of the
+25,924 -- 92% of the entire win. Other winners: `MoveNormal__14zNPCGoalPatrolFf`
+716 b, `BasisBspline__FPA4_fPf` 576 b, `Process__18zNPCGoalJellyBirth` 348 b,
+`xBoxFromCircle` 256 b, `get_bounds` (xFont anon) 208 b. Biggest losers:
+`Process__12zNPCBPatrickFP6xScenef` 6040 b, `_xCameraUpdate` 3560 b,
+`ConfigHelper__9NPCHazardF9en_npchaz` 2940 b, `Process__8zNPCTikiFP6xScenef`
+2380 b.
+
+**E3n stays.** But the narrowing is now the single largest identified win on
+the board. E3n's motivating shape is an **`stfs` to a scalar declared frame
+local**; the zEntPlayer case is an **`stw` of a pointer into a 32-byte frame
+array**. Two candidate gates separate them -- store opcode class (float vs
+integer), or the size of the declared frame object itself (the `sizeof(A) <= 4`
+test is on the *memref*, which is 4 in both cases, so it does not). NOT YET
+ATTEMPTED: it means writing new x86 into the cave against struct fields nobody
+has identified, and a guessed gate recorded as a rule is worse than no rule.
+
+### THE CHEAPEST QUESTION IN THIS PROJECT: patch, or source?
+
+Before spending a session on any near-100% residual, compile the unit with
+**stock `GC/2.0p1`**. If it hits 100.0 there, the source is already correct
+and the work is in the patch, not the `.cpp`. This costs one compile.
+
+`scratchpad/verify_mw.py <unit> <mw_version|-> <symbol>` does it: it reuses
+`build.ninja`'s own rule and flags but substitutes a chosen `$mw_version`, and
+compiles into a private temp dir -- so it is safe to run while other agents are
+building, and it never touches the shared compiler. Variant compilers live at
+`scratchpad/compilers/GC/2.0p1a-{no0,no1,no3,noV,e3c,chk}`; `no3` ablates E3n,
+`chk` is the control. Building a variant takes seconds; sweeping all 224 SB
+units takes ~35 s at 8-way parallel.
+
+### `solo.py`'s LEFT COLUMN IS THE TARGET. RIGHT IS OURS.
+
+Stated in solo.py's own docstring (`left` comes from `-1 <target_path>`) and
+got read backwards anyway, twice in one session, by me. It inverted the
+diagnosis both times: on `zEntPlayer_AnimTable` it is **retail** that
+accumulates `@stringBase0` through three registers and **ours** that does it
+in place (the direction is the entire finding -- retail has more registers
+occupied, not fewer), and on `xSpline`'s `Tridiag_Solve` it is **ours** that
+takes `b,c,d` in plain parameter order and the **target** that scrambles.
+Check the orientation before writing down a conclusion.
+
+### The `int ourAnims[2]` idiom: 3 witnesses, not source-reachable
+
+`ZNPC_AnimTable_NightLight` (176 b), `_Tubelet` (192 b) and `_BossSBobbyArm`
+(184 b) are 5 rows each, a pure r4<->r5 transposition on the 8-byte
+`@sda21`->frame copy of `int ourAnims[2]`. The trigger is exactly the
+2-element array: `grep 'ourAnims\[2\]'` returns these three and nothing else,
+and every 3-element sibling (`SleepyTime`, `BossSB1`) matches.
+
+Only one allocator decision is involved: the copy's scratch temp is r4 for us
+and r5 for retail, and the `li 0` the scheduler hoists above the copy is then
+forced to be *the other* argument register, producing all five rows. For
+retail to pick r5, r4 must be live across the copy -- retail's IR materialises
+arg 2 before the array copy and ours does not.
+
+**Stop test run and passed.** Six spellings -- array-first, `table`-declared-
+first, array-then-bare-`table`-then-assign, `S32` vs `int`, literal `0` vs
+`NULL` for arg 2, and a braced scope around the call -- are all bit-identical
+(same 99.545%, same SHA-1 of the full diff text). Only two things move it and
+both move it the wrong way: declaring the array after the call gives 79.636%,
+making it 3 elements gives 76.091%. **Do not re-open.** This supersedes the
+older note framing these three as "the best test case on the board".
+
+### NEW CANDIDATE CLAUSE: literal load hoisted over an INDEXED frame store
+
+`ZNPC_AnimTable_BossPlankton` (2,472 b) and `_BossSB2` (3,384 b) have
+*identical* 17-row clusters at the closing `NPCC_BuildStandardAnimTran` call.
+Both compile identically under stock `2.0p1` and patched `2.0p1a`, so the
+patch is exonerated here. Root cause is a literal-load hoist, not a register
+problem:
+
+    target: addi r5,r1,0x18 / slwi r0,r17,2 / li r4,0 / lis r3,g_strz_bossanim@ha
+            / stwx r4,r5,r0 / addi r4,r3,@l / mr r3,r18 / li r6,1
+            / lfs f1,@1657@sda21 / bl
+    ours:   lis r3,@ha / addi r5,r1,0x18 / addi r4,r3,@l / slwi r0,r17,2
+            / li r3,0 / lfs f1,@437@sda21 / stwx r3,r5,r0 / mr r3,r18
+            / li r6,1 / bl
+
+Our scheduler hoists `lfs f1, @NNN@sda21` and the `lis @ha` **above** the
+`stwx` into the frame array; retail does not. The r3-vs-r4 choice is a
+consequence, not a cause. This is the clause-D shape that these notes already
+price as net-negative -- except that the store here is **indexed** (`stwx`,
+computed address), which is why clause C's `memref+0x0c == 0` gate and E3n's
+declared-frame-object gate both decline. Precisely shaped candidate: *a small
+static literal load may not hoist above an indexed store to a frame array.*
+Worth 5,856 bytes across these two.
+
+Source stop test on Plankton: `anim_list[anim_size++]`, adjacency of the
+terminator write, explicit `0` for `ANIM_Unknown`, `&anim_list[0]` vs
+`anim_list`, and binding the 0.2f to a named `F32` local are all bit-identical.
+Moving the terminator write earlier *does* move the rows (97.508%), so unlike
+the `ourAnims[2]` family there is real contact with the scheduler -- but the
+baseline ordering is already the best one and the residual is the hoist.
+
 ### Two corrections this forced
 
 - **`zEntPlayer_SNDInit` was not the prize.** It was dispatched as a
@@ -1616,7 +1745,9 @@ first, the way `ValueNumbering.c` was found.
   reports are good at *characterising* a residual and bad at predicting what a
   compiler change will pay. Verify before promising.
 - **The docstring's warning against E3n on scheduler entry 3 was stale.**
-  Reverting entry 3 to clause C measures **+6/-88**, so E3n is worth +82 net
+  Reverting entry 3 to clause C measures **+6/-88** (superseded: a full
+  224-unit sweep on 2026-08-22 measures **+6/-107 functions, +25,924/-77,224
+  bytes**), so E3n is worth +82 net
   in the current tree, not the "+22/-18" recorded against it.
 
 **Every unit's residuals now need re-measuring.** Attributions recorded before
