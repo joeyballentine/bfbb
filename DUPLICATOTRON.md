@@ -642,6 +642,62 @@ other; retail's `fmuls f5, f0, f7` / `fmadds f5, f2, f4, f5` rounds
 `at.x * dpv` and fuses `right.x * ppv`. The new source reproduces retail's
 rounding exactly.
 
+### OPEN CONFLICT: the GPR ordering key is not settled
+
+Two passes measured the GPR key and got OPPOSITE answers. Do not treat either
+as settled; test both handles on any new function.
+
+  * `PlayerCollsSelectDepen` (zEntPlayer, 2026-08-22): a bare
+    `xCollis* c; xCollis* cend;` declared early and assigned later was
+    **BIT-IDENTICAL** to baseline, while moving the INITIALISER moved the
+    colour exactly as predicted. Reads as: GPR key = definition point.
+  * `PipeForAllSceneModels` (zScene, same day): hoisting
+    `U32 remainSubObjBits;` -- a BARE declaration, no initialiser -- to the
+    outer-loop top **DID** move its colour (to index 6) and put `model` on
+    retail's r24, 99.176 -> 99.412. Reads as: GPR key = lexical declaration
+    point.
+
+The difference between the two experiments is that zScene's hoist crossed a
+SCOPE boundary (into the enclosing loop) while zEntPlayer's stayed in the
+same block. That is the obvious hypothesis -- a bare declaration may only
+move a GPR's colour when it changes scope -- but it is UNTESTED. Whoever
+touches this next should test it directly; it would resolve the conflict and
+make the GPR case as predictive as the FP case.
+
+**Sub-rule, measured and useful on its own:** a loop counter declared in a
+`for`-init occupies the LAST slot of the declaration-ordered set. Declared
+anywhere else -- outer-loop scope, if-block scope, or function scope, with or
+without an initialiser -- it is EJECTED past later values (in
+`PipeForAllSceneModels`, past `pipeCB` and an anonymous byte-offset temp,
+from index 8 to index 10). So such a counter has exactly TWO reachable
+colours. That is what makes `PipeForAllSceneModels` unreachable: retail needs
+`k` at index 6, which requires it declared before `model` while STILL being a
+for-init declaration -- a contradiction.
+
+### Scoping note: check whether the function can reach 100 AT ALL first
+
+`zSceneSetup` (3,196 b) has an FP cluster that looked like a good colouring
+target. It is not worth attacking, because even with that cluster solved the
+function still carries the `gCurEnv` store-then-reload row, whose only known
+fix is the volatile read that is banned here (it banks zero and masks the
+compiler defect). **A function with a second, independently-blocked residual
+is worth zero no matter how tractable its first residual looks.** Enumerate
+ALL clusters before starting.
+
+### The alias patches do NOT cause zScene's load/store residuals -- measured
+
+A pass suggested `zSceneInit`'s two clusters (a load moved across a store
+that retail treated as a barrier) might be CAUSED by clause V / E3n rather
+than merely uncured by them, which would be a cost line against those
+patches. Measured directly, same source, both compilers:
+
+    zSceneInit    GC/2.0p1a 98.203   vs  unpatched GC/2.0p1 94.729
+    zSceneSetup   GC/2.0p1a 99.618   vs  unpatched GC/2.0p1 99.293
+    PipeForAll…   identical in both
+
+The patches are worth +3.5 points on the very function that raised the
+suspicion. Claim disproven; do not re-open it.
+
 ### CORRECTION: FP orders by DECLARATION, GPR orders by DEFINITION
 
 **This corrects the corollary stated below.** "Declaration order beats

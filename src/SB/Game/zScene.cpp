@@ -726,12 +726,31 @@ static void PipeForAllSceneModels(void (*pipeCB)(RpAtomic* data, U32 pipeFlags, 
 {
     // non-matching: identical instructions throughout; model /
     // remainSubObjBits / k get r24/r23/r25 in retail and r25/r24/r23 here - a
-    // three-way permutation of the same register allocation. Declaring k at
-    // function scope, or ahead of model, measured worse (98.765% against
-    // 99.176%) and pushes k below pipeCB into r22 instead of lifting it into
-    // r25 - note dwarf/SB/Game/zScene.cpp does list k with i and j at function
-    // scope, so the DWARF shape is measurably not what our compiler wants.
-    // Allocator tie-break residual.
+    // three-way permutation of the same register allocation.
+    //
+    // Worked with the colour-index table (0..7 = r27 r29 r28 r26 r30 r31 r25
+    // r24, then r23 r22 r21 r20). This function fills colours 0..11 with, in
+    // order: i, &xModelPipeData[j], &xModelPipeCount[j], j, numModels, the
+    // hoisted 'MODL' constant, model, remainSubObjBits, k, pipeCB, the k*12
+    // byte offset, currSubObjBits. Retail differs only in wanting k at index
+    // 6, model at 7, remainSubObjBits at 8 - i.e. k coloured FIRST of the
+    // three. Measured:
+    //   baseline (k in the for-init)                      99.176%, 12 rows
+    //   numModels declared before i,j          BIT-IDENTICAL to baseline
+    //   'S32 k;' at outer-loop top, for (k=0;...)          98.765%, 18 rows
+    //   same but 'S32 k = 0;'                              98.765%, 18 rows
+    //   'S32 k;' in the if-block, for (k=0;...)            98.765%, 18 rows
+    //   remainSubObjBits declared at outer-loop top        99.412%,  8 rows
+    //   both k and remainSubObjBits at outer-loop top      99.000%, 14 rows
+    // remainSubObjBits hoisted to the outer loop DOES move it to colour 6 and
+    // puts model on retail's r24 - so this permutation is driven by lexical
+    // declaration order after all, not by definition order. But k has only two
+    // reachable slots: index 8 when it is declared in the inner for-init (the
+    // last declaration lexically), and index 10 when it is declared anywhere
+    // else, which ejects it past pipeCB and the byte offset. Index 6 requires
+    // k declared before model while still being a for-init declaration, which
+    // is a contradiction. NOT EXPRESSIBLE; the 99.412% form banks nothing and
+    // is not kept.
 
     S32 i, j;
     S32 numModels = xSTAssetCountByType('MODL');
@@ -861,7 +880,13 @@ void zSceneInit(U32 theSceneID, S32 reloadInProgress)
     // with dwarf/SB/Game/zScene.cpp. Measured and rejected: moving b's
     // declaration next to rgba_bkgrd, moving either global assignment (both
     // worse), 'char b[5] = { 0 }' (inert), and a 3-element rgba initialiser
-    // (inert). Scheduler residual.
+    // (inert). Swapping the two global assignments measures 98.213% / 14 rows
+    // - a spurious alignment gain, since retail stores gTransitionSceneID
+    // first, which is what the source already does. The source order here is
+    // already retail's emission order; the deviation is our compiler hoisting
+    // b's .sdata2 template loads across the stores to gOccludeCount and to the
+    // stack, the same load-across-store move as cluster 2. Scheduler/alias
+    // residual, not a colouring one.
     U8 rgba_bkgrd[4] = { 0x0f, 0x0f, 0x0f, 0x00 };
 
     gTransitionSceneID = theSceneID;
@@ -1098,11 +1123,18 @@ void zSceneInit(U32 theSceneID, S32 reloadInProgress)
         // i.e. two load-use stalls; our compiler schedules them away as
         //     lwz r12, 0x10(r29) / lwz r0, 0x4(r29) / cmplwi r12, 0x0 /
         //     stb r0, HACK_BASETYPE
-        // Same instructions, different order. Measured and rejected (both
+        // Same instructions, different order. Measured and rejected (all
         // byte-identical to the above): binding &sInitTable[i] to a
-        // zSceneObjectInstanceDesc* temp and reaching through it, and hoisting
+        // zSceneObjectInstanceDesc* temp and reaching through it, hoisting
         // sInitTable[i].func into a named function-pointer local after the
-        // HACK_BASETYPE store. Scheduler residual.
+        // HACK_BASETYPE store, and hoisting it into a named local BEFORE that
+        // store (i.e. source order made to match our own output - still
+        // byte-identical, 98.203%, 15 rows). The permutation test therefore
+        // says this cluster sits below the source level: it is our compiler
+        // moving a load of sInitTable[i].func across the store to the static
+        // HACK_BASETYPE, which retail's compiler treated as a barrier.
+        // Scheduler/alias residual, not a colouring one - no register
+        // permutation is involved.
         HACK_BASETYPE = sInitTable[i].baseType;
 
         if (sInitTable[i].func)
@@ -2645,9 +2677,28 @@ void zSceneSetup()
     // assignments swaps the two stores), so no ordering of these statements
     // reaches retail's shape. Measured and rejected: declarations split from
     // assignments (inert), named F32 temps feeding the two stores (inert,
-    // constants get folded), union aggregate initialisers
-    // "FloatAndVoid x = { 4900.0f }" (99.700), and the same with const on
-    // defaultDist (99.668). Treat as a scheduler/allocator residual.
+    // constants get folded), and const on defaultDist (99.668).
+    //
+    // Re-checked against the FP colour-order rule. Retail gives the 4900.0f
+    // temp f1 and the 0.0f temp f0, so the 0.0f value has to be coloured
+    // first, i.e. created first. It cannot be: the frame slots follow
+    // declaration order (measured - swapping the two declarations moves
+    // defaultDist from 0x14 to 0x10, 99.613%, 5 rows), retail's slots pin
+    // defaultDist to the first declaration, and both values are anonymous
+    // constant temps that CodeWarrior folds, so refinement 1 ("name the
+    // anonymous temp") has nothing to bind. Further measurements:
+    //   baseline                                          99.618%,  4 rows
+    //   'FloatAndVoid a = {4900.0f}, b = {0.0f};'         99.574%,  5 rows
+    //       (aggregate init switches to an integer lwz/stw template copy)
+    //   declarations swapped, assignments kept in order   99.613%,  5 rows
+    //   assignments swapped, declarations kept in order   99.617%,  5 rows
+    //   both assignments in one comma expression   BIT-IDENTICAL to baseline
+    // Retail's shape needs both lfs issued before either stfs, which requires
+    // two FPRs live, which requires the two temps to interfere - and two
+    // independent constant-to-memory statements never make them interfere.
+    // Treat as a scheduler/allocator residual. Note also that this function
+    // cannot reach 100.0 while the gCurEnv reload above is outstanding, since
+    // that one is a compiler-side store-to-load forwarding defect.
     FloatAndVoid defaultDist;
     defaultDist.f = 4900.0f;
 
