@@ -2589,9 +2589,23 @@ void xFXRibbon::get_normal(xVec3& norm, const xVec3& dir, F32 orient)
 {
     F32 a = isin(orient);
     F32 b = icos(orient);
-    F32 ax = xabs(dir.x);
-    F32 ay = xabs(dir.y);
-    F32 az = xabs(dir.z);
+
+    // Declared z,y,x but assigned x,y,z, and that split is load-bearing: the target
+    // loads the components in address order (0x0, 0x4, 0x8) while colouring them
+    // f9, f8, f7 -- descending. CodeWarrior colours the FP class in DECLARATION
+    // order, lowest free colour first, so only a bare declaration in z,y,x order
+    // with the assignments left in x,y,z reproduces both the load order and the
+    // register order. The locals themselves are real: the target keeps all three
+    // live across the xabs compares and reuses them in the first arm below.
+    F32 dz, dy, dx;
+
+    dx = dir.x;
+    dy = dir.y;
+    dz = dir.z;
+
+    F32 ax = xabs(dx);
+    F32 ay = xabs(dy);
+    F32 az = xabs(dz);
 
     if (ax < ay && ax < az)
     {
@@ -2600,10 +2614,23 @@ void xFXRibbon::get_normal(xVec3& norm, const xVec3& dir, F32 orient)
         // with, so norm.y here should be `dir.y * (a * dir.x)`. The x-axis arm
         // repeats the z-axis arm's `dir.z * (a * dir.y)` instead, which is what
         // the target object computes.
-        norm.x = -a * (dir.y * dir.y + dir.z * dir.z);
-        norm.y = dir.z * (a * dir.y) + b * dir.z;
-        norm.z = dir.z * (a * dir.x) - b * dir.y;
-        norm *= 1.0f / xsqrt(dir.y * dir.y + dir.z * dir.z);
+
+        // Numerical fidelity, load-bearing -- do NOT fold these back into one
+        // `dir.y * dir.y + dir.z * dir.z` expression. Retail rounds each square to
+        // single precision and only then adds:
+        //     fmuls f2, f8, f8 / fmuls f0, f7, f7 / fadds f5, f2, f0
+        // Written as a single expression CodeWarrior contracts the pair into one
+        // `fmadds`, which keeps the first product at full internal precision and
+        // gives a different result. Naming the two products is what forces the
+        // rounded form. Only this arm binds the components; the two arms below
+        // re-read `dir` because the target reloads them there.
+        F32 dy2 = dy * dy;
+        F32 dz2 = dz * dz;
+
+        norm.x = -a * (dy2 + dz2);
+        norm.y = dz * (a * dy) + b * dz;
+        norm.z = dz * (a * dx) - b * dy;
+        norm *= 1.0f / xsqrt(dy2 + dz2);
     }
     else if (ay < az)
     {
