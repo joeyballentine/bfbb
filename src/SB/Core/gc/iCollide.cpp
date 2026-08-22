@@ -71,7 +71,7 @@ S32 PointWithinTriangle(xVec3* _pt, xVec3** _tri, xVec3* _normal)
     switch (dimension)
     {
     case XDIM:
-        for (i = 0, j = 2; i < 3; j = i, i++)
+        for (i = 0, j = 2; i < 3; j = i++)
         {
             if (((tri[i]->y <= pt->y && pt->y < tri[j]->y) ||
                  (tri[j]->y <= pt->y && pt->y < tri[i]->y)) &&
@@ -83,7 +83,7 @@ S32 PointWithinTriangle(xVec3* _pt, xVec3** _tri, xVec3* _normal)
         }
         break;
     case YDIM:
-        for (i = 0, j = 2; i < 3; j = i, i++)
+        for (i = 0, j = 2; i < 3; j = i++)
         {
             if (((tri[i]->z <= pt->z && pt->z < tri[j]->z) ||
                  (tri[j]->z <= pt->z && pt->z < tri[i]->z)) &&
@@ -95,7 +95,7 @@ S32 PointWithinTriangle(xVec3* _pt, xVec3** _tri, xVec3* _normal)
         }
         break;
     case ZDIM:
-        for (i = 0, j = 2; i < 3; j = i, i++)
+        for (i = 0, j = 2; i < 3; j = i++)
         {
             if (((tri[i]->y <= pt->y && pt->y < tri[j]->y) ||
                  (tri[j]->y <= pt->y && pt->y < tri[i]->y)) &&
@@ -122,26 +122,31 @@ void FindNearestPointOnLine(xVec3* _result, xVec3* _point, xVec3* _start, xVec3*
     float mu;
     float lineLength2;
 
-    mu = (point->x * (end->x - start->x) + point->y * (end->y - start->y) +
-          point->z * (end->z - start->z)) -
-         (start->x * (end->x - start->x) + start->y * (end->y - start->y) +
-          start->z * (end->z - start->z));
+    F32 dx, dy, dz;
+    F32 sy = start->y;
+    F32 sx = start->x;
+    F32 sz = start->z;
+    dy = end->y - sy;
+    dx = end->x - sx;
+    dz = end->z - sz;
+
+    mu = (point->x * dx + point->y * dy + point->z * dz) - (sx * dx + sy * dy + sz * dz);
     if (mu <= 0.0f)
     {
         localResult = *start;
     }
     else
     {
-        lineLength2 = SQR(end->x - start->x) + SQR(end->y - start->y) + SQR(end->z - start->z);
+        lineLength2 = SQR(dx) + SQR(dy) + SQR(dz);
         if (mu < lineLength2)
         {
             mu /= lineLength2;
-            localResult.x = mu * (end->x - start->x);
-            localResult.x += start->x;
-            localResult.y = mu * (end->y - start->y);
-            localResult.y += start->y;
-            localResult.z = mu * (end->z - start->z);
-            localResult.z += start->z;
+            localResult.x = dx * mu;
+            localResult.x += sx;
+            localResult.y = dy * mu;
+            localResult.y += sy;
+            localResult.z = dz * mu;
+            localResult.z += sz;
         }
         else
         {
@@ -287,20 +292,17 @@ static RpCollisionTriangle* sphereHitsEnv3CB(RpIntersection* isx, RpWorldSector*
         return tri;
     }
 
-    if (SQR(tohit.x) + SQR(tohit.y) > SQR(tohit.y))
+    if (SQR(tohit.y) > SQR(tohit.x) + SQR(tohit.z))
     {
         idx = FLOOR;
         if (FLOOR == 0xff)
         {
-            idx = cbnumcs;
-            FLOOR = cbnumcs;
-            cbnumcs++;
+            idx = FLOOR = cbnumcs++;
         }
         else if (tohit.y < 0.0f)
         {
-            if (colls[idx].hdng.y > 0.0f ||
-                (colls[idx].dist > dist &&
-                 (iabs(dist - colls[idx].dist) < 0.001f && tri->normal.y > colls[idx].norm.y)))
+            if (colls[idx].hdng.y > 0.0f || dist < colls[idx].dist ||
+                (iabs(dist - colls[idx].dist) < 0.001f && tri->normal.y > colls[idx].norm.y))
             {
                 idx = FLOOR;
             }
@@ -311,8 +313,8 @@ static RpCollisionTriangle* sphereHitsEnv3CB(RpIntersection* isx, RpWorldSector*
         }
         else
         {
-            if (colls[idx].hdng.y > 0.0f ||
-                (colls[idx].dist > dist &&
+            if (colls[idx].hdng.y > 0.0f &&
+                (dist < colls[idx].dist ||
                  (iabs(dist - colls[idx].dist) < 0.001f && tri->normal.y > colls[idx].norm.y)))
             {
                 idx = FLOOR;
@@ -331,16 +333,14 @@ static RpCollisionTriangle* sphereHitsEnv3CB(RpIntersection* isx, RpWorldSector*
         {
             if (OTHER == 0xff)
             {
-                idx = cbnumcs;
-                OTHER = cbnumcs;
-                cbnumcs++;
+                idx = OTHER = cbnumcs++;
 
                 xVec3SMul(&hdng, &tohit, 1.0f / dist);
             }
             else
             {
                 xVec3SMul(&hdng, &tohit, 1.0f / dist);
-                dot = xVec3Dot(&hdng, &colls[idx].hdng);
+                dot = xVec3Dot(&hdng, &colls[OTHER].hdng);
                 if (iabs(dot) > 0.7010677f)
                 {
                     if (colls[OTHER].dist < dist)
@@ -354,13 +354,13 @@ static RpCollisionTriangle* sphereHitsEnv3CB(RpIntersection* isx, RpWorldSector*
                 }
                 else
                 {
-                    idx = cbnumcs;
-                    NEXT2 = cbnumcs;
+                    idx = NEXT2 = cbnumcs++;
                     if (dist < colls[OTHER].dist)
                     {
-                        NEXT2 = OTHER;
-                        OTHER = cbnumcs;
-                        idx = cbnumcs;
+                        idx = OTHER;
+                        OTHER = NEXT2;
+                        NEXT2 = idx;
+                        idx = OTHER;
                     }
                 }
             }
@@ -497,7 +497,7 @@ static RpCollisionTriangle* sphereHitsEnv4CB(RpIntersection* isx, RpWorldSector*
     c = &colls[idx & 0xff];
     ddist = dist - c->dist;
 
-    if (!(dist < 0.0f || (ddist < 0.001f && c->norm.y > tri->normal.y)))
+    if (!(ddist < 0.0f || (ddist < 0.001f && c->norm.y > tri->normal.y)))
     {
         return tri;
     }
@@ -854,12 +854,12 @@ U32 iRayHitsEnv(const xRay3* r, const xEnv* env, xCollis* coll)
     isx.type = rpINTERSECTLINE;
     if (r->flags & 0x400)
     {
-        isx.t.line.start.x = (r->dir.x * r->min_t);
-        isx.t.line.start.x += r->origin.x;
-        isx.t.line.start.y = (r->dir.y * r->min_t);
-        isx.t.line.start.y += r->origin.y;
-        isx.t.line.start.z = (r->dir.z * r->dir.z);
-        isx.t.line.start.z += r->origin.z;
+        F32 sx = r->dir.x * r->min_t;
+        F32 sy = r->dir.y * r->min_t;
+        F32 sz = r->dir.z * r->min_t;
+        isx.t.line.start.x = r->origin.x + sx;
+        isx.t.line.start.y = r->origin.y + sy;
+        isx.t.line.start.z = r->origin.z + sz;
     }
     else
     {
@@ -926,7 +926,7 @@ U32 iRayHitsEnv(const xRay3* r, const xEnv* env, xCollis* coll)
     isx.t.line.start = isx.t.line.end;
     isx.t.line.end = temp;
 
-    RpCollisionWorldForAllIntersections(env->geom->collision, &isx, rayHitsEnvBackwardCB, coll);
+    RpCollisionWorldForAllIntersections(env->geom->world, &isx, rayHitsEnvBackwardCB, coll);
     if (env->geom->collision != NULL)
     {
         RpCollisionWorldForAllIntersections(env->geom->collision, &isx, rayHitsEnvBackwardCB, coll);
@@ -951,12 +951,12 @@ U32 iRayHitsModel(const xRay3* r, const xModelInstance* m, xCollis* coll)
     isx.type = rpINTERSECTLINE;
     if (r->flags & 0x400)
     {
-        isx.t.line.start.x = (r->dir.x * r->min_t);
-        isx.t.line.start.x += r->origin.x;
-        isx.t.line.start.y = (r->dir.y * r->min_t);
-        isx.t.line.start.y += r->origin.y;
-        isx.t.line.start.z = (r->dir.z * r->dir.z);
-        isx.t.line.start.z += r->origin.z;
+        F32 sx = r->dir.x * r->min_t;
+        F32 sy = r->dir.y * r->min_t;
+        F32 sz = r->dir.z * r->min_t;
+        isx.t.line.start.x = r->origin.x + sx;
+        isx.t.line.start.y = r->origin.y + sy;
+        isx.t.line.start.z = r->origin.z + sz;
     }
     else
     {
@@ -1010,7 +1010,7 @@ U32 iRayHitsModel(const xRay3* r, const xModelInstance* m, xCollis* coll)
     coll->flags &= ~1;
     coll->dist = FLOAT_MAX;
 
-    if (coll->flags & 0x800)
+    if (coll->flags & 0x2000)
     {
         coll->flags |= 0x400;
     }
@@ -1024,7 +1024,7 @@ U32 iRayHitsModel(const xRay3* r, const xModelInstance* m, xCollis* coll)
     RpAtomicForAllIntersections(m->Data, &isx, rayHitsModelBackwardCB, coll);
 
     coll->dist *= len;
-    if (coll->flags & 0x400)
+    if (r->flags & 0x400)
     {
         coll->dist += cbray.min_t;
     }
@@ -1032,7 +1032,7 @@ U32 iRayHitsModel(const xRay3* r, const xModelInstance* m, xCollis* coll)
     if (coll->flags & 0x2000 && coll->flags & 1)
     {
         xVec3 center;
-        xMat4x3Tolocal(&center, mat, &r->origin);
+        xMat4x3Tolocal(&center, (xMat4x3*)m->Mat, &r->origin);
         xVec3 heading;
         xMat4x3Tolocal(&heading, (xMat4x3*)m->Mat, &coll->tohit);
 
