@@ -2483,6 +2483,96 @@ testing whether callee-saved FP has its own ordering key.
   default is best or tied for **every** function in it. Nothing here is
   already-correct source -- except `zEntPlayer_AnimTable`, which is.
 
+### NEW LEVER: the `fmr` copy trio -- "modify the original FIRST, the copy second"
+
+Three unexplained `fmr` instructions in the target next to an in-place
+`fadds`/`fsubs` pair on the same value mean the source **copies a variable,
+then modifies the ORIGINAL first and the COPY second**:
+
+    ax = tx;  ay = ty;  az = tz;
+    tx -= dx; ty -= dy; tz -= dz;   /* must come FIRST */
+    ax += dx; ay += dy; az += dz;
+
+**The statement order is load-bearing.** Writing the `+=` before the `-=` lets
+copy propagation fold `ax = tx; ax += dx` back into `ax = tx + dx` and all three
+`fmr`s vanish -- 86.136 against 93.491 on the same function.
+
+Worth 9.1 points on `iRenderPushQuadStreak` and 8.1 on two more in the same
+unit. It presents as **extra instructions in the target**, so the
+instruction-multiset test catches it, but the fix is not obvious from the diff.
+
+### The target's FRAME SIZE is evidence for declaration order
+
+`iParMgrRenderParSys_Ground`/`_Flat`: declaring the `at`-row products
+(`zdx,zdy,zdz`) bare and first, ahead of the `right`-row products, took Ground
+97.488 -> 99.477. In definition order we spill an extra callee-saved FPR and
+**the frame grows 0x90 -> 0xa0**. When our frame is larger than the target's,
+the spill is the tell and declaration order is the lever -- check frame size
+before hunting registers.
+
+### Our allocator colours anonymous store-value groups in REVERSE source order
+
+Three witnesses in one unit, and it looks like a single mechanism:
+
+- `iRenderPushQuadStreak`'s `{px-dx, py-dy, pz-dz}` -- we give f5,f4,f3 where
+  retail gives f3,f4,f5
+- `iParMgrRenderParSys_Ground`'s six `{v0.xyz, v1.xyz}` store values -- exactly
+  reversed
+- `iRenderPushFlat` -- likewise
+
+**In all three the middle element matches and the outer pair swaps.** No source
+spelling reaches it: naming fails the multi-use precondition, and statement
+permutation only makes it worse (~35 spellings measured on QuadStreak alone,
+including all 120 declaration permutations and all 6 store-component
+permutations; the floor is 4 rows). A good target if anyone re-opens the
+allocator.
+
+### The multi-use precondition, confirmed sharply -- same file, same day
+
+In `Ground`/`Flat`, naming `px - xdx` (used **twice**) **paid**. In
+`QuadStreak`, naming `px - dx` (used **once**) was **bit-identical** in five
+declaration positions. Opposite outcomes on use count alone. This is now the
+third independent confirmation; treat single-use naming as inert.
+
+### Another mutually-exclusive sibling pair (the `RenderLightning` situation)
+
+`iParMgrRenderParSys_Streak` and `_InvStreak` were diffed **against each other
+in the target**: the two retail bodies are byte-identical except an f6/f7 swap
+on the y lane. Retail's own compiler allocated two identical sources
+differently, so **no single source can close both**. Same class as
+`RenderLightning`'s two loops. The pre-existing source comment saying so is
+verified against raw bytes.
+
+### dwarf is decisively WRONG for `iRenderPushQuadStreak`
+
+`dwarf/SB/Core/p2/iParMgr.cpp` lists the only float local as `size` -- no
+`px/py/pz`, no `tx/ty/tz`, no `dx/dy/dz`. It **does** record register-allocated
+locals elsewhere in the same function, so this is not a recording artifact.
+Writing the function that way -- every position expression inlined, CSE-only --
+measures **62.665%** against 99.900%. The GC target's three `fmr`s prove the
+named values must exist.
+
+### iParMgr: patch behaviour, and what is left
+
+The patch is strongly positive here and there is **no new patch-cost witness**.
+E3n is worth +1.00 pp on QuadStreak, +0.78 on Ground, +0.95 on Flat. On
+`iParMgrInit`, clause V is worth **+15.1 pp** and entry 0 **+21.0 pp**
+(tree 70.040 / stock 54.960 / no0 49.069 / no3 70.040 / noV 54.960).
+
+- `QuadStreak` 99.900 (4 rows) -- REGS, the `_xCameraUpdate` one-bit tie-break:
+  `(px-dx)` wants f3 and `(pz-dz)` wants f5, we produce the reverse. ~35
+  spellings; floor is 4 rows.
+- `Ground` 99.709 (16 rows) / `Flat` 99.452 (19 rows) -- same class, a
+  permutation of anonymous store-value temps across f6-f11 / f4-f11.
+- `Streak` 93.491 / `InvStreak` 93.082 -- structure now matches; residual is the
+  `5.0f` literal colouring f1-vs-f3 plus z-lane scheduling, and the pair is
+  mutually exclusive as above.
+- `Sprite` 87.688 -- one finding left on the table: retail computes **all twelve
+  `fmadds` into twelve distinct registers and then stores them all**, in
+  component-major compute order with vertex-major store order. Reproducing that
+  with 12 named temps works structurally but measures **85.795**, below the
+  inline form, because our allocator then places them badly. Not shipped.
+
 ### THE CHEAPEST QUESTION IN THIS PROJECT: patch, or source?
 
 Before spending a session on any near-100% residual, compile the unit with
