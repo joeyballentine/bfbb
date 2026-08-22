@@ -452,6 +452,35 @@ because the `volatile` device means we now emit the reload; its residual is the
 `xFXAuraUpdate` and `NPCHazard::Discard` (NAMED), plus `xFXRingCreate` and
 `LightResetFrame` (ANON, float-literal reloads).
 
+### `_xCameraUpdate`: 3,560 bytes behind ONE binary FP colour tie-break
+
+The single cheapest compiler-side witness currently known. `_xCameraUpdate`
+(3,560 b) sits at 99.792 in the tree; a clean, non-contorted source form
+reaches **99.949 with exactly 6 differing rows**, and those 6 rows are a
+literal two-register swap: retail colours `dpv`->f7 and `vax`->f5, we get
+`dpv`->f5 and `vax`->f7. Everything else in the block is byte-identical --
+same mnemonics, same operand positions, same instruction count, same branch
+shapes, same frame, same callee-saved set.
+
+`dpv` and `vax` interfere. After excluding the colours pinned by `at.x`(f0),
+`at.z`(f3), `right.x`(f2), `right.y`(f1), `ppv`(f4) and `hpv`(f6), the only
+two left are f5 and f7. Their live ranges, interference degrees and use
+counts are identical on both sides, so there is no source-visible
+discriminator -- it is one bit in the allocator's tie-break.
+
+The search that establishes this is not a spot check: 288 builds sweeping
+pv-order x va-order x accumulate mask, 144 more adding both operand-order
+flips, and 500 random topological orderings of all 15 statements in the
+block. **The floor of ~950 builds is 6 rows.** A separate probe also proved
+that a change AFTER the block cannot alter the block's colouring, which
+bounds where any fix could live.
+
+The 99.949 form is NOT in the tree: it banks zero (only 100.0 counts) and it
+contradicts `dwarf/` on two declaration orders, so it would trade fidelity
+for nothing. But if anyone extends the compiler patch to the FP colour
+tie-break, this is 3,560 bytes for one bit, with the source form recorded in
+the agent transcript.
+
 ### Entry 4: the decisive test is whether SOURCE ORDER MOVES THE ROWS AT ALL
 
 Two more entry-4 confirmations in `xCollide` (2026-08-22), and one of them
@@ -1508,6 +1537,16 @@ blind to definition order.
   and compiles to OUR pattern. So the folded form is provably not what
   Sandy's retail source had. When two call sites of the same idiom want
   different register maps, the difference is where the constant lives.
+
+- **Retail's `fmadds` are usually IN PLACE -- write `base` then `+= a * b`,
+  not one fused expression.** Written as `vax = right.x * ppv + at.x * dpv;`
+  mwcc gives the product temp and the result different colours. Written as
+  `F32 vax = at.x * dpv;` then `vax += right.x * ppv;` they coalesce, which is
+  what retail emits (`fmadds f5, f2, f4, f5` -- destination and third operand
+  the same register). On `_xCameraUpdate` this plus one declaration-order
+  constraint removed 16 of 22 differing rows (99.792 -> 99.949). Look for a
+  target `fmadds` whose destination equals one of its source registers; that
+  is an accumulate in the original, not a fused expression.
 
 - **A countdown loop on the parameter** (`while (numTriangles--)`) rather than
   an index loop: the index form costs a callee-saved register and shifts the
