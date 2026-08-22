@@ -336,8 +336,8 @@ namespace
     U32 play_sound(S32 which, const xVec3* pos, F32 volume)
     {
         const sound_asset& asset = sound_assets[which];
-        const sound_property& snd = tweak.sound[which];
         const sound_data_type& data = sound_data[which];
+        const sound_property& snd = tweak.sound[which];
 
         if (asset.flags & 1)
         {
@@ -1676,8 +1676,7 @@ namespace
 inline U8 zNPCDutchman::turning(F32 dt) const
 {
     U8 result = 0;
-    F32 fy = model->Mat->at.z;
-    xVec2 facing = { model->Mat->at.x, fy };
+    const xVec2 facing = { model->Mat->at.x, model->Mat->at.z };
 
     if (xabs(turn.vel) > dt * turn.max_vel || turn.dir.dot(facing) < 1.0f - dt)
     {
@@ -1690,10 +1689,7 @@ inline U8 zNPCDutchman::turning(F32 dt) const
 inline U8 zNPCDutchman::turning() const
 {
     U8 result = 0;
-    xVec2 facing = { 0.0f, 0.0f };
-
-    facing.x = model->Mat->at.x;
-    facing.y = model->Mat->at.z;
+    const xVec2 facing = { model->Mat->at.x, model->Mat->at.z };
 
     if (!xfeq0(turn.vel) ||
         (!xfeq0(turn.accel) && !(turn.dir.x > turn.dir.y && xabs(turn.dir.x - facing.x) < 0.001f) &&
@@ -1790,7 +1786,9 @@ namespace
             return 0;
         }
 
-        if ((g - center).length2() > r2)
+        xVec2 start_offset = g - center;
+
+        if (start_offset.length2() > r2)
         {
             out = d1;
             return 1;
@@ -1804,7 +1802,9 @@ namespace
             return 0;
         }
 
-        out = (0.5f / a) * (-b + xsqrt(b * b - 4.0f * a * (d - r2)));
+        F32 s = xsqrt(b * b - 4.0f * a * (d - r2));
+
+        out = (0.5f / a) * (-b + s);
 
         return 1;
     }
@@ -1851,10 +1851,8 @@ void zNPCDutchman::update_wave(zNPCDutchman::wave_data& wave, F32 dt)
     }
 
     F32 frac = dist * flames.imax_dist;
-    F32 tanx = wave.dir.z;
-    F32 tanz = -wave.dir.x;
-    xVec3 tan = { tanx, 0.0f, tanz };
     F32 decay = 1.0f - frac * tweak.flame.decay;
+    const xVec3 tan = { wave.dir.z, 0.0f, -wave.dir.x };
     F32 diff = dist - old_dist;
 
     for (S32 i = 0; i < 3; i++)
@@ -2209,9 +2207,8 @@ void zNPCDutchman::add_spray(const xVec3& loc, F32 dt)
     if (flames.time < tweak.flame.warm_up_time)
     {
         xParEmitterPropsAsset& prop = *snot_emitter->prop;
-        F32 old_rate[2] = { prop.rate.val[0], prop.rate.val[1] };
-
         F32 mult = tweak.flame.sneeze_mult;
+        F32 old_rate[2] = { prop.rate.val[0], prop.rate.val[1] };
 
         prop.rate.val[0] = prop.rate.val[0] * mult;
         prop.rate.val[1] = prop.rate.val[1] * mult;
@@ -2293,7 +2290,7 @@ void zNPCDutchman::update_flames(F32 dt)
             }
 
             waves.erase(it, waves.end());
-            return;
+            break;
         }
 
         ++it;
@@ -2308,9 +2305,8 @@ void zNPCDutchman::update_flames(F32 dt)
 
         add_spray(nose_loc, dt);
 
-        F32 gx = facing.x * tweak.flame.lead_dist + nose_loc.x;
-        F32 gz = facing.z * tweak.flame.lead_dist + nose_loc.z;
-        xVec3 ground_loc = { gx, tweak.ground_y, gz };
+        const xVec3 ground_loc = { facing.x * tweak.flame.lead_dist + nose_loc.x, tweak.ground_y,
+                                   facing.z * tweak.flame.lead_dist + nose_loc.z };
 
         const xVec3& orbit = get_orbit();
         F32 ox = ground_loc.x - orbit.x;
@@ -2328,9 +2324,7 @@ void zNPCDutchman::update_flames(F32 dt)
             {
                 flames.emitted = emit;
 
-                F32 tanx = facing.z;
-                F32 tanz = -facing.x;
-                xVec3 tan = { tanx, 0.0f, tanz };
+                const xVec3 tan = { facing.z, 0.0f, -facing.x };
 
                 if (waves.full())
                 {
@@ -2488,10 +2482,13 @@ U8 zNPCDutchman::check_player_damage()
         F32 frac = wave.dist * flames.imax_dist;
         xBox box;
 
-        box.upper.x = 0.5f * tweak.damage.flame_size.x;
-        box.upper.y = tweak.damage.flame_size.y * (1.0f - frac * tweak.flame.decay);
+        F32 hx = 0.5f * tweak.damage.flame_size.x;
+        F32 hy = tweak.damage.flame_size.y * (1.0f - frac * tweak.flame.decay);
+
+        box.upper.x = hx;
+        box.upper.y = hy;
         box.upper.z = 0.0f;
-        box.lower.x = -box.upper.x;
+        box.lower.x = -hx;
         box.lower.y = 0.0f;
         box.lower.z = -tweak.damage.flame_size.z;
 
@@ -2886,15 +2883,13 @@ S32 zNPCGoalDutchmanInitiate::Enter(F32 dt, void* updCtxt)
 {
     const xVec3& orbit = owner.get_orbit();
     const xVec3& end_loc = *owner.nav_curr->PosGet();
+    xVec3& loc = *(xVec3*)&owner.model->Mat->pos;
+    xVec3& floc = owner.frame->mat.pos;
     zNPCDutchman& npc = owner;
-    xVec3& loc = *(xVec3*)&npc.model->Mat->pos;
-    xVec3& floc = npc.frame->mat.pos;
 
     loc = floc = end_loc;
 
-    F32 ox = end_loc.x - orbit.x;
-    F32 oz = end_loc.z - orbit.z;
-    xVec2 offset = { ox, oz };
+    const xVec2 offset = { end_loc.x - orbit.x, end_loc.z - orbit.z };
 
     F32 dist2 = offset.length2();
 
