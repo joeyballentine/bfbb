@@ -264,12 +264,15 @@ static void xShadowSimple_CalcCorners(xShadowSimpleCache* cache, xEnt* ent, F32 
 
     if (cache->flags & 1)
     {
+        F32 dydz = cache->dydz;
+        F32 dydx = cache->dydx;
+
         ax = mat->right.x * radius * ecc;
         az = mat->right.z * radius * ecc;
         bx = mat->at.x * radius;
         bz = mat->at.z * radius;
-        ay = ax * cache->dydx + az * cache->dydz;
-        by = bx * cache->dydx + bz * cache->dydz;
+        ay = ax * dydx + az * dydz;
+        by = bx * dydx + bz * dydz;
     }
     else
     {
@@ -451,7 +454,7 @@ void xShadowSimple_Add(xShadowSimpleCache* cache, xEnt* ent, F32 radius, F32 ecc
 {
     S32 i;
     U16 shadowWas;
-    U8 moved;
+    U32 moved;
     S32 j;
     xVec3* vert;
     xVec3 xformvert[3];

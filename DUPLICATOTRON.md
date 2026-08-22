@@ -642,6 +642,60 @@ other; retail's `fmuls f5, f0, f7` / `fmadds f5, f2, f4, f5` rounds
 `at.x * dpv` and fuses `right.x * ppv`. The new source reproduces retail's
 rounding exactly.
 
+### THE RULE, REFINED TWICE (2026-08-22, xShadowSimple)
+
+Two refinements from closing `xShadowSimple_CalcCorners` (484 b) to
+**100.000, 0 of 121 rows** and from failing on `xShadowSimple_Add`. Both
+change how to apply the rule, so read them before the LIMIT section below.
+
+**1. NAMING AN ANONYMOUS TEMP PULLS IT INTO THE DECLARATION-ORDERED SET.
+This is the escape from the limit.**
+
+`CalcCorners` wanted `dydz`-CSE=f5, `bx`=f6, `dydx`-CSE=f7; we had `dydx`=f6
+and `bx`=f7. Declaration placement of `bx`/`by` was byte-identical in four
+separate spellings, because they colour AFTER two anonymous merge-block
+scratch temps. The value actually out of place was the anonymous
+`cache->dydx` CSE temp. Binding it to a named local:
+
+    F32 dydz = cache->dydz;
+    F32 dydx = cache->dydx;
+    ...
+    ay = ax * dydx + az * dydz;
+
+pulled it into the ordered set, and `bx`/`by` then snapped to retail's f6/f7
+BY THEMSELVES (99.752, 6 rows). The rule then predicted the last step
+arithmetically -- retail wants `dydz` below `dydx`, so declare `dydz` first --
+and that measured **100.000 first try**.
+
+So when the mis-coloured value is an anonymous CSE temp, do not permute the
+named locals around it: NAME IT. That is also a faithful change in its own
+right (a member read repeatedly is a plausible local in the original).
+
+Note this also corrects the LIMIT's wording below: the obstructing temp here
+came from a LATER statement yet was coloured EARLIER, so "an earlier
+statement" is not the right test. The right test is simply whether the
+mis-ordered value is anonymous -- and the answer is now to name it.
+
+**2. THE RULE GOVERNS VOLATILE REGISTERS, NOT CALLEE-SAVED GPRs.**
+
+`xShadowSimple_Add` (1,176 b) needs a permutation of six values across
+r26-r31 -- both objects save exactly r26-r31. **Sixteen source shapes moved
+NOT ONE callee-saved register**: `shadowWas` first, `castOnEnt` first, `j`
+first, a full 14-position sweep of `j`, dwarf declaration order, `U8`->`U32`
+on `moved`, `shadowWas` scoped into its own branch, all else-branch locals
+scoped, and a named `xShadowSimpleQueue*` element pointer.
+
+In the SAME function the volatile GPRs obey the rule exactly: `vert` and the
+polygon-loop `j` trade r7/r6 purely on declaration order, earlier taking the
+lower. That is what splits the `j` sweep (positions 0-3 give 99.541/25 rows,
+4-13 give 99.320/37, the twelve extra rows being only `vert`/`j` swapping).
+
+So callee-saved GPRs are assigned by a different mechanism that declaration
+order does not reach. **Before starting a REGS residual, check which register
+class the mis-coloured values are in.** FP and volatile GPRs are workable;
+a permutation confined to the callee-saved GPR set is not, and
+`xShadowSimple_Add` is the measured witness.
+
 ### THE RULE'S LIMIT: it orders NAMED LOCALS only, not anonymous temps
 
 Established on `zThrown_Update` (3,784 b) over ~320 builds, 2026-08-22. The
