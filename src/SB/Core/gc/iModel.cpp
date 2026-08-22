@@ -67,7 +67,11 @@ void iModelInit()
             _rwObjectHasFrameSetFrame(sEmptyDirectionalLight[i], frame);
         }
         sEmptyAmbientLight = RpLightCreate(rpLIGHTAMBIENT);
-        RpLightSetColor(sEmptyAmbientLight, &black); // Redundant sEmptyAmbientLight load here.
+        // Retail reloads sEmptyAmbientLight after storing it; our mwcc forwards the stored
+        // value instead. The volatile read is a matching device for that store-to-load
+        // forwarding defect (2b) -- sEmptyAmbientLight is NOT volatile in retail. Revert
+        // this before measuring any compiler-side fix for that defect.
+        RpLightSetColor(*(RpLight* volatile*)&sEmptyAmbientLight, &black);
     }
 }
 
@@ -93,9 +97,7 @@ RpAtomic* FindAndInstanceAtomicCallback(RpAtomic* model, void* data)
     }
     if (gLastAtomicCount < 0x100)
     {
-        // sda scheduling
-        gLastAtomicList[gLastAtomicCount] = model;
-        gLastAtomicCount++;
+        gLastAtomicList[gLastAtomicCount++] = model;
     }
 
     RwFrame* root = RwFrameGetRoot((RwFrame*)(model->object).object.parent);
@@ -121,9 +123,7 @@ RpAtomic* FindAndInstanceAtomicCallback(RpAtomic* model, void* data)
 
     if (gLastAtomicCount < 0x100)
     {
-        // sda scheduling
-        gLastAtomicList[gLastAtomicCount] = model;
-        gLastAtomicCount++;
+        gLastAtomicList[gLastAtomicCount++] = model;
     }
 
     return model;
@@ -162,7 +162,10 @@ static RpAtomic* iModelStreamRead(RwStream* stream)
 
     instance_world = RpWorldCreate(&bbox);
     instance_camera = (RwCamera*)iCameraCreate(0x280, 0x1e0, 0);
-    RpWorldAddCamera(instance_world, instance_camera);
+    // Retail reloads instance_camera after storing it; our mwcc forwards the stored value.
+    // Matching device for the store-to-load forwarding defect (2b) -- instance_camera is NOT
+    // volatile in retail. Revert before measuring any compiler-side fix for that defect.
+    RpWorldAddCamera(instance_world, *(RwCamera* volatile*)&instance_camera);
 
     gLastAtomicCount = 0;
     RpClumpForAllAtomics(clump, FindAndInstanceAtomicCallback, 0);
@@ -190,8 +193,8 @@ static RpAtomic* iModelStreamRead(RwStream* stream)
             if (i != maxIndex)
             {
                 testRadius = xVec3Dist((xVec3*)&gLastAtomicList[i]->boundingSphere.center,
-                                       (xVec3*)&gLastAtomicList[maxIndex]->boundingSphere.center);
-                testRadius += gLastAtomicList[i]->boundingSphere.radius; // FPR swap???
+                                       (xVec3*)&gLastAtomicList[maxIndex]->boundingSphere.center) +
+                             gLastAtomicList[i]->boundingSphere.radius;
                 if (testRadius > maxRadius)
                 {
                     maxRadius = testRadius;
@@ -294,12 +297,6 @@ void iModelQuatToMat(xQuat* q, xVec3* a, RwMatrixTag* t)
     t->pos.x = a->x;
     t->pos.y = a->y;
     t->pos.z = a->z;
-}
-
-F32 __deadstripped_sdata2_hack()
-{
-    F32 a = 0.0f;
-    return a;
 }
 
 void iModelAnimMatrices(RpAtomic* model, xQuat* quat, xVec3* tran, RwMatrixTag* mat)
@@ -416,18 +413,22 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
 
 S32 iModelCull(RpAtomic* model, RwMatrix* mat)
 {
-    RwCamera* cam = RwCameraGetCurrentCamera();
+    F32 xScale2, yScale2, zScale2;
+    RwV3d *right, *up, *at;
+    RwCamera* cam;
     RwSphere sph;
+
+    cam = RwCameraGetCurrentCamera();
 
     RwV3dTransformPoints(&sph.center, &model->boundingSphere.center, 1, mat);
 
-    // FPR hell
-    RwReal f3 = RwV3dDotProductMacro(&mat->up, &mat->up);
-    RwReal f4 = RwV3dDotProductMacro(&mat->at, &mat->at);
-    RwReal f1 = RwV3dDotProductMacro(&mat->right, &mat->right);
-
-    // cror???
-    sph.radius = model->boundingSphere.radius * xsqrt(MAX(f1, MAX(f3, f4)));
+    right = &mat->right;
+    up = &mat->up;
+    at = &mat->at;
+    xScale2 = SQR(right->x) + SQR(right->y) + SQR(right->z);
+    yScale2 = SQR(up->x) + SQR(up->y) + SQR(up->z);
+    zScale2 = SQR(at->x) + SQR(at->y) + SQR(at->z);
+    sph.radius = model->boundingSphere.radius * xsqrt(MAX3(xScale2, yScale2, zScale2));
 
     model->worldBoundingSphere = sph;
 
@@ -454,6 +455,8 @@ S32 iModelCullPlusShadow(RpAtomic* model, RwMatrix* mat, xVec3* shadowVec, S32* 
     RwSphere worldsph;
     const RwFrustumPlane* frustumPlane;
     S32 numPlanes;
+    F32 nDot;
+    F32 sDot;
 
     cam = RwCameraGetCurrentCamera();
 
@@ -472,50 +475,14 @@ S32 iModelCullPlusShadow(RpAtomic* model, RwMatrix* mat, xVec3* shadowVec, S32* 
     frustumPlane = cam->frustumPlanes;
     while (numPlanes--)
     {
-        F32 nDot = worldsph.center.x * frustumPlane->plane.normal.x +
-                   worldsph.center.y * frustumPlane->plane.normal.y +
-                   worldsph.center.z * frustumPlane->plane.normal.z;
+        nDot = worldsph.center.x * frustumPlane->plane.normal.x +
+               worldsph.center.y * frustumPlane->plane.normal.y +
+               worldsph.center.z * frustumPlane->plane.normal.z;
         nDot -= frustumPlane->plane.distance;
 
         if (nDot > worldsph.radius)
         {
-            F32 nDot;
-
-            F32 sDot = shadowVec->x * frustumPlane->plane.normal.x +
-                       shadowVec->y * frustumPlane->plane.normal.y +
-                       shadowVec->z * frustumPlane->plane.normal.z;
-            sDot -= frustumPlane->plane.distance;
-
-            if (sDot > worldsph.radius)
-            {
-                *shadowOutside = 1;
-                return 1;
-            }
-
-            frustumPlane++;
-            while (numPlanes--)
-            {
-                nDot = worldsph.center.x * frustumPlane->plane.normal.x +
-                       worldsph.center.y * frustumPlane->plane.normal.y +
-                       worldsph.center.z * frustumPlane->plane.normal.z;
-                nDot -= frustumPlane->plane.distance;
-
-                sDot = shadowVec->x * frustumPlane->plane.normal.x +
-                       shadowVec->y * frustumPlane->plane.normal.y +
-                       shadowVec->z * frustumPlane->plane.normal.z;
-                sDot -= frustumPlane->plane.distance;
-
-                if (nDot > worldsph.radius && sDot > worldsph.radius)
-                {
-                    *shadowOutside = 1;
-                    return 1;
-                }
-
-                frustumPlane++;
-            }
-
-            *shadowOutside = 0;
-            return 1;
+            goto shadow_test;
         }
 
         frustumPlane++;
@@ -523,6 +490,43 @@ S32 iModelCullPlusShadow(RpAtomic* model, RwMatrix* mat, xVec3* shadowVec, S32* 
 
     *shadowOutside = 0;
     return 0;
+
+shadow_test:
+    sDot = shadowVec->x * frustumPlane->plane.normal.x +
+           shadowVec->y * frustumPlane->plane.normal.y +
+           shadowVec->z * frustumPlane->plane.normal.z;
+    sDot -= frustumPlane->plane.distance;
+
+    if (sDot > worldsph.radius)
+    {
+        *shadowOutside = 1;
+        return 1;
+    }
+
+    frustumPlane++;
+    while (numPlanes--)
+    {
+        nDot = worldsph.center.x * frustumPlane->plane.normal.x +
+               worldsph.center.y * frustumPlane->plane.normal.y +
+               worldsph.center.z * frustumPlane->plane.normal.z;
+        nDot -= frustumPlane->plane.distance;
+
+        sDot = shadowVec->x * frustumPlane->plane.normal.x +
+               shadowVec->y * frustumPlane->plane.normal.y +
+               shadowVec->z * frustumPlane->plane.normal.z;
+        sDot -= frustumPlane->plane.distance;
+
+        if (nDot > worldsph.radius && sDot > worldsph.radius)
+        {
+            *shadowOutside = 1;
+            return 1;
+        }
+
+        frustumPlane++;
+    }
+
+    *shadowOutside = 0;
+    return 1;
 }
 
 U32 iModelVertCount(RpAtomic* model)
@@ -604,8 +608,8 @@ U32 iModelVertEval(RpAtomic* model, U32 index, U32 count, RwMatrix* mat, xVec3* 
             return 0;
         }
         count = (count < numVerts - index) ? count : (numVerts - index);
-        RpMorphTarget* mt = geom->morphTarget;
-        vert = (xVec3*)((RwV3d*)mt->verts + index);
+        vert = (xVec3*)geom->morphTarget->verts;
+        vert += index;
     }
 
     RpSkin* skin = RpSkinGeometryGetSkin(geom);
@@ -950,8 +954,8 @@ void iModelSetMaterialAlpha(RpAtomic* model, U8 alpha)
 
     RpGeometryForAllMaterials(geom, iModelSetMaterialAlphaCB, &alpha);
 
-    sLastMaterial = model;
     sMaterialFlags |= 0x1;
+    sLastMaterial = model;
 }
 
 // sda scheduling
