@@ -520,7 +520,7 @@ void zNPCBPatrick::Setup()
     {
         objName[11] = i + '1';
         this->swinger[i] = (xEnt*)zSceneFindObject(xStrHash(objName));
-        this->origSwingerHeight += this->swinger[i]->model->Mat->pos.y * f1045;
+        this->origSwingerHeight += this->swinger[i]->model->Mat->pos.y / 8.0f;
     }
 
     for (i = 0; i < 8; i++)
@@ -2357,12 +2357,14 @@ void zNPCBPatrick::bossPatBoxUpdate(bossPatBox* bx, F32 dt)
                     {
                         if (this->boxLandSndTimer > f1046)
                         {
-                            xSndPlay3D(xStrHash("b201_box_splash"), f2256, f832, 0, 0,
+                            xSndPlay3D(xStrHash("b201_box_landing"), f2256, f832, 0, 0,
                                        (xVec3*)&bx->box->model->Mat->pos, f891, f1659, SND_CAT_GAME,
                                        f832);
                             this->boxLandSndTimer = f832;
                         }
-
+                    }
+                    else
+                    {
                         if (this->boxSplash && this->boxSplash->initCB)
                         {
                             this->boxSplash->initCB(this->boxSplash, bx->box->model, NULL, NULL);
@@ -2370,7 +2372,7 @@ void zNPCBPatrick::bossPatBoxUpdate(bossPatBox* bx, F32 dt)
 
                         if (this->boxSplashSndTimer > f1046)
                         {
-                            xSndPlay3D(xStrHash("b201_box_landing"), f2256, f832, 0, 0,
+                            xSndPlay3D(xStrHash("b201_box_splash"), f2256, f832, 0, 0,
                                        (xVec3*)&bx->box->model->Mat->pos, f891, f1659, SND_CAT_GAME,
                                        f832);
                             this->boxSplashSndTimer = f832;
@@ -3511,10 +3513,8 @@ S32 zNPCGoalBossPatSpin::Enter(F32 dt, void* updCtxt)
 
     for (S32 i = 1; i < 4; i++)
     {
-        F32 ang = f1666 * i * f1664;
-
-        xVec3SMul(&this->pole[i], &this->pole[0], icos(ang));
-        xVec3AddScaled(&this->pole[i], &unk, isin(ang));
+        xVec3SMul(&this->pole[i], &this->pole[0], icos(f1666 * i / 4.0f));
+        xVec3AddScaled(&this->pole[i], &unk, isin(f1666 * i / 4.0f));
     }
 
     this->currPole = 0;
