@@ -925,34 +925,76 @@ in contact with the scheduler, though it may still be unreachable.
 Also measured and rejected on these two: binding `xVec3& N = data.N;` across
 the whole block (byte-inert), and `(o)->assign(0.0f, 1.0f, 0.0f)` (96.109).
 
-### `xSweptSphereToBox` re-characterised: the precondition WAS satisfied
+### `xSweptSphereToBox`: SOLVED as a diagnosis -- not expressible, and here is why
 
-An earlier pass recorded this function as blocked pending
-`xSweptSphereToTriangle`, which shares its inlined `xsqrtfast` block.
-`xSweptSphereToTriangle` is now 100.0, and re-measurement confirms **the
-whole `xsqrtfast` region is byte-identical** -- that blocker is genuinely
-gone. The remaining 45 rows are one basic block, the nine
-`d? x boxinvbasis` products, and they are two separate defects:
+2,448 b, 99.158, 29 rows of 614. Re-worked 2026-08-22 with the colouring
+rule. It does not close, and two things previously recorded here were WRONG.
 
-  1. A rotation. The triple belonging to the FIRST STORE statement sinks to
-     the end of the block and takes f0; the other eight are emitted in
-     ascending matrix-offset order. Verified by prediction: changing the
-     store order to `y,z,x` made `aXy` sink instead. Temp *assignment* order
-     is irrelevant (inert).
-  2. A one-instruction interleave offset. Retail issues two loads before the
-     first `fmuls`; every one of eleven variants issued three, and the shift
-     then propagates through the block.
+**The real emission rule for this block** (replaces the old "defect 1 +
+defect 2" reading, and every measured variant fits it):
 
-The diagnostic that separates them: storing `boxaZ.z` first reproduces
-retail's load order AND its `f8..f0` product order exactly, and still scores
-99.163, because defect 2 eats the gain.
+    The nine (load, fmuls) pairs are emitted in ASSIGNMENT-statement order,
+    with the value belonging to the FIRST STORE statement moved to the END
+    of that list.
 
-**Do not delete the `aXx..aZz` temps.** The DWARF-implied temp-free spelling
-measures 96.842 and emits a fully serial `lfs/fmuls/stfs` chain through f0:
-mwcc will not hoist a load from `boxinvbasis` over a store to a stack
-`xVec3`. The temps are a WORKAROUND for that alias defect, and the workaround
-is what introduces the rotation. So the honest summary is that this function
-is blocked on the load-hoist alias defect, not on a source shape.
+  base (assign asc, first store `aXx`) -> emitted `aXy..aZz, aXx`   99.158/29
+  assignments reversed, stores asc     -> emitted `aZz..aXx`        99.098/31
+  store `boxaZ.z` first                -> ascending, no move        99.163/24
+  stores fully reversed                -> ascending, no move        99.144/26
+  declaration list rotated one left     -> BIT-IDENTICAL to base
+
+**CORRECTION 1: "temp assignment order is irrelevant (inert)" was FALSE.**
+Reversing all nine assignments measures 99.098 / 31 rows and reverses the
+emitted load order. The old "inert" reading came from moving only `aXx` to
+last, which happens to produce the identical emitted list under the rule
+above.
+
+**CORRECTION 2: "defect 2 (a one-instruction interleave offset) exists" was
+FALSE.** It was an artifact of the odd store order in the `boxaZ.z`-first
+probe. With the stores fully reversed, the loads, the `fmuls`, the f8->f0
+product colours AND the load/fmuls interleave are ALL byte-identical to
+retail -- the entire computation half of the block matches. Only the nine
+stores (in that variant's reversed order) and `dy`/`dz` differ.
+
+**CORRECTION 3: "`dy`/`dz` in f22/f23 is downstream of the rotation" was
+FALSE.** In the fully-reversed variant the rotation is gone and the products
+carry retail's f8..f0, yet `dy`/`dz` are STILL f22/f23 against retail's
+f26/f27. It is an INDEPENDENT second defect. Both sides save f21-f31 with
+`rad`=f26 and `radsqr`=f25 identically, so retail has four values coloured
+before `dy` that interfere with it and not with `dx`; nothing in our graph
+does. That is the `PlayerCollsSelectDepen` shape -- an interference-graph
+difference, not an ordering one.
+
+**Why it is NOT EXPRESSIBLE.** Two constraints collide. (1) Emitted store
+order tracks source store order, adjusted only for value-readiness --
+demonstrated directly, since fully reversing the source stores fully reverses
+the emitted stores. Retail's emitted stores are
+`0x54,0x58,0x5c,0x48,0x4c,0x50,0x3c,0x40,0x44` and the values become ready in
+exactly that order, so retail's source store order is the natural ascending
+one with `boxaX.x` first. (2) The rule then moves the first-stored value to
+the end of the load/fmuls list -- the rotation. To cancel it the first-stored
+value must be `aZz`, but making `boxaZ.z` the first store forces its `stfs`
+to be emitted third, or forces the whole store block into reverse. The
+scheduler cannot defer a store that is first in source order and ready. So
+retail's store order and a non-rotated load order are mutually exclusive
+under this compiler.
+
+**The DWARF form is the real source and confirms the diagnosis.**
+`dwarf/` lists `dx, dy, dz, rad, radsqr, testdist, invZ, boxPos, boxaX,
+boxaY, boxaZ` and NO `a??` temps at all. It measures 96.842 with a fully
+serial `lfs/fmuls/stfs` chain through f0 (binding `const xVec3&` to the three
+matrix rows is byte-identical to it, so that lead is closed too). Retail's
+compiler hoisted nine loads over nine stack stores from that source; ours
+will not. **The nine temps are a workaround for the load-hoist alias defect,
+and the workaround is what injects the rotation.** If that predicate is ever
+widened, start from the fully-reversed-stores variant, then delete the temps
+entirely and use the DWARF form.
+
+Note the colouring rule's LIMIT explains why declaration order is a live
+lever for the products' colours but a dead one for emission order: these
+single-assignment single-use locals are copy-propagated away, so the ordered
+set that matters is the anonymous one -- and there is no anonymous temp left
+to name, because naming them is exactly what the baseline already does.
 
 ### symorder's "SAME SET, WRONG ORDER" is not evidence on its own
 
