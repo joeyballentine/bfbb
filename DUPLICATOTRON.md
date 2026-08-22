@@ -1682,6 +1682,22 @@ function-scope locals in declaration order; retail puts `workArea` and
 automated hill-climb over ~600 declaration orders plateaus at 97.803% and
 never reaches 100.
 
+**Independently re-derived 2026-08-22, from a cold start, by an agent that had
+not read this section** (the checkout had been rolled back by a container reset).
+It reached the same conclusion by the same route -- small-data store kills a
+cached `.sdata2` literal in retail and not in ours, with the large-global store
+as the negative control -- and cost ~80 minutes to do it. The finding is
+therefore replicated, not a one-off. It also independently hit the r30/r31 pin
+on `zMainMemCardSpaceQuery`'s two anonymous temps (15 orders sampled, versus the
+~600-order hill-climb above; same plateau, same cause).
+
+**So: DO NOT SEND ANOTHER AGENT AT zMain.** Both of its functions are
+diagnosed and both are blocked on compiler-track work, not source work.
+`zMainParseINIGlobals` needs the second alias query site found in the code
+generator's redundant-load path; `zMainMemCardSpaceQuery` needs an allocator
+that can lift block-scope values above function-scope locals, which the select
+routine at 0x508900 cannot express (lowest-free-colour, no preference term).
+
 ### Clause E3n's load-side size bound widened to 8 (SHIPPED 2026-08-21)
 
 Clause E3n reads "an `stfs` to a declared frame local may not be crossed by a
