@@ -305,7 +305,7 @@ BASE_SHA1 = "74bc177b10d1bbe8a60a21a6c0aa86d2dd9c0668"
 PATCHED_SHA1 = "19480c5dcb2c3de3b870c1fb29db73f14f7b2889"
 
 # Everything the patch injects, assembled as one position-independent block at
-# VA 0x57ea4c -- the whole of the .text tail padding. 413 bytes of 436. The
+# VA 0x57ea4c -- the whole of the .text tail padding. 428 bytes of 436. The
 # layout, in order:
 #
 #   0x57ea4c  entry-0 handler: clause A inline, clause B by CALL, then the

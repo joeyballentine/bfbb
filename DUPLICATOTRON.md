@@ -1667,14 +1667,44 @@ worse than no rule.
   separates them. I promoted this gate on two witnesses and the third refuted
   it -- recorded so nobody re-promotes it.
 
-**UNTESTED hypothesis, explicitly flagged as such:** what the three over-fire
-cases share is that the store is one of SEVERAL stores into DIFFERENT PARTS of
-the same declared frame object -- `tranTbl1[i]`, `param[0]`/`param[1]`, an
-xVec2's `.x`/`.z` -- whereas the motivating shape writes a **whole** scalar. If
-the frame-object descriptor distinguishes a whole-object memref from a
-partial/offset one, that is where to look. This may also connect to the
-whole x whole dispatch entry that `eval_joint` reaches. Do not record this as a
-rule until it is measured.
+**That hypothesis is dead too, and for an instructive reason.** I proposed that
+the over-fire cases are PARTIAL writes to a multi-field frame object where the
+motivating wins write a WHOLE scalar. Measurement: `[memrefA+0x2c] == 1`
+(subrange) and `[memrefB+0x2c] == 0` (whole) at **every** E3n site, winner and
+loser alike. Partialness is already fixed by the dispatch entry -- entry 3 *is*
+subrange x whole -- so it cannot possibly discriminate within entry 3. A
+whole-scalar store never reaches clause E3n at all.
+
+**THE NARROWING ATTEMPT FAILED, and the failure is conclusive rather than
+incomplete.** A dedicated session read the actual field values out of the
+compiler's structures rather than guessing:
+
+- **Frame-object size: FALSIFIED, not merely unfound.** Repros with declared
+  frame arrays of 8, 12, 16, 24, 32 and 64 bytes plus 12- and 32-byte structs,
+  reading every dword of the store's base-expression node from +0x00 to +0x68
+  by bisection: **all eight shapes read identically in every field.** The
+  descriptor carries no size, no element count, no array flag, and no
+  reachable `Type*`-with-size.
+- **Store opcode class: dead, and worse than thought.** A "FP stores only"
+  gate (`opcode >= 50`) costs four zEntPlayer winners on its own
+  (`CheckObjectAgainstMeleeBound`, `zEntPlayer_Damage`, `update_camera`,
+  `WallJumpCallback`). Three need E3n to fire on `stb`/`sth`; `WallJumpCallback`
+  needs it on **`stw`** -- the same opcode as the over-fire.
+- 204-probe grid over every dword of memrefA/memrefB/insnA/insnB in both
+  directions at six thresholds; 64-probe scan of the base node 0x00-0xa4; a
+  full opcode ladder on both operands; and a sibling-alias-list-length gate.
+  **Not one probe reached loser=100 with the winners kept.** The alias list
+  length is exactly 1 at every site, winner and loser alike.
+
+Both populations are real: stock `GC/2.0p1` keeps **0 of 11** zEntPlayer winners
+while giving AnimTable 100.000. One rule must split them and **nothing in the
+state clause E3n is given does**.
+
+**So any real fix must change WHAT THE PREDICATE IS GIVEN, not what it tests.**
+Two openings, neither attempted: put the gate in the dependency-graph builder
+at `0x508100`/`0x508350`, which unlike `0x511fc0` can see the pending
+load/store lists; or extend the base-object node, which is a compiler-wide
+allocation change rather than a cave patch.
 
 **Source-side mitigation that works today:** `const` on the read-only frame
 aggregate cleared the gate entirely on the third witness -- 87.870% patched
@@ -2094,6 +2124,95 @@ Decisive and CORRECT three times in zNPCTypeDutchman: `update_wave` has no
 exactly what reaches 100.000%; and `check_player_damage`'s dwarf lists no `xBox`
 locals at all though the GC target plainly has two on the stack. Use it as a
 hypothesis generator, never as an oracle.
+
+### THE DISPATCH TABLE, DECODED. This settles which clause can ever see what.
+
+Read out of `0x511fc0` rather than inferred. Given two instructions:
+
+    memrefA = [insnA+0x18]        memrefB = [insnB+0x18]
+    index   = [memrefA+0x2c]*3 + [memrefB+0x2c]
+    kind byte at +0x2c:  0 = whole object,  1 = subrange
+
+So the table at `0x5bd0bc` is indexed by operand *wholeness*, and the entries mean:
+
+    entry 0 = whole    x whole
+    entry 1 = whole    x subrange
+    entry 3 = subrange x whole
+    entry 4 = subrange x subrange
+
+**Consequences, several of which correct these notes:**
+
+- **Clause E3n's store operand is ALWAYS a subrange**, never a whole object.
+  Both this file's "an `stfs` to a **scalar** declared frame local" and
+  `patch_compiler.py`'s "an `stfs` to a declared frame local" are wrong. A
+  whole-scalar store cannot reach E3n.
+- **E3n's winners are not all `stfs`.** At least three zEntPlayer winners need
+  it on `stb`/`sth` and one on `stw`.
+- **`eval_joint` sits on entry 0** (whole 8-byte `.sdata2` load x whole 4-byte
+  frame local), confirmed from the formula rather than surmised. "E3n's rule on
+  the whole x whole entry" is therefore a genuinely NEW clause, not a
+  relocation of this one.
+- **Entry 4 being permanently blocked now has a structural reading**: it is
+  subrange x subrange, i.e. two partial accesses, which is exactly the
+  same-array-different-elements shape.
+
+**memref layout** (from stock entry-4's overlap test at `0x512012` and clause
+V's list walk):
+
+    +0x00  value-number list next     +0x1c  value number
+    +0x08  sibling-list head          +0x24  alias bitmap
+    +0x0c  computed-address flag      +0x28  alias bit index
+    +0x10  base-object node           +0x2c  kind byte (0 whole / 1 subrange)
+    +0x14  subrange offset
+    +0x18  access size
+
+**instruction layout:** `+0x10` latency, `+0x14` flags, `+0x18` memref,
+`+0x20` opcode id (16-bit).
+
+**The opcode id table is at VA `0x5c3070`** -- 791 entries, 20-byte stride
+`{char* mnemonic, u32 id, char* operand_format, u32 mask, u32 encoding}`.
+`lwz`=34, `stb`=40, `sth`=44, `stw`=49, `lfs`=142, `stfs`=150, `stfd`=154.
+Verified twice over: the encoding fields match real PPC primary opcodes, and a
+threshold ladder's flip points land exactly on 49 and 150.
+
+### AVAILABLE BUT NOT INSTALLED: 24 free cave bytes
+
+Cave space is the binding constraint on every future clause and only 8 bytes are
+free. Three cave blocks re-implement code the stock compiler already contains:
+`stock0` open-codes `0x511FF2`, `may` open-codes `0x512081`, and `e13h`'s tail
+open-codes `0x511FFF`. Replacing them with jumps takes the cave **428 -> 412,
+freeing 24**.
+
+Measured: all 224 `main/SB/*` units compile to **byte-identical objects** under
+the shipped `2.0p1a` and the compacted build (0 differing, 0 failed). Compacted
+compiler sha1 `bf72c2e4180ebef769deb949c63cad4ecd7c6f24`; bytes in
+`scratchpad/e3n/compact_cave.hex`.
+
+**Deliberately NOT installed.** It changes `PATCHED_SHA1`, which invalidates
+every agent's variant compilers and forces a re-patch mid-flight, and there is
+no clause waiting on the space. Install it when a clause actually needs the
+room, not before.
+
+### Reusable compiler-RE assets in `scratchpad/e3n/`
+
+Do not rebuild these from scratch:
+`cave.py` (symbolic re-assembler for the whole cave, validated to reproduce
+`CAVE_BYTES` byte-for-byte), `mkvar.py` (variant builder), `probe.py`/`scan.py`
+(zEntPlayer oracle -- one compile yields both the loser and 11 winners),
+`read.py`/`fieldread.py` (sub-second repro oracle that reads real field values
+by bisection), `mnem.py` + `opcodes.json` (the decoded opcode table), and
+`hashsweep.py`.
+
+Also confirmed here: rebuilding from pristine `74bc177b...` twice gives
+`19480c5dcb2c3de3b870c1fb29db73f14f7b2889` both times, so `PATCHED_SHA1` is
+correct and the patch is deterministic; and the recorded E3n price of
++6/-107 functions and +25,924/-77,224 bytes reproduces exactly.
+
+### `solo.py`'s no-symbol mode returns EVERY symbol, not just non-matching ones
+
+A harness that assumed otherwise gave a false reading for an iteration. Filter
+on `match_percent < 100.0` yourself if you write against it (this is what
+`verify_mw.run(..., None)` returns too).
 
 ### THE CHEAPEST QUESTION IN THIS PROJECT: patch, or source?
 
