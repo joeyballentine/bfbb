@@ -1743,6 +1743,106 @@ so in the `flags & 0x200` case it computes `flip` from values left over from the
 first pass. Instruction counts match exactly, so retail shipped that asymmetry.
 Flagged for PCPORT, not to be "fixed" here.
 
+### The load-hoist-over-`stw` defect IS source-reachable. Retry it.
+
+These notes file `xFX::eval_joint` as compiler-track: "predicted to flip and
+did not... the surviving defect is presumably the `stw`, so the store side of
+the clause declines there". `zCameraUpdate` has the same shape -- a small-static
+`lfs` hoisted above the `stw r0,0x30(r1)`/`stw r3,0x34(r1)` pair of mwcc's own
+int-to-float conversion scratch -- and **it is reachable from source**.
+
+Binding the conversion result to a named local blocks the hoist:
+
+    F32 dp = (F32)(MAX(32, MIN(x, 110)) - 32);
+    dp = 0.016666668f * (dp * zcam_pad_pyaw_scale);
+
+Four sites, **+0.95 pp**. The `fmuls` operand order corrects as a consequence.
+**Retry this on `eval_joint` and anywhere an `lfs <named global>` sits at the
+head of a clamp block instead of at its use site.** Do not assume the store
+side of a clause declining means the function is compiler-track.
+
+### The E3n `const` lever is a GAIN lever, not only loss-recovery
+
+These notes frame `const`-on-a-frame-local as the thing that recovered E3n's
+ten regressions. It is more general. `const xVec3 tran_accum = cam->tran_accum;`
+moved `zCameraUpdate` **+0.6 pp** with no E3n regression anywhere in sight --
+and the `const` is correct on its own merits, since the local is never written,
+only read at five sites. The idiom to scan for is `xVec3 local = <expr>;`
+sharing a block with `.sdata2` literal loads, regardless of E3n history.
+
+### TWO PRECONDITIONS on the "name the anonymous temp" escape
+
+Found independently by two agents on the same day, in different units. The
+escape (from `xShadowSimple_CalcCorners`) is recorded here as *the* way out of
+the rule's limit. It has preconditions, and both were measured:
+
+1. **The named temp must be genuinely multi-use.** In `zCameraFreeLookSetGoals`
+   the mis-coloured value is a single-assignment, single-use accumulator;
+   naming it is copy-propagated away and is byte-inert (two spellings, measured
+   twice).
+2. **Naming is necessary, not sufficient.** In `RenderLightning` the
+   mis-coloured values are *already* named locals, and defining them first
+   moves only the first of the three into the low pool. A local that is only a
+   load from a global behaves as though rematerialised at its use, so its live
+   range does not reliably start at its source definition point.
+
+### REFINEMENT: the bare-declaration loophole needs a SINGLE live range
+
+"DECLARATION order beats DEFINITION order... use bare declarations to place a
+value early in the colour order" did **not** hold for `zCameraFreeLookSetGoals`'s
+`newPitchGoal`: four bare-declaration positions, one of them crossing a scope
+boundary, are all byte-identical. The variable is reassigned on every path, so
+it splits into separate single-def values that colour at their definitions --
+i.e. it behaves like the GPR case.
+
+Corrected wording: *the bare-declaration loophole reaches a local with a single
+live range. A local reassigned on every path colours at each definition and the
+loophole is inert.*
+
+### 2b census correction: `zCameraUpdate` would NOT cross 100.0
+
+These notes carry a standing instruction to re-count how many functions would
+actually **cross** 100.0 before spending a session on the store-to-load
+forwarding fix. `zCameraUpdate` (3,892 b) is a five-site 2b witness and must be
+counted as a **no**: a `volatile`-read probe on all five sites measures 99.681%
+with 19 rows left, and those 19 are four REGS clusters that survive the fix
+(an `f2`/`f3` transposition in the `dlerp` block, `r4`/`r5` between
+`lassocam_enabled` and the pad byte, a uniform +1 colour shift in the lassocam
+d/h lerp, and one `fmuls` destination). The probe was removed rather than left
+installed at sub-100, per the install-only-at-100.0 rule.
+
+### Refuted: clamp-literal early colour is NOT CSE with an earlier literal
+
+The hypothesis that a clamp literal gets its early colour by sharing a pool
+entry with an identical literal earlier in the function is **wrong**.
+Substituting a wholly distinct literal (`1e-30f`, a different pool entry) in
+`zCameraFreeLookSetGoals` left the colouring bit-identical.
+
+### dwarf is wrong about `zCamera`'s pad locals, in a checkable way
+
+`dwarf/SB/Game/zCamera.cpp` lists the pad stick locals as `signed int x` /
+`signed int y`. The GameCube target keeps the raw byte in a register and
+re-issues `extsb` at each use, which is `S8` behaviour, not `S32`. **Our `S8 x`
+is right and DWARF is not.** Add to the "dwarf is not an oracle" list.
+
+### zCamera: what is left, and why
+
+`zCameraUpdate` 98.988% -- blocked, see the 2b census entry above.
+`zCameraFreeLookSetGoals` 99.714% (7 rows) -- unfinished, not proven blocked.
+Byte-identical until the first `fmadds` of the velocity dot product: retail
+accumulates in place (`fmadds f0,f3,f2,f0`, dest = third operand) and gives the
+`0.0f` clamp literal f7->f2, while we colour the literal f0 first, pushing the
+accumulator to f2 and shifting everything downstream. **20 spellings measured**
+(accumulate form, named chain, `MIN` macro, `if`-clamp both polarities,
+`0.0f - x`, `*= -1.0f`, right-association, term reorder, reciprocal,
+`const xVec3&` binding, fresh local, three `newPitchGoal` positions); every
+faithful one is bit-identical, every distorted one is worse.
+`zCameraFlyStart` 94.850% (4 rows) -- our scheduler hoists `lwz r0,0x1c(r1)`
+from the frame local `info` above `stw r0, zcam_flypaused@sda21`. Frame-load x
+static-store is exactly what clause C's static-storage gate excludes on purpose.
+NOT entry 4 -- source permutation does move the rows -- so it is in contact with
+the scheduler, but no faithful spelling reaches it.
+
 ### THE CHEAPEST QUESTION IN THIS PROJECT: patch, or source?
 
 Before spending a session on any near-100% residual, compile the unit with
