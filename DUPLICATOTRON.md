@@ -1183,6 +1183,19 @@ as zero. Keep this list current.
                       blocked by entry 4 regardless, so neither form banks
                       bytes. Revert it before measuring any LICM fix.
 
+**ADDED 2026-08-22: `zEntPlayer.cpp` `bbash_tmr`**, at the single use site in
+`zEntPlayerJumpUpdate` (`if (*(volatile F32*)&bbash_tmr >= 0.0f)`). It
+qualifies -- it takes that function (1,460 b) all the way to exactly 100.000%
+-- and it must be reverted before any measurement of a compiler-side fix.
+
+Two sites deliberately NOT added in the same unit, both by the same rule:
+`zEntPlayerFloorUpdate`'s three store-then-reload clusters (`surfSlickTimer`,
+`surfSlipTimer`, `surfFriction`), because a fourth entry-4 subrange x subrange
+cluster at `0xa8/0xac(r1)` caps that function below 100.0 regardless; and
+`zEntPlayer_Init`'s `drybob_anim_count`, where the device does not even reach
+the site -- introducing an index local, with or without a volatile read, is
+**bit-identical to baseline** because mwcc copy-propagates it away.
+
 One site was deliberately NOT added: `zSceneSetup`'s `gCurEnv`. Reading it
 through a volatile lvalue does reproduce retail's `stw`/`lwz` pair and moves
 the function 99.618 -> 99.743, but a second, scheduler-class cluster still
@@ -2379,6 +2392,96 @@ decisively: `TurnThemHeads`' missing `pos` local is what closed it.
 - `DiscoRender` 748 b 81.053 -- unfinished, improved 8.2 points. Remaining is
   the setup block's load order plus retail keeping `mem` and `vert_list` in two
   registers (`mr r26,r27`) where we coalesce.
+
+### NEW COMPILER-TRACK SHAPE: rematerialise-vs-copy (`mr`)
+
+Four independent witnesses in `zEntPlayer.cpp`, each otherwise byte-identical.
+Retail keeps a value in a register and copies it with `mr`; our compiler
+rematerialises it instead:
+
+- `GetPatrickTarget` -- retail `mr r23, r27` vs our `li r23, 0`, with
+  `li r27, 0` present and live in **both** objects
+- `zEntPlayer_Update` -- retail `li r14,0 / mr r16,r14` vs our two `li`
+- `get_reticle_bound` -- retail holds `addi r30,r29,0x94` across a call vs our
+  two displacement loads
+- `SpatulaGrabCB` -- retail `mr r4,r31` vs our `addi r4,r1,0x14`, and retail
+  saves one more callee-saved GPR as a result
+
+**This is neither the alias/reload defect nor the scheduler.** No source form
+measured reaches any of the four (eight spellings on `get_reticle_bound` alone
+are bit-identical or worse). Name it and count it before anyone spends a
+session trying to spell around it.
+
+### CORRECTION: E3n's store side is ALWAYS a subrange, so subrange-ness proves nothing
+
+`zEntPlayer_Render`'s residual (8 rows) is a `lwz` of the 4-byte static
+`gPTankDisable` hoisted above three `stfs` into a declared frame `xVec3` --
+and E3n declines on it, while being worth +1.17 points elsewhere in the same
+function (`no3` measures 96.849).
+
+The agent reporting this read it as evidence for the "whole vs partial memref"
+hypothesis, on the grounds that the store side is a subrange (`center.x`)
+rather than a whole scalar. **That inference is invalid.** Per the decoded
+dispatch formula, entry 3 *is* subrange x whole -- being a subrange is what
+gets a pair TO clause E3n in the first place, so it cannot discriminate within
+it. The hypothesis stays dead.
+
+The *observation* is still a real puzzle and worth keeping: E3n is consulted
+here and declines for a reason not yet identified, on a pair that satisfies
+every clause condition as documented. Whoever revisits the clause should start
+by finding out why.
+
+### `PlayerTeeterCheck`: clause V's blind spot is VN table entry 1
+
+444 b, 78.649%. A fully-unrolled 4-iteration loop where retail reloads
+`0.424264f`, `0.2f` and `0.0f` per iteration and we hoist all three. The
+killing stores are `stfsx`/`stfs` into the `floor_tmr[]` **array** -- subrange
+memrefs, which dispatch to **VN table entry 1**, and clause V patches only
+entry 0. Matches the documented `xFXAuraUpdate` finding exactly. Compiler-track,
+and a concrete second site for anyone extending clause V.
+
+### CAVEAT on the `MAX(k, expr)` signature entry
+
+These notes carry a flat reading from `zEntHangable` that "no source shape keeps
+the dead branch alive". In `CalcCombinedDepen` the target's second clamp emits
+`ble L / b L2 / L: fmr` -- an empty then-arm -- and **`MAX(0.25f, dot2)` does
+produce that two-branch form**. So the form is reachable and the flat reading is
+too strong. But it produces it with the operands and destination register
+transposed, while `if (...) {} else {...}`, `if (a < k)`, `if (a <= k)`,
+`!(a > k)` and the self-ternary all collapse to a single `bgt`/`bge`. Correct
+framing: *the two-branch form and the target's register map are individually
+reachable and mutually exclusive here.*
+
+### Lead: the callee-saved FP ordering key is not the volatile-FP rule
+
+`CalcJumpImpulse_Smooth` (680 b, 88.147%): instruction multisets identical,
+frame identical, callee-saved set identical (f18-f31). A pure REGS/SCHED
+permutation on **callee-saved FP** registers. Notably **our ascending register
+order is the exact reverse of our declaration order**, which does not match the
+volatile-FP declaration-order rule at all. Worth a dedicated pass by anyone
+testing whether callee-saved FP has its own ordering key.
+
+### zEntPlayer: other classifications
+
+- `zEntPlayer_SNDPlayStreamRandom` (1,076 b, 99.108) -- a `0.0f` literal we keep
+  across basic blocks / hoist out of a loop where retail reloads it. **No
+  intervening store**, so it is global CSE / LICM, not clause V. The existing
+  source comment already had this right.
+- `zEntPlayer_Update`'s empty `for (U32 i = 0; i < sc->num_npcs; i++) {}` --
+  retail does not unroll it and reloads `sc->num_npcs` each iteration, with a
+  second `i*4` induction variable surviving; we hoist the bound and unroll by 8.
+  `S32` counter, `while` form, dead element load and dead element-pointer are
+  all bit-identical to baseline. An unrolling/LICM decision, not source.
+- `zEntPlayer_Init` (3,392 b, 95.660) -- 140 rows dominated by the unrolled
+  `drybob_anim_count` loop, retail reloading the static after its own increment
+  store where we forward.
+- **`zEntPlayer_SNDInit` re-measured on the current tree**: 91.947 with the tree
+  compiler and *worse* under every ablation (stock 88.457, no0 91.592, no3
+  90.005, noV 90.519). Consistent with the correction already in this file, but
+  the numbers are now current. It is not a clause-V win waiting to happen.
+- The whole unit is patch-insensitive in the sense that matters: the tree
+  default is best or tied for **every** function in it. Nothing here is
+  already-correct source -- except `zEntPlayer_AnimTable`, which is.
 
 ### THE CHEAPEST QUESTION IN THIS PROJECT: patch, or source?
 
