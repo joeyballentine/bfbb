@@ -1852,8 +1852,7 @@ void zNPCRobot::TurnThemHeads()
 
     if (idx_neckBone >= 0)
     {
-        xVec3* pos = Pos();
-        xVec3Sub(&dir, xEntGetPos(&globals.player.ent), pos);
+        xVec3Sub(&dir, xEntGetPos(&globals.player.ent), Pos());
 
         F32 dst_toPlyr = xVec3Normalize(&dir, &dir);
 
@@ -2577,7 +2576,7 @@ void zNPCFodBzzt::DiscoRender()
 
     xVec3 pos_top = pos_discoLight;
     xVec3 pos_bot = *Pos();
-    xVec3 vec_ray = { 0.0f, 0.0f, 1.0f };
+    const xVec3 vec_ray = { 0.0f, 0.0f, 1.0f };
     xVec3 pos_vtx;
     xMat3x3 mat_spin;
 
@@ -3748,7 +3747,8 @@ void zNPCSleepy::RendConeOfDeath(S32 which)
         RwIm3DVertexSetRGBA(&vtx[0], rgba_beg.red, rgba_beg.green, rgba_beg.blue,
                             rgba_beg.alpha);
 
-        F32 u_seg = u_beg + 0.0625f * ((i & 1) ? i : i + 1);
+        F32 u_off = 0.0625f * ((i & 1) ? i : i + 1);
+        F32 u_seg = u_beg + u_off;
 
         RwIm3DVertexSetUV(&vtx[0], u_seg, v_beg + 0.0f);
 
@@ -6572,24 +6572,17 @@ void NPCLaser::Prepare()
 
 void NPCLaser::UVScrollUpdate(F32 dt)
 {
-    uv_base[0] += dt * uv_scroll[0];
-    while (uv_base[0] > 1.0f)
+    for (S32 i = 0; i < 2; i++)
     {
-        uv_base[0] -= 1.0f;
-    }
-    while (uv_base[0] < -0.0f)
-    {
-        uv_base[0] += 1.0f;
-    }
-
-    uv_base[1] += dt * uv_scroll[1];
-    while (uv_base[1] > 1.0f)
-    {
-        uv_base[1] -= 1.0f;
-    }
-    while (uv_base[1] < -0.0f)
-    {
-        uv_base[1] += 1.0f;
+        uv_base[i] += dt * uv_scroll[i];
+        while (uv_base[i] > 1.0f)
+        {
+            uv_base[i] -= 1.0f;
+        }
+        while (uv_base[i] < -0.0f)
+        {
+            uv_base[i] += 1.0f;
+        }
     }
 }
 
