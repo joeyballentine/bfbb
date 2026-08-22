@@ -642,6 +642,59 @@ other; retail's `fmuls f5, f0, f7` / `fmadds f5, f2, f4, f5` rounds
 `at.x * dpv` and fuses `right.x * ppv`. The new source reproduces retail's
 rounding exactly.
 
+### THE RULE'S LIMIT: it orders NAMED LOCALS only, not anonymous temps
+
+Established on `zThrown_Update` (3,784 b) over ~320 builds, 2026-08-22. The
+function did NOT close and was reverted; the boundary condition is the
+deliverable, and it tells you when to stop.
+
+**The rule was confirmed here**, including the bare-declaration loophole:
+
+  * `F32 px, py, pz;` declared x,y,z but ASSIGNED z,x,y is byte-identical to
+    plain x,y,z -- declaration order beats definition order.
+  * The rule correctly predicted `d`->f1, `px`->f3, `py`->f6 from the
+    baseline declaration order.
+
+**But its domain is named locals among themselves.** Anonymous expression
+temporaries created by an EARLIER statement are ordered separately and always
+precede the named locals of later statements. No declaration placement
+reaches them:
+
+    3 bare decls before `d`, assigned after          99.794, cluster A = 16
+    same, comma-declared                             99.794, A = 16
+    same, at FUNCTION scope                          99.794, A = 16
+    named vx/vy/vz after the p's, used later         99.794, A = 16
+
+all bit-identical to baseline. The confirmation that the named locals stay
+behind: if they were coloured first, `px` would take f0; it takes f3 in every
+build, because `OPB(f0)`, `d(f1)`, `nZ(f2)` are always coloured first.
+
+Why that blocks this function. Cluster A is NOT "two anti-correlated halves"
+as previously recorded -- it is ONE rotation in two register classes. Retail's
+FP order is
+`OPB(f0) .. d(f1) .. nZ(f2) .. nX(f3) .. OMF(f4) .. VZ(f5) .. nY/py(f6) ->
+pz(f7) -> vel.y(f8) -> vel.x(f9)`; ours is identical except `pz` sits AFTER
+the two `vel` temps instead of before. That single swap produces all 16 rows,
+GPR bases included. To fix it `pz` must be declared before the two
+`thrown->vel` temps -- but those are anonymous temps created inside the `d`
+expression, and `pz = -hdng.z * d` cannot exist before `d`. **The required
+order is not expressible.**
+
+Two escapes were measured and both fail: naming the vel values and declaring
+them after `pz` (CSE binds them to the temps `d` already created --
+bit-identical), and removing `d` as a variable so its temps belong to `px`'s
+statement (still ahead of `py`/`pz`; that is the 99.804 / A=14 form).
+
+Also settled here: retail's `pz` is NOT computed in place (`fneg f2,f2` then
+`fmuls f7,f2,f1`), which proves `nz` and `pz` are separate values in retail
+and that the p/n fusion forms are wrong.
+
+**Practical test before spending a session on a REGS residual:** work out the
+required colour order, then ask whether every value in it is a NAMED LOCAL
+whose declaration you can move. If the order requires placing a named local
+ahead of an anonymous temp created by an earlier statement, stop -- it is not
+expressible.
+
 ### Superseded: the interference-degree reading
 
 Because select is lowest-free in stack order, a value can only receive a
