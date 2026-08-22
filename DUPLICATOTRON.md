@@ -2340,8 +2340,29 @@ pool ids, then compare the multiset of instructions on each side:
 
 It separated three real-source cases from six pure REGS/SCHED cases in about a
 minute each, and it surfaced a fused-multiply defect that reading the diff
-top-to-bottom had missed. Script at `scratchpad/robot/ms.py`; solo.py's column
-split is at character 50.
+top-to-bottom had missed.
+
+**DO NOT USE `scratchpad/robot/ms.py`. It is unsound and gave false verdicts.**
+I recommended it in three agent briefs before this was caught; the method is
+right and that implementation is not. Two defects, both confirmed by reading it:
+
+- **It never normalises registers.** Its `norm()` strips only `@N@` pool ids and
+  `$N` local-static suffixes, so **every REGS case reads as "multisets
+  DIFFER"** -- exactly the verdict that sends you hunting for a source bug that
+  is not there.
+- **The column split is a fixed `line[3:50]` / `line[50:]`.** When a
+  left-column instruction exceeds 47 characters `solo.py` pushes the right
+  column further right, and the parser slices a mangled name in half. That is
+  where phantom entries like `ONLY IN OURS: {'s': 1}` and `{'ertex': 1}` come
+  from.
+
+On one function it fabricated an instruction-count difference and simultaneously
+**hid a real one-instruction difference** (`li 0x1f00` against our `li 0x1200`,
+a genuine wrong-flag bug) behind a bogus branch-target normaliser.
+
+Use `scratchpad/npcsup/{dj.py,ms.py}` instead: they read objdiff's JSON directly
+rather than parsing formatted columns, and report both reg-sensitive and
+reg-normalised multisets so you can tell the two classes apart.
 
 ### OPEN LEAD: the construct that keeps a fully-degenerate switch alive
 
@@ -2674,6 +2695,83 @@ are 5,4,3,2,1,0. **On four of six exits the second loop runs one iteration too
 many and reads `cam->frustumPlanes[6]`, past the array.** Verified against raw
 bytes at `800C8484`-`800C84EC`. Our code reproduces it exactly, because it must.
 Flag for PCPORT.
+
+### ANSWERED: the callee-saved FP ordering key is REVERSE declaration order
+
+The open lead is settled, with a prediction made *before* measuring. In
+`NPCC_aimVary` the four callee-saved FP locals `dst_toFake, mag_vary,
+mag_updown, mag_toFake` get f31, f30, f29, f29 from us against retail's f29,
+f30, f31, f31 -- an exact reversal. **Reversing the declaration list landed the
+target's map first try** (99.676 -> 99.912, zero non-pool rows), and a
+24-permutation sweep confirms only the four orders ending in `dst_toFake`
+reach it.
+
+**The boundary is sharp.** The identical 24-permutation sweep on `RenderCone`'s
+`u_tip/v_tip/u_base/v_base` is completely inert (99.056 or 98.869, never
+better). Those are single-assignment locals that get copy-propagated.
+
+*The reverse-declaration-order rule reaches callee-saved FP values with real
+multi-block live ranges, and nothing else.* Note this is the OPPOSITE direction
+from the volatile-FP rule, which is forward declaration order.
+
+### The "rematerialise-vs-copy (`mr`)" class IS source-reachable in one shape
+
+These notes record four `zEntPlayer` witnesses with "no source form measured
+reaches any of the four". At least one shape does. In `RenderCone` retail keeps
+`mem` and `vert_list` in two registers (`mr r25, r29`) where we coalesce them.
+**Passing the other alias of the same pointer to the final call** --
+`xMemPopTemp(vert_list)` rather than `xMemPopTemp(mem)` -- defeats the coalescer
+and reproduces retail's copy exactly: 91.537 -> 94.100, dragging a callee-saved
+GPR permutation into place with it. **Retry this on the four zEntPlayer
+witnesses.**
+
+### A recorded E3n over-fire is evidence of a SOURCE BUG, not only a patch fault
+
+Strengthening the earlier warning. `NPCC_LineHitsBound` was a textbook
+over-fire (tree 93.846, stock and `no3` both 96.038). Swapping
+`ray.max_t`/`ray.min_t` in the source reaches 96.038 and **all five compilers
+now agree** -- the over-fire is gone, not masked.
+
+Conversely `NPCC_aimVary`, `NPCC_HaveLOSToPos` and `RenderCone` moved from
+E3n-neutral to E3n-**positive** after source work (`no3` is now 1.2, 0.8 and 2.4
+points worse). So the matrix moves in both directions under source change.
+
+**Read an over-fire as "there is probably a source defect in this function"
+before reading it as "the patch is at fault."** Two of the three functions that
+looked patch-blocked in this unit were source bugs.
+
+### The POOL bucket does NOT exempt rows in report.json -- measured
+
+`NPCC_aimVary`'s only remaining rows are five 12-byte `.rodata` zero templates
+at target `+0x210` against our `+0x18`, a 504-byte pool displacement. The
+expectation from this file's POOL-bucket note was that such rows would not be
+scored and the function would read 100.0. **It reads 99.912.** Checked directly
+in `build/GQPE78/report.json`. Pool displacement rows are scored like any other.
+
+### CLAMP evaluates its middle argument twice, and that is a lever
+
+`CLAMP(x,a,b)` = `MAX(a, MIN(x,b))` evaluates `MIN(x,b)` **twice**. With `x` an
+inline expression mwcc CSEs the branchy `MIN` into a single `fmr`; with `x` a
+named local it does not, which is retail's shape. Binding the ratio to a local
+took `Firework::FlyFlyFly` 89.318 -> **100.000**. Look for a lone unexplained
+`fmr` next to a clamp.
+
+### The bare-declaration loophole failed again, on its documented precondition
+
+Third independent confirmation. Hoisting `F32 rat;` out of `NPCBlinker::Render`'s
+loop to three different scopes is byte-identical in all three, because `rat` is
+reassigned every iteration -- the "local reassigned on every path colours at
+each definition" case. Stop re-testing this one.
+
+### dwarf in zNPCSupport: right once, wrong twice
+
+CORRECT and decisive on `NPCC_chk_hitEnt` -- its local order is exactly ours,
+which is what stopped a +0.09 pp reorder that would have contradicted it.
+WRONG on `NPCC_GenSmooth`: it lists `i, u, u3` with **no `u2` and no row
+pointer**, yet `u2` must be a named local declared first to get retail's f3,
+and `F32* pre = prepute[i]` is worth +2.0 pp and is what removes the `stfsu`
+re-basing. WRONG on `NPCC_aimVary`: it lists `dst_toFake` first, where the GC
+target's colouring requires it declared **last**.
 
 ### THE CHEAPEST QUESTION IN THIS PROJECT: patch, or source?
 
