@@ -350,6 +350,24 @@ void zMainParseINIGlobals(xIniFile* ini)
     zcam_overrot_velmax = xIniGetFloat(ini, "zcam_overrot_velmax", zcam_overrot_velmax);
     zcam_overrot_tmanual = xIniGetFloat(ini, "zcam_overrot_tmanual", zcam_overrot_tmanual);
 
+    // non-matching, and the only residue in this function (41 rows of 2245; our
+    // object is exactly 14 instructions short).  Retail re-loads BOTH DEG2RAD
+    // literals (@1022 = PI, @1023 = 180.0f) for every one of these nine
+    // statements; our compiler value-numbers them once per basic block and keeps
+    // them live.  That is the known "reload after an aliasing store" defect: in
+    // retail a `stfs` to a small-data global kills a cached `.sdata2` literal
+    // load, and this branch's mwcc only has that rule in the instruction
+    // scheduler (patch clause C), not in the redundancy pass.  Reduced repro:
+    //     extern F32 a1, a2, a3;
+    //     void f() { a1 = DEG2RAD(a1); a2 = DEG2RAD(a2); a3 = DEG2RAD(a3); }
+    // The same three statements against members of a *large* global (see the
+    // DEG2RAD block above, on globals.player.g.*) are CSE'd by retail too, which
+    // is what pins the rule to small-data objects.  Measured and rejected as
+    // source shapes, all bit-identical to the plain form: `*(volatile F32*)&x =`,
+    // `extern volatile F32`, a volatile read, a `F32*` local, `*(F32*)&x`,
+    // `*&x`, a char* cast, a union member, file-scope statics, and a struct or
+    // array of the three.  Only a store through an address the compiler cannot
+    // fold defeats it, which this source does not have.
     if (use_degrees)
     {
         zcam_near_pitch = DEG2RAD(zcam_near_pitch);
@@ -955,6 +973,20 @@ void zMainFirstScreen(S32 mode)
     iCameraDestroy(cam);
 }
 
+// non-matching at 97.051% (121 differing rows of 416; our object carries three
+// extra `mr` copies).  Pure REGS: the callee-saved set is r20-r31 in both, the
+// instruction structure matches, and only the colouring differs.  Splitting the
+// declarations from the initialisations and reordering them permutes the
+// colours - the best of ~120 orders measured, `startBytes, formatFailed,
+// formatInProgress, do_chk, fullCard, workArea, status, startupError`, reaches
+// 97.888% / 53 rows with five of the nine registers exactly right - but it can
+// never close, because our allocator pins the function's two anonymous temps
+// (the hoisted `globals` base and the `result` of CARDGetResultCode) to r30 and
+// r31 in every one of the 15 declaration orders sampled, while retail puts them
+// in r28/r29 and gives r30/r31 to startBytes and workArea.  Reverted to the
+// readable form; hoisting `result` to function scope (9 positions) and binding
+// `zGlobals& g = globals;` (9 positions) were also measured - the first changes
+// nothing at all, the second costs 1.4 points.
 void zMainMemCardSpaceQuery()
 {
     S32 bytesNeeded = 0;

@@ -52,12 +52,17 @@ static F32 sGameOverTimer;
 F32 sTimeElapsed;
 iTime sTimeLast;
 iTime sTimeCurrent;
-extern RpLight* DirectionalLight;
-extern RpWorld* World;
-extern RwCamera* sGameScreenTransCam;
+// gLevelChanged, g_hiphopReloadHIP and g_hiphopForcePortal live in zGame.o's
+// .sbss in the target (offsets 0x30/0x34/0x38, straight after sTimeCurrent);
+// they were declared extern here and defined nowhere in the tree.
+U32 gLevelChanged;
+S32 g_hiphopReloadHIP;
+S32 g_hiphopForcePortal;
 extern _tagTRCPadInfo gTrcPad[4];
-extern S32 g_hiphopReloadHIP;
-extern S32 g_hiphopForcePortal;
+// Defined below, after bgv1: gGameWhereAmI is the last object in the target's
+// .sbss, so its definition sits near the bottom of the original file even
+// though the first function already writes it.
+extern eGameWhereAmI gGameWhereAmI;
 xPortalAsset dummyPortalAsset;
 _zPortal dummyPortal;
 U32 gSoak;
@@ -74,6 +79,16 @@ extern "C"
 {
     void RwGameCubeSetMinRetraceCount(RwUInt8 count);
 }
+
+// The target's .sdata opens gPendingPlayer, startPressed, black, clear,
+// soaklevels, soaktime - so all four of these are declared ahead of
+// soaklevels, and black ahead of clear. gPendingPlayer and startPressed had
+// no definition anywhere in the tree; their initialisers are the target's
+// .sdata bytes (3 == eCurrentPlayerCount, and -1).
+_CurrentPlayer gPendingPlayer = eCurrentPlayerCount;
+U32 startPressed = -1;
+iColor_tag black = { 0x00, 0x00, 0x00, 0xFF };
+iColor_tag clear = { 0x00, 0x00, 0x00, 0x00 };
 
 char* soaklevels_gameorder[] =
 {
@@ -279,7 +294,6 @@ static U32 PickNextSoak()
     switch (soakdir)
     {
         case SOAK_FOR:
-            // Phantom branch here.
             name = soaklevels[soakidx];
             soakidx++;
             if (*(volatile S32*)(&soakidx) < soakcnt)
@@ -313,6 +327,12 @@ static U32 PickNextSoak()
                 soakdir = SOAK_RAND;
             }
             break;
+        // SOAK_RAND shares the default block.  That is what produces the target's
+        // duplicated `b default` in the dispatch: CW builds the {0,1,2} search
+        // tree, finds the >=2 subtree is just `b default`, retargets the `bge`
+        // straight at default and leaves the orphaned `b` behind.  Without this
+        // label the phantom branch cannot be reproduced (99.363% -> 100%).
+        case SOAK_RAND:
         default:
             if (globals.sceneCur != NULL)
             {
@@ -347,8 +367,6 @@ static U32 PickNextSoak()
 
     return nextsoak;
 }
-
-eGameWhereAmI gGameWhereAmI;
 
 // Scheduling, I guess
 void zGameInit(U32 theSceneID)
@@ -466,6 +484,13 @@ U8 sHackSmoothedUpdate;
 static S32 zGameLoopContinue();
 static void zGameUpdateMode();
 
+// 92.994%.  Two independent blockers, neither source-reachable: (1) the
+// reload-after-aliasing-store defect at four sites - sTimeCurrent/sTimeLast,
+// t0/t1/gloop_time, w0/w1/gwait_time - where the target reloads each 64-bit
+// static straight after storing it and we forward the register; (2) a whole-
+// function callee-saved GPR permutation (target r19-r21 hold globals+0x44,
+// +0x14, +0x6e0 and r31 holds ostrich_delay; ours has those three highest and
+// ostrich_delay at r28).  Same instruction multiset throughout.
 void zGameLoop()
 {
     S32 ostrich_delay = 10;
@@ -812,6 +837,11 @@ void zGameStall()
     }
 }
 
+// 95.165%, pure scheduling: the target writes the quad's fields in strictly
+// ascending offset order, our compiler fills the load-use gap after each
+// `lfs` of a pool literal with the next vertex's `.x` store.  Same instruction
+// multiset.  Writing the u/v pairs as a chained assignment was measured and is
+// worse (95.154%) - it reverses the u/v store order.
 static void zGame_HackDrawCard(F32 x, F32 y, F32 w, F32 h, RwRaster* rast)
 {
     RwIm2DVertex quad[4];
@@ -961,9 +991,6 @@ static void zGame_HackPostPortalAutoSaveDraw()
     }
 }
 
-iColor_tag clear = { 0x00, 0x00, 0x00, 0x00 };
-iColor_tag black = { 0x00, 0x00, 0x00, 0xFF };
-
 static void zGameUpdateMode()
 {
     xPortalAsset* passet;
@@ -1030,16 +1057,21 @@ static void zGameUpdateMode()
 
         passet = globals.sceneCur->pendingPortal->passet;
 
+        // c/d used to be crossed over in the two expressions below, which made
+        // nextSceneID come out as [+3][+1][+2][+0] - neither the sceneID nor its
+        // byteswap.  The target's `or r31, r5, r3` / `or r3, r7, r0` pin it:
+        // nextSceneID is the plain big-endian sceneID ([+0][+1][+2][+3]) and the
+        // value compared against globals.sceneCur->sceneID is the full byteswap.
         U32 d = *(char *)((int)&passet->sceneID + 3);
         U32 c = *(char *)((int)&passet->sceneID + 0);
         U32 b = *(char *)((int)&passet->sceneID + 2);
         U32 a = *(char *)((int)&passet->sceneID + 1);
 
-        U32 x = (((b << 8) & 0xff00) | (((d << 24) & 0xff000000) | ((a << 16) & 0x00ffffff)) & 0xffff00ff);
-        U32 y = (((a << 8) & 0xff00) | (((c << 24) & 0xff000000) | ((b << 16) & 0x00ffffff)) & 0xffff00ff);
+        U32 x = (((b << 8) & 0xff00) | (((c << 24) & 0xff000000) | ((a << 16) & 0x00ffffff)) & 0xffff00ff);
+        U32 y = (((a << 8) & 0xff00) | (((d << 24) & 0xff000000) | ((b << 16) & 0x00ffffff)) & 0xffff00ff);
 
-        nextSceneID = x | c;
-        x = d | y;
+        nextSceneID = d | x;
+        x = c | y;
 
         if ((g_hiphopReloadHIP != 0) || ((g_hiphopForcePortal != 0) || (x != globals.sceneCur->sceneID)))
         {
@@ -1153,8 +1185,11 @@ static void zGameUpdateMode()
     {
         if (sGameOverTimer == 0.0f)
         {
-            xScrFxFade(&clear, &black, 4.5f, NULL, 1);
+            // The store comes first: retail's .sdata2 interns the 5.0f (@1393)
+            // before the 4.5f (@1394), and the target stores sGameOverTimer
+            // ahead of the call rather than after it.
             sGameOverTimer = 5.0f;
+            xScrFxFade(&clear, &black, 4.5f, NULL, 1);
         }
         else
         {
@@ -1177,25 +1212,45 @@ void zGameTakeSnapShot(RwCamera*)
 {
 }
 
-// Float memes
+// The arms used to be the other way round, which fed 0.5s to the particle
+// tank on every normal frame and the real dt only when the frame took longer
+// than half a second.  The target settles it: after `fcmpo f0(sTimeElapsed),
+// f1(0.5f) / ble`, the fall-through arm calls zParPTankUpdate with f1 still
+// holding the 0.5f literal and only the `ble` arm does `fmr f1, f0`.  It is a
+// clamp.  Swapping them costs fuzzy points (76.4% -> 73.5%) purely because the
+// wrong order happened to line the FPRs up with the reload the target does and
+// our compiler forwards; the whole compare/branch/call tail is now exact and
+// the residue is the known reload-after-aliasing-store defect.
 void zGameUpdateTransitionBubbles()
 {
     gGameWhereAmI = eGameWhere_TransitionBubbles;
     sTimeCurrent = iTimeGet();
-	F32 diff = iTimeDiffSec(sTimeLast, sTimeCurrent);
-    sTimeElapsed = diff;
+    sTimeElapsed = iTimeDiffSec(sTimeLast, sTimeCurrent);
     sTimeLast = sTimeCurrent;
-	if (sTimeElapsed > 0.5f)
-	{
-		zParPTankUpdate(sTimeElapsed);
-	}
-	else
-	{
-		zParPTankUpdate(0.5f);
-	}
+    if (sTimeElapsed > 0.5f)
+    {
+        zParPTankUpdate(0.5f);
+    }
+    else
+    {
+        zParPTankUpdate(sTimeElapsed);
+    }
     zParPTankRender();
 }
 
+// Target .sbss order is sGameScreenTransCam, World, DirectionalLight, and it
+// places all three after zGameLoop's function-scope statics, so this is where
+// the original declared them. They too were extern-with-no-definition here.
+RwCamera* sGameScreenTransCam;
+RpWorld* World;
+RpLight* DirectionalLight;
+
+// 88.333%, and every one of the seven differing rows is the known
+// reload-after-aliasing-store defect: the target stores sGameScreenTransCam /
+// DirectionalLight / World and then loads each straight back before testing or
+// passing it, where our compiler forwards the stored register.  `volatile` on
+// the three reaches 98.167% here but knocks zGameScreenTransitionEnd off 100%
+// (the target loads each of them exactly once there), so it is not the source.
 void zGameScreenTransitionBegin()
 {
     gGameWhereAmI = eGameWhere_TransitionBegin;
@@ -1241,7 +1296,13 @@ U8 bgb = 0x60;
 U8 bga = 0x80;
 F32 bgu1;
 F32 bgv1;
+eGameWhereAmI gGameWhereAmI;
 
+// 93.654%.  Everything outside the background-quad fill matches; inside it the
+// target stores vx[0..3] in strictly ascending offset order and never fills a
+// load-use gap, while our compiler interleaves the next vertex's stores between
+// each `lbz`/`stb` and `lfs`/`stfs` pair.  Same instruction multiset - SCHED,
+// same family as zGame_HackDrawCard.
 void zGameScreenTransitionUpdate(F32 percentComplete, char* msg, U8* rgba)
 {
     RwTexture* tex;
