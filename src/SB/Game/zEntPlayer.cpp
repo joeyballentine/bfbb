@@ -14131,6 +14131,11 @@ S32 zEntPlayerEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam, x
         zEntPlayer_SNDPlayStreamRandom(ePlayerStreamSnd_SeeRobotPlankton,
                                        ePlayerStreamSnd_SeeRobotPlankton, 0.5f);
         break;
+    case eEventPlayerDeath:
+    case eEventGiveChance:
+    case eEventSituationPlayerSuccess:
+    case eEventSituationPlayerFailure:
+        break;
     }
 
     return 1;
