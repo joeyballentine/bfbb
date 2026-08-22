@@ -554,9 +554,10 @@ static S32 zCameraRewardUpdate(xCamera* cam, F32 dt)
     {
         xCameraMove(cam, v, rewardMoveSpeed * dt);
         xCameraFOV(cam, rewardZoomAmount, rewardZoomSpeed, dt);
-        xCameraLookYPR(cam, 0x0, globals.camera.yaw_cur, rewardTiltAmount, globals.camera.roll_cur,
-                       rewardTiltTime, 0.1f, 0.1f);
     }
+
+    xCameraLookYPR(cam, 0x0, globals.camera.yaw_cur, rewardTiltAmount, globals.camera.roll_cur,
+                   rewardTiltTime, 0.1f, 0.1f);
 
     return 1;
 }
@@ -709,7 +710,7 @@ void zCameraUpdate(xCamera* cam, F32 dt)
 
     zCameraTweakGlobal_Update(dt);
 
-    xVec3 tran_accum = cam->tran_accum;
+    const xVec3 tran_accum = cam->tran_accum;
     cam->tran_accum.x = 0.0f;
     cam->tran_accum.y = 0.0f;
     cam->tran_accum.z = 0.0f;
@@ -903,7 +904,8 @@ void zCameraUpdate(xCamera* cam, F32 dt)
 
         if (x > 32)
         {
-            F32 dp = 0.016666668f * ((F32)(MAX(32, MIN(x, 110)) - 32) * zcam_pad_pyaw_scale);
+            F32 dp = (F32)(MAX(32, MIN(x, 110)) - 32);
+            dp = 0.016666668f * (dp * zcam_pad_pyaw_scale);
 
             if (lassocam_enabled && stop_track == 0)
             {
@@ -927,7 +929,8 @@ void zCameraUpdate(xCamera* cam, F32 dt)
         }
         else if (x < -32)
         {
-            F32 dp = 0.016666668f * ((F32)(MAX(-110, MIN(x, -32)) + 32) * zcam_pad_pyaw_scale);
+            F32 dp = (F32)(MAX(-110, MIN(x, -32)) + 32);
+            dp = 0.016666668f * (dp * zcam_pad_pyaw_scale);
 
             if (lassocam_enabled && stop_track == 0)
             {
@@ -959,7 +962,8 @@ void zCameraUpdate(xCamera* cam, F32 dt)
 
         if (y > 32)
         {
-            pitch_s = 0.016666668f * ((F32)(MAX(32, MIN(y, 110)) - 32) * zcam_pad_pitch_scale);
+            F32 dp = (F32)(MAX(32, MIN(y, 110)) - 32);
+            pitch_s = 0.016666668f * (dp * zcam_pad_pitch_scale);
 
             if (pitch_s > 1.0f)
             {
@@ -970,7 +974,8 @@ void zCameraUpdate(xCamera* cam, F32 dt)
         }
         else if (y < -32)
         {
-            pitch_s = 0.016666668f * ((F32)(MAX(-110, MIN(y, -32)) + 32) * zcam_pad_pitch_scale);
+            F32 dp = (F32)(MAX(-110, MIN(y, -32)) + 32);
+            pitch_s = 0.016666668f * (dp * zcam_pad_pitch_scale);
 
             if (pitch_s < -1.0f)
             {
