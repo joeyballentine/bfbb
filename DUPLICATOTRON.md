@@ -1530,6 +1530,59 @@ before `gPlayerPad`; we define it in `xEntMotion.cpp`.
 The `.bss` of the playtest DOL is 42 KB larger than retail's and `.text` is
 6.7 KB smaller; entry point and boot section addresses are identical.
 
+## First boot of the playtest build (2026-08-24)
+
+It runs. The apploader loads our DOL (the `DVDRead` sizes in Dolphin's log match
+our section table, not retail's), the Dolphin SDK initialises, and the game
+reaches `main`.
+
+**How to debug it.** Dolphin's GDB stub is the tool: launch with
+`-C Dolphin.General.GDBPort=2159` and talk the remote protocol from a script.
+Two things to know. The stop reply carries the registers you usually want --
+`T05` **immediately followed by** `40:<pc>;01:<r1>;` with no separator before
+`40:`, which is easy to mis-parse. And the stub queues an extra packet after an
+interrupt, so a naive client reads every answer one query late; drain before
+each query. With that, `p<n>` (67 = LR), `m<addr>,<len>` and `Z0` all work, and
+the back chain at r1 unwinds into a full symbolised call stack against
+`build/GQPE78/main.elf`. Breakpoints did not fire under JIT64.
+
+**Bug 1, fixed (86856842).** `iFile::async_cb` treated every completed DVD read
+as a failure, so no multi-chunk async load could finish. The boot stalled after
+the first 32-byte read of `font.HIP`. With it fixed the DVD trace matches the
+retail disc read-for-read -- same offsets, same DMA buffers, same lengths --
+through all 222,400 bytes.
+
+**Bug 2, open.** The boot now stalls one step later, before retail reads
+`sb.ini`. PC sampling puts 28 of 31 samples inside MSL's `__timesdec`, and the
+call stack is:
+
+    main -> zMainShowProgressBar -> zMainMemCardRenderText -> RenderText
+      -> xtextbox::temp_layout -> layout::refresh -> layout::calc
+      -> parse_next_jot -> parse_next_tag_jot -> parse_tag_height
+      -> xatof -> atof -> __strtold -> __dec2num -> __num2dec_internal
+      -> __two_exp -> __timesdec
+
+`__timesdec` is retail MSL here, so the corruption is in what we hand it.
+`parse_tag_height` does `xatof(ti.value.text)` on a substr that is *not*
+null-terminated, which is safe only while the surrounding text is well formed.
+The string in memory at the hang is well formed --
+`{font=0}{h*2}{w*2}{color=FFFFFFFF}Loading...{~:c}` -- and `parse_tag_height`,
+`parse_split_tag`'s `find_char` overloads and `xtextbox::set_text` are all at
+100%, so the bad pointer comes from somewhere else in the layout walk. Prime
+suspects, all non-matching and all on this path: `xString` at 93.841%
+(`xStricmp` **56.10%**, `atox` 90.45%, `find_char(substr,substr)` 97.36%) and
+`xtextbox::find_entry` at 86.89%.
+
+Note `set_text(const char*)` passes `0x40000000` as the size deliberately, so
+the walk is bounded only by the NUL terminator -- a pointer that escapes the
+buffer runs a long way.
+
+**Dolphin setup.** The `GQPE78.ini` game patch "EFB Copy Fix" pokes a byte at
+`0x803CD04C` every frame. That address is in retail's `data7`; our data sections
+moved, so it lands in our `.bss`. It must be disabled for playtesting -- but
+Dolphin keys game INIs by game ID, so disabling it also disables it for a retail
+copy, where it is a legitimate fix at above-1x internal resolution.
+
 ## Tooling
 
 The tools that earned their keep now live in `tools/` and are documented in
