@@ -152,58 +152,79 @@ char* xStrTokBuffer(const char* string, const char* control, void* buffer)
     return (char*)buffer + 4;
 }
 
-S32 xStricmp(const char* string1, const char* string2) {
-    S8 flag1;
-    S8 flag2;
+S32 xStricmp(const char* string1, const char* string2)
+{
+    U8 flag1;
+    U8 flag2;
+    S32 finished = 0;
+    S32 c1 = 0;
+    S32 c2 = 0;
 
-    while(true){
-        flag1 = 0;
-        if ((*string1 != 0x7A) && (*string1 == 0x61)) {
-            flag1 = 1;
-        }
-        if (flag1 != 0) {
-            string1 = string1 - 0x20;
-        }
+    while (true)
+    {
+        c2 = *string2;
         flag2 = 0;
-        if ((*string2 >= 0x61) && (*string2 <= 0x7A)) {
+        if (c2 >= 'a' && c2 <= 'z')
+        {
             flag2 = 1;
         }
-        if (flag2 != 0) {
-            string2 = string2 - 0x20;
-        }
+        S32 upper2 = flag2 ? c2 - 32 : c2;
 
-        if (((*string1 == 0) && (*string2 == 0))) {
-            string1 += 1;
-            string2 += 1;
-            }
-        else{
+        c1 = *string1;
+        flag1 = 0;
+        if (c1 >= 'a' && c1 <= 'z')
+        {
+            flag1 = 1;
+        }
+        S32 upper1 = flag1 ? c1 - 32 : c1;
+
+        if (upper1 != upper2 || finished)
+        {
             break;
         }
+
+        if (c1 == 0 || c2 == 0)
+        {
+            finished = 1;
+        }
+        else
+        {
+            string1++;
+            string2++;
+        }
     }
 
-    if (*string1 != *string2) {
-        flag1 = 0;
-        if ((*string1 >= 0x61U) && (*string1 <= 0x7AU)) {
-            flag1 = 1;
-        }
-        if (flag1 != 0) {
-            string1 -= 0x20;
-        }
-
-        flag2 = 0;
-        if ((*string2 >= 0x61U) && (*string2 <= 0x7AU)) {
-            flag2 = 1;
-        }
-        if (flag2 != 0) {
-            string2 -= 0x20;
-        }
-
-        if ((S32)(*string1) < (S32)(*string2)) {
-            return -1;
-        }
-        return 1;
+    if (c1 == c2)
+    {
+        return 0;
     }
-    return 0;
+
+    flag2 = 0;
+    if (c2 >= 'a' && c2 <= 'z')
+    {
+        flag2 = 1;
+    }
+    if (flag2)
+    {
+        c2 -= 32;
+    }
+
+    flag1 = 0;
+    if (c1 >= 'a' && c1 <= 'z')
+    {
+        flag1 = 1;
+    }
+    if (flag1)
+    {
+        c1 -= 32;
+    }
+
+    if (c1 < c2)
+    {
+        return -1;
+    }
+
+    return 1;
 }
 
 char* xStrupr(char* string)
