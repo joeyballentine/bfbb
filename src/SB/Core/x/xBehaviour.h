@@ -284,9 +284,6 @@ struct xGoal : xListItem<xGoal>, xFactoryInst
     {
         return 1;
     }
-
-protected:
-    ~xGoal(); // prevents implicit destructors from being generated in subclasses of xGoal
 };
 
 /* TODO: get these to weakly link into other files without causing redefinitions in xBehaviour
