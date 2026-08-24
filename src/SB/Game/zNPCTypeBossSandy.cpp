@@ -138,7 +138,7 @@ static void GetBonePos(xVec3* result, xMat4x3* matArray, S32 index, xVec3* offse
 static void MakeOBBFor(S32 startBone, S32 endBone, xEnt* ent, xMat4x3* matArray);
 static S32 BoundEventCB(xBase*, xBase* to, U32 toEvent, const F32*, xBase*);
 
-void on_change_newsfish(const tweak_info& tweak)
+static void on_change_newsfish(const tweak_info& tweak)
 {
     sSandyPtr->newsfish->SpeakStart(sCurrNFSound, 0, -1);
 }

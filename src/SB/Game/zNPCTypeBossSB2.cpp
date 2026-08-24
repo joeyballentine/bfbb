@@ -4178,7 +4178,7 @@ S32 zNPCGoalBossSB2Death::Process(en_trantype*, F32, void*, xScene*)
 namespace auto_tweak
 {
     template <>
-    void load_param<S32, S32>(S32& value, S32 scale, S32 lo, S32 hi, xModelAssetParam* ap,
+    inline void load_param<S32, S32>(S32& value, S32 scale, S32 lo, S32 hi, xModelAssetParam* ap,
                               U32 apsize, const char* name)
     {
         S32 v = zParamGetInt(ap, apsize, name, value);
@@ -4198,14 +4198,14 @@ namespace auto_tweak
     }
 
     template <>
-    void load_param<bool, S32>(bool& value, S32, S32, S32, xModelAssetParam* ap, U32 apsize,
+    inline void load_param<bool, S32>(bool& value, S32, S32, S32, xModelAssetParam* ap, U32 apsize,
                                const char* name)
     {
         value = zParamGetInt(ap, apsize, name, value) != 0;
     }
 
     template <>
-    void load_param<xVec3, S32>(xVec3& value, S32, S32, S32, xModelAssetParam* ap, U32 apsize,
+    inline void load_param<xVec3, S32>(xVec3& value, S32, S32, S32, xModelAssetParam* ap, U32 apsize,
                                 const char* name)
     {
         xVec3 def = value;
@@ -4213,7 +4213,7 @@ namespace auto_tweak
     }
 
     template <>
-    void load_param<F32, F32>(F32& value, F32 scale, F32 lo, F32 hi, xModelAssetParam* ap,
+    inline void load_param<F32, F32>(F32& value, F32 scale, F32 lo, F32 hi, xModelAssetParam* ap,
                               U32 apsize, const char* name)
     {
         value = zParamGetFloat(ap, apsize, name, value);

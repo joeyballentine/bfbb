@@ -479,7 +479,7 @@ void zNPCBPatrick::Init(xEntAsset* asset)
     }
 }
 
-void on_change_newsfish(const tweak_info&)
+static void on_change_newsfish(const tweak_info&)
 {
     sPat_Ptr->newsfish->SpeakStart(sNFComment[sCurrNFSound].soundID, 0, -1);
 }

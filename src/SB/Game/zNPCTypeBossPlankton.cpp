@@ -44,7 +44,8 @@ namespace std
 #define SOUND_BOLT_HIT 4
 #define SOUND_CHARGE 5
 
-template <> F32 range_limit<F32>(F32 v, F32 minv, F32 maxv)
+template <>
+inline F32 range_limit<F32>(F32 v, F32 minv, F32 maxv)
 {
     if (v <= minv)
     {
@@ -62,7 +63,7 @@ template <> F32 range_limit<F32>(F32 v, F32 minv, F32 maxv)
 namespace auto_tweak
 {
     template <>
-    void load_param<S32, S32>(S32& value, S32 scale, S32 lo, S32 hi, xModelAssetParam* ap,
+    inline void load_param<S32, S32>(S32& value, S32 scale, S32 lo, S32 hi, xModelAssetParam* ap,
                               U32 apsize, const char* name)
     {
         S32 v = zParamGetInt(ap, apsize, name, value);
@@ -79,7 +80,7 @@ namespace auto_tweak
     }
 
     template <>
-    void load_param<xVec3, S32>(xVec3& value, S32, S32, S32, xModelAssetParam* ap, U32 apsize,
+    inline void load_param<xVec3, S32>(xVec3& value, S32, S32, S32, xModelAssetParam* ap, U32 apsize,
                                 const char* name)
     {
         xVec3 def = value;
@@ -87,7 +88,7 @@ namespace auto_tweak
     }
 
     template <>
-    void load_param<F32, F32>(F32& value, F32 scale, F32 lo, F32 hi, xModelAssetParam* ap,
+    inline void load_param<F32, F32>(F32& value, F32 scale, F32 lo, F32 hi, xModelAssetParam* ap,
                               U32 apsize, const char* name)
     {
         value = zParamGetFloat(ap, apsize, name, value);

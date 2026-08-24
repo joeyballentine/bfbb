@@ -1830,7 +1830,8 @@ xVec3& xVec3::safe_normalize(const xVec3& val)
     }
 }
 
-template <> F32 range_limit<F32>(F32 v, F32 minv, F32 maxv)
+template <>
+inline F32 range_limit<F32>(F32 v, F32 minv, F32 maxv)
 {
     if (v <= minv)
     {
