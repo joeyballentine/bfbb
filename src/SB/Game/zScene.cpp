@@ -131,6 +131,7 @@ static S32 sMemDepthJustHIPStart = -1;
 _zEnv* gCurEnv;
 U32 gTransitionSceneID;
 F32 gSceneUpdateTime;
+_tagClimate gClimate;
 static xVec3 sOldPosPlayer;
 static xVec3 sOldPosCamera;
 static U32 sSuddenMove;
