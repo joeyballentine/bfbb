@@ -139,13 +139,8 @@ struct zNPCRobot : zNPCCommon
     // vTable (zNPCCommon)
 
     S32 NPCMessage(NPCMsg* mail);
-    void RenderExtra();
-    void RenderExtraPostParticles();
     void ParseINI();
-    void ParseLinks();
-    void ParseProps();
     void SelfSetup();
-    void SelfDestroy();
     S32 IsHealthy();
     S32 IsAlive();
     S32 Respawn(xVec3* pos, zMovePoint* mvptFirst, zMovePoint* mvptSpawnRef);
@@ -181,7 +176,6 @@ struct zNPCFodder : zNPCRobot
     void Init(xEntAsset* asset);
     zNPCLassoInfo* PRIV_GetLassoData();
     void LassoModelIndex(S32* idxgrab, S32* idxhold);
-    void Reset();
 };
 
 struct zNPCFodBomb : zNPCRobot
@@ -195,7 +189,6 @@ struct zNPCFodBomb : zNPCRobot
     }
 
     zNPCLassoInfo* PRIV_GetLassoData();
-    void Reset();
     void Init(xEntAsset*);
     void ParseINI();
     void Setup();
@@ -254,7 +247,6 @@ struct zNPCChomper : zNPCRobot
     }
 
     zNPCLassoInfo* PRIV_GetLassoData();
-    void Reset();
     void ParseINI();
     void Init(xEntAsset*);
     void BreathTrail();
@@ -272,7 +264,6 @@ struct zNPCCritter : zNPCRobot
     }
 
     zNPCLassoInfo* PRIV_GetLassoData();
-    void Reset();
     void Init(xEntAsset*);
     void SelfSetup();
     void LassoModelIndex(S32* idxgrab, S32* idxhold);
@@ -285,7 +276,6 @@ struct zNPCHammer : zNPCRobot
     }
 
     void Init(xEntAsset*);
-    void Reset();
     void ParseINI();
     void LassoModelIndex(S32* idxgrab, S32* idxhold);
     U32 AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal);
@@ -298,7 +288,6 @@ struct zNPCTarTar : zNPCRobot
     {
     }
 
-    void Reset();
     void Init(xEntAsset*);
     void ParseINI();
     void LassoModelIndex(S32* idxgrab, S32* idxhold);
