@@ -1042,10 +1042,20 @@ def generate_build_ninja(
                 link_built_obj = True
                 built_obj_path = asm_build(obj, obj.asm_path, obj.asm_obj_path)
 
-            # TEMP (playtest build): link all game code from source, SDK from retail
-            # originals. Revert to: link_built_obj = obj.completed (line above).
+            # TEMP (playtest build): add every game translation unit to whatever
+            # the normal build already links. Revert to: link_built_obj =
+            # obj.completed (line above).
+            #
+            # Keep `obj.completed` in the test. Dropping it and taking the
+            # libraries from the retail objects instead looks equivalent -- a
+            # Matching object is byte-identical -- but it is not, because the
+            # extracted objects have lost some relocations. The retail
+            # __start.o sets r1 from a baked immediate where our source has
+            # `lis r1, _stack_addr@h`, so linking the extracted one boots the
+            # game on retail's stack address, which in this layout sits inside
+            # our .sdata2 and quietly overwrites MSL's constant tables.
             if config.non_matching:
-                link_built_obj = obj_name.startswith(("SB/Core", "SB/Game"))
+                link_built_obj = obj.completed or obj_name.startswith(("SB/Core", "SB/Game"))
 
             if link_built_obj and built_obj_path is not None:
                 # Use the source-built object
