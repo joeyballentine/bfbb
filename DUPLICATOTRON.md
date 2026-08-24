@@ -1480,6 +1480,56 @@ Recommended order: **Phase 1 first** (best leverage, lowest risk, visible as
 whole units), with **2a's DWARF investigation alongside** — it is research
 rather than edits, and it gates Phase 3.
 
+## The playtest build (2026-08-24)
+
+`python configure.py --non-matching && ninja` links **all 224 `src/SB` units
+from our source** and every library unit (MSL, Dolphin, Runtime, rwsdk, bink)
+from the retail objects, producing a runnable `build/GQPE78/main.dol`. The
+object selection lives in `tools/project.py`, guarded on `config.non_matching`,
+so the matching build and its sha1 are untouched. Plain `python configure.py`
+switches back.
+
+Without that guard `--non-matching` links only the 108 units marked `Matching`
+or `Equivalent` and takes the other 116 from retail, so most of what runs is
+not our code.
+
+Getting it to link surfaced **22 defects that no amount of matching work would
+have found**, because a symbol that is declared, called, and defined nowhere is
+invisible until the whole game links at once. Four classes, all fixed:
+
+| class | examples |
+|---|---|
+| declared-but-never-defined | `xVec3::normal`, `xNPCBasic::DBG_IsNormLog`, `xListItem<T>::Remove`, `gClimate`, `gPlayerPad`, `mRumbleList`, `dutchman_reticle_center` |
+| overrides retail never had | eleven in `zNPCTypeRobot.h`; the vtable slots belong to `zNPCCommon` |
+| undefined protected destructors | `~zNPCCommon`, `~zNPCGoalCommon`, `~xGoal` — all three "prevents implicit destructors" hacks |
+| wrong call target | `xHudMeter` C++-mangled `printf`; `xpkrsvc` `char*` vs `const char*` |
+
+Plus one symbol collision that only exists in this configuration:
+`math_api.h` handed every TU an inline `__fpclassifyf` while `math_ppc.c` owns
+the real one, so `xBound.o`/`xCollide.o` emitted competing weak copies.
+
+**None of it regressed the matching build** — DOL sha1 held, zero units lost a
+function, and Game Code went 79.2789 → 79.2852% exact (7193 → 7195 functions),
+because several of these were genuine fidelity fixes rather than plumbing.
+
+Two data-size mismatches were found by comparing symbol sizes against the
+retail objects, one fixed and one still open:
+
+- `sDummyEmptyJSP` was `xJSPHeader` (24 b) where retail reserves 32 — it is a
+  `xJSPHeaderGC`, and `JSP_Read` already reported its size to callers as 32.
+  **Fixed.**
+- **OPEN:** `colls_grid` is 52 bytes for us and **156** in retail, so `xGrid`
+  is missing 104 bytes of trailing members. Nothing reads past 0x30 today
+  (`xGrid.o` is 14/14 at 100%, and every reference just passes `&colls_grid`),
+  so it is latent rather than live, and the missing members are not guessable
+  from the code we have. `xGridBound` is correct at 20 bytes.
+
+Also noted, not fixed: the target defines `gDebugPad` in `xPad.o` immediately
+before `gPlayerPad`; we define it in `xEntMotion.cpp`.
+
+The `.bss` of the playtest DOL is 42 KB larger than retail's and `.text` is
+6.7 KB smaller; entry point and boot section addresses are identical.
+
 ## Tooling
 
 The tools that earned their keep now live in `tools/` and are documented in
