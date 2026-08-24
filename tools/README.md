@@ -90,3 +90,24 @@ how `MSL_C`'s `-opt level=4 -inline on` and rwsdk's `-fp_contract on` were
 found. The reconstructed command matches ninja's exactly for `.c` units but not
 always for C++ ones, so treat a hit as a hypothesis and confirm it with a full
 build before changing `configure.py`.
+
+### `playtest_iso.py` — run the decomp on real hardware or an emulator
+
+```
+playtest_iso.py <retail.iso> <output.iso> [--dol build/GQPE78/main.dol]
+```
+
+Turns a playtest build into a bootable disc. Build it first with
+
+```
+python configure.py --non-matching && ninja
+```
+
+which links every `src/SB` unit from our source and takes the libraries from the
+retail objects. Our DOL is smaller than retail's, so this writes it over the
+original in place and zeroes the slack up to the FST; the filesystem is not
+rebuilt and every other byte of the image is untouched. The 1.4 GB copy happens
+once, so re-run after each build to refresh just the DOL.
+
+It refuses to patch anything but a verified GQPE78 image whose embedded DOL
+hashes to `306526d9…`, since assets and code have to come from the same build.
