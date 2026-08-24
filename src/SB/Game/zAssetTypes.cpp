@@ -28,7 +28,10 @@ static void TextureRW3_Unload(void*, U32);
 static void LightKit_Unload(void*, U32);
 static void MovePoint_Unload(void*, U32);
 
-static xJSPHeader sDummyEmptyJSP;
+// The GameCube build's dummy is a xJSPHeaderGC: the retail object reserves 32
+// bytes for it and JSP_Read below reports its size as 32. Declaring it as the
+// 24-byte base left stripVecCount/stripVecList off the end of the object.
+static xJSPHeaderGC sDummyEmptyJSP;
 static xJSPHeader* sTempJSP;
 
 static u32 s_sbFootSoundA;
