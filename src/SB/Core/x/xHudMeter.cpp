@@ -4,7 +4,7 @@
 
 #include "xString.h"
 #include "xMathInlines.h"
-#include "PowerPC_EABI_Support\MSL_C\MSL_Common\printf.h"
+#include <stdio.h>
 
 #include <math.h>
 
