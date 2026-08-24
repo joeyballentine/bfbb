@@ -178,9 +178,14 @@ static void async_cb(s32 result, DVDFileInfo* fileInfo)
         xTRCDisk(TRC_DiskFatal);
         return;
     }
-    case DVD_RESULT_GOOD:
-    case DVD_RESULT_IGNORED:
+    case DVD_RESULT_CANCELED:
     {
+        break;
+    }
+    default:
+    {
+        // result is the byte count on success, so every non-negative value
+        // lands here -- not just DVD_RESULT_GOOD.
         if (result >= DVD_RESULT_GOOD)
         {
             r7 = result;
