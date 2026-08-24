@@ -562,10 +562,6 @@ struct zNPCCommon : xNPCBasic //Size of zNPCCommon: 0x2A0
         return NULL;
     }
     virtual S32 LassoSetup();
-
-protected:
-    // This prevents implicit destructors from being generated in subclasses of zNPCCommon
-    ~zNPCCommon();
 };
 
 xFactoryInst* ZNPC_Create_Common(S32 who, RyzMemGrow* grow, void*);
