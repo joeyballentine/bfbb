@@ -1042,6 +1042,11 @@ def generate_build_ninja(
                 link_built_obj = True
                 built_obj_path = asm_build(obj, obj.asm_path, obj.asm_obj_path)
 
+            # TEMP (playtest build): link all game code from source, SDK from retail
+            # originals. Revert to: link_built_obj = obj.completed (line above).
+            if config.non_matching:
+                link_built_obj = obj_name.startswith(("SB/Core", "SB/Game"))
+
             if link_built_obj and built_obj_path is not None:
                 # Use the source-built object
                 link_step.add(built_obj_path)
