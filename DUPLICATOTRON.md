@@ -1552,9 +1552,10 @@ the first 32-byte read of `font.HIP`. With it fixed the DVD trace matches the
 retail disc read-for-read -- same offsets, same DMA buffers, same lengths --
 through all 222,400 bytes.
 
-**Bug 2, open.** The boot now stalls one step later, before retail reads
-`sb.ini`. PC sampling puts 28 of 31 samples inside MSL's `__timesdec`, and the
-call stack is:
+**Bug 2, open -- and narrowed hard.** The boot stalls one step later, before
+retail reads `sb.ini`. It is a *true* infinite loop: five minutes, log frozen,
+CPU climbing. PC sampling puts 28 of 31 samples inside MSL's `__timesdec`, and
+the call stack (every symbol range checked, no mis-attribution) is:
 
     main -> zMainShowProgressBar -> zMainMemCardRenderText -> RenderText
       -> xtextbox::temp_layout -> layout::refresh -> layout::calc
@@ -1576,6 +1577,44 @@ suspects, all non-matching and all on this path: `xString` at 93.841%
 Note `set_text(const char*)` passes `0x40000000` as the size deliberately, so
 the walk is bounded only by the NUL terminator -- a pointer that escapes the
 buffer runs a long way.
+
+**What the live state says, and what it rules out.** Read over the GDB stub at
+the hang:
+
+- `atof` receives **the correct string**. The stack holds `0x803d89f7` ->
+  `"2}{w*2}{color=FFFFFFFF}Loading...{~:c}"`, i.e. exactly the `2` of `{h*2}`.
+  The textbox itself is intact: `tb$247.text.text` -> the full well-formed
+  `{font=0}{h*2}{w*2}{color=FFFFFFFF}Loading...{~:c}`, size `0x40000000`.
+- The nested `__two_exp` frames hold negative exponents that **double** with
+  depth -- `-33, -66, -133, -267, -535` -- and each frame ends in `7ff00000`,
+  the high word of `+inf`. So MSL is evaluating `10^huge` and overflowing.
+  `f0` sits at `3.28e-307` with the same mantissa as `f1` (`0.92`), i.e. a
+  value being scaled toward denormal. For the input `"2"` the exponent should
+  be `0`.
+- MSL is **retail code** in this build, so it is not the thing that is wrong.
+
+Eliminated, each by measurement rather than reasoning:
+
+| hypothesis | verdict |
+|---|---|
+| bad string / bad `substr` pointer | ruled out -- pointer and text read back correct |
+| stack overflow into `.sdata2` | ruled out -- retail's SP sits in the same region (`0x803d8658`) |
+| small-data 16-bit reach overflow | ruled out -- `.sdata2` is 15,884 b, `.sdata` 2,136 b |
+| FPU state (rounding / non-IEEE) | ruled out -- retail's FPSCR is also `0x14`, MSR also `0xa932` |
+| `xStricmp` / `imemcmp` / `icompare` | `xStricmp` was badly broken and is fixed (d27efcae); `imemcmp` differs only in register allocation |
+| `find_char`, `set_text`, `parse_tag_height`, `parse_split_tag`, `calc` | all 100% matching |
+| under-sized `xGrid` corrupting neighbours | not this hang -- `zGridInit` runs during scene load, much later |
+
+So the remaining suspects are the non-matching functions still on this path:
+`get_bounds` (**49.42%**, the worst in `xFont`, called per character via
+`xfont::bounds`), `parse_next_text_jot` (94.20%), `find_entry` (86.89%),
+`yextent` (98.35%). A garbage width from `get_bounds` would make `calc`'s
+`line.bounds.w >= tb.bounds.w` test fire on every character; that is the
+next thing to look at.
+
+**Breakpoints do not work** in this Dolphin's GDB stub under JIT64 *or* the
+cached interpreter -- `Z0` returns OK and never fires, even on `main`. Use PC
+sampling and stack reads instead.
 
 **Dolphin setup.** The `GQPE78.ini` game patch "EFB Copy Fix" pokes a byte at
 `0x803CD04C` every frame. That address is in retail's `data7`; our data sections
