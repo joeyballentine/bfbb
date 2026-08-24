@@ -88,7 +88,10 @@ struct xNPCBasic : xEnt, xFactoryInst
     void DBG_PStatCont(en_npcperf stat)
     {
     }
-    S32 DBG_IsNormLog(en_npcdcat input, S32 input2);
+    S32 DBG_IsNormLog(en_npcdcat input, S32 input2)
+    {
+        return 0;
+    }
     void DBG_HaltOnMe(U32, char*);
 
     // DO NOT CHANGE THE ORDER OF THESE, the order determines the

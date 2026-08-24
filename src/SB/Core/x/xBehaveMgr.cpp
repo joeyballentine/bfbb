@@ -1103,3 +1103,19 @@ template <class T> T* xListItem<T>::Head()
 
     return item;
 }
+
+template <class T> void xListItem<T>::Remove()
+{
+    if (next != NULL)
+    {
+        next->prev = prev;
+    }
+
+    if (prev != NULL)
+    {
+        prev->next = next;
+    }
+
+    next = NULL;
+    prev = NULL;
+}

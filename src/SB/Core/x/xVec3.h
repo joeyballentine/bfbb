@@ -93,7 +93,11 @@ struct xVec3
     {
         return safe_normal(xVec3::m_UnitAxisY);
     }
-    xVec3 normal() const;
+    xVec3 normal() const
+    {
+        xVec3 tmp = *this;
+        return tmp.normalize();
+    }
     xVec3& assign(F32 x, F32 y, F32 z);
     F32 length() const;
     F32 length2() const;
