@@ -5710,3 +5710,57 @@ Genuinely still source-shaped, and unsolved:
    `mfcr`/`xori 1`/`cntlzw`/`>>5` and then tests it, i.e. it computes the
    condition as a *value*. We compile a direct float branch. Writing it as
    `!(x != 0.0f)` does not help; mwcc folds it straight back.
+
+
+### What srcprogress was counting, and three ways it lied
+
+The tool now judges the reload class per TERM and ranks by unexplained terms
+rather than bytes. Both changes were needed and neither was sufficient, because
+the term count itself had two more distortions in it.
+
+**Bytes.** A function's size says nothing about how much of it is wrong. Judging
+the reload class per function meant one unexplained term threw every byte of an
+18KB function into "needs source"; zEntPlayer_Update sat at the top of the list
+on the strength of two source-shaped clusters while 25 of its 76 terms were the
+compiler defect. Per-term, ranked by terms, it is sixth.
+
+**Our own naming.** We spell a recovered local static `sStripVert_2188` where CW
+emits `sStripVert$2188`. LOCALNUM erased the compiler's numbering but not ours,
+and a symbol name rides on every instruction that references the variable, so
+the mismatch counted once per reference. xFXShineRender reported 172 terms and
+has 8. That was 245 phantom terms and the whole of xFX's first place.
+
+**Loop unrolling.** A multiset cannot tell a duplicated loop body from new work.
+Tridiag_Solve reports 110 terms and is correct: mwcc unrolls our loop by two and
+did not unroll retail's, and retail keeps `mulli r,r,12` indexing where we
+strength-reduce to pointer walking. Neither stock 2.0p1 nor patched 2.0p1a
+reproduces retail's shape, so it is not the compiler patch -- but nothing is
+wrong with the source either.
+
+`semdiff --kinds` is the triage for the third: it prints the mnemonics one side
+executes and the other never does, with address arithmetic, branches and
+register moves filtered out, since those are exactly what unrolling and strength
+reduction rewrite. Tridiag_Solve comes back with nothing but address arithmetic.
+xScrFXGlareRender comes back with retail using `psq_l`/`psq_st`/`lmw`/`stfd`
+against our `fctiwz`/`fmuls`, which is a different computation and is now the
+best-evidenced target on the list at 40.04%.
+
+Ruled out, do not re-tread:
+
+- **xFXShineRender / xFXStreakRender.** Declaring `blah` as a function-local
+  static does produce `blah$1557` and does collapse the terms, but CW then emits
+  it at the end of `.bss` instead of between sFirework and active_ribbons,
+  moving three other objects and taking the unit's `.bss` from 100% to 94.63%
+  for no `.text` gain at all. Retail places both statics early, so its source
+  must order these functions differently -- our `.text` already runs ~2KB long
+  by xFXRibbonRender and carries template bodies retail does not. That file's
+  structure is a separate job; the metric was what was wrong.
+- **Tridiag_Solve** is semantically exact. See above.
+- **xsqrt** still differs for a reason recorded in the source: retail applies
+  `fmuls` straight to the `frsqrte` result while we round it first, because
+  `__frsqrte` is declared to return double and `F32 guess` narrows it. Do not
+  redeclare the intrinsic -- xCollide's `std::sqrtf` and xSpline's `sqrt` both
+  match at 100% precisely because they take the double.
+- **ArcLength3** differs by exactly two contractions: retail computes two of its
+  five product-sums as `fmul` + `fadd` where we emit `fmadd`. Which two, and
+  why, is not apparent from the codegen. 6 terms at 88.02%.
