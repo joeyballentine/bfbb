@@ -228,7 +228,12 @@ struct zPlayerSndTimer
     F32 time;
 };
 
-// TODO: Why are there two of these enums with the same effect, should there be?
+// Yes, retail really did carry two parallel enums for the playable characters,
+// and both are live: _CurrentPlayer is the one the game uses everywhere (some
+// 290 references to eCurrentPlayerSpongeBob alone, and it is what
+// globals.player.Character holds), while _zPlayerType is used by a handful of
+// per-character table lookups. Neither is dead, so neither can be folded into
+// the other without changing what retail compiled.
 enum _zPlayerType
 {
     ePlayer_SB,

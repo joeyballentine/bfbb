@@ -1378,8 +1378,7 @@ static void InvReset()
         globals.player.Inv_Shiny = SHINY_MAX;
     }
 
-    // FIXME: Use some macro for the world count. WORLD_COUNT is local to zUI and hard to move
-    for (U32 i = 0; i < 15; i++)
+    for (U32 i = 0; i < LEVEL_COUNT; i++)
     {
         U32& maxsocks = globals.player.Inv_PatsSock_Max[i];
         globals.player.Inv_PatsSock[i] = 0;
