@@ -99,6 +99,23 @@ def instrs(sym, names):
     return out
 
 
+def stored(counter):
+    """The operand of every store in a stream, e.g. `R, 0x1c8(R)`.
+
+    Used to recognise the store-then-reload class. Retail stores a value and
+    loads it straight back where our mwcc forwards the stored value, so the
+    store cancels between the two streams and only the load shows as a
+    difference. An operand that is stored on BOTH sides and loaded on only one
+    is that pattern rather than a missing read.
+    """
+    out = set()
+    for term in counter:
+        parts = term.split(None, 1)
+        if len(parts) == 2 and parts[0].startswith("st"):
+            out.add(parts[1])
+    return out
+
+
 def scan(unit):
     tgt = os.path.join(ROOT, unit["target_path"])
     base = os.path.join(ROOT, unit["base_path"])
@@ -145,6 +162,8 @@ def scan(unit):
                 "pct": pct,
                 "target_only": sorted(only_t.elements()),
                 "ours_only": sorted(only_o.elements()),
+                "stored_both": stored(L) & stored(R),
+                "ours_terms": set(R),
             })
     return found
 

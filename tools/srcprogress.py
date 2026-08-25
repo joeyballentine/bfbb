@@ -19,8 +19,8 @@ every literal and memory offset kept. Reordering cannot change a multiset and
 renaming cannot change a normalised one, so a clean multiset means the two
 objects execute the same operations on the same values.
 
-THE STORE-THEN-RELOAD CLASS
----------------------------
+THE RELOAD-ONLY CLASS
+---------------------
 One family of "semantic" differences is not a source problem at all. Retail
 reloads a static it has just stored; our mwcc forwards the stored value and
 skips the load. DUPLICATOTRON records this as a known compiler defect, gated
@@ -37,8 +37,27 @@ They are therefore counted as compiler-track, but reported on their own line
 so they stay visible: if the value-numbering path is ever widened, this is the
 number that would move.
 
-Signature: every target-only term is a load and every ours-only term is a
-register copy.
+Signature, applied per TERM rather than per function: a target-only load
+whose operand is stored on both sides (retail reads back what it just
+wrote), or one whose term is merely rarer on our side rather than absent
+(retail re-reads a value we held in a register). Register copies on our
+side are the other half of the same pattern.
+
+Judging this per function -- the first version of this tool -- meant one
+unexplained term threw the whole function into "needs source", and every
+one of its bytes with it. zEntPlayer_Update contributed 18188 bytes on the
+strength of two source-shaped clusters while 25 of its 76 terms were this
+defect. Ranking by unexplained TERMS instead of bytes moves it from first
+place to sixth, which is where it belongs.
+
+RANK BY TERMS, NOT BYTES
+------------------------
+A function's size says nothing about how much of it is wrong. An 18KB function
+with two bad statements and a 200-byte function that is wrong throughout both
+land in "needs source", and by bytes the first looks ninety times the problem.
+The per-function tables below therefore rank by *unexplained terms* -- differing
+instruction terms that are not the reload-only class -- and print bytes beside
+them rather than instead of them.
 
 WHAT THIS NUMBER IS NOT
 -----------------------
@@ -47,7 +66,12 @@ known hole: two different float constants both normalise to `lfs R, @P@sda21`,
 so a wrong .sdata2 value cancels out. Units where `datadiff.py --consts`
 reports a value difference are therefore marked (!) and their codegen-only
 verdicts are weaker than the rest. The iCollide 0.7010677/0.70710677 bug lived
-in exactly that hole.
+in exactly that hole. `tools/pooldiff.py` covers it directly by resolving each
+pool reference to the bytes it names; run it before trusting a verdict here.
+
+The same hole widens the reload-only class slightly: a target-only
+`lfs R, @P@sda21` is credited as a re-read whenever we load any pool constant
+anywhere, even if retail's is a different number. pooldiff is the check.
 
 Treat source-complete as "nothing more to write here that we can see", and the
 DOL sha1 as the only proof of anything.
@@ -125,20 +149,54 @@ def main():
     LOADS = ("lfs ", "lwz ", "lfd ", "lbz ", "lhz ", "lha ")
     COPIES = ("mr ", "fmr ")
 
-    def is_reload_class(hit):
-        """Retail reloads a static we keep in a register -- a compiler defect."""
-        if not hit["target_only"]:
-            return False
-        if not all(t.startswith(LOADS) for t in hit["target_only"]):
-            return False
-        return all(o.startswith(COPIES) for o in hit["ours_only"])
+    def split_terms(hit):
+        """(reload-class terms, residual terms) for one function.
+
+        The store-then-reload defect is recognised per TERM, not per function.
+        A target-only load whose operand is also stored on both sides is retail
+        reloading a value our mwcc kept in a register: the store cancels between
+        the streams, so only the load shows up. Register copies on our side are
+        the other half of the same pattern.
+
+        Doing this per function -- the tool's first version -- meant a single
+        residual term threw the whole function into "needs source", and with it
+        every one of its bytes. zEntPlayer_Update alone put 18188 bytes there on
+        the strength of two source-shaped clusters, while 22 of its 76 terms
+        were this defect.
+        """
+        stored = hit.get("stored_both") or set()
+        ours = hit.get("ours_terms") or set()
+        rl, res = 0, 0
+        for t in hit["target_only"]:
+            parts = t.split(None, 1)
+            reload_shaped = t.startswith(LOADS) and (
+                # retail stores a value and reads it straight back
+                (len(parts) == 2 and parts[1] in stored)
+                # or it simply reads the same thing again where we held it in a
+                # register: the term is not absent from our stream, only rarer
+                or t in ours)
+            if reload_shaped:
+                rl += 1
+            else:
+                res += 1
+        for o in hit["ours_only"]:
+            if o.startswith(COPIES):
+                rl += 1
+            else:
+                res += 1
+        return rl, res
 
     semantic = set()
     reload_cls = set()
+    residual = {}
+    reloaded = {}
     for u in units:
         for hit in semdiff.scan(u):
             key = (hit["unit"], hit["name"])
-            if is_reload_class(hit):
+            rl, res = split_terms(hit)
+            residual[key] = res
+            reloaded[key] = rl
+            if res == 0:
                 reload_cls.add(key)
             else:
                 semantic.add(key)
@@ -149,7 +207,8 @@ def main():
         if args and not any(a.lower() in un.lower() for a in args):
             continue
         r = rows.setdefault(un, dict(exact_n=0, exact_b=0, cg_n=0, cg_b=0,
-                                     rl_n=0, rl_b=0, sem_n=0, sem_b=0))
+                                     rl_n=0, rl_b=0, sem_n=0, sem_b=0,
+                                     res_t=0, rl_t=0))
         p = pcts[(un, fn)]
         if p == 100.0:
             r["exact_n"] += 1
@@ -160,13 +219,15 @@ def main():
         elif (un, fn) in semantic:
             r["sem_n"] += 1
             r["sem_b"] += sz
-            todo.append((sz, p, un, fn))
+            r["res_t"] += residual[(un, fn)]
+            r["rl_t"] += reloaded[(un, fn)]
+            todo.append((residual[(un, fn)], sz, p, un, fn, reloaded[(un, fn)]))
         else:
             r["cg_n"] += 1
             r["cg_b"] += sz
 
     tot = dict(exact_n=0, exact_b=0, cg_n=0, cg_b=0, rl_n=0, rl_b=0,
-               sem_n=0, sem_b=0)
+               sem_n=0, sem_b=0, res_t=0, rl_t=0)
     for r in rows.values():
         for k in tot:
             tot[k] += r[k]
@@ -181,10 +242,15 @@ def main():
 
     if want_list:
         print("%d function(s) still needing source work, worst first\n" % len(todo))
-        for sz, p, un, fn in sorted(todo, reverse=True):
+        print("  %5s %6s  %7s  %-24s %s"
+              % ("terms", "reload", "bytes", "unit", "function"))
+        for res, sz, p, un, fn, rl in sorted(todo, reverse=True):
             mark = " (!)" if un in suspect else ""
-            print("  %7d  %6.2f%%  %-26s %s%s"
-                  % (sz, p or 0.0, un.replace(GAME, "")[:26], fn[:52], mark))
+            print("  %5d %6d  %7d  %-24s %s%s"
+                  % (res, rl, sz, un.replace(GAME, "")[:24], fn[:46], mark))
+        print("")
+        print("  terms  = differing terms that are NOT the store-then-reload defect")
+        print("  reload = terms in the same function that ARE, needing no source work")
         return 0
 
     def pc(x):
@@ -195,8 +261,8 @@ def main():
           % (tot["exact_n"], tot["exact_b"], pc(tot["exact_b"])))
     print("  codegen-only     %5d fns  %8d bytes  %6.2f%%   source right, "
           "compiler places it differently" % (tot["cg_n"], tot["cg_b"], pc(tot["cg_b"])))
-    print("  store-then-reload%5d fns  %8d bytes  %6.2f%%   known compiler "
-          "defect, deprioritised" % (tot["rl_n"], tot["rl_b"], pc(tot["rl_b"])))
+    print("  reload-only      %5d fns  %8d bytes  %6.2f%%   retail re-reads what "
+          "we hold in a register" % (tot["rl_n"], tot["rl_b"], pc(tot["rl_b"])))
     print("  " + "-" * 68)
     sc_n = tot["exact_n"] + tot["cg_n"] + tot["rl_n"]
     sc_b = tot["exact_b"] + tot["cg_b"] + tot["rl_b"]
@@ -204,21 +270,29 @@ def main():
     print()
     print("  needs source     %5d fns  %8d bytes  %6.2f%%"
           % (tot["sem_n"], tot["sem_b"], pc(tot["sem_b"])))
+    print("      %d unexplained term(s), and %d more inside those same functions"
+          % (tot["res_t"], tot["rl_t"]))
+    print("      that are only retail re-reading a value, and need no source work.")
+    print("      Bytes overstate this bucket: a function contributes every byte it")
+    print("      has as soon as one term is unexplained, however small the fix.")
     if suspect:
         print("\n  %d unit(s) carry a .sdata2 value difference, so codegen-only "
               "verdicts\n  inside them are weaker -- marked (!) below and in --list."
               % len(suspect))
 
-    print("\nUnits with source work left, by bytes:\n")
-    print("  %8s %5s  %8s  %-34s" % ("bytes", "fns", "src-done", "unit"))
-    for un, r in sorted(rows.items(), key=lambda x: -x[1]["sem_b"]):
+    print("\nUnits with source work left, by unexplained terms:\n")
+    print("  %5s %6s %8s %5s  %8s  %-30s"
+          % ("terms", "reload", "bytes", "fns", "src-done", "unit"))
+    for un, r in sorted(rows.items(),
+                        key=lambda x: (-x[1]["res_t"], -x[1]["sem_b"])):
         if not r["sem_b"]:
             continue
         ub = r["exact_b"] + r["cg_b"] + r["rl_b"] + r["sem_b"]
         done = 100.0 * (r["exact_b"] + r["cg_b"] + r["rl_b"]) / ub if ub else 0.0
         mark = " (!)" if un in suspect else ""
-        print("  %8d %5d  %7.2f%%  %-34s%s"
-              % (r["sem_b"], r["sem_n"], done, un.replace(GAME, "")[:34], mark))
+        print("  %5d %6d %8d %5d  %7.2f%%  %-30s%s"
+              % (r["res_t"], r["rl_t"], r["sem_b"], r["sem_n"], done,
+                 un.replace(GAME, "")[:30], mark))
     done_units = [u for u, r in rows.items() if not r["sem_b"]]
     print("\n  %d of %d units are source-complete." % (len(done_units), len(rows)))
     return 0
