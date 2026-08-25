@@ -411,16 +411,18 @@ void xShadowSimple_CacheInit(xShadowSimpleCache* cache, xEnt* ent, U8 alpha)
     {
         sst = (zSimpleShadowTableHeader*)xSTFindAssetByType('SHDW', i, &size);
 
+        zSimpleShadowTableEntry* entries = (zSimpleShadowTableEntry*)(sst + 1);
+
         for (j = 0; j < sst->num; j++)
         {
-            if (ent->model->modelID == ((U32*)sst)[3 * j + 1])
+            if (ent->model->modelID == entries[j].modelID)
             {
-                tex = (RwTexture*)xSTFindAsset(((U32*)sst)[3 * j + 2], NULL);
+                tex = (RwTexture*)xSTFindAsset(entries[j].assetID, NULL);
 
                 if (tex != NULL)
                 {
                     raster = tex->raster;
-                    flags = ((U32*)sst)[3 * j + 3];
+                    flags = entries[j].flags;
                 }
                 else
                 {

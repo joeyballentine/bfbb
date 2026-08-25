@@ -50,6 +50,13 @@ struct zSimpleShadowTableHeader {
     U32 num;
 };
 
+// `num` of these follow the header directly.
+struct zSimpleShadowTableEntry {
+    U32 modelID;
+    U32 assetID;
+    U32 flags;
+};
+
 void xShadowSimple_Render();
 void xShadowSimple_Add(xShadowSimpleCache* cache, xEnt* ent, F32 radius, F32 ecc);
 void xShadowSimple_CacheInit(xShadowSimpleCache* cache, xEnt* ent, U8 alpha);
