@@ -25,16 +25,14 @@
 #include <string.h>
 #include <types.h>
 
-// FIXME: belongs in MSL_Common/cmath
-namespace std
-{
-    float powf(float x, float y);
-}
-
 // FIXME: declared in zGame.h, which Core must not include
 void zGameScreenTransitionUpdate(F32 percentComplete, char* msg, U8* rgba);
 
 u32 aram_array[40];
+
+// Private to this translation unit; iSndMessWithEA calls it before the
+// definition, so it needs the forward declaration.
+U32 SampleToNybbleAddress(U32 sample);
 
 // Size: 0x20
 // This was not in dwarf data

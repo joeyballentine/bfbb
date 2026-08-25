@@ -11,6 +11,7 @@
 
 #include "iAnim.h"
 #include "iAnimSKB.h"
+#include "iCollide.h"
 #include "iMath.h"
 #include "iSnd.h"
 #include "iTRC.h"
@@ -24,7 +25,10 @@
 #include "xMath.h"
 #include "xMathInlines.h"
 #include "xMemMgr.h"
+#include "xPad.h"
 #include "xRay3.h"
+#include "xScene.h"
+#include "xShadow.h"
 #include "xScrFx.h"
 #include "xSnd.h"
 #include "xstransvc.h"
@@ -40,6 +44,7 @@
 #include "zEntCruiseBubble.h"
 #include "zEntDestructObj.h"
 #include "zEntHangable.h"
+#include "zEntPickup.h"
 #include "zEntPlayer.h"
 #include "zEntPlayerBungeeState.h"
 #include "zEntPlayerOOBState.h"
@@ -294,47 +299,6 @@ static xModelTag sPatrickRElbow;
 static xModelTag sPatrickMelee;
 static zSurfaceProps* sWallCollisionSurface;
 
-// Defined in iCollide.cpp but declared in no header.
-S32 iSphereHitsEnv4(const xSphere* b, const xEnv* env, const xMat3x3* mat, xCollis* colls);
-
-// FIXME: declared in iCollide.h, which this TU does not include.
-S32 iSphereHitsModel3(const xSphere* b, const xModelInstance* m, xCollis* colls, U8 ncolls,
-                      F32 sth);
-
-// FIXME: defined in zPlatform.cpp but missing from zPlatform.h.
-void zPlatform_Mount(zPlatform* plat);
-void zPlatform_Dismount(zPlatform* plat);
-
-// FIXME: these are defined in zSurface.cpp but zSurface.h only declares some of the
-// accessor family. They belong in zSurface.h.
-S32 zSurfaceGetDamageType(const xSurface* surf);
-U32 zSurfaceGetDamagePassthrough(const xSurface* surf);
-U32 zSurfaceGetMatchOrient(const xSurface* surf);
-U32 zSurfaceGetSlide(const xSurface* surf);
-U32 zSurfaceGetStep(const xSurface* surf);
-U32 zSurfaceGetSticky(const xSurface* surf);
-F32 zSurfaceGetSlideStartAngle(const xSurface* surf);
-F32 zSurfaceGetSlideStopAngle(const xSurface* surf);
-F32 zSurfaceGetFriction(const xSurface* surf);
-S32 zSurfaceGetSlickness(const xSurface* surf);
-F32 zSurfaceGetDamping(const xSurface* surf, F32 min_vel);
-
-// FIXME: defined in xShadow.cpp; xShadow.h declares the rest of the manager API but not this one.
-void xShadowManager_Remove(xEnt* ent);
-
-// FIXME: defined in zEntPlayerBungeeState.cpp but missing from zEntPlayerBungeeState.h.
-namespace bungee_state
-{
-    void reset();
-    void init();
-} // namespace bungee_state
-
-// FIXME: defined in iPad.cpp but declared in no header.
-extern _tagxPad mPad[4];
-
-// FIXME: defined in xScene.cpp but missing from xScene.h.
-U32 xSceneNearestFloorPoly(xScene* sc, xNearFloorPoly* nfpoly, U8 collType, U8 chk);
-
 static void zEntPlayer_ReticleRender(zEnt* ent);
 static void zEntPlayer_UpdateVelocityBlur();
 void zEntPlayer_SNDPlayDelayed(F32 seconds);
@@ -345,25 +309,6 @@ static S32 BoulderVEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toPar
                            xBase* toParamWidget);
 static void zEntPlayer_SNDInit();
 void zEntPlayer_RestoreSounds();
-
-// FIXME: declared in zEntPickup.h, which this TU does not include.
-void zEntPickup_CheckAllPickupsAgainstPlayer(xScene* sc, F32 dt);
-void zEntPickup_GiveAllRewardsNow();
-extern U32 gEnableRewardsQueue;
-
-// FIXME: defined in zFX.cpp but missing from zFX.h.
-void zFXPatrickStun(const xVec3* pos);
-
-// FIXME: defined in zGust.cpp but missing from zGust.h.
-void zGustUpdateEnt(xEnt* ent, xScene* sc, F32 dt, void* data);
-
-// FIXME: defined in xEntBoulder.cpp but missing from xEntBoulder.h.
-void xEntBoulder_ApplyForces(xEntCollis* collis);
-void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt);
-
-// FIXME: defined in xCollide.cpp but missing from xCollide.h.
-S32 xSweptSphereToNonMoving(xSweptSphere* sws, xScene* sc, xEnt* mover, U8 collType);
-S32 xSweptSphereToTriangle(xSweptSphere* sws, xVec3* v0, xVec3* v1, xVec3* v2);
 
 void zEntPlayerCollide(xEnt* ent, xScene* sc, F32 dt);
 void zEntPlayer_CheckCritterContact(xEnt* ent, F32 dt);
@@ -377,12 +322,6 @@ static void zEntPlayerTSlideUpdate(xEnt* ent, xScene* sc, F32 dt);
 void zEntPlayerCollTrigger(xEnt* ent, xScene* sc);
 static void zEntPlayerVelUpdate(xEnt* ent, xScene* sc, F32 dt);
 
-// FIXME: defined in zCamera.cpp but missing from zCamera.h.
-void zCameraTranslate(xCamera* camera, xVec3* v);
-
-// FIXME: defined in zLasso.cpp but missing from zLasso.h.
-void zLasso_Update(zLasso* lasso, xEnt* ent, F32 dt);
-void zLasso_Render(zLasso* lasso);
 static void zEntPlayerEGenUpdate(xEnt* ent, xScene* sc, F32 dt);
 static xEnt* zEntPlayer_FindGrabEnt(xEnt* ent, zScene* zsc, S32* failed);
 static void PlayerSwingUpdate(xEnt* ent, F32 mag, F32 angle, F32 dt);

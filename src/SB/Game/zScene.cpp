@@ -102,10 +102,6 @@
 #include <string.h>
 #include <stdio.h>
 
-// Defined in zSurface.cpp but not declared in zSurface.h.
-// TODO: move this declaration into zSurface.h next to zSurfaceExit().
-void zSurfaceInit();
-
 // Declared in zAssetTypes.h. That header is deliberately not included here: it
 // pulls in zNPCTypeBossPlankton.h -> xLaserBolt.h (`xVec3 temp = { 0, 0, 0 };`)
 // and zNPCTypeBossSB2.h (`xVec2 cur = { ..., ... };`), whose class-body

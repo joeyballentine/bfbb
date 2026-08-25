@@ -296,5 +296,6 @@ void xCameraSetTargetMatrix(xCamera* cam, xMat4x3* mat);
 void xCameraSetTargetOMatrix(xCamera* cam, xMat4x3* mat);
 void xCameraFXShake(F32 maxTime, F32 magnitude, F32 cycleMax, F32 rotate_magnitude, F32 radius,
                     xVec3* epicenter, xVec3* player);
+void SweptSphereHitsCameraEnt(xScene*, xRay3* ray, xQCData* qcd, xEnt* ent, void* data);
 
 #endif

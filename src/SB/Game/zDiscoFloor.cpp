@@ -19,11 +19,6 @@
 #include <stdio.h>
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\stdlib.h>
 
-// TODO: this belongs in xMath3.h next to xBoxUnion. It is only defined (as an
-// inline) in zEntPlayerBungeeState.cpp today, so declare it here to keep the
-// call out of line, the way the target object has it.
-void xBoxFromSphere(xBox& box, const xSphere& o);
-
 namespace
 {
     struct

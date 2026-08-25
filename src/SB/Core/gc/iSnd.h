@@ -102,9 +102,4 @@ void iSndResume();
 
 F32 iSndGetVol(U32 snd);
 
-// FIXME: delete these
-struct vinfo;
-U32 SampleToNybbleAddress(U32 sample);
-void iSndCalcVol(xSndVoiceInfo* xSndVoiceInfo, vinfo* vinfo);
-void iSndCalcVol3d(xSndVoiceInfo* xSndVoiceInfo, vinfo* vinfo);
 #endif

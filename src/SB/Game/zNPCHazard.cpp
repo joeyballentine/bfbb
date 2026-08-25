@@ -14,14 +14,6 @@
 #include "xordarray.h"
 #include "zRenderState.h"
 
-// TODO: these two belong in xCollide.h next to xSweptSpherePrepare; declared here
-// to keep the change inside this unit.
-S32 xSweptSphereToStatDyn(xSweptSphere* sws, xScene* sc, xEnt* mover, U8 collType);
-S32 xSweptSphereToNPC(xSweptSphere* sws, xScene* sc, xEnt* mover, U8 collType);
-// TODO: this one belongs in zNPCSupport.h beside the other NPCC_ helpers.
-S32 NPCC_HaveLOSToPos(xVec3* pos_src, xVec3* pos_tgt, F32 dst_max, xBase* tgt,
-                      xCollis* colCallers);
-
 extern const xVec3 g_O3;
 
 // These structs were used in deadstripped functions.

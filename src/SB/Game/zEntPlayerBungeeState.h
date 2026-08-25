@@ -79,6 +79,8 @@ namespace bungee_state
     };
 
     void load(xBase& data, xDynAsset& asset, size_t);
+    void init();
+    void reset();
     bool active();
     bool landed();
     void destroy();

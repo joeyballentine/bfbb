@@ -30,7 +30,8 @@ struct zNPCGoalHurt : zNPCGoalPushAnim
     virtual S32 Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* scene);
 };
 
-// FIXME: Put this in somewhere.
+// Defined in zNPCSupport.h; forward-declared here because only a pointer is
+// needed and that header is not otherwise required by this one.
 struct NPCWidget;
 
 struct zNPCGoalPlayerNear : zNPCGoalCommon

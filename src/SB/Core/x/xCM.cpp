@@ -3,14 +3,12 @@
 #include "xFont.h"
 #include "xstransvc.h"
 #include "xDebug.h"
+#include "xShadow.h"
 #include "xVec3.h"
 
 #include <rwplcore.h>
 #include <stdio.h>
 #include <types.h>
-
-// TODO: find and move to appropriate header
-U32 Im2DRenderQuad(F32 x0, F32 y0, F32 x1, F32 y1, F32 z, F32 alpha, F32 uv_offset);
 
 void __deadstripped_rodata()
 {

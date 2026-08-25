@@ -1,5 +1,6 @@
 #include "zEntPlayerBungeeState.h"
 
+#include "iCollide.h"
 #include "iScrFX.h"
 #include "xScrFx.h"
 #include "xCamera.h"
@@ -37,12 +38,11 @@
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\cstring>
 #include <types.h>
 
-// FIXME: belongs in iCollide.h (defined in iCollide.cpp)
-U32 iSphereHitsEnv(const xSphere* b, const xEnv* env, xCollis* coll);
-// FIXME: belongs in zSurface.h (defined in zSurface.cpp)
-S32 zSurfaceGetDamageType(const xSurface* surf);
 
-// FIXME: belongs in xMath3.h as an inline
+// The declaration now lives in xMath3.h; the body has to stay here. Moving the
+// inline into the header makes zDiscoFloor.cpp expand it, and that emits weak
+// __apl__5xVec3Ff / __ami__5xVec3Ff copies into zDiscoFloor.o that retail's
+// zDiscoFloor.o does not contain. Measured, not assumed.
 inline void xBoxFromSphere(xBox& box, const xSphere& o)
 {
     box.upper = box.lower = o.center;

@@ -371,7 +371,6 @@ namespace std
 } // namespace std
 #endif
 
-// TODO: move to xMathInlines.h
 F32 xatan2(F32 y, F32 x)
 {
     return xAngleClampFast(std::atan2f(y, x));

@@ -54,9 +54,10 @@ void zEntSave(zEnt* ent, xSerial* s);
 void zEntSetup(zEnt* ent);
 void zEntInit(zEnt* ent, xEntAsset* asset, U32 type);
 
-// TODO: Misplaced Inlines/Weak functions
+// Weak functions retail emitted into zEnt.o. The name says x-layer, but the
+// body is in zEnt.cpp, so this header is where the declaration belongs.
+// (xEntGetFrame used to be re-declared here as well; xEnt.h already had it.)
 WEAK void xModelAnimCollStop(xModelInstance& m);
-WEAK xMat4x3* xEntGetFrame(const xEnt* ent);
 // Retail inlined this into some callers and not others, so neither choice is
 // right for every TU. Callers that expand it (zFX, zEntTeleportBox) gain 12
 // exact functions between them. Two TUs must NOT expand it and define

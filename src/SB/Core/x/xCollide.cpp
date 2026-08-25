@@ -22,16 +22,6 @@ static U32 sSweptSphereIgnoreMovers;
 
 extern U8 xClumpColl_FilterFlags;
 
-// TODO: figure out where this needs to go since ive only seen seil use it here
-#define RwV3dSubMacro(o, a, b)                                                                     \
-    MACRO_START                                                                                    \
-    {                                                                                              \
-        (o)->x = (((a)->x) - ((b)->x));                                                            \
-        (o)->y = (((a)->y) - ((b)->y));                                                            \
-        (o)->z = (((a)->z) - ((b)->z));                                                            \
-    }                                                                                              \
-    MACRO_STOP
-
 #define rwInvSqrtMacro(_recip, _input) (*(_recip) = _rwInvSqrt(_input))
 
 #include <world/bageomet.h>

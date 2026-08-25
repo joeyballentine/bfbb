@@ -39,12 +39,6 @@
 bool xSphereHitsBound(const xSphere& o, const xBound& b);
 void xQuickCullForSphere(xQCData* q, const xSphere* s);
 void xCameraRotate(xCamera* cam, const xVec3& at, F32 roll, F32 time, F32 accel, F32 decl);
-// FIXME: zFX.h declares only the single-point zFX_SpawnBubbleTrail overloads; the
-// two-endpoint form is defined in zFX.cpp but never declared in the header.
-void zFX_SpawnBubbleTrail(const xVec3* pos_beg, const xVec3* pos_end, U32 num,
-                          const xVec3* pos_rnd, const xVec3* vel_rnd);
-// FIXME: defined in xCamera.cpp, but no header declares it.
-void SweptSphereHitsCameraEnt(xScene*, xRay3* ray, xQCData* qcd, xEnt* ent, void* data);
 
 const basic_rect<F32> screen_bounds = { 0.0f, 0.0f, 1.0f, 1.0f };
 const basic_rect<F32> default_adjust = { 0.0f, 0.0f, 1.0f, 1.0f };

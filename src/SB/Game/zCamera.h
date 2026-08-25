@@ -103,6 +103,7 @@ void zCameraSetConvers(int on);
 void zCameraDoTrans(xCamAsset* asset, float ttime);
 U32 zCamera_FlyOnly();
 void zCameraTranslate(xCamera* camera, F32 dposx, F32 dposy, F32 dposz);
+void zCameraTranslate(xCamera* camera, xVec3* v);
 void zCameraReset(xCamera* camera);
 void zCameraUpdate(xCamera* camera, F32 dt);
 
