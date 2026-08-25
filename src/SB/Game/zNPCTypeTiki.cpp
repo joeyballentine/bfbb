@@ -1260,7 +1260,7 @@ void zNPCTiki::FindParents(zScene* zsc)
                 }
                 else
                 {
-                    // else condition – swapped 0.75/0.25 coefficients
+                    // else condition -- swapped 0.75/0.25 coefficients
                     if (tiki->bound.box.box.upper.y * 0.75f + tiki->bound.box.box.lower.y * 0.25f <
                             p->bound.box.box.lower.y + 0.00001f &&
                         tiki->bound.box.box.upper.y < 0.75f * p->bound.box.box.lower.y +
