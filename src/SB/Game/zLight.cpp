@@ -16,8 +16,61 @@ static _tagPartition sLightPart;
 zVolume* sPartitionVolume;
 static volatile S32 gNumTemporaryLights;
 static _zLight* volatile gTemporaryLights[32];
-void (*sEffectFuncs[18])(_zLight*, F32) = {};
-lightInitFunc sEffectInitFuncs[18] = {};
+// NOTE: these belong in zLightEffect.h next to the Flicker/Cauldron
+// declarations, but that header currently omits them.
+void zLightEffectStrobeSlow(_zLight* zlight, F32 seconds);
+void zLightEffectStrobe(_zLight* zlight, F32 seconds);
+void zLightEffectStrobeFast(_zLight* zlight, F32 seconds);
+void zLightEffectDimSlow(_zLight* zlight, F32 seconds);
+void zLightEffectDim(_zLight* zlight, F32 seconds);
+void zLightEffectDimFast(_zLight* zlight, F32 seconds);
+void zLightEffectHalfDimSlow(_zLight* zlight, F32 seconds);
+void zLightEffectHalfDim(_zLight* zlight, F32 seconds);
+void zLightEffectHalfDimFast(_zLight* zlight, F32 seconds);
+void zLightEffectRandomColSlow(_zLight* zlight, F32 seconds);
+void zLightEffectRandomCol(_zLight* zlight, F32 seconds);
+void zLightEffectRandomColFast(_zLight* zlight, F32 seconds);
+
+void (*sEffectFuncs[18])(_zLight*, F32) = {
+    NULL,
+    NULL,
+    zLightEffectFlickerSlow,
+    zLightEffectFlicker,
+    zLightEffectFlickerErratic,
+    zLightEffectStrobeSlow,
+    zLightEffectStrobe,
+    zLightEffectStrobeFast,
+    zLightEffectDimSlow,
+    zLightEffectDim,
+    zLightEffectDimFast,
+    zLightEffectHalfDimSlow,
+    zLightEffectHalfDim,
+    zLightEffectHalfDimFast,
+    zLightEffectRandomColSlow,
+    zLightEffectRandomCol,
+    zLightEffectRandomColFast,
+    zLightEffectCauldron,
+};
+lightInitFunc sEffectInitFuncs[18] = {
+    NULL,
+    NULL,
+    zLightEffectInitFlicker,
+    zLightEffectInitFlicker,
+    zLightEffectInitFlicker,
+    zLightEffectInitStrobe,
+    zLightEffectInitStrobe,
+    zLightEffectInitStrobe,
+    zLightEffectInitDim,
+    zLightEffectInitDim,
+    zLightEffectInitDim,
+    zLightEffectInitHalfDim,
+    zLightEffectInitHalfDim,
+    zLightEffectInitHalfDim,
+    zLightEffectInitRandomCol,
+    zLightEffectInitRandomCol,
+    zLightEffectInitRandomCol,
+    zLightEffectInitCauldron,
+};
 static xVec3 sDefaultShadowVec = { 0, 1.0f, 0 };
 
 void zLightResetAll(xEnv* env)
