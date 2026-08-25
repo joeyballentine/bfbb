@@ -11,13 +11,34 @@ to retail's. That conflates two very different states:
 The second is real progress the exact metric refuses to show, and it is a large
 share of what is left. This tool separates them and reports a second number:
 
-  source-complete = exact + codegen-only
+  source-complete = exact + codegen-only + store-then-reload
 
 A function counts as codegen-only when semdiff's multiset test finds no
 difference: registers, branch destinations and anonymous pool ordinals erased,
 every literal and memory offset kept. Reordering cannot change a multiset and
 renaming cannot change a normalised one, so a clean multiset means the two
 objects execute the same operations on the same values.
+
+THE STORE-THEN-RELOAD CLASS
+---------------------------
+One family of "semantic" differences is not a source problem at all. Retail
+reloads a static it has just stored; our mwcc forwards the stored value and
+skips the load. DUPLICATOTRON records this as a known compiler defect, gated
+at the -O2 threshold inside the optimizer, deliberately deprioritised, and
+already worked around at a handful of sites with the `volatile` device.
+
+The project's rule for that device is that it may only be installed where it
+takes a function ALL the way to 100.0 -- otherwise it banks no bytes and masks
+the compiler-side fix. Most of these functions are capped below 100 by the
+register allocator anyway, so the device does not apply and there is nothing
+to write.
+
+They are therefore counted as compiler-track, but reported on their own line
+so they stay visible: if the value-numbering path is ever widened, this is the
+number that would move.
+
+Signature: every target-only term is a load and every ours-only term is a
+register copy.
 
 WHAT THIS NUMBER IS NOT
 -----------------------
@@ -101,10 +122,26 @@ def main():
     units = [u for u in semdiff.CFG["units"] if u["name"].startswith(GAME)
              and (not args or any(a.lower() in u["name"].lower() for a in args))]
 
+    LOADS = ("lfs ", "lwz ", "lfd ", "lbz ", "lhz ", "lha ")
+    COPIES = ("mr ", "fmr ")
+
+    def is_reload_class(hit):
+        """Retail reloads a static we keep in a register -- a compiler defect."""
+        if not hit["target_only"]:
+            return False
+        if not all(t.startswith(LOADS) for t in hit["target_only"]):
+            return False
+        return all(o.startswith(COPIES) for o in hit["ours_only"])
+
     semantic = set()
+    reload_cls = set()
     for u in units:
         for hit in semdiff.scan(u):
-            semantic.add((hit["unit"], hit["name"]))
+            key = (hit["unit"], hit["name"])
+            if is_reload_class(hit):
+                reload_cls.add(key)
+            else:
+                semantic.add(key)
 
     rows = {}
     todo = []
@@ -112,11 +149,14 @@ def main():
         if args and not any(a.lower() in un.lower() for a in args):
             continue
         r = rows.setdefault(un, dict(exact_n=0, exact_b=0, cg_n=0, cg_b=0,
-                                     sem_n=0, sem_b=0))
+                                     rl_n=0, rl_b=0, sem_n=0, sem_b=0))
         p = pcts[(un, fn)]
         if p == 100.0:
             r["exact_n"] += 1
             r["exact_b"] += sz
+        elif (un, fn) in reload_cls:
+            r["rl_n"] += 1
+            r["rl_b"] += sz
         elif (un, fn) in semantic:
             r["sem_n"] += 1
             r["sem_b"] += sz
@@ -125,12 +165,13 @@ def main():
             r["cg_n"] += 1
             r["cg_b"] += sz
 
-    tot = dict(exact_n=0, exact_b=0, cg_n=0, cg_b=0, sem_n=0, sem_b=0)
+    tot = dict(exact_n=0, exact_b=0, cg_n=0, cg_b=0, rl_n=0, rl_b=0,
+               sem_n=0, sem_b=0)
     for r in rows.values():
         for k in tot:
             tot[k] += r[k]
-    allb = tot["exact_b"] + tot["cg_b"] + tot["sem_b"]
-    alln = tot["exact_n"] + tot["cg_n"] + tot["sem_n"]
+    allb = tot["exact_b"] + tot["cg_b"] + tot["rl_b"] + tot["sem_b"]
+    alln = tot["exact_n"] + tot["cg_n"] + tot["rl_n"] + tot["sem_n"]
 
     if want_json:
         print(json.dumps(dict(total_bytes=allb, total_functions=alln,
@@ -154,10 +195,12 @@ def main():
           % (tot["exact_n"], tot["exact_b"], pc(tot["exact_b"])))
     print("  codegen-only     %5d fns  %8d bytes  %6.2f%%   source right, "
           "compiler places it differently" % (tot["cg_n"], tot["cg_b"], pc(tot["cg_b"])))
+    print("  store-then-reload%5d fns  %8d bytes  %6.2f%%   known compiler "
+          "defect, deprioritised" % (tot["rl_n"], tot["rl_b"], pc(tot["rl_b"])))
     print("  " + "-" * 68)
-    print("  SOURCE-COMPLETE  %5d fns  %8d bytes  %6.2f%%"
-          % (tot["exact_n"] + tot["cg_n"], tot["exact_b"] + tot["cg_b"],
-             pc(tot["exact_b"] + tot["cg_b"])))
+    sc_n = tot["exact_n"] + tot["cg_n"] + tot["rl_n"]
+    sc_b = tot["exact_b"] + tot["cg_b"] + tot["rl_b"]
+    print("  SOURCE-COMPLETE  %5d fns  %8d bytes  %6.2f%%" % (sc_n, sc_b, pc(sc_b)))
     print()
     print("  needs source     %5d fns  %8d bytes  %6.2f%%"
           % (tot["sem_n"], tot["sem_b"], pc(tot["sem_b"])))
@@ -171,8 +214,8 @@ def main():
     for un, r in sorted(rows.items(), key=lambda x: -x[1]["sem_b"]):
         if not r["sem_b"]:
             continue
-        ub = r["exact_b"] + r["cg_b"] + r["sem_b"]
-        done = 100.0 * (r["exact_b"] + r["cg_b"]) / ub if ub else 0.0
+        ub = r["exact_b"] + r["cg_b"] + r["rl_b"] + r["sem_b"]
+        done = 100.0 * (r["exact_b"] + r["cg_b"] + r["rl_b"]) / ub if ub else 0.0
         mark = " (!)" if un in suspect else ""
         print("  %8d %5d  %7.2f%%  %-34s%s"
               % (r["sem_b"], r["sem_n"], done, un.replace(GAME, "")[:34], mark))

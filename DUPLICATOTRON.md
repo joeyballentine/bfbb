@@ -1202,6 +1202,17 @@ cluster at `0xa8/0xac(r1)` caps that function below 100.0 regardless; and
 the site -- introducing an index local, with or without a volatile read, is
 **bit-identical to baseline** because mwcc copy-propagates it away.
 
+**ADDED 2026-08-25 to the not-added list: `zThrown.cpp` `sSNDLandTimer`**, at
+the single site in `zThrown_Update`. Measured: the plain form is 99.794, and
+`*(volatile F32*)&sSNDLandTimer < 0.0f` reproduces retail's reload exactly and
+moves it to 99.915 -- but the residue is register allocation (r3/r4/r5 and
+f7/f8/f9 permuted around the `lfsx` cluster), so the function is capped below
+100.0 regardless and the device would bank zero bytes. Declined by the rule
+below. Three other spellings were measured first and were all bit-identical to
+baseline: `x = x - dt` instead of `x -= dt`, a named temp assigned then read
+back, and the two combined -- mwcc copy-propagates all of them away, so the
+volatile lvalue is the only form that reaches this defect.
+
 One site was deliberately NOT added: `zSceneSetup`'s `gCurEnv`. Reading it
 through a volatile lvalue does reproduce retail's `stw`/`lwz` pair and moves
 the function 99.618 -> 99.743, but a second, scheduler-class cluster still
