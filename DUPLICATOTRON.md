@@ -5634,3 +5634,79 @@ clean -- `zThrown_Update` (3784 b, 99.79%, 1 term), `zSceneSetup` (3196 b,
 99.62%, 1 term), `Process__10zNPCBSandy` (3852 b, 99.36%, 2 terms). All three
 are the reload-versus-cache pattern, so they are cheap bytes if that pattern
 turns out to be mechanically fixable.
+
+
+### The constant behind the relocation
+
+A float literal never appears in a PowerPC instruction. `x <= 0.001f` becomes an
+`lfs` naming an anonymous pool symbol, and that ordinal is assigned in first-use
+order per TU, so every differ normalises it away -- and never compares the four
+bytes the instruction actually names. A function can be byte-identical in
+`.text`, score 100.0%, and load a different number.
+
+`datadiff --consts` does not cover it: it compares `.sdata2` as a multiset, so a
+value present in *both* pools but attached to the wrong *site* cancels out. All
+fifteen findings on the first sweep were exactly that.
+
+`tools/pooldiff.py` resolves each pool reference and walks the streams in
+lockstep. It found, among others, a swept-sphere epsilon whose sign was never
+flipped for the second winding (`<= -1e-5f` for `<= 1e-5f`), so contacts on the
+edges of clockwise triangles were rejected game-wide; a bungee `horizontal.sway`
+default of 0.0f where retail passes 3.0f, with nothing in the shipped INI to
+override it; and Patrick's spawn goal turning at PI/4 where every sibling call
+passes PI/2.
+
+Two traps. Only `lfs`/`lfd` count -- integer small-data refs name real globals,
+and the `lis`/`addi` pairs that build a `.rodata` address name `@stringBase0`,
+whose contents legitimately move when a string moves. And the section must come
+from `objdump -t`, never `nm`: a pool ordinal is unique only *within* a section,
+and nm's one-letter class cannot tell `.sdata2` from `.rodata`. Resolving
+against the wrong one turned 2 findings into 1157.
+
+Residual hole: 1-ULP values with no natural decimal spelling (zEntPlayer's
+`0x3eaaaaa0` against our `0.333333f`, zNPCSupplement's `0x3cccccce` against
+`0.025f`). mwcc's literal conversion matches Python's exactly, so these are not
+misspellings, and at 3e-8 they are gameplay-irrelevant.
+
+### zEntPlayer_Update is mostly compiler-track, not source-track
+
+It is the single biggest item on `srcprogress --list` at 18188 bytes, and
+zEntPlayer as a unit holds a third of all remaining source work in the game. But
+the gap inside this function is not mostly ours.
+
+Of 76 semantic terms, **22 are store-then-reload reloads** -- retail stores a
+static and immediately loads it back, our mwcc forwards the stored value. There
+are 18 such pairs (sReticleRot, sReticleAlpha, sBubbleBowlTimer, sTimeToRetarget,
+sPlayerCollAdjust, sHackStuckTimer, stuck_timer, not_stuck_timer, inact_tmr,
+bbash_end_tmr, sGooKnockedTimer, sCatchCapsuleTimer, sLastBubbleEmit,
+sLastInvulnEmit, sPlayerSndSneakDelay, sHitchAngle) and the net instruction
+deficit for the whole function is exactly 16. The same defect appears once more
+on a stack slot: retail spills an `xsqrt` result to `456(1)` and reloads it, we
+keep it in `f28`. That is the `lfs R, 0x1c8(R)` term.
+
+Two things that look like findings and are not:
+
+- `lis/addi ...bss.0` against retail's `sHackStuckDir` is a naming artifact.
+  `...bss.0` is the section anchor and `sHackStuckDir` is the first object in
+  `.bss`; both are `.bss+0` and link identically. `.bss` is the same size on both
+  sides, and all 104 `.sbss` objects sit at identical offsets -- the 4-byte
+  `.sbss` section delta is trailing alignment.
+- the `zEntPlayer_Init` gust test reads zScene+244 on *both* sides. Counting
+  accesses at 244 and 708 across every object in the game gives identical totals,
+  which is what showed that the two sites had simply been exchanged.
+
+Genuinely still source-shaped, and unsolved:
+
+1. `for (U32 i = 0; i < sc->num_npcs; i++) {}` -- an empty placeholder loop.
+   Retail emits an empty loop too, but keeps `lhz 0,14(r27)` *inside* the
+   condition and carries a second dead induction variable stepping by 4, so it
+   never unrolls. We hoist the trip count and mwcc unrolls by 8, costing ~12
+   terms. **This is not the compiler patch**: stock 2.0p1 and patched 2.0p1a both
+   produce the hoisted, unrolled shape (3 `bdnz` against retail's 1), so it is a
+   source difference. Adding `xEnt* npc = sc->npcs[i];` as a dead body does not
+   reproduce it -- the load is eliminated before strength reduction leaves a
+   residue. The 4-stride induction variable is the clue worth chasing.
+2. `if (sCatchCapsuleTimer == 0.0f)` -- retail materialises the boolean through
+   `mfcr`/`xori 1`/`cntlzw`/`>>5` and then tests it, i.e. it computes the
+   condition as a *value*. We compile a direct float branch. Writing it as
+   `!(x != 0.0f)` does not help; mwcc folds it straight back.
