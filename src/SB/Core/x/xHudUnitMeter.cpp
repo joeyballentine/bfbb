@@ -40,11 +40,8 @@ void xhud::unit_meter_widget::load(xBase& data, xDynAsset& asset, size_t arg2)
 xhud::unit_meter_widget::unit_meter_widget(const xhud::unit_meter_asset& a) : meter_widget(a)
 {
     S32 i, j;
-    // for (i = 0; i < 18; i++)
-    // {
-        res.id = a.id;
-        res.baseType = a.baseType;
-    // }
+
+    res = a;
 
     anim_time = 0.0f;
 
@@ -52,7 +49,7 @@ xhud::unit_meter_widget::unit_meter_widget(const xhud::unit_meter_asset& a) : me
     {
         for (j = 0; j < 6; j++)
         {
-            xModelInstance* m = load_model(res.model[i].id);
+            model[j][i] = load_model(res.model[i].id);
         }
     }
 
