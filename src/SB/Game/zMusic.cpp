@@ -247,21 +247,18 @@ static S32 zMusicDo(S32 track)
         vol *= 0.7f;
     }
 
-    U32 snd_id = sMusicSoundID[snd_enum][track];
     sMusicTrack[track].snd_id =
-        xSndPlay(snd_id, vol, pitch, 0xFF,
+        xSndPlay(sMusicSoundID[snd_enum][0], vol, pitch, 0xFF,
                  (sMusicTrack[track].loop ? 0x8000 : 0) | 0x10000 | (track << 11) | 0x20000, 0,
                  SND_CAT_MUSIC, 0.0f);
 
-    // FIXME: This isn't quite right
     if (sMusicTrack[track].snd_id != 0)
     {
-        sMusicTrack[track].snd_id = snd_id;
-        sMusicTrack[track].assetID = sMusicSoundID[snd_enum][track];
+        sMusicTrack[track].assetID = sMusicSoundID[snd_enum][0];
         sMusicTrack[track].lastVol = vol;
         if (sMusicQueueData[track] != NULL)
         {
-            sMusicQueueData[track]->sndid = snd_id;
+            sMusicQueueData[track]->sndid = sMusicTrack[track].snd_id;
             sMusicQueueData[track]->elapsedTime = 0.0f;
             sMusicQueueData[track]->count += 1;
             sMusicQueueData[track] = NULL;
@@ -325,12 +322,11 @@ void zMusicNotifyEvent(const F32* toParam, xBase* base)
     s = &sMusicInfo[musicInfoIdx];
     track = s->track;
 
-    // FIXME: Body (and maybe conditions) aren't quite right
     if (musicEnum != sMusicLastEnum[track] && sMusicQueueData[track] == NULL &&
         (s->countMax == 0 || s->count < s->countMax) && !(s->delay > s->elapsedTime))
     {
-        sMusicTimer[track] = s->punchDelay;
         sMusicQueueData[track] = s;
+        sMusicTimer[track] = s->punchDelay;
         sMusicQueueData[track]->game_state = (gGameMode == eGameMode_Game);
         sMusicQueueData[track]->music_enum = musicEnum;
     }
