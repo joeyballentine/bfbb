@@ -442,8 +442,9 @@ S32 xSerial_svgame_register(st_XSAVEGAME_DATA* sgctxt, en_SAVEGAME_MODE mode)
 
         for (S32 i = 0; i < xsd->cltlist.cnt; i++)
         {
-            xSGAddSaveClient(sgctxt, *(U32*)xsd->cltlist.list[i], xsd->cltlist.list[i],
-                             xSER_xsgclt_svinfo_clt, xSER_xsgclt_svproc_clt);
+            xSGAddSaveClient(sgctxt, ((st_SERIAL_CLIENTINFO*)xsd->cltlist.list[i])->idtag,
+                             xsd->cltlist.list[i], xSER_xsgclt_svinfo_clt,
+                             xSER_xsgclt_svproc_clt);
         }
         xSGAddSaveClient(sgctxt, 'SFIL', &g_xserdata, xSER_xsgclt_svinfo_fill,
                          xSER_xsgclt_svproc_fill);
@@ -488,15 +489,15 @@ static S32 xSER_xsgclt_ldproc_ver(void*, st_XSAVEGAME_DATA* xsg, st_XSAVEGAME_RE
 static S32 xSER_xsgclt_svinfo_clt(void* cltdata, st_XSAVEGAME_DATA*, S32* cur_space,
                                   S32* max_fullgame)
 {
-    *cur_space = *(S32*)((S32)cltdata + 12);
-    *max_fullgame = *(S32*)((S32)cltdata + 12);
+    *cur_space = ((st_SERIAL_CLIENTINFO*)cltdata)->actsize;
+    *max_fullgame = ((st_SERIAL_CLIENTINFO*)cltdata)->actsize;
     return 1;
 }
 
 static S32 xSER_xsgclt_svproc_clt(void* cltdata, st_XSAVEGAME_DATA* xsg,
                                   st_XSAVEGAME_WRITECONTEXT* wctxt)
 {
-    st_SERIAL_CLIENTINFO* clt = XSER_get_client(*(U32*)cltdata);
+    st_SERIAL_CLIENTINFO* clt = XSER_get_client(((st_SERIAL_CLIENTINFO*)cltdata)->idtag);
     xSGWriteData(xsg, wctxt, (char*)clt->membuf, clt->actsize);
     return 1;
 }

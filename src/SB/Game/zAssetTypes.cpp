@@ -1,6 +1,7 @@
 #include "zAssetTypes.h"
 
 #include "xAnim.h"
+#include "xCurveAsset.h"
 #include "xstransvc.h"
 #include "xDebug.h"
 #include "xEnv.h"
@@ -171,7 +172,9 @@ static void* Curve_Read(void* param_1, U32 param_2, void* indata, U32 insize, U3
     void* __dest = RWSRCGLOBAL(memoryFuncs.rwmalloc(insize));
     memcpy(__dest, indata, insize);
 
-    *(int*)((int)__dest + 0x10) = (int)__dest + 0x14;
+    // The baked point array is packed directly after the header, so points
+    // has to be fixed up to point just past the struct we copied in.
+    ((xCurveAsset*)__dest)->points = (F32*)((xCurveAsset*)__dest + 1);
 
     return __dest;
 }

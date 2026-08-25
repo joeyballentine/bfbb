@@ -329,6 +329,14 @@ float std::logf(float x)
     return (float)log((double)x);
 }
 
+// A camera chunk's payload sits directly after its xCutsceneData header: the
+// number of fly keys, then the keys themselves.
+struct xCutsceneCameraData
+{
+    U32 NumKeys;
+    zFlyKey Keys[1];
+};
+
 void xCutscene_SetCamera(xCutscene* csn, xCamera* cam)
 {
     xCutsceneData* data;
@@ -352,8 +360,9 @@ void xCutscene_SetCamera(xCutscene* csn, xCamera* cam)
         if (data->DataType == XCUTSCENEDATA_TYPE_CAMERA)
         {
             frame = (S32)std::floorf(30.0f * csn->CamTime);
-            keys = (zFlyKey*)((U8*)data + 0x14);
-            dataIndex = *(U32*)((U8*)data + 0x10);
+            xCutsceneCameraData* camData = (xCutsceneCameraData*)(data + 1);
+            keys = camData->Keys;
+            dataIndex = camData->NumKeys;
 
             if (frame < keys[0].frame)
             {

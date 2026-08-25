@@ -232,7 +232,9 @@ void iRenderSetCameraViewMatrix(xMat4x3* m)
 {
     if ((m == NULL) && (globals.camera.lo_cam != NULL))
     {
-        gRenderBuffer.m_camViewMatrix = *(xMat4x3 *)(*(int *)(*(int*)RwEngineInstance + 4) + 0x10);
+        gRenderBuffer.m_camViewMatrix =
+            *(xMat4x3*)&((RwFrame*)((RwCamera*)RWSRCGLOBAL(curCamera))->object.object.parent)
+                 ->modelling;
     }
     else
     {

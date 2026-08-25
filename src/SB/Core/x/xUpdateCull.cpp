@@ -26,14 +26,13 @@ static void xUpdateCull_Swap(xUpdateCullMgr* mgr, U32 a, U32 b)
             break;
     } while (pMgrIndex != pMgrBIndex);
 
-    // Set index and groupIndex together.
-    S32 uVar6 = *(S32*)(&mgr->ent[a]);
-    *(S32*)(&mgr->ent[a]) = *(S32*)(&mgr->ent[b]);
-    *(S32*)(&mgr->ent[b]) = uVar6;
+    void* tmpEnt = mgr->ent[a];
+    mgr->ent[a] = mgr->ent[b];
+    mgr->ent[b] = tmpEnt;
 
-    uVar6 = *(S32*)(&mgr->mgr[a]);
-    *(S32*)(&mgr->mgr[a]) = *(S32*)(&mgr->mgr[b]);
-    *(S32*)(&mgr->mgr[b]) = uVar6;
+    xUpdateCullEnt* tmpMgr = mgr->mgr[a];
+    mgr->mgr[a] = mgr->mgr[b];
+    mgr->mgr[b] = tmpMgr;
 }
 
 static void xUpdateCull_MakeActive(xUpdateCullMgr* m, xUpdateCullEnt* e)

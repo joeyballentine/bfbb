@@ -187,9 +187,9 @@ void xParSysInit(xBase* b, xParSysAsset* tasset)
     U8* cmdPtr = (U8*)&tasset[1];
     for (i = 0; i < t->cmdCount; i++)
     {
-        *(U32*)(&t->cmd[i]) = TRUE;
-        *(U32*)(&t->cmd[i].tasset) = (U32)cmdPtr;
-        cmdPtr += xParCmdGetSize(*(U32*)cmdPtr);
+        t->cmd[i].flag = TRUE;
+        t->cmd[i].tasset = (xParCmdAsset*)cmdPtr;
+        cmdPtr += xParCmdGetSize(((xParCmdAsset*)cmdPtr)->type);
     }
 
     t->group = (xParGroup*)xMemAlloc(gActiveHeap, sizeof(xParGroup), FALSE);

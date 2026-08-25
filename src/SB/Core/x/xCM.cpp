@@ -289,7 +289,7 @@ void xCMupdate(F32 dt)
     if (credits_data != 0)
     {
         credits_time += (dt * dtscale);
-        if (credits_time >= *(F32*)((S32)&credits_data->dummy + 0x10))
+        if (credits_time >= ((xCMheader*)credits_data)->total_time)
         {
             xCMstop();
         }

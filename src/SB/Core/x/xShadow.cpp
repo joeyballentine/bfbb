@@ -1170,7 +1170,7 @@ static RpCollisionTriangle* shadowCacheEnvCB(RpIntersection* isx, RpWorldSector*
         return collTriangle;
     }
 
-    if (sShadowCollJSP && !(*(U8*)(collTriangle->index + 4) & 0x8))
+    if (sShadowCollJSP && !(((xClumpCollBSPTriangle*)collTriangle->index)->flags & 0x8))
     {
         return collTriangle;
     }

@@ -243,7 +243,7 @@ static void async_cb(s32 result, DVDFileInfo* fileInfo)
             length = length & ~(32 - 1);
         }
 
-        void* addr = (void*)((U32)entry->buf + entry->offset);
+        void* addr = (U8*)entry->buf + entry->offset;
         DVDReadAsync(&entry->file->ps.fileInfo, addr, length,
                      entry->file->ps.offset + entry->offset, async_cb);
     }
