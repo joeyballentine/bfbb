@@ -9,6 +9,27 @@
 #include "xMath.h"
 #include "xMemMgr.h"
 
+// The target's @stringBase0 opens with twelve strings ours lacks entirely --
+// the en_LAYER_TYPE names, plus a "<unknown>" fallback. Nothing left in the
+// unit references them, so they are the residue of a layer-type-to-name
+// lookup the linker dead-stripped. They intern first, so this sits ahead of
+// every other string literal in the file.
+void __deadstripped_xpkrsvc()
+{
+    printf("DEFAULT");
+    printf("TEXTURE");
+    printf("BSP");
+    printf("MODEL");
+    printf("ANIMATION");
+    printf("VRAM");
+    printf("SRAM");
+    printf("SNDTOC");
+    printf("CUTSCENE");
+    printf("CUTSCENETOC");
+    printf("JSPINFO");
+    printf("<unknown>");
+}
+
 // Square and JESway: Function relocation issues will resolve themselves when all the functions
 //                    here 100% match, as it is apparently related to the instruction size of each function
 static st_PACKER_READ_FUNCS g_pkr_read_funcmap_original = { 1,
