@@ -42,55 +42,6 @@ U32 iSphereHitsEnv(const xSphere* b, const xEnv* env, xCollis* coll);
 // FIXME: belongs in zSurface.h (defined in zSurface.cpp)
 S32 zSurfaceGetDamageType(const xSurface* surf);
 
-// FIXME: remove this when no longer needed for float data order
-static void __all_the_floats(F32* out)
-{
-#define FLOATDATA(n) out[__LINE__] = n
-    FLOATDATA(500.0f);
-    FLOATDATA(100.0f);
-    FLOATDATA(1.0f);
-    FLOATDATA(0.5f);
-    FLOATDATA(0.1f);
-    FLOATDATA(-10000.0f);
-    FLOATDATA(10000.0f);
-    FLOATDATA(3.57E-43f);
-    FLOATDATA(0.0f);
-    FLOATDATA(-9.9999997E+37f);
-    FLOATDATA(0.017453292f);
-    FLOATDATA(-1.0f);
-    FLOATDATA(2.0f);
-    FLOATDATA(3.0f);
-    FLOATDATA(100000.0f);
-    FLOATDATA(0.0000099999997f);
-    FLOATDATA(-3.1415927f);
-    FLOATDATA(1.0E+10f);
-    FLOATDATA(0.05f);
-    FLOATDATA(10.0f);
-    FLOATDATA(1000.0f);
-    FLOATDATA(1.5f);
-    FLOATDATA(20.0f);
-    FLOATDATA(0.3f);
-    FLOATDATA(0.0099999998f);
-    FLOATDATA(0.25f);
-    FLOATDATA(0.91f);
-    FLOATDATA(5.0f);
-    FLOATDATA(0.6f);
-    FLOATDATA(0.50999999f);
-    FLOATDATA(1.0E+9f);
-    FLOATDATA(25.0f);
-    FLOATDATA(0.94999999f);
-    FLOATDATA(200.0f);
-    FLOATDATA(360.0f);
-    FLOATDATA(3.1415927f);
-    FLOATDATA(6.2831855f);
-    FLOATDATA(0.70710677f);
-    FLOATDATA(0.57735026f);
-    FLOATDATA(0.000099999997f);
-    FLOATDATA(1.5707964f);
-    FLOATDATA(-0.0000099999997f);
-#undef FLOATDATA
-} // namespace all_the_floats
-
 // FIXME: belongs in xMath3.h as an inline
 inline void xBoxFromSphere(xBox& box, const xSphere& o)
 {
