@@ -1448,7 +1448,7 @@ void zUI_ScenePortalInit(zScene* zsc)
 
         c = '1';
 
-        for (j = 0; j < sWorld[i].numTasks; i++)
+        for (j = 0; j < sWorld[i].numTasks; j++)
         {
             if (c > '9')
             {
