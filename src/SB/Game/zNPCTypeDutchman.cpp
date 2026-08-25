@@ -40,11 +40,6 @@ WEAK bool xSphereHitsCapsule(const xSphere& o, const xVec3& v1, const xVec3& v2,
     return xSphereHitsCapsule(o.center, o.r, v1, v2, width);
 }
 
-#define f1605 0.0f
-#define f1606 1.0f
-#define f1689 0.2f
-#define f1690 0.1f
-
 #define ANIM_Idle01 1
 #define ANIM_Fidget01 4 //0x10
 #define ANIM_Fidget02 5 //0x14
@@ -402,53 +397,52 @@ xAnimTable* ZNPC_AnimTable_Dutchman()
     // clang-format on
     xAnimTable* table = xAnimTableNew("zNPCDutchman", NULL, 0);
 
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Idle01], 0x10, 0, f1606, NULL, NULL, f1605, NULL,
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Idle01], 0x10, 0, 1.0f, NULL, NULL, 0.0f, NULL,
                        NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Death01], 0, 0, f1606, NULL, NULL, f1605, NULL,
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Death01], 0, 0, 1.0f, NULL, NULL, 0.0f, NULL,
                        NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Fidget01], 0x20, 0, f1606, NULL, NULL, f1605,
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Fidget01], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Fidget02], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Fidget03], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Taunt01], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_AttackWindup01], 0x20, 0, 1.0f, NULL, NULL, 0.0f,
                        NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Fidget02], 0x20, 0, f1606, NULL, NULL, f1605,
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_AttackLoop01], 0x10, 0, 1.0f, NULL, NULL, 0.0f,
                        NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Fidget03], 0x20, 0, f1606, NULL, NULL, f1605,
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_AttackEnd01], 0x20, 0, 1.0f, NULL, NULL, 0.0f,
                        NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Taunt01], 0x20, 0, f1606, NULL, NULL, f1605,
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Attack02Windup01], 0x20, 0, 1.0f, NULL, NULL,
+                       0.0f, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Attack02Loop01], 0x10, 0, 1.0f, NULL, NULL, 0.0f,
                        NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_AttackWindup01], 0x20, 0, f1606, NULL, NULL,
-                       f1605, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_AttackLoop01], 0x10, 0, f1606, NULL, NULL, f1605,
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Attack02End01], 0x20, 0, 1.0f, NULL, NULL, 0.0f,
                        NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_AttackEnd01], 0x20, 0, f1606, NULL, NULL, f1605,
-                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Attack02Windup01], 0x20, 0, f1606, NULL, NULL,
-                       f1605, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Attack02Loop01], 0x10, 0, f1606, NULL, NULL,
-                       f1605, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Attack02End01], 0x20, 0, f1606, NULL, NULL,
-                       f1605, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_LassoGrab01], 0x20, 0x2000000, f1606, NULL, NULL,
-                       f1605, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_LassoGrab01], 0x20, 0x2000000, 1.0f, NULL, NULL,
+                       0.0f, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
 
-    NPCC_BuildStandardAnimTran(table, g_strz_subbanim, ourAnims, 1, f1689);
+    NPCC_BuildStandardAnimTran(table, g_strz_subbanim, ourAnims, 1, 0.2f);
 
     xAnimTableNewTransition(table, g_strz_subbanim[ANIM_AttackWindup01],
-                            g_strz_subbanim[ANIM_AttackLoop01], 0, 0, 0x10, 0, 0, 0, 0, 0, f1690,
-                            0);
+                            g_strz_subbanim[ANIM_AttackLoop01], 0, 0, 0x10, 0, 0, 0, 0, 0, 0.1f, 0);
     xAnimTableNewTransition(table, g_strz_subbanim[ANIM_AttackLoop01],
-                            g_strz_subbanim[ANIM_AttackEnd01], 0, 0, 0, 0, 0, 0, 0, 0, f1690, 0);
+                            g_strz_subbanim[ANIM_AttackEnd01], 0, 0, 0, 0, 0, 0, 0, 0, 0.1f, 0);
     xAnimTableNewTransition(table, g_strz_subbanim[ANIM_Attack02Windup01],
-                            g_strz_subbanim[ANIM_Attack02Loop01], 0, 0, 0x10, 0, 0, 0, 0, 0, f1690,
+                            g_strz_subbanim[ANIM_Attack02Loop01], 0, 0, 0x10, 0, 0, 0, 0, 0, 0.1f,
                             0);
     xAnimTableNewTransition(table, g_strz_subbanim[ANIM_Attack02Loop01],
-                            g_strz_subbanim[ANIM_Attack02End01], 0, 0, 0, 0, 0, 0, 0, 0, f1690, 0);
+                            g_strz_subbanim[ANIM_Attack02End01], 0, 0, 0, 0, 0, 0, 0, 0, 0.1f, 0);
     xAnimTableNewTransition(table, g_strz_subbanim[ANIM_Fidget02], g_strz_subbanim[ANIM_Idle01], 0,
-                            0, 0x10, 0, 0, 0, 0, 0, f1690, 0);
+                            0, 0x10, 0, 0, 0, 0, 0, 0.1f, 0);
     xAnimTableNewTransition(table, g_strz_subbanim[ANIM_Fidget02],
-                            g_strz_subbanim[ANIM_AttackWindup01], 0, 0, 0, 0, 0, 0, 0, 0, f1690, 0);
+                            g_strz_subbanim[ANIM_AttackWindup01], 0, 0, 0, 0, 0, 0, 0, 0, 0.1f, 0);
     xAnimTableNewTransition(table, g_strz_subbanim[ANIM_Fidget02], g_strz_subbanim[ANIM_Fidget01],
-                            0, 0, 0, 0, 0, 0, 0, 0, f1690, 0);
+                            0, 0, 0, 0, 0, 0, 0, 0, 0.1f, 0);
     xAnimTableNewTransition(table, g_strz_subbanim[ANIM_LassoGrab01], g_strz_subbanim[ANIM_Death01],
-                            0, 0, 0, 0, 0, 0, 0, 0, f1690, 0);
+                            0, 0, 0, 0, 0, 0, 0, 0, 0.1f, 0);
 
     return table;
 }

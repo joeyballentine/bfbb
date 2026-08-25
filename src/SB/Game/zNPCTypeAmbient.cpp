@@ -112,18 +112,15 @@ xAnimTable* ZNPC_AnimTable_Jelly()
         1, 7, 4, 8, 11, 0,
     };
 
-#define f882 1.0f
-#define f883 0.0f
-
-    xAnimTableNewState(table, g_strz_ambianim[1], 0x110, 1, f882, 0, 0, f883, 0, 0,
+    xAnimTableNewState(table, g_strz_ambianim[1], 0x110, 1, 1.0f, 0, 0, 0.0f, 0, 0,
                        xAnimDefaultBeforeEnter, 0x0, 0x0);
-    xAnimTableNewState(table, g_strz_ambianim[7], 0x110, 1, f882, 0, 0, f883, 0, 0,
+    xAnimTableNewState(table, g_strz_ambianim[7], 0x110, 1, 1.0f, 0, 0, 0.0f, 0, 0,
                        xAnimDefaultBeforeEnter, 0x0, 0x0);
-    xAnimTableNewState(table, g_strz_ambianim[4], 0x20, 1, f882, 0, 0, f883, 0, 0,
+    xAnimTableNewState(table, g_strz_ambianim[4], 0x20, 1, 1.0f, 0, 0, 0.0f, 0, 0,
                        xAnimDefaultBeforeEnter, 0x0, 0x0);
-    xAnimTableNewState(table, g_strz_ambianim[8], 0x10, 1, f882, 0, 0, f883, 0, 0,
+    xAnimTableNewState(table, g_strz_ambianim[8], 0x10, 1, 1.0f, 0, 0, 0.0f, 0, 0,
                        xAnimDefaultBeforeEnter, 0x0, 0x0);
-    xAnimTableNewState(table, g_strz_ambianim[11], 0x10, 1, f882, 0, 0, f883, 0, 0,
+    xAnimTableNewState(table, g_strz_ambianim[11], 0x10, 1, 1.0f, 0, 0, 0.0f, 0, 0,
                        xAnimDefaultBeforeEnter, 0x0, 0x0);
 
     NPCC_BuildStandardAnimTran(table, g_strz_ambianim, ourAnims, 1, 0.2f);
@@ -139,28 +136,26 @@ xAnimTable* ZNPC_AnimTable_Neptune()
 
     xAnimTable* table = (xAnimTable*)xAnimTableNew("zNPCNeptune", NULL, 0);
 
-#define f903 0.5f
+    xAnimTableNewState(table, g_strz_ambianim[1], 0x10, 0, 1.0f, 0, 0, 0.0f, 0, 0,
+                       xAnimDefaultBeforeEnter, 0x0, 0x0);
+    xAnimTableNewState(table, g_strz_ambianim[2], 0x10, 0, 1.0f, 0, 0, 0.0f, 0, 0,
+                       xAnimDefaultBeforeEnter, 0x0, 0x0);
+    xAnimTableNewState(table, g_strz_ambianim[3], 0x10, 0, 1.0f, 0x0, 0x0, 0.0f, 0x0, 0x0,
+                       xAnimDefaultBeforeEnter, 0x0, 0x0);
+    xAnimTableNewState(table, g_strz_ambianim[4], 0x20, 0, 1.0f, 0x0, 0x0, 0.0f, 0x0, 0x0,
+                       xAnimDefaultBeforeEnter, 0x0, 0x0);
+    xAnimTableNewState(table, g_strz_ambianim[5], 0x20, 0, 1.0f, 0, 0, 0.0f, 0, 0,
+                       xAnimDefaultBeforeEnter, 0x0, 0x0);
+    xAnimTableNewState(table, g_strz_ambianim[6], 0x20, 0, 1.0f, 0, 0, 0.0f, 0, 0,
+                       xAnimDefaultBeforeEnter, 0x0, 0x0);
+    NPCC_BuildStandardAnimTran(table, g_strz_ambianim, ourAnims, 1, 0.5f);
 
-    xAnimTableNewState(table, g_strz_ambianim[1], 0x10, 0, f882, 0, 0, f883, 0, 0,
-                       xAnimDefaultBeforeEnter, 0x0, 0x0);
-    xAnimTableNewState(table, g_strz_ambianim[2], 0x10, 0, f882, 0, 0, f883, 0, 0,
-                       xAnimDefaultBeforeEnter, 0x0, 0x0);
-    xAnimTableNewState(table, g_strz_ambianim[3], 0x10, 0, f882, 0x0, 0x0, f883, 0x0, 0x0,
-                       xAnimDefaultBeforeEnter, 0x0, 0x0);
-    xAnimTableNewState(table, g_strz_ambianim[4], 0x20, 0, f882, 0x0, 0x0, f883, 0x0, 0x0,
-                       xAnimDefaultBeforeEnter, 0x0, 0x0);
-    xAnimTableNewState(table, g_strz_ambianim[5], 0x20, 0, f882, 0, 0, f883, 0, 0,
-                       xAnimDefaultBeforeEnter, 0x0, 0x0);
-    xAnimTableNewState(table, g_strz_ambianim[6], 0x20, 0, f882, 0, 0, f883, 0, 0,
-                       xAnimDefaultBeforeEnter, 0x0, 0x0);
-    NPCC_BuildStandardAnimTran(table, g_strz_ambianim, ourAnims, 1, f903);
-
-    xAnimTableNewTransition(table, g_strz_ambianim[4], g_strz_ambianim[1], 0x0, 0x0, 0x10, 0, f883,
-                            f883, 0, 0, f903, 0x0);
-    xAnimTableNewTransition(table, g_strz_ambianim[5], g_strz_ambianim[2], 0x0, 0x0, 0x10, 0, f883,
-                            f883, 0, 0, f903, 0x0);
-    xAnimTableNewTransition(table, g_strz_ambianim[6], g_strz_ambianim[3], 0x0, 0x0, 0x10, 0, f883,
-                            f883, 0, 0, f903, 0x0);
+    xAnimTableNewTransition(table, g_strz_ambianim[4], g_strz_ambianim[1], 0x0, 0x0, 0x10, 0, 0.0f,
+                            0.0f, 0, 0, 0.5f, 0x0);
+    xAnimTableNewTransition(table, g_strz_ambianim[5], g_strz_ambianim[2], 0x0, 0x0, 0x10, 0, 0.0f,
+                            0.0f, 0, 0, 0.5f, 0x0);
+    xAnimTableNewTransition(table, g_strz_ambianim[6], g_strz_ambianim[3], 0x0, 0x0, 0x10, 0, 0.0f,
+                            0.0f, 0, 0, 0.5f, 0x0);
 
     return table;
 }

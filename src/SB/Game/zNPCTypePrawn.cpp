@@ -14,11 +14,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#define f1052 1.0f
-#define f1053 0.0f
-#define f1454 0.2f
-#define f1455 0.1f
-
 #define ANIM_Unknown 0 // 0x0
 #define ANIM_Idle01 1 // 0x04
 #define ANIM_Idle02 2 // 0x08
@@ -438,34 +433,33 @@ xAnimTable* ZNPC_AnimTable_Prawn()
     // clang-format on
     xAnimTable* table = xAnimTableNew("zNPCPrawn", NULL, 0);
 
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Idle01], 0x10, 0, f1052, NULL, NULL, f1053, NULL,
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Idle01], 0x10, 0, 1.0f, NULL, NULL, 0.0f, NULL,
                        NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Fidget01], 0x20, 0, f1052, NULL, NULL, f1053,
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Fidget01], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Fidget02], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Taunt01], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_AttackWindup01], 0x20, 0, 1.0f, NULL, NULL, 0.0f,
                        NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Fidget02], 0x20, 0, f1052, NULL, NULL, f1053,
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_AttackLoop01], 0x10, 0, 1.0f, NULL, NULL, 0.0f,
                        NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Taunt01], 0x20, 0, f1052, NULL, NULL, f1053,
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_AttackEnd01], 0x20, 0, 1.0f, NULL, NULL, 0.0f,
                        NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_AttackWindup01], 0x20, 0, f1052, NULL, NULL,
-                       f1053, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_AttackLoop01], 0x10, 0, f1052, NULL, NULL, f1053,
-                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_AttackEnd01], 0x20, 0, f1052, NULL, NULL, f1053,
-                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Damage01], 0x20, 0, f1052, NULL, NULL, f1053,
-                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
-    xAnimTableNewState(table, g_strz_subbanim[ANIM_Damage02], 0x20, 0, f1052, NULL, NULL, f1053,
-                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Damage01], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_subbanim[ANIM_Damage02], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
 
-    NPCC_BuildStandardAnimTran(table, g_strz_subbanim, ourAnims, 1, f1454);
+    NPCC_BuildStandardAnimTran(table, g_strz_subbanim, ourAnims, 1, 0.2f);
 
     xAnimTableNewTransition(table, g_strz_subbanim[ANIM_AttackWindup01],
-                            g_strz_subbanim[ANIM_AttackLoop01], 0, 0, 0x10, 0, 0, 0, 0, 0, f1455,
-                            0);
+                            g_strz_subbanim[ANIM_AttackLoop01], 0, 0, 0x10, 0, 0, 0, 0, 0, 0.1f, 0);
     xAnimTableNewTransition(table, g_strz_subbanim[ANIM_AttackLoop01],
-                            g_strz_subbanim[ANIM_AttackEnd01], 0, 0, 0, 0, 0, 0, 0, 0, f1455, 0);
+                            g_strz_subbanim[ANIM_AttackEnd01], 0, 0, 0, 0, 0, 0, 0, 0, 0.1f, 0);
     xAnimTableNewTransition(table, g_strz_subbanim[ANIM_AttackEnd01], g_strz_subbanim[ANIM_Idle01],
-                            0, 0, 0x10, 0, 0, 0, 0, 0, f1455, 0);
+                            0, 0, 0x10, 0, 0, 0, 0, 0, 0.1f, 0);
 
     return table;
 }

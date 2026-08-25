@@ -16,11 +16,6 @@ namespace std
     float fabsf(float x);
 }
 
-#define f1585 1.0f
-#define f1586 0.0f
-#define f1657 0.2f
-#define f1658 0.1f
-
 #define ANIM_Unknown 0
 #define ANIM_Idle01 1 // 0x4
 #define ANIM_Taunt01 3 // 0xC
@@ -584,92 +579,92 @@ xAnimTable* ZNPC_AnimTable_BossPlankton()
     xAnimTableNewState(table, g_strz_bossanim[ANIM_Taunt01], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL,
                        NULL, xAnimDefaultBeforeEnter, NULL, NULL);
     anim_list[anim_size++] = ANIM_move;
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_move], 0x10, 0, f1585, NULL, NULL, f1586, NULL,
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_move], 0x10, 0, 1.0f, NULL, NULL, 0.0f, NULL,
                        NULL, xAnimDefaultBeforeEnter, NULL, NULL);
     anim_list[anim_size++] = ANIM_stun_begin;
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_stun_begin], 0x20, 0, f1585, NULL, NULL, f1586,
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_stun_begin], 0x20, 0, 1.0f, NULL, NULL, 0.0f,
                        NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
     anim_list[anim_size++] = ANIM_stun_loop;
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_stun_loop], 0x10, 0, f1585, NULL, NULL, f1586,
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_stun_loop], 0x10, 0, 1.0f, NULL, NULL, 0.0f,
                        NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
     anim_list[anim_size++] = ANIM_stun_end;
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_stun_end], 0x20, 0, f1585, NULL, NULL, f1586,
-                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_stun_end], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL,
+                       NULL, xAnimDefaultBeforeEnter, NULL, NULL);
     anim_list[anim_size++] = ANIM_attack_beam_begin;
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_beam_begin], 0x20, 0, f1585, NULL, NULL,
-                       f1586, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_beam_begin], 0x20, 0, 1.0f, NULL, NULL,
+                       0.0f, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
     anim_list[anim_size++] = ANIM_attack_beam_loop;
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_beam_loop], 0x10, 0, f1585, NULL, NULL,
-                       f1586, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_beam_loop], 0x10, 0, 1.0f, NULL, NULL,
+                       0.0f, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
     anim_list[anim_size++] = ANIM_attack_beam_end;
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_beam_end], 0x20, 0, f1585, NULL, NULL,
-                       f1586, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_beam_end], 0x20, 0, 1.0f, NULL, NULL,
+                       0.0f, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
     anim_list[anim_size++] = ANIM_attack_wall_begin;
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_wall_begin], 0x20, 0, f1585, NULL, NULL,
-                       f1586, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_wall_begin], 0x20, 0, 1.0f, NULL, NULL,
+                       0.0f, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
     anim_list[anim_size++] = ANIM_attack_wall_loop;
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_wall_loop], 0x10, 0, f1585, NULL, NULL,
-                       f1586, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_wall_loop], 0x10, 0, 1.0f, NULL, NULL,
+                       0.0f, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
     anim_list[anim_size++] = ANIM_attack_wall_end;
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_wall_end], 0x20, 0, f1585, NULL, NULL,
-                       f1586, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_wall_end], 0x20, 0, 1.0f, NULL, NULL,
+                       0.0f, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
     anim_list[anim_size++] = ANIM_attack_missle;
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_missle], 0x20, 0, f1585, NULL, NULL,
-                       f1586, NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_missle], 0x20, 0, 1.0f, NULL, NULL, 0.0f,
+                       NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
     anim_list[anim_size++] = ANIM_attack_bomb;
-    xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_bomb], 0x20, 0, f1585, NULL, NULL, f1586,
+    xAnimTableNewState(table, g_strz_bossanim[ANIM_attack_bomb], 0x20, 0, 1.0f, NULL, NULL, 0.0f,
                        NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
     anim_list[anim_size] = ANIM_Unknown;
 
-    NPCC_BuildStandardAnimTran(table, g_strz_bossanim, anim_list, 1, f1657);
+    NPCC_BuildStandardAnimTran(table, g_strz_bossanim, anim_list, 1, 0.2f);
 
     xAnimTableNewTransition(table, g_strz_bossanim[ANIM_stun_begin],
-                            g_strz_bossanim[ANIM_stun_loop], 0, 0, 0x10, 0, f1586, f1586, 0, 0,
-                            f1658, 0);
+                            g_strz_bossanim[ANIM_stun_loop], 0, 0, 0x10, 0, 0.0f, 0.0f, 0, 0, 0.1f,
+                            0);
     xAnimTableNewTransition(table, g_strz_bossanim[ANIM_stun_loop], g_strz_bossanim[ANIM_stun_end],
-                            0, 0, 0, 0, f1586, f1586, 0, 0, f1658, 0);
+                            0, 0, 0, 0, 0.0f, 0.0f, 0, 0, 0.1f, 0);
     xAnimTableNewTransition(table, g_strz_bossanim[ANIM_attack_beam_begin],
-                            g_strz_bossanim[ANIM_attack_beam_loop], 0, 0, 0x10, 0, f1586, f1586, 0,
-                            0, f1658, 0);
+                            g_strz_bossanim[ANIM_attack_beam_loop], 0, 0, 0x10, 0, 0.0f, 0.0f, 0, 0,
+                            0.1f, 0);
     xAnimTableNewTransition(table, g_strz_bossanim[ANIM_attack_beam_begin],
-                            g_strz_bossanim[ANIM_attack_beam_end], 0, 0, 0, 0, f1586, f1586, 0, 0,
-                            f1658, 0);
+                            g_strz_bossanim[ANIM_attack_beam_end], 0, 0, 0, 0, 0.0f, 0.0f, 0, 0,
+                            0.1f, 0);
     xAnimTableNewTransition(table, g_strz_bossanim[ANIM_attack_beam_loop],
-                            g_strz_bossanim[ANIM_attack_beam_end], 0, 0, 0, 0, f1586, f1586, 0, 0,
-                            f1658, 0);
+                            g_strz_bossanim[ANIM_attack_beam_end], 0, 0, 0, 0, 0.0f, 0.0f, 0, 0,
+                            0.1f, 0);
     xAnimTableNewTransition(table, g_strz_bossanim[ANIM_attack_wall_begin],
-                            g_strz_bossanim[ANIM_attack_wall_loop], 0, 0, 0x10, 0, f1586, f1586, 0,
-                            0, f1658, 0);
+                            g_strz_bossanim[ANIM_attack_wall_loop], 0, 0, 0x10, 0, 0.0f, 0.0f, 0, 0,
+                            0.1f, 0);
     xAnimTableNewTransition(table, g_strz_bossanim[ANIM_attack_wall_loop],
-                            g_strz_bossanim[ANIM_attack_wall_end], 0, 0, 0, 0, f1586, f1586, 0, 0,
-                            f1658, 0);
+                            g_strz_bossanim[ANIM_attack_wall_end], 0, 0, 0, 0, 0.0f, 0.0f, 0, 0,
+                            0.1f, 0);
     xAnimTableNewTransition(table, g_strz_bossanim[ANIM_Taunt01], g_strz_bossanim[ANIM_stun_begin],
-                            0, 0, 0, 0, f1586, f1586, 0, 0, f1658, 0);
+                            0, 0, 0, 0, 0.0f, 0.0f, 0, 0, 0.1f, 0);
     xAnimTableNewTransition(table, g_strz_bossanim[ANIM_move], g_strz_bossanim[ANIM_stun_begin], 0,
-                            0, 0, 0, f1586, f1586, 0, 0, f1658, 0);
+                            0, 0, 0, 0.0f, 0.0f, 0, 0, 0.1f, 0);
     xAnimTableNewTransition(table, g_strz_bossanim[ANIM_attack_beam_begin],
-                            g_strz_bossanim[ANIM_stun_begin], 0, 0, 0, 0, f1586, f1586, 0, 0, f1658,
+                            g_strz_bossanim[ANIM_stun_begin], 0, 0, 0, 0, 0.0f, 0.0f, 0, 0, 0.1f,
                             0);
     xAnimTableNewTransition(table, g_strz_bossanim[ANIM_attack_beam_loop],
-                            g_strz_bossanim[ANIM_stun_begin], 0, 0, 0, 0, f1586, f1586, 0, 0, f1658,
+                            g_strz_bossanim[ANIM_stun_begin], 0, 0, 0, 0, 0.0f, 0.0f, 0, 0, 0.1f,
                             0);
     xAnimTableNewTransition(table, g_strz_bossanim[ANIM_attack_beam_end],
-                            g_strz_bossanim[ANIM_stun_begin], 0, 0, 0, 0, f1586, f1586, 0, 0, f1658,
+                            g_strz_bossanim[ANIM_stun_begin], 0, 0, 0, 0, 0.0f, 0.0f, 0, 0, 0.1f,
                             0);
     xAnimTableNewTransition(table, g_strz_bossanim[ANIM_attack_wall_begin],
-                            g_strz_bossanim[ANIM_stun_begin], 0, 0, 0, 0, f1586, f1586, 0, 0, f1658,
+                            g_strz_bossanim[ANIM_stun_begin], 0, 0, 0, 0, 0.0f, 0.0f, 0, 0, 0.1f,
                             0);
     xAnimTableNewTransition(table, g_strz_bossanim[ANIM_attack_wall_loop],
-                            g_strz_bossanim[ANIM_stun_begin], 0, 0, 0, 0, f1586, f1586, 0, 0, f1658,
+                            g_strz_bossanim[ANIM_stun_begin], 0, 0, 0, 0, 0.0f, 0.0f, 0, 0, 0.1f,
                             0);
     xAnimTableNewTransition(table, g_strz_bossanim[ANIM_attack_wall_end],
-                            g_strz_bossanim[ANIM_stun_begin], 0, 0, 0, 0, f1586, f1586, 0, 0, f1658,
+                            g_strz_bossanim[ANIM_stun_begin], 0, 0, 0, 0, 0.0f, 0.0f, 0, 0, 0.1f,
                             0);
     xAnimTableNewTransition(table, g_strz_bossanim[ANIM_attack_missle],
-                            g_strz_bossanim[ANIM_stun_begin], 0, 0, 0, 0, f1586, f1586, 0, 0, f1658,
+                            g_strz_bossanim[ANIM_stun_begin], 0, 0, 0, 0, 0.0f, 0.0f, 0, 0, 0.1f,
                             0);
     xAnimTableNewTransition(table, g_strz_bossanim[ANIM_attack_bomb],
-                            g_strz_bossanim[ANIM_stun_begin], 0, 0, 0, 0, f1586, f1586, 0, 0, f1658,
+                            g_strz_bossanim[ANIM_stun_begin], 0, 0, 0, 0, 0.0f, 0.0f, 0, 0, 0.1f,
                             0);
 
     return table;
