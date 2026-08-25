@@ -605,14 +605,6 @@ static void LeanUpdate(F32 angle, F32 dt)
     globals.player.LeanLerp += t * dt;
 }
 
-// Temp function to fix sdata2 float order.
-// TODO: Figure out why these literals occur this earlier in the binary.
-void floatfix(float* out)
-{
-    out[0] = 3.0f;
-    out[1] = 0.00001f;
-}
-
 static void TurnToFace(xEnt* ent, const xVec3* target, F32 speedLimit, F32 dt)
 {
     xVec3 currentFacing = ent->frame->mat.at;
@@ -1741,18 +1733,6 @@ static U32 BubbleSpinCB(xAnimTransition*, xAnimSingle* anim, void*)
     sPlayerAttackInAir++;
     zEntPlayer_SNDStop(ePlayerSnd_SlipLoop);
     return 0;
-}
-
-// FIXME: These floats are out of order (again...)
-static void float_fix2(float* out)
-{
-    out[0] = 0.70709997f;
-    out[1] = 1.0e-7;
-    out[2] = -4.0f;
-    out[3] = 15.0f;
-    out[4] = 9.0f;
-    out[5] = -1.5f;
-    out[6] = 0.0001f;
 }
 
 static U32 BubbleBashCheck(xAnimTransition*, xAnimSingle* anim, void*)
