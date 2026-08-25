@@ -6235,36 +6235,39 @@ static void zEntPlayer_StreakFX(xEnt* ent, F32)
     {
         if (strcmp(ent->model->Anim->Single->State->Name, "Melee01") == 0)
         {
-            sStreakInfo[1][1].activated = TRUE;
+            sStreakInfo[cp][1].activated = TRUE;
         }
         else if (strcmp(ent->model->Anim->Single->State->Name, "JumpMelee01") == 0)
         {
-            sStreakInfo[1][2].activated = 1;
+            sStreakInfo[cp][2].activated = TRUE;
         }
         else if (strcmp(ent->model->Anim->Single->State->Name, "LassoSwing") == 0)
         {
-            sStreakInfo[1][2].activated = TRUE;
-            sStreakInfo[1][3].activated = TRUE;
+            sStreakInfo[cp][2].activated = TRUE;
+            sStreakInfo[cp][3].activated = TRUE;
         }
         else if (globals.player.IsCoptering)
         {
-            sStreakInfo[1][1].activated = 1;
+            sStreakInfo[cp][1].activated = TRUE;
+        }
+    }
+    else if (cp == 0)
+    {
+        if (strcmp(ent->model->Anim->Single->State->Name, "BbowlWindup01") == 0)
+        {
+            sStreakInfo[cp][1].activated = TRUE;
         }
     }
     else if (cp == 2)
     {
-        if (strcmp(ent->model->Anim->Single->State->Name, "BbowlWindup01") == 0)
+        if (strcmp(ent->model->Anim->Single->State->Name, "Stunfall") == 0 ||
+            strcmp(ent->model->Anim->Single->State->Name, "Stunjump") == 0)
         {
-            sStreakInfo[0][1].activated = 1;
+            sStreakInfo[cp][1].activated = TRUE;
+            sStreakInfo[cp][0].activated = TRUE;
+            sStreakInfo[cp][3].activated = TRUE;
+            sStreakInfo[cp][2].activated = TRUE;
         }
-    }
-    else if (cp == 0 && strcmp(ent->model->Anim->Single->State->Name, "Stunfall") == 0 ||
-             strcmp(ent->model->Anim->Single->State->Name, "Stunjump") == 0)
-    {
-        sStreakInfo[2][1].activated = TRUE;
-        sStreakInfo[2][0].activated = TRUE;
-        sStreakInfo[2][3].activated = TRUE;
-        sStreakInfo[2][2].activated = TRUE;
     }
 
     for (i = 0; i < 3; i++)
