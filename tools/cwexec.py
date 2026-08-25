@@ -40,7 +40,20 @@ def compile_prefix(ninja, rule, mw_version):
     """
     command = _rule_command(ninja, rule)
     head = command.split("$cflags")[0]
-    return shlex.split(head.replace("$mw_version", mw_version))
+    # shlex's POSIX mode reads a backslash as an escape character, so on Windows
+    # it silently EATS the separators in `build\compilers\GC.0p1a\mwcceppc.exe`
+    # and hands back `buildcompilersGC2.0p1amwcceppc.exe`, which cannot be
+    # spawned. That broke solo.py -- the tool used to VERIFY that a change is
+    # byte-neutral -- on the platform this is developed on.
+    parts = shlex.split(head.replace("$mw_version", mw_version),
+                        posix=(os.name != "nt"))
+    if os.name == "nt":
+        # Non-POSIX mode keeps the quotes as part of the token; argv wants them
+        # gone. build.ninja does not currently quote the compiler path, but a
+        # path with a space in it would arrive here quoted.
+        parts = [x[1:-1] if len(x) > 1 and x[0] == x[-1] == '"' else x
+                 for x in parts]
+    return parts
 
 
 def objdiff_cli(root):
