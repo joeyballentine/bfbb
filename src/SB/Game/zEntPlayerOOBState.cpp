@@ -384,6 +384,8 @@ void oob_state::init()
     static drop_state_type drop_state;
     shared.states[3] = &drop_state;
 
+    shared.state = shared.states[0];
+
     shared.max_out_time = fixed.out_time;
     shared.fade_alpha = 1.0f;
     shared.render_hand = FALSE;
