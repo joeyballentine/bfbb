@@ -5012,3 +5012,25 @@ The method that found all of these is written up in the
 read the Dolphin log, and confirm against the target's disassembly. The fuzzy
 percentage is not the detector — most of these live in functions scoring 87-99%,
 while several sub-60% functions are semantically perfect.
+
+### Open playtest issues (2026-08-25)
+
+Reported while playing, not yet diagnosed. Method: see the
+`feedback_behavioural_bug_hunting` memory -- trace with OSReport, confirm
+against the target's disassembly, do not trust the fuzzy %.
+
+1. **NPC glyph looks off.** The floating icon over things you can hit.
+   `zNPCGlyph` is 99.69%; `zNPCGlyph_ScenePrepare` 96.87% and
+   `zNPCCommon_Glyphs_RenderAll` 97.70% are the only sub-100 functions.
+   RenderAll has been diffed and is register allocation only -- one `mr r27,
+   r24` retail keeps and we fold. ScenePrepare not yet checked.
+2. **Out-of-bounds detection is too lenient** (and the OOB hand with it).
+   `oob_state` is the least-matching visual set on the player:
+   `move_hand` 73.89%, `set_camera` 82.69%, `render_fade` 85.78%,
+   `grab_state::start` 91.36%, `render_hand` 94.93%. Note the thresholds come
+   from SB.INI (`player.state.out_of_bounds.*`, parsed in
+   `oob_state::load_settings`), so check the parsed `fixed` values first --
+   that is a data path, not code.
+3. **Goo (water) does not appear in levels.** Start at `zFX`'s goo functions
+   (`zFXGooEventMelt` 93.23%) and whatever renders the goo surface; also check
+   the JSP/env path, since goo is level geometry rather than an entity.
