@@ -337,8 +337,7 @@ S32 zNPCGoalPlayerNear::NPCMessage(NPCMsg* mail)
 void zNPCGoalPlayerNear::ChkCheatMedic()
 {
     static S32 cnt_nextMedic = 0;
-    cnt_nextMedic--;
-    if (cnt_nextMedic <= 0)
+    if (--cnt_nextMedic <= 0)
     {
         cnt_nextMedic = (S32)(5.0f * xurand()) + 5;
         zEntPlayer_GiveHealth(1);

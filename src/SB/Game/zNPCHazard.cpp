@@ -93,7 +93,7 @@ static NPCHazard g_hazards[64] = { NPC_HAZ_UNKNOWN };
 static xAnimTable* g_haz_animTable[30];
 static UVAModelInfo g_haz_uvAnimInfo[30];
 
-static volatile S32 g_cnt_activehaz;
+static S32 g_cnt_activehaz;
 static xParEmitterCustomSettings g_parf_default;
 static xParEmitterCustomSettings g_parf_zapwarn;
 static xParEmitterCustomSettings g_parf_zapwave;

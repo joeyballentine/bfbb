@@ -1126,7 +1126,45 @@ whole-variable `volatile` on `zThrownCount` is firmly disproven by the
 target (it breaks six other functions in the unit and creates four new
 non-matching ones), so nothing has been papered over here.
 
-### The store-to-load forwarding defect: isolated, and DEPRIORITISED
+### The store-to-load forwarding defect: FIXED IN THE COMPILER (clause F, 2026-08-25)
+
+**This whole section is now historical.** Clause F (see `patch_compiler.py`)
+suppresses store-to-load forwarding for whole plain-static objects: on the
+value-numbering entry-0 store-kill path, a store whose base expression is a
+plain static (word 5) gets a FRESH value number instead of recording the
+stored value's, so the following load reloads exactly as retail does. Four
+bytes (`xor esi, esi` on clause V's static discriminant path); the stock
+0x50a2c0(memref, value) records when value != 0 and kills when value == 0,
+and the entry-0 handler passes esi as value.
+
+Measured 2026-08-25 (full ninja, DOL sha1 306526d9... intact):
+matched_functions **8386 -> 8403 (+17 / -0)**, GAME exact 79.830 -> 80.226,
+GAME fuzzy 99.1068 -> 99.1477, 20 sub-100 functions up, ZERO down, 12 units'
+matched-count up, none down. Clause F ALONE was +16/-15 with the DOL broken:
+under stock forwarding a source re-read of a just-stored static and a use of
+the stored expression's value compile identically, so 15 functions were
+spelled with a re-read where retail's source used the expression value or a
+local (`cnt--; if (cnt == 0)` vs `if (--cnt == 0)`, chained assignments,
+call-result temps). All 15 were respelled the same session — the census's
+prediction that "every one of these must be reverted first or the measurement
+will read as zero" was exactly right, in both directions.
+
+The volatile-device census below was swept: devices removed from iSnd (5),
+zNPCTypeTiki (2), zNPCHazard, zEntPlayer (5 incl. bbash_tmr and
+sTongueDblSpeedMult), zScene (3), iModel (2), zCombo (5), zAnimList,
+isavegame, xutil, xMath (rndseed), xFFX (3) — every beneficiary function
+still byte-exact, and zAnimListInit ("no source form reaches 100%") crossed
+to 100.0 once its device stopped fighting the clause. TWO devices survive
+and are still load-bearing: `xPar`'s pool volatile (it also pins store
+ORDER, which is scheduler territory) and `zMovePoint_GetMemPool`'s volatile
+return (that forward happens upstream of value numbering — evidence that
+retail's own change sits earlier in the pipe than clause F's reconstruction
+of it). `zNPCTypeBossSandy`'s `sElbowDropThreshold` masks LICM, not this,
+and stays.
+
+Everything below this line is the pre-clause-F record, kept for the method.
+
+### (historical) The store-to-load forwarding defect: isolated, and DEPRIORITISED
 
 A 30-line repro reproduces it standalone with the shipped 2.0p1a compiler and
 the project's own cflags. All three field shapes fall out of it:

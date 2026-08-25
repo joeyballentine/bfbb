@@ -375,8 +375,7 @@ bool zMenuCardCheckStartup(S32* bytesNeeded, S32* availOnDisk, S32* neededFiles)
         }
         else
         {
-            corruptFileCount = xSGCheckForCorruptFiles(ldinst, corruptFiles);
-            if (corruptFileCount != 0)
+            if ((corruptFileCount = xSGCheckForCorruptFiles(ldinst, corruptFiles)) != 0)
             {
                 *bytesNeeded = -4;
                 *availOnDisk = -4;
@@ -435,8 +434,7 @@ bool zMenuCardCheckStartup(S32* bytesNeeded, S32* availOnDisk, S32* neededFiles)
         }
         else
         {
-            corruptFileCount = xSGCheckForCorruptFiles(ldinst, corruptFiles);
-            if (corruptFileCount != 0)
+            if ((corruptFileCount = xSGCheckForCorruptFiles(ldinst, corruptFiles)) != 0)
             {
                 *bytesNeeded = -4;
                 *availOnDisk = -4;

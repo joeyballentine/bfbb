@@ -129,12 +129,12 @@ sinfo sinfo_array[12];
 
 sndlookup snd;
 
-U32* volatile ua_stream_buffer = NULL; //unaligned stream buffer
-U32* volatile stream_buffer = 0;
+U32* ua_stream_buffer = NULL; //unaligned stream buffer
+U32* stream_buffer = 0;
 u32 silence_buffer = 0;
 volatile u32 zero_point = 0;
 volatile u32 zero_end = 0;
-volatile S32 sinfo_array_max = 0;
+S32 sinfo_array_max = 0;
 volatile U32 SoundFlags = 0;
 volatile S32 fc = 0;
 static char soundInited = 0;
@@ -291,8 +291,9 @@ static void arqcb(u32 pointerToARQRequest)
 
     xSTAssetName(data->vinf.aid);
     dump_flags(data->vinf.flags);
-    last_ar = (ARQRequest*)pointerToARQRequest;
-    if (last_ar->length == 0 || data->vinf.voice == NULL)
+    ARQRequest* req = (ARQRequest*)pointerToARQRequest;
+    last_ar = req;
+    if (req->length == 0 || data->vinf.voice == NULL)
     {
         return;
     }
@@ -755,8 +756,8 @@ static S32 sound_stream;
 
 iSndFileInfo* iSndLookup(U32 id)
 {
-    static volatile S32 strm_id = 1;
-    static volatile S32 snd_id = 0x1000;
+    static S32 strm_id = 1;
+    static S32 snd_id = 0x1000;
 
     sound_stream = 0;
 

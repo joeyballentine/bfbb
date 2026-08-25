@@ -16,8 +16,7 @@ void xBehaveMgr_Startup()
 
 void xBehaveMgr_Shutdown()
 {
-    g_modinit--;
-    if (g_modinit == 0)
+    if (--g_modinit == 0)
     {
         if (g_behavmgr != NULL)
         {

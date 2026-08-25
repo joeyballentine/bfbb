@@ -41,8 +41,7 @@ S32 xSTStartup(st_PACKER_ASSETTYPE* handlers)
 
 S32 xSTShutdown()
 {
-    g_straninit--;
-    if (g_straninit == 0)
+    if (--g_straninit == 0)
     {
         g_typeHandlers = 0;
         XST_unlock_all();

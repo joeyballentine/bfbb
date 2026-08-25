@@ -53,8 +53,7 @@ void zDispatcher_sceneFinish()
 {
     st_ZDISPATCH_DEPOT* depot = &g_zdsp_depot;
 
-    g_zdsp_init--;
-    if (g_zdsp_init == 0)
+    if (--g_zdsp_init == 0)
     {
         memset(depot, 0, sizeof(st_ZDISPATCH_DEPOT));
     }

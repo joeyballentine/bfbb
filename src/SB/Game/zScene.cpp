@@ -120,8 +120,8 @@ static S32 neededFiles;
 static F32 offsetx;
 static F32 offsety;
 static U32 enableScreenAdj;
-volatile static F32 oldOffsetx;
-volatile static F32 oldOffsety;
+static F32 oldOffsetx;
+static F32 oldOffsety;
 static S32 sMemDepthSceneStart = -1;
 static S32 sMemDepthJustHIPStart = -1;
 _zEnv* gCurEnv;
@@ -3263,10 +3263,7 @@ static void zSceneObjHashtableInit(S32 count)
 {
     scobj_idbps = (IDBasePair*)xMemAllocSize((U32)count * sizeof(IDBasePair));
 
-    // Retail reloads scobj_idbps from memory for the memset instead of reusing the
-    // xMemAlloc return value; the volatile cast forces that reload (same idiom as
-    // xFFXPoolInit / zMovePoint_GetMemPool). Byte-exact with it, 95% without.
-    memset(*(IDBasePair* volatile*)&scobj_idbps, 0, count * sizeof(IDBasePair));
+    memset(scobj_idbps, 0, count * sizeof(IDBasePair));
 
     scobj_size = count;
     nidbps = 0;

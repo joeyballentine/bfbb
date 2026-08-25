@@ -19,8 +19,9 @@ void iMemInit()
 {
     OSHeapHandle hi = (OSHeapHandle)OSGetArenaHi();
     he = hi & 0xffffffe0;
-    hs = (OSHeapHandle)OSGetArenaLo() + 0x1f & 0xffffffe0;
-    the_heap = OSCreateHeap(OSInitAlloc((void*)hs, (void*)(hi & 0xffffffe0), 1), (void*)he);
+    OSHeapHandle lo = (OSHeapHandle)OSGetArenaLo() + 0x1f & 0xffffffe0;
+    hs = lo;
+    the_heap = OSCreateHeap(OSInitAlloc((void*)lo, (void*)(hi & 0xffffffe0), 1), (void*)he);
     OSHeapHandle currHeap = the_heap;
     if (currHeap >= 0)
     {
@@ -40,9 +41,10 @@ void iMemInit()
     gMemInfo.stack.size = (U32)_stack_end - gMemInfo.stack.addr;
     gMemInfo.stack.flags = 0x820;
     HeapSize = 0x384000;
-    mem_base_alloc = (U32)OSAllocFromHeap(__OSCurrHeap, HeapSize);
-    mem_top_alloc = mem_base_alloc + HeapSize;
-    gMemInfo.DRAM.addr = mem_base_alloc;
+    U32 base = (U32)OSAllocFromHeap(__OSCurrHeap, HeapSize);
+    mem_base_alloc = base;
+    mem_top_alloc = base + HeapSize;
+    gMemInfo.DRAM.addr = base;
     gMemInfo.DRAM.size = HeapSize;
     gMemInfo.DRAM.flags = 0x820;
     gMemInfo.SRAM.addr = 0;

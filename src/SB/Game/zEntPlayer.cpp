@@ -95,7 +95,7 @@ static U32 sCurrentStreamSndID;
 static F32 sPlayerSndStreamVolume[ePlayerStreamSnd_Total] = {};
 static F32 sPlayerSndSneakDelay;
 static S32 sPlayerDiedLastTime;
-volatile static S32 sPlayerIgnoreSound;
+static S32 sPlayerIgnoreSound;
 static S32 sPlayerAttackInAir;
 
 #define MAX_DELAYED_SOUNDS 8
@@ -207,14 +207,14 @@ static xVec3 precollide_motion;
 static RwRaster* sBowlingLaneRast;
 _CurrentPlayer gCurrentPlayer;
 F32 floor_safe_tmr;
-static volatile F32 bbash_start_ht;
+static F32 bbash_start_ht;
 static F32 bbash_end_tmr;
 static F32 bbash_tmr;
 static F32 bbash_vel;
 static S32 bbash_hit;
 static S32 bbounce_hit;
 
-static volatile F32 idle_tmr;
+static F32 idle_tmr;
 static F32 inact_tmr;
 static F32 stun_power_tmr;
 
@@ -228,14 +228,12 @@ static xVec3 tslide_lastrealvel;
 static S32 in_goo;
 static S32 lin_goo;
 static F32 in_goo_tmr;
-// volatile: retail reloads this from memory after storing it in zEntPlayer_Damage.
-// Without it CW forwards the stored value and drops two instructions.
-static volatile U32 player_hitlist_anim;
+static U32 player_hitlist_anim;
 S32 player_hit;
 static U32 player_idle_anim;
 static U32 mount_type;
 static xEnt* mount_object;
-static volatile F32 mount_tmr;
+static F32 mount_tmr;
 static S32 player_hit_anim = 1;
 static U32 player_dead_anim = 1;
 
@@ -1793,8 +1791,9 @@ static U32 BBounceToJumpCB(xAnimTransition* tran, xAnimSingle* anim, void* param
 {
     zEntPlayerJumpStart(&globals.player.ent, &globals.player.s->Jump);
 
-    startDouble = globals.player.ent.frame->mat.pos.y;
-    startJump = startDouble;
+    F32 startY = globals.player.ent.frame->mat.pos.y;
+    startDouble = startY;
+    startJump = startY;
     globals.player.CanJump = 0;
     globals.player.IsJumping = 1;
     globals.player.Jump_CanDouble = 1;
@@ -2289,7 +2288,7 @@ static void DoWallJumpCheck()
     }
 }
 
-static volatile float sTongueDblSpeedMult;
+static float sTongueDblSpeedMult;
 
 static U32 WallJumpLaunchCheck(class xAnimTransition*, class xAnimSingle*, void*)
 {
@@ -2382,8 +2381,9 @@ static U32 JumpCB(class xAnimTransition*, class xAnimSingle*, void*)
     zEntPlayerJumpAddDriver(&globals.player.ent);
     zEntPlayer_SNDStop(ePlayerSnd_SlipLoop);
     zEntPlayer_SNDPlay(ePlayerSnd_Jump, 0.0f);
-    startDouble = globals.player.ent.frame->mat.pos.y;
-    startJump = startDouble;
+    F32 startY = globals.player.ent.frame->mat.pos.y;
+    startDouble = startY;
+    startJump = startY;
     globals.player.CanJump = 0;
     globals.player.IsJumping = 1;
 
@@ -10617,9 +10617,7 @@ static void zEntPlayerJumpUpdate(xEnt* ent, xScene* sc, F32 dt)
             {
                 bbash_tmr += dt;
 
-                // The target reloads bbash_tmr after the store; mwcc forwards the
-                // stored value. Read through a volatile lvalue to reproduce it.
-                if (*(volatile F32*)&bbash_tmr >= 0.0f)
+                if (bbash_tmr >= 0.0f)
                 {
                     ent->frame->vel.y = bbash_vel;
                 }

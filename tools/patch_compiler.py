@@ -240,6 +240,57 @@ AddToLODList, zNPCBPatrick::Reset, zNPCFodBzzt::Init,
 zParCmdFindClipVolumes and zFruit_Update. 27 of 451 objects change and none
 belongs to a complete unit.
 
+Clause F -- no store-to-load forwarding for statics; rides clause V's entry-0
+hook (2026-08-25):
+
+    if the stored memref's base expression is a plain static object (word 5),
+    the store's own object gets a FRESH value number instead of recording the
+    stored value's number -- so a later load of that object reloads from
+    memory, the way retail does, instead of reusing the register.
+
+Mechanically: the stock entry-0 store-kill at 0x511a53 does
+`push esi; push ebx; call 0x50a2c0` where esi is the stored value operand;
+0x50a2c0(memref, value) with value != 0 sets memref+0x1c to the value's
+number (enabling forwarding) and with value == 0 assigns a fresh number from
+the counter at 0x5e9b44 (killing it). Clause V's discriminant already
+separates the static (word 5) and frame (word 0x00010005) store paths, so
+clause F is four bytes: `xor esi, esi` on the static path only, before
+falling into 0x511a53. Frame-object stores still forward -- widening to them
+is untested and everything currently matching leans on it.
+
+This is the long-hypothesised "reload-after-store / store-to-load forwarding
+defect (2b)" that seven hand-installed `volatile` matching devices were
+approximating (zAnimList, zCombo, iModel, isavegame, xutil, xMath's rndseed,
+zScene's scobj_idbps + oldOffset pair, xFFX's three pool casts, zEntPlayer's
+player_hitlist_anim/mount_tmr). All of those devices were removed when this
+clause landed and every one of their functions still matches byte-exactly,
+which is the strongest evidence that the rule is retail's own behaviour and
+not a fit. Two devices SURVIVE the clause and are still required:
+
+  * xPar's `volatile xPar gParPool[...]` -- the re-read of gParDead per pool
+    iteration is clause F, but the pool volatile also pins two NULL stores
+    AHEAD of the gParDead store, which is scheduler ordering, not VN.
+    Removing it (or keeping only `xPar* volatile gParDead`) measures 91.864
+    on xParMemInit.
+  * zMovePoint_GetMemPool's volatile return -- `return g_mvpt_list;`
+    immediately after storing it forwards ANYWAY under clause F (measured
+    92.000 without the device). That forward happens upstream of value
+    numbering, so retail's reload there is evidence the retail compiler's
+    change sits earlier in the pipe than this reconstruction of it.
+
+Clause F alone measures +16 gained / 15 LOST with the DOL sha broken: under
+stock forwarding, a source re-read of a just-stored static and a use of the
+stored expression's value compile identically, so the tree had accumulated 15
+functions spelled with a re-read where retail's source used the expression
+value or a local. All 15 were respelled the same day (`if (--cnt == 0)` for
+`cnt--; if (cnt == 0)` in six shutdown/counter sites, a bound local for
+chained or repeated assignments in iMemMgr/iSnd/zMenu/zEntPlayer), after
+which the tree measures **+17 exact / -0**, zero sub-100 regressions, DOL
+sha1 unchanged (2026-08-25: matched_functions 8386 -> 8403, GAME exact
+79.830 -> 80.226, GAME fuzzy 99.1068 -> 99.1477). The 17th gain is
+zAnimListInit, whose "no source form reaches 100%" verdict dissolved with
+its volatile device.
+
 Do not relax clause C's static-storage gate on the store side. "Skip the
 base-expression test for whichever operand is the store, keep it for the
 load" is the obvious reading of the retail behaviour above, and it measures
@@ -302,10 +353,10 @@ BASE_VERSION = "GC/2.0p1"
 PATCHED_VERSION = "GC/2.0p1a"
 
 BASE_SHA1 = "74bc177b10d1bbe8a60a21a6c0aa86d2dd9c0668"
-PATCHED_SHA1 = "19480c5dcb2c3de3b870c1fb29db73f14f7b2889"
+PATCHED_SHA1 = "5965be762f2584ca4f6eac3d100abeae2251d214"
 
 # Everything the patch injects, assembled as one position-independent block at
-# VA 0x57ea4c -- the whole of the .text tail padding. 428 bytes of 436. The
+# VA 0x57ea4c -- the whole of the .text tail padding. 432 bytes of 436. The
 # layout, in order:
 #
 #   0x57ea4c  entry-0 handler: clause A inline, clause B by CALL, then the
@@ -325,7 +376,10 @@ PATCHED_SHA1 = "19480c5dcb2c3de3b870c1fb29db73f14f7b2889"
 #             bit tolerated, load-side size <= 4, static base on both sides
 #   0x57eb5e  clause E3n (entry 3); declines into the entry-1/3 stub
 #   0x57eba5  clause V: the value-numbering store kill, which falls through to
-#             the stock whole-object kill at 0x511a53 either way
+#             the stock whole-object kill at 0x511a53 either way; its
+#             discriminant tail carries clause F's `xor esi, esi` on the
+#             static-store path (the stock kill then records value 0, i.e. a
+#             fresh number, so the store's own object is not forwardable)
 CAVE_OFFSET = 0x17DE4C
 CAVE_BYTES = bytes.fromhex(
     "8b481883f904772f8b4a1883f9047727668b4e20663b4d2074188b4e14f7c1f9"
@@ -341,7 +395,7 @@ CAVE_BYTES = bytes.fromhex(
     "0074118b4a1085c9740a8339057505e9e134f9ffe92cffffff8b4b1085c97438"
     "e93800000055e8000000005d8bad2134060085ed7421837d180477168b4d1085"
     "c9740f833905750a6a0055e8e4b6f8ff59598b6d00ebdb5de96a2ef9ff833905"
-    "740881390500010075eeebb9"
+    "750431f6ebbf81390500010075eaebb5"
 )
 
 # Entries of the scheduler's may-alias dispatch table at VA 0x5bd0bc that get

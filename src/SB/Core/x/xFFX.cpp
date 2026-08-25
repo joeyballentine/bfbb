@@ -19,7 +19,7 @@ void xFFXPoolInit(U32 num_ffx)
 {
     psize = num_ffx;
     pool = (xFFX*)xMemAlloc(gActiveHeap, num_ffx * sizeof(xFFX), 0);
-    (*(xFFX* volatile*)&pool)[0].next = NULL;
+    pool[0].next = NULL;
     for (U32 i = 1; i < psize; i++)
     {
         pool[i].next = &pool[i - 1];
@@ -160,7 +160,7 @@ void xFFXShakePoolInit(U32 num)
 {
     shake_psize = num;
     shake_pool = (xFFXShakeState*)xMemAlloc(gActiveHeap, num * sizeof(xFFXShakeState), 0);
-    (*(xFFXShakeState* volatile*)&shake_pool)->next = NULL;
+    shake_pool->next = NULL;
     for (S32 i = 1; i < shake_psize; i++)
     {
         shake_pool[i].next = &shake_pool[i - 1];
@@ -192,7 +192,7 @@ void xFFXRotMatchPoolInit(U32 num)
 
     rot_match_pool = (xFFXRotMatchState*)xMemAlloc(gActiveHeap, num * sizeof(xFFXRotMatchState), 0);
 
-    (*(xFFXRotMatchState* volatile*)&rot_match_pool)->next = NULL;
+    rot_match_pool->next = NULL;
     for (U32 i = 1; i < rot_match_psize; ++i)
     {
         rot_match_pool[i].next = &rot_match_pool[i - 1];

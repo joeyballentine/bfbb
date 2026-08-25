@@ -27,8 +27,7 @@ static _tagLightningAdd sThunderLightningInfo;
 // .sbss
 static zNPCTiki* orphanList;
 static S32 numTikisOnScreen;
-// volatile: retail reloads this from memory right after storing it in zNPCTiki_InitFX.
-static zParEmitter* volatile cloudEmitter;
+static zParEmitter* cloudEmitter;
 static RwRaster* sHelmetRast;
 // .sdata
 extern U32 g_hash_tikianim[ANIM_COUNT] = { 0, 0 };
@@ -854,10 +853,7 @@ void zNPCTiki::Process(xScene* xscn, F32 dt)
         if (400.0f > offset && !this->isCulled)
         {
             numTikisOnScreen++;
-            // volatile read: retail reloads numTikisOnScreen from memory here, right
-            // after the increment stores it. Declaring the variable volatile would do it
-            // too, but that costs zNPCTiki_PickTikisToAnimate its match.
-            if (*(volatile S32*)&numTikisOnScreen == whichTikiToAnimate)
+            if (numTikisOnScreen == whichTikiToAnimate)
             {
                 this->tikiFlag &= ~0xC0;
             }

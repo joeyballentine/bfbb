@@ -7,7 +7,7 @@
 
 S32 xmath_inited;
 S32 xmath_exited;
-volatile U32 rndseed; // made this volatile so xrand() matches
+U32 rndseed;
 
 void xMathInit()
 {

@@ -5554,9 +5554,7 @@ void zNPCSlick::SlipSlidenAway(F32 dt)
         init = 1;
     }
 
-    moreorless--;
-
-    if (moreorless < 0)
+    if (--moreorless < 0)
     {
         moreorless = 8;
 

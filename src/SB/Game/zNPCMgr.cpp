@@ -379,8 +379,7 @@ void zNPCMgr_Startup()
 
 void zNPCMgr_Shutdown()
 {
-    g_modinit--;
-    if (g_modinit == 0)
+    if (--g_modinit == 0)
     {
         zNPCMgr* mgr = zNPCMgrSelf();
         if (mgr != NULL)

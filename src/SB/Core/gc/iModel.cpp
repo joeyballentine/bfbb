@@ -67,11 +67,7 @@ void iModelInit()
             _rwObjectHasFrameSetFrame(sEmptyDirectionalLight[i], frame);
         }
         sEmptyAmbientLight = RpLightCreate(rpLIGHTAMBIENT);
-        // Retail reloads sEmptyAmbientLight after storing it; our mwcc forwards the stored
-        // value instead. The volatile read is a matching device for that store-to-load
-        // forwarding defect (2b) -- sEmptyAmbientLight is NOT volatile in retail. Revert
-        // this before measuring any compiler-side fix for that defect.
-        RpLightSetColor(*(RpLight* volatile*)&sEmptyAmbientLight, &black);
+        RpLightSetColor(sEmptyAmbientLight, &black);
     }
 }
 
@@ -162,10 +158,7 @@ static RpAtomic* iModelStreamRead(RwStream* stream)
 
     instance_world = RpWorldCreate(&bbox);
     instance_camera = (RwCamera*)iCameraCreate(0x280, 0x1e0, 0);
-    // Retail reloads instance_camera after storing it; our mwcc forwards the stored value.
-    // Matching device for the store-to-load forwarding defect (2b) -- instance_camera is NOT
-    // volatile in retail. Revert before measuring any compiler-side fix for that defect.
-    RpWorldAddCamera(instance_world, *(RwCamera* volatile*)&instance_camera);
+    RpWorldAddCamera(instance_world, instance_camera);
 
     gLastAtomicCount = 0;
     RpClumpForAllAtomics(clump, FindAndInstanceAtomicCallback, 0);

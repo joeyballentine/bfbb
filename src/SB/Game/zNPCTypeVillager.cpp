@@ -1904,8 +1904,7 @@ void zNPCBalloonBoy::PlatShadRend()
 
         static S32 takeThePain = 0;
         needit = 0;
-        takeThePain--;
-        if (takeThePain < 0)
+        if (--takeThePain < 0)
         {
             takeThePain = 8;
 

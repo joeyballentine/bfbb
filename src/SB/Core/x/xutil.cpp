@@ -6,7 +6,7 @@
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\stdlib.h>
 #include <PowerPC_EABI_Support/MSL_C/MSL_Common/ctype_api.h>
 
-static volatile S32 g_xutilinit; // volatile so xUtilShutdown matches
+static S32 g_xutilinit;
 static S32 g_crc_needinit = 1;
 static U32 g_crc32_table[256] = {};
 

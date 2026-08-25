@@ -5478,8 +5478,7 @@ void zNPCGoalDogLaunch::FurryFlurry()
     static const xVec3 pos_disperse = { 0.01f, 0.01f, 0.01f };
     static const xVec3 vel_disperse = { 3.0f, 2.5f, -2.0f };
 
-    moreorless--;
-    if ((moreorless < 0) && (psyche->TimerGet(XPSY_TYMR_CURGOAL) > 0.04f))
+    if ((--moreorless < 0) && (psyche->TimerGet(XPSY_TYMR_CURGOAL) > 0.04f))
     {
         moreorless = -1;
         BubTrailCone(npc->Center(), 15, &pos_disperse, &vel_disperse, (xMat3x3*)npc->BoneMat(0));
@@ -7026,8 +7025,7 @@ void zNPCGoalAfterlife::DieTheGoodDeath()
 
         static S32 cnt_nextfunfrag = 60;
         static S32 num_funFrag = 3;
-        cnt_nextfunfrag--;
-        if (cnt_nextfunfrag < 0)
+        if (--cnt_nextfunfrag < 0)
         {
             cnt_nextfunfrag = 60;
             cnt_nextfunfrag += (S32)(60.0f * xurand());

@@ -94,7 +94,7 @@ S32 iSGShutdown()
 
 char* iSGMakeName(en_NAMEGEN_TYPE type, const char* base, S32 idx)
 {
-    static volatile S32 rotate = 0; // fakematch??
+    static S32 rotate = 0;
     static char rotatebuf[8][32] = { 0 };
 
     const char* fmt_sd = "%s%02d";
