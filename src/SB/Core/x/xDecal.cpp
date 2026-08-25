@@ -321,10 +321,10 @@ void xDecalEmitter::get_render_data(const xDecalEmitter::unit_data& unit, F32 sc
         mat.at *= scale;
     }
 
-    uv1.x = this->curve_index * this->texture.size.x + this->cfg.texture.uv[0].x;
-    uv1.y = this->curve_index * this->texture.size.y + this->cfg.texture.uv[0].y;
-    uv0.x = this->curve_index * this->texture.size.x + this->cfg.texture.uv[1].x;
-    uv0.y = this->curve_index * this->texture.size.y + this->cfg.texture.uv[1].y;
+    uv0.x = this->curve_index * this->texture.size.x + this->cfg.texture.uv[0].x;
+    uv0.y = this->curve_index * this->texture.size.y + this->cfg.texture.uv[0].y;
+    uv1.x = uv0.x + this->texture.size.x;
+    uv1.y = uv0.y + this->texture.size.y;
 }
 
 namespace
