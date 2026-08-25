@@ -2747,7 +2747,7 @@ static U32 BoulderRollDoneCB()
         info.size_death.set(0.5f, 0.5f, 1.0f, 0.0f);
 
         xParEmitterEmitCustom(sEmitSpinBubbles, update_dt, &info);
-        xVec3AddScaled(&info.pos, &boulderVehicle->vel, 10.0f * update_dt);
+        xVec3AddScaled(&info.pos, &boulderVehicle->vel, 5.0f * update_dt);
         xParEmitterEmitCustom(sEmitSpinBubbles, update_dt, &info);
     }
     else
@@ -6958,9 +6958,9 @@ void zEntPlayer_Update(xEnt* ent, xScene* sc, F32 dt)
     if (gReticleTarget)
     {
         sReticleRot += 8.0f * dt;
-        if (sReticleRot > 6.28319f)
+        if (sReticleRot > 2.0f * PI)
         {
-            sReticleRot -= 6.28319f;
+            sReticleRot -= 2.0f * PI;
         }
 
         sReticleAlpha += 3.0f * dt;
@@ -7216,7 +7216,7 @@ void zEntPlayer_Update(xEnt* ent, xScene* sc, F32 dt)
 
                 for (S32 j = 0; j < 100; j++)
                 {
-                    F32 ang = 6.28319f * j / 100.0f;
+                    F32 ang = 2.0f * PI * j / 100.0f;
                     info.vel.x = 4.0f * icos(ang);
                     info.vel.y = 1.25f;
                     info.vel.z = 4.0f * isin(ang);
@@ -8835,9 +8835,9 @@ catchtunnel_done:
     }
 
     sHitchAngle += 3.14f * dt;
-    if (sHitchAngle > 6.28319f)
+    if (sHitchAngle > 2.0f * PI)
     {
-        sHitchAngle -= 6.28319f;
+        sHitchAngle -= 2.0f * PI;
     }
 
     xMat3x3 hitchMat;
@@ -9236,7 +9236,7 @@ catchtunnel_done:
                 }
             }
             else if (!globals.player.ControlOff && (globals.pad0->pressed & XPAD_BUTTON_TRIANGLE) &&
-                     strcmp(ent->model->Anim->Single->State->Name, "LedgeGrab01") == 0 &&
+                     strcmp(ent->model->Anim->Single->State->Name, "LedgeGrab01") != 0 &&
                      !globals.player.IsCoptering && !zEntTeleportBox_playerIn())
             {
                 sShouldMelee = 1;
