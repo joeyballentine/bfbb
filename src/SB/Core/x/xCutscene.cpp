@@ -686,7 +686,6 @@ void xCutscene_Render(xCutscene* csn, xEnt**, S32*, F32*)
     RpAtomic* shadowModel;
     RwMatrixTag animMat[65];
     xVec3* camVec;
-    XCSNNosey* nosey;
     U32 tempSize;
     RpAtomic* tmpModel;
     F32 radius;
@@ -717,12 +716,11 @@ void xCutscene_Render(xCutscene* csn, xEnt**, S32*, F32*)
     U32 cmpval;
     void* deltaAnim;
     void* deltaModel;
-    xLightKit* lkit;
     xShadowCache scache;
     static xVec3 shadVec = { 0.0f, -1.0f, 0.0f };
 
     fakeCount = 0;
-    nosey = csn->cb_nosey;
+    XCSNNosey* nosey = csn->cb_nosey;
     camVec = (xVec3*)&((RwFrame*)((RwCamera*)RwEngineInstance->curCamera)->object.object.parent)
                  ->modelling.pos;
     data = (xCutsceneData*)&csn->Play[1];
@@ -1025,7 +1023,7 @@ void xCutscene_Render(xCutscene* csn, xEnt**, S32*, F32*)
                     smod.model = shadowModel;
                     smod.animMat = animMat;
                     smod.shadowBits = shadowBits;
-                    lkit = gLastLightKit;
+                    xLightKit* lkit = gLastLightKit;
                     xLightKit_Enable(NULL, globals.currWorld);
                     xShadowSetLight(&center, &shadVec, 1.0f);
                     xShadowVertical_FillCache(&scache, &center, maxRadius, 6.0f, 0.0871557f);

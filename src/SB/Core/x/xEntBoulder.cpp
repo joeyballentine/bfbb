@@ -235,12 +235,28 @@ void xEntBoulder_RealBUpdate(xEnt* ent, xVec3* pos)
 
 void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
 {
-    // Names come from dwarf/SB/Core/x/xEntBoulder.cpp. The PS2 source declared
-    // most of these inside the blocks that use them; the GC build hoists them
-    // here, which is why three of them (dVar16/dVar18/dVar20) are shared scratch
-    // floats with no single role and so no dwarf name - dVar18 alone carries the
-    // bubble count scalar, a boulder-vs-boulder velocity component, |vel| and a
-    // depen dot product. someVec has no dwarf counterpart either.
+    // Names come from dwarf/SB/Core/x/xEntBoulder.cpp.
+    //
+    // These stay hoisted, and it is not laziness: their ORDER is load-bearing.
+    // The compiler assigns stack slots in declaration order, so moving any one
+    // of them down into the block that uses it renumbers every slot after it
+    // and the function stops matching. Measured, one at a time: bubVelRnd
+    // 99.939%, scaleVel 99.992%, numDepens and iter_npc likewise, and every
+    // other xVec3 the same. Only rotM, npc and boul survived being moved,
+    // because a pointer or a matrix here lives in a callee-saved register and
+    // never takes a slot -- those three have been moved and are gone from this
+    // list.
+    //
+    // The order is also not something scoping could reproduce even in
+    // principle. It is not the order of first use: `force` is declared after
+    // `depen` and `tmp` but is used before either. So this sequence is real
+    // information about the original source, not an artifact of decompiling,
+    // and rewriting it to look tidier would destroy it.
+    //
+    // dVar16/dVar18/dVar20 keep placeholder names because each is shared
+    // scratch with no single role -- dVar18 alone carries the bubble-count
+    // scalar, a boulder-vs-boulder velocity component, |vel| and a depen dot
+    // product. someVec has no dwarf counterpart either.
     S32 i;
     F32 dx__;
     F32 dy__;
@@ -266,10 +282,7 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
     xVec3 someVec;
     S32 numDepens;
     S32 iter_npc;
-    zNPCCommon* npc;
-    xMat3x3 rotM;
     F32 vol;
-    xEntBoulder* boul;
 
     if ((ent->timeToLive > 0.0f) && (ent->timeToLive -= dt, ent->timeToLive <= 0.0f))
     {
@@ -455,7 +468,7 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
                 xVec3AddScaled(&depen, &ent->collis->colls[i].norm, fn);
             }
 
-            boul = (xEntBoulder*)(ent->collis->colls[i].optr);
+            xEntBoulder* boul = (xEntBoulder*)(ent->collis->colls[i].optr);
             if ((ent->basset->flags & 4) && (boul->baseType == eBaseTypeDestructObj))
             {
                 if ((zEntDestructObj_GetHit((zEntDestructObj*)boul, 0x8000)) &&
@@ -482,6 +495,8 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
         // NPC
         for (iter_npc = ent->collis->npc_sidx; iter_npc < ent->collis->npc_eidx; iter_npc++)
         {
+            zNPCCommon* npc;
+
             npc = (zNPCCommon*)(ent->collis->colls[iter_npc].optr);
             if (ent->basset->flags & 1)
             {
@@ -597,6 +612,8 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
     }
     if ((ent->angVel > 0.075f) || (ent->angVel < -0.075f))
     {
+        xMat3x3 rotM;
+
         xMat3x3Rot(&rotM, &ent->rotVec, (ent->angVel * dt));
         xMat3x3Mul((xMat3x3*)ent->model->Mat, (xMat3x3*)ent->model->Mat, &rotM);
     }
