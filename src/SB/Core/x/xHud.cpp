@@ -14,6 +14,14 @@
 
 #define lengthof(x) (sizeof(x) / sizeof((x)[0]))
 
+// NOTE: retail's xHud.o carries these two file-scope statics in .rodata at
+// offsets 0x30 and 0x40, both 16 bytes of { 0.0f, 0.0f, 1.0f, 1.0f }. They are
+// unmangled, so they live outside `namespace xhud`, and nothing in this
+// translation unit references them - their only consumers were deadstripped.
+// The byte contents are certain; the exact type is inferred.
+static const basic_rect<F32> screen_bounds = { 0.0f, 0.0f, 1.0f, 1.0f };
+static const basic_rect<F32> default_adjust = { 0.0f, 0.0f, 1.0f, 1.0f };
+
 namespace xhud
 {
 
