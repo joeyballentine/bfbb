@@ -88,9 +88,7 @@ void xBoundGetSphere(xSphere& o, const xBound& bound)
 F32 xsqrt(F32 x)
 {
     const F32 half = 0.5f;
-    // volatile: the target creates the 3.0f literal before the 0.0f one, which
-    // pins the order of this TU's .sdata2 pool.
-    volatile F32 three = 3.0f;
+    const F32 three = 3.0f;
 
     if (x <= 0.0f || isinf(x))
     {
