@@ -99,6 +99,14 @@ volatile static S32 sPlayerIgnoreSound;
 static S32 sPlayerAttackInAir;
 
 #define MAX_DELAYED_SOUNDS 8
+
+// MINF asset IDs for the two swappable player characters. These are xStrHash()
+// name hashes and the source names are not recoverable from the binary, but the
+// role of each is unambiguous: every site that tests PATRICK_MODEL_ASSETID goes
+// on to load the 'SPPA' sound pack and set the Patrick model, and every site
+// that tests SANDY_MODEL_ASSETID loads 'SPSC' and sets the Sandy model.
+#define PATRICK_MODEL_ASSETID 0x791025ac
+#define SANDY_MODEL_ASSETID 0xc0e34b23
 static zDelayedStreamSound sDelayedSound[MAX_DELAYED_SOUNDS];
 static zPlayerSndTimer sPlayerStreamSndTimer[ePlayerStreamSnd_Total] = {};
 
@@ -5791,15 +5799,13 @@ static void load_player_ini()
 
     if (globals.player.model_patrick != NULL)
     {
-        // TODO: figure out hardcoded int
-        modelass = zEntGetModelParams(0x791025ac, &size[1]);
+        modelass = zEntGetModelParams(PATRICK_MODEL_ASSETID, &size[1]);
         load_player_ini(globals.player.patrick, *globals.player.model_patrick, modelass, size[1]);
     }
 
     if (globals.player.model_sandy != NULL)
     {
-        // TODO: figure out hardcoded int
-        modelass = zEntGetModelParams(0xc0e34b23, &size[0]);
+        modelass = zEntGetModelParams(SANDY_MODEL_ASSETID, &size[0]);
         load_player_ini(globals.player.sandy, *globals.player.model_sandy, modelass, size[0]);
     }
 }
@@ -5899,7 +5905,7 @@ void zEntPlayer_Init(xEnt* ent, xEntAsset* asset)
         (globals.player.g.BBashHeight + 0.5f * globals.player.g.Gravity * bbncvtm * bbncvtm) /
         globals.player.g.BBashTime;
 
-    void* info = xSTFindAsset(0x791025ac, &bufsize);
+    void* info = xSTFindAsset(PATRICK_MODEL_ASSETID, &bufsize);
 
     if (info != 0)
     {
@@ -16088,14 +16094,14 @@ void zEntPlayer_LoadSounds()
     player_sound_hop_load('SPSB', 2);
     g_flg_loaded |= 2;
 
-    void* info = xSTFindAsset(0x791025ac, &bufsize);
+    void* info = xSTFindAsset(PATRICK_MODEL_ASSETID, &bufsize);
     if (info != NULL)
     {
         player_sound_hop_load('SPPA', 2);
         g_flg_loaded |= 0x08;
     }
 
-    info = xSTFindAsset(0xc0e34b23, &bufsize);
+    info = xSTFindAsset(SANDY_MODEL_ASSETID, &bufsize);
     if (info != NULL)
     {
         player_sound_hop_load('SPSC', 2);
