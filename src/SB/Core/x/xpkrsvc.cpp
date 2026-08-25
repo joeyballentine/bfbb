@@ -849,9 +849,9 @@ void PKR_Disconnect(st_PACKER_READ_DATA* pr)
     }
 }
 
-U32 PKRAssetIDFromInst(void* inst)
+U32 PKRAssetIDFromInst(void* asset_inst)
 {
-    return ((st_PACKER_ATOC_NODE*)inst)->aid;
+    return ((st_PACKER_ATOC_NODE*)asset_inst)->aid;
 }
 
 char* PKR_AssetName(st_PACKER_READ_DATA* pr, U32 aid)
@@ -879,27 +879,27 @@ U32 PKR_GetBaseSector(st_PACKER_READ_DATA* pr)
     return pr->base_sector;
 }
 
-S32 PKR_GetAssetInfo(st_PACKER_READ_DATA* pr, U32 aid, st_PKR_ASSET_TOCINFO* tocainfo)
+S32 PKR_GetAssetInfo(st_PACKER_READ_DATA* pr, U32 aid, st_PKR_ASSET_TOCINFO* tocinfo)
 {
-    memset(tocainfo, 0, sizeof(st_PKR_ASSET_TOCINFO));
+    memset(tocinfo, 0, sizeof(st_PKR_ASSET_TOCINFO));
     S32 idx = XOrdLookup(&pr->asstoc, (void*)aid, OrdTest_R_AssetID);
     if (idx >= 0)
     {
         st_PACKER_ATOC_NODE* assnode = (st_PACKER_ATOC_NODE*)pr->asstoc.list[idx];
-        tocainfo->aid = aid;
-        tocainfo->typeref = assnode->typeref;
-        tocainfo->sector = pr->base_sector + assnode->d_off / pkr_sector_size;
-        tocainfo->plus_offset = assnode->d_off % pkr_sector_size;
-        tocainfo->size = assnode->d_size;
-        tocainfo->mempos = assnode->memloc;
+        tocinfo->aid = aid;
+        tocinfo->typeref = assnode->typeref;
+        tocinfo->sector = pr->base_sector + assnode->d_off / pkr_sector_size;
+        tocinfo->plus_offset = assnode->d_off % pkr_sector_size;
+        tocinfo->size = assnode->d_size;
+        tocinfo->mempos = assnode->memloc;
     }
     return idx >= 0 ? 1 : 0;
 }
 
 S32 PKR_GetAssetInfoByType(st_PACKER_READ_DATA* pr, U32 type, S32 idx,
-                           st_PKR_ASSET_TOCINFO* tocainfo)
+                           st_PKR_ASSET_TOCINFO* tocinfo)
 {
-    memset(tocainfo, 0, sizeof(st_PKR_ASSET_TOCINFO));
+    memset(tocinfo, 0, sizeof(st_PKR_ASSET_TOCINFO));
     if (idx < 0)
     {
         idx = 0;
@@ -918,12 +918,12 @@ S32 PKR_GetAssetInfoByType(st_PACKER_READ_DATA* pr, U32 type, S32 idx,
     }
 
     st_PACKER_ATOC_NODE* assnode = (st_PACKER_ATOC_NODE*)tmplist->list[idx];
-    tocainfo->aid = assnode->aid;
-    tocainfo->typeref = assnode->typeref;
-    tocainfo->sector = pr->base_sector + assnode->d_off / pkr_sector_size;
-    tocainfo->plus_offset = assnode->d_off % pkr_sector_size;
-    tocainfo->size = assnode->d_size;
-    tocainfo->mempos = assnode->memloc;
+    tocinfo->aid = assnode->aid;
+    tocinfo->typeref = assnode->typeref;
+    tocinfo->sector = pr->base_sector + assnode->d_off / pkr_sector_size;
+    tocinfo->plus_offset = assnode->d_off % pkr_sector_size;
+    tocinfo->size = assnode->d_size;
+    tocinfo->mempos = assnode->memloc;
 
     return 1;
 }
@@ -1558,14 +1558,14 @@ void PKR_spew_verhist()
 {
 }
 
-st_PACKER_ASSETTYPE* PKR_type2typeref(U32 asstype, st_PACKER_ASSETTYPE* types)
+st_PACKER_ASSETTYPE* PKR_type2typeref(U32 type, st_PACKER_ASSETTYPE* typelist)
 {
     st_PACKER_ASSETTYPE* da_type = NULL;
-    if (types != NULL)
+    if (typelist != NULL)
     {
-        for (st_PACKER_ASSETTYPE* tmptype = types; tmptype->typetag != 0; tmptype++)
+        for (st_PACKER_ASSETTYPE* tmptype = typelist; tmptype->typetag != 0; tmptype++)
         {
-            if (tmptype->typetag == asstype)
+            if (tmptype->typetag == type)
             {
                 da_type = tmptype;
                 break;
@@ -1574,7 +1574,7 @@ st_PACKER_ASSETTYPE* PKR_type2typeref(U32 asstype, st_PACKER_ASSETTYPE* types)
     }
     if (da_type == NULL)
     {
-        xUtil_idtag2string(asstype, 0);
+        xUtil_idtag2string(type, 0);
     }
     return da_type;
 }

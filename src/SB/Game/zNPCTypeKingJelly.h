@@ -240,7 +240,7 @@ struct zNPCKingJelly : zNPCSubBoss
     void update_rings(F32 dt);
     void update_tentacle_lightning(F32 dt);
     void update_spawn_particles(F32 dt);
-    zLightning* new_tentacle_lightning(xVec3* loc);
+    zLightning* new_tentacle_lightning(xVec3* points);
     void generate_zap_particles(const zLightning& zap, F32 amount, F32 dt);
     void generate_ring_particles(const lightning_ring& ring, F32 dt);
     void move_to_spawn_position(zNPCCommon& npc, F32 t);

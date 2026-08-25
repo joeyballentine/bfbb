@@ -58,7 +58,7 @@ void zThrown_Remove(xEnt* ent);
 void zThrown_Reset();
 void zThrown_LaunchVel(xEnt* ent, xVec3* vel);
 S32 zThrown_LaunchPos(xEnt* ent, xVec3* pos, xVec3* dir);
-void zThrown_LaunchStack(xEnt* ent, xEnt* target);
+void zThrown_LaunchStack(xEnt* ent, xEnt* stackTgt);
 void zThrown_PatrickLauncher(xEnt* ent, xEnt* launcher);
 S32 zThrown_KillFruit(xEnt* ent);
 void zThrown_AddFruit(xEnt* ent);

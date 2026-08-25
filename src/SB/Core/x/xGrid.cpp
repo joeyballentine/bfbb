@@ -8,16 +8,16 @@
 
 volatile S32 gGridIterActive = 0;
 
-void xGridBoundInit(xGridBound* bound, void* data)
+void xGridBoundInit(xGridBound* gridb, void* data)
 {
-    bound->data = data;
-    bound->gx = -1;
-    bound->gz = -1;
-    bound->ingrid = 0;
-    bound->oversize = 0;
-    bound->head = 0;
-    bound->next = 0;
-    bound->gpad = 0xea;
+    gridb->data = data;
+    gridb->gx = -1;
+    gridb->gz = -1;
+    gridb->ingrid = 0;
+    gridb->oversize = 0;
+    gridb->head = 0;
+    gridb->next = 0;
+    gridb->gpad = 0xea;
 }
 
 void xGridInit(xGrid* grid, const xBox* bounds, U16 nx, U16 nz, U8 ingrid_id)
@@ -207,20 +207,20 @@ S32 xGridAdd(xGrid* grid, xEnt* ent)
     return 0;
 }
 
-S32 xGridRemove(xGridBound* bound)
+S32 xGridRemove(xGridBound* gridb)
 {
-    if (bound->head)
+    if (gridb->head)
     {
         if (gGridIterActive)
         {
-            bound->deleted = 1;
+            gridb->deleted = 1;
             return 0;
         }
         else
         {
-            xGridBound* curr = bound->head[0];
-            xGridBound** prev = bound->head;
-            while (curr && curr != bound)
+            xGridBound* curr = gridb->head[0];
+            xGridBound** prev = gridb->head;
+            while (curr && curr != gridb)
             {
                 prev = &curr->next;
                 curr = curr->next;

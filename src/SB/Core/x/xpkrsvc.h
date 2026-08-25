@@ -175,9 +175,9 @@ void PKR_Disconnect(st_PACKER_READ_DATA* pr);
 U32 PKRAssetIDFromInst(void* asset_inst);
 char* PKR_AssetName(st_PACKER_READ_DATA* pr, U32 aid);
 U32 PKR_GetBaseSector(st_PACKER_READ_DATA* pr);
-S32 PKR_GetAssetInfo(st_PACKER_READ_DATA* pr, U32 aid, st_PKR_ASSET_TOCINFO* tocainfo);
+S32 PKR_GetAssetInfo(st_PACKER_READ_DATA* pr, U32 aid, st_PKR_ASSET_TOCINFO* tocinfo);
 S32 PKR_GetAssetInfoByType(st_PACKER_READ_DATA* pr, U32 type, S32 idx,
-                           st_PKR_ASSET_TOCINFO* tocainfo);
+                           st_PKR_ASSET_TOCINFO* tocinfo);
 S32 PKR_PkgHasAsset(st_PACKER_READ_DATA* pr, U32 aid);
 S32 PKR_FRIEND_assetIsGameDup(U32 aid, const st_PACKER_READ_DATA* skippr, S32 oursize, U32 ourtype,
                               U32 chksum, char*);
@@ -212,7 +212,7 @@ S32 LOD_r_STRM(st_HIPLOADDATA* pkg, st_PACKER_READ_DATA* pr);
 S32 LOD_r_DHDR(st_HIPLOADDATA* pkg, st_PACKER_READ_DATA* pr);
 S32 LOD_r_DPAK(st_HIPLOADDATA* pkg, st_PACKER_READ_DATA* pr);
 void PKR_spew_verhist();
-st_PACKER_ASSETTYPE* PKR_type2typeref(U32 asstype, st_PACKER_ASSETTYPE* types);
+st_PACKER_ASSETTYPE* PKR_type2typeref(U32 type, st_PACKER_ASSETTYPE* typelist);
 void PKR_bld_typecnt(st_PACKER_READ_DATA* pr);
 S32 PKR_typeHdlr_idx(st_PACKER_READ_DATA* pr, U32 type);
 void PKR_alloc_chkidx();

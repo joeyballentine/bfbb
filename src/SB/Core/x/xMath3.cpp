@@ -693,7 +693,7 @@ F32 xQuatNormalize(xQuat* o, const xQuat* q)
     return len;
 }
 
-void xQuatSlerp(xQuat* q, const xQuat* a, const xQuat* b, F32 t)
+void xQuatSlerp(xQuat* o, const xQuat* a, const xQuat* b, F32 t)
 {
     F32 temp_s;
     F32 temp_t;
@@ -729,8 +729,8 @@ void xQuatSlerp(xQuat* q, const xQuat* a, const xQuat* b, F32 t)
 
     xQuatSMul(&qp1, a, temp_t);
     xQuatSMul(&qp2, b, temp_s);
-    xQuatAdd(q, &qp1, &qp2);
-    xQuatNormalize(q, q);
+    xQuatAdd(o, &qp1, &qp2);
+    xQuatNormalize(o, o);
     return;
 }
 

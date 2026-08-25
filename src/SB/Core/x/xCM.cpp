@@ -284,11 +284,11 @@ static U32 xCMrender(F32 time, xCreditsData* data)
     return 0;
 }
 
-void xCMupdate(F32 time)
+void xCMupdate(F32 dt)
 {
     if (credits_data != 0)
     {
-        credits_time += (time * dtscale);
+        credits_time += (dt * dtscale);
         if (credits_time >= *(F32*)((S32)&credits_data->dummy + 0x10))
         {
             xCMstop();

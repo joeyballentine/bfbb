@@ -88,7 +88,7 @@ void zEntButton_Init(_zEntButton* ent, xEntAsset* asset)
     ent->oldMotState = ent->motion.mech.state;
 }
 
-void zEntButton_Move(_zEntButton* ent, xScene* sc, F32 dt, xEntFrame* frame)
+void zEntButton_Move(_zEntButton* ent, xScene* s, F32 dt, xEntFrame* frame)
 {
     if (ent->driver != NULL)
     {
@@ -102,7 +102,7 @@ void zEntButton_Move(_zEntButton* ent, xScene* sc, F32 dt, xEntFrame* frame)
         }
     }
 
-    xEntMotionMove(&ent->motion, sc, dt, frame);
+    xEntMotionMove(&ent->motion, s, dt, frame);
 }
 
 void zEntButton_Setup(_zEntButton* ent, xScene*)

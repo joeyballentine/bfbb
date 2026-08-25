@@ -1744,7 +1744,7 @@ namespace
     }
 
     void update_move_orbit(xVec3& loc, zNPCBPlankton::move_info& move, const xVec3& center, F32 dt,
-                           bool clamp)
+                           bool xfree)
     {
         const xVec3 loc_pt = { loc.x, center.y, loc.z };
         const xVec3 dest_pt = { move.dest.x, center.y, move.dest.z };
@@ -1762,7 +1762,7 @@ namespace
         xVec3 dir;
         F32 ang = loc_ang;
 
-        if (clamp)
+        if (xfree)
         {
             xAccelMove(disp.x, move.vel.x, move.accel.x, dt, move.max_vel.x);
         }

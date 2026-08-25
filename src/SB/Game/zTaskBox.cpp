@@ -222,21 +222,21 @@ bool ztaskbox::exists(state_enum stage)
     return state != STATE_BEGIN && xSTFindAsset(state, NULL) != NULL;
 }
 
-void ztaskbox::set_state(state_enum stage)
+void ztaskbox::set_state(state_enum state)
 {
-    this->state = stage;
+    this->state = state;
     this->current = this;
 
-    switch (stage)
+    switch (state)
     {
         case STATE_BEGIN:
-            if (!exists(stage))
+            if (!exists(state))
             {
                 set_state(STATE_DESCRIPTION);
             }
             break;
         case STATE_DESCRIPTION:
-            if (!exists(stage))
+            if (!exists(state))
             {
                 set_state(STATE_REMINDER);
             }
@@ -244,13 +244,13 @@ void ztaskbox::set_state(state_enum stage)
         case STATE_REMINDER:
         case STATE_SUCCESS:
         case STATE_FAILURE:
-            if (!exists(stage))
+            if (!exists(state))
             {
                 set_state(STATE_END);
             }
             break;
         case STATE_END:
-            if (!exists(stage))
+            if (!exists(state))
             {
                 set_state(STATE_INVALID);
             }

@@ -39,29 +39,29 @@ void xClimateInit(_tagClimate* climate)
 
 // Equivalent
 // float ops are being optimized more aggressively
-void xClimateInitAsset(_tagClimate* climate, xEnvAsset* asset)
+void xClimateInitAsset(_tagClimate* climate, xEnvAsset* easset)
 {
     sClimate = climate;
     climate->wind.strength = 0.0f;
     xClimateVecFromAngle(climate->wind.angle, &climate->wind.dir);
 
-    if (asset->climateFlags == 0)
+    if (easset->climateFlags == 0)
     {
         climate->wind.strength = 0.0f;
         climate->rain.strength = 0.0f;
         return;
     }
-    if (asset->climateFlags & 1)
+    if (easset->climateFlags & 1)
     {
         climate->rain.rain = 1.0f;
-        climate->rain.strength = 0.5f * (asset->climateStrengthMax - asset->climateStrengthMin);
-        climate->rain.strength += asset->climateStrengthMin;
+        climate->rain.strength = 0.5f * (easset->climateStrengthMax - easset->climateStrengthMin);
+        climate->rain.strength += easset->climateStrengthMin;
     }
-    else if (asset->climateFlags & 2)
+    else if (easset->climateFlags & 2)
     {
         climate->rain.rain = 0.0f;
-        climate->rain.strength = 0.5f * (asset->climateStrengthMax - asset->climateStrengthMin);
-        climate->rain.strength += asset->climateStrengthMin;
+        climate->rain.strength = 0.5f * (easset->climateStrengthMax - easset->climateStrengthMin);
+        climate->rain.strength += easset->climateStrengthMin;
     }
 }
 

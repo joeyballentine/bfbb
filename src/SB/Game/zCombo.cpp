@@ -61,41 +61,41 @@ static zComboReward comboReward[16] = {
     { 100, "COMBO_13_TXT", {}, 0, NULL },
 };
 
-static void fillCombo(zComboReward* reward)
+static void fillCombo(zComboReward* r)
 {
-    S32 rewardLeft = reward->reward;
+    S32 rewardLeft = r->reward;
     S32 j = 0;
 
     while (rewardLeft > 0)
     {
         if (rewardLeft >= globals.player.g.ShinyValuePurple)
         {
-            reward->rewardList[j++] = 0;
+            r->rewardList[j++] = 0;
             rewardLeft -= globals.player.g.ShinyValuePurple;
         }
         else if (rewardLeft >= globals.player.g.ShinyValueBlue)
         {
-            reward->rewardList[j++] = 1;
+            r->rewardList[j++] = 1;
             rewardLeft -= globals.player.g.ShinyValueBlue;
         }
         else if (rewardLeft >= globals.player.g.ShinyValueGreen)
         {
-            reward->rewardList[j++] = 2;
+            r->rewardList[j++] = 2;
             rewardLeft -= globals.player.g.ShinyValueGreen;
         }
         else if (rewardLeft >= globals.player.g.ShinyValueYellow)
         {
-            reward->rewardList[j++] = 3;
+            r->rewardList[j++] = 3;
             rewardLeft -= globals.player.g.ShinyValueYellow;
         }
         else
         {
-            reward->rewardList[j++] = 4;
+            r->rewardList[j++] = 4;
             rewardLeft -= globals.player.g.ShinyValueRed;
         }
     }
 
-    reward->rewardNum = j;
+    r->rewardNum = j;
 }
 
 void zCombo_Setup()

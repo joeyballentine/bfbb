@@ -286,9 +286,9 @@ void xShadowRenderWorld(xVec3* center, F32 radius, F32 max_dist)
     ShadowRender(ShadowCamera, ShadowRenderRaster, &shadowZone, ShadowStrength, 0.0f);
 }
 
-static void modelRenderCB(void* param)
+static void modelRenderCB(void* model)
 {
-    xModelRender((xModelInstance*)param);
+    xModelRender((xModelInstance*)model);
 }
 
 U32 xShadowReceiveShadowSetup(xEnt* ent)

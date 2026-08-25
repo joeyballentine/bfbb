@@ -2781,34 +2781,34 @@ namespace
     }
 } // namespace
 
-S32 xFXRibbon::render_compare(const xFXRibbon& other) const
+S32 xFXRibbon::render_compare(const xFXRibbon& c) const
 {
-    if (raster < other.raster)
+    if (raster < c.raster)
     {
         return -1;
     }
 
-    if (raster > other.raster)
+    if (raster > c.raster)
     {
         return 1;
     }
 
-    if (cfg.blend_src < other.cfg.blend_src)
+    if (cfg.blend_src < c.cfg.blend_src)
     {
         return -1;
     }
 
-    if (cfg.blend_src > other.cfg.blend_src)
+    if (cfg.blend_src > c.cfg.blend_src)
     {
         return 1;
     }
 
-    if (cfg.blend_dst < other.cfg.blend_dst)
+    if (cfg.blend_dst < c.cfg.blend_dst)
     {
         return -1;
     }
 
-    if (cfg.blend_dst > other.cfg.blend_dst)
+    if (cfg.blend_dst > c.cfg.blend_dst)
     {
         return 1;
     }

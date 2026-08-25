@@ -149,14 +149,14 @@ namespace oob_state
             vec += camMat.up * scale * localCoords.z;
         }
 
-        static void move_right(xVec3& vec, F32 scale)
+        static void move_right(xVec3& loc, F32 x)
         {
             xMat4x3& camMat = globals.camera.mat;
 
             xVec3 localCoords;
-            xMat4x3Tolocal(&localCoords, &camMat, &vec);
+            xMat4x3Tolocal(&localCoords, &camMat, &loc);
 
-            vec += camMat.right * scale * localCoords.z * (4.0f / 3.0f);
+            loc += camMat.right * x * localCoords.z * (4.0f / 3.0f);
         }
 
         static void update_max_out_time(const xSurface& surface)

@@ -1179,14 +1179,14 @@ void zCameraSetLongbounce(S32 lbounce)
     zcam_highbounce = 0;
 }
 
-void zCameraSetHighbounce(S32 lbounce)
+void zCameraSetHighbounce(S32 hbounce)
 {
-    if (zcam_longbounce != 0 || zcam_highbounce != lbounce)
+    if (zcam_longbounce != 0 || zcam_highbounce != hbounce)
     {
         zcam_lbbounce = 0;
     }
 
-    zcam_highbounce = lbounce;
+    zcam_highbounce = hbounce;
     // li r0 happens too early
     zcam_longbounce = 0;
 }
@@ -1231,9 +1231,9 @@ void zCameraEnableLassoCam()
     lassocam_enabled = 1;
 }
 
-void zCameraSetLassoCamFactor(F32 new_factor)
+void zCameraSetLassoCamFactor(F32 factor)
 {
-    lassocam_factor = new_factor;
+    lassocam_factor = factor;
 }
 
 F32 zCameraGetLassoCamFactor()
@@ -1305,14 +1305,14 @@ void zCameraDoTrans(xCamAsset* asset, F32 ttime)
     }
 }
 
-void zCameraTranslate(xCamera* cam, F32 x, F32 y, F32 z)
+void zCameraTranslate(xCamera* cam, F32 dposx, F32 dposy, F32 dposz)
 {
-    cam->mat.pos.x += x;
-    cam->mat.pos.y += y;
-    cam->mat.pos.z += z;
-    cam->tran_accum.x += x;
-    cam->tran_accum.y += y;
-    cam->tran_accum.z += z;
+    cam->mat.pos.x += dposx;
+    cam->mat.pos.y += dposy;
+    cam->mat.pos.z += dposz;
+    cam->tran_accum.x += dposx;
+    cam->tran_accum.y += dposy;
+    cam->tran_accum.z += dposz;
 }
 
 void zCameraEnableWallJump(xCamera* cam, const xVec3& collNormal)
@@ -1341,19 +1341,19 @@ void zCameraDisableWallJump(xCamera* cam)
     }
 }
 
-void zCameraSetReward(S32 reward)
+void zCameraSetReward(S32 on)
 {
     if (zCameraIsTrackingDisabled() != 0)
     {
         zcam_reward = 0;
         return;
     }
-    zcam_reward = reward;
+    zcam_reward = on;
 }
 
-void zCameraMinTargetHeightSet(F32 min_height)
+void zCameraMinTargetHeightSet(F32 height)
 {
-    zcam_mintgtheight = min_height;
+    zcam_mintgtheight = height;
 }
 
 void zCameraMinTargetHeightClear()

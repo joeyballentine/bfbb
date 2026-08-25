@@ -3695,7 +3695,7 @@ void zNPCSleepy::RenderExtra()
 
 static RxObjSpace3DVertex g_vert_list[34];
 
-void zNPCSleepy::RendConeOfDeath(S32 which)
+void zNPCSleepy::RendConeOfDeath(S32 tgt_isBowlingBall)
 {
     static RwRGBA rgba_beg = { 0, 200, 240, 0 };
     static RwRGBA rgba_end = { 80, 204, 204, 255 };
@@ -3703,7 +3703,7 @@ void zNPCSleepy::RendConeOfDeath(S32 which)
     xVec3 pos_top;
     xVec3 pos_bot;
 
-    if (which)
+    if (tgt_isBowlingBall)
     {
         GetVertPos(NPC_MDLVERT_ATTACK, &pos_top);
 

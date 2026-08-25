@@ -925,32 +925,32 @@ S32 zThrown_LaunchPos(xEnt* ent, xVec3* pos, xVec3* dir)
     return result;
 }
 
-void zThrown_LaunchStack(xEnt* ent, xEnt* target)
+void zThrown_LaunchStack(xEnt* ent, xEnt* stackTgt)
 {
     xVec3 pos;
     xVec3 dir;
     xBox box;
 
-    switch (target->bound.type)
+    switch (stackTgt->bound.type)
     {
     case XBOUND_TYPE_SPHERE:
-        pos.y = target->bound.sph.center.y + target->bound.sph.r;
+        pos.y = stackTgt->bound.sph.center.y + stackTgt->bound.sph.r;
         break;
     case XBOUND_TYPE_BOX:
-        pos.y = target->bound.box.box.upper.y;
+        pos.y = stackTgt->bound.box.box.upper.y;
         break;
     case XBOUND_TYPE_OBB:
-        xBoxInitBoundOBB(&box, &target->bound.box.box, target->bound.mat);
+        xBoxInitBoundOBB(&box, &stackTgt->bound.box.box, stackTgt->bound.mat);
         pos.y = box.upper.y;
         break;
     default:
-        pos.y = target->model->Mat->pos.y;
+        pos.y = stackTgt->model->Mat->pos.y;
         break;
     }
 
     pos.y += 0.2f;
-    pos.x = target->model->Mat->pos.x;
-    pos.z = target->model->Mat->pos.z;
+    pos.x = stackTgt->model->Mat->pos.x;
+    pos.z = stackTgt->model->Mat->pos.z;
     dir.x = pos.x - ent->model->Mat->pos.x;
     dir.y = 0.0f;
     dir.z = pos.z - ent->model->Mat->pos.z;
@@ -968,7 +968,7 @@ void zThrown_LaunchStack(xEnt* ent, xEnt* target)
             }
         }
         zThrownStruct* listInd = &zThrownList[i];
-        listInd->stackTgt = target;
+        listInd->stackTgt = stackTgt;
     }
 }
 

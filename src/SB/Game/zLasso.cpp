@@ -172,7 +172,7 @@ void zLasso_InterpToGuide(zLasso* lasso)
     }
 }
 
-void zLasso_Render(zLasso* l)
+void zLasso_Render(zLasso* lasso)
 {
     xVec3 pts[16];
     xVec3 vtx[6];
@@ -243,8 +243,8 @@ void zLasso_Render(zLasso* l)
     F32 pz;
     U8 useGuide;
 
-    useGuide = ((((l->flags & 0x800) != 0) && ((l->flags & 0x4000) != 0)) ||
-                (((l->flags & 0x800) == 0) && ((l->flags & 0x2000) != 0)));
+    useGuide = ((((lasso->flags & 0x800) != 0) && ((lasso->flags & 0x4000) != 0)) ||
+                (((lasso->flags & 0x800) == 0) && ((lasso->flags & 0x2000) != 0)));
 
     if (useGuide)
     {
@@ -267,7 +267,7 @@ void zLasso_Render(zLasso* l)
             xMat4x3Toworld(&pts[i], (xMat4x3*)sCurrentGuide->poly->Mat, &pts[i]);
         }
 
-        xVec3Add(&target, &l->lastRefs[l->reindex[0]], &l->anchor);
+        xVec3Add(&target, &lasso->lastRefs[lasso->reindex[0]], &lasso->anchor);
         xVec3Sub(&delta, &target, &pts[0]);
         xVec3Copy(&best, &pts[0]);
         bestDist = xVec3Dot(&delta, &delta);
@@ -304,12 +304,12 @@ void zLasso_Render(zLasso* l)
             ropeLen += xVec3Dist(&pts[i], &pts[(i + 1) % numPts]);
         }
 
-        xVec3Sub(&l->honda, &best, &l->anchor);
+        xVec3Sub(&lasso->honda, &best, &lasso->anchor);
     }
     else
     {
         strandIdx = 0;
-        ropeLen = 2.0f * PI * l->crRadius;
+        ropeLen = 2.0f * PI * lasso->crRadius;
     }
 
     RwRenderStateSet(rwRENDERSTATETEXTURERASTER, NULL);
@@ -319,10 +319,10 @@ void zLasso_Render(zLasso* l)
     prevRing = 0;
     numPrims = 0;
 
-    xVec3Sub(&dir, &l->lastRefs[l->reindex[0]], &l->honda);
+    xVec3Sub(&dir, &lasso->lastRefs[lasso->reindex[0]], &lasso->honda);
     ropeDist = xVec3Normalize(&dir, &dir);
-    l->lastDist = l->currDist;
-    l->currDist = ropeDist;
+    lasso->lastDist = lasso->currDist;
+    lasso->currDist = ropeDist;
 
     perp.x = dir.y - dir.z;
     perp.y = dir.z - dir.x;
@@ -349,7 +349,7 @@ void zLasso_Render(zLasso* l)
 
     travelled = 0.0f;
 
-    xVec3Add(&hondaPos, &l->honda, &l->anchor);
+    xVec3Add(&hondaPos, &lasso->honda, &lasso->anchor);
     xVec3Copy(&cur, &hondaPos);
 
     for (i = 0; i < 3; i++)
@@ -385,14 +385,14 @@ void zLasso_Render(zLasso* l)
             xVec3AddTo(&cur, &step);
             xVec3Copy(&pos, &cur);
             ang = PI * (0.75f * travelled);
-            t = (ropeDist - travelled) * (travelled * (l->crSlack * isin(ang))) / lenSq;
-            segLen = (ropeDist - travelled) * (travelled * (l->crSlack * icos(ang))) / lenSq;
+            t = (ropeDist - travelled) * (travelled * (lasso->crSlack * isin(ang))) / lenSq;
+            segLen = (ropeDist - travelled) * (travelled * (lasso->crSlack * icos(ang))) / lenSq;
             xVec3AddScaled(&pos, &perp, t);
             xVec3AddScaled(&pos, &side, segLen);
         }
         else
         {
-            xVec3Add(&pos, &l->anchor, &l->lastRefs[l->reindex[0]]);
+            xVec3Add(&pos, &lasso->anchor, &lasso->lastRefs[lasso->reindex[0]]);
             du = ropeDist + (stepLen - travelled);
         }
 
@@ -485,8 +485,8 @@ void zLasso_Render(zLasso* l)
 
     if (!useGuide)
     {
-        xVec3Sub(&perp, &l->honda, &l->crCenter);
-        xVec3Cross(&side, &perp, &l->crNormal);
+        xVec3Sub(&perp, &lasso->honda, &lasso->crCenter);
+        xVec3Cross(&side, &perp, &lasso->crNormal);
         xVec3Normalize(&axis, &side);
         vec2vecMat(&coilMat, &dir, &axis);
 
@@ -495,7 +495,7 @@ void zLasso_Render(zLasso* l)
             xMat4x3Toworld(&strand[i], &coilMat, &strand[i]);
         }
 
-        xMat4x3Rot(&coilMat, &l->crNormal, 2.0f * PI / 15.0f);
+        xMat4x3Rot(&coilMat, &lasso->crNormal, 2.0f * PI / 15.0f);
 
         prevRing = 0;
         curRing = 3;
@@ -504,10 +504,10 @@ void zLasso_Render(zLasso* l)
             xVec3Add(&vtx[i], &strand[i], &hondaPos);
         }
 
-        xVec3Sub(&cur, &l->honda, &l->crCenter);
-        xVec3Add(&center, &l->crCenter, &l->anchor);
+        xVec3Sub(&cur, &lasso->honda, &lasso->crCenter);
+        xVec3Add(&center, &lasso->crCenter, &lasso->anchor);
 
-        du = 2.0f * (PI * l->crRadius) / 15.0f;
+        du = 2.0f * (PI * lasso->crRadius) / 15.0f;
         u = 0.0f;
 
         for (j = 0; j < 15 && numVerts + pending + 8 <= 480; j++)

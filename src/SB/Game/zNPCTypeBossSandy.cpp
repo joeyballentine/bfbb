@@ -1593,7 +1593,7 @@ static void GetBonePos(xVec3* result, xMat4x3* matArray, S32 index, xVec3* offse
     }
 }
 
-static void MakeOBBFor(S32 startBone, S32 endBone, xEnt* ent, xMat4x3* matArray)
+static void MakeOBBFor(S32 index1, S32 index2, xEnt* ent, xMat4x3* matArray)
 {
     xVec3 startPos;
     xVec3 dir;
@@ -1601,8 +1601,8 @@ static void MakeOBBFor(S32 startBone, S32 endBone, xEnt* ent, xMat4x3* matArray)
     F32 len;
     F32 angle;
 
-    GetBonePos(&startPos, matArray, sBone[startBone], &sBoneOffset[startBone]);
-    GetBonePos(&dir, matArray, sBone[endBone], &sBoneOffset[endBone]);
+    GetBonePos(&startPos, matArray, sBone[index1], &sBoneOffset[index1]);
+    GetBonePos(&dir, matArray, sBone[index2], &sBoneOffset[index2]);
 
     xVec3SubFrom(&dir, &startPos);
     len = xVec3Normalize(&dir, &dir);

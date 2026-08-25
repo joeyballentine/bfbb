@@ -355,7 +355,7 @@ struct zNPCSleepy : zNPCRobot
     void NightLightPos(xVec3*);
     void NewTime(xScene* sc, F32 dt);
     void Init(xEntAsset* asset);
-    void RendConeOfDeath(S32 which);
+    void RendConeOfDeath(S32 tgt_isBowlingBall);
     void RendConeRange();
     void RenderExtra();
     void LassoModelIndex(S32* idxgrab, S32* idxhold);

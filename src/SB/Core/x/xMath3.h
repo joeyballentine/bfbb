@@ -128,7 +128,7 @@ void xQuatFromAxisAngle(xQuat* q, const xVec3* a, F32 t);
 void xQuatToMat(const xQuat* q, xMat3x3* m);
 void xQuatToAxisAngle(const xQuat* q, xVec3* a, F32* t);
 F32 xQuatNormalize(xQuat* o, const xQuat* q);
-void xQuatSlerp(xQuat* q, const xQuat* a, const xQuat* b, F32 t);
+void xQuatSlerp(xQuat* o, const xQuat* a, const xQuat* b, F32 t);
 void xQuatMul(xQuat* o, const xQuat* a, const xQuat* b);
 void xQuatDiff(xQuat* o, const xQuat* a, const xQuat* b);
 

@@ -353,7 +353,7 @@ void zNPCGoalPlayerNear::DoCheatPanHandle()
     }
 }
 
-void zNPCGoalPlayerNear::ChkCheatDogTrix(S32* goal, en_trantype* trantype)
+void zNPCGoalPlayerNear::ChkCheatDogTrix(S32* nextgoal, en_trantype* trantype)
 {
     // clang-format off
     static U32 hashes_sc[] = {
@@ -426,7 +426,7 @@ void zNPCGoalPlayerNear::ChkCheatDogTrix(S32* goal, en_trantype* trantype)
 
         zNPCVillager* npc = (zNPCVillager*)psyche->clt_owner;
         zEntPickup_SpawnNRewards((U32*)shinies, 5, npc->Center());
-        *goal = NPC_GOAL_CHEER;
+        *nextgoal = NPC_GOAL_CHEER;
         *trantype = GOAL_TRAN_PUSH;
     }
 }

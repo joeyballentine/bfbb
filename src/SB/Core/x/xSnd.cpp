@@ -307,7 +307,7 @@ void xSndUpdate()
     iSndUpdate();
 }
 
-void xSndSetListenerData(sound_listener_type listenerType, const xMat4x3* matrix)
+void xSndSetListenerData(sound_listener_type listenerType, const xMat4x3* pMat)
 {
     /*
     * This code appears to be correct but there appears to be a possibility
@@ -317,12 +317,12 @@ void xSndSetListenerData(sound_listener_type listenerType, const xMat4x3* matrix
     * (Gamecube audio bug source????)
     */
     int i = (int)listenerType;
-    gSnd.listenerMat[i] = *matrix;
+    gSnd.listenerMat[i] = *pMat;
 }
 
-void xSndSelectListenerMode(sound_listener_game_mode listenerGameMode)
+void xSndSelectListenerMode(sound_listener_game_mode listenerMode)
 {
-    gSnd.listenerMode = listenerGameMode;
+    gSnd.listenerMode = listenerMode;
 }
 
 void xSndExit()

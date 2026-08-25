@@ -11270,7 +11270,7 @@ static F32 det3x3top1(F32 a, F32 b, F32 c, F32 d, F32 e, F32 f)
 
 void xQuickCullForSphere(xQCData* q, const xSphere* s);
 
-static void SlideTrackUpdate(xEnt* ent)
+static void SlideTrackUpdate(xEnt* p)
 {
     xQCData qcd;
     RpIntersection isx;
@@ -11279,19 +11279,19 @@ static void SlideTrackUpdate(xEnt* ent)
     TrackPolyData tpd;
     U32 i;
 
-    sph.center = *(xVec3*)&ent->model->Mat->pos;
-    sph.r = 2.0f * ent->bound.sph.r;
+    sph.center = *(xVec3*)&p->model->Mat->pos;
+    sph.r = 2.0f * p->bound.sph.r;
     xQuickCullForSphere(&qcd, &sph);
 
     S32 triIndex = -1;
 
     tpd.neardist = 1e38f;
     tpd.triIndex = -1;
-    tpd.center = *(xVec3*)&ent->model->Mat->pos;
+    tpd.center = *(xVec3*)&p->model->Mat->pos;
 
     isx.type = rpINTERSECTSPHERE;
-    isx.t.sphere.center = ent->model->Mat->pos;
-    isx.t.sphere.radius = 2.0f * ent->bound.sph.r;
+    isx.t.sphere.center = p->model->Mat->pos;
+    isx.t.sphere.radius = 2.0f * p->bound.sph.r;
 
     for (i = 0; i < globals.player.SlideTrackCount; i++)
     {
@@ -11318,7 +11318,7 @@ static void SlideTrackUpdate(xEnt* ent)
         RpAtomicForAllIntersections(tent->model->Data, &isx, nearestTrackCB, &tpd);
     }
 
-    if (tpd.neardist < 1.1f * ent->bound.sph.r)
+    if (tpd.neardist < 1.1f * p->bound.sph.r)
     {
         triIndex = tpd.triIndex;
     }

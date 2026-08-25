@@ -3946,10 +3946,10 @@ void NPCHazard::VisSplashSparklies()
     }
 }
 
-S32 UVAModelInfo::Init(RpAtomic* model, U32 flags)
+S32 UVAModelInfo::Init(RpAtomic* model, U32 flg_uvamCaller)
 {
     this->model = model;
-    this->flg_uvam = flags;
+    this->flg_uvam = flg_uvamCaller;
 
     if (model == NULL)
     {
@@ -3986,11 +3986,11 @@ void UVAModelInfo::Hemorrage()
     uv = 0;
 }
 
-void UVAModelInfo::Update(F32 dt, const xVec2* uvoff)
+void UVAModelInfo::Update(F32 dt, const xVec2* use_offset)
 {
-    if (uvoff != NULL)
+    if (use_offset != NULL)
     {
-        this->offset = *uvoff;
+        this->offset = *use_offset;
     }
     else if (xVec2Length2(&this->offset_vel) > 0.0f)
     {

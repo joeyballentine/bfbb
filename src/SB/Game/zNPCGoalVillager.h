@@ -47,7 +47,7 @@ struct zNPCGoalPlayerNear : zNPCGoalCommon
 
     void ChkCheatMedic();
     void DoCheatPanHandle();
-    void ChkCheatDogTrix(S32* goal, en_trantype* trantype);
+    void ChkCheatDogTrix(S32* nextgoal, en_trantype* trantype);
 
     virtual S32 Enter(F32 dt, void* updCtxt);
     virtual S32 Exit(F32 dt, void* updCtxt);

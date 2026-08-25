@@ -102,7 +102,7 @@ void zCameraSetPlayerVel(xVec3* vel);
 void zCameraSetConvers(int on);
 void zCameraDoTrans(xCamAsset* asset, float ttime);
 U32 zCamera_FlyOnly();
-void zCameraTranslate(xCamera* camera, F32 x, F32 y, F32 z);
+void zCameraTranslate(xCamera* camera, F32 dposx, F32 dposy, F32 dposz);
 void zCameraReset(xCamera* camera);
 void zCameraUpdate(xCamera* camera, F32 dt);
 
@@ -113,14 +113,14 @@ void zCameraEnableTracking(camera_owner_enum owner);
 void zCameraDisableTracking(camera_owner_enum owner);
 void zCameraDisableLassoCam();
 void zCameraEnableLassoCam();
-void zCameraSetLassoCamFactor(F32 new_factor);
+void zCameraSetLassoCamFactor(F32 factor);
 F32 zCameraGetLassoCamFactor();
 void zCameraEnableWallJump(xCamera* cam, const xVec3& collNormal);
 S32 zCameraGetConvers();
-void zCameraTranslate(xCamera* cam, F32 x, F32 y, F32 z);
+void zCameraTranslate(xCamera* cam, F32 dposx, F32 dposy, F32 dposz);
 void zCameraDisableWallJump(xCamera* cam);
-void zCameraSetReward(S32 reward);
-void zCameraMinTargetHeightSet(F32 min_height);
+void zCameraSetReward(S32 on);
+void zCameraMinTargetHeightSet(F32 height);
 void zCameraMinTargetHeightClear();
 
 #endif

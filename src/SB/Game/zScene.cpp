@@ -2783,38 +2783,38 @@ S32 zSceneSetup_serialTraverseCB(U32 clientID, xSerial* xser)
     return 1;
 }
 
-void zSceneUpdate(F32 dt)
+void zSceneUpdate(F32 elapsedSec)
 {
     U32 i;
     S32 isPaused;
     zScene* s;
     xBase** b;
 
-    if (0.0f == dt)
+    if (0.0f == elapsedSec)
     {
         return;
     }
 
     isPaused = zGameIsPaused();
-    gSceneUpdateTime = dt;
+    gSceneUpdateTime = elapsedSec;
 
     if (!isPaused)
     {
-        zEntPickup_SceneUpdate(dt);
-        zEntButton_SceneUpdate(dt);
+        zEntPickup_SceneUpdate(elapsedSec);
+        zEntButton_SceneUpdate(elapsedSec);
     }
 
-    xEntSetTimePassed(dt);
+    xEntSetTimePassed(elapsedSec);
 
     if (globals.cmgr)
     {
-        zCutsceneMgrUpdate(globals.cmgr, globals.sceneCur, dt);
+        zCutsceneMgrUpdate(globals.cmgr, globals.sceneCur, elapsedSec);
     }
 
     s = globals.sceneCur;
     b = s->update_base;
 
-    gUIMgr.PreUpdate(s, dt);
+    gUIMgr.PreUpdate(s, elapsedSec);
 
     if (s->baseCount[eBaseTypeUIFont])
     {
@@ -2822,13 +2822,13 @@ void zSceneUpdate(F32 dt)
 
         for (i = 0; i < s->baseCount[eBaseTypeUIFont]; i++)
         {
-            zUIFont_PreUpdate(&ui[i], s, dt);
+            zUIFont_PreUpdate(&ui[i], s, elapsedSec);
         }
     }
 
     if (!isPaused)
     {
-        zNPCMgr_sceneTimestep(s, dt);
+        zNPCMgr_sceneTimestep(s, elapsedSec);
     }
     else if (s->sceneID == 'B101')
     {
@@ -2839,10 +2839,10 @@ void zSceneUpdate(F32 dt)
         zNPCBPatrick_GameIsPaused(s);
     }
 
-    ztextbox::update_all(*s, dt);
-    ztalkbox::update_all(*s, dt);
+    ztextbox::update_all(*s, elapsedSec);
+    ztalkbox::update_all(*s, elapsedSec);
 
-    gUIMgr.Update(s, dt);
+    gUIMgr.Update(s, elapsedSec);
 
     if (xVec3Dist(&sOldPosPlayer, (xVec3*)&globals.player.ent.model->Mat->pos) > 5.0f ||
         xVec3Dist(&sOldPosCamera, &globals.camera.mat.pos) > 5.0f)
@@ -2869,7 +2869,7 @@ void zSceneUpdate(F32 dt)
             {
                 if (((xEnt*)b[i])->update)
                 {
-                    ((xEnt*)b[i])->update((xEnt*)b[i], s, dt);
+                    ((xEnt*)b[i])->update((xEnt*)b[i], s, elapsedSec);
                 }
                 break;
             }
@@ -2877,7 +2877,7 @@ void zSceneUpdate(F32 dt)
             {
                 if (((xEnt*)b[i])->update && !isPaused)
                 {
-                    ((xEnt*)b[i])->update((xEnt*)b[i], s, dt);
+                    ((xEnt*)b[i])->update((xEnt*)b[i], s, elapsedSec);
                 }
                 break;
             }
@@ -2899,7 +2899,7 @@ void zSceneUpdate(F32 dt)
             {
                 if (((xEnt*)b[i])->update && !isPaused)
                 {
-                    ((xEnt*)b[i])->update((xEnt*)b[i], s, dt);
+                    ((xEnt*)b[i])->update((xEnt*)b[i], s, elapsedSec);
                 }
                 break;
             }
@@ -2907,7 +2907,7 @@ void zSceneUpdate(F32 dt)
             {
                 if (!isPaused || ((xTimer*)b[i])->runsInPause)
                 {
-                    xTimerUpdate(b[i], s, dt);
+                    xTimerUpdate(b[i], s, elapsedSec);
                 }
                 break;
             }
@@ -2915,7 +2915,7 @@ void zSceneUpdate(F32 dt)
             {
                 if (!isPaused)
                 {
-                    zScriptUpdate(b[i], s, dt);
+                    zScriptUpdate(b[i], s, elapsedSec);
                 }
                 break;
             }
@@ -2923,7 +2923,7 @@ void zSceneUpdate(F32 dt)
             {
                 if (!isPaused)
                 {
-                    xFogUpdate(b[i], s, dt);
+                    xFogUpdate(b[i], s, elapsedSec);
                 }
                 break;
             }
@@ -2931,7 +2931,7 @@ void zSceneUpdate(F32 dt)
             {
                 if (!isPaused)
                 {
-                    xParEmitterUpdate(b[i], s, dt);
+                    xParEmitterUpdate(b[i], s, elapsedSec);
                 }
                 break;
             }
@@ -2939,7 +2939,7 @@ void zSceneUpdate(F32 dt)
             {
                 if (!isPaused && !zGameIsPaused())
                 {
-                    xParSysUpdate(b[i], s, dt);
+                    xParSysUpdate(b[i], s, elapsedSec);
                 }
                 break;
             }
@@ -2947,7 +2947,7 @@ void zSceneUpdate(F32 dt)
             {
                 if (!isPaused)
                 {
-                    zLightUpdate(b[i], s, dt);
+                    zLightUpdate(b[i], s, elapsedSec);
                 }
                 break;
             }
@@ -2955,7 +2955,7 @@ void zSceneUpdate(F32 dt)
             {
                 if (!isPaused || ((xSurface*)b[i])->type == XSURFACE_TYPE_3)
                 {
-                    zSurfaceUpdate(b[i], s, dt);
+                    zSurfaceUpdate(b[i], s, elapsedSec);
                 }
                 break;
             }
@@ -2963,7 +2963,7 @@ void zSceneUpdate(F32 dt)
             {
                 if (!isPaused)
                 {
-                    zBusStop_Update(b[i], s, dt);
+                    zBusStop_Update(b[i], s, elapsedSec);
                 }
                 break;
             }
@@ -2971,7 +2971,7 @@ void zSceneUpdate(F32 dt)
             {
                 if (!isPaused)
                 {
-                    ((z_disco_floor*)b[i])->update(*s, dt);
+                    ((z_disco_floor*)b[i])->update(*s, elapsedSec);
                 }
 
                 break;
@@ -2980,7 +2980,7 @@ void zSceneUpdate(F32 dt)
             {
                 if (!isPaused)
                 {
-                    zTaxi_Update(b[i], s, dt);
+                    zTaxi_Update(b[i], s, elapsedSec);
                 }
                 break;
             }
@@ -2988,7 +2988,7 @@ void zSceneUpdate(F32 dt)
             {
                 if (!isPaused)
                 {
-                    zCameraFly_Update(b[i], s, dt);
+                    zCameraFly_Update(b[i], s, elapsedSec);
                 }
                 break;
             }
@@ -2998,7 +2998,7 @@ void zSceneUpdate(F32 dt)
 
     if (!isPaused)
     {
-        zEntSimpleObj_MgrCustomUpdate(s, dt);
+        zEntSimpleObj_MgrCustomUpdate(s, elapsedSec);
     }
 
     if (isPaused)
@@ -3014,20 +3014,20 @@ void zSceneUpdate(F32 dt)
 
     if (!isPaused)
     {
-        zActionLineUpdate(dt);
-        xFXStreakUpdate(dt);
-        xFXShineUpdate(dt);
-        xFXFireworksUpdate(dt);
-        zLightningUpdate(dt);
-        zGustUpdateFX(dt);
-        xClimateUpdate(&gClimate, dt);
-        zShrapnel_Update(dt);
-        zCombo_Update(dt);
-        zFXUpdate(dt);
+        zActionLineUpdate(elapsedSec);
+        xFXStreakUpdate(elapsedSec);
+        xFXShineUpdate(elapsedSec);
+        xFXFireworksUpdate(elapsedSec);
+        zLightningUpdate(elapsedSec);
+        zGustUpdateFX(elapsedSec);
+        xClimateUpdate(&gClimate, elapsedSec);
+        zShrapnel_Update(elapsedSec);
+        zCombo_Update(elapsedSec);
+        zFXUpdate(elapsedSec);
         zLOD_Update(sSuddenMove ? 100 : 5);
-        zParPTankUpdate(dt);
-        xDecalUpdate(dt);
-        xCMupdate(dt);
+        zParPTankUpdate(elapsedSec);
+        xDecalUpdate(elapsedSec);
+        xCMupdate(elapsedSec);
 
         if (s->pendingPortal)
         {

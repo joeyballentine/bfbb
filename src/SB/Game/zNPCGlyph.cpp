@@ -301,11 +301,11 @@ void zNPCCommon_Glyphs_RenderAll(S32 doOpaqueStuff)
     zRenderState(old_render_state);
 }
 
-NPCGlyph* GLYF_Acquire(en_npcglyph gtyp)
+NPCGlyph* GLYF_Acquire(en_npcglyph type)
 {
     NPCGlyph* glist = NULL;
     NPCGlyph* ret = NULL;
-    S32 cnt = zNPCGlyph_TypeToList(gtyp, &glist);
+    S32 cnt = zNPCGlyph_TypeToList(type, &glist);
 
     if (glist == NULL || cnt < 1)
     {
@@ -323,7 +323,7 @@ NPCGlyph* GLYF_Acquire(en_npcglyph gtyp)
 
         glyph->Reset();
         glyph->flg_glyph = (1 << 0);
-        g_cnt_activeGlyphs[gtyp]++;
+        g_cnt_activeGlyphs[type]++;
         ret = glyph;
         break;
     }

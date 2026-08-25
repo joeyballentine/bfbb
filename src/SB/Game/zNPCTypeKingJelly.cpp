@@ -2672,7 +2672,7 @@ void zNPCKingJelly::create_tentacle_lightning()
 {
 }
 
-zLightning* zNPCKingJelly::new_tentacle_lightning(xVec3* loc)
+zLightning* zNPCKingJelly::new_tentacle_lightning(xVec3* points)
 {
     _tagLightningAdd add;
 
@@ -2694,7 +2694,7 @@ zLightning* zNPCKingJelly::new_tentacle_lightning(xVec3* loc)
         add.move_degrees *= -1.0f;
     }
 
-    add.start = loc;
+    add.start = points;
     add.end = NULL;
 
     return zLightningAdd(&add);
