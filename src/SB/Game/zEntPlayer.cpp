@@ -3471,7 +3471,7 @@ static U32 LassoDestroyCB(xAnimTransition*, xAnimSingle*, void*)
 {
     zEntPlayer_SNDPlay(ePlayerSnd_LassoYank, 0.17f);
     zEntPlayer_SNDPlayStreamRandom(ePlayerStreamSnd_RopingComment1, ePlayerStreamSnd_RopingComment3,
-                                   0.133f);
+                                   0.2f);
 
     if (sLassoInfo->targetGuide == 0)
     {
@@ -3497,7 +3497,7 @@ static U32 LassoYankCB(xAnimTransition*, xAnimSingle*, void*)
 {
     zEntPlayer_SNDPlay(ePlayerSnd_LassoYank, 0.17f);
     zEntPlayer_SNDPlayStreamRandom(ePlayerStreamSnd_RopingComment1, ePlayerStreamSnd_RopingComment3,
-                                   0.133f);
+                                   0.2f);
 
     if (sLassoInfo->targetGuide && sLassoInfo->target)
     {
