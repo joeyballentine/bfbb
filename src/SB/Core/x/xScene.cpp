@@ -909,7 +909,7 @@ static RpCollisionTriangle* nearestFloorCB(RpIntersection*, RpCollisionTriangle*
         return NULL;
     }
 
-    xformVert[1] = xformVert[0];
+    xformVert[3] = xformVert[0];
 
     for (i = 0; i < 3; i++)
     {
