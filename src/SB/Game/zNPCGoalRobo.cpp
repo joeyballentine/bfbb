@@ -704,62 +704,62 @@ S32 zNPCGoalAlertFodder::CheckSpot(F32 dt)
 void zNPCGoalAlertFodder::FlankPlayer(F32 dt)
 {
     zNPCRobot* npc = (zNPCRobot*)this->psyche->clt_owner;
-    xVec3 dir_dest;
     xVec3 pos_plyr;
-    xVec3 r1_0x38;
-    xVec3 r1_0x2C;
-    xVec3 r1_0x20;
-    xVec3 r1_0x14;
+    xVec3 dir_arenaToPlyr;
+    xVec3 dir_tan;
+    xVec3 dir_plyr;
+    xVec3 dir_arena;
+    xVec3 dir_dest;
     xVec3 dir;
     F32 length;
 
-    zEntPlayer_PredictPos(&dir_dest, 0.5f, 1.0f, 1);
+    zEntPlayer_PredictPos(&pos_plyr, 0.5f, 1.0f, 1);
 
-    if (npc->XZDstSqToPlayer(NULL, NULL) < npc->XZDstSqToPos(&dir_dest, NULL, NULL))
+    if (npc->XZDstSqToPlayer(NULL, NULL) < npc->XZDstSqToPos(&pos_plyr, NULL, NULL))
     {
-        xVec3Copy(&dir_dest, xEntGetPos(&globals.player.ent));
+        xVec3Copy(&pos_plyr, xEntGetPos(&globals.player.ent));
     }
 
-    xVec3Sub(&pos_plyr, &dir_dest, npc->arena.Pos());
-    length = xVec3Length(&pos_plyr);
+    xVec3Sub(&dir_arenaToPlyr, &pos_plyr, npc->arena.Pos());
+    length = xVec3Length(&dir_arenaToPlyr);
     if (length < 1.0f)
     {
-        xVec3Copy(&pos_plyr, NPCC_faceDir(&globals.player.ent));
+        xVec3Copy(&dir_arenaToPlyr, NPCC_faceDir(&globals.player.ent));
     }
     else
     {
-        xVec3SMulBy(&pos_plyr, 1.0f / length);
+        xVec3SMulBy(&dir_arenaToPlyr, 1.0f / length);
     }
 
-    xVec3Cross(&r1_0x38, &g_Y3, &pos_plyr);
+    xVec3Cross(&dir_tan, &g_Y3, &dir_arenaToPlyr);
 
-    xVec3Sub(&r1_0x2C, xEntGetPos(&globals.player.ent), npc->Pos());
-    length = xVec3Length(&r1_0x2C);
+    xVec3Sub(&dir_plyr, xEntGetPos(&globals.player.ent), npc->Pos());
+    length = xVec3Length(&dir_plyr);
     if (length < 1.0f)
     {
-        xVec3Copy(&r1_0x2C, NPCC_rightDir(&globals.player.ent));
+        xVec3Copy(&dir_plyr, NPCC_rightDir(&globals.player.ent));
     }
     else
     {
-        xVec3SMulBy(&r1_0x2C, 1.0f / length);
+        xVec3SMulBy(&dir_plyr, 1.0f / length);
     }
 
-    xVec3Sub(&r1_0x20, npc->arena.Pos(), npc->zNPCCommon::Pos());
-    length = xVec3Length(&r1_0x20);
+    xVec3Sub(&dir_arena, npc->arena.Pos(), npc->zNPCCommon::Pos());
+    length = xVec3Length(&dir_arena);
     if (length < 1.0f)
     {
-        xVec3Copy(&r1_0x20, NPCC_rightDir(npc));
+        xVec3Copy(&dir_arena, NPCC_rightDir(npc));
     }
     else
     {
-        xVec3SMulBy(&r1_0x20, 1.0f / length);
+        xVec3SMulBy(&dir_arena, 1.0f / length);
     }
 
-    xVec3Dot(&r1_0x20, &r1_0x2C);
-    xVec3Copy(&r1_0x14, &r1_0x2C);
+    xVec3Dot(&dir_arena, &dir_plyr);
+    xVec3Copy(&dir_dest, &dir_plyr);
 
     npc->ThrottleAdjust(dt, 6.0f, -1.0f);
-    NPCC_ang_toXZDir(npc->frame->rot.angle + npc->TurnToFace(dt, &r1_0x14, 4 * PI), &dir);
+    NPCC_ang_toXZDir(npc->frame->rot.angle + npc->TurnToFace(dt, &dir_dest, 4 * PI), &dir);
     npc->ThrottleApply(dt, &dir, 0);
 }
 
@@ -795,37 +795,36 @@ void zNPCGoalAlertFodder::GetInArena(F32 dt)
 
 void zNPCGoalAlertFodder::MoveEvade(F32 dt)
 {
-    // TODO: Variable names.
     zNPCRobot* npc = (zNPCRobot*)this->psyche->clt_owner;
-    xVec3 r1_0x2C;
-    xVec3 r1_0x20;
+    xVec3 dir_arena;
+    xVec3 dir_plyr;
     xVec3 dir_dest;
     xVec3 dir;
     F32 length;
 
-    xVec3Sub(&r1_0x2C, npc->arena.Pos(), npc->Pos());
-    length = xVec3Length(&r1_0x2C);
+    xVec3Sub(&dir_arena, npc->arena.Pos(), npc->Pos());
+    length = xVec3Length(&dir_arena);
     if (length < 1.0f)
     {
-        xVec3Copy(&r1_0x2C, NPCC_rightDir(npc));
+        xVec3Copy(&dir_arena, NPCC_rightDir(npc));
     }
     else
     {
-        xVec3SMulBy(&r1_0x2C, 1.0f / length);
+        xVec3SMulBy(&dir_arena, 1.0f / length);
     }
 
-    xVec3Sub(&r1_0x20, xEntGetPos(&globals.player.ent), npc->Pos());
-    length = xVec3Length(&r1_0x20);
+    xVec3Sub(&dir_plyr, xEntGetPos(&globals.player.ent), npc->Pos());
+    length = xVec3Length(&dir_plyr);
     if (length < 1.0f)
     {
-        xVec3Copy(&r1_0x20, NPCC_rightDir(&globals.player.ent));
+        xVec3Copy(&dir_plyr, NPCC_rightDir(&globals.player.ent));
     }
     else
     {
-        xVec3SMulBy(&r1_0x20, 1.0f / length);
+        xVec3SMulBy(&dir_plyr, 1.0f / length);
     }
 
-    xVec3SMul(&dir_dest, &r1_0x20, -1.0f);
+    xVec3SMul(&dir_dest, &dir_plyr, -1.0f);
     npc->ThrottleAdjust(dt, 6.0f, -1.0f);
     NPCC_ang_toXZDir(npc->frame->rot.angle + (npc->TurnToFace(dt, &dir_dest, PI * 4)), &dir);
     npc->ThrottleApply(dt, &dir, 0);
@@ -977,85 +976,82 @@ void zNPCGoalAlertFodBomb::Detonate()
     }
 }
 
-// TODO: Cleanup local vars
+// dwarf/SB/Game/zNPCGoalRobo.cpp names only npc, pos_plyr, dir_dest and dir here:
+// the PS2 build dropped the intermediates whose results this one computes and
+// throws away (dir_tan, and the dot of dir_arena with dir_plyr). Those four keep
+// role-derived names. fVar4 is left alone deliberately - it is a shared scratch
+// float that holds a vector length, then the pursuit speed, then the turn delta,
+// so no single name is honest.
 void zNPCGoalAlertFodBomb::SonarHoming(F32 dt)
 {
-    // The var length was not in dwarf. copied from other functions
     zNPCRobot* npc = (zNPCRobot*)(this->psyche->clt_owner);
-    //xVec3 pos_plyr;
+    xVec3 pos_plyr;
+    xVec3 dir_arenaToPlyr;
+    xVec3 dir_tan;
+    xVec3 dir_plyr;
+    xVec3 dir_arena;
     xVec3 dir_dest;
-    F32 spd_pursuit;
-    F32 acc_pursuit;
-
-    xVec3 xStack_60;
-    xVec3 xStack_6c;
-    xVec3 xStack_78;
-    xVec3 xStack_84;
-    xVec3 xStack_90;
-    xVec3 xStack_9c;
     xVec3 dir;
-    //F32 length;
-    //F32 rot;
 
-    zEntPlayer_PredictPos(&xStack_60, 0.5f, 1.0f, 0);
+    zEntPlayer_PredictPos(&pos_plyr, 0.5f, 1.0f, 0);
 
-    if (npc->XZDstSqToPlayer(0, 0) < npc->XZDstSqToPos(&xStack_60, 0, 0))
+    if (npc->XZDstSqToPlayer(0, 0) < npc->XZDstSqToPos(&pos_plyr, 0, 0))
     {
-        xVec3Copy(&xStack_60, xEntGetPos(&globals.player.ent));
+        xVec3Copy(&pos_plyr, xEntGetPos(&globals.player.ent));
     }
 
-    xVec3Sub(&xStack_6c, &xStack_60, npc->arena.Pos());
+    xVec3Sub(&dir_arenaToPlyr, &pos_plyr, npc->arena.Pos());
 
-    F32 fVar4 = xVec3Length(&xStack_6c);
+    F32 fVar4 = xVec3Length(&dir_arenaToPlyr);
     if (fVar4 < 1.0f)
     {
-        xVec3Copy(&xStack_6c, NPCC_faceDir(&globals.player.ent));
+        xVec3Copy(&dir_arenaToPlyr, NPCC_faceDir(&globals.player.ent));
     }
     else
     {
-        xVec3SMulBy(&xStack_6c, 1.0f / fVar4);
+        xVec3SMulBy(&dir_arenaToPlyr, 1.0f / fVar4);
     }
 
-    xVec3Cross(&xStack_78, &g_Y3, &xStack_6c);
-    xVec3Sub(&xStack_84, xEntGetPos(&globals.player.ent), npc->Pos());
+    xVec3Cross(&dir_tan, &g_Y3, &dir_arenaToPlyr);
+    xVec3Sub(&dir_plyr, xEntGetPos(&globals.player.ent), npc->Pos());
 
-    fVar4 = xVec3Length(&xStack_84);
+    fVar4 = xVec3Length(&dir_plyr);
     if (fVar4 < 1.0f)
     {
-        xVec3Copy(&xStack_84, NPCC_rightDir(&globals.player.ent));
+        xVec3Copy(&dir_plyr, NPCC_rightDir(&globals.player.ent));
     }
     else
     {
-        xVec3SMulBy(&xStack_84, 1.0f / fVar4);
+        xVec3SMulBy(&dir_plyr, 1.0f / fVar4);
     }
 
-    xVec3Sub(&xStack_90, npc->arena.Pos(), npc->zNPCCommon::Pos());
+    xVec3Sub(&dir_arena, npc->arena.Pos(), npc->zNPCCommon::Pos());
 
-    fVar4 = xVec3Length(&xStack_90);
+    fVar4 = xVec3Length(&dir_arena);
     if (fVar4 < 1.0f)
     {
-        xVec3Copy(&xStack_90, NPCC_rightDir(npc));
+        xVec3Copy(&dir_arena, NPCC_rightDir(npc));
     }
     else
     {
-        xVec3SMulBy(&xStack_90, 1.0f / fVar4);
+        xVec3SMulBy(&dir_arena, 1.0f / fVar4);
     }
 
-    xVec3Dot(&xStack_90, &xStack_84);
-    xVec3Copy(&xStack_9c, &xStack_84);
+    xVec3Dot(&dir_arena, &dir_plyr);
+    xVec3Copy(&dir_dest, &dir_plyr);
 
     fVar4 = 4.0f;
-    F32 fVar6 = 1.0f;
+    F32 acc_pursuit = 1.0f;
     F32 spd_turnrate = DEG2RAD(135);
     if (zGameExtras_CheatFlags() & 0x800)
     {
         fVar4 = 6.0f;
         spd_turnrate = 2 * PI;
-        fVar6 = 6.0f;
+        acc_pursuit = 6.0f;
     }
 
-    npc->ThrottleAdjust(dt, fVar4, fVar6);
-    fVar4 = (npc->TurnToFace(dt, &xStack_9c, spd_turnrate));
+    npc->ThrottleAdjust(dt, fVar4, acc_pursuit);
+    fVar4 = (npc->TurnToFace(dt, &dir_dest, spd_turnrate));
     NPCC_ang_toXZDir(npc->frame->rot.angle + fVar4, &dir);
     npc->ThrottleApply(dt, &dir, 0);
 }
@@ -1911,57 +1907,55 @@ S32 zNPCGoalAlertHammer::Process(en_trantype* trantype, F32 dt, void* updCtxt, x
 
 S32 zNPCGoalAlertHammer::PlayerInSpot(F32 dt)
 {
-    // TODO: Variable names.
-
     S32 plyrInSpot;
     zNPCRobot* npc;
 
-    xVec3 r1_0x30;
-    xVec3 r1_0x24;
-    xVec3 r1_0x18;
-    xVec3 r1_0x0C;
+    xVec3 dir_plyr;
+    xVec3 pos_zone;
+    xVec3 pos_plyr;
+    xVec3 vec;
 
-    F32 f0;
-    F32 f1;
-    F32 f2;
-    F32 f3;
+    F32 dst_guess;
+    F32 dst_plyr;
+    F32 dy;
+    F32 spd_mover;
 
     plyrInSpot = 0;
     npc = (zNPCRobot*)(psyche->clt_owner);
-    f1 = xsqrt(npc->XZDstSqToPlayer(&r1_0x30, &f2));
-    f2 = __fabs(f2);
-    if (f1 < 2.25f)
+    dst_plyr = xsqrt(npc->XZDstSqToPlayer(&dir_plyr, &dy));
+    dy = __fabs(dy);
+    if (dst_plyr < 2.25f)
     {
         return 1;
     }
-    else if (f2 > 3.75f)
+    else if (dy > 3.75f)
     {
         return 0;
     }
-    else if (f1 < 0.4f)
+    else if (dst_plyr < 0.4f)
     {
         return 1;
     }
     else
     {
-        r1_0x30 *= (1.0f / f1);
-        if (xVec3Dot(&r1_0x30, (xVec3*)NPCC_faceDir(npc)) < 0.5f)
+        dir_plyr *= (1.0f / dst_plyr);
+        if (xVec3Dot(&dir_plyr, (xVec3*)NPCC_faceDir(npc)) < 0.5f)
         {
             return 0;
         }
         else
         {
-            xVec3SMul(&r1_0x24, (xVec3*)NPCC_faceDir(npc), 3.5f);
-            xVec3AddTo(&r1_0x24, (xVec3*)npc->Pos());
-            xVec3Copy(&r1_0x18, (xVec3*)xEntGetPos(&globals.player.ent));
-            f0 = xsqrt(NPCC_DstSq(&r1_0x24, (xVec3*)xEntGetPos(&globals.player.ent), NULL));
-            f3 = MAX(npc->spd_throttle, 12.0f);
-            zEntPlayer_PredictPos(&r1_0x18, MIN((f0 / f3) + 0.5f, 2.0f), 1.0f, 0);
-            xVec3Sub(&r1_0x0C, &r1_0x18, &r1_0x24);
-            if ((F32)__fabs(r1_0x0C.y) < 2.5f)
+            xVec3SMul(&pos_zone, (xVec3*)NPCC_faceDir(npc), 3.5f);
+            xVec3AddTo(&pos_zone, (xVec3*)npc->Pos());
+            xVec3Copy(&pos_plyr, (xVec3*)xEntGetPos(&globals.player.ent));
+            dst_guess = xsqrt(NPCC_DstSq(&pos_zone, (xVec3*)xEntGetPos(&globals.player.ent), NULL));
+            spd_mover = MAX(npc->spd_throttle, 12.0f);
+            zEntPlayer_PredictPos(&pos_plyr, MIN((dst_guess / spd_mover) + 0.5f, 2.0f), 1.0f, 0);
+            xVec3Sub(&vec, &pos_plyr, &pos_zone);
+            if ((F32)__fabs(vec.y) < 2.5f)
             {
-                r1_0x0C.y = 0.0f;
-                if (xVec3Length2(&r1_0x0C) < 1.25f)
+                vec.y = 0.0f;
+                if (xVec3Length2(&vec) < 1.25f)
                 {
                     plyrInSpot = 1;
                 }
@@ -2055,37 +2049,36 @@ void zNPCGoalAlertHammer::MoveChase(F32 dt)
 
 void zNPCGoalAlertHammer::MoveEvade(F32 dt)
 {
-    // TODO: Variable names.
     zNPCRobot* npc = (zNPCRobot*)this->psyche->clt_owner;
-    xVec3 r1_0x14;
-    xVec3 r1_0x08;
+    xVec3 dir_arena;
+    xVec3 dir_dest;
     F32 length;
 
-    xVec3Sub(&r1_0x14, npc->arena.Pos(), npc->Pos());
-    length = xVec3Length(&r1_0x14);
+    xVec3Sub(&dir_arena, npc->arena.Pos(), npc->Pos());
+    length = xVec3Length(&dir_arena);
     if (length < 1.0f)
     {
-        xVec3Copy(&r1_0x14, NPCC_rightDir(npc));
+        xVec3Copy(&dir_arena, NPCC_rightDir(npc));
     }
     else
     {
-        xVec3SMulBy(&r1_0x14, 1.0f / length);
+        xVec3SMulBy(&dir_arena, 1.0f / length);
     }
 
-    xVec3Sub(&r1_0x08, xEntGetPos(&globals.player.ent), npc->Pos());
-    length = xVec3Length(&r1_0x08);
+    xVec3Sub(&dir_dest, xEntGetPos(&globals.player.ent), npc->Pos());
+    length = xVec3Length(&dir_dest);
     if (length < 0.5f)
     {
-        xVec3Copy(&r1_0x08, NPCC_rightDir(&globals.player.ent));
+        xVec3Copy(&dir_dest, NPCC_rightDir(&globals.player.ent));
     }
     else
     {
-        xVec3SMulBy(&r1_0x08, 1.0f / length);
+        xVec3SMulBy(&dir_dest, 1.0f / length);
     }
 
-    xVec3SMulBy(&r1_0x08, -1.0f);
+    xVec3SMulBy(&dir_dest, -1.0f);
     npc->ThrottleAdjust(dt, 7.0f, 14.0f);
-    npc->ThrottleApply(dt, &r1_0x08, 0);
+    npc->ThrottleApply(dt, &dir_dest, 0);
 }
 
 S32 zNPCGoalAlertTarTar::Enter(F32 dt, void* updCtxt)

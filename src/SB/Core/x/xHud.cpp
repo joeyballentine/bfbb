@@ -6,6 +6,9 @@
 #include "xstransvc.h"
 #include "zGlobals.h"
 #include "xHudText.h"
+#include "xHudModel.h"
+#include "xHudUnitMeter.h"
+#include "xHudFontMeter.h"
 
 #include "zEnt.h"
 
@@ -346,11 +349,13 @@ namespace xhud
             U8 widget_type;
             U32 widget_size;
         } known_types[] = {
-            // TODO: The second value should probably be sizeof(...)
-            { 0x3a, 0x9c },
-            { 0x3c, 0x19c },
-            { 0x3b, 0x15c },
-            { 0x47, 0x17c },
+            // The size is the stride of globals.sceneCur->baseList[type], i.e.
+            // sizeof(xBase) plus the widget that follows it - see for_each()
+            // below, which steps by it and offsets past the xBase.
+            { eBaseTypeHUD_model, sizeof(xBase) + sizeof(model_widget) },
+            { eBaseTypeHUD_unit_meter, sizeof(xBase) + sizeof(unit_meter_widget) },
+            { eBaseTypeHUD_font_meter, sizeof(xBase) + sizeof(font_meter_widget) },
+            { eBaseTypeHUD_text, sizeof(xBase) + sizeof(text_widget) },
         };
 
         struct functor_disable

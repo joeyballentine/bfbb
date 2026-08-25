@@ -351,9 +351,9 @@ void zNPCBPatrick::Init(xEntAsset* asset)
         ent->driver = this;
         ent->baseType = eBaseTypeDynamic; // 0xc
 
-        ent->collType = XENT_COLLTYPE_STAT; // 2
-        ent->chkby = XENT_COLLTYPE_PLYR; // 0x10
-        ent->penby = XENT_COLLTYPE_PLYR; // 0x10
+        ent->collType = XENT_COLLTYPE_STAT;
+        ent->chkby = XENT_COLLTYPE_PLYR;
+        ent->penby = XENT_COLLTYPE_PLYR;
 
         ent->baseFlags |= 0x21;
         ent->moreFlags = 0x10;
@@ -2312,11 +2312,11 @@ void zNPCBPatrick::bossPatBoxUpdate(bossPatBox* bx, F32 dt)
 
         if (bx->flags & 2)
         {
-            bx->box->chkby |= 0x10;
+            bx->box->chkby |= XENT_COLLTYPE_PLYR;
         }
         else
         {
-            bx->box->chkby &= 0xef;
+            bx->box->chkby &= (U8)~XENT_COLLTYPE_PLYR;
         }
     }
 
@@ -2832,10 +2832,10 @@ S32 zNPCGoalBossPatHit::Enter(F32 dt, void* updCtxt)
 
     pat->bossFlags &= 0xffffffd3;
 
-    sPat_Ptr->boundList[0]->chkby &= 0xef; // TODO substitute out enum XENT_COLLTYPE_
-    sPat_Ptr->boundList[1]->chkby &= 0xef;
-    sPat_Ptr->boundList[2]->chkby &= 0xef;
-    sPat_Ptr->boundList[3]->chkby &= 0xef;
+    sPat_Ptr->boundList[0]->chkby &= (U8)~XENT_COLLTYPE_PLYR;
+    sPat_Ptr->boundList[1]->chkby &= (U8)~XENT_COLLTYPE_PLYR;
+    sPat_Ptr->boundList[2]->chkby &= (U8)~XENT_COLLTYPE_PLYR;
+    sPat_Ptr->boundList[3]->chkby &= (U8)~XENT_COLLTYPE_PLYR;
 
     this->timeInGoal = 0.0f;
 
@@ -2868,10 +2868,10 @@ S32 zNPCGoalBossPatHit::Exit(F32 dt, void* updCtxt)
 {
     zNPCBPatrick* pat = (zNPCBPatrick*)this->GetOwner();
 
-    sPat_Ptr->boundList[0]->chkby |= 0x10;
-    sPat_Ptr->boundList[1]->chkby |= 0x10;
-    sPat_Ptr->boundList[2]->chkby |= 0x10;
-    sPat_Ptr->boundList[3]->chkby |= 0x10;
+    sPat_Ptr->boundList[0]->chkby |= XENT_COLLTYPE_PLYR;
+    sPat_Ptr->boundList[1]->chkby |= XENT_COLLTYPE_PLYR;
+    sPat_Ptr->boundList[2]->chkby |= XENT_COLLTYPE_PLYR;
+    sPat_Ptr->boundList[3]->chkby |= XENT_COLLTYPE_PLYR;
 
     return xGoal::Exit(dt, updCtxt);
 }

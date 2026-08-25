@@ -235,16 +235,21 @@ void xEntBoulder_RealBUpdate(xEnt* ent, xVec3* pos)
 
 void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
 {
-    // TODO: Improve variable names.
+    // Names come from dwarf/SB/Core/x/xEntBoulder.cpp. The PS2 source declared
+    // most of these inside the blocks that use them; the GC build hoists them
+    // here, which is why three of them (dVar16/dVar18/dVar20) are shared scratch
+    // floats with no single role and so no dwarf name - dVar18 alone carries the
+    // bubble count scalar, a boulder-vs-boulder velocity component, |vel| and a
+    // depen dot product. someVec has no dwarf counterpart either.
     S32 i;
     F32 dx__;
     F32 dy__;
     F32 dz__;
-    F32 f31;
+    F32 depenComp;
     F32 dVar16;
     F32 dVar18;
     F32 dVar20;
-    F32 uVar19;
+    F32 fn;
     xVec3 newRotVec;
     xVec3 a;
     xVec3 b;
@@ -364,7 +369,7 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
             }
             else
             {
-                uVar19 = xVec3Dot(&ent->collis->colls[i].norm, &ent->collis->colls[i].depen);
+                fn = xVec3Dot(&ent->collis->colls[i].norm, &ent->collis->colls[i].depen);
 
                 if ((ent == globals.player.bubblebowl) &&
                     (xVec3Dot(&ent->collis->colls[i].norm, &velNorm) < -0.70710676f) &&
@@ -373,7 +378,7 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
                     ent->timeToLive = 0.05f;
                 }
 
-                xVec3AddScaled(&depen, &ent->collis->colls[i].norm, uVar19);
+                xVec3AddScaled(&depen, &ent->collis->colls[i].norm, fn);
             }
             numDepens++;
         }
@@ -440,14 +445,14 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
             }
             else
             {
-                uVar19 = xVec3Dot(&ent->collis->colls[i].norm, &ent->collis->colls[i].depen);
+                fn = xVec3Dot(&ent->collis->colls[i].norm, &ent->collis->colls[i].depen);
                 if ((ent == globals.player.bubblebowl) &&
                     (xVec3Dot(&ent->collis->colls[i].norm, &velNorm) < -0.70710676f) &&
                     (ent->timeToLive > 0.05f))
                 {
                     ent->timeToLive = 0.05f;
                 }
-                xVec3AddScaled(&depen, &ent->collis->colls[i].norm, uVar19);
+                xVec3AddScaled(&depen, &ent->collis->colls[i].norm, fn);
             }
 
             boul = (xEntBoulder*)(ent->collis->colls[i].optr);
@@ -484,11 +489,11 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
             }
             else
             {
-                uVar19 = xVec3Dot(&ent->collis->colls[iter_npc].norm,
+                fn = xVec3Dot(&ent->collis->colls[iter_npc].norm,
                                   &ent->collis->colls[iter_npc].depen);
                 if ((ent != globals.player.bubblebowl) || (npc->SelfType() & ~0xFF) != 'NTT\0')
                 {
-                    xVec3AddScaled(&depen, &ent->collis->colls[iter_npc].norm, uVar19);
+                    xVec3AddScaled(&depen, &ent->collis->colls[iter_npc].norm, fn);
                 }
             }
 
@@ -534,23 +539,23 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
     if (numDepens != 0)
     {
         xVec3Normalize(&depenNorm1, &depen);
-        f31 = xVec3Dot(&ent->vel, &depenNorm1);
+        depenComp = xVec3Dot(&ent->vel, &depenNorm1);
     }
     if (!(ent->basset->flags & 1) && (numDepens != 0))
     {
         F32 bounce = ent->basset->bounce;
-        if (bounce && ((f31 / dVar18) < bounce + -1.0f))
+        if (bounce && ((depenComp / dVar18) < bounce + -1.0f))
         {
             dVar18 = xVec3Dot(&sphDist, &depenNorm1);
-            if (-f31 > ent->basset->bounceDamp)
+            if (-depenComp > ent->basset->bounceDamp)
             {
-                xVec3AddScaled(&sphDist, &depenNorm1, (-ent->basset->bounce * f31) - dVar18);
+                xVec3AddScaled(&sphDist, &depenNorm1, (-ent->basset->bounce * depenComp) - dVar18);
             }
         }
         if (ent->basset->friction)
         {
             xVec3Copy(&scaleVel, &ent->vel);
-            xVec3AddScaled(&scaleVel, &depenNorm1, -f31);
+            xVec3AddScaled(&scaleVel, &depenNorm1, -depenComp);
             xVec3AddScaled(&sphDist, &scaleVel, -ent->basset->friction * dt);
         }
     }
@@ -600,11 +605,11 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
     xVec3Sub((xVec3*)&ent->model->Mat->pos, &ent->bound.sph.center, &newRotVec);
     if ((ent->basset->soundID != 0) && (numDepens != 0) && (ent->lastRolling > 0.25f))
     {
-        if (-f31 > ent->basset->minSoundVel)
+        if (-depenComp > ent->basset->minSoundVel)
         {
             vol = ent->basset->maxSoundVel - ent->basset->minSoundVel;
             F32 max = MAX(1e-5f, vol);
-            vol = (-f31 - ent->basset->minSoundVel);
+            vol = (-depenComp - ent->basset->minSoundVel);
             vol /= max;
 
             if (vol > 1.0f)

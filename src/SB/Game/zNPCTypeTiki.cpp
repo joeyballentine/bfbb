@@ -944,10 +944,9 @@ void zNPCTiki::Process(xScene* xscn, F32 dt)
 S32 zNPCTiki::SysEvent(xBase* from, xBase* to, U32 toEvent, const F32* toParam,
                        xBase* toParamWidget, S32* handled)
 {
-    // TODO: Figure out event enum
     switch (toEvent)
     {
-    case 0x32:
+    case eEventNPCRespawn:
         if ((this->tikiFlag & 0x300) != 0x200 && this->explosion && this->explosion->initCB)
         {
             this->explosion->initCB(this->explosion, this->model, 0, 0);
@@ -966,8 +965,8 @@ S32 zNPCTiki::SysEvent(xBase* from, xBase* to, U32 toEvent, const F32* toParam,
         *handled = TRUE;
         break;
 
-    case 3:
-    case 0x1F7:
+    case eEventVisible:
+    case eEventFastVisible:
         if ((this->tikiFlag & 0x300) != 0x200)
         {
             xEntShow(this);
@@ -984,8 +983,8 @@ S32 zNPCTiki::SysEvent(xBase* from, xBase* to, U32 toEvent, const F32* toParam,
         *handled = TRUE;
         break;
 
-    case 4:
-    case 0x1F8:
+    case eEventInvisible:
+    case eEventFastInvisible:
         if (xEntIsVisible(this) && toParam)
         {
             S32 code = (S32)(0.5f + toParam[0]);
@@ -997,18 +996,18 @@ S32 zNPCTiki::SysEvent(xBase* from, xBase* to, U32 toEvent, const F32* toParam,
         xEntHide(this);
         *handled = TRUE;
         break;
-    case 0x53:
+    case eEventCollisionOn:
         if ((this->tikiFlag & 0x300) != 0x200)
         {
             this->RestoreColFlags();
         }
         *handled = TRUE;
         break;
-    case 0x54:
+    case eEventCollisionOff:
         this->chkby = 0;
         *handled = TRUE;
         break;
-    case 0x55:
+    case eEventCollision_Visible_On:
         if ((this->tikiFlag & 0x300) != 0x200)
         {
             this->RestoreColFlags();
@@ -1026,7 +1025,7 @@ S32 zNPCTiki::SysEvent(xBase* from, xBase* to, U32 toEvent, const F32* toParam,
         *handled = TRUE;
         break;
 
-    case 0x56:
+    case eEventCollision_Visible_Off:
         this->chkby = 0;
 
         if (xEntIsVisible(this) && toParam)
