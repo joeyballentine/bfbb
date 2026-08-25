@@ -700,8 +700,8 @@ void xQuatSlerp(xQuat* q, const xQuat* a, const xQuat* b, F32 t)
     F32 abdot;
     xQuat b2;
 
-    xQuat* qp1 = 0;
-    xQuat* qp2 = 0;
+    xQuat qp1;
+    xQuat qp2;
 
     abdot = xQuatDot(a, b);
     if (abdot < 0.0)
@@ -727,9 +727,9 @@ void xQuatSlerp(xQuat* q, const xQuat* a, const xQuat* b, F32 t)
         t = one_sintheta * abdot;
     }
 
-    xQuatSMul(qp1, a, temp_t);
-    xQuatSMul(qp2, b, t);
-    xQuatAdd(q, qp1, qp2);
+    xQuatSMul(&qp1, a, temp_t);
+    xQuatSMul(&qp2, b, t);
+    xQuatAdd(q, &qp1, &qp2);
     xQuatNormalize(q, q);
     return;
 }
