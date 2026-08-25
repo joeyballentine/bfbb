@@ -1322,7 +1322,7 @@ void zCameraEnableWallJump(xCamera* cam, const xVec3& collNormal)
         wall_jump_enabled = WJVS_ENABLING;
     }
 
-    xVec3 up = { 0.0f, 0.0f, 0.0f };
+    xVec3 up = { 0.0f, 1.0f, 0.0f };
 
     xVec3Cross(&wall_jump_view, &collNormal, &up);
     xVec3Normalize(&wall_jump_view, &wall_jump_view);
