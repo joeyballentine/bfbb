@@ -37,11 +37,10 @@ void xhud::unit_meter_widget::load(xBase& data, xDynAsset& asset, size_t arg2)
     new (widget) unit_meter_widget((unit_meter_asset&)asset);
 }
 
-xhud::unit_meter_widget::unit_meter_widget(const xhud::unit_meter_asset& a) : meter_widget(a)
+xhud::unit_meter_widget::unit_meter_widget(const xhud::unit_meter_asset& a)
+    : meter_widget(a), res(a)
 {
     S32 i, j;
-
-    res = a;
 
     anim_time = 0.0f;
 
@@ -120,8 +119,7 @@ void xhud::unit_meter_widget::update(F32 dt)
         xModelInstance* m = model[i][which];
         if (m != NULL && m->Anim != NULL && !(m->Anim->Single->State->Data->Duration <= 0.0f))
         {
-            // TODO: Float ops aren't quite right
-            F32 duration = i * 0.1f + anim_time;
+            F32 duration = i * tweak_anim_time_delta + anim_time;
             if (duration > m->Anim->Single->State->Data->Duration) {
                 duration = xfmod(duration, m->Anim->Single->State->Data->Duration);
             }
@@ -155,9 +153,9 @@ void xhud::unit_meter_widget::render()
             continue;
         }
 
-        unitrc.loc.x = res.offset.x * i + rc.loc.x + res.model[which].loc.x;
-        unitrc.loc.y = res.offset.y * i + rc.loc.y + res.model[which].loc.y;
-        unitrc.loc.z = res.offset.z * i + rc.loc.z + res.model[which].loc.z;
+        unitrc.loc.x = rc.loc.x + res.model[which].loc.x + res.offset.x * i;
+        unitrc.loc.y = rc.loc.y + res.model[which].loc.y + res.offset.y * i;
+        unitrc.loc.z = rc.loc.z + res.model[which].loc.z + res.offset.z * i;
         unitrc.size.x = rc.size.x * res.model[which].size.x;
         unitrc.size.y = rc.size.y * res.model[which].size.y;
         unitrc.size.z = rc.size.z * res.model[which].size.z;
