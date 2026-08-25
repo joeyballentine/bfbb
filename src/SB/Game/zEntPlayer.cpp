@@ -14545,17 +14545,23 @@ static void zEntPlayer_SNDInit()
             sPlayerStreamSndRand[player][snd] = 0;
         }
     }
+    for (S32 snd = 0; snd < ePlayerStreamSnd_Total; snd++)
+    {
+        sPlayerStreamSndTimer[snd].timer = 0.0f;
+        sPlayerStreamSndTimer[snd].time = 0.0f;
+    }
+
     for (S32 i = 0; i < MAX_DELAYED_SOUNDS; i++)
     {
-        for (S32 snd = 0; snd < ePlayerStreamSnd_Total; snd++)
-        {
-            sPlayerStreamSndTimer[snd].timer = 0.0f;
-            sPlayerStreamSndTimer[snd].time = 0.0f;
-        }
-
         sDelayedSound[i].start = ePlayerStreamSnd_Invalid;
         sDelayedSound[i].end = ePlayerStreamSnd_Invalid;
         sDelayedSound[i].delay = 0.0f;
+    }
+
+    for (S32 snd = 0; snd < ePlayerSnd_Total; snd++)
+    {
+        sPlayerRumbleType[snd] = eRumble_Off;
+        sPlayerRumbleTime[snd] = 0.0f;
     }
 
     for (S32 snd = 0; snd < ePlayerSnd_Total; snd++)
