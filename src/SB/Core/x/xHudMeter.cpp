@@ -61,7 +61,7 @@ void xhud::meter_widget::set_value(F32 v)
             return;
         }
 
-        dvalue = -1.0f;
+        sign = -1.0f;
     }
     else if (dvalue > 0.01f)
     {
@@ -76,7 +76,7 @@ void xhud::meter_widget::set_value(F32 v)
             return;
         }
 
-        dvalue = 1.0f;
+        sign = 1.0f;
     }
     else
     {
@@ -91,13 +91,13 @@ void xhud::meter_widget::set_value(F32 v)
         printf("decrement time = 0 -- ass saved!\n");
     }
 
-    value_vel = dvalue / (res.decrement_time > 1e-5f ? res.decrement_time : 1e-5f);
-    value_accel = 50.0f * dvalue;
+    value_vel = sign / (res.decrement_time > 1e-5f ? res.decrement_time : 1e-5f);
+    value_accel = 50.0f * sign;
     pitch = 0.0f;
 
-    if (xsqrt(2.0f * (v - value) / value_accel) > 2.0f)
+    if (xsqrt(2.0f * dvalue / value_accel) > 2.0f)
     {
-        value_accel = 2.0f * (v - value) / 4.0f;
+        value_accel = 2.0f * dvalue / 4.0f;
     }
 }
 
@@ -137,6 +137,7 @@ void xhud::meter_widget::updater(F32 dt)
     F32 old_value;
     F32 pitch; // This was Heavy Iron, idk why they chose a name that causes name collisions :(
     F32 min_ping_time;
+    F32 dvalue;
 
     xhud::widget::updater(dt);
 
@@ -147,7 +148,8 @@ void xhud::meter_widget::updater(F32 dt)
     {
         old_value = value;
 
-        value = value + (value_vel * dt + dt * (0.5f * value_accel * dt));
+        dvalue = value_vel * dt;
+        value = value + (dvalue + dt * (0.5f * value_accel * dt));
         value_vel += value_accel * dt;
 
         if (value_vel < 0.0f)
@@ -158,7 +160,8 @@ void xhud::meter_widget::updater(F32 dt)
                 value_vel = 0.0f;
             }
 
-            pitch = range_limit<F32>(-4.0f * this->pitch, -10.0f, 6.5f);
+            pitch = -4.0f * this->pitch;
+            pitch = range_limit<F32>(pitch, -10.0f, 6.5f);
             min_ping_time = 0.05f * xpow(0.5f, 0.083333336f * pitch);
 
             if ((S32)value != (S32)old_value && res.sound.decrement != 0 &&
@@ -176,7 +179,8 @@ void xhud::meter_widget::updater(F32 dt)
                 value_vel = 0.0f;
             }
 
-            pitch = range_limit<F32>(2.0f * this->pitch, -10.0f, 6.5f);
+            pitch = 2.0f * this->pitch;
+            pitch = range_limit<F32>(pitch, -10.0f, 6.5f);
             min_ping_time = 0.05f * xpow(0.5f, 0.083333336f * pitch);
 
             if ((S32)value != (S32)old_value && res.sound.increment != 0 &&
