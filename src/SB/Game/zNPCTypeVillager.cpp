@@ -1819,16 +1819,11 @@ void zNPCSandyBikini::Process(xScene* xscn, F32 dt)
 
 void zNPCSandyBikini::VFXLeakyFaucet(F32 dt)
 {
-    F32 rat_tym;
-    xVec3 pos_emit;
+    static const xVec3 vec_boneOffset = { 0.05f, 0.0f, 0.0f };
+    F32 rat_tym = NPCC_TmrCycle(&this->tmr_leakCycle, dt, 0.3f);
+    xVec3 pos_emit = *(const xVec3*)this->BonePos(17);
     xVec3 dir_emit;
     F32 dist;
-    static const xVec3 vec_boneOffset = { 0.05f, 0.0f, 0.0f };
-    rat_tym = NPCC_TmrCycle(&this->tmr_leakCycle, dt, 0.3f);
-    const xVec3* bone_pos = (const xVec3*)this->BonePos(17);
-    pos_emit.x = bone_pos->x;
-    pos_emit.y = bone_pos->y;
-    pos_emit.z = bone_pos->z;
     pos_emit += vec_boneOffset;
     xMat3x3RMulVec(&pos_emit, (const xMat3x3*)this->BoneMat(0), &pos_emit);
     pos_emit *= this->cfg_npc->scl_model.x;
