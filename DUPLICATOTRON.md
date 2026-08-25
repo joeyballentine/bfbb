@@ -5183,3 +5183,134 @@ most of these bugs were localised, and the same thing for relocations, for when
 instructions match but the score does not. Resolve float constants with
 `llvm-objdump -s -j .sdata2 <retail .o>` plus the `@NNN` offsets from
 `llvm-nm -S` -- guessing them sends you the wrong way (@688 was 0.25f, not 25.0f).
+
+## Playtest round 2 (2026-08-25): ledge grab, and a filter for the rest
+
+### The ledge-grab bug, and why nothing on the ledge path looked wrong
+
+Reported symptom: ledge grabbing does not work at all. Every function on the
+obvious path was already exact -- `LedgeGrabCheck`, `LedgeGrabCB`,
+`LedgeFinishCB`, `PlayerLedgeInit`, `zLedgeAdjust`, `xSceneNearestFloorPoly`,
+`gridNearestFloorCB`, `boxNearestFloorCB`, `sectorNearestFloorCB`,
+`PlayerCollsDetect`, `xRayHitsSceneFlags`, and every anim-table entry that
+wires the transition. `PlayerLedgeUpdate` sat at 96% but every one of its
+diffs was register allocation.
+
+The bug was one level below all of that, in `nearestFloorCB` (xScene.cpp) --
+the triangle test every floor-poly callback funnels into, and a function
+reachable *only* from ledge grab. It closes the triangle ring with
+
+    xformVert[3] = xformVert[0];
+
+so the edge loop `xformVert[i + 1] - xformVert[i]` for i = 0,1,2 walks
+(0->1), (1->2), (2->0). That fourth slot is why the array is declared
+`xVec3 xformVert[4]`. We wrote slot 1 instead, which destroys vertex 1, makes
+the i=0 edge vector zero, trips `if (denom < 0.000001f) return collTriangle;`
+on the first iteration, and bails on every triangle before touching
+`nfpoly->neardist`. neardist stays FLOAT_MAX, so `xSceneNearestFloorPoly`
+returns 0 and detection dies on its first pass every frame.
+
+The lesson to carry: **a dead feature's bug is often not in the code named
+after the feature.** Walk the call graph down to the leaves and check what is
+reachable only from the broken path -- `xSceneNearestFloorPoly` had exactly
+one caller, and its callee had exactly one purpose.
+
+The stack offsets settled it without any guessing: `xformVert[0]` at 0x44 and
+12-byte elements make slot 3 = 0x68, and the target's copy reads
+`addi r3, r1, 0x68` against our `mr r3, r30` where r30 is `r1 + 0x50`.
+
+### tools/semdiff.py -- separating real bugs from compiler noise
+
+Most non-matching functions differ only in register allocation and
+scheduling. Those are compiler-track: the source is right and the game plays
+correctly. `semdiff.py` filters them out by comparing *multisets of
+normalised instructions* -- registers, branch destinations and anonymous
+`@NNN` pool ordinals erased, mnemonic plus every literal constant and memory
+offset kept. Reordering cannot change a multiset; renaming cannot change a
+normalised one. What survives is evidence about behaviour.
+
+Over the 224 game-code units it flags 249 functions. Sort by term count and
+work upward: the one-and-two-term cases are where the behavioural bugs are.
+It reads objects `ninja` already built, so it is safe to run alongside other
+agents.
+
+Validated by reintroducing the ledge bug and confirming it reports exactly
+the two terms, then confirming it goes silent with the fix in.
+
+Known blind spot: two different float constants both normalise to
+`lfs R, @P@sda21`, so a wrong .sdata2 value cancels out. The 0.7010677 /
+0.70710677 bug in iCollide would not have been caught. That class needs a
+section comparison.
+
+### False-positive shapes that cost time, so recognise them on sight
+
+Four idioms account for nearly every small-term hit. None is a bug.
+
+1. **The MAX/MIN idiom.** Target `fcmpo; ble L; b M; L: fmr` against our
+   `fcmpo; bge M; fmr`. `if (x <= c) x = c;` and `if (x < c) x = c;` differ
+   only at equality, where the assignment is a no-op. `CalcCombinedDepen`
+   looked like an inverted collision test and was not.
+
+2. **Retail reloads, we cache.** This is the big one -- it explains around
+   twenty functions whose only difference is `target only: lfs R,
+   someStatic@sda21`. CodeWarrior at -O4 re-reads a global (or an array
+   element) in each statement where retail's source names it, while our
+   source hoists it into a local. Seen in `zEntPickup_Update`
+   (sSpatulaGrabbedLife, sSpatulaGrabbedSpinMult), `zThrown_AddFruit`,
+   `find_weight`, `zThrown_Update`, `zGameUpdateMode`, `zSceneSetup`,
+   `zLOD_Update`, `zUIRenderAll`, `xCMupdate`, `zCameraTweakGlobal_Update`,
+   `zParPTankSteamUpdate`, `zParPTankInit`. The matching fix is mechanical:
+   write the global, then read it back rather than reusing the local.
+
+3. **The store that gets overwritten.** Target stores an intermediate to the
+   same stack slot a later store overwrites -- `life = a / C1; life *= C2;`
+   against our `life = a / C1 * C2;`. `UpdateGustFX` is this.
+
+4. **Addressing that reaches the same byte.** `addi 0x4b4` + `lwz 0x4(R)`
+   against `lwz 0x4b8(R)`; `jsp_shadow_hack_textures + 0x14` against
+   `animTable + 0` when the two are adjacent. Always check the addend before
+   believing a relocation points somewhere else.
+
+Also benign: `lmw/stmw` at a different offset (register save area size),
+`clrlwi. R, R, 24` against `cmplwi R, 0x0` (U8 versus int for a flag),
+`srwi R, R, 5` against `extrwi R, R, 8, 19` (bool versus U8), and any
+`$NNNN` suffix difference on a static's name (DWARF numbering).
+
+### The data sections are a separate, richer seam
+
+`semdiff` only reads code. Comparing `.rela.data` / `.rela.rodata` /
+`.rela.sdata` between the two objects as multisets of (symbol, addend) pairs
+is what finds NULL dispatch tables and wrong table entries -- the class that
+produced most of the playtest fixes. Three found this round:
+
+- **zNPCTypeBossPatrick**: `newsfish_cb` and `recenter_cb` were `= {}`, so
+  ten NULL function pointers each and two registered tweaks with nothing to
+  call. Retail relocates `on_change` at +0x5c and +0x84, one tweak_callback
+  (0x28) apart. Same shape as the zNPCTypeBossSandy fix. Data 44.87% -> 100%.
+- **zNPCTypeKingJelly**: `sound_name[11][3]` holds up to three interchangeable
+  takes per sound, and `play_sound_immediate` picks between them at random
+  when `amount > 1`. Retail's twelfth relocation sits at 0x40 -- four bytes
+  into the row at 0x3c, i.e. its second element -- so row 5 is
+  `{ "KJ_Land1", "KJ_Land2", NULL }` and row 4 repeats `"KJ_grunt"`. We had
+  eleven single-take rows, so the landing sound never varied and sound 4
+  played the wrong clip. Data 47.65% -> 57.39%.
+- **zEntPlayerOOBState**: `tutorial_callback` declared an empty
+  `virtual void on_signal(U32) {}`, which emits a distinct function and puts
+  it in the derived vtable where retail's holds the base version. Behaviour
+  identical, data 19.57% -> 31.68%.
+
+After those three the (symbol, addend) scan is clean across game code apart
+from jump tables (whose entries shift with our code size), zGame's string
+pool living in .sdata, and the two `.rela.debug` sections our build emits and
+retail's does not -- exclude all of those or the signal drowns.
+
+Sweeping for the all-NULL shape directly is worth doing after any new unit
+lands: `grep -rn "= {};" src --include=*.cpp` on struct-of-function-pointer
+types. It is currently empty.
+
+### Still open on the ledge path
+
+`nearestFloorCB` 95.581%, `PlayerLedgeUpdate` 96.175% and
+`xClumpColl_ForAllIntersections` 96.236% all pass the multiset test, so they
+are register allocation and scheduling only. Ledge grab is correct; those
+three are compiler-track work.
