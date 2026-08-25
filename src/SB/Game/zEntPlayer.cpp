@@ -7783,7 +7783,7 @@ void zEntPlayer_Update(xEnt* ent, xScene* sc, F32 dt)
         sDriveVel.y += ent->frame->mat.pos.y - predrive_pos.y;
         sDriveVel.z += ent->frame->mat.pos.z - predrive_pos.z;
 
-        if (globals.sceneCur->zen)
+        if (globals.sceneCur->baseCount[eBaseTypeGust] != 0)
         {
             xFFX* gust_fkt = ent->ffx;
             while (gust_fkt)
