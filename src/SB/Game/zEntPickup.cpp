@@ -2171,14 +2171,15 @@ void zEntPickup_SceneUpdate(F32 dt)
     {
         if (sRewards[i].active && (!sRewards[i].currRequest || 0.0f == sRewards[i].timer))
         {
+            U32 req = sRewards[i].currRequest;
+
             sRewards[i].timer = 0.2f;
 
-            U32 ret = rewardRequest(sRewards[i].pickups[sRewards[i].currRequest], sRewards[i].ppos,
-                                    sRewards[i].pos);
+            U32 ret = rewardRequest(sRewards[i].pickups[req], sRewards[i].ppos, sRewards[i].pos);
 
             if (!ret)
             {
-                switch (sRewards[i].pickups[sRewards[i].currRequest])
+                switch (sRewards[i].pickups[req])
                 {
                 case SHINY_PURPLE:
                 {
