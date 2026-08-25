@@ -4,10 +4,28 @@
 
 #include "xMathInlines.h"
 
+#include "xClumpColl.h"
+
 #include <rpcollis.h>
 #include <string.h>
 
 static S32 sCollidingJSP = 0;
+
+// RpCollisionTriangle::index is declared RwInt32, but the JSP collision tree
+// does not index anything with it: xClumpColl_ForAllIntersections stores a
+// pointer to the triangle's own xClumpCollBSPTriangle record there, and these
+// callbacks read the flags and material id straight out of it. Retail does the
+// same -- `lwz r4,24(r29)` to load index, then `lhz r0,6(r4)` for matIndex -- so
+// the behaviour was always right and only the type was lost. Name it rather than
+// repeat the raw offsets.
+//
+// Only valid while sCollidingJSP is set. On the sector path index really is an
+// index, into sector->polygons.
+//
+// A macro rather than an inline function: this TU builds with -inline off, so an
+// inline would be emitted out of line and called, which does change codegen.
+#define JSPTri(tri) ((xClumpCollBSPTriangle*)(tri)->index)
+
 static F32 cbath = 0;
 static xRay3 cbray;
 static const xMat3x3* cbmat = NULL;
@@ -436,8 +454,7 @@ static RpCollisionTriangle* sphereHitsEnv3CB(RpIntersection* isx, RpWorldSector*
     }
     else if (sCollidingJSP != NULL)
     {
-        // FIXME: this looks busted
-        colls[idx].oid = *(U16*)(tri->index + 6);
+        colls[idx].oid = JSPTri(tri)->matIndex;
     }
     else
     {
@@ -477,7 +494,7 @@ static RpCollisionTriangle* sphereHitsEnv4CB(RpIntersection* isx, RpWorldSector*
 
     if (sCollidingJSP != NULL)
     {
-        if (*(U8*)(tri->index + 4) & 0x10)
+        if (JSPTri(tri)->flags & 0x10)
         {
             temp.flags = 0x20000;
         }
@@ -510,7 +527,7 @@ static RpCollisionTriangle* sphereHitsEnv4CB(RpIntersection* isx, RpWorldSector*
     c->tri.index = tri->index;
     c->flags |= 1;
 
-    if (sCollidingJSP != NULL && *(U8*)(tri->index + 4) & 0x10)
+    if (sCollidingJSP != NULL && JSPTri(tri)->flags & 0x10)
     {
         c->flags |= 0x20000;
     }
@@ -521,7 +538,7 @@ static RpCollisionTriangle* sphereHitsEnv4CB(RpIntersection* isx, RpWorldSector*
     }
     else if (sCollidingJSP != NULL)
     {
-        c->oid = *(U16*)(tri->index + 6);
+        c->oid = JSPTri(tri)->matIndex;
     }
     else
     {
@@ -553,8 +570,8 @@ static RpCollisionTriangle* rayHitsEnvCB(RpIntersection* isx, RpWorldSector* sec
     }
     else if (sCollidingJSP != NULL)
     {
-        colls->oid = *(U16*)(tri->index + 6);
-        if (*(U8*)(tri->index + 4) & 0x10)
+        colls->oid = JSPTri(tri)->matIndex;
+        if (JSPTri(tri)->flags & 0x10)
         {
             colls->flags |= 0x20000;
         }
@@ -596,7 +613,7 @@ RpCollisionTriangle* rayHitsEnvBackwardCB(RpIntersection* isx, RpWorldSector* se
     }
     else if (sCollidingJSP != NULL)
     {
-        colls->oid = *(U16*)(tri->index + 6);
+        colls->oid = JSPTri(tri)->matIndex;
     }
     else
     {
