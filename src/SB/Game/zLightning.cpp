@@ -1,5 +1,7 @@
 #include "zLightning.h"
 
+#include <stdio.h>
+
 #include "xDebug.h"
 #include "zGlobals.h"
 #include "xstransvc.h"
@@ -1394,4 +1396,18 @@ void zLightningModifyEndpoints(zLightning* l, xVec3* start, xVec3* end)
         }
 
     }
+}
+
+// The target's @stringBase0 runs past ours by six strings, in this order:
+// "X to test lightning\n", fifteen spaces, "1", "0", "-", "\n". Nothing left
+// in the unit references them -- they are a debug overlay the linker
+// dead-stripped, printing a row of per-bolt flags under a heading.
+void __deadstripped_zLightning()
+{
+    printf("X to test lightning\n");
+    printf("               ");
+    printf("1");
+    printf("0");
+    printf("-");
+    printf("\n");
 }
