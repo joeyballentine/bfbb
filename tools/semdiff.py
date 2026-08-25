@@ -185,6 +185,14 @@ SHAPE = re.compile(r"^(addi|addic|subi|add|subf|mulli|slwi|srwi|srawi|sraw"
                    r"|cmp\w*|b\w*|mtctr|mfctr|andi|ori|nop)\.?$")
 
 
+# `stwx` and `stw` store the same word; only the addressing differs, and which
+# one you get is decided by strength reduction, not by the C. Fold the indexed
+# and update forms onto the base so that a memory op only counts as a difference
+# when the WIDTH changes -- lhz against lwz is a type error, lwzx against lwz is
+# not.
+MEMFORM = re.compile(r"^(lbz|lhz|lha|lwz|lfs|lfd|stb|sth|stw|stfs|stfd)(u|x|ux)$")
+
+
 def exclusive_kinds(hit):
     """Mnemonics one side executes and the other never does, shape ignored.
 
@@ -195,7 +203,9 @@ def exclusive_kinds(hit):
     fctiwz/fmuls, which is a different computation and worth reading.
     """
     def mnem(t):
-        return t.split(None, 1)[0]
+        m = t.split(None, 1)[0]
+        f = MEMFORM.match(m)
+        return f.group(1) if f else m
     t = set(mnem(x) for x in hit["target_only"])
     o = set(mnem(x) for x in hit["ours_only"])
     return (sorted(m for m in t - o if not SHAPE.match(m)),
