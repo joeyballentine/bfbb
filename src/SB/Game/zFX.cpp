@@ -522,8 +522,13 @@ RpAtomic* zFXGooRenderAtomic(class RpAtomic* atomic)
     if (g_txtr_gooFrozen == NULL)
     {
         g_txtr_gooFrozen = xSTFindAsset(0x13401f, NULL);
-        gAtomicRenderCallBack(atomic);
     }
+
+    // The default atomic render must run unconditionally: this callback replaces
+    // the goo entity's own render callback, so skipping it makes the goo surface
+    // invisible. Retail's `bf 2, <+6>` jumps only past the xSTFindAsset block and
+    // falls straight into `lwz 12 / mtctr / bctrl`.
+    (*gAtomicRenderCallBack)(atomic);
 
     S32 i;
     zFXGooInstance* goo = zFXGooInstances;
