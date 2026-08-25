@@ -42,8 +42,8 @@ community patch at 0x0dfd4e / 0x16fd86 / 0x16fd8c). Reading it resolves the
 magic numbers into named fields, and it is worth knowing before touching any of
 this:
 
-  * All eight clauses hook ONE function --
-    `may_alias_alias()` in BackEnd/PowerPC/GlobalOptimizer/Alias.c:
+  * The clauses hook FOUR DIFFERENT FUNCTIONS, all in Alias.c, each with its
+    own copy of the same 3x3 operand-kind switch:
 
         static Boolean may_alias_alias(Alias *a, Alias *b) {
             switch ((a->type * 3) + b->type) {
@@ -51,11 +51,31 @@ this:
                     return a == b;
                 ...
 
-    That switch is the 3x3 operand-kind dispatch, and its nine-entry jump
-    table is what the clauses redirect. The compiler INLINES this function at
-    several call sites, which is why there are four such tables in a row and
-    why each clause re-derived the same gates independently. A source-level
-    change would apply to all four coherently; byte patches cannot.
+    An earlier revision of this comment claimed they were inlined copies of a
+    single may_alias_alias(). That was wrong. Established by identifying each
+    function from its CError_Internal("Alias.c") fingerprint and matching it
+    against a built Alias.obj:
+
+        0x5bd068   update_alias_value   (0x511a30) -- 3-entry store-kill
+                                        dispatch; the 0x511a53 path
+        0x5bd074   may_alias_object     (0x511cb0)
+        0x5bd098   uniquely_aliases     (0x511e10)
+        0x5bd0bc   may_alias_alias      (0x511fc0)
+        0x5bd0f8   is_address_load      (0x512ca0)
+
+    Alias.c spans 0x511A00-0x513490. Note 2.0 has no may_alias() or
+    may_alias_worst_case() -- those are 7.0-only.
+
+    UNRESOLVED, and worth settling before trusting clause H's rationale: the
+    clause-H work found 0x5bd074 reached only from CodeMotion.c's LICM and
+    measured the +6 accordingly, while the function-identification work found
+    may_alias_object called from computeusedeflists/precomputeusedefcounts in
+    UseDefChains.c. Both cannot be the whole story. The measurement stands
+    either way; only the explanation is in doubt.
+
+    Because these are separate functions rather than inlined copies, a
+    source-level fix does NOT automatically apply to all four -- but it can be
+    written once and called from each, which byte patches cannot.
 
   * The operand descriptors are `struct Alias`:
 
@@ -87,7 +107,9 @@ this:
     so word 5 is "an object in static data" and word 0x00010005 is "an object
     in a stack frame". Not magic numbers -- type tags.
 
-  * Clause H's site is `isloopinvariant()` in CodeMotion.c. For a read it
+  * Clause H's site is a read-invariance test (see the UNRESOLVED note above
+    for which caller). `isloopinvariant()` in CodeMotion.c is the shape: for a
+    read it
     walks only the defs OF THE SAME OBJECT:
 
         for (list = findobjectusedef(pcode->alias->object)->defs; ...)
