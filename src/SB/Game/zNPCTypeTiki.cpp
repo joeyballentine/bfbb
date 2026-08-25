@@ -907,8 +907,8 @@ void zNPCTiki::Process(xScene* xscn, F32 dt)
         xVec3Add(&this->bound.box.box.lower, (xVec3*)&this->model->Mat->pos, &scaledLower);
         xVec3Add(&this->bound.box.center, (xVec3*)&this->model->Mat->pos, &scaledCenter);
 
-        scaledUpper.y += 0.00005f;
-        scaledCenter.y += 0.0001f;
+        scaledUpper.y += 0.0001f;
+        scaledCenter.y += 0.00005f;
     }
     else
     {
