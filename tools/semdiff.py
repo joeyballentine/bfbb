@@ -49,6 +49,11 @@ REG = re.compile(r"\b[rf](?:3[01]|[12]\d|\d)\b")
 CR = re.compile(r"\bcr\d\b")
 QR = re.compile(r"\bqr\d\b")
 POOL = re.compile(r"@\d+")
+# A `$NNNN` suffix on a local static's name (tb$731) is the compiler's own
+# numbering. It differs between any two builds of the same source, so leaving
+# it in floods every function that touches a static with false differences --
+# it buried a real fnmsubs/fnmadds sign error in xTRC under 50 phantom terms.
+LOCALNUM = re.compile(r"\$\d+")
 # A bare hex/decimal word that is a branch destination rather than a value.
 BRANCH = re.compile(r"^(b|b[a-z]{1,4}|b[a-z]{1,4}\+|b[a-z]{1,4}-)$")
 
@@ -67,6 +72,7 @@ def norm(formatted):
     rest = CR.sub("CR", rest)
     rest = QR.sub("QR", rest)
     rest = POOL.sub("@P", rest)
+    rest = LOCALNUM.sub("$N", rest)
     return mnem + " " + rest.strip()
 
 
@@ -86,7 +92,8 @@ def instrs(sym, names):
             # objects number their symbols differently, so the index itself is
             # meaningless -- resolve it to the name, which is not.
             nm = names[t] if isinstance(t, int) and 0 <= t < len(names) else str(t)
-            out.append(norm(s) + " <%s>" % POOL.sub("@P", nm))
+            nm = LOCALNUM.sub("$N", POOL.sub("@P", nm))
+            out.append(norm(s) + " <%s>" % nm)
         else:
             out.append(norm(s))
     return out

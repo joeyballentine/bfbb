@@ -138,7 +138,7 @@ void RenderText(const char* text, bool enabled)
 
     if (!enabled)
     {
-        render_fill_rect(tb.font.clip, xColorFromRGBA(0, 0, 0, 0xC8));
+        render_fill_rect(tb.font.clip, xColorFromRGBA(0, 0, 0, 0x96));
     }
 }
 
