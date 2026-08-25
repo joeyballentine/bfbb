@@ -75,7 +75,7 @@ void xLine3VecDist2(const xVec3* p1, const xVec3* p2, const xVec3* v, xIsect* is
     }
 
     F32 lvlen2 = xVec3Length2(&isx->norm);
-    isx->dist = lvlen2 - SQ(ldirdotlv) / ldirlen2;
+    isx->dist = lvlen2 - (ldirdotlv * ldirdotlv) / ldirlen2;
 }
 
 S32 xPointInBox(const xBox* b, const xVec3* p)
