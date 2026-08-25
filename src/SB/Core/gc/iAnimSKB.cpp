@@ -66,7 +66,7 @@ void iAnimEvalSKB(iAnimSKBHeader* data, F32 time, U32 flags, xVec3* tran, xQuat*
 
         for (i = 0; i < bcount; i++, quat++, tran++)
         {
-            iAnimSKBKey* k = &keys[i];
+            iAnimSKBKey* k = &keys[i * 2];
 
             quat->v.x = k->Quat[0] * (1.0f / SHRT_MAX);
             quat->v.y = k->Quat[1] * (1.0f / SHRT_MAX);
@@ -119,9 +119,9 @@ void iAnimEvalSKB(iAnimSKBHeader* data, F32 time, U32 flags, xVec3* tran, xQuat*
             tran->x =
                 lerp * (scalex * k[1].Tran[0] - scalex * k[0].Tran[0]) + scalex * k[0].Tran[0];
             tran->y =
-                lerp * (scaley * k[1].Tran[1] - scaley * k[0].Tran[1]) + scaley * k[1].Tran[1];
+                lerp * (scaley * k[1].Tran[1] - scaley * k[0].Tran[1]) + scaley * k[0].Tran[1];
             tran->z =
-                lerp * (scalez * k[1].Tran[2] - scalez * k[0].Tran[2]) + scalez * k[1].Tran[2];
+                lerp * (scalez * k[1].Tran[2] - scalez * k[0].Tran[2]) + scalez * k[0].Tran[2];
         }
     }
 }
