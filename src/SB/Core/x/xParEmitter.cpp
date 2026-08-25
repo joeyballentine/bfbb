@@ -233,11 +233,9 @@ xPar* xParEmitterEmitCustom(xParEmitter* p, F32 dt, xParEmitterCustomSettings* i
 
 {
     U32 custom_flags;
-    xParEmitterAsset* p_tasset;
-    xPar* newpar;
 
     custom_flags = info->custom_flags;
-    p_tasset = p->tasset;
+    xParEmitterAsset* p_tasset = p->tasset;
     if ((custom_flags & eParEmitterCustomSaveRestore) != 0)
     {
         memcpy(&sSaveEmmiterSettings, p_tasset, sizeof(xParEmitterAsset));
@@ -308,7 +306,7 @@ xPar* xParEmitterEmitCustom(xParEmitter* p, F32 dt, xParEmitterCustomSettings* i
             break;
         }
     }
-    newpar = xParEmitterEmit(p, dt);
+    xPar* newpar = xParEmitterEmit(p, dt);
     if ((custom_flags & eParEmitterCustomSaveRestore) != 0)
     {
         memcpy(p_tasset, &sSaveEmmiterSettings, sizeof(xParEmitterAsset));
@@ -320,12 +318,11 @@ xPar* xParEmitterEmitCustom(xParEmitter* p, F32 dt, xParEmitterCustomSettings* i
 U32 xParEmitterCull(xParEmitter* t, xPar* p)
 
 {
-    xParEmitterAsset* tas;
     F32 vec_length;
     xVec3 global_vec;
     xVec3 temp_vec;
 
-    tas = t->tasset;
+    xParEmitterAsset* tas = t->tasset;
     if (tas->emit_flags & 2)
     {
         global_vec = xglobals->camera.mat.pos;
@@ -401,9 +398,8 @@ F32 xParInterpCompute(S32 interp_mode, xParInterp* r, F32 time, S32 time_has_ela
 
 xPar* xParEmitterEmitSetTexIdxs(xPar* p, const xParSys* ps)
 {
-    xParCmdTex* ps_cmdTex;
+    xParCmdTex* ps_cmdTex = ps->group->m_cmdTex;
 
-    ps_cmdTex = ps->group->m_cmdTex;
     if (ps_cmdTex == NULL)
     {
         return NULL;
@@ -431,7 +427,6 @@ xPar* xParEmitterEmitSetTexIdxs(xPar* p, const xParSys* ps)
 
 xPar* xParEmitterEmit(xParEmitter* pe, F32 emit_dt, F32 par_dt)
 {
-    xPar* last_p;
     xParEmitterAsset* pea;
     xParEmitterPropsAsset* prop;
     S32 rate_has_elapsed;
@@ -443,13 +438,10 @@ xPar* xParEmitterEmit(xParEmitter* pe, F32 emit_dt, F32 par_dt)
     F32 size_birth;
     F32 size_death;
     xVec3 emitPosition;
-    xBase* attachObject;
     S32 attachGroupIndex;
     S32 attachGroupTotal;
     S32 emitAgain;
-    xBase* emitObj;
     S32 marker;
-    xGroup* g;
     U32 get_rnd_group_idx;
     xEnt* attach_ent;
     xMat4x3* bone_mat;
@@ -465,7 +457,7 @@ xPar* xParEmitterEmit(xParEmitter* pe, F32 emit_dt, F32 par_dt)
         return NULL;
     }
 
-    last_p = NULL;
+    xPar* last_p = NULL;
     pea = pe->tasset;
     prop = pe->prop;
 
@@ -527,19 +519,19 @@ xPar* xParEmitterEmit(xParEmitter* pe, F32 emit_dt, F32 par_dt)
         rate_has_elapsed = ps->tasset->maxPar - ps->group->m_num_of_particles;
     }
 
-    emitObj = (xBase*)pe->attachTo;
+    xBase* emitObj = (xBase*)pe->attachTo;
     count = -1;
     attachGroupTotal = -1;
 
     do
     {
         emitAgain = 0;
-        attachObject = NULL;
+        xBase* attachObject = NULL;
         marker = 0;
 
         if ((emitObj != NULL) && (emitObj->baseType == eBaseTypeGroup))
         {
-            g = (xGroup*)emitObj;
+            xGroup* g = (xGroup*)emitObj;
 
             if (count == -1)
             {

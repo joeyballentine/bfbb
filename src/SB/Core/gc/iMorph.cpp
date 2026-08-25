@@ -20,11 +20,8 @@ static void MorphCommon(RpAtomic* model, RwMatrixTag* mat, S16** v_array, S16* w
     S16 wa[4];
     S16* va[4];
     S32 wsum;
-    RwV3d* vold;
     RwV3d* nold;
     S32 lockMode;
-    RpUserDataArray* usr;
-    DirtyMorph* dm;
     U8 useNormals;
 
     s_geom = model->geometry;
@@ -36,7 +33,7 @@ static void MorphCommon(RpAtomic* model, RwMatrixTag* mat, S16** v_array, S16* w
 
     useNormals = normals && s_geom->object.flags & 0x10;
 
-    vold = s_tgt->verts;
+    RwV3d* vold = s_tgt->verts;
     lockMode = (useNormals ? 4 : 0) | 2;
 
     if (useNormals)
@@ -58,11 +55,11 @@ static void MorphCommon(RpAtomic* model, RwMatrixTag* mat, S16** v_array, S16* w
         }
     }
 
-    usr = RpGeometryGetUserDataArray(s_geom, 0);
+    RpUserDataArray* usr = RpGeometryGetUserDataArray(s_geom, 0);
 
     if (usr != NULL)
     {
-        dm = (DirtyMorph*)usr->data;
+        DirtyMorph* dm = (DirtyMorph*)usr->data;
 
         s_vTemp = (F32*)((char*)dm + 32);
 

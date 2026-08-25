@@ -123,13 +123,8 @@ void xEntMotionInit(xEntMotion* motion, xEnt* owner, xEntMotionAsset* asset)
 
 void xEntMotionReset(xEntMotion* motion, xScene* sc)
 {
-    xEntMotionPenData* aspen;
     xMat3x3 pshrot;
     xEnt* ownr;
-    xVec3* modlpos;
-    xMat4x3* modlrot;
-    xEntMotionMechData* mkasst;
-    xEntMechData* mech;
     F32 drot;
 
     motion->flags = motion->asset->flags;
@@ -154,9 +149,9 @@ void xEntMotionReset(xEntMotion* motion, xScene* sc)
     {
         xVec3 a, b, c;
 
-        modlpos = (xVec3*)&motion->owner->model->Mat->pos;
-        modlrot = (xMat4x3*)motion->owner->model->Mat;
-        aspen = &motion->asset->pen;
+        xVec3* modlpos = (xVec3*)&motion->owner->model->Mat->pos;
+        xMat4x3* modlrot = (xMat4x3*)motion->owner->model->Mat;
+        xEntMotionPenData* aspen = &motion->asset->pen;
 
         xMat3x3Rot(&pshrot, &modlrot->at, aspen->range * isin(aspen->phase));
 
@@ -183,8 +178,8 @@ void xEntMotionReset(xEntMotion* motion, xScene* sc)
     else if (motion->type == XENTMOTION_TYPE_MECH)
     {
         ownr = motion->owner;
-        mkasst = &motion->asset->mech;
-        mech = &motion->mech;
+        xEntMotionMechData* mkasst = &motion->asset->mech;
+        xEntMechData* mech = &motion->mech;
 
         if ((ownr != NULL) && (ownr->frame != NULL) && (ownr->model != NULL))
         {
@@ -766,7 +761,6 @@ static U32 xEntRotMove(xEntMotion* motion, xScene* sc, F32 dt, xEntFrame* frame)
     F32 tmradj = motion->tmr + (dt * 0.5f);
     F32 rem = mkasst->rot_tm - tmradj;
     F32 speed;
-    xEntAsset* easst;
 
     if (motion->tmr + dt >= mkasst->rot_tm)
     {
@@ -820,7 +814,7 @@ static U32 xEntRotMove(xEntMotion* motion, xScene* sc, F32 dt, xEntFrame* frame)
 
     if (motion->owner != NULL)
     {
-        easst = motion->owner->asset;
+        xEntAsset* easst = motion->owner->asset;
         xVec3SMulBy(&frame->mat.right, easst->scale.x);
         xVec3SMulBy(&frame->mat.up, easst->scale.y);
         xVec3SMulBy(&frame->mat.at, easst->scale.z);
@@ -1009,11 +1003,9 @@ void xEntMotionDebugAdd(xEntMotion* motion)
 
 void xEntMotionDebugCB()
 {
-    xEntMotion* xem;
-
     if ((dbg_idx != -1) && (dbg_num != 0))
     {
-        xem = dbg_xems[dbg_idx];
+        xEntMotion* xem = dbg_xems[dbg_idx];
         xEntMotionDebugWrite(xem);
         xEntMotionDebugDraw(xem);
         xEntMotionDebugIPad(xem);

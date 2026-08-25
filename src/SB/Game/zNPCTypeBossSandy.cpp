@@ -198,9 +198,7 @@ xAnimTable* ZNPC_AnimTable_BossSandy()
     };
     // clang-format on
 
-    xAnimTransition* tList;
-    xAnimTable* table;
-    table = xAnimTableNew("zNPCBSandy", NULL, 0);
+    xAnimTable* table = xAnimTableNew("zNPCBSandy", NULL, 0);
 
     xAnimTableNewState(table, g_strz_bossanim[Idle01], 0x10, 0x40, 1.0f, NULL, NULL, 0.0f, NULL,
                        NULL, xAnimDefaultBeforeEnter, NULL, NULL);
@@ -251,7 +249,7 @@ xAnimTable* ZNPC_AnimTable_BossSandy()
 
     NPCC_BuildStandardAnimTran(table, g_strz_bossanim, ourAnims, 1, 0.2f);
 
-    tList = table->TransitionList;
+    xAnimTransition* tList = table->TransitionList;
     while (tList != NULL)
     {
         tList->BlendRecip = 3.3333333f;
@@ -283,9 +281,7 @@ U32 HeadNotShocked(xAnimTransition*, xAnimSingle*, void*)
 
 xAnimTable* ZNPC_AnimTable_BossSandyHead()
 {
-    xAnimTable* table;
-
-    table = xAnimTableNew("SandyBossHead", NULL, 0);
+    xAnimTable* table = xAnimTableNew("SandyBossHead", NULL, 0);
 
     xAnimTableNewState(table, "Idle01", 0x10, 0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
@@ -308,9 +304,7 @@ xAnimTable* ZNPC_AnimTable_BossSandyHead()
 
 xAnimTable* ZNPC_AnimTable_BossSandyScoreboard()
 {
-    xAnimTable* table;
-
-    table = xAnimTableNew("SandyBossScoreboard", NULL, 0);
+    xAnimTable* table = xAnimTableNew("SandyBossScoreboard", NULL, 0);
 
     xAnimTableNewState(table, "Idle01", 0x10, 0x0, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
@@ -328,9 +322,7 @@ xAnimTable* ZNPC_AnimTable_BossSandyScoreboard()
 void zNPCBSandy::Init(xEntAsset* asset)
 {
     S32 i;
-    xEnt* ent;
     char objName[32];
-    xMarkerAsset* laserMarker;
     U32 colorPicker;
 
     zNPCCommon::Init(asset);
@@ -347,7 +339,7 @@ void zNPCBSandy::Init(xEntAsset* asset)
         this->boundFlags[i] = 0;
         this->boundList[i] = (xEnt*)xMemAlloc(gActiveHeap, sizeof(xEnt), 0x0);
 
-        ent = this->boundList[i];
+        xEnt* ent = this->boundList[i];
         ent->id = i;
         ent->eventFunc = BoundEventCB;
         ent->driver = (xEnt*)this;
@@ -418,7 +410,7 @@ void zNPCBSandy::Init(xEntAsset* asset)
     strcpy(objName, "LASER_MK_00");
     for (i = 0; i < 16; i++)
     {
-        laserMarker = (xMarkerAsset*)xSTFindAsset(xStrHash(objName), NULL);
+        xMarkerAsset* laserMarker = (xMarkerAsset*)xSTFindAsset(xStrHash(objName), NULL);
         xVec3Copy(&this->laserPoint[i], (xVec3*)laserMarker);
 
         objName[10]++;
@@ -620,9 +612,6 @@ void zNPCBSandy::Reset()
     RwTexture* tempTex;
     char objName[32];
     U32 size;
-    xMarkerAsset* marker;
-    xAnimState* state;
-    xModelInstance* currModel;
     xVec3 endPnt;
     xVec3 zeroPnt;
 
@@ -706,7 +695,7 @@ void zNPCBSandy::Reset()
     for (i = 0; i < 8; i++)
     {
         objName[8] = '0' + (char)i;
-        marker = (xMarkerAsset*)xSTFindAsset(xStrHash(objName), &size);
+        xMarkerAsset* marker = (xMarkerAsset*)xSTFindAsset(xStrHash(objName), &size);
         xVec3Copy(&this->ringCorner[i], (xVec3*)marker);
     }
 
@@ -745,7 +734,7 @@ void zNPCBSandy::Reset()
             this->ropeObject[i][j]->model->PipeFlags &= ~0xc;
             this->ropeObject[i][j]->model->PipeFlags |= 0x4;
 
-            state = this->ropeObject[i][j]->model->Anim->Table->StateList;
+            xAnimState* state = this->ropeObject[i][j]->model->Anim->Table->StateList;
             while (state)
             {
                 if (strcmp(state->Name, "Idle01") == 0)
@@ -798,7 +787,7 @@ void zNPCBSandy::Reset()
 
     zEntEvent(headBoulder, eEventKill);
 
-    currModel = this->model;
+    xModelInstance* currModel = this->model;
     while (currModel)
     {
         currModel->Data->boundingSphere.radius = 100.0f;
@@ -857,7 +846,6 @@ U32 zNPCBSandy::AnimPick(S32 gid, en_NPC_GOAL_SPOT param_2, xGoal* rawgoal)
 {
     S32 index = -1;
     U32 animID = 0;
-    zNPCGoalBossSandyClothesline* cl;
 
     switch (gid)
     {
@@ -936,7 +924,7 @@ U32 zNPCBSandy::AnimPick(S32 gid, en_NPC_GOAL_SPOT param_2, xGoal* rawgoal)
         index = 4;
         break;
     case 'NGB;':
-        cl = (zNPCGoalBossSandyClothesline*)rawgoal;
+        zNPCGoalBossSandyClothesline* cl = (zNPCGoalBossSandyClothesline*)rawgoal;
         if (cl->stage == 0)
         {
             index = 18;
@@ -1166,7 +1154,6 @@ static void zNPCBSandy_BossDamageEffect(xModelInstance* minst, U32 turnOff)
 static void zNPCBSandy_BossDamageEffect_Update(F32 dt)
 {
     S32 i;
-    xModelInstance* m;
     F32 frac;
     F32 phase;
     F32 gb;
@@ -1199,7 +1186,7 @@ static void zNPCBSandy_BossDamageEffect_Update(F32 dt)
         phase = 9.0f * (6.2831855f * frac);
         gb = 0.7f * xpow(icos(3.1415927f * frac), 100.0f) + 0.3f;
 
-        for (m = BDErecord[i].BDEminst; m != NULL; m = m->Next)
+        for (xModelInstance* m = BDErecord[i].BDEminst; m != NULL; m = m->Next)
         {
             m->RedMultiplier = 0.25f * icos(phase) + 0.75f;
             m->GreenMultiplier = gb;
@@ -1669,7 +1656,6 @@ void zNPCBSandy::Process(xScene* xscn, F32 dt)
     F32 distSq;
     F32 radSq;
     F32 lerpAmt;
-    xEnt* rope;
     xVec3 toEdge;
     F32 color[3];
     xVec3 point;
@@ -2014,7 +2000,7 @@ void zNPCBSandy::Process(xScene* xscn, F32 dt)
         {
             for (j = 0; j < 4; j++)
             {
-                rope = this->ropeObject[i][j];
+                xEnt* rope = this->ropeObject[i][j];
                 rope->model->Flags &= 0xfffd;
                 xEntHide(rope);
             }
@@ -2258,7 +2244,6 @@ void zNPCBSandy_AddBoundEntsToGrid(zScene* scn)
 {
     S32 i;
     S32 isLimb;
-    xEnt* ent;
 
     if (sOthersHaventBeenAdded)
     {
@@ -2266,7 +2251,7 @@ void zNPCBSandy_AddBoundEntsToGrid(zScene* scn)
 
         for (i = 0; i < 13; i++)
         {
-            ent = sSandyPtr->boundList[i];
+            xEnt* ent = sSandyPtr->boundList[i];
             if (i == 2 || i == 4 || i == 9 || i == 11)
             {
                 isLimb = TRUE;

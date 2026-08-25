@@ -598,9 +598,6 @@ void xAnimFileEval(xAnimFile* data, F32 time, F32* bilinear, U32 flags, xVec3* t
     U32 biindex[2];
     U32 biplus[2];
     xQuat* q0;
-    xVec3* t0;
-    xQuat* q1;
-    xVec3* t1;
 
     time = xAnimFileRawTime(data, CLAMP(time, 0.0f, data->Duration));
     if (data->FileFlags & 0x8000)
@@ -639,11 +636,11 @@ void xAnimFileEval(xAnimFile* data, F32 time, F32* bilinear, U32 flags, xVec3* t
         }
 
         q0 = (xQuat*)(giAnimScratch + 0x1560);
-        t0 = (xVec3*)((U8*)q0 + 0x410);
+        xVec3* t0 = (xVec3*)((U8*)q0 + 0x410);
         if (bilerp[0] && bilerp[1])
         {
-            q1 = (xQuat*)(giAnimScratch + 0x1c80);
-            t1 = (xVec3*)((U8*)q1 + 0x410);
+            xQuat* q1 = (xQuat*)(giAnimScratch + 0x1c80);
+            xVec3* t1 = (xVec3*)((U8*)q1 + 0x410);
 
             iAnimEval(data->RawData[biindex[0] + biindex[1] * data->NumAnims[0]], time, flags, tran,
                       quat);
@@ -700,10 +697,8 @@ xAnimEffect* xAnimStateNewEffect(xAnimState* state, U32 flags, F32 startTime, F3
                                  xAnimEffectCallback callback, U32 userDataSize)
 {
     xAnimEffect* curr;
-    xAnimEffect** prev;
-    xAnimEffect* effect;
 
-    effect =
+    xAnimEffect* effect =
         (gxAnimUseGrowAlloc ? (xAnimEffect*)xMemGrowAllocSize(userDataSize + sizeof(xAnimEffect)) :
                               (xAnimEffect*)xMemAllocSize(userDataSize + sizeof(xAnimEffect)));
 
@@ -712,7 +707,7 @@ xAnimEffect* xAnimStateNewEffect(xAnimState* state, U32 flags, F32 startTime, F3
     effect->EndTime = endTime;
     effect->Callback = callback;
 
-    prev = &state->Effects;
+    xAnimEffect** prev = &state->Effects;
     curr = state->Effects;
 
     while (curr && startTime > curr->StartTime)
@@ -729,9 +724,7 @@ xAnimEffect* xAnimStateNewEffect(xAnimState* state, U32 flags, F32 startTime, F3
 
 xAnimTable* xAnimTableNew(const char* name, xAnimTable** linkedList, U32 userFlags)
 {
-    xAnimTable* table;
-
-    table = (xAnimTable*)xMemAllocSize(sizeof(xAnimTable));
+    xAnimTable* table = (xAnimTable*)xMemAllocSize(sizeof(xAnimTable));
 
     if (linkedList)
     {
@@ -772,10 +765,8 @@ xAnimState* xAnimTableNewState(xAnimTable* table, const char* name, U32 flags, U
                                xAnimStateCallback stateCallback,
                                xAnimStateBeforeAnimMatricesCallback beforeAnimMatrices)
 {
-    xAnimState* state;
-
-    state = (gxAnimUseGrowAlloc ? (xAnimState*)xMemGrowAllocSize(sizeof(xAnimState)) :
-                                  (xAnimState*)xMemAllocSize(sizeof(xAnimState)));
+    xAnimState* state = (gxAnimUseGrowAlloc ? (xAnimState*)xMemGrowAllocSize(sizeof(xAnimState)) :
+                                              (xAnimState*)xMemAllocSize(sizeof(xAnimState)));
 
     if (!table->StateList)
     {
@@ -1132,9 +1123,7 @@ xAnimState* xAnimTableGetStateID(xAnimTable* table, U32 ID);
 xAnimState* xAnimTableAddFileID(xAnimTable* table, xAnimFile* file, U32 stateID, U32 subStateID,
                                 U32 subStateCount)
 {
-    xAnimState* state;
-
-    state = xAnimTableGetStateID(table, stateID);
+    xAnimState* state = xAnimTableGetStateID(table, stateID);
 
     if (state)
     {
@@ -1178,9 +1167,7 @@ xAnimState* xAnimTableAddFileID(xAnimTable* table, xAnimFile* file, U32 stateID,
 
 xAnimState* xAnimTableGetStateID(xAnimTable* table, U32 ID)
 {
-    xAnimState* curr;
-
-    curr = table->StateList;
+    xAnimState* curr = table->StateList;
 
     while (curr)
     {
@@ -1859,8 +1846,6 @@ void xAnimPlayChooseTransition(xAnimPlay* play)
     U32 i;
     void* object = play->Object;
     xAnimTransition** list = (xAnimTransition**)giAnimScratch;
-    xAnimTransition** found;
-    xAnimTransitionList* curr;
 
     memset(list, 0, play->NumSingle * sizeof(xAnimTransition*));
 
@@ -1868,7 +1853,7 @@ void xAnimPlayChooseTransition(xAnimPlay* play)
     {
         if (play->Single[i].State)
         {
-            curr = play->Single[i].State->List;
+            xAnimTransitionList* curr = play->Single[i].State->List;
 
             if (curr && curr->T->Conditional)
             {
@@ -1876,7 +1861,7 @@ void xAnimPlayChooseTransition(xAnimPlay* play)
                 {
                     if (curr->T->Conditional(curr->T, &play->Single[i], object))
                     {
-                        found = &list[curr->T->Dest->Flags & 0xF];
+                        xAnimTransition** found = &list[curr->T->Dest->Flags & 0xF];
 
                         if (!*found || curr->T->Priority > (*found)->Priority)
                         {
@@ -1975,11 +1960,10 @@ void xAnimPlayStartTransition(xAnimPlay* play, xAnimTransition* transition)
 void xAnimPlayUpdate(xAnimPlay* play, F32 timeDelta)
 {
     U32 i;
-    xAnimSingle* single;
 
     for (i = 0; i < play->NumSingle; i++)
     {
-        single = &play->Single[i];
+        xAnimSingle* single = &play->Single[i];
 
         SingleUpdate(single, timeDelta);
 
@@ -2072,7 +2056,6 @@ void xAnimPoolCB(xMemPool* pool, void* data)
     xAnimPlay* play = (xAnimPlay*)pool->Buffer;
     xAnimSingle* clonesingle = (xAnimSingle*)(clone + 1);
     xAnimSingle* currsingle;
-    xAnimActiveEffect* curract;
 
     clone->NumSingle = play->NumSingle;
     clone->Single = clonesingle;
@@ -2098,7 +2081,7 @@ void xAnimPoolCB(xMemPool* pool, void* data)
         }
     }
 
-    curract = (xAnimActiveEffect*)clonesingle;
+    xAnimActiveEffect* curract = (xAnimActiveEffect*)clonesingle;
 
     for (i = 0; i < clone->NumSingle; i++)
     {
@@ -2193,9 +2176,7 @@ void xAnimPoolInit(xMemPool* pool, U32 count, U32 singles, U32 blendFlags, U32 e
 xAnimPlay* xAnimPoolAlloc(xMemPool* pool, void* object, xAnimTable* table,
                           xModelInstance* modelInst)
 {
-    xAnimPlay* play;
-
-    play = (xAnimPlay*)xMemPoolAlloc(pool);
+    xAnimPlay* play = (xAnimPlay*)xMemPoolAlloc(pool);
 
     xAnimPlaySetup(play, object, table, modelInst);
 

@@ -5814,18 +5814,13 @@ void zEntPlayer_Init(xEnt* ent, xEntAsset* asset)
     xModelInstance* m;
     F32 bbncvtm;
     U32 bufsize;
-    void* info;
     xAnimTable* wettbl;
-    xAnimTable* drytbl;
-    xAnimState* wetstate;
     xAnimState* drystate;
     xAnimFile* wetfile;
     xAnimFile* dryfile;
     S32 aa;
     S32 numa;
-    xFFXRotMatchState* rms;
     U32 trailerHash;
-    xEnt* hitch;
     static S32 drybob_anim_count;
     static void** drybob_chgData[64];
     static void* drybob_oldData[64];
@@ -5904,7 +5899,7 @@ void zEntPlayer_Init(xEnt* ent, xEntAsset* asset)
         (globals.player.g.BBashHeight + 0.5f * globals.player.g.Gravity * bbncvtm * bbncvtm) /
         globals.player.g.BBashTime;
 
-    info = xSTFindAsset(0x791025ac, &bufsize);
+    void* info = xSTFindAsset(0x791025ac, &bufsize);
 
     if (info != 0)
     {
@@ -5969,7 +5964,7 @@ void zEntPlayer_Init(xEnt* ent, xEntAsset* asset)
         globals.player.sb_models[0]->Data = treedome3;
 
         wettbl = (xAnimTable*)xSTFindAsset(xStrHash("spongebob_bind.ATBL"), NULL);
-        drytbl = (xAnimTable*)xSTFindAsset(xStrHash("spongebob_bind_treedome.ATBL"), NULL);
+        xAnimTable* drytbl = (xAnimTable*)xSTFindAsset(xStrHash("spongebob_bind_treedome.ATBL"), NULL);
 
         if (wettbl != NULL && drytbl != NULL)
         {
@@ -5977,7 +5972,7 @@ void zEntPlayer_Init(xEnt* ent, xEntAsset* asset)
             {
                 if (!(drystate->UserFlags & 0x40000000))
                 {
-                    wetstate = xAnimTableGetState(wettbl, drystate->Name);
+                    xAnimState* wetstate = xAnimTableGetState(wettbl, drystate->Name);
                     wetfile = wetstate->Data;
                     dryfile = drystate->Data;
                     numa = wetfile->NumAnims[0] * wetfile->NumAnims[1];
@@ -6025,7 +6020,7 @@ void zEntPlayer_Init(xEnt* ent, xEntAsset* asset)
         xFFXAddEffect(ent, zGustUpdateEnt, &gust_data);
     }
 
-    rms = xFFXRotMatchAlloc();
+    xFFXRotMatchState* rms = xFFXRotMatchAlloc();
 
     if (rms != NULL)
     {
@@ -6053,7 +6048,7 @@ void zEntPlayer_Init(xEnt* ent, xEntAsset* asset)
 
     for (aa = 0; aa < globals.sceneCur->num_base; aa++)
     {
-        hitch = (xEnt*)globals.sceneCur->base[aa];
+        xEnt* hitch = (xEnt*)globals.sceneCur->base[aa];
 
         if (hitch->baseType == eBaseTypeDestructObj || hitch->baseType == eBaseTypePlatform ||
             hitch->baseType == eBaseTypeStatic)
@@ -6733,12 +6728,11 @@ static S32 zEntPlayerKnockToSafety(xEnt* ent)
 static xEnt* zEntPlayer_FindGrabEnt(xEnt* ent, zScene* zsc, S32* failed)
 {
     U32 i;
-    xEnt* e;
     F32 dx, dy, dz;
 
     for (i = 0; i < zsc->num_ents; i++)
     {
-        e = (xEnt*)zsc->ents[i];
+        xEnt* e = (xEnt*)zsc->ents[i];
 
         if (!(e->baseFlags & 0x20))
         {
@@ -9375,7 +9369,6 @@ void zEntPlayer_ShadowModelDisable()
     }
 }
 
-
 static void zEntPlayer_BubbleBowlLaneRender(zEnt* ent)
 {
     xShadowCache cache;
@@ -9383,7 +9376,6 @@ static void zEntPlayer_BubbleBowlLaneRender(zEnt* ent)
     F32 factor;
     xMat4x3 matrix;
     U32 i;
-    xEnt* ep;
 
     factor = 1.75f * sBubbleBowlTimer;
 
@@ -9414,7 +9406,7 @@ static void zEntPlayer_BubbleBowlLaneRender(zEnt* ent)
 
     for (i = 0; i < cache.entCount; i++)
     {
-        ep = cache.ent[i];
+        xEnt* ep = cache.ent[i];
 
         if (xShadowReceiveShadowSetup(ep))
         {
@@ -9547,10 +9539,9 @@ inline void get_reticle_bound(xVec3& center, F32& radius)
 static void zEntPlayerUpdateModelSB()
 {
     xAnimSingle* single = globals.player.ent.model->Anim->Single;
-    xModelInstance* m;
     S32 i;
 
-    m = globals.player.sb_models[0];
+    xModelInstance* m = globals.player.sb_models[0];
     m->Flags |= 3;
     *m->Mat = *globals.player.ent.model->Mat;
 
@@ -9741,7 +9732,6 @@ static void zEntPlayerCheckShoePop()
     xModelInstance** mlist;
     S32 i;
     S32 bone;
-    xModelInstance* m;
 
     if (globals.player.IsBubbleBouncing != 0)
     {
@@ -9752,7 +9742,7 @@ static void zEntPlayerCheckShoePop()
         for (i = 0; i < 2; i++)
         {
             bone = bone_index[i];
-            m = model_index[i];
+            xModelInstance* m = model_index[i];
 
             if (!(m->Flags & 1))
             {
@@ -10774,7 +10764,6 @@ static void zEntPlayerJumpUpdate(xEnt* ent, xScene* sc, F32 dt)
 static void zEntPlayerEGenUpdate(xEnt* ent, xScene* sc, F32 dt)
 {
     U32 i;
-    zEGenerator* egen;
     xIsect isx;
     F32 rad;
 
@@ -10782,7 +10771,7 @@ static void zEntPlayerEGenUpdate(xEnt* ent, xScene* sc, F32 dt)
 
     for (i = 0; i < ((zScene*)sc)->baseCount[eBaseTypeEGenerator]; i++)
     {
-        egen = (zEGenerator*)((zScene*)sc)->baseList[eBaseTypeEGenerator] + i;
+        zEGenerator* egen = (zEGenerator*)((zScene*)sc)->baseList[eBaseTypeEGenerator] + i;
 
         if (egen->flags & 0x1)
         {
@@ -10810,7 +10799,6 @@ static void zEntPlayerEGenUpdate(xEnt* ent, xScene* sc, F32 dt)
 
 static void zEntPlayerVelUpdate(xEnt* ent, xScene* sc, F32 dt)
 {
-    xVec3* v;
     F32 min;
     F32 interp;
     F32 speedMult;
@@ -10837,7 +10825,7 @@ static void zEntPlayerVelUpdate(xEnt* ent, xScene* sc, F32 dt)
         return;
     }
 
-    v = &ent->frame->vel;
+    xVec3* v = &ent->frame->vel;
 
     if (strcmp(ent->model->Anim->Single->State->Name, "BoulderRoll01") == 0)
     {
@@ -11866,12 +11854,10 @@ static void zEntPlayerSurfDamageUpdate(xEnt* ent, xScene* sc, F32 dt)
     xCollis* cend;
     xSurface* surf;
     S32 damaged;
-    zSurfaceProps* prop;
     F32 dx;
     F32 dz;
     F32 mag;
     F32 kvel;
-    xEnt* cent;
 
     if (globals.player.DamageTimer > 0.0f)
     {
@@ -11885,7 +11871,7 @@ static void zEntPlayerSurfDamageUpdate(xEnt* ent, xScene* sc, F32 dt)
     {
         if ((coll->flags & 0x1) && (surf = zSurfaceGetSurface(coll)) != NULL && !surf->state)
         {
-            prop = (zSurfaceProps*)surf->moprops;
+            zSurfaceProps* prop = (zSurfaceProps*)surf->moprops;
             damaged = 0;
 
             if (prop && prop->asset)
@@ -11936,7 +11922,7 @@ static void zEntPlayerSurfDamageUpdate(xEnt* ent, xScene* sc, F32 dt)
                     damaged = 1;
                     break;
                 case 1:
-                    cent = (xEnt*)coll->optr;
+                    xEnt* cent = (xEnt*)coll->optr;
 
                     if (cent && cent->baseType == eBaseTypeEGenerator &&
                         !(((zEGenerator*)cent)->flags & 0x1))
@@ -12004,14 +11990,10 @@ static void zEntPlayerDriveUpdate(xEnt* ent, xScene* sc, F32 dt)
     xCollis* coll;
     zPlatform* plat;
     xEntDrive* drv;
-    zPlatform* oplat;
-    xSurface* surf;
     zJumpParam jump;
     F32 jmph;
     U32 superbounce;
-    F32* jmphs;
     xVec3* jmpdir;
-    xAnimPlay* aplay;
     xAnimState* spring_state;
 
     if (globals.player.carry.patLauncher)
@@ -12041,7 +12023,7 @@ static void zEntPlayerDriveUpdate(xEnt* ent, xScene* sc, F32 dt)
         }
         else
         {
-            oplat = (zPlatform*)drv->odriver;
+            zPlatform* oplat = (zPlatform*)drv->odriver;
 
             if (!drv->os)
             {
@@ -12091,7 +12073,7 @@ static void zEntPlayerDriveUpdate(xEnt* ent, xScene* sc, F32 dt)
         return;
     }
 
-    surf = zSurfaceGetSurface(coll);
+    xSurface* surf = zSurfaceGetSurface(coll);
 
     if (surf && !surf->state && zSurfaceGetDamageType(surf))
     {
@@ -12207,7 +12189,7 @@ do_bounce:
     }
     else
     {
-        jmphs = plat->passet->sb.jmph;
+        F32* jmphs = plat->passet->sb.jmph;
         jmph = MAX(MAX(jmphs[0], jmphs[1]), jmphs[2]);
     }
 
@@ -12247,7 +12229,7 @@ do_bounce:
         zEntPlayerControlOn((zControlOwner)0x4000);
     }
 
-    aplay = plat->model->Anim;
+    xAnimPlay* aplay = plat->model->Anim;
 
     if (aplay && (spring_state = xAnimTableGetState(aplay->Table, "Spring")) != NULL)
     {
@@ -12941,7 +12923,6 @@ static U32 CollidePyramidBoxTop(xCollis* coll, xBox* box, F32 height, xSphere* s
 static xEnt* PlayerCollCheckOneVillain(xEnt* ent, xScene* sc, void* data)
 {
     xEnt* p = (xEnt*)data;
-    xCollis* coll;
 
     if (p->collis->idx >= 15)
     {
@@ -12963,7 +12944,7 @@ static xEnt* PlayerCollCheckOneVillain(xEnt* ent, xScene* sc, void* data)
         return ent;
     }
 
-    coll = &p->collis->colls[p->collis->idx];
+    xCollis* coll = &p->collis->colls[p->collis->idx];
 
     if (cchkButtbounce &&
         (p->frame->oldmat.pos.y >= ent->frame->mat.pos.y + ent->bound.sph.r ||
@@ -13543,7 +13524,6 @@ void zEntPlayerCollTrigger(xEnt* ent, xScene* sc)
     U32 i;
     U32 inside;
     zEntTrigger* trig;
-    xTriggerAsset* tasset;
 
     for (i = 0; i < sc->num_trigs; i++)
     {
@@ -13555,7 +13535,7 @@ void zEntPlayerCollTrigger(xEnt* ent, xScene* sc)
         }
 
         inside = 0;
-        tasset = (xTriggerAsset*)(trig->asset + 1);
+        xTriggerAsset* tasset = (xTriggerAsset*)(trig->asset + 1);
 
         switch (trig->subType)
         {
@@ -15374,11 +15354,10 @@ void zEntPlayer_SNDNotifyPlaying(U32 id)
 static void PlayerBeginCollideNoBupdate(xEnt* ent, xScene*, F32)
 {
     U8 idx;
-    xCollis* coll;
 
     for (idx = 0; idx < 18; idx++)
     {
-        coll = &ent->collis->colls[idx];
+        xCollis* coll = &ent->collis->colls[idx];
 
         coll->flags = 0x1F00;
         coll->optr = NULL;
@@ -15443,19 +15422,17 @@ static void PlayerHackFixBbashMiss(xModelInstance* model)
     static F32 bbspeed[4] = { 1.0f, 0.96f, 0.96f, 0.92f };
 
     S32 i;
-    xAnimState* astate;
     xVec3 tran[2];
-    iAnimSKBHeader* skb;
     xVec3 tranList[128];
     S32 tranCount;
 
     for (i = 0; i < 4; i++)
     {
-        astate = xAnimTableGetState(model->Anim->Table, bbstate[i]);
+        xAnimState* astate = xAnimTableGetState(model->Anim->Table, bbstate[i]);
 
         if (astate)
         {
-            skb = (iAnimSKBHeader*)astate->Data->RawData[0];
+            iAnimSKBHeader* skb = (iAnimSKBHeader*)astate->Data->RawData[0];
 
             if (!(skb->Flags & 0x80000000))
             {
@@ -15489,13 +15466,11 @@ static void PlayerHackFixBbashMiss(xModelInstance* model)
 static void PlayerLedgeInit(zLedgeGrabParams* ledge, xModelInstance* model)
 {
     S32 i;
-    xAnimState* idle;
-    xAnimState* grab;
     xVec3 tran[64];
     xQuat quat[64];
 
-    idle = model->Anim->Table->StateList;
-    grab = xAnimTableGetState(model->Anim->Table, "LedgeGrab01");
+    xAnimState* idle = model->Anim->Table->StateList;
+    xAnimState* grab = xAnimTableGetState(model->Anim->Table, "LedgeGrab01");
 
     if (grab && !(grab->UserFlags & 0x40000000))
     {
@@ -16109,12 +16084,11 @@ static S32 g_flg_loaded;
 void zEntPlayer_LoadSounds()
 {
     U32 bufsize;
-    void* info;
 
     player_sound_hop_load('SPSB', 2);
     g_flg_loaded |= 2;
 
-    info = xSTFindAsset(0x791025ac, &bufsize);
+    void* info = xSTFindAsset(0x791025ac, &bufsize);
     if (info != NULL)
     {
         player_sound_hop_load('SPPA', 2);

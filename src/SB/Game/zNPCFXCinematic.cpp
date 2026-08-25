@@ -454,7 +454,6 @@ void NCINBeNosey::CanRenderNow()
 {
     zCutsceneMgr* csnmgr = (zCutsceneMgr*)this->use_csnmgr;
     NCINEntry* fxtab = this->use_fxtab;
-    NCINEntry* nextrec;
 
     if (csnmgr == NULL)
     {
@@ -466,7 +465,7 @@ void NCINBeNosey::CanRenderNow()
         return;
     }
 
-    nextrec = fxtab;
+    NCINEntry* nextrec = fxtab;
 
     while (nextrec->typ_ncinfx != NCIN_FXTYP_UNKNOWN)
     {
@@ -486,7 +485,6 @@ void NCINBeNosey::UpdatedAnimated(RpAtomic* model, RwMatrixTag* animMat, U32 ani
 {
     zCutsceneMgr* csnmgr = (zCutsceneMgr*)this->use_csnmgr;
     NCINEntry* fxtab = this->use_fxtab;
-    NCINEntry* nextrec;
 
     if (csnmgr == NULL)
     {
@@ -498,7 +496,7 @@ void NCINBeNosey::UpdatedAnimated(RpAtomic* model, RwMatrixTag* animMat, U32 ani
         return;
     }
 
-    nextrec = fxtab;
+    NCINEntry* nextrec = fxtab;
 
     while (nextrec->typ_ncinfx != NCIN_FXTYP_UNKNOWN)
     {
@@ -1703,7 +1701,6 @@ static NCINCutMap g_cutmap[24] = {
 static NCINEntry* zNPCFXCutscenePickTable(const zCutsceneMgr* csnmgr)
 {
     NCINEntry* fxtab = NULL;
-    xCutscene* csn;
     NCINCutMap* cutmap;
     static S32 needinit = 1;
 
@@ -1721,7 +1718,7 @@ static NCINEntry* zNPCFXCutscenePickTable(const zCutsceneMgr* csnmgr)
     }
 
     cutmap = g_cutmap;
-    csn = csnmgr->csn;
+    xCutscene* csn = csnmgr->csn;
 
     while (cutmap->csn_name != NULL)
     {
@@ -1739,12 +1736,10 @@ static NCINEntry* zNPCFXCutscenePickTable(const zCutsceneMgr* csnmgr)
 
 S32 zNPCFXCutscenePrep(const xScene*, F32, const zCutsceneMgr* csnmgr)
 {
-    NCINEntry* fxtab;
-    NCINEntry* nextrec;
     char tweakBase[128];
     char tweakName[128];
 
-    fxtab = zNPCFXCutscenePickTable(csnmgr);
+    NCINEntry* fxtab = zNPCFXCutscenePickTable(csnmgr);
 
     if (fxtab == NULL)
     {
@@ -1758,7 +1753,7 @@ S32 zNPCFXCutscenePrep(const xScene*, F32, const zCutsceneMgr* csnmgr)
 
     g_noz_ncin->Init(csnmgr, fxtab, 3);
 
-    nextrec = fxtab;
+    NCINEntry* nextrec = fxtab;
 
     while (nextrec->typ_ncinfx != NCIN_FXTYP_UNKNOWN)
     {
@@ -1812,11 +1807,7 @@ void NCINBeNosey::Init(const zCutsceneMgr* m, NCINEntry* e, S32 i)
 
 void zNPCFXCutsceneDone(const xScene*, F32, const zCutsceneMgr* csnmgr)
 {
-    NCINEntry* fxtab;
-    NCINEntry* nextrec;
-    NCINEntry* fxrec;
-
-    fxtab = zNPCFXCutscenePickTable(csnmgr);
+    NCINEntry* fxtab = zNPCFXCutscenePickTable(csnmgr);
 
     if (fxtab == NULL)
     {
@@ -1830,11 +1821,11 @@ void zNPCFXCutsceneDone(const xScene*, F32, const zCutsceneMgr* csnmgr)
 
     g_noz_ncin->Done();
 
-    nextrec = fxtab;
+    NCINEntry* nextrec = fxtab;
 
     while (nextrec->typ_ncinfx != NCIN_FXTYP_UNKNOWN)
     {
-        fxrec = nextrec;
+        NCINEntry* fxrec = nextrec;
         nextrec++;
 
         if (fxrec->flg_stat & 4)
@@ -1861,30 +1852,27 @@ void NCINBeNosey::Done()
 
 void zNPCFXCutscene(const xScene*, F32, const zCutsceneMgr* csnmgr)
 {
-    NCINEntry* fxtab;
     xCutscene* csn;
     S32 need_animated;
     S32 need_render;
-    NCINEntry* nextrec;
-    NCINEntry* fxrec;
     S32 flags;
 
     csn = csnmgr->csn;
 
-    fxtab = zNPCFXCutscenePickTable(csnmgr);
+    NCINEntry* fxtab = zNPCFXCutscenePickTable(csnmgr);
 
     if (fxtab == NULL)
     {
         return;
     }
 
-    nextrec = fxtab;
+    NCINEntry* nextrec = fxtab;
     need_animated = 0;
     need_render = 0;
 
     while (nextrec->typ_ncinfx != NCIN_FXTYP_UNKNOWN)
     {
-        fxrec = nextrec;
+        NCINEntry* fxrec = nextrec;
         nextrec++;
 
         if (csn->Time < fxrec->tym_beg)
@@ -1992,7 +1980,6 @@ static void NCIN_BubSlam(const zCutsceneMgr*, NCINEntry* fxrec, S32 param)
 
 static void NCIN_BubWipe(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
-    xMat4x3* mat;
     xVec3* pos;
     xVec3* vel;
     xVec3* pp;
@@ -2009,7 +1996,7 @@ static void NCIN_BubWipe(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
         return;
     }
 
-    mat = &mat_fake;
+    xMat4x3* mat = &mat_fake;
 
     mat->pos = fxrec->pos_A[0];
     mat->at = fxrec->pos_A[1];
@@ -2339,8 +2326,6 @@ static void NCIN_HazTTSteam_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*,
                         U32 animIndex, U32 dataIndex)
 {
     S32 idx_boneSign;
-    RwMatrixTag* mat_bone;
-    NPCHazard* haz;
 
     U32 ifx = fxrec->pos_A[1].x;
 
@@ -2356,7 +2341,7 @@ static void NCIN_HazTTSteam_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*,
 
     if (idx_boneSign > 0)
     {
-        mat_bone = &animMat[idx_boneSign];
+        RwMatrixTag* mat_bone = &animMat[idx_boneSign];
 
         pos = *(const xVec3*)&mat_bone->pos;
         pos += *(const xVec3*)&mat_bone->right * vec_offset.x;
@@ -2372,7 +2357,7 @@ static void NCIN_HazTTSteam_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*,
         pos += *(const xVec3*)&animMat->at * vec_offset.z;
     }
 
-    haz = fxrec->fxdata.hazdata.npchaz;
+    NPCHazard* haz = fxrec->fxdata.hazdata.npchaz;
     haz->pos_hazard = pos;
 }
 
@@ -2380,9 +2365,7 @@ static void NCIN_TTGunSmoke_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpA
                         RwMatrixTag* animMat, U32 animIndex, U32 dataIndex)
 {
     S32 idx_boneGun;
-    xMat4x3* mat_bone;
     F32 spd_blow;
-    xCutscene* csn;
     F32 rat_blow;
 
     U32 idx_roboAnim = fxrec->pos_A[1].x;
@@ -2397,7 +2380,7 @@ static void NCIN_TTGunSmoke_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpA
     xVec3 vec_offset = fxrec->pos_A[0];
     xVec3 pos_smoke;
 
-    mat_bone = (xMat4x3*)&animMat[idx_boneGun];
+    xMat4x3* mat_bone = (xMat4x3*)&animMat[idx_boneGun];
 
     pos_smoke = mat_bone->pos;
     pos_smoke += mat_bone->right * vec_offset.x;
@@ -2407,7 +2390,7 @@ static void NCIN_TTGunSmoke_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpA
 
     F32 tym_blow[2] = { 22.000002f, 23.166667f };
 
-    csn = csnmgr->csn;
+    xCutscene* csn = csnmgr->csn;
 
     if (csn->Time < tym_blow[0])
     {
@@ -2924,7 +2907,6 @@ static void NCIN_FodProdBone_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*
                          U32 animIndex, U32 dataIndex)
 {
     xMat4x3* mat_bone;
-    NPCHazard* haz;
 
     U32 ifx = fxrec->pos_A[1].x;
 
@@ -2935,7 +2917,7 @@ static void NCIN_FodProdBone_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*
 
     static S32 idx_bonePoke = fxrec->pos_A[1].y;
 
-    haz = fxrec->fxdata.hazdata.npchaz;
+    NPCHazard* haz = fxrec->fxdata.hazdata.npchaz;
     mat_bone = (xMat4x3*)&animMat[idx_bonePoke];
 
     if (haz == NULL)
@@ -3151,7 +3133,6 @@ static void NCIN_LightninBone_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 kil
 {
     _tagLightningAdd addInfo;
     xVec3 pnt;
-    zLightning* light;
 
     if (killit != 0)
     {
@@ -3186,7 +3167,7 @@ static void NCIN_LightninBone_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 kil
         fxrec->fxdata.arcdata.endPos.z = fxrec->pos_B[0].z * xurand() + fxrec->pos_B[1].z;
     }
 
-    light = fxrec->fxdata.arcdata.lightning;
+    zLightning* light = fxrec->fxdata.arcdata.lightning;
 
     if (light == NULL)
     {
@@ -3806,7 +3787,6 @@ static void NCIN_SBBNode_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* mod
 {
     zNPCB_SB2* sb2;
     S32 bones;
-    RpSkin* skin;
     xMat3x3 imat;
     S32 i;
 
@@ -3828,7 +3808,7 @@ static void NCIN_SBBNode_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* mod
 
     if (model->geometry != NULL)
     {
-        skin = RpSkinGeometryGetSkin(model->geometry);
+        RpSkin* skin = RpSkinGeometryGetSkin(model->geometry);
 
         if (skin != NULL)
         {

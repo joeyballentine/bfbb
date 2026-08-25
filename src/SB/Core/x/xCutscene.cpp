@@ -94,7 +94,6 @@ xCutscene* xCutscene_Create(U32 id)
 {
     xCutscene* csn;
     U32 i;
-    xCutsceneInfo* cnfo;
     U32 maxload;
 
     xSndPauseAll(1, 1);
@@ -102,7 +101,7 @@ xCutscene* xCutscene_Create(U32 id)
     memset(csn, 0, sizeof(xCutscene));
     sActiveCutscene.PlaybackSpeed = 1.0f;
 
-    cnfo = sCutTocInfo;
+    xCutsceneInfo* cnfo = sCutTocInfo;
 
     for (i = 0; i < sCutTocCount; i++)
     {
@@ -351,7 +350,6 @@ void xCutscene_SetCamera(xCutscene* csn, xCamera* cam)
     F32 lerp;
     U32 count;
     S32 frame;
-    zFlyKey* keys;
 
     data = (xCutsceneData*)&csn->Play[1];
 
@@ -361,7 +359,7 @@ void xCutscene_SetCamera(xCutscene* csn, xCamera* cam)
         {
             frame = (S32)std::floorf(30.0f * csn->CamTime);
             xCutsceneCameraData* camData = (xCutsceneCameraData*)(data + 1);
-            keys = camData->Keys;
+            zFlyKey* keys = camData->Keys;
             dataIndex = camData->NumKeys;
 
             if (frame < keys[0].frame)
@@ -495,22 +493,18 @@ static void xcsCalcAnimMatrices(RwMatrixTag* animMat, RpAtomic* model, xCutscene
 static void JDeltaEval(RpAtomic* model, void* deltaModel, void* deltaAnim, F32 time)
 {
     F32 outweight[128];
-    F32* currweight;
     S32 i;
     S32 numFrames;
     S32 numRun;
     S32 numWeights;
-    F32* times;
-    F32* weights;
     F32 lerp;
     F32 invlerp;
     RwV3d* outverts;
-    JDeltaTarget* dtgt;
 
     numFrames = *((S32*)deltaAnim + 1);
     numWeights = *((S32*)deltaAnim + 2);
-    times = (F32*)deltaAnim + 3;
-    weights = times + numFrames;
+    F32* times = (F32*)deltaAnim + 3;
+    F32* weights = times + numFrames;
 
     if (time <= times[0] || numFrames == 1)
     {
@@ -539,7 +533,7 @@ static void JDeltaEval(RpAtomic* model, void* deltaModel, void* deltaAnim, F32 t
 
     RpGeometryLock(model->geometry, 2);
 
-    dtgt = (JDeltaTarget*)((U8*)deltaModel + 8);
+    JDeltaTarget* dtgt = (JDeltaTarget*)((U8*)deltaModel + 8);
     outverts = model->geometry->morphTarget->verts;
     numRun = dtgt->numRuns;
 
@@ -583,7 +577,7 @@ static void JDeltaEval(RpAtomic* model, void* deltaModel, void* deltaAnim, F32 t
         }
     }
 
-    currweight = outweight;
+    F32* currweight = outweight;
     dtgt = (JDeltaTarget*)((U8*)dtgt + dtgt->skipSize);
 
     while (numWeights)
@@ -681,41 +675,30 @@ void xCutscene_Render(xCutscene* csn, xEnt**, S32*, F32*)
     U32 tworoot;
     U32 noshadow;
     xCutsceneData* data;
-    xCutsceneData* mphdata;
     RpAtomic* model;
     RpAtomic* shadowModel;
     RwMatrixTag animMat[65];
     xVec3* camVec;
     U32 tempSize;
-    RpAtomic* tmpModel;
     F32 radius;
     F32 animTime;
     F32 maxRadius;
     U32 viscnt;
-    U32* currvis;
     U32 subIndex;
     U32 frameMin;
     U32 frameMax;
     U32 frameIndex;
     U32 shadowBits;
-    RpGeometry* geom;
-    RwTexture* tex;
     S32 matnum;
     U32 morphAnimIndex;
     U32 morphModelIndex;
     U32 numFrame;
     U32 numRun;
-    xCutsceneMphFrame* mphFrame;
-    xCutsceneMphRun* mphRun;
-    xMorphTargetFile* mphFile;
     U32 skipsize;
-    xVec3* csnTmpArray;
     xVec3* currtmp;
     xVec3* outv;
     U32 j;
     U32 cmpval;
-    void* deltaAnim;
-    void* deltaModel;
     xShadowCache scache;
     static xVec3 shadVec = { 0.0f, -1.0f, 0.0f };
 
@@ -759,7 +742,7 @@ void xCutscene_Render(xCutscene* csn, xEnt**, S32*, F32*)
             {
                 maxRadius = model->boundingSphere.radius;
                 shadowModel = model;
-                tmpModel = iModelFile_RWMultiAtomic(model);
+                RpAtomic* tmpModel = iModelFile_RWMultiAtomic(model);
 
                 while (tmpModel != NULL)
                 {
@@ -774,7 +757,7 @@ void xCutscene_Render(xCutscene* csn, xEnt**, S32*, F32*)
                 if (csn->Info->VisCount)
                 {
                     viscnt = csn->Info->VisCount;
-                    currvis = csn->Visibility;
+                    U32* currvis = csn->Visibility;
                     frameIndex = (U32)(30.0f * animTime);
 
                     while (viscnt)
@@ -815,9 +798,9 @@ void xCutscene_Render(xCutscene* csn, xEnt**, S32*, F32*)
                 {
                     if (visFlags & (1 << visIdx))
                     {
-                        geom = model->geometry;
+                        RpGeometry* geom = model->geometry;
                         hasAlpha = 0;
-                        tex = geom->matList.materials[0]->texture;
+                        RwTexture* tex = geom->matList.materials[0]->texture;
 
                         if (tex != NULL && (xStricmp(tex->name, "tv_close") == 0 ||
                                             (xStricmp(tex->name, "robot_2a_tar-tar") == 0 &&
@@ -837,7 +820,7 @@ void xCutscene_Render(xCutscene* csn, xEnt**, S32*, F32*)
                             }
                         }
 
-                        mphdata = (xCutsceneData*)&csn->Play[1];
+                        xCutsceneData* mphdata = (xCutsceneData*)&csn->Play[1];
 
                         for (mphIndex = 0; mphIndex < csn->Play->NumData; mphIndex++)
                         {
@@ -852,9 +835,9 @@ void xCutscene_Render(xCutscene* csn, xEnt**, S32*, F32*)
                                 {
                                     numFrame = ((U32*)&mphdata[1])[0];
                                     numRun = ((U32*)&mphdata[1])[1];
-                                    mphFrame = (xCutsceneMphFrame*)((U32*)&mphdata[1] + 2);
-                                    mphRun = (xCutsceneMphRun*)&mphFrame[numFrame];
-                                    mphFile = (xMorphTargetFile*)((U8*)mphdata +
+                                    xCutsceneMphFrame* mphFrame = (xCutsceneMphFrame*)((U32*)&mphdata[1] + 2);
+                                    xCutsceneMphRun* mphRun = (xCutsceneMphRun*)&mphFrame[numFrame];
+                                    xMorphTargetFile* mphFile = (xMorphTargetFile*)((U8*)mphdata +
                                                                   ((numFrame * 2 + numRun * 2 + 5) *
                                                                    4 & 0xfffffff0) +
                                                                   0x10);
@@ -893,7 +876,7 @@ void xCutscene_Render(xCutscene* csn, xEnt**, S32*, F32*)
                                     }
                                     weight[0] = 0x4000 - weight[1];
 
-                                    csnTmpArray = (xVec3*)&gRenderArr;
+                                    xVec3* csnTmpArray = (xVec3*)&gRenderArr;
                                     FastS16weight2((F32*)csnTmpArray, v_array, weight,
                                                    mphFile->NumVerts * 3,
                                                    0.000061035156f * mphFile->Scale);
@@ -920,8 +903,8 @@ void xCutscene_Render(xCutscene* csn, xEnt**, S32*, F32*)
                                 }
                                 else
                                 {
-                                    deltaAnim = (void*)((U8*)mphdata + 0x10);
-                                    deltaModel = NULL;
+                                    void* deltaAnim = (void*)((U8*)mphdata + 0x10);
+                                    void* deltaModel = NULL;
 
                                     for (dataIndex = 0; dataIndex < csn->Info->NumData; dataIndex++)
                                     {

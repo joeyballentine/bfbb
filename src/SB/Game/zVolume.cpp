@@ -29,7 +29,6 @@ void zVolumeInit()
 {
     U16 i;
     U32 size;
-    xVolumeAsset* asset;
 
     nvols = xSTAssetCountByType('VOLU');
 
@@ -41,7 +40,7 @@ void zVolumeInit()
 
         for (i = 0; i < nvols; i++)
         {
-            asset = (xVolumeAsset*)xSTFindAssetByType('VOLU', i, &size);
+            xVolumeAsset* asset = (xVolumeAsset*)xSTFindAssetByType('VOLU', i, &size);
 
             zVolumeInit(&vols[i], asset);
         }
@@ -72,11 +71,8 @@ void zVolume_OccludePrecalc(xVec3* camPos)
     S32 i;
     S32 j;
     xVec3 corner[5];
-    zVolume* vol;
-    xVolumeAsset* a;
     F32 c;
     F32 s;
-    PreCalcOcclude* calc;
     xVec3 d1;
     xVec3 d2;
     xVec4 locFrustVec[4];
@@ -89,13 +85,13 @@ void zVolume_OccludePrecalc(xVec3* camPos)
 
     for (i = 0; i < gOccludeCount; i++)
     {
-        vol = gOccludeList[i];
-        a = vol->asset;
+        zVolume* vol = gOccludeList[i];
+        xVolumeAsset* a = vol->asset;
 
         c = icos(a->rot);
         s = isin(a->rot);
 
-        calc = &gOccludeCalc[gOccludeCalcCount];
+        PreCalcOcclude* calc = &gOccludeCalc[gOccludeCalcCount];
 
         corner[0].x = c * (a->bound.box.box.lower.x - a->xpivot) + a->xpivot;
         corner[0].y = a->bound.box.box.lower.y;

@@ -153,7 +153,6 @@ void zNPCTiki_ExplodeFX(zNPCTiki* tiki)
 {
     xVec3 shockwavePos;
     xVec3 delta; // not in dwarf
-    NPCHazard* haz;
     zScene* zsc;
     U32 i;
 
@@ -165,7 +164,7 @@ void zNPCTiki_ExplodeFX(zNPCTiki* tiki)
         xVec3Copy(&shockwavePos, (xVec3*)&tiki->model->Mat->pos);
         shockwavePos.y += 0.35f;
 
-        haz = HAZ_Acquire();
+        NPCHazard* haz = HAZ_Acquire();
         if (!haz)
             return;
 
@@ -340,9 +339,7 @@ void ZNPC_Destroy_Tiki(xFactoryInst* inst)
 
 xAnimTable* ZNPC_AnimTable_Tiki()
 {
-    xAnimTable* table;
-
-    table = xAnimTableNew("zNPCTiki", NULL, 0);
+    xAnimTable* table = xAnimTableNew("zNPCTiki", NULL, 0);
     xAnimTableNewState(table, g_strz_tikianim[1], 0x110, 1, 1.0f, NULL, NULL, 0.0f, NULL, NULL,
                        xAnimDefaultBeforeEnter, NULL, NULL);
     return table;
@@ -576,17 +573,13 @@ S32 zNPCTiki::SetCarryState(en_NPC_CARRY_STATE cs)
 
 void zNPCTiki::SelfSetup()
 {
-    xBehaveMgr* bmgr;
-    xPsyche* psy;
-    xGoal* goal;
-
-    bmgr = xBehaveMgr_GetSelf();
-    psy = bmgr->Subscribe(this, 0);
+    xBehaveMgr* bmgr = xBehaveMgr_GetSelf();
+    xPsyche* psy = bmgr->Subscribe(this, 0);
     this->psy_instinct = psy;
     psy = this->psy_instinct;
     psy->BrainBegin();
 
-    goal = psy->AddGoal(NPC_GOAL_TIKIIDLE, NULL);
+    xGoal* goal = psy->AddGoal(NPC_GOAL_TIKIIDLE, NULL);
     ((zNPCGoalCommon*)goal)->flg_npcgauto = 0;
 
     switch (this->myNPCType)
@@ -637,9 +630,7 @@ void zNPCTiki::ParseINI()
 
 void zNPCTiki::Process(xScene* xscn, F32 dt)
 {
-    xVec3* t0;
     U32 i;
-    xQuat* q0;
 
     if (!(this->numChildren == NULL || ((this->tikiFlag & 8) != 0)))
     {
@@ -673,8 +664,8 @@ void zNPCTiki::Process(xScene* xscn, F32 dt)
             }
         }
 
-        q0 = (xQuat*)giAnimScratch;
-        t0 = (xVec3*)(q0 + 0x41);
+        xQuat* q0 = (xQuat*)giAnimScratch;
+        xVec3* t0 = (xVec3*)(q0 + 0x41);
         iAnimEval(this->tikiAnim, this->tikiAnimTime, 0, t0, q0);
         iModelAnimMatrices(this->model->Data, q0, t0, this->model->Mat + 1);
     }
@@ -1791,8 +1782,7 @@ static void loveyTikiRender(xEnt* ent)
                 model->Alpha = 1.0f;
         }
 
-        xModelInstance* curr;
-        for (curr = model->Next; curr != NULL; curr = curr->Next)
+        for (xModelInstance* curr = model->Next; curr != NULL; curr = curr->Next)
             curr->Alpha = model->Alpha;
 
         if (alphaTooLow)

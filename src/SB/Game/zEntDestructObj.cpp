@@ -17,22 +17,17 @@ namespace
 {
     static void SwapModel(zEntDestructObj* s, xModelInstance* model)
     {
-        xSFXAsset* sfxDestroy;
-        xModelInstance* collModel;
-        xModelInstance* camcollModel;
-        xModelInstance* entModel;
-
-        entModel = s->model;
+        xModelInstance* entModel = s->model;
         if (entModel != model)
         {
-            collModel = s->collModel;
+            xModelInstance* collModel = s->collModel;
             if ((collModel != NULL) && (collModel != entModel))
             {
                 xModelInstanceFree(collModel);
                 s->collModel = NULL;
             }
 
-            camcollModel = s->camcollModel;
+            xModelInstance* camcollModel = s->camcollModel;
             if ((camcollModel != NULL) && (camcollModel != (xModelInstance*)s->model))
             {
                 xModelInstanceFree(camcollModel);
@@ -47,7 +42,7 @@ namespace
             iBoxForModelLocal(&s->bound.box.box, model);
             zCollGeom_EntSetup((xEnt*)s);
 
-            sfxDestroy = s->sfx_destroy;
+            xSFXAsset* sfxDestroy = s->sfx_destroy;
             if (sfxDestroy != NULL)
             {
                 xSndPlay3D(sfxDestroy->soundAssetID, (f32)sfxDestroy->volume, 0.0f, 0x80U, 0U,
@@ -74,9 +69,6 @@ void zEntDestructObj_Init(void* ent, void* asset)
 
 void zEntDestructObj_Init(zEntDestructObj* ent, xEntAsset* asset)
 {
-    zEntDestructObjAsset* dasset;
-    xModelInstance* hitModelInst;
-    xModelInstance* destroyModelInst;
     u32 shrapnelDestroyId;
     u32 shrapnelHitId;
     u32 sfxDestroyId;
@@ -84,12 +76,10 @@ void zEntDestructObj_Init(zEntDestructObj* ent, xEntAsset* asset)
     u32 hitModelId;
     u32 destroyModelId;
     U8 boundType;
-    xModelInstance* destroyModel;
-    xModelInstance* hitModel;
 
     zEntInit((zEnt*)ent, asset, 0x44535452U);
 
-    dasset = (zEntDestructObjAsset*)(asset + 0x1);
+    zEntDestructObjAsset* dasset = (zEntDestructObjAsset*)(asset + 0x1);
 
     ent->dasset = dasset;
     ent->healthCnt = dasset->health;
@@ -209,12 +199,12 @@ void zEntDestructObj_Init(zEntDestructObj* ent, xEntAsset* asset)
     hitModelId = dasset->hitModelId;
     if (hitModelId != NULL)
     {
-        hitModelInst = (xModelInstance*)xSTFindAsset(hitModelId, NULL);
+        xModelInstance* hitModelInst = (xModelInstance*)xSTFindAsset(hitModelId, NULL);
         if (hitModelInst != NULL)
         {
             ent->hit_model = xEntLoadModel(NULL, (RpAtomic*)hitModelInst);
             RwMatrixCopyMacro(ent->hit_model->Mat, ent->model->Mat);
-            hitModel = ent->hit_model;
+            xModelInstance* hitModel = ent->hit_model;
             hitModel->Flags = (U16)hitModel->Flags & 0xFBFF;
         }
     }
@@ -223,12 +213,12 @@ void zEntDestructObj_Init(zEntDestructObj* ent, xEntAsset* asset)
     destroyModelId = dasset->destroyModelId;
     if (destroyModelId != NULL)
     {
-        destroyModelInst = (xModelInstance*)xSTFindAsset(destroyModelId, NULL);
+        xModelInstance* destroyModelInst = (xModelInstance*)xSTFindAsset(destroyModelId, NULL);
         if (destroyModelInst != NULL)
         {
             ent->destroy_model = xEntLoadModel(NULL, (RpAtomic*)destroyModelInst);
             RwMatrixCopyMacro(ent->destroy_model->Mat, ent->model->Mat);
-            destroyModel = ent->destroy_model;
+            xModelInstance* destroyModel = ent->destroy_model;
             destroyModel->Flags = (U16)destroyModel->Flags & 0xFBFF;
         }
     }
@@ -368,11 +358,10 @@ U32 zEntDestructObj_isDestroyed(zEntDestructObj* ent)
 void zEntDestructObj_DestroyFX(zEntDestructObj* o)
 {
     xVec3 entDistanceFromPlayer;
-    xSFXAsset* sfxAsset;
     _tagSDRumbleType rt;
     u8 fxType;
 
-    sfxAsset = o->sfx_destroy;
+    xSFXAsset* sfxAsset = o->sfx_destroy;
     if (sfxAsset != NULL)
     {
         xSndPlay3D(sfxAsset->soundAssetID, (F32)sfxAsset->volume, (F32)0.0f, (U32)0x80, (U32)0x0,

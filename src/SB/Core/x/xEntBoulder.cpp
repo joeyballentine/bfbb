@@ -235,55 +235,41 @@ void xEntBoulder_RealBUpdate(xEnt* ent, xVec3* pos)
 
 void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
 {
-    // Names come from dwarf/SB/Core/x/xEntBoulder.cpp.
+    // Names come from dwarf/SB/Core/x/xEntBoulder.cpp. These declarations used to
+    // sit in one 26-line block at the top; they are spread through the function
+    // now, and two rules govern where they may go.
     //
-    // These stay hoisted, and it is not laziness: their ORDER is load-bearing.
-    // The compiler assigns stack slots in declaration order, so moving any one
-    // of them down into the block that uses it renumbers every slot after it
-    // and the function stops matching. Measured, one at a time: bubVelRnd
-    // 99.939%, scaleVel 99.992%, numDepens and iter_npc likewise, and every
-    // other xVec3 the same. Only rotM, npc and boul survived being moved,
-    // because a pointer or a matrix here lives in a callee-saved register and
-    // never takes a slot -- those three have been moved and are gone from this
-    // list.
+    // 1. Their relative ORDER is fixed. The compiler assigns stack slots in
+    //    declaration order, so swapping any two changes the frame: swapping just
+    //    `depen` and `tmp` in place, re-scoping nothing, takes this function from
+    //    100% to 99.984%, and the whole difference is offsets shifting by 12
+    //    while every instruction stays the same.
     //
-    // The order is also not something scoping could reproduce even in
-    // principle. It is not the order of first use: `force` is declared after
-    // `depen` and `tmp` but is used before either. So this sequence is real
-    // information about the original source, not an artifact of decompiling,
-    // and rewriting it to look tidier would destroy it.
+    // 2. They must stay at FUNCTION scope. Moving one into the block that uses
+    //    it breaks the match even when the order is preserved exactly -- 99.943%
+    //    with every declaration still in retail's sequence, just nested. Placing
+    //    each at its natural first-use point inside its own block gives 99.913%.
+    //    In both cases the only difference is permuted stack offsets.
     //
-    // dVar16/dVar18/dVar20 keep placeholder names because each is shared
-    // scratch with no single role -- dVar18 alone carries the bubble-count
-    // scalar, a boulder-vs-boulder velocity component, |vel| and a depen dot
-    // product. someVec has no dwarf counterpart either.
+    // Within those two rules the position is free, so each declaration sits as
+    // close to its first use as its predecessor allows. That is not merely
+    // tidier, it is probably what retail wrote: the fourteen xVec3s come out in
+    // first-use order, thirteen of fourteen, which would be a strange
+    // coincidence if they had all been declared up top.
+    //
+    // rotM, npc and boul are not in this scheme at all -- a pointer or a matrix
+    // here lives in a callee-saved register and never takes a stack slot, so
+    // those move freely and are declared at their point of use.
+    //
+    // dVar16/dVar18/dVar20 keep placeholder names because each is shared scratch
+    // with no single role -- dVar18 alone carries the bubble-count scalar, a
+    // boulder-vs-boulder velocity component, |vel| and a depen dot product.
+    // someVec has no dwarf counterpart either.
+
     S32 i;
     F32 dx__;
     F32 dy__;
     F32 dz__;
-    F32 depenComp;
-    F32 dVar16;
-    F32 dVar18;
-    F32 dVar20;
-    F32 fn;
-    xVec3 newRotVec;
-    xVec3 a;
-    xVec3 b;
-    xVec3 bubVelRnd;
-    xVec3 oldSphCen;
-    xVec3 velNorm;
-    xVec3 depen;
-    xVec3 tmp;
-    xVec3 depenNorm0;
-    xVec3 force;
-    xVec3 sphDist;
-    xVec3 depenNorm1;
-    xVec3 scaleVel;
-    xVec3 someVec;
-    S32 numDepens;
-    S32 iter_npc;
-    F32 vol;
-
     if ((ent->timeToLive > 0.0f) && (ent->timeToLive -= dt, ent->timeToLive <= 0.0f))
     {
         zEntEvent(ent, eEventKill);
@@ -308,9 +294,17 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
     ent->collis->pen = ent->collis_pen;
     ent->collis->post = NULL;
     ent->collis->depenq = NULL;
+    F32 depenComp;
+    F32 dVar16;
+    F32 dVar18;
+    F32 dVar20;
+    F32 fn;
+    xVec3 newRotVec;
     xMat3x3RMulVec(&newRotVec, (xMat3x3*)ent->model->Mat, &ent->localCenter);
     xVec3Add(&ent->bound.sph.center, (xVec3*)&ent->model->Mat->pos, &newRotVec);
 
+    xVec3 a;
+    xVec3 b;
     if ((sBubbleStreakID != 0xDEAD) && (globals.player.bubblebowl == ent))
     {
         a = ent->bound.sph.center - (ent->rotVec * ent->bound.sph.r);
@@ -319,6 +313,7 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
         xFXStreakUpdate(sBubbleStreakID, &a, &b);
     }
 
+    xVec3 bubVelRnd;
     bubVelRnd.x = bubVelRnd.y = bubVelRnd.z = ent->bound.sph.r * 4.0f;
 
     U32 numBubbles;
@@ -337,12 +332,14 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
         zFX_SpawnBubbleTrail(&ent->bound.sph.center, numBubbles, NULL, &bubVelRnd);
     }
 
+    xVec3 oldSphCen;
     xVec3Copy(&oldSphCen, &ent->bound.sph.center);
     ent->vel.y = -(ent->basset->gravity * dt - ent->vel.y);
     xVec3AddScaled(&ent->vel, &ent->instForce, (1.0f / ent->basset->mass));
     xVec3Init(&ent->instForce, 0.0f, 0.0f, 0.0f);
     xVec3AddScaled(&ent->vel, &ent->force, dt / ent->basset->mass);
     xVec3Init(&ent->force, 0.0f, 0.0f, 0.0f);
+    xVec3 velNorm;
     xVec3Normalize(&velNorm, &ent->vel);
     xVec3AddScaled(&ent->bound.sph.center, &ent->vel, dt);
     xQuickCullForBound(&ent->bound.qcd, &ent->bound);
@@ -364,7 +361,16 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
         return;
     }
 
-    numDepens = 0;
+    xVec3 depen;
+    xVec3 tmp;
+    xVec3 depenNorm0;
+    xVec3 force;
+    xVec3 sphDist;
+    xVec3 depenNorm1;
+    xVec3 scaleVel;
+    xVec3 someVec;
+    S32 numDepens = 0;
+    S32 iter_npc;
     xVec3Init(&tmp, 0.0f, 0.0f, 0.0f); // Let's initialize a vector for no reason.
     if ((ent->collis->env_eidx > ent->collis->env_sidx) ||
         (ent->collis->dyn_eidx > ent->collis->dyn_sidx) ||
@@ -495,9 +501,8 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
         // NPC
         for (iter_npc = ent->collis->npc_sidx; iter_npc < ent->collis->npc_eidx; iter_npc++)
         {
-            zNPCCommon* npc;
+            zNPCCommon* npc = (zNPCCommon*)(ent->collis->colls[iter_npc].optr);
 
-            npc = (zNPCCommon*)(ent->collis->colls[iter_npc].optr);
             if (ent->basset->flags & 1)
             {
                 xVec3AddTo(&depen, (xVec3*)(&ent->collis->colls[iter_npc].depen));
@@ -620,6 +625,7 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
 
     xMat3x3RMulVec(&newRotVec, (xMat3x3*)(ent->model->Mat), &ent->localCenter);
     xVec3Sub((xVec3*)&ent->model->Mat->pos, &ent->bound.sph.center, &newRotVec);
+    F32 vol;
     if ((ent->basset->soundID != 0) && (numDepens != 0) && (ent->lastRolling > 0.25f))
     {
         if (-depenComp > ent->basset->minSoundVel)

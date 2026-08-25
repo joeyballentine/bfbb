@@ -991,7 +991,6 @@ static S32 ShadowRender(RwCamera* shadowCamera, RwRaster* shadowRast, RpIntersec
                         F32 shadowFactor, F32 fadeDist)
 {
     _ProjectionParam param;
-    RwMatrixTag* shadowMatrix;
     F32 radius;
     RwV3d scl;
     RwV3d tr;
@@ -1014,7 +1013,7 @@ static S32 ShadowRender(RwCamera* shadowCamera, RwRaster* shadowRast, RpIntersec
         RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCCOLOR);
     }
 
-    shadowMatrix = &((RwFrame*)shadowCamera->object.object.parent)->modelling;
+    RwMatrixTag* shadowMatrix = &((RwFrame*)shadowCamera->object.object.parent)->modelling;
 
     param.at = shadowMatrix->at;
 
@@ -1902,14 +1901,12 @@ void xShadowManager_Render()
     {
         xVec3 center;
         F32 radius;
-        xShadowMgr* mgr_best;
         F32 dst_depth;
-        xEnt* ep;
 
         zEntGetShadowParams(sMgrList[bestIndex].ent, &center, &radius, xEntShadow::RADIUS_CACHE);
 
-        mgr_best = &sMgrList[bestIndex];
-        ep = mgr_best->ent;
+        xShadowMgr* mgr_best = &sMgrList[bestIndex];
+        xEnt* ep = mgr_best->ent;
 
         dst_depth = 10.0f;
         if (ep->entShadow->dst_cast > 0.0f)
@@ -1949,8 +1946,6 @@ void xShadowManager_Render()
         {
             xVec3 center;
             F32 radius;
-            RpAtomic* old_model;
-            xModelInstance* old_mnext;
 
             ent->entShadow->pos.x = ent->model->Mat->pos.x;
             ent->entShadow->pos.y = 1.0f + ent->model->Mat->pos.y;
@@ -1963,8 +1958,8 @@ void xShadowManager_Render()
 
             zEntGetShadowParams(ent, &center, &radius, xEntShadow::RADIUS_RASTER);
 
-            old_model = NULL;
-            old_mnext = ent->model->Next;
+            RpAtomic* old_model = NULL;
+            xModelInstance* old_mnext = ent->model->Next;
 
             if (ent->entShadow->shadowModel != NULL)
             {
