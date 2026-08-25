@@ -1133,7 +1133,6 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
                                 CLAMP_ANGLE(targetLean);
                             }
 
-                            // FIXME: Using our PI constant here is off by one bit with the resulting float constant
                             targetLean = -targetLean / DEG2RAD(50);
 
                             if (targetLean < -1.0f)
