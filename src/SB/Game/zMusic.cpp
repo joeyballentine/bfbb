@@ -196,6 +196,7 @@ static S32 getCurrLevelMusicEnum()
 
 static S32 zMusicDo(S32 track)
 {
+
     S32 snd_enum;
     F32 vol;
     F32 pitch;
@@ -240,16 +241,17 @@ static S32 zMusicDo(S32 track)
     sMusicTrack[track].loop = sMusicSoundID[snd_enum][1];
 
     pitch = 0.0f;
-    if (snd_enum == 9 && globals.scenePreload->sceneID == 'KF04')
+    if (snd_enum == 9 && globals.sceneCur->sceneID == 'KF04')
     {
         pitch = -12.0f;
         vol *= 0.7f;
     }
 
-    // FIXME: loop operator
     U32 snd_id = sMusicSoundID[snd_enum][track];
     sMusicTrack[track].snd_id =
-        xSndPlay(snd_id, vol, pitch, 0xFF, sMusicTrack[track].loop, 0, SND_CAT_MUSIC, 0.0f);
+        xSndPlay(snd_id, vol, pitch, 0xFF,
+                 (sMusicTrack[track].loop ? 0x8000 : 0) | 0x10000 | (track << 11) | 0x20000, 0,
+                 SND_CAT_MUSIC, 0.0f);
 
     // FIXME: This isn't quite right
     if (sMusicTrack[track].snd_id != 0)
@@ -346,11 +348,10 @@ void zMusicUpdate(F32 dt)
 
         for (i = 0; i < TRACK_COUNT; i++)
         {
-            // FIXME: This conditional isn't quite right
             if ((sMusicTimer[i] != 0.0f || sMusicQueueData[i] != NULL) &&
-                gGameMode & 0xC == sMusicQueueData[i]->game_state)
+                (gGameMode == eGameMode_Game) == sMusicQueueData[i]->game_state)
             {
-                if (sMusicTimer[i] < 0.0f)
+                if (sMusicTimer[i] > 0.0f)
                 {
                     sMusicTimer[i] -= dt;
                     if (sMusicTimer[i] < 0.0f)
@@ -475,13 +476,13 @@ void zMusicUnpause(S32 kill)
 // This version of it matches 33%. It's also functionally incorrect.
 void zMusicSetVolume(float vol, float delay)
 {
-    volume.cur = vol; // This makes it introduce the "frsp" instruction.
-    volume.inc = vol - volume.cur;
+    volume.end = vol;
+    volume.inc = volume.end - volume.cur; // This makes it introduce the "frsp" instruction.
 
     if (delay >
         minDelay) // Doing the if statement likes this makes it generate the "blelr" instruction
     {
-        volume.inc = vol / delay;
+        volume.inc = volume.inc / delay;
     }
 }
 
