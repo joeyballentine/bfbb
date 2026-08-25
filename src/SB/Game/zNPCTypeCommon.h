@@ -158,13 +158,13 @@ enum en_dupowavmod
 struct zNPCSettings : xDynAsset
 {
     en_npcbtyp basisType;
-    S8 allowDetect;
+    U8 allowDetect;
     U8 allowPatrol;
     U8 allowWander;
     U8 reduceCollide;
     U8 useNavSplines;
     S8 pad[3];
-    S8 allowChase;
+    U8 allowChase;
     S8 allowAttack;
     S8 assumeLOS;
     S8 assumeFOV;

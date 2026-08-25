@@ -671,7 +671,7 @@ S32 JELY_grul_getAngry(xGoal* rawgoal, void* p1, en_trantype* trantype, F32 f, v
     S32 selftype;
     F32 dst_sq;
 
-    if (!*(U8*)(&npc->npcset.allowDetect))
+    if (!npc->npcset.allowDetect)
     {
         skipit = 1;
     }

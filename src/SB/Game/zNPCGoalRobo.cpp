@@ -429,7 +429,7 @@ S32 zNPCGoalAlert::Enter(F32 dt, void* updCtxt)
 {
     zNPCRobot* npc = ((zNPCRobot*)(this->psyche->clt_owner));
     npc->SelfType();
-    if (*(U8*)(&npc->npcset.allowDetect) && npc->arena.IsReady())
+    if (npc->npcset.allowDetect && npc->arena.IsReady())
     {
         if (npc->arena.IncludesPlayer(0.0f, NULL))
         {
@@ -2151,7 +2151,7 @@ S32 zNPCGoalAlertTarTar::Process(en_trantype* trantype, F32 dt, void* updCtxt, x
         *trantype = GOAL_TRAN_SET;
         nextgoal = NPC_GOAL_IDLE;
     }
-    else if (!*(U8*)(&npc->npcset.allowDetect))
+    else if (!npc->npcset.allowDetect)
     {
         *trantype = GOAL_TRAN_SET;
         nextgoal = NPC_GOAL_IDLE;
@@ -2299,7 +2299,7 @@ S32 zNPCGoalAlertTarTar::HoppyUpdate(en_trantype* trantype, F32 dt)
     switch (hoppy)
     {
     case HOPPY_PATTERN_START:
-        if (!*(U8*)(&npc->npcset.allowChase))
+        if (!npc->npcset.allowChase)
         {
             hoppy = HOPPY_PATTERN_SHOOT;
         }
@@ -2886,7 +2886,7 @@ S32 zNPCGoalAlertMonsoon::Process(en_trantype* trantype, F32 dt, void* updCtxt, 
         *trantype = GOAL_TRAN_SET;
         nextgoal = NPC_GOAL_IDLE;
     }
-    else if (!*(U8*)(&npc->npcset.allowDetect))
+    else if (!npc->npcset.allowDetect)
     {
         *trantype = GOAL_TRAN_SET;
         nextgoal = NPC_GOAL_IDLE;
@@ -2976,7 +2976,7 @@ void zNPCGoalAlertMonsoon::MoveCorner(F32 dt)
     zNPCRobot* npc = (zNPCRobot*)(psyche->clt_owner);
     F32 ds2_corn;
     xVec3 dir_corn;
-    if (*(U8*)(&npc->npcset.allowChase) && npc->arena.IsReady() && (npc->arena.Radius(1.0f) > 2.0f))
+    if (npc->npcset.allowChase && npc->arena.IsReady() && (npc->arena.Radius(1.0f) > 2.0f))
     {
         ds2_corn = npc->XYZDstSqToPos(&pos_corner, 0);
         if (ds2_corn < SQ(0.5f))
@@ -3189,7 +3189,7 @@ S32 zNPCGoalAlertArf::Process(en_trantype* trantype, F32 dt, void* updCtxt, xSce
         *trantype = GOAL_TRAN_SET;
         nextgoal = NPC_GOAL_IDLE;
     }
-    else if (!*(U8*)(&npc->npcset.allowDetect))
+    else if (!npc->npcset.allowDetect)
     {
         *trantype = GOAL_TRAN_SET;
         nextgoal = NPC_GOAL_IDLE;
@@ -3440,7 +3440,7 @@ S32 zNPCGoalAlertChuck::Process(en_trantype* trantype, F32 dt, void* updCtxt, xS
         *trantype = GOAL_TRAN_SET;
         nextgoal = NPC_GOAL_IDLE;
     }
-    else if (!*(U8*)(&npc->npcset.allowDetect))
+    else if (!npc->npcset.allowDetect)
     {
         *trantype = GOAL_TRAN_SET;
         nextgoal = NPC_GOAL_IDLE;
@@ -3505,7 +3505,7 @@ S32 zNPCGoalAlertChuck::Process(en_trantype* trantype, F32 dt, void* updCtxt, xS
         else
         {
             tmr_reload = MAX(-1.0f, (tmr_reload - dt));
-            if (*(U8*)(&npc->npcset.allowChase))
+            if (npc->npcset.allowChase)
             {
                 F32 dst_home = xsqrt(npc->XZDstSqToPos(npc->arena.Pos(), &vec_home, NULL));
                 dst_edge = npc->arena.Radius(1.0f) - dst_home;
@@ -3966,7 +3966,7 @@ S32 zNPCGoalAlertSlick::Process(en_trantype* trantype, F32 dt, void* updCtxt, xS
         *trantype = GOAL_TRAN_SET;
         nextgoal = NPC_GOAL_IDLE;
     }
-    else if (!*(U8*)(&npc->npcset.allowDetect))
+    else if (!npc->npcset.allowDetect)
     {
         *trantype = GOAL_TRAN_SET;
         nextgoal = NPC_GOAL_IDLE;
@@ -4114,7 +4114,7 @@ void zNPCGoalAlertSlick::MoveCorner(F32 dt)
     zNPCRobot* npc = (zNPCRobot*)(psyche->clt_owner);
     F32 ds2_corn;
     xVec3 dir_corn;
-    if (*(U8*)(&npc->npcset.allowChase) && npc->arena.IsReady() && (npc->arena.Radius(1.0f) > 2.0f))
+    if (npc->npcset.allowChase && npc->arena.IsReady() && (npc->arena.Radius(1.0f) > 2.0f))
     {
         ds2_corn = npc->XYZDstSqToPos(&pos_corner, 0);
         if (ds2_corn < SQ(0.5f))
@@ -5531,7 +5531,7 @@ S32 zNPCGoalDogBark::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScen
         *trantype = GOAL_TRAN_SET;
         nextgoal = NPC_GOAL_IDLE;
     }
-    else if (*(U8*)(&npc->npcset.allowDetect) == 0)
+    else if (npc->npcset.allowDetect == 0)
     {
         *trantype = GOAL_TRAN_SET;
         nextgoal = NPC_GOAL_IDLE;
@@ -5563,7 +5563,7 @@ S32 zNPCGoalDogDash::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScen
         *trantype = GOAL_TRAN_SET;
         nextgoal = NPC_GOAL_IDLE;
     }
-    else if (*(U8*)(&npc->npcset.allowDetect) == 0)
+    else if (npc->npcset.allowDetect == 0)
     {
         *trantype = GOAL_TRAN_SET;
         nextgoal = NPC_GOAL_IDLE;
@@ -5766,7 +5766,7 @@ S32 zNPCGoalHokeyPokey::Process(en_trantype* trantype, F32 dt, void* updCtxt, xS
     {
         cnt_loop = MAX(2, cnt_loop);
     }
-    else if (!*(U8*)(&npc->npcset.allowDetect))
+    else if (!npc->npcset.allowDetect)
     {
         *trantype = GOAL_TRAN_SET;
         nextgoal = NPC_GOAL_IDLE;

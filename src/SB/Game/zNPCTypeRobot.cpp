@@ -5608,7 +5608,7 @@ S32 ROBO_grul_goAlertMelee(xGoal* rawgoal, void*, en_trantype* trantype, F32, vo
         return 0;
     }
 
-    if ((U8)npc->npcset.allowDetect == 0)
+    if (npc->npcset.allowDetect == 0)
     {
         return 0;
     }
@@ -5659,7 +5659,7 @@ S32 ROBO_grul_goAlertLobber(xGoal* rawgoal, void*, en_trantype* trantype, F32, v
         return 0;
     }
 
-    if ((U8)npc->npcset.allowDetect == 0)
+    if (npc->npcset.allowDetect == 0)
     {
         return 0;
     }
@@ -5758,7 +5758,7 @@ S32 SLEP_grul_goAlert(xGoal* rawgoal, void*, en_trantype* trantype, F32, void*)
         return 0;
     }
 
-    if ((U8)npc->npcset.allowDetect == 0)
+    if (npc->npcset.allowDetect == 0)
     {
         return 0;
     }
