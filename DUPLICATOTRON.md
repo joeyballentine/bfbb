@@ -5048,6 +5048,47 @@ against the target's disassembly, do not trust the fuzzy %.
    transition set on the state it returns to would show up exactly like this.
    Next step: log the anim state name each frame while attempting a bowl,
    before and after damage, and see which state it falls into and why.
-4. **Goo (water) does not appear in levels.** Start at `zFX`'s goo functions
+4. **Music does not stop when it should -- tracks overlap.** Switching between
+   the sliding-track music and the main track leaves both playing. `zMusicDo`
+   does stop the previous voice on its own track
+   (`if (sMusicTrack[track].snd_id != 0) xSndStop(...)`), so suspect either the
+   *other* track (TRACK_COUNT is 2 and each is stopped independently) or the
+   notify/queue layer choosing a different track for the new music.
+   Sub-100 functions left in `zMusic` after this session's fixes:
+   `zMusicNotifyEvent` 81.21%, `zMusicDo` ~86%, `zMusicSetVolume` 70.75%,
+   `zMusicNotify` 98.06%. Note `zMusicUpdate`'s per-track gate --
+   `(gGameMode == eGameMode_Game) == sMusicQueueData[i]->game_state` -- was
+   only just corrected (55cd4099), so re-read the queue/track selection with
+   that in mind. `zMusicKill` stops both tracks; check who calls it on scene
+   and situation changes.
+5. **Goo (water) does not appear in levels.** Start at `zFX`'s goo functions
    (`zFXGooEventMelt` 93.23%) and whatever renders the goo surface; also check
    the JSP/env path, since goo is level geometry rather than an entity.
+
+### Resuming after a compact
+
+Branch state at 2026-08-25: working tree clean, matching DOL sha1 **306526d9**
+unchanged, Game Code **79.3402% exact / 99.01354% fuzzy / 7200 functions**.
+The playtest build is playable.
+
+To build and run:
+
+    python configure.py --non-matching && ninja
+    python tools/playtest_iso.py "<retail iso>" "E:/ROMS/GC-WIi/Roms/BFBB-decomp-playtest.iso"
+
+The retail disc is `SpongeBob SquarePants - Battle for Bikini Bottom.iso` under
+`E:/ROMS/GC-WIi/Roms`. Dolphin is the one in `Downloads/Dolphin-x64`; launch it
+with `--batch --exec=<playtest iso> --config Dolphin.Interface.UsePanicHandlers=False`
+and read `%APPDATA%/Dolphin Emulator/Logs/dolphin.log`. Delete that log before
+each run, and Stop-Process the old Dolphin *first* -- otherwise the delete races
+the exit and two runs concatenate into one file, which has burned a cycle twice.
+
+`python configure.py` (no flag) restores the matching build; verify sha1
+306526d9 and the Game Code numbers before every commit.
+
+Scratch tools worth rebuilding if lost (they lived in the session scratchpad):
+a per-symbol disassembly differ with branch targets normalised, which is how
+most of these bugs were localised, and the same thing for relocations, for when
+instructions match but the score does not. Resolve float constants with
+`llvm-objdump -s -j .sdata2 <retail .o>` plus the `@NNN` offsets from
+`llvm-nm -S` -- guessing them sends you the wrong way (@688 was 0.25f, not 25.0f).
