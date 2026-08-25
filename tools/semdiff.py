@@ -54,6 +54,13 @@ POOL = re.compile(r"@\d+")
 # it in floods every function that touches a static with false differences --
 # it buried a real fnmsubs/fnmadds sign error in xTRC under 50 phantom terms.
 LOCALNUM = re.compile(r"\$\d+")
+# Our decomp spells a recovered local static `sStripVert_2188` where CW emits
+# `sStripVert$2188`. Same object, different spelling -- but a symbol name is
+# attached to every instruction that references it, so the mismatch is counted
+# once per reference. It reported 172 differing terms for xFXShineRender, which
+# has 8, and put it top of srcprogress --list. Three digits or more, so an
+# ordinary identifier ending in a small number is left alone.
+DECOMPNUM = re.compile(r"_\d{3,}\b")
 # A bare hex/decimal word that is a branch destination rather than a value.
 BRANCH = re.compile(r"^(b|b[a-z]{1,4}|b[a-z]{1,4}\+|b[a-z]{1,4}-)$")
 
@@ -73,6 +80,7 @@ def norm(formatted):
     rest = QR.sub("QR", rest)
     rest = POOL.sub("@P", rest)
     rest = LOCALNUM.sub("$N", rest)
+    rest = DECOMPNUM.sub("$N", rest)
     return mnem + " " + rest.strip()
 
 
@@ -92,7 +100,7 @@ def instrs(sym, names):
             # objects number their symbols differently, so the index itself is
             # meaningless -- resolve it to the name, which is not.
             nm = names[t] if isinstance(t, int) and 0 <= t < len(names) else str(t)
-            nm = LOCALNUM.sub("$N", POOL.sub("@P", nm))
+            nm = DECOMPNUM.sub("$N", LOCALNUM.sub("$N", POOL.sub("@P", nm)))
             out.append(norm(s) + " <%s>" % nm)
         else:
             out.append(norm(s))
