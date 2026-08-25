@@ -1493,7 +1493,7 @@ S32 xSweptSphereToTriangle(xSweptSphere* sws, xVec3* v0, xVec3* v1, xVec3* v2)
         F32 dot1 = (p2y - p1y) * (contx - p1x) - (p2x - p1x) * (conty - p1y);
         F32 dot2 = (p0y - p2y) * (contx - p2x) - (p0x - p2x) * (conty - p2y);
         if ((dot0 >= -1e-5f && dot1 >= -1e-5f && dot2 >= -1e-5f) ||
-            (dot0 <= -1e-5f && dot1 <= -1e-5f && dot2 <= -1e-5f))
+            (dot0 <= 1e-5f && dot1 <= 1e-5f && dot2 <= 1e-5f))
         {
             sws->curdist = testdist;
             sws->contact = contact;
