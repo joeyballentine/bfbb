@@ -3386,7 +3386,7 @@ S32 zNPCGoalBossPatSpawn::Process(en_trantype* trantype, F32 dt, void* updCtxt, 
 
     this->timeInGoal += dt;
 
-    Pat_FaceTarget(pat, (xVec3*)&globals.player.ent.model->Mat->pos, f2629, dt);
+    Pat_FaceTarget(pat, (xVec3*)&globals.player.ent.model->Mat->pos, f1673, dt);
 
     F32 animTime = pat->model->Anim->Single->Time;
 
