@@ -156,7 +156,7 @@ S32 xStricmp(const char* string1, const char* string2)
 {
     U8 flag1;
     U8 flag2;
-    S32 finished = 0;
+    S32 result = 0;
     U32 c1 = 0;
     U32 c2 = 0;
 
@@ -178,14 +178,14 @@ S32 xStricmp(const char* string1, const char* string2)
         }
         S32 upper1 = flag1 ? c1 - 32 : c1;
 
-        if (upper1 != upper2 || finished)
+        if (upper1 != upper2 || result)
         {
             break;
         }
 
         if (c1 == 0 || c2 == 0)
         {
-            finished = 1;
+            result = 1;
         }
         else
         {
