@@ -5031,6 +5031,11 @@ against the target's disassembly, do not trust the fuzzy %.
    from SB.INI (`player.state.out_of_bounds.*`, parsed in
    `oob_state::load_settings`), so check the parsed `fixed` values first --
    that is a data path, not code.
-3. **Goo (water) does not appear in levels.** Start at `zFX`'s goo functions
+3. **Bubble Bowl cancels immediately** -- the ability starts and aborts, so the
+   bubble can never be bowled. Start at `zEntPlayer`'s bubble-bowl state and
+   `zEntCruiseBubble`/`zFX_SpawnBubbleWall`; also check the ability-unlock and
+   `globals.player.g.PowerUp[]` path, since that is read from SB.INI and from
+   the savegame client that `XSER_get_client` used to corrupt.
+4. **Goo (water) does not appear in levels.** Start at `zFX`'s goo functions
    (`zFXGooEventMelt` 93.23%) and whatever renders the goo surface; also check
    the JSP/env path, since goo is level geometry rather than an entity.
