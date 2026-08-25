@@ -19,7 +19,12 @@
 #define CAMERAFX_ZOOM_MODE_2 2
 #define CAMERAFX_ZOOM_MODE_3 3
 
+#define CAMERAFX_TYPE_NONE 0
+#define CAMERAFX_TYPE_ZOOM 1
 #define CAMERAFX_TYPE_SHAKE 2
+
+void xCameraFXZoomUpdate(cameraFX* f, F32 dt, const xMat4x3*, xMat4x3* m);
+void xCameraFXShakeUpdate(cameraFX* f, F32 dt, const xMat4x3*, xMat4x3* m);
 
 S32 sCamCollis;
 volatile S32 xcam_collis_owner_disable;
@@ -30,7 +35,9 @@ RpAtomic* sInvisWallHack;
 F32 gCameraLastFov;
 static xMat4x3 sCameraFXMatOld;
 cameraFX sCameraFX[10];
-cameraFXTableEntry sCameraFXTable[3] = {};
+cameraFXTableEntry sCameraFXTable[3] = { { CAMERAFX_TYPE_NONE, NULL, NULL },
+                                         { CAMERAFX_TYPE_ZOOM, xCameraFXZoomUpdate, NULL },
+                                         { CAMERAFX_TYPE_SHAKE, xCameraFXShakeUpdate, NULL } };
 
 zGlobals globals;
 

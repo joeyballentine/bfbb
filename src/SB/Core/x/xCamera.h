@@ -53,7 +53,7 @@ struct cameraFX
 struct cameraFXTableEntry
 {
     S32 type;
-    void (*func)(cameraFX*, F32, xMat4x3*, xMat4x3*);
+    void (*func)(cameraFX*, F32, const xMat4x3*, xMat4x3*);
     void (*funcKill)(cameraFX*);
 };
 
