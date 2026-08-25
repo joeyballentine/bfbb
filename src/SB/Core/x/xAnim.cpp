@@ -110,7 +110,7 @@ static U8 _xCheckAnimNameInner(const char* name, const char* pattern, S32 patter
                     U8 first = 1;
                     S32 parenCount = 0;
 
-                    while (pattern[check] != NULL && parenCount > -1)
+                    while (pattern[check] != NULL && parenCount >= 0)
                     {
                         if (pattern[check] == '(')
                         {
@@ -178,7 +178,8 @@ static U8 _xCheckAnimNameInner(const char* name, const char* pattern, S32 patter
         case '(':
             patternCurrent++;
             U8 done = 0;
-            const char* current = &pattern[patternCurrent];
+            const char* groupStart = &pattern[patternCurrent];
+            const char* current = groupStart;
             while (*current != ')' && *current != NULL)
             {
                 const char* startPattern = current;
@@ -247,7 +248,7 @@ static U8 _xCheckAnimNameInner(const char* name, const char* pattern, S32 patter
             {
                 current++;
             }
-            patternCurrent += current - pattern;
+            patternCurrent += current - groupStart;
             if (!done)
             {
                 return 0;
@@ -303,7 +304,7 @@ static U8 _xCheckAnimNameInner(const char* name, const char* pattern, S32 patter
             {
                 positiveEnd++;
             }
-            patternCurrent += &positiveEnd[patternCurrent] - &pattern[patternCurrent];
+            patternCurrent += positiveEnd - current;
             if (matched == 0)
             {
                 return 0;
@@ -391,7 +392,7 @@ float CalcRecipBlendMax(U16* arg0)
             f3 = 1.0f / (0.0009765625f * arg0[1]);
         }
 
-        f3 = 0.001f * arg0[0] + f3;
+        f3 = 0.0009765625f * arg0[0] + f3;
         if (f3 > max)
         {
             max = f3;
@@ -870,12 +871,12 @@ void _xAnimTableAddTransition(xAnimTable* table, xAnimTransition* tran, const ch
     xAnimTransitionList* tlist;
     xAnimTransition* substTransitionList[32];
 
-    char extra[128];
     char tempName[128];
+    char extra[128];
 
     U8 bVar2 = false;
     U8 bVar1 = false;
-    S32 iVar12 = 0;
+    U32 iVar12 = 0;
 
     if (dest != NULL)
     {
@@ -913,29 +914,40 @@ void _xAnimTableAddTransition(xAnimTable* table, xAnimTransition* tran, const ch
                 {
                     if (bVar2)
                     {
-                        for (const char* tempIterator = dest; *tempIterator != NULL; ++tempIterator)
+                        // tempName is a run of NUL-separated capture groups written by
+                        // _xCheckAnimNameInner, so each '@'/'~' in dest consumes the next one.
+                        const char* tempIterator = tempName;
+                        char* extraIterator = extra;
+                        U8 allowMissingState = false;
+
+                        for (S32 j = 0; dest[j] != NULL; ++j)
                         {
-                            if (*dest == '@' || *dest == '~')
+                            if (dest[j] == '@' || dest[j] == '~')
                             {
-                                bVar1 = *dest == '~';
-                                U32 l = strlen(tempName);
-                                strcpy(extra, tempName);
+                                allowMissingState = dest[j] == '~';
+                                U32 l = strlen(tempIterator);
+                                strcpy(extraIterator, tempIterator);
+                                tempIterator += l;
+                                extraIterator += l;
+                                tempIterator++;
                             }
                             else
                             {
-                                *extra = *dest;
+                                *extraIterator = dest[j];
+                                extraIterator++;
                             }
                         }
-                        *extra = NULL;
+                        *extraIterator = NULL;
+
                         xAnimState* sp = xAnimTableGetState(table, extra);
-                        if (bVar1 && sp == NULL)
+                        if (allowMissingState && sp == NULL)
                         {
                             continue;
                         }
 
-                        xAnimTransition* duplicatedTransition = tran;
                         if (iVar12 != 0)
                         {
+                            xAnimTransition* duplicatedTransition;
                             if (gxAnimUseGrowAlloc)
                             {
                                 duplicatedTransition = (xAnimTransition*)xMemGrowAlloc(
@@ -947,10 +959,11 @@ void _xAnimTableAddTransition(xAnimTable* table, xAnimTransition* tran, const ch
                                     gActiveHeap, sizeof(xAnimTransition), 0);
                             }
                             memcpy(duplicatedTransition, tran, sizeof(xAnimTransition));
+                            tran = duplicatedTransition;
                         }
-                        duplicatedTransition->Dest = sp;
+                        tran->Dest = sp;
+                        substTransitionList[iVar12] = tran;
                         iVar12++;
-                        substTransitionList[iVar12] = duplicatedTransition;
                     }
                     if (tran->Dest != state)
                     {
@@ -1004,15 +1017,15 @@ void _xAnimTableAddTransition(xAnimTable* table, xAnimTransition* tran, const ch
                 curr->T = bVar2 ? substTransitionList[i] : tran;
                 curr->Next = NULL;
                 tail->Next = curr;
+                curr++;
             }
             else
             {
                 curr->T = bVar2 ? substTransitionList[i] : tran;
                 curr->Next = stateList[i]->Default;
                 stateList[i]->Default = curr;
+                curr++;
             }
-
-            curr++;
         }
     }
     else
