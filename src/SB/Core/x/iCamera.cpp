@@ -4,6 +4,7 @@
 
 #include "iScrFX.h"
 #include "iMath.h"
+#include "iSystem.h"
 
 #include "zGlobals.h"
 
@@ -296,7 +297,7 @@ void iCameraSetFogParams(iFogParams* fp, F32 time)
         xglobals->fogB = *fp;
 
         xglobals->fog_t0 = iTimeGet();
-        xglobals->fog_t1 = xglobals->fog_t0 + (iTime)(time * 1000.0f);
+        xglobals->fog_t1 = xglobals->fog_t0 + (iTime)(time * (GET_BUS_FREQUENCY() / 4));
     }
 }
 
