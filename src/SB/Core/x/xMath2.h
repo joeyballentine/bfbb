@@ -102,10 +102,12 @@ struct xVec2
         return tmp;
     }
 
-    xVec2 operator/=(F32 f)
+    xVec2& operator/=(F32 f)
     {
-        x /= f;
-        y /= f;
+        F32 inv = 1.0f / f;
+
+        x *= inv;
+        y *= inv;
 
         return *this;
     }
