@@ -192,6 +192,15 @@ SHAPE = re.compile(r"^(addi|addic|subi|add|subf|mulli|slwi|srwi|srawi|sraw"
 # not.
 MEMFORM = re.compile(r"^(lbz|lhz|lha|lwz|lfs|lfd|stb|sth|stw|stfs|stfd)(u|x|ux)$")
 
+# Saving and restoring callee-saved registers. lmw/stmw and the paired-single
+# psq_l/psq_st only ever appear in a prologue or epilogue, and lfd/stfd join
+# them there to save the halves of an FPR. How many registers a function saves
+# is decided by the allocator, so a difference made up ENTIRELY of these says
+# nothing about the source -- it was the whole of xScrFXGlareRender's apparent
+# `retail uses paired-singles` lead, which was really a colour expression being
+# recomputed sixteen times.
+FRAME = {"lmw", "stmw", "psq_l", "psq_st", "lfd", "stfd"}
+
 
 def exclusive_kinds(hit):
     """Mnemonics one side executes and the other never does, shape ignored.
@@ -208,8 +217,11 @@ def exclusive_kinds(hit):
         return f.group(1) if f else m
     t = set(mnem(x) for x in hit["target_only"])
     o = set(mnem(x) for x in hit["ours_only"])
-    return (sorted(m for m in t - o if not SHAPE.match(m)),
-            sorted(m for m in o - t if not SHAPE.match(m)))
+    et = sorted(m for m in t - o if not SHAPE.match(m))
+    eo = sorted(m for m in o - t if not SHAPE.match(m))
+    if set(et) | set(eo) <= FRAME:
+        return [], []          # register save/restore only; the allocator's business
+    return et, eo
 
 
 def main():
