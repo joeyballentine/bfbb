@@ -341,7 +341,7 @@ static RpCollisionTriangle* sphereHitsEnv3CB(RpIntersection* isx, RpWorldSector*
             {
                 xVec3SMul(&hdng, &tohit, 1.0f / dist);
                 dot = xVec3Dot(&hdng, &colls[OTHER].hdng);
-                if (iabs(dot) > 0.7010677f)
+                if (iabs(dot) > 0.70710677f)
                 {
                     if (colls[OTHER].dist < dist)
                     {
@@ -375,10 +375,10 @@ static RpCollisionTriangle* sphereHitsEnv3CB(RpIntersection* isx, RpWorldSector*
             odot = xVec3Dot(&hdng, &colls[OTHER].hdng);
             if (colls[OTHER].dist < dist)
             {
-                if (iabs(odot) > 0.7010677f)
+                if (iabs(odot) > 0.70710677f)
                 {
                     ndot = xVec3Dot(&hdng, &colls[NEXT2].hdng);
-                    if (iabs(ndot) > 0.7010677f)
+                    if (iabs(ndot) > 0.70710677f)
                     {
                         if (NEXT2 < OTHER)
                         {
@@ -402,7 +402,7 @@ static RpCollisionTriangle* sphereHitsEnv3CB(RpIntersection* isx, RpWorldSector*
             }
             else
             {
-                if (iabs(odot) > 0.7010677f)
+                if (iabs(odot) > 0.70710677f)
                 {
                     return tri;
                 }
