@@ -17,11 +17,14 @@ Usage:
   dwarforder.py [<path.cpp> ...]      default: every changed file with a peer
   dwarforder.py --min 95 [...]        only functions already at >= 95%
 """
+import difflib
 import json
 import os
 import re
 import subprocess
 import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 MIN = 0.0
 if "--min" in sys.argv:
@@ -121,6 +124,61 @@ else:
     files = subprocess.run(["git", "diff", "--name-only", "bfbbdecomp/main...HEAD",
                             "--", "src/*.cpp"], capture_output=True, text=True).stdout.split()
 
+OBJDUMP = os.path.join(ROOT, "build/binutils/powerpc-eabi-objdump")
+STACKREF = re.compile(r"-?\d+\(r1\)")
+
+
+def _stream(obj, mangled):
+    out = subprocess.run([OBJDUMP, "-d", "--section=.text", obj],
+                         capture_output=True, text=True).stdout.splitlines()
+    start = None
+    for i, l in enumerate(out):
+        if re.match(r"^[0-9a-f]{8} <%s>:" % re.escape(mangled), l):
+            start = i
+            break
+    if start is None:
+        return None
+    res = []
+    for l in out[start + 1:]:
+        if re.match(r"^[0-9a-f]{8} <", l):
+            break
+        m = re.match(r"^\s+[0-9a-f]+:\s+(?:[0-9a-f]{2} ){4}\s*(.*)$", l)
+        if m:
+            res.append(m.group(1).strip())
+    return res
+
+
+def stack_touching(relcpp, name):
+    """How many stack slots the two objects disagree about.
+
+    Declaration order assigns stack slots and does nothing else. So the question
+    is not whether the differing instructions mention r1 -- register allocation
+    moves those around constantly while the frame stays put -- but whether the
+    two objects reference a DIFFERENT SET of offsets from r1. If the sets match,
+    the frame is laid out identically and no amount of reordering will help.
+
+    xShadowVertical_DrawCache is the case that forced this: eight differing
+    instructions, four of them addressing r1, and every offset the same on both
+    sides (196(r1), 176(r1)). Its residual is register allocation, and moving
+    `tri` to dwarf's position changed nothing at all.
+    """
+    o = os.path.join(ROOT, "build/GQPE78/src", relcpp[:-4] + ".o")
+    t = os.path.join(ROOT, "build/GQPE78/obj", relcpp[:-4] + ".o")
+    if not (os.path.exists(o) and os.path.exists(t)):
+        return None
+    syms = subprocess.run([OBJDUMP, "-t", t], capture_output=True, text=True).stdout
+    cand = [l.split()[-1] for l in syms.splitlines()
+            if " F .text" in l and l.split()[-1].startswith(name)]
+    if not cand:
+        return None
+    A, B = _stream(t, cand[0]), _stream(o, cand[0])
+    if not A or not B:
+        return None
+    sa = set(m.group(0) for x in A for m in [STACKREF.search(x)] if m)
+    sb = set(m.group(0) for x in B for m in [STACKREF.search(x)] if m)
+    return len(sa ^ sb)
+
+
 rows = []
 for f in files:
     dw = "dwarf/" + f[len("src/"):]
@@ -141,9 +199,33 @@ for f in files:
         rows.append((p, f[len("src/"):], nm, common, ours))
 
 rows.sort(reverse=True)
-print("%-7s %-34s %s" % ("fuzzy", "file", "function"))
+print("%-7s %-6s %-30s %s" % ("fuzzy", "stack", "file", "function"))
+live = 0
 for p, f, nm, d, o in rows:
-    print("%6.2f%% %-34s %s" % (p, f, nm))
+    n = stack_touching(f, nm)
+    if n:
+        live += 1
+    print("%6.2f%% %-6s %-30s %s"
+          % (p, ("%d" % n) if n is not None else "?", f, nm))
     print("        dwarf order: %s" % ", ".join(d))
     print("        our order  : %s" % ", ".join(o))
 print("\n%d candidate functions (>= %.0f%%, order differs, >=2 shared locals)" % (len(rows), MIN))
+print("%d of them address a stack slot the target does not, or vice versa." % live)
+print("""
+stack = how many r1 offsets one object references and the other does not.
+Declaration order assigns stack slots and nothing else, so a candidate showing 0
+has the same frame layout as the target and cannot be explained by order however
+much the two declaration lists disagree. Its residual is register allocation,
+scheduling or data placement, and reordering will only churn it.
+
+Do not read `differing instructions that mention r1` as the signal -- register
+allocation moves those constantly while the frame stays put.
+xShadowVertical_DrawCache has four such instructions and every offset identical
+on both sides; moving `tri` to dwarf's position changed nothing.
+
+Three worked examples, all reverted: MoveFrolic disagrees on two locals and is
+201/203 instructions from the target, all of it one expression computed into
+f1-then-f27 instead of f27-then-f1. NPCC_aimVary's residual is the
+zero-initialiser blob at a different .rodata offset. SlideTrackUpdate compiles
+identically either way -- 99.4236% both -- because triIndex never reaches the
+stack. Applying dwarf's order made the first two measurably worse.""")
