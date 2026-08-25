@@ -1391,7 +1391,38 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
     }
 }
 
-static PlayerStreakInfo sStreakInfo[3][4] = {};
+static PlayerStreakInfo sStreakInfo[3][4] = {
+    {
+        { FALSE, 0xdead, &sSpongeBobLHand, &sSpongeBobLElbow, 0.7f, 1, { 255, 255, 128, 255 },
+          { 196, 196, 64, 255 } },
+        { FALSE, 0xdead, &sSpongeBobRHand, &sSpongeBobRElbow, 0.7f, 1, { 255, 255, 128, 255 },
+          { 196, 196, 64, 255 } },
+        { FALSE, 0xdead, &sSpongeBobLFoot, &sSpongeBobLKnee, 0.7f, 1, { 255, 255, 128, 255 },
+          { 196, 196, 64, 255 } },
+        { FALSE, 0xdead, &sSpongeBobRFoot, &sSpongeBobRKnee, 0.7f, 1, { 255, 255, 128, 255 },
+          { 196, 196, 64, 255 } },
+    },
+    {
+        { FALSE, 0xdead, &sSandyLHand, &sSandyLElbow, 0.8f, 1, { 192, 192, 255, 255 },
+          { 192, 192, 255, 255 } },
+        { FALSE, 0xdead, &sSandyRHand, &sSandyRElbow, 0.8f, 1, { 192, 192, 255, 255 },
+          { 192, 192, 255, 255 } },
+        { FALSE, 0xdead, &sSandyLFoot, &sSandyLKnee, 0.8f, 1, { 192, 192, 255, 255 },
+          { 192, 192, 255, 255 } },
+        { FALSE, 0xdead, &sSandyRFoot, &sSandyRKnee, 0.8f, 1, { 192, 192, 255, 255 },
+          { 192, 192, 255, 255 } },
+    },
+    {
+        { FALSE, 0xdead, &sPatrickLHand, &sPatrickLElbow, 0.6f, 1, { 255, 133, 133, 255 },
+          { 255, 133, 133, 255 } },
+        { FALSE, 0xdead, &sPatrickRHand, &sPatrickRElbow, 0.6f, 1, { 255, 133, 133, 255 },
+          { 255, 133, 133, 255 } },
+        { FALSE, 0xdead, &sPatrickLFoot, &sPatrickLKnee, 0.6f, 1, { 255, 133, 133, 255 },
+          { 255, 133, 133, 255 } },
+        { FALSE, 0xdead, &sPatrickRFoot, &sPatrickRKnee, 0.6f, 1, { 255, 133, 133, 255 },
+          { 255, 133, 133, 255 } },
+    },
+};
 
 static void HealthReset();
 
@@ -6256,7 +6287,12 @@ static void zEntPlayer_StreakFX(xEnt* ent, F32)
                 }
             }
 
-            if (sStreakInfo[i][p].streakID != 0xdead)
+            if (sStreakInfo[i][p].streakID == 0xdead)
+            {
+                continue;
+            }
+
+            if (i == 0)
             {
                 iModelTagEval(ent->model->Data, sStreakInfo[i][p].tagA,
                               globals.player.model_spongebob->Mat, &sStreakInfo[i][p].a);
