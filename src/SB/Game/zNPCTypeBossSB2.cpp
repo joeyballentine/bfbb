@@ -343,7 +343,7 @@ namespace
     // clang-format on
 
     static const bool dizzy_round[9] = {
-        false, true, false, false, false, true, false, false, true
+        false, false, true, false, false, true, false, false, true
     };
 
     static const node_hook node_hooks[9] = {
