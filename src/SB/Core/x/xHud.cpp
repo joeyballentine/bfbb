@@ -56,12 +56,12 @@ namespace xhud
 
     void block_allocator::size_reserve(U32 size)
     {
-        void** ppvVar1 = (void**)xMemAllocSize(size);
-        void** ppvVar2 = (void**)((U32)ppvVar1 + size);
-        for (; ppvVar1 < ppvVar2; ppvVar1 = (void**)((U32)ppvVar1 + _block_size))
+        holder* block = (holder*)xMemAllocSize(size);
+        holder* end = (holder*)((U32)block + size);
+        for (; block < end; block = (holder*)((U32)block + _block_size))
         {
-            *ppvVar1 = _top;
-            _top = ppvVar1;
+            block->_next = _top;
+            _top = block;
         }
     }
 
@@ -72,15 +72,16 @@ namespace xhud
             size_reserve(_alloc_size);
         }
 
-        void** ptr = (void**)_top;
-        _top = *ptr;
-        return ptr + 1;
+        holder* block = _top;
+        _top = block->_next;
+        return block + 1;
     }
 
     void block_allocator::free(void* ptr)
     {
-        *(void**)((U32)ptr - 4) = _top;
-        _top = (void*)((U32)ptr - 4);
+        holder* block = (holder*)ptr - 1;
+        block->_next = _top;
+        _top = block;
     }
 
     void block_allocator::flush()
