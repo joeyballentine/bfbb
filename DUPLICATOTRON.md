@@ -5019,7 +5019,28 @@ Reported while playing, not yet diagnosed. Method: see the
 `feedback_behavioural_bug_hunting` memory -- trace with OSReport, confirm
 against the target's disassembly, do not trust the fuzzy %.
 
-1. **Icon over breakable objects looks off** (position and/or timing).
+1. **Patrick's throw-target reticle appears while playing as SpongeBob.**
+   The user clarified 2026-08-25: the icon is the hand that shows where
+   Patrick can throw a carried object, and it is showing up for SpongeBob
+   when it should not. The asset is `target_reticle_hand`, loaded in
+   `zEntPlayer.cpp` and drawn by `zEntPlayer_ReticleRender` off the global
+   `gReticleTarget`.
+   **Ruled out so far:** `zEntPlayer_ReticleRender` and
+   `zEntPlayer_MinimalRender` are both 100%; `zEntRecurseModelInfo` (which
+   builds `model_patrick`) is 100%; and `zEntPlayer_Update` has exactly the
+   same 43 `gReticleTarget` and 9 `sTypeOfTarget` accesses as retail, with
+   every difference in that region being register allocation. The target is
+   only ever set inside `if (ent->model == globals.player.model_patrick)`
+   (Patrick, types 2 and 3) or `== model_sandy` (lasso, type 1), so on a
+   static reading SpongeBob cannot set it. `zThrown.cpp` is the only other
+   TU that touches `gReticleTarget`, and it only clears it.
+   **Next step is runtime, not static:** print `gCurrentPlayer`,
+   `sTypeOfTarget`, and which of the three model pointers `ent->model`
+   equals, from inside `zEntPlayer_ReticleRender` when it actually draws.
+   A stale/dangling `gReticleTarget` surviving a scene change is the
+   leading untested theory.
+
+1b. **(superseded)** Original framing was "icon over breakable objects".
    **Ruled out: it is not an NPC glyph.** `zNPCGlyph`'s two sub-100 functions
    (`ScenePrepare` 96.87%, `Glyphs_RenderAll` 97.70%) are both register
    allocation only, every `NPCGlyph` method is already 100%, and retail
@@ -5064,6 +5085,76 @@ against the target's disassembly, do not trust the fuzzy %.
 5. **Goo (water) does not appear in levels.** Start at `zFX`'s goo functions
    (`zFXGooEventMelt` 93.23%) and whatever renders the goo surface; also check
    the JSP/env path, since goo is level geometry rather than an entity.
+
+
+6. **RoboSandy phase 3: hitting the damage area only flashes red.** Reported
+   2026-08-25. The generic NPC damage tint fires but the boss-specific reaction
+   that should accompany it does not. Note `zNPCTypeBossSandy` is already almost
+   entirely 100% (only `Process` 99.36% and `Reset` 99.67% are below), so expect
+   the defect in shared boss/damage/FX code or in something that file calls,
+   not in `zNPCTypeBossSandy.cpp` itself. Likely shapes: an off-by-one or
+   `>=`/`>` on the phase index, or a switch missing its third case falling
+   through to just the tint.
+
+
+### 2026-08-25: eight playtest bugs fixed, and a whole bug class we had been blind to
+
+Game Code 79.3402% -> **79.4467%** exact, 99.01354% -> **99.04296%** fuzzy,
+7200 -> **7204** functions. Matching DOL sha1 306526d9 unchanged.
+
+Fixed this round (one commit each):
+
+| bug | cause |
+|---|---|
+| goo invisible in every level | `zFXGooRenderAtomic` had the default render nested inside the one-time texture lookup, and that callback *replaces* the entity's own |
+| music tracks overlapped | `zMusicDo` clobbered the voice handle with the asset hash, so every `xSndStop` in the game was a silent no-op |
+| startup crash, invalid read 0x90010018 | `unit_meter_widget::model` declared `[2][6]`, indexed `[unit][which]`; retail's store stride proves `[6][2]`. Constructor also discarded every `load_model` result |
+| out-of-bounds far too lenient | `out_state_type::update` tested `reset_time`, assigned from a constant on the line above, so `STATE_GRAB` was unreachable |
+| RoboSandy phase 3 only flashed red | animation index array off by one, no `0` terminator, and `NoHeadHit01` missing -- the only anim with no transition into it |
+| menu warp did nothing | `zUI_ScenePortalInit` inner loop wrote `i++` instead of `j++`, leaving every `task[1..7].portal.passet` NULL |
+| (latent) camera tweak removal | `for (j = i; j < count; j--)` -- an unbounded downward memmove through MEM1. Fires on any `Camera_Tweak` Stop event |
+| SpongeBob's bowl streak never fired | `zEntPlayer_StreakFX` hardcoded player index 1 and had the Bbowl/Stun branches swapped, plus an `&&`/`||` precedence bug |
+
+**The lesson that outlives these fixes: `fuzzy_match_percent` only measures
+`.text`.** `zNPCTypeBossSandy` reported 99.92% with the relevant function at a
+clean 100% while the bug sat entirely in `.rodata`. Sweep
+`report.json` `units[].sections[]` for non-`.text` sections under 100% -- there
+were 45 project-wide. Diff the bytes *and* the relocations
+(`llvm-readobj -r`, `.rela.<sec>`): **a missing relocation is a pointer that is
+NULL for us and non-NULL in retail**, i.e. a callback never invoked. That is how
+`static const tweak_callback cb = {};` was caught.
+
+Two tooling traps worth remembering. `llvm-objdump` does not know the PowerPC
+small-data relocation types and prints them as `Unknown`, so a differ matching
+only `R_PPC\S+` silently drops every `r13`-relative global and shows it as an
+anonymous `0(0)` -- precisely where wrong-global bugs live. And
+`llvm-objdump -s` prints 4-digit addresses, not 8.
+
+Ruled out, do not re-tread:
+- **`GetCurrentH()` using `dMultiplier`/`dOffset` for height is retail's own
+  bug**, faithfully reproduced (retail loads `dMultiplier__21@unnamed@zCamera_cpp@`).
+  `hMultiplier`/`hOffset` are written and never read. Do not "fix" it.
+- `move_hand` (73.89%), `xVec3::cross` (59%), `NPCS_SndTimersReset` (57%) and
+  `bind_nodes` (36 insns vs retail's 76) are all semantically exact -- float
+  scheduling and retail-side loop unrolling.
+- xAnim is **not** the Bubble Bowl cause: the substitution path it fixes needs a
+  `dest` containing `@` or `~`, and no caller in the tree passes one.
+
+Still open:
+1. **Patrick's throw reticle appears while playing as SpongeBob.** Every clear
+   and set of `gReticleTarget` matches retail (same 43 accesses, same 9
+   `sTypeOfTarget`), both render functions are 100%, and `zEntPlayerReset`
+   clears it on scene reset. Static analysis is exhausted -- needs the runtime
+   probe in `zEntPlayer_ReticleRender`.
+2. **Bubble Bowl cancels immediately, only after taking damage.** All `Bbowl*`
+   callbacks, `zEntPlayer_Damage` and the Hit checks are 100%; `HIT_STATES` is
+   byte-identical to retail (63 entries) and includes all five Bbowl states;
+   the charge loop in `zEntPlayer_Update` diffs clean. The live lead is
+   `xAnimPlayChooseTransition`: `if (curr && curr->T->Conditional)` discards a
+   state's **entire** transition list when the head node has no Conditional, so
+   the list order built by `_xAnimTableAddTransition` decides whether the Hit
+   transitions -- the only thing that clears `player_hit` -- are reachable at
+   all. If `player_hit` sticks, every later bowl attempt gets yanked.
 
 ### Resuming after a compact
 
