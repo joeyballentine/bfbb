@@ -48,10 +48,10 @@ void xSFXUpdateEnvironmentalStreamSounds(xSFX* pSFXList, U32 numSounds)
         F32 dist = xVec3Length2(&delta);
         if (dist > pSFXList[j].cachedOuterDistSquared)
         {
-            break;
+            continue;
         }
 
-        if (bestSFX == NULL)
+        if (*bestSFX == NULL)
         {
             *bestSFX = &pSFXList[j];
             *bestDist2 = dist;  
