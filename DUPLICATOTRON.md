@@ -5019,11 +5019,14 @@ Reported while playing, not yet diagnosed. Method: see the
 `feedback_behavioural_bug_hunting` memory -- trace with OSReport, confirm
 against the target's disassembly, do not trust the fuzzy %.
 
-1. **NPC glyph looks off.** The floating icon over things you can hit.
-   `zNPCGlyph` is 99.69%; `zNPCGlyph_ScenePrepare` 96.87% and
-   `zNPCCommon_Glyphs_RenderAll` 97.70% are the only sub-100 functions.
-   RenderAll has been diffed and is register allocation only -- one `mr r27,
-   r24` retail keeps and we fold. ScenePrepare not yet checked.
+1. **Icon over breakable objects looks off** (position and/or timing).
+   **Ruled out: it is not an NPC glyph.** `zNPCGlyph`'s two sub-100 functions
+   (`ScenePrepare` 96.87%, `Glyphs_RenderAll` 97.70%) are both register
+   allocation only, every `NPCGlyph` method is already 100%, and retail
+   references `GLYF_Acquire` from exactly the two objects we do --
+   `zNPCGoalRobo` (DAZED) and `zNPCGoalVillager` (TALK/TALKOTHER). The
+   NPC_GLYPH_SHINY* types are dead in retail too. Needs a screenshot to
+   identify what it actually is before going further.
 2. **Out-of-bounds detection is too lenient** (and the OOB hand with it).
    `oob_state` is the least-matching visual set on the player:
    `move_hand` 73.89%, `set_camera` 82.69%, `render_fade` 85.78%,
@@ -5031,11 +5034,20 @@ against the target's disassembly, do not trust the fuzzy %.
    from SB.INI (`player.state.out_of_bounds.*`, parsed in
    `oob_state::load_settings`), so check the parsed `fixed` values first --
    that is a data path, not code.
-3. **Bubble Bowl cancels immediately** -- the ability starts and aborts, so the
-   bubble can never be bowled. Start at `zEntPlayer`'s bubble-bowl state and
-   `zEntCruiseBubble`/`zFX_SpawnBubbleWall`; also check the ability-unlock and
-   `globals.player.g.PowerUp[]` path, since that is read from SB.INI and from
-   the savegame client that `XSER_get_client` used to corrupt.
+3. **Bubble Bowl cancels immediately, but only after taking damage.**
+   Ruled out: every `Bbowl*` callback is 100% (`BbowlCheck`, `BbowlCB`,
+   `BbowlWindupEndCheck`, `BbowlTossEndCB`, all the recover checks), and so is
+   every damage entry point (`zEntPlayer_Damage` x2, `DamageNPCKnockBack`,
+   `DamageKnockIntoAir`, `KnockToSafety`). `zEntPlayer_Damage` clears
+   `IsBubbleBowling` but leaves `sShouldBubbleBowl` / `sBubbleBowlTimer` /
+   `sBubbleBowlLastWindupTime`, which is also what retail does.
+   **Prime suspect: `_xAnimTableAddTransition` (81.89%, 279 retail insns vs
+   270 ours -- 9 genuinely missing).** It builds every animation transition
+   list; the two bugs already fixed in it (commits 45ec670d, bad45518) were
+   found this way. Since damage moves the player through a Hurt state, a wrong
+   transition set on the state it returns to would show up exactly like this.
+   Next step: log the anim state name each frame while attempting a bowl,
+   before and after damage, and see which state it falls into and why.
 4. **Goo (water) does not appear in levels.** Start at `zFX`'s goo functions
    (`zFXGooEventMelt` 93.23%) and whatever renders the goo surface; also check
    the JSP/env path, since goo is level geometry rather than an entity.
