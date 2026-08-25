@@ -261,7 +261,7 @@ S32 NPCTarget::FindNearest(S32 flg_consider, xBase* skipme, xVec3* from, F32 dst
     S32 i, ntyp;
 
     npc_best = NULL;
-    ds2_best = (dst_max < 0.0f) ? HUGE : SQ(dst_max);
+    ds2_best = (dst_max < 0.0f) ? FLOAT_MAX : SQ(dst_max);
 
     if (flg_consider & 0x1)
     {
@@ -1159,7 +1159,9 @@ S32 NPCC_pos_ofBase(xBase* tgt, xVec3* pos)
     case eBaseTypeCamera:
         xVec3Copy(pos, &globals.camera.mat.pos);
         break;
-    case eBaseTypeCruiseBubble:
+    case eBaseTypeDoor:
+    case eBaseTypeVolume:
+    case eBaseTypeEGenerator:
         known = 0;
         break;
     case eBaseTypePlayer:
@@ -1177,9 +1179,7 @@ S32 NPCC_pos_ofBase(xBase* tgt, xVec3* pos)
     case eBaseTypeBoulder:
         xVec3Copy(pos, xEntGetPos((xEnt*)tgt));
         break;
-    case eBaseTypeDoor:
-    case eBaseTypeVolume:
-    case eBaseTypeEGenerator:
+    case eBaseTypeCruiseBubble:
         known = 0;
         break;
     default:
