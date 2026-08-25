@@ -889,8 +889,8 @@ void _xAnimTableAddTransition(xAnimTable* table, xAnimTransition* tran, const ch
         }
     }
 
-    for (char* x = xStrTokBuffer(source, " ,\t\n\r", table); x != NULL;
-         x = xStrTokBuffer(source, " ,\t\n\r", table))
+    for (char* x = xStrTokBuffer(source, " ,\t\n\r", buffer); x != NULL;
+         x = xStrTokBuffer(NULL, " ,\t\n\r", buffer))
     {
         bVar1 = dest != NULL;
         if (!bVar1)
