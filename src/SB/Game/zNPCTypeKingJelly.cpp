@@ -265,7 +265,6 @@ namespace
     static xParEmitterCustomSettings thump_ring_emitter_settings;
     static xVec3 ring_segments[64];
     
-    // TODO: fix this up
     static char* sound_name[11][3] = {
         {
             "KJ_pulseupdown",
@@ -288,13 +287,13 @@ namespace
             NULL
         },
         {
-            "KJ_Land1",
+            "KJ_grunt",
             NULL,
             NULL
         },
         {
+            "KJ_Land1",
             "KJ_Land2",
-            NULL,
             NULL
         },
         {
