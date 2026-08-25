@@ -4962,3 +4962,53 @@ Agents may not edit shared headers, so they report them instead. Outstanding:
   mandatory `zDispatcher.h`/`zGlobals.h` chain and cannot be reached from the
   .cpp. This is the same unsolved problem as the POOL bucket: what creates a
   literal before its first `.text` use.
+
+## The playtest build is playable (2026-08-25)
+
+It boots, plays the Bink logos, reaches the title screen, loads a level, and
+plays. Music, voice lines, HUD counters and collectibles all work. Eleven
+behavioural bugs were fixed on top of the link work, none of which moved the
+matching DOL (still sha1 306526d9); Game Code went 79.2852% -> 79.3402% exact,
+7195 -> 7200 functions.
+
+Boot-blockers, in the order they were hit:
+
+- `xAnim::_xAnimTableAddTransition` re-tokenized its source string forever
+  (`xStrTokBuffer` restarts unless `string` is NULL) and used the animation
+  table as the tokenizer scratch buffer. The first ATBL asset never returned,
+  so the packer stopped issuing DVD reads 140 reads into boot.HIP.
+- The same function never linked its transition lists into the states: three
+  loops wrote through one `xAnimTransitionList*` without advancing it or
+  storing it back, plus one deref too many.
+- `isavegame`'s `cardwork` lost `ATTRIBUTE_ALIGN(32)`, so CARDMount DMA'd the
+  directory and FAT into a buffer 8 bytes off and every card read as BROKEN.
+- `oob_state::init` never set `shared.state`, so the first player update called
+  through a null vtable.
+- `xHud::for_each` passed the `xBase` header instead of the widget that follows
+  it, so `zGameSetup` called vtable slot 6 of a header. This was the "freezes
+  when loading gameplay" crash.
+- `xQuatSlerp` blended through two null pointers.
+
+Gameplay bugs after it booted:
+
+- `XSER_get_client` corrupted the serializer's client registry three ways, so
+  `zSceneLoad` read garbage for `sceneExist` and ran its *load* path over an
+  uninitialised buffer on first entry to a level — `xBaseLoad` then disabled
+  every entity. That is why no shiny object existed anywhere.
+- `zMusicUpdate` only counted its delay down when it was already negative, so
+  `zMusicDo` was never reached at all. Same condition had a `&`/`==`
+  precedence bug.
+- `meter_widget::set_value` stored the direction (+/-1) into `end_value`
+  instead of the target, and `updater` dropped the `value_vel * dt` term — the
+  two together are why every counter sat at 0, then at 1.
+- `iAnimEvalSKB` lerped bone Y and Z from the *end* key (`b + t*(b-a)`), which
+  is the vertical sway; its single-keyframe path also indexed `keys[i]` where
+  the target strides two keys per bone.
+- `zTalkBox::trigger_sound` returned out of the `ACTION_SET` case instead of
+  falling through, so no character ever spoke.
+
+The method that found all of these is written up in the
+`feedback_behavioural_bug_hunting` memory: trace our own code with `OSReport`,
+read the Dolphin log, and confirm against the target's disassembly. The fuzzy
+percentage is not the detector — most of these live in functions scoring 87-99%,
+while several sub-60% functions are semantically perfect.
