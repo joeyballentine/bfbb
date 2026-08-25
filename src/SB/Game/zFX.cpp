@@ -49,6 +49,7 @@ void __deadstripped_zFX()
     const char _555[0x28] = {};
     const char _556[0x28] = {};
     const char _557[0x28] = {};
+    const char _558[0x28] = {};
     const char _559[0x28] = {};
 
     const F32 _screen_bounds[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
