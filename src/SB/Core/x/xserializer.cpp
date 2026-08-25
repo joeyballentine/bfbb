@@ -413,18 +413,19 @@ static S32 xSER_ord_test(const void* key, void* elt)
 static st_SERIAL_CLIENTINFO* XSER_get_client(U32 idtag)
 {
     st_XSERIAL_DATA_PRIV* xsd = &g_xserdata;
-    st_SERIAL_CLIENTINFO* clt = xsd->cltnext;
+    st_SERIAL_CLIENTINFO* clt;
     S32 idx = XOrdLookup(&xsd->cltlist, (void*)idtag, xSER_ord_test);
 
     if (idx < 0)
     {
+        clt = xsd->cltnext;
+        xsd->cltnext = clt + 1;
         clt->idtag = idtag;
-        clt++;
         XOrdInsert(&xsd->cltlist, clt, xSER_ord_compare);
     }
     else
     {
-        clt = (st_SERIAL_CLIENTINFO*)&xsd->cltlist.list[idx];
+        clt = (st_SERIAL_CLIENTINFO*)xsd->cltlist.list[idx];
     }
 
     return clt;
