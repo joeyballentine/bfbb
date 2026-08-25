@@ -102,10 +102,10 @@ static void xCMprep(xCreditsData* data)
 
 static iColor_tag xCMcolor_scale(iColor_tag color, F32 t)
 {
-    F64 r = (F64)color.r;
-    F64 g = (F64)color.g;
-    F64 b = (F64)color.b;
-    F64 a = (F64)color.a * (F64)t;
+    F32 r = (F32)color.r;
+    F32 g = (F32)color.g;
+    F32 b = (F32)color.b;
+    F32 a = (F32)color.a * t;
 
     iColor_tag ret;
     xColorInit(&ret, (U8)r, (U8)g, (U8)b, (U8)a);
