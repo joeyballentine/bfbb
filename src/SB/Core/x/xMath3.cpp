@@ -695,16 +695,17 @@ F32 xQuatNormalize(xQuat* o, const xQuat* q)
 
 void xQuatSlerp(xQuat* q, const xQuat* a, const xQuat* b, F32 t)
 {
-    F32 one_sintheta;
+    F32 temp_s;
     F32 temp_t;
+    F32 one_sintheta;
     F32 abdot;
-    xQuat b2;
 
     xQuat qp1;
     xQuat qp2;
+    xQuat b2;
 
     abdot = xQuatDot(a, b);
-    if (abdot < 0.0)
+    if (abdot < 0.0f)
     {
         abdot = -abdot;
         b2.v.x = -b->v.x;
@@ -713,22 +714,21 @@ void xQuatSlerp(xQuat* q, const xQuat* a, const xQuat* b, F32 t)
         b2.s = -b->s;
         b = &b2;
     }
-    if (0.999 <= abdot)
+    if (abdot >= 0.999f)
     {
-        temp_t = 1.0 - t;
+        temp_t = 1.0f - t;
+        temp_s = t;
     }
     else
     {
         abdot = xacos(abdot);
-        one_sintheta = 1.0 / isin(abdot);
-        temp_t = isin(t);
-        temp_t = one_sintheta * temp_t;
-        abdot = isin(t * abdot);
-        t = one_sintheta * abdot;
+        one_sintheta = 1.0f / isin(abdot);
+        temp_t = one_sintheta * isin((1.0f - t) * abdot);
+        temp_s = one_sintheta * isin(t * abdot);
     }
 
     xQuatSMul(&qp1, a, temp_t);
-    xQuatSMul(&qp2, b, t);
+    xQuatSMul(&qp2, b, temp_s);
     xQuatAdd(q, &qp1, &qp2);
     xQuatNormalize(q, q);
     return;
