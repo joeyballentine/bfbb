@@ -3129,9 +3129,9 @@ static xEnt* GetPatrickTarget(xEnt* ent)
         }
         else if (tgtent->baseType == eBaseTypeNPC)
         {
-            // FIXME: This comparison looks like a fakematch
             U32 t = ((xNPCBasic*)tgtent)->SelfType();
-            if (t - NPC_TYPE_JELLYPINK <= 2 || t == NPC_TYPE_MIMEFISH)
+            if (t == NPC_TYPE_JELLYPINK || t == NPC_TYPE_JELLYBLUE ||
+                t == NPC_TYPE_KINGNEPTUNE || t == NPC_TYPE_MIMEFISH)
             {
                 continue;
             }
