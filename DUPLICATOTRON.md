@@ -1126,6 +1126,77 @@ whole-variable `volatile` on `zThrownCount` is firmly disproven by the
 target (it breaks six other functions in the unit and creates four new
 non-matching ones), so nothing has been papered over here.
 
+### Clause H: the THIRD query site FOUND AND PATCHED -- LICM's alias query (2026-08-25)
+
+**The "second query site in the code generator's redundant-load path" /
+"gFrameCount third site" hunt is over.** Alias.c holds FOUR dispatch tables
+in a row, and the float-meme work only ever found the last one:
+
+| table | consumer | callers |
+|---|---|---|
+| `0x5bd068` (3 entries) | `0x511a30` VN store-kill | ValueNumbering.c — clauses V, F |
+| **`0x5bd074` (3x3)** | **`0x511cb0(instr, expr)`** | **CodeMotion.c ONLY — clause H** |
+| `0x5bd098` (3x3) | `0x511e10` must-alias/full-overlap | CodeMotion.c |
+| `0x5bd0bc` (3x3) | `0x511fc0` scheduler may-alias | Scheduler.c + CodeMotion.c — clauses A/B/C/C+/E3n |
+
+`0x511cb0` is "may this loop store alias this hoist candidate's memref".
+Stock entry 0 is reference identity, so an `lfs` of a `.sdata2` literal was
+invariant in any loop storing to a static array and LICM hoisted it to the
+preheader. Retail answers may-alias and keeps the load in the loop — which
+is upstream of the WHOLE `zEntPlayer_SNDInit` residual: in-body reloads,
+remainder-loop reloads, and the unroll factors (the kept load doubles the
+body, so retail's 0.65f fill is a 16-wide loop where ours was 56 straight-line,
+and 0.77f x48 is retail 2x21 vs our full unroll).
+
+Clause H (shipped, see `patch_compiler.py` for the mechanism — it is a
+pre-dispatch hook covering all nine entries, living in a NEW second cave
+created by growing .text's raw size one page):
+
+    store base expr word == 5  AND  candidate base expr word == 5
+    AND candidate size <= 4  ->  may-alias
+
+Measured 2026-08-25, full ninja, DOL intact: **matched_functions 8403 ->
+8409 (+6/-0), zero sub-100 functions down anywhere.** GAME exact 80.226 ->
+80.349, fuzzy 99.1546 -> 99.2130. Gains: xScrFXGlareUpdate, xSndDelayedInit
+(59.459!), cruise_bubble::update_hud, PlayerTeeterCheck (the long-stuck
+78.649), zFXGooEventMelt, NPCS_SndTimersReset (56.984). Also up without
+crossing: xFXAuraUpdate 86.0->95.4, zEntPickup_SceneUpdate 96.3->99.5,
+**zEntPlayer_SNDInit 94.126 -> 99.188**, NPCS_SndTimersUpdate 86.8->98.4,
+zEntPlayer_Update 96.6->96.8. New compiler sha1
+`5c6862b641adb8845f0fc09a6569902df068a83f`.
+
+**Method that found it, because it generalises:** frida (pip-installed, works
+on the native Windows mwcceppc.exe; bypass sjiswrap and spawn the compiler
+directly so the hooks land in the right process) hooking `0x511a30`,
+`0x511fc0`, `0x511cb0` with caller addresses turned every "which path does
+this store take" argument into a five-minute measurement. Forcing a candidate
+predicate's answer in the running compiler (Interceptor onLeave
+`rv.replace(1)`) measures a clause's exact tree effect BEFORE spending any
+bytes; the byte implementation then reproduced the instrumented objects
+bit-for-bit. Scripts in the session scratchpad (`probe_alias.py`,
+`probe_cm3.py`, `force_cm.py`, `battery.py`, `fsolo.py`, `mkclauseH.py`).
+Pitfall for the next user: a frida `InvocationReturnValue` is only valid
+inside its callback — copy it (`rv.add(0)`) before storing, and capture
+recursive helpers like `0x512e20` at depth 0 only.
+
+Ruled out as frida A/Bs over the shipped clause (each measured as the delta
+of only the widening, all inert on the units that clause H moved): candidate
+size <= 8; dropping the store-side static gate; admitting declared-frame
+candidates. Forcing the SCHEDULER table (0x5bd0bc) entries 2/6, 1/3, or all
+nine to may-alias does not touch this population at all.
+
+Stale attributions this supersedes: "zEntPlayer_SNDInit is not a clause-V
+win waiting to happen" stays true, but its residual WAS one compiler defect
+after all — this one. `xFXAuraUpdate`'s "different sub-case, the killing
+store is indirect" reading was partly this too (+9.4 from clause H). The
+`ourAnims`/`ZNPC_AnimTable_BossPlankton` "literal load hoisted over an
+INDEXED frame store" candidate clause should be re-measured against this
+compiler before anyone chases it — the store there is into a FRAME array,
+which clause H's static gate excludes, so it is probably still open.
+`zEntPlayer_SNDPlayStreamRandom` (99.108) did not move and its "no
+intervening store, global CSE across blocks" reading stands; likewise
+`Process__10zNPCBSandy` and `zCameraTweakGlobal_Reset` did not move.
+
 ### The store-to-load forwarding defect: FIXED IN THE COMPILER (clause F, 2026-08-25)
 
 **This whole section is now historical.** Clause F (see `patch_compiler.py`)

@@ -338,7 +338,83 @@ GC/2.0p1 with the new layout and the same three scheduler entries, all 451
 units compile to objects with **identical SHA-1s** and not one symbol's match
 percentage moves.
 
-Both writes are guarded by the SHA-1 of the input and by the expected bytes at
+Clause H -- loop-invariant motion's alias query; a THIRD query site, hooked
+pre-dispatch (2026-08-25):
+
+    on 0x511cb0(store instr, hoist-candidate expr) -- CodeMotion.c's "may
+    this loop store alias this candidate memref" -- answer MAY-ALIAS when
+        the store's memref base expression is a plain static (word 5)
+        and the candidate's base expression is a plain static (word 5)
+        and the candidate is <= 4 bytes
+    for every operand-kind pair; anything else falls into the stock 3x3
+    dispatch at 0x5bd074, which no earlier clause had ever touched.
+
+This is the site the "gFrameCount hoisting is a THIRD site, reachable from
+neither table" note predicted. Alias.c holds FOUR dispatch tables in a row at
+0x5bd068 (VN store-kill, 3 entries), 0x5bd074 (0x511cb0, only CodeMotion.c
+calls it), 0x5bd098 (0x511e10, a must-alias/full-overlap test, also
+CodeMotion.c), and 0x5bd0bc (0x511fc0, scheduler + CodeMotion). The original
+float-meme work found only the last. Stock entry 0 of the 0x5bd074 table is
+reference identity, so a `lfs` of a .sdata2 literal was "invariant" in any
+loop that stores to a static array, and LICM hoisted it to the preheader; the
+retail compiler answers may-alias and leaves the load inside the loop. That
+one answer is upstream of everything the SNDInit residual shows: the reload
+inside the loop body, the reload inside the tail/remainder loops the unroller
+emits, and the unroll factor itself (the kept load doubles the body size:
+0.65f-fill goes 56-wide straight-line under stock, 16-wide loop in retail;
+0.77f x48 goes full-unroll under stock, 2x21 loop in retail).
+
+The mechanism was pinned with a live instrumented compile (frida): on a
+20-line repro of `for (i<59) sStreamVol[i]=0.65f;` CodeMotion asks 0x511cb0
+(whole-static-array store, size 236, word 5) x (4-byte literal, word 5) and
+stock answers no-alias. Forcing may-alias for exactly the clause-H predicate
+in the running compiler reproduced retail's loop shape on the repro and moved
+the real zEntPlayer unit before any byte was patched; the byte implementation
+then produced bit-identical objects to the instrumented run.
+
+Measured tree-wide (full ninja, 2026-08-25), DOL sha1 306526d9... intact:
+matched_functions **8403 -> 8409 (+6 / -0)**, GAME exact 80.226 -> 80.349,
+GAME fuzzy 99.1546 -> 99.2130, five more functions up without crossing, ZERO
+functions down anywhere, 6 units' matched-count up, none down. Gains:
+xScrFXGlareUpdate (90.476), xSndDelayedInit (59.459!), cruise_bubble's
+update_hud (97.311), PlayerTeeterCheck (78.649), zFXGooEventMelt (93.233),
+NPCS_SndTimersReset (56.984). Sub-100 movers, all up: xFXAuraUpdate 86.015
+-> 95.426, zEntPickup_SceneUpdate 96.341 -> 99.480, zEntPlayer_SNDInit
+94.126 -> 99.188 (the 10,160-byte fn this clause was aimed at; the residue
+is register roles and one store/load tiebreak, not reloads),
+zEntPlayer_Update 96.634 -> 96.776, NPCS_SndTimersUpdate 86.800 -> 98.400.
+
+Ruled out while fitting (each measured as a frida A/B over the byte-patched
+baseline, i.e. the delta of ONLY the widening):
+  * candidate size <= 8 instead of <= 4: zero objects change on zEntPlayer,
+    zNPCSndTable, xFX, xSnd -- the magic-double population that clause E3n
+    needed does not arise here.
+  * dropping the store-side static gate (any store kills small-static
+    candidates): zero change on zEntPlayer, xFX, zNPCSndTable,
+    zNPCTypeBossSandy, zEntPickup -- inert, so the narrow form is kept.
+  * admitting declared-frame candidates (word 0x00010005): zero change on
+    zEntPlayer, xFX, zNPCSndTable.
+Forcing entries 2/6, 1/3, or all nine of the SCHEDULER table (0x5bd0bc) to
+may-alias moves none of this -- measured before the site was found; LICM
+never consults that table for these loops.
+
+Clause H's space is a SECOND cave: the original 436-byte tail is full
+(432 used), so the patch grows .text's SizeOfRawData 0x17dc00 -> 0x17e000,
+inserting one page of zeros before .rdata's raw data and bumping
+PointerToRawData of every later section. No VA, RVA, VirtualSize or data
+directory changes (the image has no file-offset-based directories and a zero
+checksum); the loader maps the new page executable exactly as it maps the
+existing cave, which already sits past VirtualSize. The growth alone -- no
+clause -- compiles repro TUs to byte-identical objects. The hook rewrites
+0x511cb0's 7-byte table-dispatch `jmp [ebx*4+0x5bd074]` into a rel32 jump to
+the new cave; the HIGHLOW relocation that covered the old operand (RVA
+0x111ce8) is retyped to ABSOLUTE (the documented padding no-op) so a rebase
+under sjiswrap cannot scribble on the new code. The handler is
+position-independent: it re-enters the stock dispatch by rebuilding the
+table address with the call/pop trick, and answers may-alias by jumping to
+0x511cb0's own answer tail with ebx=1.
+
+All writes are guarded by the SHA-1 of the input and by the expected bytes at
 each offset, so an unexpected build fails loudly instead of being corrupted.
 """
 
@@ -353,7 +429,7 @@ BASE_VERSION = "GC/2.0p1"
 PATCHED_VERSION = "GC/2.0p1a"
 
 BASE_SHA1 = "74bc177b10d1bbe8a60a21a6c0aa86d2dd9c0668"
-PATCHED_SHA1 = "5965be762f2584ca4f6eac3d100abeae2251d214"
+PATCHED_SHA1 = "5c6862b641adb8845f0fc09a6569902df068a83f"
 
 # Everything the patch injects, assembled as one position-independent block at
 # VA 0x57ea4c -- the whole of the .text tail padding. 432 bytes of 436. The
@@ -420,6 +496,53 @@ VN_DISPATCH = (
     (0, 0x00511A53, 0x0057EBA5),  # stock: kill this object and its alias sets
 )
 
+# ---- clause H: CodeMotion's loop-invariance alias query -------------------
+#
+# Alias.c contains TWO more 3x3 dispatch tables that no earlier patch
+# touched, sitting between the VN table and the scheduler table:
+#   0x5bd074 -- used only by 0x511cb0(instr, expr), whose only callers are
+#               six sites in CodeMotion.c: "may this loop store alias this
+#               hoist candidate's memref"
+#   0x5bd098 -- used only by 0x511e10 (a must-alias/full-overlap test)
+# Clause H hooks the FIRST one, pre-dispatch, covering all nine entries:
+# if the store's base expression is a plain static (word 5) AND the
+# candidate's base expression is a plain static AND the candidate is <= 4
+# bytes, answer may-alias; otherwise fall into the stock dispatch.
+#
+# The hook is the 7-byte `jmp [ebx*4+0x5bd074]` at VA 0x511ce5 rewritten to
+# `jmp 0x57ec00; nop; nop`, with the HIGHLOW relocation that covered the old
+# instruction's table operand (RVA 0x111ce8) retyped to ABSOLUTE (a no-op
+# padding entry) so a rebase does not scribble on the new code. The handler
+# itself is position-independent: it re-enters the stock dispatch through a
+# call/pop-computed table address.
+#
+# The handler lives in a NEW cave: the original .text tail padding is full
+# (432/436), so the patch grows .text's SizeOfRawData by one page
+# (0x17dc00 -> 0x17e000), inserting 0x400 zero bytes before .rdata's raw
+# data and bumping PointerToRawData of every later section. No VirtualSize,
+# no VA and no RVA changes anywhere; the loader maps the new page executable
+# exactly as it does the existing cave (which already sits past VirtualSize).
+# A null test of the growth alone produced byte-identical objects.
+TEXT_SECTION_GROW = 0x400          # inserted at file 0x17e000
+TEXT_RAW_INSERT_AT = 0x17E000
+CAVE2_VA = 0x57EC00                # file 0x17e000 after the insertion
+CAVE2_BYTES = bytes.fromhex(
+    "8b4a1085c97421833905751c"     # store base expr: null/word!=5 -> disp
+    "8b481085c974158339057510"     # candidate base expr: null/word!=5 -> disp
+    "83781804770a"                 # candidate size > 4 -> disp
+    "bb01000000"                   # ebx = may-alias
+    "e9dd31f9ff"                   # jmp 0x511e05 (0x511cb0's answer tail)
+    "e80000000059"                 # call $+5; pop ecx    (PIC)
+    "81c147e40300"                 # add ecx, 0x5bd074 - next_va
+    "ff2499"                       # jmp [ecx+ebx*4]      (stock dispatch)
+)
+CM_DISPATCH_JMP_OFFSET = 0x1110E5  # VA 0x511ce5
+CM_DISPATCH_JMP_OLD = bytes.fromhex("ff249d74d05b00")
+CM_DISPATCH_JMP_NEW = bytes.fromhex("e916cf06009090")  # jmp 0x57ec00; nop; nop
+CM_RELOC_OFFSET = 0x1E6A98         # pre-insertion file offset of the u16
+CM_RELOC_OLD = 0x3CE8              # HIGHLOW @ RVA 0x111ce8
+CM_RELOC_NEW = 0x0CE8              # ABSOLUTE (padding no-op), offset kept
+
 
 def sha1(path: Path) -> str:
     return hashlib.sha1(path.read_bytes()).hexdigest()
@@ -470,6 +593,41 @@ def patch_compiler(compilers: Path) -> bool:
                     f"{found:#x}, expected {stock:#x}"
                 )
             struct.pack_into("<I", data, offset, replacement)
+
+    # ---- clause H (see the constants above for the mechanism) ----
+    # 1. hook the CodeMotion alias dispatch at VA 0x511ce5
+    off = CM_DISPATCH_JMP_OFFSET
+    if data[off:off + 7] != CM_DISPATCH_JMP_OLD:
+        sys.exit(f"{src}: bytes at {off:#x} are {data[off:off+7].hex()}, "
+                 f"expected {CM_DISPATCH_JMP_OLD.hex()}")
+    data[off:off + 7] = CM_DISPATCH_JMP_NEW
+    # 2. retype the displaced HIGHLOW relocation to a padding no-op
+    found = struct.unpack_from("<H", data, CM_RELOC_OFFSET)[0]
+    if found != CM_RELOC_OLD:
+        sys.exit(f"{src}: reloc word at {CM_RELOC_OFFSET:#x} is {found:#x}, "
+                 f"expected {CM_RELOC_OLD:#x}")
+    struct.pack_into("<H", data, CM_RELOC_OFFSET, CM_RELOC_NEW)
+    # 3. grow .text's raw data by one page and bump later sections' raw
+    #    pointers (all file offsets already written above are below the
+    #    insertion point in .text or belong to sections whose contents do
+    #    not move relative to their own start; the insertion happens LAST)
+    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    nsec = struct.unpack_from("<H", data, pe + 6)[0]
+    optsz = struct.unpack_from("<H", data, pe + 20)[0]
+    sec0 = pe + 24 + optsz
+    for i in range(nsec):
+        o = sec0 + 40 * i
+        name = bytes(data[o:o + 8]).rstrip(b"\0").decode()
+        rsz, rptr = struct.unpack_from("<II", data, o + 16)
+        if name == ".text":
+            if rsz != 0x17DC00:
+                sys.exit(f"{src}: .text raw size is {rsz:#x}, expected 0x17dc00")
+            struct.pack_into("<I", data, o + 16, rsz + TEXT_SECTION_GROW)
+        elif rptr >= TEXT_RAW_INSERT_AT and rptr != 0:
+            struct.pack_into("<I", data, o + 20, rptr + TEXT_SECTION_GROW)
+    data[TEXT_RAW_INSERT_AT:TEXT_RAW_INSERT_AT] = bytes(TEXT_SECTION_GROW)
+    # 4. the clause H handler, into the newly created zero page
+    data[TEXT_RAW_INSERT_AT:TEXT_RAW_INSERT_AT + len(CAVE2_BYTES)] = CAVE2_BYTES
 
     tmp = dst.with_suffix(".exe.tmp")
     tmp.write_bytes(bytes(data))
