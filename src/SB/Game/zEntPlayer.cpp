@@ -8886,361 +8886,361 @@ catchtunnel_done:
                 xSndSetPitch(heliSnd, 5.0f * (-1.0f + speed));
             }
         }
-    }
 
-    if (globals.player.JumpState == 0)
-    {
-        sLassoInfo->canCopter = 1;
-    }
-
-    if (sLasso->flags & 1)
-    {
-        if (sLassoInfo->swingTarget)
+        if (globals.player.JumpState == 0)
         {
-            if (strcmp(ent->model->Anim->Single->State->Name, "LassoSwingCatch02") == 0)
+            sLassoInfo->canCopter = 1;
+        }
+
+        if (sLasso->flags & 1)
+        {
+            if (sLassoInfo->swingTarget)
             {
-                if (sLasso->flags & 0x800)
+                if (strcmp(ent->model->Anim->Single->State->Name, "LassoSwingCatch02") == 0)
+                {
+                    if (sLasso->flags & 0x800)
+                    {
+                        xVec3Sub(&sLasso->crCenter, xBoundCenter(&sLassoInfo->swingTarget->bound),
+                                 (xVec3*)&ent->model->Mat->pos);
+                        xVec3AddScaled(&sLasso->crCenter,
+                                       (xVec3*)&sLassoInfo->swingTarget->model->Mat->up, -0.6f);
+                    }
+                    else
+                    {
+                        xVec3Copy(&sLasso->tgCenter,
+                                  xBoundCenter(&sLassoInfo->swingTarget->bound));
+                        xVec3AddScaled(&sLasso->tgCenter,
+                                       (xVec3*)&sLassoInfo->swingTarget->model->Mat->up, -0.6f);
+                    }
+                }
+                else if (strcmp(ent->model->Anim->Single->State->Name, "LassoSwing") == 0)
                 {
                     xVec3Sub(&sLasso->crCenter, xBoundCenter(&sLassoInfo->swingTarget->bound),
                              (xVec3*)&ent->model->Mat->pos);
                     xVec3AddScaled(&sLasso->crCenter,
                                    (xVec3*)&sLassoInfo->swingTarget->model->Mat->up, -0.6f);
                 }
-                else
-                {
-                    xVec3Copy(&sLasso->tgCenter,
-                              xBoundCenter(&sLassoInfo->swingTarget->bound));
-                    xVec3AddScaled(&sLasso->tgCenter,
-                                   (xVec3*)&sLassoInfo->swingTarget->model->Mat->up, -0.6f);
-                }
             }
-            else if (strcmp(ent->model->Anim->Single->State->Name, "LassoSwing") == 0)
-            {
-                xVec3Sub(&sLasso->crCenter, xBoundCenter(&sLassoInfo->swingTarget->bound),
-                         (xVec3*)&ent->model->Mat->pos);
-                xVec3AddScaled(&sLasso->crCenter,
-                               (xVec3*)&sLassoInfo->swingTarget->model->Mat->up, -0.6f);
-            }
-        }
 
-        if (sLassoInfo->target)
-        {
-            if (strcmp(ent->model->Anim->Single->State->Name, "LassoFly") == 0)
-            {
-                if (!sLassoInfo->targetGuide && !(sLasso->flags & 0x800))
-                {
-                    xVec3Copy(&sLasso->tgCenter, xBoundCenter(&sLassoInfo->target->bound));
-                    xVec3AddScaled(&sLasso->tgCenter, (xVec3*)&ent->model->Mat->at,
-                                   sLassoInfo->target->model->Data->boundingSphere.radius *
-                                       sLassoInfo->dist);
-                    xVec3AddScaled(&sLasso->tgCenter, (xVec3*)&ent->model->Mat->up,
-                                   sLassoInfo->target->model->Data->boundingSphere.radius *
-                                       sLassoInfo->dist);
-                }
-            }
-            else if (strcmp(ent->model->Anim->Single->State->Name, "LassoDestroy") == 0 &&
-                     !(sLasso->flags & 0x800))
-            {
-                xVec3Copy(&sLasso->tgCenter, xBoundCenter(&sLassoInfo->target->bound));
-            }
-        }
-
-        zLasso_Update(sLasso, ent, dt);
-
-        if (sLassoInfo->destroy && (sLasso->flags & 0x800))
-        {
             if (sLassoInfo->target)
             {
-                zEntEvent(sLassoInfo->target, 0x3a);
+                if (strcmp(ent->model->Anim->Single->State->Name, "LassoFly") == 0)
+                {
+                    if (!sLassoInfo->targetGuide && !(sLasso->flags & 0x800))
+                    {
+                        xVec3Copy(&sLasso->tgCenter, xBoundCenter(&sLassoInfo->target->bound));
+                        xVec3AddScaled(&sLasso->tgCenter, (xVec3*)&ent->model->Mat->at,
+                                       sLassoInfo->target->model->Data->boundingSphere.radius *
+                                           sLassoInfo->dist);
+                        xVec3AddScaled(&sLasso->tgCenter, (xVec3*)&ent->model->Mat->up,
+                                       sLassoInfo->target->model->Data->boundingSphere.radius *
+                                           sLassoInfo->dist);
+                    }
+                }
+                else if (strcmp(ent->model->Anim->Single->State->Name, "LassoDestroy") == 0 &&
+                         !(sLasso->flags & 0x800))
+                {
+                    xVec3Copy(&sLasso->tgCenter, xBoundCenter(&sLassoInfo->target->bound));
+                }
             }
 
-            sLassoInfo->destroy = 0;
-        }
+            zLasso_Update(sLasso, ent, dt);
 
-        if (sLassoInfo->copterTime > 0.0f)
-        {
-            sLassoInfo->copterTime -= dt;
-            if (sLassoInfo->copterTime < 0.0f)
+            if (sLassoInfo->destroy && (sLasso->flags & 0x800))
             {
-                sLassoInfo->canCopter = 0;
+                if (sLassoInfo->target)
+                {
+                    zEntEvent(sLassoInfo->target, 0x3a);
+                }
+
+                sLassoInfo->destroy = 0;
+            }
+
+            if (sLassoInfo->copterTime > 0.0f)
+            {
+                sLassoInfo->copterTime -= dt;
+                if (sLassoInfo->copterTime < 0.0f)
+                {
+                    sLassoInfo->canCopter = 0;
+                }
             }
         }
-    }
 
-    xModelTag* meleeTag = NULL;
+        xModelTag* meleeTag = NULL;
 
-    if (strcmp(ent->model->Anim->Single->State->Name, "Melee01") == 0 &&
-        ent->model->Anim->Single->Time >= globals.player.g.SandyMeleeMinFrame &&
-        ent->model->Anim->Single->Time <= globals.player.g.SandyMeleeMaxFrame)
-    {
-        meleeTag = &sSandyRHand;
-    }
-    else if (strcmp(ent->model->Anim->Single->State->Name, "JumpMelee01") == 0 ||
-             (sShouldMelee &&
-              strcmp(ent->model->Anim->Single->State->Name, "DJumpApex01") == 0))
-    {
-        meleeTag = &sSandyLFoot;
-    }
+        if (strcmp(ent->model->Anim->Single->State->Name, "Melee01") == 0 &&
+            ent->model->Anim->Single->Time >= globals.player.g.SandyMeleeMinFrame &&
+            ent->model->Anim->Single->Time <= globals.player.g.SandyMeleeMaxFrame)
+        {
+            meleeTag = &sSandyRHand;
+        }
+        else if (strcmp(ent->model->Anim->Single->State->Name, "JumpMelee01") == 0 ||
+                 (sShouldMelee &&
+                  strcmp(ent->model->Anim->Single->State->Name, "DJumpApex01") == 0))
+        {
+            meleeTag = &sSandyLFoot;
+        }
 
-    if (meleeTag)
-    {
-        xBound meleeB;
-        meleeB.type = XBOUND_TYPE_SPHERE;
+        if (meleeTag)
+        {
+            xBound meleeB;
+            meleeB.type = XBOUND_TYPE_SPHERE;
 
-        iModelTagEval(ent->model->Data, meleeTag, ent->model->Mat, &meleeB.sph.center);
+            iModelTagEval(ent->model->Data, meleeTag, ent->model->Mat, &meleeB.sph.center);
 
-        meleeB.sph.r = globals.player.g.SandyMeleeRadius;
+            meleeB.sph.r = globals.player.g.SandyMeleeRadius;
 
-        xQuickCullForBound(&meleeB.qcd, &meleeB);
-        MeleeAttackBoundCollide(ent, (zScene*)sc, &meleeB);
-    }
+            xQuickCullForBound(&meleeB.qcd, &meleeB);
+            MeleeAttackBoundCollide(ent, (zScene*)sc, &meleeB);
+        }
 
-    if (gReticleTarget && gReticleTarget->baseType == eBaseTypeNPC &&
-        !((zNPCCommon*)gReticleTarget)->CanRope())
-    {
-        gReticleTarget = NULL;
-        sTimeToRetarget = 0.0f;
-    }
-
-    if (gReticleTarget)
-    {
-        xVec3 disp;
-        xVec3Sub(&disp, (xVec3*)&gReticleTarget->model->Mat->pos,
-                 (xVec3*)&ent->model->Mat->pos);
-
-        if (xVec3Length2(&disp) > 100.0f)
+        if (gReticleTarget && gReticleTarget->baseType == eBaseTypeNPC &&
+            !((zNPCCommon*)gReticleTarget)->CanRope())
         {
             gReticleTarget = NULL;
             sTimeToRetarget = 0.0f;
         }
-    }
 
-    if (!globals.player.ControlOff && (globals.pad0->pressed & XPAD_BUTTON_O) &&
-        !gReticleTarget)
-    {
-        sTimeToRetarget = 0.0f;
-    }
-
-    sTimeToRetarget -= dt;
-
-    U32 sliding = ent->model->Anim->Single->State->UserFlags & 0x1000;
-
-    if (sliding && gReticleTarget && sTypeOfTarget != 1)
-    {
-        gReticleTarget = NULL;
-        sTimeToRetarget = 0.25f;
-    }
-
-    if (sTimeToRetarget < 0.0f)
-    {
-        if (((sLasso->flags & 1) == 0 && sLassoInfo->target == NULL && meleeTag == NULL) ||
-            globals.player.IsCoptering || sLassoInfo->swingTarget)
+        if (gReticleTarget)
         {
-            xEnt* oldTarget = gReticleTarget;
-            xEnt* closest = NULL;
+            xVec3 disp;
+            xVec3Sub(&disp, (xVec3*)&gReticleTarget->model->Mat->pos,
+                     (xVec3*)&ent->model->Mat->pos);
 
+            if (xVec3Length2(&disp) > 100.0f)
+            {
+                gReticleTarget = NULL;
+                sTimeToRetarget = 0.0f;
+            }
+        }
+
+        if (!globals.player.ControlOff && (globals.pad0->pressed & XPAD_BUTTON_O) &&
+            !gReticleTarget)
+        {
+            sTimeToRetarget = 0.0f;
+        }
+
+        sTimeToRetarget -= dt;
+
+        U32 sliding = ent->model->Anim->Single->State->UserFlags & 0x1000;
+
+        if (sliding && gReticleTarget && sTypeOfTarget != 1)
+        {
+            gReticleTarget = NULL;
             sTimeToRetarget = 0.25f;
+        }
 
-            F32 closestDist_sqr = 100.0f;
-            xVec3 toTarget;
-
-            if (globals.player.JumpState == 0 && !sliding)
+        if (sTimeToRetarget < 0.0f)
+        {
+            if (((sLasso->flags & 1) == 0 && sLassoInfo->target == NULL && meleeTag == NULL) ||
+                globals.player.IsCoptering || sLassoInfo->swingTarget)
             {
-                xRay3 ray;
-                xCollis rayCollis;
-                U32 i = 0;
+                xEnt* oldTarget = gReticleTarget;
+                xEnt* closest = NULL;
 
-                for (; i < ((zScene*)sc)->num_base; i++)
+                sTimeToRetarget = 0.25f;
+
+                F32 closestDist_sqr = 100.0f;
+                xVec3 toTarget;
+
+                if (globals.player.JumpState == 0 && !sliding)
                 {
-                    xEnt* targent = (xEnt*)((zScene*)sc)->base[i];
+                    xRay3 ray;
+                    xCollis rayCollis;
+                    U32 i = 0;
 
-                    if (targent->baseType != eBaseTypeDestructObj &&
-                        targent->baseType != eBaseTypeNPC)
+                    for (; i < ((zScene*)sc)->num_base; i++)
                     {
-                        continue;
-                    }
+                        xEnt* targent = (xEnt*)((zScene*)sc)->base[i];
 
-                    if (!(targent->flags & 1))
-                    {
-                        continue;
-                    }
-
-                    if (!targent->model)
-                    {
-                        continue;
-                    }
-
-                    xVec3Sub(&toTarget, (xVec3*)&targent->model->Mat->pos,
-                             (xVec3*)&ent->model->Mat->pos);
-
-                    F32 currDist_sqr = xVec3Length2(&toTarget);
-
-                    if (currDist_sqr >= 100.0f)
-                    {
-                        continue;
-                    }
-
-                    if (currDist_sqr >= closestDist_sqr)
-                    {
-                        continue;
-                    }
-
-                    if (targent->baseType == eBaseTypeNPC)
-                    {
-                        if ((((xNPCBasic*)targent)->SelfType() & 0xffffff00) == 'NTT\0' &&
-                            !((zNPCCommon*)targent)->flg_vuln)
+                        if (targent->baseType != eBaseTypeDestructObj &&
+                            targent->baseType != eBaseTypeNPC)
                         {
                             continue;
                         }
 
-                        if (((xNPCBasic*)targent)->SelfType() == 'NTT4')
+                        if (!(targent->flags & 1))
                         {
                             continue;
                         }
+
+                        if (!targent->model)
+                        {
+                            continue;
+                        }
+
+                        xVec3Sub(&toTarget, (xVec3*)&targent->model->Mat->pos,
+                                 (xVec3*)&ent->model->Mat->pos);
+
+                        F32 currDist_sqr = xVec3Length2(&toTarget);
+
+                        if (currDist_sqr >= 100.0f)
+                        {
+                            continue;
+                        }
+
+                        if (currDist_sqr >= closestDist_sqr)
+                        {
+                            continue;
+                        }
+
+                        if (targent->baseType == eBaseTypeNPC)
+                        {
+                            if ((((xNPCBasic*)targent)->SelfType() & 0xffffff00) == 'NTT\0' &&
+                                !((zNPCCommon*)targent)->flg_vuln)
+                            {
+                                continue;
+                            }
+
+                            if (((xNPCBasic*)targent)->SelfType() == 'NTT4')
+                            {
+                                continue;
+                            }
+                        }
+
+                        if (targent->baseType == eBaseTypeDestructObj &&
+                            !zEntDestructObj_GetHit((zEntDestructObj*)targent, 0x200))
+                        {
+                            continue;
+                        }
+
+                        if (targent->baseType == eBaseTypeNPC &&
+                            !((zNPCCommon*)targent)->CanRope())
+                        {
+                            continue;
+                        }
+
+                        rayCollis.flags = 0;
+
+                        F32 dist = xsqrt(currDist_sqr);
+
+                        ray.max_t = dist;
+                        ray.min_t = 0.5f;
+
+                        xVec3Copy(&ray.origin, (xVec3*)&ent->model->Mat->pos);
+                        ray.origin.y += 0.5f;
+
+                        xVec3SMul(&ray.dir, &toTarget, 1.0f / dist);
+
+                        ray.flags = 0xc00;
+
+                        xRayHitsSceneFlags(globals.sceneCur, &ray, &rayCollis, 0x10, 0x2e);
+
+                        if ((rayCollis.flags & 1) && rayCollis.optr != targent)
+                        {
+                            continue;
+                        }
+
+                        if (xVec3Dot(&toTarget, (xVec3*)&ent->model->Mat->at) <= 0.0f)
+                        {
+                            continue;
+                        }
+
+                        closestDist_sqr = currDist_sqr;
+                        closest = targent;
                     }
 
-                    if (targent->baseType == eBaseTypeDestructObj &&
-                        !zEntDestructObj_GetHit((zEntDestructObj*)targent, 0x200))
-                    {
-                        continue;
-                    }
-
-                    if (targent->baseType == eBaseTypeNPC &&
-                        !((zNPCCommon*)targent)->CanRope())
-                    {
-                        continue;
-                    }
-
-                    rayCollis.flags = 0;
-
-                    F32 dist = xsqrt(currDist_sqr);
-
-                    ray.max_t = dist;
-                    ray.min_t = 0.5f;
-
-                    xVec3Copy(&ray.origin, (xVec3*)&ent->model->Mat->pos);
-                    ray.origin.y += 0.5f;
-
-                    xVec3SMul(&ray.dir, &toTarget, 1.0f / dist);
-
-                    ray.flags = 0xc00;
-
-                    xRayHitsSceneFlags(globals.sceneCur, &ray, &rayCollis, 0x10, 0x2e);
-
-                    if ((rayCollis.flags & 1) && rayCollis.optr != targent)
-                    {
-                        continue;
-                    }
-
-                    if (xVec3Dot(&toTarget, (xVec3*)&ent->model->Mat->at) <= 0.0f)
-                    {
-                        continue;
-                    }
-
-                    closestDist_sqr = currDist_sqr;
-                    closest = targent;
+                    gReticleTarget = closest;
+                    sTypeOfTarget = 0;
                 }
 
-                gReticleTarget = closest;
-                sTypeOfTarget = 0;
-            }
-
-            if (!gReticleTarget || globals.player.JumpState)
-            {
-                F32 maxDist_sqr = 100.0f;
-                xEnt* targent = NULL;
-
-                for (S32 i = 0; i < sNumHitches; i++)
+                if (!gReticleTarget || globals.player.JumpState)
                 {
-                    xEnt* hitchent = sHitch[i];
+                    F32 maxDist_sqr = 100.0f;
+                    xEnt* targent = NULL;
 
-                    if (sLassoInfo->swingTarget == hitchent)
+                    for (S32 i = 0; i < sNumHitches; i++)
                     {
-                        continue;
+                        xEnt* hitchent = sHitch[i];
+
+                        if (sLassoInfo->swingTarget == hitchent)
+                        {
+                            continue;
+                        }
+
+                        if (!(hitchent->flags & 1))
+                        {
+                            continue;
+                        }
+
+                        xVec3Sub(&toTarget, (xVec3*)&hitchent->model->Mat->pos,
+                                 (xVec3*)&ent->model->Mat->pos);
+
+                        if (globals.player.JumpState == 0 && toTarget.y <= 1.0f)
+                        {
+                            continue;
+                        }
+
+                        F32 currDist_sqr = xVec3Length2(&toTarget);
+
+                        if (currDist_sqr >= maxDist_sqr)
+                        {
+                            continue;
+                        }
+
+                        if (xVec3Dot(&toTarget, (xVec3*)&ent->model->Mat->at) <= 0.0f)
+                        {
+                            continue;
+                        }
+
+                        maxDist_sqr = currDist_sqr;
+                        targent = hitchent;
                     }
 
-                    if (!(hitchent->flags & 1))
+                    if (targent)
                     {
-                        continue;
+                        gReticleTarget = targent;
+                        sTypeOfTarget = 1;
                     }
+                }
 
-                    xVec3Sub(&toTarget, (xVec3*)&hitchent->model->Mat->pos,
+                if (gReticleTarget != oldTarget)
+                {
+                    sReticleAlpha = 0.0f;
+                }
+            }
+        }
+
+        if (strcmp(ent->model->Anim->Single->State->Name, "DJumpApex01") != 0)
+        {
+            sShouldMelee = 0;
+        }
+
+        if (((sLasso->flags & 1) == 0 && sLassoInfo->target == NULL && meleeTag == NULL) ||
+            globals.player.IsCoptering)
+        {
+            sLassoInfo->target = NULL;
+            sLassoInfo->swingTarget = NULL;
+
+            if (!globals.player.ControlOff && (globals.pad0->pressed & XPAD_BUTTON_O))
+            {
+                if (gReticleTarget)
+                {
+                    xVec3 disp;
+                    xVec3Sub(&disp, (xVec3*)&gReticleTarget->model->Mat->pos,
                              (xVec3*)&ent->model->Mat->pos);
 
-                    if (globals.player.JumpState == 0 && toTarget.y <= 1.0f)
+                    F32 dist = xVec3Length(&disp);
+
+                    switch (sTypeOfTarget)
                     {
-                        continue;
+                    case 0:
+                        sLassoInfo->target = gReticleTarget;
+                        sLassoInfo->dist = dist / 10.0f;
+                        break;
+                    case 1:
+                        sLassoInfo->swingTarget = gReticleTarget;
+                        sLassoInfo->dist = dist * 0.25f;
+                        break;
                     }
-
-                    F32 currDist_sqr = xVec3Length2(&toTarget);
-
-                    if (currDist_sqr >= maxDist_sqr)
-                    {
-                        continue;
-                    }
-
-                    if (xVec3Dot(&toTarget, (xVec3*)&ent->model->Mat->at) <= 0.0f)
-                    {
-                        continue;
-                    }
-
-                    maxDist_sqr = currDist_sqr;
-                    targent = hitchent;
-                }
-
-                if (targent)
-                {
-                    gReticleTarget = targent;
-                    sTypeOfTarget = 1;
                 }
             }
-
-            if (gReticleTarget != oldTarget)
+            else if (!globals.player.ControlOff && (globals.pad0->pressed & XPAD_BUTTON_TRIANGLE) &&
+                     strcmp(ent->model->Anim->Single->State->Name, "LedgeGrab01") == 0 &&
+                     !globals.player.IsCoptering && !zEntTeleportBox_playerIn())
             {
-                sReticleAlpha = 0.0f;
+                sShouldMelee = 1;
             }
-        }
-    }
-
-    if (strcmp(ent->model->Anim->Single->State->Name, "DJumpApex01") != 0)
-    {
-        sShouldMelee = 0;
-    }
-
-    if (((sLasso->flags & 1) == 0 && sLassoInfo->target == NULL && meleeTag == NULL) ||
-        globals.player.IsCoptering)
-    {
-        sLassoInfo->target = NULL;
-        sLassoInfo->swingTarget = NULL;
-
-        if (!globals.player.ControlOff && (globals.pad0->pressed & XPAD_BUTTON_O))
-        {
-            if (gReticleTarget)
-            {
-                xVec3 disp;
-                xVec3Sub(&disp, (xVec3*)&gReticleTarget->model->Mat->pos,
-                         (xVec3*)&ent->model->Mat->pos);
-
-                F32 dist = xVec3Length(&disp);
-
-                switch (sTypeOfTarget)
-                {
-                case 0:
-                    sLassoInfo->target = gReticleTarget;
-                    sLassoInfo->dist = dist / 10.0f;
-                    break;
-                case 1:
-                    sLassoInfo->swingTarget = gReticleTarget;
-                    sLassoInfo->dist = dist * 0.25f;
-                    break;
-                }
-            }
-        }
-        else if (!globals.player.ControlOff && (globals.pad0->pressed & XPAD_BUTTON_TRIANGLE) &&
-                 strcmp(ent->model->Anim->Single->State->Name, "LedgeGrab01") == 0 &&
-                 !globals.player.IsCoptering && !zEntTeleportBox_playerIn())
-        {
-            sShouldMelee = 1;
         }
     }
 
