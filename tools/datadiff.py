@@ -21,6 +21,9 @@ Usage:
   datadiff.py                       every game unit with a data gap, worst first
   datadiff.py <unit-frag> ...       detail for matching units
   datadiff.py <unit-frag> -n 40     show up to N differences per section
+  datadiff.py --consts              .sdata2 constants that differ in VALUE,
+                                    compared as multisets so pool order is
+                                    ignored -- semdiff's blind spot
 """
 
 import json
@@ -162,8 +165,52 @@ def detail(unit, limit):
                     print("       ours-only  : %s + %s  x%d" % (s[:58], a, c))
 
 
+def consts():
+    """Compare .sdata2 / .sbss2 as multisets of 4-byte words.
+
+    Those sections hold nothing but numeric constants, so order is irrelevant
+    and a multiset difference means a constant is genuinely wrong or missing --
+    the class semdiff cannot see, because two different floats both normalise
+    to `lfs R, @P@sda21`.
+    """
+    import struct
+    for u in CFG["units"]:
+        if not u["name"].startswith(GAME):
+            continue
+        t = os.path.join(ROOT, u["target_path"])
+        o = os.path.join(ROOT, u["base_path"])
+        if not (os.path.exists(t) and os.path.exists(o)):
+            continue
+        for sec in (".sdata2", ".sbss2"):
+            T, O = section(t, sec), section(o, sec)
+            if T == O:
+                continue
+            def words(b):
+                return Counter(struct.unpack(">I", b[i:i + 4])[0]
+                               for i in range(0, len(b) // 4 * 4, 4))
+            A, B = words(T), words(O)
+            miss, extra = A - B, B - A
+            # A lone zero on the target side with a 4-byte size difference is
+            # section padding, not a constant.
+            miss.pop(0, None)
+            extra.pop(0, None)
+            if not miss and not extra:
+                continue
+            print("### %-40s %s  (target %d bytes / ours %d)"
+                  % (u["name"].replace(GAME, ""), sec, len(T), len(O)))
+            def fmt(w):
+                return "0x%08x  %-16g" % (
+                    w, struct.unpack(">f", struct.pack(">I", w))[0])
+            for w, c in sorted(miss.items()):
+                print("    target-only: %s x%d" % (fmt(w), c))
+            for w, c in sorted(extra.items()):
+                print("    ours-only  : %s x%d" % (fmt(w), c))
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    if "--consts" in sys.argv:
+        return consts() or 0
     limit = 12
     if "-n" in sys.argv:
         limit = int(sys.argv[sys.argv.index("-n") + 1])

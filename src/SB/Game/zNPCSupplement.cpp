@@ -749,7 +749,7 @@ void NPCC_RenderProjTexture(RwRaster* rast, F32 factor, xMat4x3* mat, F32 radius
 {
     if (fillCache)
     {
-        xShadowVertical_FillCache(cache, &mat->pos, radius, height, 0.087156497f);
+        xShadowVertical_FillCache(cache, &mat->pos, radius, height, 0.0871557f);
     }
 
     gShadowObjectRadius = radius;

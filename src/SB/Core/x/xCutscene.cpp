@@ -208,9 +208,9 @@ F32 xCutsceneConvertBreak(F32 time, xCutsceneBreak* breaklist, U32 breakcount, S
     for (i = 0; i < breakcount; i++)
     {
         if (idx == breaklist[i].Index && breaklist[i].Time - time > 0.0f &&
-            breaklist[i].Time - time < 0.03333333f)
+            breaklist[i].Time - time < (1.0f / 30.0f))
         {
-            return breaklist[i].Time - 0.03333333f;
+            return breaklist[i].Time - (1.0f / 30.0f);
         }
     }
 
