@@ -1464,7 +1464,7 @@ namespace bungee_state
         xDebugAddTweak("Bungee|Globals|Horz Edge Zone", &fixed.horizontal.edge_zone, 0.0f, 0.25f,
                        NULL, NULL, NULL);
 
-        fixed.horizontal.sway = xIniGetFloat(&ini, "SB.state.bungee.horizontal.sway", 0.0f);
+        fixed.horizontal.sway = xIniGetFloat(&ini, "SB.state.bungee.horizontal.sway", 3.0f);
         if (fixed.horizontal.sway < 0.0f)
         {
             fixed.horizontal.sway = 0.0f;
@@ -1500,15 +1500,15 @@ namespace bungee_state
         xDebugAddTweak("Bungee|Globals|Dive Time", &fixed.dive.time, 0.01f, 5.0f, NULL, NULL, NULL);
 
         fixed.dive.anim_out_time = xIniGetFloat(&ini, "SB.state.bungee.dive.anim_out_time", 0.5f);
-        if (fixed.dive.anim_out_time < 0.01f)
+        if (fixed.dive.anim_out_time < 0.0f)
         {
-            fixed.dive.anim_out_time = 0.01f;
+            fixed.dive.anim_out_time = 0.0f;
         }
         if (fixed.dive.anim_out_time > 5.0f)
         {
             fixed.dive.anim_out_time = 5.0f;
         }
-        xDebugAddTweak("Bungee|Globals|Dive Anim Out-Time", &fixed.dive.anim_out_time, 0.01f, 5.0f,
+        xDebugAddTweak("Bungee|Globals|Dive Anim Out-Time", &fixed.dive.anim_out_time, 0.0f, 5.0f,
                        NULL, NULL, NULL);
 
         fixed.dive.min_dist = xIniGetFloat(&ini, "SB.state.bungee.dive.min_dist", 0.0f);
