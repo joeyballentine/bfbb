@@ -54,7 +54,7 @@ struct st_ISG_TPL_TEXPALETTE
 };
 
 // .bss
-static char cardwork[2][0xa000];
+static char cardwork[2][0xa000] ATTRIBUTE_ALIGN(32);
 
 // .sbss
 static volatile S32 g_isginit;
