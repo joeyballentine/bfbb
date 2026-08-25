@@ -97,7 +97,7 @@ void xhud::unit_meter_widget::update(F32 dt)
 {
     meter_widget::updater(dt);
 
-    if (!widget::visible() || this->rc.a <= (5.0f / 255.0f))
+    if (!widget::visible() || this->rc.a <= (0.5f / 255.0f))
     {
         return;
     }
