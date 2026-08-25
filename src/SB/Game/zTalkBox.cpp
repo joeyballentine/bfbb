@@ -582,7 +582,7 @@ namespace
         case sound_context::ACTION_SET:
             shared.sounds.clear();
             speak_stop();
-            return 1;
+            break;
         }
 
         if (c.id == 0)
