@@ -28,7 +28,7 @@ static const char* __deadstripped_xTRC()
 static const char* message_text;
 
 static const basic_rect<F32> screen_bounds = { 0.0f, 0.0f, 1.0f, 1.0f };
-static S32 yellow = 0xFFE600FF;
+static const S32 yellow = 0xFFE600FF;
 
 void xTRCInit()
 {
