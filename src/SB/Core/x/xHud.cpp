@@ -383,10 +383,12 @@ namespace xhud
         template <class F> void for_each(U8 widget_type, U32 type_size, F f)
         {
             U32 count = globals.sceneCur->baseCount[widget_type];
-            U8* list = (U8*)globals.sceneCur->baseList[widget_type];
-            for (int i = 0; i < count; ++i)
+            U8* it = (U8*)globals.sceneCur->baseList[widget_type];
+            U8* end = it + count * type_size;
+            while (it != end)
             {
-                f(*(widget*)(list + i * type_size));
+                f(*(widget*)(it + sizeof(xBase)));
+                it += type_size;
             }
         }
 
