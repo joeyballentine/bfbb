@@ -5460,3 +5460,111 @@ With those two ruled out and the opcode families clean, the automated seams on
 *code* are close to exhausted for behavioural bugs. What is left is the
 compiler track -- register allocation, block layout, the reload-versus-cache
 pattern -- plus the data sections, which are a different tool.
+
+## The data sections (2026-08-25)
+
+`tools/datadiff.py` is the data-side counterpart to semdiff. It compares
+.data/.rodata/.sdata/.sdata2 byte by byte and relocation by relocation, and
+splits the relocation comparison three ways because each failure reads
+differently: **count** (fewer entries than retail -> NULLs where pointers
+belong), **positional** (same offset, different target -> wrong function or
+string), **set** (same targets, different offsets -> declaration order).
+`--consts` compares .sdata2 as a multiset of 4-byte words, which is semdiff's
+blind spot: two different floats both normalise to `lfs R, @P@sda21`.
+
+Run with no arguments it ranks every game unit by bytes missing.
+
+### The metric is all-or-nothing per symbol
+
+report.json scores a data symbol as matched only at exactly 100%. A 36KB
+`[.data-0]` blob with one wrong pointer scores **zero**. That cuts both ways:
+it makes the percentages alarming, and it makes small fixes enormous.
+zCutsceneMgr went 62.29% -> 100.00% on seventeen bytes; xpkrsvc went
+96.06% -> 100.00% on ninety-two.
+
+So read the byte counts, not the percentages, and always check whether a unit
+is *nearly* right before assuming it needs real work.
+
+### objdiff tolerates trailing section padding
+
+Retail's sections are padded to 8-byte boundaries; ours often are not. Every
+one of the "ours is a strict prefix, missing 4 zero bytes" cases is this, and
+none of them costs anything. zCutsceneMgr reached 100% while still one byte
+shorter than retail. Do not chase them.
+
+### What the remaining gap actually is
+
+After this round: 56,024 bytes over 25 units. Essentially none of it is
+*wrong* data. Comparing relocation (symbol, addend) multisets across all 224
+game units, every remaining mismatch is either a jump table whose entries
+point into a function at offsets that shift with our code size -- these fix
+themselves when the function reaches 100% -- or DWARF `$NNNN` numbering. No
+dispatch table is NULL, no pointer aims at the wrong thing.
+
+What is left is **ordering**, in three flavours:
+
+1. **vtable emission order** -- zNPCTypeRobot, zNPCGoalRobo, zNPCTypeKingJelly,
+   zEntCruiseBubble, zEntPlayerOOBState, about 19.7KB between them. Retail's
+   zNPCTypeRobot emits Slick, TubeSlave, TubeNotice, Tubelet, Chuck, ArfDog,
+   ArfArf, Sleepy, Monsoon, Glove, TarTar, Hammer, Critter, Chomper, FodBzzt,
+   FodBomb, Fodder, Robot, xPSYNote; ours emits xPSYNote first and then a
+   different order entirely. It matches neither our source's order of first
+   member definition nor anything else obvious -- worth an experiment, but the
+   rule is not yet known.
+2. **string pool order** -- .rodata byte differences where the same strings
+   appear in a different sequence.
+3. **constant pool order** -- .sdata2, same story with floats. zEntPlayer's
+   568 differing bytes are this, which is why its 8232 bytes are the largest
+   single gap and also one of the least tractable.
+
+### Dead-stripped strings, and where to put them
+
+Three units this round were missing strings outright, all residue of debug
+functions the linker dropped. The tree's idiom is
+`void __deadstripped_<unit>() { printf("..."); }`.
+
+**Placement is the whole trick.** Strings intern in order of first appearance,
+so the function has to sit where retail's dropped code sat:
+
+- zCutsceneMgr's "FINISH EXIT...\n" is the *last* string, so the function goes
+  at the end of the file.
+- zLightning's six ("X to test lightning\n", fifteen spaces, "1", "0", "-",
+  "\n") are also last.
+- xpkrsvc's twelve (the en_LAYER_TYPE names plus "<unknown>") are *first*, so
+  the function goes immediately after the includes. Appending them would have
+  put them behind "%s %s %s %s" and shifted nothing into place.
+
+Read run lengths off the hex dump rather than guessing: zLightning's space
+string is fifteen, and sixteen put the terminator one byte late and pushed
+every string after it.
+
+### The nm placement scan
+
+Comparing each symbol's nm letter between the two objects finds a class no
+byte comparison does: `R`/`r` in the target against `D`/`d` in ours means
+retail declared it const and we did not. `xTRC`'s `yellow` was this -- moving
+it to .sdata2 put the whole pool into retail's order behind it and took the
+unit to 100%.
+
+Still outstanding in that shape: xColor's colour globals, xFont's
+`text_delims`, zEntPlayer's `SBBBashBones`/`SBBBounceBones` (already written
+`static const` yet still landing in .data -- placement is being driven by
+something other than the declaration, and a fully-written-out initializer does
+not change it), and anonymous entries in zFX, zScene, zPlatform and
+zEntCruiseBubble.
+
+Also found by that scan: `iPad`'s `sPadData`, a file-scope array that `-common
+on` turned into a COMMON symbol so our object had no .data section at all.
+`static` plus an explicit initializer put it where retail has it.
+
+### Two genuinely wrong constants
+
+`--consts` found both. zNPCSupplement called `xShadowVertical_FillCache` with
+`0.087156497f` where the other three call sites in the tree -- and retail --
+write `0.0871557f`, which is sin(5 degrees), the slope below which a surface
+takes a vertical shadow. xCutscene's `0.03333333f` is one ULP below 1/30;
+retail's word is exactly `1.0f / 30.0f`.
+
+Still flagged and not guessed at: zNPCSupplement has one ULP on a 0.025f
+streak frequency (retail 0x3cccccce against our 0x3ccccccd) that no natural
+literal reproduces.
