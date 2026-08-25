@@ -5568,3 +5568,58 @@ retail's word is exactly `1.0f / 30.0f`.
 Still flagged and not guessed at: zNPCSupplement has one ULP on a 0.025f
 streak frequency (retail 0x3cccccce against our 0x3ccccccd) that no natural
 literal reproduces.
+
+## The source-complete metric (2026-08-25)
+
+`tools/srcprogress.py`. The exact metric conflates two states that call for
+completely different work:
+
+- our C says something different from retail's C -- **something to write**
+- our C is right and only the scheduler or register allocator disagrees --
+  **nothing to write**
+
+Splitting them with semdiff's multiset test gives a second number:
+
+    exact             7211 fns   1307160 bytes   79.59%
+    codegen-only       250 fns    160460 bytes    9.77%
+    ---------------------------------------------------
+    SOURCE-COMPLETE   7461 fns   1467620 bytes   89.36%
+    needs source       212 fns    174780 bytes   10.64%
+
+    132 of 221 units are source-complete.
+
+This reframes the project. The remaining *writing* is a tenth of the game,
+not a fifth, and 60% of units have nothing left to write at all. Everything
+else is the compiler track -- the alias patch, the scheduler, the register
+allocator -- which is one research problem rather than four hundred small ones.
+
+**It is an upper bound, not a proof.** The multiset test cannot see a wrong
+float constant, because two different values both normalise to
+`lfs R, @P@sda21` -- precisely where the iCollide 0.7010677 bug lived.
+srcprogress cross-checks each unit against `datadiff --consts` and marks the
+ones carrying a value difference with (!), where a codegen-only verdict is
+weaker. Five today: zEntPlayer, zGame, xCM, zMain, xHudUnitMeter. The DOL
+sha1 is still the only proof of anything.
+
+### Where the remaining source work is
+
+    48556  17 fns  zEntPlayer          <- 28% of everything left
+     6280   2 fns  zNPCTypeBossSandy
+     4732   4 fns  zUI
+     4620   3 fns  zNPCHazard
+     4216   2 fns  zThrown
+     4048   1 fn   zLasso
+     3892   1 fn   zCamera
+
+zEntPlayer is seven times the next unit and three functions carry most of it:
+`zEntPlayer_Update` (18188 b, 96.04%, 80 terms), `zEntPlayer_SNDInit`
+(10160 b, 91.97%, **215 terms**) and `PlayerAbsControl` (5460 b, 97.56%,
+17 terms). SNDInit's 215 terms in a 10KB function is the shape of a big
+registration table with many wrong entries -- likely tractable and
+gameplay-visible, since wrong entries there mean wrong sounds.
+
+Also worth knowing: several multi-KB functions sit one or two terms from
+clean -- `zThrown_Update` (3784 b, 99.79%, 1 term), `zSceneSetup` (3196 b,
+99.62%, 1 term), `Process__10zNPCBSandy` (3852 b, 99.36%, 2 terms). All three
+are the reload-versus-cache pattern, so they are cheap bytes if that pattern
+turns out to be mechanically fixable.
