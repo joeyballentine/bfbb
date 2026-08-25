@@ -398,12 +398,12 @@ static S32 xSER_ord_compare(void* e1, void* e2)
 // non-matching
 static S32 xSER_ord_test(const void* key, void* elt)
 {
-    if (*(U32*)key < *(U32*)elt)
+    if ((U32)key < *(U32*)elt)
     {
         return -1;
     }
 
-    if (*(U32*)elt < *(U32*)key)
+    if (*(U32*)elt < (U32)key)
     {
         return 1;
     }
