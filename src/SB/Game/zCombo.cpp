@@ -31,7 +31,12 @@ static xVec3 sUnderCamPos;
 static ztextbox* sHideText[5];
 
 /* .sbss */
-widget_chunk* volatile comboHUD; // TODO: should be externed in the header, but that doesn't show up in objdiff
+// The volatile on these four is the store-then-reload matching device, and it
+// earns its place: removing it takes zCombo_Setup from 100% to 97.727% and
+// zCombo_Add from 100% to 86.087%. Measured, not assumed. zCombo_Update sits at
+// 99.854% either way, so its gap is something else.
+// TODO: comboHUD should be externed in the header, but that does not show up in objdiff
+widget_chunk* volatile comboHUD;
 static zUIFont* sHideUIF;
 static volatile S32 comboPending;
 static volatile S32 comboLastCounter;
