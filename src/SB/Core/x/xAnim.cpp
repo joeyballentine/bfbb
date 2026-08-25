@@ -875,7 +875,7 @@ void _xAnimTableAddTransition(xAnimTable* table, xAnimTransition* tran, const ch
     char extra[128];
 
     U8 bVar2 = false;
-    U8 bVar1 = false;
+    U32 bVar1 = false;
     U32 iVar12 = 0;
 
     if (dest != NULL)
