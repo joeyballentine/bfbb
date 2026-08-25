@@ -1964,7 +1964,6 @@ static void NCIN_Generic_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     }
 }
 
-// TODO: NEEDS REWRITEN / CORRECTED
 static void NCIN_BubSlam(const zCutsceneMgr*, NCINEntry* fxrec, S32 param)
 {
     if (param != 0)

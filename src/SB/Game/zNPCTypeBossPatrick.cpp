@@ -2982,12 +2982,12 @@ S32 zNPCGoalBossPatSpit::Process(en_trantype* trantype, F32 dt, void* updCtxt, x
 
         if (colls.flags & 1)
         {
-            glob->path.maxTime = colls.dist; // TODO: not sure if right
+            glob->path.maxTime = colls.dist;
             xVec3Copy(&glob->norm, &colls.norm);
             glob->flags |= 2;
         }
 
-        colls.flags &= 0xfffffffe; // TODO: clean this up
+        colls.flags &= ~1;
 
         pat->ParabolaHitsConveyors(&glob->path, &colls);
 
