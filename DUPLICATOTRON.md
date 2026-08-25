@@ -5764,3 +5764,59 @@ Ruled out, do not re-tread:
 - **ArcLength3** differs by exactly two contractions: retail computes two of its
   five product-sums as `fmul` + `fadd` where we emit `fmadd`. Which two, and
   why, is not apparent from the codegen. 6 terms at 88.02%.
+
+
+### The held-across-a-call pattern, and the limits of sweeping for it
+
+Two fixes in one session came from the same shape. A member load cannot survive
+a call in a register -- the callee might write the object -- so the compiler must
+reload it afterwards. If the target instead keeps the value in a *callee-saved*
+register across the `bl`, the original source had bound it to a LOCAL.
+
+  zEntPickup_SceneUpdate  87.67% -> 95.31%  (currRequest across rewardRequest)
+  xHudMeter::set_value    89.45% -> 100.0%  (v - value across xsqrt)
+
+Sweeping for it mechanically is harder than it looks, and three formulations
+failed before one worked:
+
+- **"we load an address more often than the target"** -- 548 functions. That is
+  ordinary register allocation, not a pattern.
+- **"split the function at its first call, require loads on both sides"** -- 0
+  functions, including on a known positive. zEntPickup_SceneUpdate calls
+  zGameIsPaused() on line one, so everything counts as after a call.
+- **"a call sits between two loads of the same address"** -- 0 on the known
+  positive as well. The target has that too: `currRequest++` genuinely re-reads
+  memory after the call. The distinguishing feature was never the call placement
+  but the raw count (target 2 loads, ours 5).
+
+What works is already in semdiff: **ours-only load terms with a non-zero struct
+offset**. Across the whole game that is 8 functions, and the top one
+(Tridiag_Solve, 43) is known noise from loop unrolling. So the pattern is real
+but there is no seam left to mine.
+
+A trap worth naming: a sweep script in the scratchpad must not copy
+`ROOT = dirname(dirname(__file__))` from tools/*.py. It resolves to the temp
+directory, os.walk finds nothing, and the sweep reports a clean result over zero
+objects -- the failure mode that looks exactly like success. Validate every
+detector against a known positive before believing a null result.
+
+### xMat3x3Mul is register allocation, not source
+
+73.39%, and every source shape tried made it worse. Recorded so it is not
+re-tried:
+
+- `usetemp` **is** a U8 or bool in retail -- it emits `clrlwi. r7,r0,24`, a
+  truncate-and-test that a U32 cannot produce. Changing our U32 to bool does
+  reproduce that instruction, and costs 3 points (73.39 -> 70.38) because the
+  surrounding allocation shifts. Instruction count is unchanged at 108.
+  Retail truncates once into r7 and re-tests with `cmplwi r7,0`; we truncate
+  twice either way.
+- `b->at.y` is loaded once by retail (into callee-saved f29) and three times by
+  us, once per use -- textbook held-across-a-call. Restoring the
+  commented-out `F32 bay = b->at.y;` local *does* fix the load count to 1, and
+  costs 6 instructions in spills (108 -> 114, retail 106) because the extra live
+  value does not fit. 73.39 -> 67.63. Both changes together: 60.25.
+
+The function shares 51 of 106 instructions with the target. That is an
+allocation problem, and the source shapes that would fix the load counts cost
+more than they save.
