@@ -2,12 +2,12 @@
 #include "xUpdateCull.h"
 #include "xGroup.h"
 
-static void xUpdateCull_Swap(xUpdateCullMgr* mgr, U32 a, U32 b)
+static void xUpdateCull_Swap(xUpdateCullMgr* m, U32 a, U32 b)
 {
     xUpdateCullEnt* pMgrAIndex;
 
-    xUpdateCullEnt* pMgrBIndex = mgr->mgr[b];
-    xUpdateCullEnt* pMgrIndex = pMgrAIndex = mgr->mgr[a];
+    xUpdateCullEnt* pMgrBIndex = m->mgr[b];
+    xUpdateCullEnt* pMgrIndex = pMgrAIndex = m->mgr[a];
 
     do
     {
@@ -26,13 +26,13 @@ static void xUpdateCull_Swap(xUpdateCullMgr* mgr, U32 a, U32 b)
             break;
     } while (pMgrIndex != pMgrBIndex);
 
-    void* tmpEnt = mgr->ent[a];
-    mgr->ent[a] = mgr->ent[b];
-    mgr->ent[b] = tmpEnt;
+    void* tmpEnt = m->ent[a];
+    m->ent[a] = m->ent[b];
+    m->ent[b] = tmpEnt;
 
-    xUpdateCullEnt* tmpMgr = mgr->mgr[a];
-    mgr->mgr[a] = mgr->mgr[b];
-    mgr->mgr[b] = tmpMgr;
+    xUpdateCullEnt* tmpMgr = m->mgr[a];
+    m->mgr[a] = m->mgr[b];
+    m->mgr[b] = tmpMgr;
 }
 
 static void xUpdateCull_MakeActive(xUpdateCullMgr* m, xUpdateCullEnt* e)

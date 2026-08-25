@@ -81,7 +81,7 @@ void xTRCReset()
     }
 }
 
-void xTRCPad(S32, _tagTRCState)
+void xTRCPad(S32 pad_id, _tagTRCState state)
 {   
 }
 
