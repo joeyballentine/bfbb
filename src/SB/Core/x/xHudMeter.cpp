@@ -84,20 +84,20 @@ void xhud::meter_widget::set_value(F32 v)
         return;
     }
 
-    end_value = dvalue;
+    end_value = v;
 
     if (res.decrement_time == 0.0f)
     {
         printf("decrement time = 0 -- ass saved!\n");
     }
 
-    dvalue = res.decrement_time > 1e-5f ? 1e-5f : dvalue / res.decrement_time;
-    value_vel = dvalue;
-    value_accel = 50.0f * res.decrement_time;
+    value_vel = dvalue / (res.decrement_time > 1e-5f ? res.decrement_time : 1e-5f);
+    value_accel = 50.0f * dvalue;
+    pitch = 0.0f;
 
-    if (xsqrt(2.0f * (v - value) / res.decrement_time) > 2.0f)
+    if (xsqrt(2.0f * (v - value) / value_accel) > 2.0f)
     {
-        value_accel = 25.0f * res.decrement_time;
+        value_accel = 2.0f * (v - value) / 4.0f;
     }
 }
 
@@ -147,7 +147,7 @@ void xhud::meter_widget::updater(F32 dt)
     {
         old_value = value;
 
-        value = value + dt * (0.5f * value_accel * dt);
+        value = value + (value_vel * dt + dt * (0.5f * value_accel * dt));
         value_vel += value_accel * dt;
 
         if (value_vel < 0.0f)
@@ -155,7 +155,7 @@ void xhud::meter_widget::updater(F32 dt)
             if (value <= end_value)
             {
                 value = end_value;
-                end_value = 0.0f;
+                value_vel = 0.0f;
             }
 
             pitch = range_limit<F32>(-4.0f * this->pitch, -10.0f, 6.5f);
