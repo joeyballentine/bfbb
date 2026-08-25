@@ -927,7 +927,7 @@ namespace
         if (init)
         {
             spin.vel = 5.0f;
-            auto_tweak::load_param<F32, F32>(spin.vel, 1.0f, 0.0f, 10.0f, ap, apsize, "spin.vel");
+            auto_tweak::load_param<F32, F32>(spin.vel, 1.0f, 0.0f, 100000.0f, ap, apsize, "spin.vel");
         }
         if (init)
         {
@@ -2212,7 +2212,7 @@ void zNPCB_SB2::update_halt(F32 dt)
     xAccelStop(move.yaw, move.yaw_vel, yaw_accel, dt);
     xAccelStop(s, move.vel, accel, dt);
 
-    if (xfeq0(s) || xabs(old_yaw - move.yaw) <= 0.001f)
+    if (xfeq0(s) || xabs(old_yaw - move.yaw) <= 0.01f)
     {
         flag.move = MOVE_NONE;
     }
@@ -3584,7 +3584,7 @@ S32 zNPCGoalBossSB2Taunt::Enter(F32 dt, void* updCtxt)
 
 S32 zNPCGoalBossSB2Taunt::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
 {
-    if (owner.AnimTimeRemain(NULL) < dt + 0.1f)
+    if (owner.AnimTimeRemain(NULL) < dt + 0.001f)
     {
         *trantype = GOAL_TRAN_SET;
         return owner.next_goal();
