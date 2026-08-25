@@ -1,6 +1,7 @@
 #include "zCutsceneMgr.h"
 
 #include <types.h>
+#include <stdio.h>
 
 #include "zGlobals.h"
 #include "zEnt.h"
@@ -522,4 +523,12 @@ static void check_hide_entities()
         }
         it++;
     }
+}
+
+// The target's @stringBase0 ends with "FINISH EXIT...\n", seventeen bytes our
+// .rodata was short. Nothing in the surviving code references it, so it is the
+// residue of a debug printf in a function the linker dead-stripped.
+void __deadstripped_zCutsceneMgr()
+{
+    printf("FINISH EXIT...\n");
 }
