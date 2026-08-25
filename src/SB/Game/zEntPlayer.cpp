@@ -7214,7 +7214,7 @@ void zEntPlayer_Update(xEnt* ent, xScene* sc, F32 dt)
                 info.custom_flags = 0x30e;
                 info.pos = pos;
 
-                for (S32 j = 0; j < 100; j++)
+                for (S32 j = 0; j < 100U; j++)
                 {
                     F32 ang = 2.0f * PI * j / 100.0f;
                     info.vel.x = 4.0f * icos(ang);
