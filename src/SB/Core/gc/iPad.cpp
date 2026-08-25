@@ -9,7 +9,7 @@
 extern xGlobals* xglobals;
 extern zGlobals globals;
 
-PADStatus sPadData[PAD_MAX_CONTROLLERS];
+static PADStatus sPadData[PAD_MAX_CONTROLLERS] = {};
 
 S32 iPadInit()
 {
