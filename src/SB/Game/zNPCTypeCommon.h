@@ -549,10 +549,7 @@ struct zNPCCommon : xNPCBasic //Size of zNPCCommon: 0x2A0
 
     virtual void GetParm(en_npcparm pid, void* val);
     virtual S32 GetParmDefault(en_npcparm pid, void* val);
-    virtual F32 GenShadCacheRad()
-    {
-        return 2.4f;
-    }
+    virtual F32 GenShadCacheRad();
     virtual xEntDrive* PRIV_GetDriverData()
     {
         return NULL;

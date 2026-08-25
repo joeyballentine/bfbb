@@ -2452,6 +2452,11 @@ S32 zNPCCommon::GetParmDefault(en_npcparm pid, void* val)
     return result;
 }
 
+F32 zNPCCommon::GenShadCacheRad()
+{
+    return 2.4f;
+}
+
 S32 zNPCCommon::CanDoSplines()
 {
     bool retval = false;
