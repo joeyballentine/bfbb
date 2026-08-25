@@ -463,7 +463,7 @@ void xMat3x3Mul(xMat3x3* o, const xMat3x3* a, const xMat3x3* b)
 {
     xMat3x3 temp;
     xMat3x3* tp;
-    U32 usetemp;
+    U32 usetemp = 0;
 
     if (o == a || o == b)
     {
