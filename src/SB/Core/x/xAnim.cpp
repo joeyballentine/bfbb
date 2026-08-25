@@ -988,19 +988,31 @@ void _xAnimTableAddTransition(xAnimTable* table, xAnimTransition* tran, const ch
     {
         for (S32 i = 0; i < allocCount; ++i)
         {
-            if (DefaultOverride(stateList[i], tran) == 0)
+            if (DefaultOverride(stateList[i], tran) != 0)
             {
-                if (tran->Conditional == NULL && stateList[i]->Default != NULL)
+                continue;
+            }
+
+            if (tran->Conditional == NULL && stateList[i]->Default != NULL)
+            {
+                xAnimTransitionList* tail = stateList[i]->Default;
+                while (tail->Next != NULL)
                 {
-                    curr->Next = NULL;
-                    curr->T = bVar2 ? substTransitionList[i] : tran;
+                    tail = tail->Next;
                 }
+
+                curr->T = bVar2 ? substTransitionList[i] : tran;
+                curr->Next = NULL;
+                tail->Next = curr;
             }
             else
             {
                 curr->T = bVar2 ? substTransitionList[i] : tran;
+                curr->Next = stateList[i]->Default;
                 stateList[i]->Default = curr;
             }
+
+            curr++;
         }
     }
     else
@@ -1010,7 +1022,9 @@ void _xAnimTableAddTransition(xAnimTable* table, xAnimTransition* tran, const ch
             for (S32 i = 0; i < allocCount; ++i)
             {
                 curr->T = substTransitionList[i];
-                curr->Next = stateList[i]->List->Next;
+                curr->Next = stateList[i]->List;
+                stateList[i]->List = curr;
+                curr++;
             }
         }
         else
@@ -1018,7 +1032,9 @@ void _xAnimTableAddTransition(xAnimTable* table, xAnimTransition* tran, const ch
             for (S32 i = 0; i < allocCount; ++i)
             {
                 curr->T = tran;
-                curr->Next = stateList[i]->List->Next;
+                curr->Next = stateList[i]->List;
+                stateList[i]->List = curr;
+                curr++;
             }
         }
     }
