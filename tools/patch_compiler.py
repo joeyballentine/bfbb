@@ -32,6 +32,92 @@ predicates instead and points selected dispatch entries at them. Anything not
 matching a clause falls through to the stock test for that entry, which the
 injected code replicates exactly.
 
+WHAT THE CLAUSES ACTUALLY PATCH, from the compiler's own source
+---------------------------------------------------------------
+
+Every clause below was derived by reverse engineering the binary. A
+decompilation of this compiler exists (a local, unpublished repo -- see the
+maintainer; it targets stock GC/2.0, which is this binary minus the three-byte
+community patch at 0x0dfd4e / 0x16fd86 / 0x16fd8c). Reading it resolves the
+magic numbers into named fields, and it is worth knowing before touching any of
+this:
+
+  * All eight clauses hook ONE function --
+    `may_alias_alias()` in BackEnd/PowerPC/GlobalOptimizer/Alias.c:
+
+        static Boolean may_alias_alias(Alias *a, Alias *b) {
+            switch ((a->type * 3) + b->type) {
+                case (AliasType0 * 3) + AliasType0:
+                    return a == b;
+                ...
+
+    That switch is the 3x3 operand-kind dispatch, and its nine-entry jump
+    table is what the clauses redirect. The compiler INLINES this function at
+    several call sites, which is why there are four such tables in a row and
+    why each clause re-derived the same gates independently. A source-level
+    change would apply to all four coherently; byte patches cannot.
+
+  * The operand descriptors are `struct Alias`:
+
+        +0x08 children      AliasMember*      (sub-ranges of this object)
+        +0x0c parents       AliasMember*      (ranges this one belongs to)
+        +0x10 object        Object*
+        +0x18 size
+        +0x1c valuenumber
+
+    So "compare +0x10 is equivalent to descriptor identity" holds because
+    entry 0 IS `a == b` and lookup_alias() makes (object, offset, size)
+    unique; and clause V/F's "records the value number into memref+0x1c" is
+    literally `Alias::valuenumber`.
+
+    CORRECTION to clause B's note below: +0x08 and +0x0c are NOT an "object
+    link" and an "indirection expression". They are the children and parents
+    AliasMember lists. Clause B's predicate therefore means "a whole-object
+    alias that has been subdivided, and is not itself a sub-range". The
+    measured behaviour stands; only the explanation was wrong.
+
+  * The "word 5" / "word 0x00010005" discriminant is `Object`'s first four
+    bytes, packed because the compiler is built with `-enum min`:
+
+        +0x00 otype     ObjectType   OT_OBJECT = 5
+        +0x01 access    AccessType
+        +0x02 datatype  DataType     DDATA = 0, DLOCAL = 1
+        +0x03 section   Section
+
+    so word 5 is "an object in static data" and word 0x00010005 is "an object
+    in a stack frame". Not magic numbers -- type tags.
+
+  * Clause H's site is `isloopinvariant()` in CodeMotion.c. For a read it
+    walks only the defs OF THE SAME OBJECT:
+
+        for (list = findobjectusedef(pcode->alias->object)->defs; ...)
+            if (may_alias(pcode, Defs[list->id].pcode) && ...) return 0;
+
+    A .sdata2 literal has no defs, so nothing blocks hoisting and the load
+    leaves the loop before value numbering ever runs. That is why clause H had
+    to hook may_alias rather than the VN path.
+
+  * The float meme's root is `make_alias()`:
+
+        switch (object->datatype) {
+            case DLOCAL: case DNONLAZYPTR: break;
+            default:
+                if (!is_safe_const(object))
+                    add_alias_member(worst_case, make_alias(object, 0, 0));
+        }
+
+    An object that is_safe_const() never joins worst_case, so it cannot alias
+    anything, so nothing stops it being hoisted or forwarded. is_safe_const()
+    reduces to is_const_object() -> CParser_IsConst(obj->type, obj->qual).
+    This is what the GC/2.0p1 three-byte patch reaches: it changes what the
+    float-literal-pool symbol constructor writes, and hence the literal's
+    const-ness.
+
+  * `uniquely_aliases()` is a stricter sibling of may_alias(): same test, plus
+    both aliases non-AliasType2 and each alias->size exactly equal to
+    nbytes_loaded_or_stored_by(). Unexamined here; the place to look if a
+    residual involves partial-width access.
+
 Clause A -- differing opcodes, entry 0 only:
 
     sizeof(A) <= 4 and sizeof(B) <= 4
