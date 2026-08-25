@@ -176,9 +176,36 @@ def scan(unit):
     return found
 
 
+# Address arithmetic, branches and register moves are what loop unrolling and
+# strength reduction rewrite. Two builds of the same C differ in these all the
+# time. A genuinely different computation shows up as an arithmetic, memory or
+# call mnemonic that one side executes and the other never does.
+SHAPE = re.compile(r"^(addi|addic|subi|add|subf|mulli|slwi|srwi|srawi|sraw"
+                   r"|li|lis|mr|neg|rlwinm|clrlwi|clrrwi|extrwi|insrwi"
+                   r"|cmp\w*|b\w*|mtctr|mfctr|andi|ori|nop)\.?$")
+
+
+def exclusive_kinds(hit):
+    """Mnemonics one side executes and the other never does, shape ignored.
+
+    This is the triage that separates a real difference from an unrolled loop.
+    Tridiag_Solve shows 110 differing terms and nothing here but address
+    arithmetic -- it is our loop unrolled twice against retail's, and the source
+    is right. xScrFXGlareRender shows retail using psq_l/psq_st/lmw where we use
+    fctiwz/fmuls, which is a different computation and worth reading.
+    """
+    def mnem(t):
+        return t.split(None, 1)[0]
+    t = set(mnem(x) for x in hit["target_only"])
+    o = set(mnem(x) for x in hit["ours_only"])
+    return (sorted(m for m in t - o if not SHAPE.match(m)),
+            sorted(m for m in o - t if not SHAPE.match(m)))
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
     verbose = "-v" in sys.argv
+    kinds = "--kinds" in sys.argv
     allunits = "--all" in sys.argv
 
     units = []
@@ -201,6 +228,14 @@ def main():
         n = len(h["target_only"]) + len(h["ours_only"])
         print("%-64s %-7s %6.2f%%  %2d term(s)  [%s]"
               % (h["name"][:64], h["size"], h["pct"], n, h["unit"]))
+        if kinds:
+            et, eo = exclusive_kinds(h)
+            if et:
+                print("      retail-only mnemonics: %s" % ", ".join(et))
+            if eo:
+                print("      ours-only   mnemonics: %s" % ", ".join(eo))
+            if not et and not eo:
+                print("      (no operation either side lacks -- shape only)")
         if verbose:
             for t in h["target_only"]:
                 print("      target only : %s" % t)
