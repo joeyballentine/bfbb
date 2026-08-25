@@ -157,8 +157,8 @@ S32 xStricmp(const char* string1, const char* string2)
     U8 flag1;
     U8 flag2;
     S32 finished = 0;
-    S32 c1 = 0;
-    S32 c2 = 0;
+    U32 c1 = 0;
+    U32 c2 = 0;
 
     while (true)
     {
