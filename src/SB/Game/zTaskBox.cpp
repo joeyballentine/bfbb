@@ -326,7 +326,8 @@ const char* ztaskbox::get_text(U32 textID)
         return 0;
     }
 
-    // What type is this?
+    // A TEXT asset: an xTextAsset header, which is just a length, followed by
+    // the string itself.
     void* asset = xSTFindAsset(id, NULL);
     if (asset == NULL)
     {
@@ -334,8 +335,7 @@ const char* ztaskbox::get_text(U32 textID)
     }
     else
     {
-        // HACK
-        return (const char*)asset + 4;
+        return (const char*)((xTextAsset*)asset + 1);
     }
 }
 

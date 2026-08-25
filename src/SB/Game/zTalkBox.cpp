@@ -1243,15 +1243,15 @@ namespace
             return NULL;
         }
 
-        // What type is this?
+        // A TEXT asset: an xTextAsset header, which is just a length, followed
+        // by the string itself.
         void* asset = xSTFindAsset(id, NULL);
         if (asset == NULL)
         {
             return NULL;
         }
 
-        // HACK
-        return (char*)(asset) + 4;
+        return (char*)((xTextAsset*)asset + 1);
     }
 } // namespace
 void ztalkbox::load(const asset_type& tasset)

@@ -16319,23 +16319,24 @@ WEAK void zCameraTranslate(xCamera* cam, xVec3* pos)
 
 // TODO: This belongs in zNPCSupport.h
 // but the compiler put it here for some reason?
+// The casts below are not papering over anything. Mat is a RenderWare matrix,
+// so its axes are RwV3d; the game's own vector type is xVec3. The two are
+// layout-identical (three consecutive F32) but are genuinely distinct types
+// owned by different SDKs, and neither can be made an alias of the other
+// without dragging RenderWare into xMath3.h or vice versa. Casting at the
+// boundary is what retail did, and it costs nothing at runtime.
 WEAK xVec3* NPCC_rightDir(xEnt* ent)
 {
-    // So this is actually a reference to a struct RwV3D
-    // which is the exact same as xVec3, but typed differently.
-    // TODO: figure out what to do with these duplicate types
     return (xVec3*)&ent->model->Mat->right;
 }
 
 WEAK xVec3* NPCC_faceDir(xEnt* ent)
 {
-    // TODO: see note in previous function
     return (xVec3*)&ent->model->Mat->at;
 }
 
 WEAK xVec3* NPCC_upDir(xEnt* ent)
 {
-    // TODO: see note in previous function
     return (xVec3*)&ent->model->Mat->up;
 }
 

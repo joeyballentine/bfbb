@@ -25,11 +25,21 @@
 #include "xMarkerAsset.h"
 #include <xMathInlines.h>
 
-// FIXME: zEntPlayerDyingInGoo() is defined in zEntPlayer.cpp but declared in no header.
-// zNPCBPatrick::Process tests only the low byte of the result, so the retail declaration
-// returned a U8. Once it is added to zEntPlayer.h this local declaration should go away:
-//   -                                                          (nothing)
-//   + U8 zEntPlayerDyingInGoo();
+// zEntPlayerDyingInGoo() is DEFINED as S32 in zEntPlayer.cpp and declared U8 here.
+// That looks like something to clean up and is not: retail had the same split, and
+// both halves are load-bearing.
+//
+//   - Declaring it S32 here to agree with the definition costs a whole function:
+//     zNPCTypeBossPatrick drops from 70/71 exact to 69/71, and the 6040-byte
+//     zNPCBPatrick::Process is what falls out. It tests only the low byte of the
+//     result, which is what the U8 return gives it.
+//   - Moving the declaration into zEntPlayer.h is not possible either. zEntPlayer.h
+//     already reaches this file transitively, so a U8 declaration there collides
+//     with the S32 definition ("illegal function overloading"), and an S32
+//     declaration there loses the function above. Retail's header cannot have
+//     declared it, which is exactly why this local declaration exists.
+//
+// So this stays. Do not "fix" it.
 U8 zEntPlayerDyingInGoo();
 
 #define ANIM_IDLE01 1
