@@ -589,7 +589,7 @@ void xRayHitsEnt(xScene* sc, xRay3* r, xQCData* qcr, xEnt* ent, void* colldata)
 
 void xRayHitsTikiLandableScene(xScene* sc, xRay3* r, xCollis* coll)
 {
-    coll->dist = HUGE;
+    coll->dist = FLOAT_MAX;
 
     xQCData q;
     xQuickCullForRay(&q, r);
@@ -609,7 +609,7 @@ void xRayHitsTikiLandableScene(xScene* sc, xRay3* r, xCollis* coll)
         coll->mptr = NULL;
     }
 
-    if (coll->dist < HUGE)
+    if (coll->dist < FLOAT_MAX)
     {
         coll->flags |= k_HIT_IT;
     }
@@ -621,7 +621,7 @@ void xRayHitsTikiLandableScene(xScene* sc, xRay3* r, xCollis* coll)
 
 void xRayHitsScene(xScene* sc, xRay3* r, xCollis* coll)
 {
-    coll->dist = HUGE;
+    coll->dist = FLOAT_MAX;
 
     xQCData q;
     xQuickCullForRay(&q, r);
@@ -641,7 +641,7 @@ void xRayHitsScene(xScene* sc, xRay3* r, xCollis* coll)
         coll->mptr = NULL;
     }
 
-    if (coll->dist < HUGE)
+    if (coll->dist < FLOAT_MAX)
     {
         coll->flags |= k_HIT_IT;
     }
@@ -658,7 +658,7 @@ cb_ray_hits_ent::cb_ray_hits_ent(const xRay3& ray, xCollis& coll, U8 chkby, U8 c
 
 void xRayHitsSceneFlags(xScene* sc, xRay3* r, xCollis* coll, U8 collType, U8 chk)
 {
-    coll->dist = HUGE;
+    coll->dist = FLOAT_MAX;
     coll->flags = (coll->flags & ~k_HIT_IT) | k_HIT_0x100;
 
     cb_ray_hits_ent cb(*r, *coll, collType, chk);
@@ -686,7 +686,7 @@ void xRayHitsSceneFlags(xScene* sc, xRay3* r, xCollis* coll, U8 collType, U8 chk
     {
         xCollis temp_coll;
         temp_coll.flags = coll->flags;
-        temp_coll.dist = HUGE;
+        temp_coll.dist = FLOAT_MAX;
 
         iRayHitsEnv(r, sc->env, &temp_coll);
 
@@ -1082,7 +1082,7 @@ U32 xSceneNearestFloorPoly(xScene* sc, xNearFloorPoly* nfpoly, U8 collType, U8 c
               0.25f);
     sSphereIsx.t.sphere.center = *(RwV3d*)&sNearestBound.box.center;
 
-    nfpoly->neardist = HUGE;
+    nfpoly->neardist = FLOAT_MAX;
     nfpoly->center = sNearestBound.box.center;
     nfpoly->oid = NULL;
     nfpoly->optr = NULL;
@@ -1118,7 +1118,7 @@ U32 xSceneNearestFloorPoly(xScene* sc, xNearFloorPoly* nfpoly, U8 collType, U8 c
         }
     }
 
-    if (nfpoly->neardist != HUGE)
+    if (nfpoly->neardist != FLOAT_MAX)
     {
         nfpoly->neardist = xsqrt(nfpoly->neardist);
         return 1;
