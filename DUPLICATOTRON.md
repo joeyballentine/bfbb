@@ -5434,3 +5434,29 @@ Comparing `bl <symbol>` terms across all 224 game units: every mismatch is
 not, so no behaviour is missing by that route. `xLine3VecDist2` was the one
 place our `SQ` call had no counterpart at all; squaring in place took it to
 100%.
+
+### Two more filters that looked promising and are not
+
+**Off-by-one branch pairs** (`blt`/`ble`, `bgt`/`bge` on the same operands,
+excluding the inversions that block layout produces). One hit across the whole
+build, `zShrapnel_BB03FloorInit`: target `cmpwi 0x3; blt` against our
+`cmpwi 0x2; ble`. For integers `x < 3` and `x <= 2` are the same test, so this
+is a spelling difference. The filter is cheap to run and worth keeping for the
+float cases, but on integers it will mostly report this shape.
+
+**`cror` presence.** `fcmpo` + `cror eq, gt, eq` + `beq` is a precise float
+`>=`; a bare `bge` after `fcmpo` is the same test but also taken when
+unordered. So ours-only `cror` means retail spelled a range check as the
+positive strict form and we spelled it as negated exits:
+
+    retail : if (x < hi && x > lo)  { ... }        -> bge exit; ble exit
+    ours   : if (x >= hi) exit; if (x <= lo) exit; -> cror/beq; cror/beq
+
+Identical for every non-NaN input. Seen in `zFrag_ProjectileSetupPath` (six),
+`zShrapnel_DestructObjInit` (four), `zEntPlayer_Update` (three) and
+`refresh_prompts`. Worth rewriting for match, but it is not a bug.
+
+With those two ruled out and the opcode families clean, the automated seams on
+*code* are close to exhausted for behavioural bugs. What is left is the
+compiler track -- register allocation, block layout, the reload-versus-cache
+pattern -- plus the data sections, which are a different tool.
