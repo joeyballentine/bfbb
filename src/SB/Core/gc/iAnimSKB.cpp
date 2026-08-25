@@ -58,8 +58,6 @@ void iAnimEvalSKB(iAnimSKBHeader* data, F32 time, U32 flags, xVec3* tran, xQuat*
 
     if (tcount == 1)
     {
-        // non-matching: float constants are loaded outside of loop
-
         scalex = data->Scale[0];
         scaley = data->Scale[1];
         scalez = data->Scale[2];
@@ -73,27 +71,23 @@ void iAnimEvalSKB(iAnimSKBHeader* data, F32 time, U32 flags, xVec3* tran, xQuat*
             quat->v.z = k->Quat[2] * (1.0f / SHRT_MAX);
             quat->s = k->Quat[3] * (1.0f / SHRT_MAX);
 
-            tran->x = k->Tran[0] * scalex;
-            tran->y = k->Tran[1] * scaley;
-            tran->z = k->Tran[2] * scalez;
+            tran->x = scalex * k->Tran[0];
+            tran->y = scaley * k->Tran[1];
+            tran->z = scalez * k->Tran[2];
         }
     }
     else
     {
-        // non-matching: float constants are loaded outside of loop
-
         scalex = data->Scale[0];
         scaley = data->Scale[1];
         scalez = data->Scale[2];
 
-        for (i = 0; i < bcount; i++, quat++, tran++)
+        for (i = 0; i < bcount; quat++, tran++, i++)
         {
-            // no idea if this part even functionally matches.
-            // come back to this when not lazy
-
             RtQuatSlerpCache qcache;
             RtQuat q1, q2;
             RwReal time1, time2, lerp;
+            F32 x0, y0, z0, x1, y1, z1;
             iAnimSKBKey* k = &keys[*offsets];
             U32 costheta, theta; // unused
 
@@ -116,12 +110,18 @@ void iAnimEvalSKB(iAnimSKBHeader* data, F32 time, U32 flags, xVec3* tran, xQuat*
             RtQuatSetupSlerpCache(&q1, &q2, &qcache);
             RtQuatSlerp((RtQuat*)quat, &q1, &q2, lerp, &qcache);
 
-            tran->x =
-                lerp * (scalex * k[1].Tran[0] - scalex * k[0].Tran[0]) + scalex * k[0].Tran[0];
-            tran->y =
-                lerp * (scaley * k[1].Tran[1] - scaley * k[0].Tran[1]) + scaley * k[0].Tran[1];
-            tran->z =
-                lerp * (scalez * k[1].Tran[2] - scalez * k[0].Tran[2]) + scalez * k[0].Tran[2];
+            // The two endpoints are scaled into their own values before the lerp: retail
+            // rounds scale*Tran to F32 here, so this must not fold into a fused fmsubs.
+            x0 = scalex * k[0].Tran[0];
+            y0 = scaley * k[0].Tran[1];
+            z0 = scalez * k[0].Tran[2];
+            x1 = scalex * k[1].Tran[0];
+            y1 = scaley * k[1].Tran[1];
+            z1 = scalez * k[1].Tran[2];
+
+            tran->x = lerp * (x1 - x0) + x0;
+            tran->y = lerp * (y1 - y0) + y0;
+            tran->z = lerp * (z1 - z0) + z0;
         }
     }
 }
