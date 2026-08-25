@@ -321,8 +321,14 @@ xAnimTable* ZNPC_AnimTable_BossPatrick()
     return table;
 }
 
-static const tweak_callback newsfish_cb = {};
-static const tweak_callback recenter_cb = {};
+static void on_change_newsfish(const tweak_info& tweak);
+void on_change_recenter(const tweak_info& tweak);
+
+// .rodata carries an R_PPC_ADDR32 against on_change_newsfish at +0x5c and one
+// against on_change_recenter at +0x84 -- one tweak_callback apart -- so each of
+// these is a create_change callback, not an all-NULL struct.
+static const tweak_callback newsfish_cb = { (void (*)(tweak_info&))on_change_newsfish };
+static const tweak_callback recenter_cb = { (void (*)(tweak_info&))on_change_recenter };
 
 static void UpdatePatrickBossCam(zNPCBPatrick* pat, F32 dt)
 {
