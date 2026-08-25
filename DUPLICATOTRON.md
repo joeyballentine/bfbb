@@ -5314,3 +5314,123 @@ types. It is currently empty.
 `xClumpColl_ForAllIntersections` 96.236% all pass the multiset test, so they
 are register allocation and scheduling only. Ledge grab is correct; those
 three are compiler-track work.
+
+## Playtest round 3 (2026-08-25): the opcode-family filter
+
+`semdiff` finds *that* a function differs. Sorting its output by term count
+was the wrong first move -- the small-term list is dominated by the four
+benign shapes recorded above. Sorting by **which opcodes differ** is far
+sharper, because a handful of opcode pairs cannot be produced by scheduling
+or register allocation and always mean the source says something different.
+
+Pair the target-only and ours-only terms that have *identical operands* and
+differing mnemonics, then keep only pairs drawn from one of these families:
+
+    arith      fmadds/fmsubs/fnmadds/fnmsubs, fadds/fsubs, fmuls/fdivs,
+               add/subf
+    precision  fadd/fadds, fsub/fsubs, fmul/fmuls, fdiv/fdivs
+    signedness cmpw/cmplw, cmpwi/cmplwi, srawi/srwi
+    width      lbz/lhz/lwz/lha, stb/sth/stw, lfs/lfd, stfs/stfd
+
+Across the 224 game units this produced **two** arith hits, and both were
+real bugs (xDecal's UV corner, xTRC's centring sign). Precision produced
+xCM's double-vs-single arithmetic. Signedness and width produced xStricmp,
+xCMcolor_scale and _xAnimTableAddTransition -- type-declaration errors rather
+than behaviour, but all real. Nothing in the family scan was a false positive
+in the sense of "the source is already right"; the only judgement needed was
+whether a given type error could change an answer.
+
+Run it first. It is a dozen candidates instead of two hundred.
+
+### semdiff had a flaw that buried a real bug
+
+It normalised anonymous `@NNN` pool ordinals but not the `$NNNN` suffix
+CodeWarrior appends to function-local statics (`tb$731` against `tb$165`).
+Any function touching a static drowned: xTRC's `RenderText` reported 30 terms
+and `render_message` 50, both far down a list being read from the top. The
+real content of RenderText's diff was two instructions. Stripping `$NNNN` in
+*both* the resolved relocation name and the instruction text dropped it to 2
+terms and cleared render_message entirely. Fixed; re-run anything triaged
+before that.
+
+### `lfd` from .sdata2 is usually not a double literal
+
+This cost a wrong turn. `iCameraSetFogParams` showed target `lfd R, @P@sda21`
+against our `lfs R, @P@sda21`, which reads as "retail's constant is a double"
+-- so I wrote `time * 1000.0`. Wrong. The accompanying `lis R, 0x4330` is the
+other half of the integer-to-float magic-number conversion, and the `lfd`
+loads `0x4330000000000000`, not a program constant. The giveaways:
+
+- `lis 0x4330` nearby -- always the conversion.
+- `fsubs` (not `fsub`) after it -- converting *to float*, so the destination
+  variable is F32.
+- `lis 0x8000` / `xoris` -- the signed variant.
+
+Reading it correctly is what found the actual expression, because the same
+sequence also carried `lwz r, 0xf8(r)` and `srwi r, r, 2`, which is
+`GET_BUS_FREQUENCY() / 4` spelled out.
+
+### iTime is timebase ticks, and one caller forgot
+
+`typedef S64 iTime`, `iTimeGet()` returns OSGetTime deltas, and
+`iTimeDiffSec(t) = (F32)t / (GET_BUS_FREQUENCY() / 4)` -- so a second is
+about 40.5 million ticks. `iCameraSetFogParams` built its blend window with
+`(iTime)(time * 1000.0f)`, making a one-second fog transition 1000 ticks,
+roughly 25 microseconds. `iCameraUpdateFog` divides by that window, so `dt`
+saturated at 1.0 on the first frame and every fog transition snapped instead
+of easing. Correct form, confirmed by the function reaching 100% exact:
+
+    xglobals->fog_t1 = xglobals->fog_t0 + (iTime)(time * (GET_BUS_FREQUENCY() / 4));
+
+Swept the rest: zGame, xFont and zSaveLoad all convert through
+`GET_BUS_FREQUENCY() / 4` already. This was the only one.
+
+### `beq / bge / b` to the same place means a switch, not an if
+
+`stop_audio_effect` in zTalkBox had
+
+    if ((shared.active) && (shared.active->asset->audio_effect != 1))
+
+against retail's
+
+    lbz   r0, 0x23(r3)
+    cmpwi r0, 0x1
+    beq   <call>        ; case 1
+    bge   <exit>        ; default
+    b     <exit>        ; case 0, empty
+
+An `if (x == 1)` compiles to a single `bne`. Three branches off one compare
+means a switch whose empty case and default land together, which is exactly
+what `start_audio_effect` twenty lines up already looked like. Writing it as
+that switch took the function to 100% and fixed the inversion: the music was
+being un-ducked for the boxes that never ducked it, and left ducked forever
+by the ones that did.
+
+The switch also explains the signedness: a `bool : 8` bitfield promotes to
+int in a switch (`cmpwi`), where `!= 1` compared it unsigned (`cmplwi`).
+
+### Two more shapes for the false-positive list
+
+5. **The magic-constant `lfd`** -- see above. Check for `lis 0x4330` before
+   believing a `.sdata2` double.
+6. **`frsp` on an already-single value.** Retail inserts `frsp` to model the
+   rounding of storing through an F32 variable, where our source passes the
+   expression directly. `update_turn` in Dutchman, Plankton and BossSB2 all
+   show it against an `xatan2` result, which is already F32, so it is
+   numerically a no-op.
+
+Also confirmed benign this round: `bltlr`/`bgelr` and `bne`/`beq` pairs with
+swapped targets (block layout -- `sound_queue::size`, `zEntHangable_UpdateFX`),
+redundant rematerialisation of a constant inside a loop
+(`iSndWaitForDeadSounds`), and `addi rX, base, 0x786c` + `lwz 0x18(rX)`
+against `lwz 0x7884(base)` (`xtextbox::layout::yextent`).
+
+### No calls are missing
+
+Comparing `bl <symbol>` terms across all 224 game units: every mismatch is
+*ours-only*, i.e. retail inlined a helper we call out to (`SQ`,
+`ztextbox::deactivate`, `trigger_pads`, `pad_pressed`,
+`unit_meter_asset::operator=`). There is no function retail calls that we do
+not, so no behaviour is missing by that route. `xLine3VecDist2` was the one
+place our `SQ` call had no counterpart at all; squaring in place took it to
+100%.
