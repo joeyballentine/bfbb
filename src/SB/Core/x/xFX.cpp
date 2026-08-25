@@ -912,13 +912,16 @@ namespace
                   const U16* index);
     };
 
-    // TODO: Check all lerp return types. Only the first is in dwarf
+    // Every overload returns void: each one is byte-identical to retail as
+    // written, and a non-void return would have to materialise a result here
+    // because no caller uses one. Only the vert_data overload survives in the
+    // dwarf; the parameter names of the rest follow it.
     void lerp(vert_data& v, F32 frac, const vert_data& v0, const vert_data& v1);
-    void lerp(RwTexCoords& unk0, F32 unk1, const RwTexCoords& unk2, const RwTexCoords& unk3);
-    void lerp(F32& unk0, F32 unk1, F32 unk2, F32 unk3);
-    void lerp(RwRGBA& unk0, F32 unk1, RwRGBA unk2, RwRGBA unk3);
-    void lerp(U8& unk0, F32 unk1, U8 unk2, U8 unk3);
-    void lerp(xVec3& unk0, F32 unk1, const xVec3& unk2, const xVec3& unk3);
+    void lerp(RwTexCoords& v, F32 frac, const RwTexCoords& v0, const RwTexCoords& v1);
+    void lerp(F32& v, F32 frac, F32 v0, F32 v1);
+    void lerp(RwRGBA& v, F32 frac, RwRGBA v0, RwRGBA v1);
+    void lerp(U8& v, F32 frac, U8 v0, U8 v1);
+    void lerp(xVec3& v, F32 frac, const xVec3& v0, const xVec3& v1);
 
     void set_vert(RxObjSpace3DVertex& vert, const vert_data& vd);
     void set_vert(RxObjSpace3DVertex& vert, const xVec3& loc, const xVec3& norm,
@@ -1325,35 +1328,35 @@ namespace
         lerp(v.uv, frac, v0.uv, v1.uv);
     }
 
-    void lerp(RwTexCoords& unk0, F32 unk1, const RwTexCoords& unk2, const RwTexCoords& unk3)
+    void lerp(RwTexCoords& v, F32 frac, const RwTexCoords& v0, const RwTexCoords& v1)
     {
-        lerp(unk0.u, unk1, unk2.u, unk3.u);
-        lerp(unk0.v, unk1, unk2.v, unk3.v);
+        lerp(v.u, frac, v0.u, v1.u);
+        lerp(v.v, frac, v0.v, v1.v);
     }
 
-    void lerp(F32& unk0, F32 unk1, F32 unk2, F32 unk3)
+    void lerp(F32& v, F32 frac, F32 v0, F32 v1)
     {
-        unk0 = unk2 + (unk3 - unk2) * unk1;
+        v = v0 + (v1 - v0) * frac;
     }
 
-    void lerp(RwRGBA& unk0, F32 unk1, RwRGBA unk2, RwRGBA unk3)
+    void lerp(RwRGBA& v, F32 frac, RwRGBA v0, RwRGBA v1)
     {
-        lerp(unk0.red, unk1, unk2.red, unk3.red);
-        lerp(unk0.green, unk1, unk2.green, unk3.green);
-        lerp(unk0.blue, unk1, unk2.blue, unk3.blue);
-        lerp(unk0.alpha, unk1, unk2.alpha, unk3.alpha);
+        lerp(v.red, frac, v0.red, v1.red);
+        lerp(v.green, frac, v0.green, v1.green);
+        lerp(v.blue, frac, v0.blue, v1.blue);
+        lerp(v.alpha, frac, v0.alpha, v1.alpha);
     }
 
-    void lerp(U8& unk0, F32 unk1, U8 unk2, U8 unk3)
+    void lerp(U8& v, F32 frac, U8 v0, U8 v1)
     {
-        unk0 = 0.5f + ((F32)unk2 + ((F32)unk3 - (F32)unk2) * unk1);
+        v = 0.5f + ((F32)v0 + ((F32)v1 - (F32)v0) * frac);
     }
 
-    void lerp(xVec3& unk0, F32 unk1, const xVec3& unk2, const xVec3& unk3)
+    void lerp(xVec3& v, F32 frac, const xVec3& v0, const xVec3& v1)
     {
-        lerp(unk0.x, unk1, unk2.x, unk3.x);
-        lerp(unk0.y, unk1, unk2.y, unk3.y);
-        lerp(unk0.z, unk1, unk2.z, unk3.z);
+        lerp(v.x, frac, v0.x, v1.x);
+        lerp(v.y, frac, v0.y, v1.y);
+        lerp(v.z, frac, v0.z, v1.z);
     }
 
     void tri_data::init(const xVec3* loc, const xVec3* norm, const RwTexCoords* uv,
@@ -1606,7 +1609,7 @@ void xFXFireworksUpdate(F32 dt)
                 sFirework[i].vel.y += 15.0f * dt;
             }
             xParEmitterCustomSettings trail_info;
-            trail_info.custom_flags = 0x100;
+            trail_info.custom_flags = eParEmitterCustomPos;
             F32 vx = sFirework[i].vel.x;
             sFirework[i].pos.x += vx * dt;
             F32 vy = sFirework[i].vel.y;
@@ -1628,7 +1631,9 @@ void xFXFireworksUpdate(F32 dt)
                 }
 
                 xParEmitterCustomSettings xplo_info;
-                xplo_info.custom_flags = 0xD00;
+                xplo_info.custom_flags =
+                    eParEmitterCustomColorDeath | eParEmitterCustomColorBirth |
+                    eParEmitterCustomPos;
                 xplo_info.pos = sFirework[i].pos;
 
                 if (femit != NULL)

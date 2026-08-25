@@ -295,7 +295,8 @@ static void UpdateGustFX(zGust* g, float seconds)
         return;
 
     xParEmitterCustomSettings info;
-    info.custom_flags = 0x302; // TODO(jelly): i'm guessing this is constants or'd together
+    info.custom_flags =
+        eParEmitterCustomVel | eParEmitterCustomPos | eParEmitterCustomLife;
 
     for (i = 0; i < total_debris; i++)
     {

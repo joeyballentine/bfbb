@@ -62,6 +62,35 @@ struct xParEmitterPropsAsset : xBaseAsset
     F32 emit_limit_reset_time; // 0x134
 };
 
+// Which fields of an xParEmitterCustomSettings override the emitter's own asset
+// for the duration of one xParEmitterEmitCustom() call. Every bit below gates
+// exactly one assignment in that function, and the mapping is read straight off
+// it -- so the VALUES are certain.
+//
+// The NAMES are not. No debug symbol in dwarf/ names this enum, so these
+// identifiers are ours, chosen to mirror the field each bit gates. Bits 0x20
+// and 0x80 are never tested and so have no name here.
+enum en_xParEmitterCustomFlags
+{
+    // Copy the emitter and prop assets aside before applying the overrides and
+    // copy them back after emitting, so the overrides last one particle only.
+    eParEmitterCustomSaveRestore = 0x1,
+    eParEmitterCustomLife = 0x2,
+    eParEmitterCustomSizeBirth = 0x4,
+    eParEmitterCustomSizeDeath = 0x8,
+    // value[0], which unions with `rate`.
+    eParEmitterCustomRate = 0x10,
+    eParEmitterCustomVelAngleVariation = 0x40,
+    eParEmitterCustomPos = 0x100,
+    eParEmitterCustomVel = 0x200,
+    eParEmitterCustomColorBirth = 0x400,
+    eParEmitterCustomColorDeath = 0x800,
+    // Overwrites e_entbound as an F32, and only for the circle and sphere
+    // emitter types.
+    eParEmitterCustomRadius = 0x1000,
+    eParEmitterCustomEmitVolume = 0x2000
+};
+
 // Size 0x16c
 struct xParEmitterCustomSettings : xParEmitterPropsAsset
 {

@@ -94,7 +94,7 @@ static void UpdateRain(_tagClimate* climate, float seconds)
     _tagRain* r = &climate->rain;
     xParEmitterCustomSettings info;
     memset(&info, 0, sizeof(xParEmitterCustomSettings));
-    info.custom_flags = 0x100;
+    info.custom_flags = eParEmitterCustomPos;
 
     if (r->rain != 0)
     {
@@ -112,7 +112,7 @@ static void UpdateRain(_tagClimate* climate, float seconds)
 
     xVec3 fool;
     S32 total_snow_flakes = 25.0f * r->strength;
-    info.custom_flags |= 0x202;
+    info.custom_flags |= eParEmitterCustomVel | eParEmitterCustomLife;
     GetPosBigDogWhattupFool(&fool);
     if (gPTankDisable)
     {

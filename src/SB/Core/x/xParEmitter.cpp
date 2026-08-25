@@ -238,59 +238,59 @@ xPar* xParEmitterEmitCustom(xParEmitter* p, F32 dt, xParEmitterCustomSettings* i
 
     custom_flags = info->custom_flags;
     p_tasset = p->tasset;
-    if ((custom_flags & 0x1) != 0)
+    if ((custom_flags & eParEmitterCustomSaveRestore) != 0)
     {
         memcpy(&sSaveEmmiterSettings, p_tasset, sizeof(xParEmitterAsset));
         memcpy(&sSaveEmmiterPropSettings, p->prop, sizeof(xParEmitterPropsAsset));
     }
-    if ((custom_flags & 0x100) != 0)
+    if ((custom_flags & eParEmitterCustomPos) != 0)
     {
         p_tasset->pos = info->pos;
     }
-    if ((custom_flags & 0x10) != 0)
+    if ((custom_flags & eParEmitterCustomRate) != 0)
     {
         p->prop->value[0] = info->value[0];
     }
-    if ((custom_flags & 0x2) != 0)
+    if ((custom_flags & eParEmitterCustomLife) != 0)
     {
         p->prop->life = info->life;
     }
-    if ((custom_flags & 0x2000) != 0)
+    if ((custom_flags & eParEmitterCustomEmitVolume) != 0)
     {
         p->emit_volume = info->emit_volume;
     }
-    if ((custom_flags & 0x4) != 0)
+    if ((custom_flags & eParEmitterCustomSizeBirth) != 0)
     {
         p->prop->size_birth = info->size_birth;
     }
-    if ((custom_flags & 0x8) != 0)
+    if ((custom_flags & eParEmitterCustomSizeDeath) != 0)
     {
         p->prop->size_death = info->size_death;
     }
-    if ((custom_flags & 0x200) != 0)
+    if ((custom_flags & eParEmitterCustomVel) != 0)
     {
         p_tasset->vel = info->vel;
         p->prop->vel = info->vel;
     }
-    if ((custom_flags & 0x40) != 0)
+    if ((custom_flags & eParEmitterCustomVelAngleVariation) != 0)
     {
         p_tasset->vel_angle_variation = info->vel_angle_variation;
     }
-    if ((custom_flags & 0x400) != 0)
+    if ((custom_flags & eParEmitterCustomColorBirth) != 0)
     {
         p->prop->color_birth[0] = info->color_birth[0];
         p->prop->color_birth[1] = info->color_birth[1];
         p->prop->color_birth[2] = info->color_birth[2];
         p->prop->color_birth[3] = info->color_birth[3];
     }
-    if ((custom_flags & 0x800) != 0)
+    if ((custom_flags & eParEmitterCustomColorDeath) != 0)
     {
         p->prop->color_death[0] = info->color_death[0];
         p->prop->color_death[1] = info->color_death[1];
         p->prop->color_death[2] = info->color_death[2];
         p->prop->color_death[3] = info->color_death[3];
     }
-    if ((custom_flags & 0x1000) != 0)
+    if ((custom_flags & eParEmitterCustomRadius) != 0)
     {
         switch (p->tasset->emit_type)
         {
@@ -309,7 +309,7 @@ xPar* xParEmitterEmitCustom(xParEmitter* p, F32 dt, xParEmitterCustomSettings* i
         }
     }
     newpar = xParEmitterEmit(p, dt);
-    if ((custom_flags & 0x1) != 0)
+    if ((custom_flags & eParEmitterCustomSaveRestore) != 0)
     {
         memcpy(p_tasset, &sSaveEmmiterSettings, sizeof(xParEmitterAsset));
         memcpy(p->prop, &sSaveEmmiterPropSettings, sizeof(xParEmitterPropsAsset));
