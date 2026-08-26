@@ -28,13 +28,13 @@ did after every edit made so far.
 `tools/pcprogress.py` measures the other half of the question — how much of
 `src/SB` compiles against these headers:
 
-    compiles            169 / 198 units   85.35%
-    pointer width only   26 / 198 units   13.13%
-    needs other work      3 / 198 units
+    compiles            198 / 198 units   100.00%
+    pointer width only    0 / 198 units   0.00%
+    needs other work      0 / 198 units
 
-The middle line is casting a pointer to `U32`, which is one open decision
-(PCPORT.md, **Asset caveats**) rather than 26 separate defects. `src/SB` no
-longer includes a `dolphin` header anywhere.
+Compiling is not linking, and the port now does both: `tools/pclink.py` reports
+0 unresolved symbols and `build-pc/bfbb.exe` runs far enough to bring RenderWare
+up on a D3D9 device. See LINKING.md.
 
 | interface | state | notes |
 |---|---|---|
@@ -47,20 +47,26 @@ longer includes a `dolphin` header anywhere.
 | `iTRC` | **done** | the three entry points game code uses; no disc, no error screen |
 | `iColor` | **done** | pure; copied from `gc` unchanged |
 | `isavegame` | **done** | a directory per target; saves written atomically |
-| `iSnd` (22 fns) | header only | audio. The largest group after rendering |
-| `iModel` (19) | header only | librw |
-| `iMath3` (10) | header only | mostly pure computation, but the header is RW-typed |
-| `iCollide` (10) | header only | pure computation |
-| `iScrFX` (10) | header only | librw |
-| `iEnv` (7), `iLight` (7) | header only | librw |
-| `iAnim` (5), `iCutscene` (4), `iParMgr` (4), `iDraw` (3), `iMorph` (2), `iFX` (1), `iCollideFast` (1) | header only | librw |
-| `iFMV` (1) | header only | Bink is proprietary; re-encode or drop |
+| `iSnd` | **done** | 22 entry points; null backend is silent but keeps time |
+| `iModel` | **done** | not verbatim: RpAtomic has no interpolator on PC. Needed the RpHAnim group |
+| `iParMgr` | **done** | verbatim; the particle renderer, and `gRenderArr`/`gRenderBuffer` |
+| `iScrFX` | **done** | not verbatim: a `RwRasterLock` bracket a host must not honour. Its motion blur was cut from retail before ship |
+| `iEnv`, `iLight`, `iAnim`, `iMorph`, `iMath3`, `iCollide`, `iCollideFast` | **done** | all verbatim copies — see VERBATIM.txt and PORTING.md |
+| `iCutscene`, `iAnimSKB` | **done** | ported, not copied; see the notes in CMakeLists.txt |
+| `iDraw` | **done, lossy** | `iDrawSetFBMSK` is a documented no-op. It is a frame-buffer write mask with no spelling in RenderWare's portable render state or librw's, and four call sites use it to make a first pass invisible. Those passes now paint |
+| `iFX` (1 fn) | **stub** | `iFXanimUVCreatePipe`, a custom RxPipeline. The first stub the boot reaches |
+| `iFMV` (1 fn) | **stub, and will not be ported** | Bink is proprietary. The decision taken is to convert the videos with ffmpeg ahead of time and play them back with something else |
 | `ngcrad3d` | not ported | GameCube radiosity; no host counterpart |
 
-117 of the 178 interface functions game code actually calls are implemented.
-The count is what `src/SB` *references*, not what the headers declare — the
-headers declare a good deal that nothing outside `src/SB/Core/gc` ever used,
-and that surface has been dropped rather than reproduced.
+Nine of the eleven unported platform modules are done; `iFX` and `iFMV` are
+left. Seven of the nine were byte-identical copies of their `gc` counterparts,
+which is the finding PORTING.md is built around: most of this layer is not
+GameCube code, it is RenderWare calls and game logic that happen to live in the
+platform directory.
+
+**This table has been wrong before.** It said "header only" for nine interfaces
+that were already implemented, because four rounds of porting updated the code
+and not the table. If you port something, edit the row.
 
 ## Files that are not interfaces
 

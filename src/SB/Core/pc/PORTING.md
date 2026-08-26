@@ -19,9 +19,27 @@ makes three. Measured GameCube-specific line counts for the rest:
     iParMgr   986 lines, 0     iMorph  303, 0     iFX     213, 37
     iScrFX    210 lines, 2     iAnim   234, 0     iFMV    422, 70
 
+**Nine of the eleven are now done, and seven of those nine were verbatim
+copies**: iLight, iEnv, iAnim, iMorph, iParMgr, plus iMath3 and iCollideFast
+from before. Two needed one hunk each -- iModel for RpAtomic's missing
+interpolator, iScrFX for a RwRasterLock bracket a host must not honour -- and
+iDraw is a documented no-op that loses a behaviour. iFX and iFMV are left.
+
 `iFX` and `iFMV` are the only two that are substantially GameCube. `iFMV` is not
 getting ported at all -- the decision taken is to convert the videos with ffmpeg
 and play them back with something else rather than reimplement Bink.
+
+## If you are working in a fresh git worktree
+
+Two things bite immediately, both reported by agents who hit them:
+
+  * **The submodule is not populated.** `cmake` refuses with "third_party/librw
+    is empty". Run `git submodule update --init --recursive` first; it checks
+    out the pinned commit and leaves `git status` clean.
+  * **Check what your worktree was branched from.** Both agents in one round
+    were handed a worktree cut from a master-line commit rather than from
+    `treedome`, where `src/SB/Core/pc/` does not exist at all. `git log --oneline -1`
+    before you start, and `git reset --hard treedome` if it is wrong.
 
 ## The procedure
 
@@ -54,7 +72,9 @@ and play them back with something else rather than reimplement Bink.
                                         # and 7249 / 80.66999%. NON-NEGOTIABLE.
     cmake --build build-pc              # builds clean
     python tools/pclink.py              # 0 unresolved
-    build-pc/rw_selftest.exe            # 468 checks, 0 failures
+    build-pc/rw_selftest.exe            # 0 failures. The COUNT rises as the shim
+                                        # grows -- 502 at the time of writing --
+                                        # so read the failure count, not the total.
     python tools/pcprogress.py --drift  # 0 drifted
 
 `gcgate.py` is the one that matters most and the one it is easiest to skip.
