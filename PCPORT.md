@@ -292,8 +292,11 @@ question under **Asset caveats** arriving as a compile error, so it gets its
 own line. 26 units fail for that reason and no other -- 195 of 198 are either
 compiling or waiting on a decision that has not been made.
 
-`-m32` could not be tested here; this container has no multilib. That
-experiment is still the cheapest way to settle the question.
+`-m32` was tested on 2026-08-26 with clang 16, and it clears the whole class:
+162/198 units compile 64-bit against these headers, 195/198 under `-m32`, with
+the pointer-width count at zero — 33 units fixed, none broken. So the answer to
+this section is **build 32-bit**; the alternative, separating on-disk formats
+from in-memory structs, is not needed and should not be started.
 
 None of the remainder is waiting on librw, because compiling is not linking.
 

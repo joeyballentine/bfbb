@@ -4,43 +4,44 @@ For whoever picks this up next. `PCPORT.md` is the design record and the
 argument; this is the operating manual. Read this first, then
 `src/SB/Core/pc/README.md` for the layer itself.
 
-Branch: **`claude/pc-port-platform-layer`**, off `duplicatotron-3000`.
+Branch: **`treedome`**, off `duplicatotron-3000`.
 
 ---
 
-## 0. Before anything else: the container rolls back
+## 0. Setup, and what this branch sits on
 
-This happened **six times** in one session. The working tree reverts to commit
-`3b74efe` and everything uncommitted is gone, including files under `/tmp`.
+`treedome` branches off `duplicatotron-3000` and **inherits the CodeWarrior
+patch on purpose**. That costs you nothing if you only want to build the port:
+the PC build is clang/cmake and never invokes CodeWarrior. The patch matters
+only for running the GameCube regression gate in section 1, and inheriting it
+keeps that gate on the best baseline available (7249 matched functions rather
+than roughly 7180 against a stock compiler).
 
-Symptoms: `git log --oneline -1` shows `3b74efe`, `src/SB/Core/pc/` does not
-exist, `tools/objsame.py` is missing.
+The division of labour matters when you add something:
 
-Recovery, and run this **at the start of every session** before trusting
-anything:
-
-```sh
-cd /home/user/bfbb
-SC=/tmp/claude-0/-home-user-bfbb/<session-id>/scratchpad     # your scratchpad
-
-git fetch origin claude/pc-port-platform-layer
-git checkout -B claude/pc-port-platform-layer origin/claude/pc-port-platform-layer
-
-rm -rf $SC/compilers/GC/2.0p1a
-python3 tools/patch_compiler.py $SC/compilers
-python3 configure.py --compilers $SC/compilers
-```
-
-Then confirm three things before you measure anything:
+- **`duplicatotron-3000`** is the shared base -- decomp work, the compiler
+  patch, and `tools/gcgate.py`. Anything both branches need goes there, and
+  `treedome` is rebased on top, so the port never carries a duplicate copy.
+- **`treedome`** is the port and nothing else: `src/SB/Core/pc/`,
+  `CMakeLists.txt`, `tools/pcprogress.py`, and the docs.
 
 ```sh
-git log --oneline -1                            # a6b4929 or later
-sha1sum $SC/compilers/GC/2.0p1a/mwcceppc.exe    # 5c6862b641adb8845f0fc09a6569902df068a83f
-ls src/SB/Core/pc/*.cpp | wc -l                 # 10
+git checkout treedome
+python tools/patch_compiler.py build/compilers
+python configure.py
+ninja
+python tools/gcgate.py           # must pass before you trust any measurement
 ```
 
-**Commit and push often.** Anything not pushed is one rollback from gone. Two
-of the six rollbacks cost real work.
+The PC side is separate and needs neither of the above:
+
+```sh
+cmake -S . -B build-pc -G Ninja && cmake --build build-pc && ./build-pc/pc_selftest
+python tools/pcprogress.py --m32
+```
+
+Note that `cmake --build` currently fails on Windows -- the platform layer's own
+implementation is POSIX-only. See 5(f).
 
 ---
 
@@ -181,22 +182,39 @@ There is no `report.json` for a port — nothing to score bytes against.
 of `src/SB` compile, on a modern toolchain, against the PC platform headers?
 
 ```
-$ python3 tools/pcprogress.py
-compiles            169 / 198 units   85.35%
-pointer width only   26 / 198 units   13.13%   (see PCPORT.md, Asset caveats)
+$ python tools/pcprogress.py --m32
+clang++ -m32
+compiles            195 / 198 units   98.48%
+pointer width only    0 / 198 units    0.00%
 needs other work      3 / 198 units
 ```
 
+**Always pass `--m32`.** 32-bit is the project's answer to the pointer-width
+question, not an experiment — see §5(a). Without it the same tree reads
+162/198, and the 33-unit gap is entirely pointers truncating on LP64.
+
 - `--list` per-unit verdict, `--errors` first error per failing unit,
   `--drift` checks the 16 headers copied verbatim from `gc/` for divergence.
+- `--cc` picks the host compiler; the default is `g++`, else `clang++`.
 - Positional args filter: `pcprogress.py xEnt zPlayer`.
 
-**The middle line is one decision, not 26 defects.** See §5.
+The remaining 3 are the structural units in §5(c). There is nothing else left
+in the "would compile if only" category.
 
-**Do not add `-fpermissive` back.** It was there once and inflated the number
-by 34 units — it read 97.5% where the truth was 80.3%, and it disagreed with
-`CMakeLists.txt`, which never passed it. If you widen the flags, make the two
-agree.
+### Two ways this metric has already lied
+
+**`-fpermissive`.** It was on once and inflated the number by 34 units — read
+97.5% where the truth was 80.3% — and it disagreed with `CMakeLists.txt`, which
+never passed it. Do not add it back. If you widen the flags, make the two agree.
+
+**`-w`, on clang.** Subtler and worse. g++ makes `(U32)somePointer` a hard error
+in C++ mode, so `-w` is harmless there. clang makes the same cast a *warning*,
+so under `-w` the entire pointer-width class vanishes and every unit whose only
+problem is pointer width silently passes — the tool reads ~195/198 in **64-bit**
+and means nothing by it. clang's `-w` cannot be overridden by a later
+`-Werror=`; `-Wno-everything` can, so that is the idiom, with the pointer casts
+promoted back to errors. The rule underneath both: if a flag changes the number,
+check that it changed the *port* and not the *diagnostic policy*.
 
 `src/SB/Core/pc/tests/selftest.cpp` is the other half: **86 checks** over every
 implemented interface that does not need a renderer, so "implemented" is a
@@ -232,8 +250,8 @@ defines neither).
   macro for non-CodeWarrior compilers to quiet clangd — a port picking that up
   gets `FABS(-3) == -3`. The selftest checks this specifically.
 - `iPadHost.h` / `iPadHostNull.cpp` — the device end of input, behind a seam.
-  `null` is a real configuration (no controllers), not a placeholder. No SDL2
-  in this container and `apt` could not reach a mirror.
+  `null` is a real configuration (no controllers), not a placeholder. Nothing
+  is wired to a real device yet; SDL2 is the obvious first backend.
 - `VERBATIM.txt` — the 16 headers copied unchanged from `gc/`, with the hash
   each was copied at. `pcprogress.py --drift` reports divergence.
 
