@@ -551,7 +551,7 @@ typedef enum RpLightFlag RpLightFlag;
 // The last four are librw's own, named after its members so the assertions can
 // name them: clump/inClump and world/originalSync are how librw implements what
 // RenderWare does with plugin extensions on RpLight.
-#ifdef GAMECUBE
+#ifndef PLATFORM_PC
 struct RpLight
 {
     RwObjectHasFrame object;

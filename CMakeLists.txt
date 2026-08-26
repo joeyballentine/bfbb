@@ -33,6 +33,18 @@ set(PC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/pc)
 # PCPORT.md.
 add_compile_options(-fno-strict-aliasing)
 
+# Selects the port's own struct layouts in include/rwsdk -- the ones that mirror
+# librw so an RwFrame* is an rw::Frame*. It has to be a positive marker that
+# ONLY the port defines, and it must match what tools/pcprogress.py measures
+# with, or the two disagree the way they did over -m32.
+#
+# NOT -DGAMECUBE inverted, which is what those guards used to key on: GAMECUBE
+# lives in configure.py's cflags_bfbb and so is absent from src/rwsdk,
+# src/dolphin and src/bink. Those are compiled by CodeWarrior for the console
+# and were silently getting the port's layouts; src/rwsdk stopped compiling
+# outright once the camera structs landed.
+add_compile_definitions(PLATFORM_PC)
+
 # 32-bit is a project-wide constraint, not a preference. gMemInfo.DRAM.addr is
 # a U32 and xMemInitHeap does pointer arithmetic on it as an integer; every
 # asset-overlaid struct addresses memory in 32 bits; and sizeof(xSndVoiceInfo)

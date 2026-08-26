@@ -416,7 +416,7 @@ typedef enum RwRasterPrivateFlag RwRasterPrivateFlag;
 // RwRasterGetFormat is spelled differently below. And it carries a `platform`
 // field RenderWare has no counterpart for, naming the driver that owns the
 // pixels; it is librw's, not ours, and nothing in the game should read it.
-#ifdef GAMECUBE
+#ifndef PLATFORM_PC
 struct RwRaster
 {
     RwRaster* parent;
@@ -463,7 +463,7 @@ struct RwRaster
 
 #define RwRasterGetDepth(_raster) ((_raster)->depth)
 
-#ifdef GAMECUBE
+#ifndef PLATFORM_PC
 #define RwRasterGetFormat(_raster) ((((_raster)->cFormat) & (rwRASTERFORMATMASK >> 8)) << 8)
 #else
 #define RwRasterGetFormat(_raster) (((_raster)->cFormat) & rwRASTERFORMATMASK)
@@ -496,7 +496,7 @@ struct RxRenderStateVector
 // uses bit 0 and bit 1 to record whether it owns the pixels and the palette,
 // where RenderWare kept rwIMAGEGAMMACORRECTED there. Nothing in the game reads
 // image->flags, and the port must not start.
-#ifdef GAMECUBE
+#ifndef PLATFORM_PC
 struct RwImage
 {
     RwInt32 flags;
@@ -571,7 +571,7 @@ struct RwTexDictionary
 // Mirrored onto rw::Texture, which agrees with RenderWare all the way down and
 // then appends a second link. Keeping the trailing member is what makes the
 // sizes match, and the size is what a caller allocating a texture depends on.
-#ifdef GAMECUBE
+#ifndef PLATFORM_PC
 struct RwTexture
 {
     RwRaster* raster;
@@ -696,8 +696,8 @@ typedef RwTexture* (*RwTextureCallBack)(RwTexture* texture, void* pData);
 // byte-identical. Guarded on GAMECUBE rather than __MWERKS__ deliberately: this
 // is a question about the console, not the compiler. Safe here because nothing
 // outside src/SB includes this header, and src/SB is the only thing built with
-// -DGAMECUBE.
-#ifdef GAMECUBE
+// -DPLATFORM_PC, which only the port defines.
+#ifndef PLATFORM_PC
 struct RwFrame
 {
     RwObject object;
@@ -824,7 +824,7 @@ typedef RwCamera* (*RwCameraEndUpdateFunc)(RwCamera* camera);
 // librw's callbacks return void where RenderWare's return the camera. Nothing
 // in the game reads or calls them, and this way a call through RenderWare's
 // RwCameraBeginUpdateFunc is a compile error rather than a wrong return value.
-#ifdef GAMECUBE
+#ifndef PLATFORM_PC
 struct RwCamera
 {
     RwObjectHasFrame object;

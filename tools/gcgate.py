@@ -21,6 +21,16 @@ lost the symbols they call, and the DOL hash stayed green throughout.
 
 So both numbers, every time.
 
+ALWAYS check ninja's exit status before trusting a PASS from this. A failed
+build leaves the previous DOL and report.json in place, and this script will
+happily pass on them -- it has no way to know they are stale. That is the same
+trap as `ninja | tail`, reached from the other end, and it has now happened:
+a header change broke src/rwsdk, ninja exited 1, and this printed PASS/PASS on
+artifacts from the build before it.
+
+    ninja > /tmp/gc.log 2>&1; echo "exit: $?"    # <- read that number
+    python tools/gcgate.py
+
 Confirm a FAIL before believing it, especially just after a branch switch. The
 incremental build can hand back a stale object: switching to a branch and
 rebuilding reported check_hide_entities__Fv in zCutsceneMgr down to 91.047%,

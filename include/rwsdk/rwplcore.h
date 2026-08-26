@@ -616,7 +616,7 @@ typedef RwBool (*rwCustomStreamFnSkip)(void* data, RwUInt32 offset);
 // src/SB/Core/pc/rw/stream.h defines it, as a class deriving from rw::Stream,
 // so the shim's own conversions are checked by the compiler rather than
 // reinterpret_cast'd.
-#ifdef GAMECUBE
+#ifndef PLATFORM_PC
 struct RwStreamMemory
 {
     RwUInt32 position;
