@@ -21,6 +21,14 @@ lost the symbols they call, and the DOL hash stayed green throughout.
 
 So both numbers, every time.
 
+Confirm a FAIL before believing it, especially just after a branch switch. The
+incremental build can hand back a stale object: switching to a branch and
+rebuilding reported check_hide_entities__Fv in zCutsceneMgr down to 91.047%,
+and deleting that one .o and rebuilding put it back at 100% with nothing else
+changed. Neither the unit nor any header it includes differed between the two
+branches. So when this fails, delete the named unit's object, rebuild, and read
+it again -- the same discipline the hand-off applies to `ninja | tail`.
+
 Usage:
   gcgate.py                 check both; exit 1 if either fails
   gcgate.py --update        record the current numbers as the new baseline
