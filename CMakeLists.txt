@@ -274,6 +274,16 @@ add_library(bfbb_platform STATIC
   # there is nothing new for rw/layout_*.cpp to assert.
   ${PC_DIR}/iAnim.cpp
 
+  # Ported, and a verbatim copy too: gc/iParMgr.cpp is the particle renderer,
+  # and it builds its quads into RxObjSpace3DVertex arrays and hands them to
+  # RwIm3DTransform -- no GX, no OS, nothing GameCube-specific in it. The one
+  # RenderWare enumeration it passes through numerically is rwPRIMTYPETRILIST,
+  # already asserted against librw's in rw/layout_camera.cpp;
+  # rwRENDERSTATETEXTURERASTER is translated by the shim's own switch in
+  # rw/renderstate.cpp rather than passed through, so it needs no assert.
+  # It also owns the gRenderArr / gRenderBuffer globals.
+  ${PC_DIR}/iParMgr.cpp
+
   # --- STUBS, not implementations ------------------------------------------
   # Eleven modules have a PC header and no PC implementation. These files make
   # the port LINK so that it can be RUN, which is the next gate after the one
@@ -289,7 +299,6 @@ add_library(bfbb_platform STATIC
   # A file leaves this block when it stops being a stub. It does not need to
   # move -- it needs to stop including iStub.h.
   ${PC_DIR}/iModel.cpp
-  ${PC_DIR}/iParMgr.cpp
   ${PC_DIR}/iScrFX.cpp
   ${PC_DIR}/iDraw.cpp
   ${PC_DIR}/iFX.cpp
