@@ -169,6 +169,12 @@ add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   # All three are verbatim copies of shipping code, so what is unproven about
   # them is only that they build on a host -- which bfbb_platform already shows.
 
+  # The HIP container reader, so the byte-swapping in xhipio.cpp is exercised
+  # rather than asserted. Its whole dependency closure is iFile, which this
+  # layer already implements.
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x/xhipio.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x/xbinio.cpp
+
   ${INPUT_SOURCES}
   ${AUDIO_SOURCES}
   ${HOST_SOURCES}

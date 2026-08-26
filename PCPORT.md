@@ -167,11 +167,18 @@ plausible RenderWare chunk headers little-endian and zero big-endian, at library
 version 0x1400FFFF (RW 3.4), including type 0x16 texture dictionaries, which is
 the Xbox-native form librw handles best.
 
-So the port needs byte-swapping in the HIP/HOP loader and nowhere else. That is
-bounded -- chunk headers and the two tables of contents -- rather than the
-pervasive problem GameCube payloads would have been, and it is worth knowing
-before someone concludes from the section above that no swapping is needed
-anywhere.
+**And the engine already handles it.** `src/SB/Core/x/xbinio.cpp` has carried
+`ReadMShorts` / `ReadMLongs` / `ReadMFloats` behind `#if ENDIAN ==
+LITTLE_ENDIAN` since retail, with `ENDIAN` selected by `GAMECUBE` -- Heavy Iron
+shipped this engine on Xbox and PS2 as well, so the container reader was always
+byte-order aware, and the decomp preserved the mechanism. The port gets it for
+free.
+
+Verified rather than assumed: the unmodified reader walks a retail Xbox
+`boot.HIP` on Windows and returns HIPA, PACK, PVER, DICT and ATOC correctly.
+There is a check for it in the selftest, because this looks exactly like
+something a port would have to add -- and adding it double-swaps, which is what
+happened before that check existed to say so.
 
 **Version and content drift.** The decomp targets `GQPE78` (GameCube NTSC-U).
 The Xbox release is a different SKU and may carry different revisions, fixes or

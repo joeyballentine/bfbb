@@ -15,6 +15,7 @@
 #include "iFile.h"
 #include "iHost.h"
 #include "iSnd.h"
+#include "xhipio.h"
 #include "iSndHost.h"
 #include "xSnd.h"
 #include "iMath.h"
@@ -568,8 +569,180 @@ static void test_snd()
     iSndExit();
 }
 
+// ---------------------------------------------------------------------------
+// The HIP container reader.
+//
+// The container is big-endian on every platform, including Xbox -- it is the
+// packer's format, not the console's -- so a little-endian host has to swap
+// every chunk id and size on the way in.
+//
+// It already does, and that is the point of this test. xbinio.cpp has carried
+// ReadMShorts/ReadMLongs/ReadMFloats behind `#if ENDIAN == LITTLE_ENDIAN` since
+// retail: Heavy Iron shipped this engine on Xbox and PS2 as well as the
+// GameCube, and the decomp preserved the mechanism. ENDIAN is selected by
+// GAMECUBE, so the port gets the swapping for free.
+//
+// Worth pinning down with a test precisely because it looks like something the
+// port would have to add. It does not, and adding it double-swaps -- which is
+// what happened before this test existed to say so.
+//
+// Synthesised rather than pointed at a retail file on purpose: the check has to
+// run for anyone, and a hand-built container is what pins the byte order down.
+// Set BFBB_HIP to a real .HIP as well and the last part of this reads that too.
+
+static void put32(FILE* f, U32 v)
+{
+    fputc((v >> 24) & 0xff, f);
+    fputc((v >> 16) & 0xff, f);
+    fputc((v >> 8) & 0xff, f);
+    fputc(v & 0xff, f);
+}
+
+static void put_tag(FILE* f, const char* tag)
+{
+    fwrite(tag, 1, 4, f);
+}
+
+#define TAG4(a, b, c, d) (((U32)(a) << 24) | ((U32)(b) << 16) | ((U32)(c) << 8) | (U32)(d))
+
+static void test_hip()
+{
+    printf("HIP container reader\n");
+
+    char dir[512];
+    if (!scratch_dir("hip", dir, sizeof(dir)))
+    {
+        check(false, "could not make a temp directory");
+        return;
+    }
+
+    char path[600];
+    snprintf(path, sizeof(path), "%s/synth.HIP", dir);
+
+    // HIPA(0) PACK{ PVER=<3 longs> PFLG=<1 long> } -- the shape of a real file's
+    // head, with values chosen so a byte-order slip cannot look like a pass.
+    FILE* f = fopen(path, "wb");
+    check(f != NULL, "the synthetic HIP could be created");
+    if (f == NULL)
+    {
+        return;
+    }
+
+    put_tag(f, "HIPA");
+    put32(f, 0);
+    put_tag(f, "PACK");
+    put32(f, 8 + 12 + 8 + 4);
+    put_tag(f, "PVER");
+    put32(f, 12);
+    put32(f, 2);
+    put32(f, 0x000a000f);
+    put32(f, 1);
+    put_tag(f, "PFLG");
+    put32(f, 4);
+    put32(f, 0x022a002e);
+    fclose(f);
+
+    // iFile resolves names against a base path, so point it at the scratch
+    // directory and open the file by name, exactly as the game does.
+    iFileInit();
+    iFileSetPath(dir);
+
+    st_HIPLOADFUNCS* hf = get_HIPLFuncs();
+    check(hf != NULL, "get_HIPLFuncs returns the function map");
+
+    st_HIPLOADDATA* ld = hf->create("synth.HIP", NULL, 0);
+    check(ld != NULL, "the reader opens it");
+    if (ld == NULL)
+    {
+        return;
+    }
+
+    check(hf->basesector(ld) == 0,
+          "base sector is 0 on a host, where there is no disc");
+
+    U32 cid = hf->enter(ld);
+    check(cid == TAG4('H', 'I', 'P', 'A'), "first chunk is HIPA");
+    hf->exit(ld);
+
+    cid = hf->enter(ld);
+    check(cid == TAG4('P', 'A', 'C', 'K'), "second chunk is PACK");
+
+    cid = hf->enter(ld);
+    check(cid == TAG4('P', 'V', 'E', 'R'), "PACK's first child is PVER");
+
+    // The values, which is where a byte-order slip actually shows: a swapped
+    // 2 reads as 0x02000000, and a swapped 0x000a000f as 0x0f000a00.
+    S32 v[3] = { 0, 0, 0 };
+    S32 got = hf->readLongs(ld, v, 3);
+    check(got == 3, "three longs read out of PVER");
+    check(v[0] == 2, "PVER's first long is 2, swapped back from big-endian");
+    check(v[1] == 0x000a000f, "PVER's second long survives the round trip");
+    check(v[2] == 1, "PVER's third long is 1");
+    hf->exit(ld);
+
+    cid = hf->enter(ld);
+    check(cid == TAG4('P', 'F', 'L', 'G'), "PACK's second child is PFLG");
+    S32 flg = 0;
+    hf->readLongs(ld, &flg, 1);
+    check(flg == 0x022a002e, "PFLG's value survives the round trip");
+    hf->exit(ld);
+
+    hf->exit(ld);
+    hf->destroy(ld);
+
+    iHostRemoveFile(path);
+    iHostRemoveDir(dir);
+
+    // If a real game HIP is to hand, walk its head too. Retail files are the
+    // only thing that proves the synthetic one has the shape right.
+    const char* real = getenv("BFBB_HIP");
+    if (real == NULL || real[0] == '\0')
+    {
+        printf("    (set BFBB_HIP to a retail .HIP to check one of those too)\n");
+        return;
+    }
+
+    // Split the retail path into a directory to point iFile at and a name.
+    char rdir[512];
+    snprintf(rdir, sizeof(rdir), "%s", real);
+    char* slash = strrchr(rdir, '/');
+    char* back = strrchr(rdir, '\\');
+    if (back > slash)
+    {
+        slash = back;
+    }
+    const char* rname = real;
+    if (slash != NULL)
+    {
+        *slash = '\0';
+        rname = real + (slash - rdir) + 1;
+        iFileSetPath(rdir);
+    }
+
+    st_HIPLOADDATA* rl = hf->create(rname, NULL, 0);
+    check(rl != NULL, "a retail HIP opens");
+    if (rl == NULL)
+    {
+        return;
+    }
+
+    check(hf->enter(rl) == TAG4('H', 'I', 'P', 'A'), "retail: first chunk is HIPA");
+    hf->exit(rl);
+    check(hf->enter(rl) == TAG4('P', 'A', 'C', 'K'), "retail: second chunk is PACK");
+    check(hf->enter(rl) == TAG4('P', 'V', 'E', 'R'), "retail: PACK begins with PVER");
+    hf->exit(rl);
+    hf->exit(rl);
+    check(hf->enter(rl) == TAG4('D', 'I', 'C', 'T'), "retail: then DICT");
+    check(hf->enter(rl) == TAG4('A', 'T', 'O', 'C'), "retail: DICT begins with ATOC");
+    hf->exit(rl);
+    hf->exit(rl);
+    hf->destroy(rl);
+    iFileExit();
+}
+
 int main()
 {
+    setvbuf(stdout, NULL, _IONBF, 0);
     printf("bfbb PC platform layer selftest\n\n");
 
     test_time();
@@ -579,6 +752,7 @@ int main()
     test_pad();
     test_savegame();
     test_snd();
+    test_hip();
 
     printf("\n%s (%d failure%s)\n", failures ? "FAILED" : "passed", failures,
            failures == 1 ? "" : "s");
