@@ -37,8 +37,8 @@ did after every edit made so far.
 | `iSystem` | **done** | boot sequence, `iVSync` paces to 60 Hz until a renderer exists |
 | `iTRC` | **done** | the three entry points game code uses; no disc, no error screen |
 | `iColor` | **done** | pure; copied from `gc` unchanged |
+| `isavegame` | **done** | a directory per target; saves written atomically |
 | `iSnd` (22 fns) | header only | audio. The largest group after rendering |
-| `isavegame` (29 fns) | header only | host files; the header is written, the body is not |
 | `iModel` (19) | header only | librw |
 | `iMath3` (10) | header only | mostly pure computation, but the header is RW-typed |
 | `iCollide` (10) | header only | pure computation |
@@ -48,7 +48,7 @@ did after every edit made so far.
 | `iFMV` (1) | header only | Bink is proprietary; re-encode or drop |
 | `ngcrad3d` | not ported | GameCube radiosity; no host counterpart |
 
-43 of the 178 interface functions game code actually calls are implemented.
+72 of the 178 interface functions game code actually calls are implemented.
 The count is what `src/SB` *references*, not what the headers declare — the
 headers declare a good deal that nothing outside `src/SB/Core/gc` ever used,
 and that surface has been dropped rather than reproduced.
@@ -72,7 +72,7 @@ and that surface has been dropped rather than reproduced.
   reach this one. `tools/pcprogress.py --drift` says when that has happened.
 - **`tests/selftest.cpp`** exercises every implemented interface that does not
   need a renderer. The GameCube side is scored by a byte-identical DOL; a port
-  has no such thing, so this is the substitute — 37 checks, so that
+  has no such thing, so this is the substitute — 84 checks, so that
   "implemented" is a measurement rather than a claim.
 
 ## Building
@@ -104,3 +104,20 @@ wrong on a host, and the reasoning is at the site:
 - `iPadStopRumble()` — the argument-less overload — stops every port instead of
   reading `globals.currentActivePad`. Nothing calls it, and it is not worth a
   dependency from the platform layer on the game layer.
+- `iSGAutoSave_Monitor` does not clear `globals.autoSaveFeature`. Retail does,
+  which is the platform layer reaching into game state; its caller already
+  returns the same answer and `zSaveLoad.cpp` turns the feature off itself.
+- `iSGSaveFile` writes to a temporary and renames. The console got atomicity
+  from CARD, which updates the directory entry after the sectors; losing power
+  mid-write here would otherwise leave a truncated save where the old one was.
+
+## Where saves go
+
+`BFBB_SAVE_DIR` if set, else `$XDG_DATA_HOME/bfbb/saves`, else
+`$HOME/.local/share/bfbb/saves`, else `./saves`. Files keep retail's names —
+`SpongeBob00` through `SpongeBob02` — so a save is called the same thing on
+both platforms.
+
+One target is exposed, which is the host equivalent of a single memory card
+inserted: it stops the game asking which card to save to on every write.
+`ISG_HOST_TARGETS` raises it, and `mcdata` is already sized for two.

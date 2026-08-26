@@ -18,6 +18,7 @@
 #include "iMemMgr.h"
 #include "iPadHost.h"
 #include "iSystem.h"
+#include "isavegame.h"
 #include "iTime.h"
 #include "xFile.h"
 #include "xMemMgr.h"
@@ -223,6 +224,148 @@ static void test_pad()
     iPadHostExit();
 }
 
+static void test_savegame()
+{
+    printf("isavegame\n");
+
+    char dir[] = "/tmp/bfbb_pc_saves_XXXXXX";
+    if (mkdtemp(dir) == NULL)
+    {
+        check(false, "could not make a temp directory");
+        return;
+    }
+
+    // iSGStartup resolves the save root once, so this has to be set first.
+    setenv("BFBB_SAVE_DIR", dir, 1);
+
+    check(iSGStartup() == 1, "iSGStartup succeeds on first call");
+
+    // The names are retail's, so a save file is called the same thing on both
+    // platforms.
+    check(strcmp(iSGMakeName(ISG_NGTYP_GAMEFILE, NULL, 1), "SpongeBob01") == 0,
+          "iSGMakeName(GAMEFILE, 1) is SpongeBob01");
+    check(iSGMakeName(ISG_NGTYP_GAMEDIR, NULL, 0)[0] == '\0',
+          "iSGMakeName(GAMEDIR) is empty, as on a card with no directories");
+
+    // Eight rotating buffers, because callers hold several at once.
+    char* a = iSGMakeName(ISG_NGTYP_GAMEFILE, NULL, 0);
+    char* b = iSGMakeName(ISG_NGTYP_GAMEFILE, NULL, 1);
+    check(strcmp(a, "SpongeBob00") == 0 && strcmp(b, "SpongeBob01") == 0,
+          "two names in flight do not alias");
+
+    st_ISGSESSION* isg = iSGSessionBegin(NULL, NULL, 0);
+    check(isg != NULL, "iSGSessionBegin returns a session");
+    check(isg->slot == -1, "a fresh session has no target selected");
+
+    S32 max = 0;
+    check(iSGTgtCount(isg, &max) >= 1, "at least one target is present");
+    check(max == ISG_NUM_SLOTS, "the maximum is the console's slot count");
+
+    check(iSGTgtState(isg, 0, NULL) == 0xF, "target 0 is present and formatted");
+    check(iSGTgtState(isg, 99, NULL) == 0x1000000, "an out-of-range target reports no card");
+    check(iSGCheckMemoryCard(isg, 0) == 1, "iSGCheckMemoryCard sees target 0");
+    check(iSGTgtPhysSlotIdx(isg, 0) == 0, "target 0 maps to physical slot 0");
+    check(iSGCheckForWrongDevice() == -1, "no wrong-region device on a host");
+
+    check(iSGTgtSetActive(isg, 0) == 1, "iSGTgtSetActive selects target 0");
+    check(isg->slot == 0, "the session records the active slot");
+
+    // Nothing saved yet.
+    check(iSGSelectGameDir(isg, "") == 0, "no game files yet");
+    check(iSGFileSize(isg, "SpongeBob00") == -1, "a missing file has size -1");
+    check(iSGCheckForCorruptFiles(isg, (char(*)[64])calloc(ISG_NUM_FILES, 64)) == 0,
+          "nothing is corrupt when nothing exists");
+
+    // xSGGameIsEmpty is `size <= 0`, so -1 has to mean empty rather than error.
+    check(iSGFileSize(isg, "SpongeBob00") <= 0, "a missing file reads as an empty slot");
+
+    S32 needed = -1;
+    S32 avail = -1;
+    S32 needFile = -1;
+    check(iSGTgtHaveRoom(isg, 0, 4096, NULL, "SpongeBob00", &needed, &avail, &needFile) == 1,
+          "there is room for a 4 KB save");
+    check(needed == 4096, "bytesNeeded is the whole file when none exists");
+    check(needFile == 1, "a new file needs a new directory entry");
+    check(avail > 0, "availOnDisk is reported");
+
+    const char payload[] = "BIKINI BOTTOM SAVE DATA, ONE EACH";
+    check(iSGSaveFile(isg, "SpongeBob00", (char*)payload, sizeof(payload) - 1, 0, NULL) == 1,
+          "iSGSaveFile writes a slot");
+    check(iSGPollStatus(isg, NULL, 0) == ISG_OPSTAT_SUCCESS, "the status reports success");
+    check(iSGOpError(isg, NULL) == ISG_OPERR_NONE, "no error is left behind");
+
+    check(iSGFileSize(isg, "SpongeBob00") == (S32)sizeof(payload) - 1,
+          "iSGFileSize is the payload, with no icon header to subtract");
+    check(iSGSelectGameDir(isg, "") == 1, "the target now has a game on it");
+
+    char readbuf[64];
+    memset(readbuf, 0, sizeof(readbuf));
+    check(iSGLoadFile(isg, "SpongeBob00", readbuf, 0) == 1, "iSGLoadFile reads it back");
+    check(memcmp(readbuf, payload, sizeof(payload) - 1) == 0, "the bytes survived the round trip");
+
+    // The save UI reads only the header of each slot to list them.
+    memset(readbuf, 0, sizeof(readbuf));
+    check(iSGReadLeader(isg, "SpongeBob00", readbuf, 6, 0) == 1, "iSGReadLeader reads a prefix");
+    check(memcmp(readbuf, "BIKINI", 6) == 0, "the prefix is the start of the file");
+
+    // Asking for more than the file holds is what a truncated save looks like.
+    // The buffer really is this big: iSGReadLeader's contract is that databuf
+    // holds numbytes, and it zero-fills the shortfall rather than leaving the
+    // tail stale.
+    static char bigbuf[4096];
+    check(iSGReadLeader(isg, "SpongeBob00", bigbuf, sizeof(bigbuf), 0) == 0,
+          "a short read is reported as failure, not a partly-filled buffer");
+    check(bigbuf[sizeof(bigbuf) - 1] == 0, "and the shortfall is zeroed");
+    check(iSGOpError(isg, NULL) == ISG_OPERR_CORRUPT, "and the error says corrupt");
+
+    char errmsg[256];
+    iSGOpError(isg, errmsg);
+    check(strlen(errmsg) > 0, "iSGOpError fills in a message");
+
+    // Overwriting costs only the difference and needs no new entry.
+    needed = -1;
+    needFile = -1;
+    iSGTgtHaveRoom(isg, 0, 4096, NULL, "SpongeBob00", &needed, &avail, &needFile);
+    check(needed == 4096 - (S32)(sizeof(payload) - 1), "overwriting only needs the difference");
+    check(needFile == 0, "overwriting needs no new directory entry");
+
+    char date[64];
+    strcpy(date, iSGFileModDate(isg, "SpongeBob00"));
+    check(strlen(date) == 19, "iSGFileModDate is MM/DD/YYYY HH:MM:SS");
+    check(strcmp(iSGFileModDate(isg, "NOPE00"), "<Unknown Modification>") == 0,
+          "a missing file reports an unknown date");
+
+    char stamp[64];
+    iSGMakeTimeStamp(stamp);
+    check(strlen(stamp) == 19, "iSGMakeTimeStamp uses the same format");
+
+    // An empty file is the one kind of damage visible at this level.
+    char corrupt[512];
+    snprintf(corrupt, sizeof(corrupt), "%s/SpongeBob01", dir);
+    fclose(fopen(corrupt, "wb"));
+    char bad[ISG_NUM_FILES][64];
+    check(iSGCheckForCorruptFiles(isg, bad) == 1, "an empty save file is reported as corrupt");
+    check(strcmp(bad[0], "SpongeBob01") == 0, "and it is named");
+
+    // The autosave session watches a target rather than saving through it.
+    st_ISGSESSION* mon = iSGAutoSave_Connect(0, NULL, NULL);
+    check(mon != NULL, "iSGAutoSave_Connect attaches to target 0");
+    check(iSGAutoSave_Monitor(mon, 0) == 1, "the target is still there");
+    check(iSGAutoSave_Monitor(NULL, 0) == 0, "a null session monitors nothing");
+    iSGAutoSave_Disconnect(mon);
+
+    iSGSessionEnd(isg);
+    check(iSGShutdown() == 1, "iSGShutdown succeeds");
+
+    char cmd[600];
+    snprintf(cmd, sizeof(cmd), "rm -rf %s", dir);
+    if (system(cmd) != 0)
+    {
+        printf("    (could not clean up %s)\n", dir);
+    }
+    unsetenv("BFBB_SAVE_DIR");
+}
+
 int main()
 {
     printf("bfbb PC platform layer selftest\n\n");
@@ -232,6 +375,7 @@ int main()
     test_mem();
     test_file();
     test_pad();
+    test_savegame();
 
     printf("\n%s (%d failure%s)\n", failures ? "FAILED" : "passed", failures,
            failures == 1 ? "" : "s");

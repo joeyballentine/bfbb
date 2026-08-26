@@ -108,17 +108,27 @@ struct st_ISG_MEMCARD_DATA
 
 #define ISG_NUM_SLOTS 2
 #define ISG_NUM_FILES 3
+// Nothing outside isavegame touches a field of this -- xsavegame.cpp only
+// passes the pointer along -- so the host build uses the names the PS2 DWARF
+// gives them rather than carrying the GameCube's unk_ offsets forward.
 struct st_ISGSESSION
 {
     st_ISG_MEMCARD_DATA mcdata[ISG_NUM_SLOTS];
+
+    // Index into mcdata, or -1 when no target has been selected.
     S32 slot;
-    S32 unk_264;
-    en_ASYNC_OPERR unk_268;
-    en_ASYNC_OPSTAT unk_26c;
-    S32 unk_270;
-    void (*chgfunc)(void*, en_CHGCODE); // 0x274
-    void* cltdata; // 0x278
-    S32 unk_27c;
+
+    en_ASYNC_OPCODE as_curop;
+    en_ASYNC_OPSTAT as_opstat;
+    en_ASYNC_OPERR as_operr;
+
+    en_CHGCODE chgcode;
+    void (*chgfunc)(void*, en_CHGCODE);
+    void* cltdata;
+
+    // Set for the autosave session, which watches its target rather than
+    // saving through it.
+    S32 monitor;
 };
 
 enum en_NAMEGEN_TYPE

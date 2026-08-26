@@ -323,8 +323,12 @@ reserved at twice the size. One more for the latent-retail-bugs list.
 
 ### What is next
 
-1. **`isavegame`** — 29 functions, the largest group that needs no renderer.
-   The header is written; the body is host files standing in for a memory card.
+1. ~~**`isavegame`**~~ — done. 29 functions, a directory per target standing in
+   for a memory card. Most of the GameCube's 2048 lines were CARD itself:
+   mounting, sector probing, formatting, repairing, and the 8 KB banner-and-icon
+   blob every card file carries ahead of its payload. None of that survives.
+   What survives is the shape, because `xsavegame.cpp` is shared and asks all
+   the same questions.
 2. **`iSnd`** — 22 functions, and the largest group after rendering.
 3. **The remaining 40 units** that do not compile. The big class is 13 units
    with `jump to case label`, which needs braces per site and a DOL check after,
