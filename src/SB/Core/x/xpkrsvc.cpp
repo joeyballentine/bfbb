@@ -1783,5 +1783,5 @@ void PKR_pop_memmark()
 
 char* st_PACKER_ATOC_NODE::Name() const
 {
-    return "<Unknown>";
+    return "<unknown>";
 }

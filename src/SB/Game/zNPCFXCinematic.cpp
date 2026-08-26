@@ -54,21 +54,22 @@ xVec3* SMOOTH(F32 t, xVec3* dst, const xVec3* a, const xVec3* b);
 void EmitFreezeBreath(xVec3* pos, xVec3* vel, F32 dt, F32 elapsed, F32 total);
 void NPAR_EmitTubeSpiralCin(const xVec3* pos, const xVec3* vel, F32 dt);
 
-// UNRESOLVED, 2026-08-26. Counting @stringBase0 relocations per function shows
-// this is the only function in the TU whose string-reference count differs:
-// retail's has ZERO, ours has one (the zParEmitterFind literal below). The
-// string "PAREMIT_BPLANK_JET_1" is present in retail's .rodata, so retail
-// references it from somewhere else and obtains the emitter here by some other
-// route -- possibly through the NCINEntry, whose table rows already carry a name
-// field ("13-BPLANK_JET_1" and friends).
+// UNRESOLVED, 2026-08-26. Retail's .rodata carries one string ours lacks
+// entirely, "fx_pickup_emphasis". It pools immediately after "g-love_shrapnel",
+// and pool order is first-use order, so it belongs to a function somewhere after
+// NCIN_GloveShrapnel_Upd.
 //
-// Related: retail's .rodata has one string ours lacks entirely,
-// "fx_pickup_emphasis", and it pools immediately after "g-love_shrapnel".
-// Pool order is first-use order, so it belongs to a function somewhere after
-// NCIN_GloveShrapnel_Upd. The two are probably the same restructuring.
+// A first attempt blamed this function, on a count that said retail referenced no
+// string here. That count was wrong: it attributed relocations using section
+// NAMES, and dtk gives the target many sections all called ".text", so this
+// function collided with another at the same offset and was dropped. Keying by
+// section index instead (tools/strdiff.py) shows retail references
+// "PAREMIT_BPLANK_JET_1" here exactly as we do, and strdiff reports zero
+// string-reference differences across the whole tree. This function is fine.
 //
-// Not guessed at: every sibling _Upd function here has the same literal shape,
-// so changing one on a hunch would be inventing an interface.
+// So the missing string is named from somewhere strdiff cannot see -- a data
+// table rather than an instruction -- or by a function that does not exist in
+// our source at all. tools/datamulti.py is the lens for the first case.
 static void NCIN_Par_BPLANK_JET_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
