@@ -15,8 +15,12 @@ namespace xhud
         F32 space;
         F32 drop_x;
         F32 drop_y;
-        color32u c;
-        color32u drop_c;
+        // iColor_tag, not color32u: it has a user-declared operator=, so
+        // `xf.color = font.drop_c` in render() resolves to
+        // iColor_tag::operator=(const iColor_tag&) -- which is the overload the
+        // target calls. Layout is identical (U8 r,g,b,a).
+        iColor_tag c;
+        iColor_tag drop_c;
     };
 
     struct font_meter_asset : meter_asset
