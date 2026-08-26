@@ -1673,11 +1673,8 @@ void ztalkbox::update_all(xScene& s, F32 dt)
     {
         trigger_pads_enum tp = (trigger_pads_enum)shared.active->asset->trigger_pads;
 
-        if (tp == TP_ACTIVE && !globals.cmgr)
-        {
-            trigger_pads(*pad_pressed());
-        }
-        else if (tp == TP_TRAPPED && globals.cmgr)
+        if ((tp == TP_ACTIVE && !globals.player.ControlOff) ||
+            (tp == TP_TRAPPED && globals.player.ControlOff))
         {
             trigger_pads(*pad_pressed());
         }
