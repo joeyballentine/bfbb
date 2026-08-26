@@ -7,7 +7,9 @@
 #include "xHudModel.h"
 #include "xHud.h"
 
-extern const basic_rect<F32> screen_bounds;
+// screen_bounds is defined `static const` privately in xHud.cpp, zGame.cpp,
+// zEntCruiseBubble.cpp and zEntPlayerBungeeState.cpp -- four separate copies,
+// none of them this one. Nothing ever linked against an external definition.
 
 struct special_data {
     char* hud_model;

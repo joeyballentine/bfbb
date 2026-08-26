@@ -11,8 +11,18 @@
 #include "xEvent.h"
 #include "xColor.h"
 
+// These are declared extern here and defined `static` at the bottom of the
+// file with an explicit .sdata2 placement -- a device for getting the two
+// constants into the right section in the right order. `extern` followed by
+// `static` is a contradiction the standard rejects, and a host has neither the
+// section nor the ordering requirement, so it just gets the constants.
+#ifdef GAMECUBE
 extern F32 _930;
 extern F64 _932_0;
+#else
+static F32 _930 = 0.5f;
+static F64 _932_0 = 4.503599627370496e15;
+#endif
 
 static void set_text(zUIFont& uif, U32 id)
 {
@@ -442,5 +452,7 @@ F32 xtextbox::yextent(F32 max, S32& size, bool cache) const
     return yextent(max, size, temp_layout(cache), 0, -1);
 }
 
+#ifdef GAMECUBE
 __declspec(section ".sdata2") static F32 _930 = 0.5f;
 __declspec(section ".sdata2") static F64 _932_0 = 4.503599627370496e15;
+#endif

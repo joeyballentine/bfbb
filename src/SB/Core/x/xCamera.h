@@ -63,7 +63,9 @@ extern S32 xcam_do_collis;
 extern F32 xcam_collis_radius;
 extern F32 xcam_collis_stiffness;
 extern RpAtomic* sInvisWallHack;
-extern xMat4x3 sCameraFXMatOld;
+// sCameraFXMatOld is defined `static` in xCamera.cpp and read nowhere else, so
+// declaring it extern here contradicted that. A const or static at namespace
+// scope keeps internal linkage only if nothing has already declared it extern.
 extern cameraFX sCameraFX[10];
 extern cameraFXTableEntry sCameraFXTable[3];
 extern F32 gCameraLastFov;

@@ -16,7 +16,11 @@ enum eStartupErrors
     eNoController,
 };
 
+#ifdef GAMECUBE
 void main(S32 argc, char** argv);
+#else
+int main(S32 argc, char** argv);
+#endif
 void iEnvStartup();
 static void zMainOutputMgrSetup();
 static void zMainInitGlobals();

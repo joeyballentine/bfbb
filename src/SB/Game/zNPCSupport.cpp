@@ -937,7 +937,7 @@ void Firework_SceneReset(int param_1)
         {
             Firework_Release(fw);
         }
-        fw->fwstate = 0;
+        fw->fwstate = FW_STAT_UNUSED;
         fw++;
     }
 }

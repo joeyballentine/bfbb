@@ -27,12 +27,13 @@ did after every edit made so far.
 `tools/pcprogress.py` measures the other half of the question — how much of
 `src/SB` compiles against these headers:
 
-    compiles            163 / 198 units   82.32%
-    pointer width only   23 / 198 units   11.62%
-    needs other work     12 / 198 units
+    compiles            169 / 198 units   85.35%
+    pointer width only   26 / 198 units   13.13%
+    needs other work      3 / 198 units
 
 The middle line is casting a pointer to `U32`, which is one open decision
-(PCPORT.md, **Asset caveats**) rather than 23 separate defects.
+(PCPORT.md, **Asset caveats**) rather than 26 separate defects. `src/SB` no
+longer includes a `dolphin` header anywhere.
 
 | interface | state | notes |
 |---|---|---|

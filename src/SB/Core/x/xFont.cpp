@@ -1271,6 +1271,12 @@ namespace
 #else
 #ifdef PS2
 #define TL_CACHE_COUNT 3
+#else
+// How many laid-out textboxes are kept. Purely a memory-for-work trade: a miss
+// re-runs the layout, it does not change what is drawn. The GameCube's 1 is
+// kept rather than the PS2's 3 because this code is GameCube-derived and 1 is
+// what it was tuned against; raising it is a tuning decision, not a port one.
+#define TL_CACHE_COUNT 1
 #endif
 #endif
 

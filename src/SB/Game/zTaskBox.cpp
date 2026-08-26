@@ -19,7 +19,9 @@ namespace
 
 void ztaskbox::load(const ztaskbox::asset_type& a)
 {
-    xBaseInit((xBase*)this, &(xBaseAsset)a);
+    // &(T)x is the address of x reinterpreted; a reference cast is the spelling
+    // that keeps it an lvalue rather than making a temporary to point at.
+    xBaseInit((xBase*)this, &(xBaseAsset&)a);
     this->baseType = eBaseTypeTaskBox;
     this->asset = &a;
     this->eventFunc = cb_dispatch;

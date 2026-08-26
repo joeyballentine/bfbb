@@ -179,7 +179,7 @@ void zSaveLoad_Tick()
     zSceneUpdate(time_elapsed);
 
     xMat4x3 playerMat;
-    xMat4x3* ma = xEntGetFrame(&(xEnt)globals.player.ent);
+    xMat4x3* ma = xEntGetFrame(&(xEnt&)globals.player.ent);
     // This feels like a normal assignment but that calls the assignment operator function.
     *(U32*)&playerMat.right.x = *(U32*)&ma->right.x;
     *(U32*)&playerMat.right.y = *(U32*)&ma->right.y;
@@ -1698,7 +1698,16 @@ void zSaveLoadAutoSaveUpdate()
     if (physicalSlot >= 0)
     {
         autoSaveCard = physicalSlot;
+#ifdef GAMECUBE
         switch (CARDProbeEx(physicalSlot, &out1, &out2))
+#else
+        // CARD_RESULT_READY (0) and CARD_RESULT_BUSY (-1) both mean the card is
+        // in the slot and the autosave can go ahead; anything else hides the
+        // icon, tells the player the save failed, and turns the feature off. A
+        // host save directory does not get pulled out mid-frame, so this is
+        // always the ready case.
+        switch (0)
+#endif
         {
         case 0:
         case -1:

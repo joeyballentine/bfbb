@@ -273,9 +273,9 @@ proxy, and anything failing it names its reason.
 
 It reports three numbers, and the split is the interesting part:
 
-    compiles            163 / 198 units   82.32%
-    pointer width only   23 / 198 units   11.62%
-    needs other work     12 / 198 units
+    compiles            169 / 198 units   85.35%
+    pointer width only   26 / 198 units   13.13%
+    needs other work      3 / 198 units
 
 **The percentage was wrong for two rounds and is corrected here.** The tool
 passed `-fpermissive`, which downgrades real errors to warnings, so it counted
@@ -286,7 +286,7 @@ only the looser one was being reported. The flag is gone.
 What it hid is worth having found: the largest remaining class is **casting a
 pointer to `U32`**. That is not a defect to fix unit by unit, it is the open
 question under **Asset caveats** arriving as a compile error, so it gets its
-own line. 23 units fail for that reason and no other -- 186 of 198 are either
+own line. 26 units fail for that reason and no other -- 195 of 198 are either
 compiling or waiting on a decision that has not been made.
 
 `-m32` could not be tested here; this container has no multilib. That
@@ -349,15 +349,17 @@ reserved at twice the size. One more for the latent-retail-bugs list.
    What survives is the shape, because `xsavegame.cpp` is shared and asks all
    the same questions.
 2. **`iSnd`** — 22 functions, and the largest group after rendering.
-3. **The 23 pointer-width units**, which are one decision rather than 23 fixes.
-4. **The 12 that need other work.** `zMain.cpp` and `zSaveLoad.cpp` call
-   `CARDMount`, `CARDFormatAsync` and `CARDProbeEx` directly to drive the
-   memory-card format screen -- a platform leak in game code that belongs
-   behind an interface, and the last dolphin dependency in `src/SB`.
-   `xModelBucket.cpp` includes a GameCube RenderWare driver header. `xFX.cpp`
-   needs its `tier_queue` member specializations declared before `xFX.h`
-   instantiates them, and `xFX.h` is included by 71 other units, so the
-   declaration cannot simply go there -- that was tried and cost 71 units.
+3. **The 26 pointer-width units**, which are one decision rather than 26 fixes.
+4. **The 3 that need other work**, all structural rather than mechanical:
+   - `xFX.cpp` and `xFont.cpp` define member specializations
+     (`tier_queue<joint_data>`, `basic_rect<F32>`) below the point where their
+     own headers instantiate them. The declaration has to be visible earlier,
+     and the obvious home -- the header -- is shared with 71 and 100+ other
+     units respectively, where the declaration would then land *after*
+     instantiation. Putting them in `xFX.h` was tried and took the count from
+     191 units to 120. Needs somewhere those includers do not see.
+   - `xModelBucket.cpp` includes `rwsdk/driver/gcn/dlrendst.h`, a GameCube
+     RenderWare driver header. Phase 3.
 4. **librw**, which is phase 3 and gates the other 14 interfaces.
 
 ### `jump to case label`, and what measuring it cost
@@ -427,3 +429,42 @@ version has two.
   aliases for `fabs` -- and does not define them, so the host layer supplies
   the bodies in `src/SB/Core/pc/intrin.cpp`. Defining them in a header instead
   is a static redeclaration of an extern, which is how this was found.
+
+### No game code reaches for the console any more
+
+`src/SB` is now free of `dolphin`. The last three were:
+
+- **`zMainMemCardSpaceQuery`**, the memory-card startup screen -- 250 lines of
+  `CARDMount`, `CARDFormatAsync`, progress bars and `OSResetSystem`. Every state
+  it exists to resolve is a property of a card: not inserted, not formatted,
+  formatted for another region, damaged, or holding a file whose checksum does
+  not hold up. A save directory has none of them, and a host has nowhere to
+  reset to. The host body keeps the one question still worth asking -- is there
+  room -- so a full disk is reported at startup rather than found at the first
+  autosave.
+- **`CARDProbeEx` in zSaveLoad.cpp**, one call deciding whether to show the
+  saving icon. `CARD_RESULT_READY` and `CARD_RESULT_BUSY` both mean go ahead.
+- **`void main`.** CodeWarrior accepts it; standard C++ does not. The port's
+  entry point returns `int` now.
+
+### Third pass, continued
+
+- **`extern` contradicted by `static`.** `sCameraFXMatOld` declared extern in
+  `xCamera.h` and defined static in the .cpp with no other reader;
+  `screen_bounds` declared extern in `zHud.h` while four .cpp files each define
+  a private `static const` copy and nothing links to an external one; `_930`
+  and `_932_0` in `zUIFont.cpp`, declared extern at the top and defined static
+  at the bottom with an explicit `.sdata2` placement -- a device for getting
+  two constants into the right section in the right order, which a host needs
+  neither of.
+- **`&(T)expr`.** CodeWarrior treats a C-style cast of an lvalue as an lvalue,
+  so this is the address of the object; standard C++ makes a temporary and
+  points at that. A reference cast, `&(T&)expr`, says what was meant.
+- **Two-phase lookup.** `sound_queue::pop` and its neighbours call `xSndStop`
+  and `xSndIsPlayingByHandle`, both declared 100 lines below the template that
+  calls them. A call with no dependent arguments binds where the template is
+  defined, not where it is instantiated.
+- **`TL_CACHE_COUNT`** had a `GAMECUBE` branch and a `PS2` branch and no other.
+  It is how many laid-out textboxes are kept -- a miss re-runs the layout, it
+  does not change what is drawn -- so the host takes the GameCube's 1 rather
+  than the PS2's 3, on the grounds that this code is GameCube-derived.

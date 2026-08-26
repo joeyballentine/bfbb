@@ -103,7 +103,7 @@ namespace oob_state
 
         static void reset_camera()
         {
-            globals.camera.tgt_omat = xEntGetFrame(&(xEnt)globals.player.ent);
+            globals.camera.tgt_omat = xEntGetFrame(&(xEnt&)globals.player.ent);
             globals.camera.tgt_mat = globals.camera.tgt_omat;
 
             zCameraEnableInput();

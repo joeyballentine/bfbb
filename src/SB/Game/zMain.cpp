@@ -33,8 +33,11 @@ extern "C" int sprintf(char*, const char*, ...);
 #include "iFile.h"
 #include "zScene.h"
 #include "zGameState.h"
+// Only zMainMemCardSpaceQuery reaches for these, and its body is gated below.
+#ifdef GAMECUBE
 #include <dolphin/card.h>
 #include <dolphin/os.h>
+#endif
 // from zAssetTypes.h - see the note above
 void zAssetStartup();
 void zAssetShutdown();
@@ -97,7 +100,14 @@ void zGameSetup();
 void zGameLoop();
 void zGameExit();
 
+#ifdef GAMECUBE
 void main(S32 argc, char** argv)
+#else
+// Standard C++ requires ::main to return int. CodeWarrior does not, and the
+// console's boot code has nothing to do with a return value -- the game runs
+// zMainLoop until it is shutting down and then the hardware halts.
+int main(S32 argc, char** argv)
+#endif
 {
     U32 options;
     S32 i;
@@ -150,6 +160,10 @@ void main(S32 argc, char** argv)
     xSerialShutdown();
     xUtilShutdown();
     iSystemExit();
+
+#ifndef GAMECUBE
+    return 0;
+#endif
 }
 
 void zMainOutputMgrSetup()
@@ -989,6 +1003,7 @@ void zMainFirstScreen(S32 mode)
 // nothing at all, the second costs 1.4 points.
 void zMainMemCardSpaceQuery()
 {
+#ifdef GAMECUBE
     S32 bytesNeeded = 0;
     S32 availOnDisk = 0;
     S32 neededFiles = 0;
@@ -1236,6 +1251,30 @@ void zMainMemCardSpaceQuery()
     {
         RwFree(workArea);
     }
+#else
+
+    // The GameCube body is the memory-card startup screen. Every state it
+    // exists to resolve is a property of a card: not inserted, not formatted,
+    // formatted for another region, physically damaged, or holding a file whose
+    // checksum does not hold up -- and, if the player declines to fix it,
+    // OSResetSystem back to the console menu.
+    //
+    // A save directory has none of those states. It cannot be absent (iSGStartup
+    // creates it), cannot be unformatted, has no region, and cannot be pulled
+    // out mid-frame. There is also nowhere for a host to reset to.
+    //
+    // What survives is the one question still worth asking before the player
+    // starts a game: is there room. Asking it here means a full disk is reported
+    // at startup rather than discovered at the first autosave.
+    S32 bytesNeeded = 0;
+    S32 availOnDisk = 0;
+    S32 neededFiles = 0;
+
+    zMenuCardCheckStartup(&bytesNeeded, &availOnDisk, &neededFiles);
+    zSceneCardCheckStartup_set(bytesNeeded, availOnDisk, neededFiles);
+    zMainMemCardQueryPost(0, 0, 0, 0);
+
+#endif
 }
 
 static void zMainMemCardQueryPost(S32 needed, S32 available, S32 neededFiles, S32 unk0)
