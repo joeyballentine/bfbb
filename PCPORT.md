@@ -214,11 +214,51 @@ the truthful outcome. **The consequence at runtime is no level geometry: the
 player falls through the floor.** Model-to-model collision is unaffected, since
 that goes through `RpAtomicForAllIntersections`.
 
-There is a second problem stacked behind the first: BFBB's BSPs are
-GameCube-native even in the Xbox build's shape -- sector geometry is a display
-list in a platform extension chunk, which is why `iFX.cpp` reads
+### The Xbox assets do not contain a world at all
+
+Checked against the dump rather than assumed, and it changes the shape of the
+problem. Scanning all 121 packs:
+
+    BSP assets:   0
+    JSP assets: 110
+
+Level geometry in the Xbox build is `JSP`, and a JSP's payload is RW chunk type
+**0x10 (`rwID_CLUMP`)**, not 0x0B (`rwID_WORLD`). `xJSP_MultiStreamRead` loads
+it with `RwStreamFindChunk(stream, rwID_CLUMP)` + `RpClumpStreamRead` -- a path
+the shim already implements and tests.
+
+So `RpWorldStreamRead` is registered for asset type `'BSP '` and never fed
+anything. **Implementing world sectors would not help against Xbox assets: there
+would be no BSP to read.**
+
+That is not the good news it first looks like, because the world is not only
+scenery. `iEnv` carries four of them --
+
+    struct iEnv { RpWorld *world, *collision, *fx, *camera; xJSPHeader *jsp; ... }
+
+-- and `BSP_Read` is the only thing in this codebase that produces any. The
+collision world is what `xScene`'s nearest-floor query walks
+(`RpCollisionWorldForAllIntersections`), so without it the player falls through
+the floor for a second, unrelated reason: not "librw cannot render the level"
+but "nothing built the collision world".
+
+This is the risk this document already named under "The code is GameCube-derived;
+the assets would be Xbox-derived", now realised in a specific place. The Xbox
+build clearly loaded its environment some other way, and that code is not what
+we decompiled -- ours is the GameCube build's, and it expects BSPs.
+
+**So the fallback recorded below is no longer hypothetical: use GameCube assets,
+converted offline to little-endian.** They carry the BSPs the code we actually
+have was written against. Xbox assets remain the better answer for *models and
+textures*, and PCPORT.md already allows the hybrid; this is the case for taking
+it. Implementing world sectors in librw is then worth doing, and worth doing
+upstream -- but it pays off against GameCube assets, not Xbox ones.
+
+A second problem sits behind that one either way: GameCube sector geometry is a
+display list in a platform extension chunk, which is why `iFX.cpp` reads
 `_rpDlWorldVtxFmtOffset` off the current world. librw has PS2, D3D and GL
-pipelines and no GameCube one.
+pipelines and no GameCube one, so the sector work includes a pipeline that can
+consume that geometry.
 
 Three ways out, none of them small, and this is the decision phase 4 actually
 turns on:
