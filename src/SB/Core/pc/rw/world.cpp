@@ -329,3 +329,33 @@ RpWorld* RpWorldStreamRead(RwStream* stream)
 {
     return NULL;
 }
+
+// Render everything in the world.
+//
+// **This draws the clumps and NOT the level.** librw's World::render walks the
+// world's clump list and renders each atomic; RenderWare's descends the world's
+// sector tree and renders the static geometry in each sector it decides is
+// visible. librw has no sectors -- its own comment on this function is "this is
+// very wrong, we really want world sectors" -- so everything that would have
+// come out of the tree is missing.
+//
+// For BFBB that is less bad than it sounds, and the reason is in PCPORT.md: the
+// Xbox assets carry no BSP at all. A JSP level's RpWorld is the empty one
+// iEnv.cpp:61 creates with RpWorldCreate(&tmpbbox), and the level's geometry
+// lives in atomics that xJSP renders itself. So the sectors this cannot walk
+// are, on this asset set, always empty.
+//
+// It is still forwarded rather than refused, because iEnv.cpp:197 calls it on
+// every environment render and a refusal would lose whatever HAS been added to
+// the world -- lights are attached to it, and RpWorldAddClump is how a
+// non-JSP model would get drawn if anything used it.
+RpWorld* RpWorldRender(RpWorld* world)
+{
+    if (world == NULL)
+    {
+        return NULL;
+    }
+
+    asWorld(world)->render();
+    return world;
+}

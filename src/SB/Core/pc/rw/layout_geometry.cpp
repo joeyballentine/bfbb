@@ -180,6 +180,12 @@ static_assert((int)rw::Geometry::LOCKVERTICES == 2, "a bare 2 is no longer LOCKV
 static_assert((int)rw::Geometry::LOCKTEXCOORDS1 == 0x10, "a bare 0x10 is no longer LOCKTEXCOORDS1");
 static_assert((int)rw::Geometry::LOCKPOLYGONS == 1, "LOCKPOLYGONS moved");
 
+// iMorph.cpp's MorphCommon builds its lock word as `(useNormals ? 4 : 0) | 2`,
+// so a bare 4 has to keep meaning LOCKNORMALS. Not to be confused with
+// rpGEOMETRYNORMALS, which is a different constant that happens to share a
+// value with LOCKTEXCOORDS1 above.
+static_assert((int)rw::Geometry::LOCKNORMALS == 4, "a bare 4 is no longer LOCKNORMALS");
+
 // --- RpAtomic --------------------------------------------------------------
 //
 // The mirror that loses fields; rpworld.h says which four and why. What is

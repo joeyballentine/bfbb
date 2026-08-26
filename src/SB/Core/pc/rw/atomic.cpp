@@ -480,3 +480,27 @@ RpAtomic* AtomicDefaultRenderCallBack(RpAtomic* atomic)
     rw::Atomic::defaultRenderCB(asAtomic(atomic));
     return atomic;
 }
+
+// Build the atomic's platform-specific instance data.
+//
+// RenderWare's pipelines instance lazily -- the first render of an atomic
+// converts its geometry into whatever the hardware wants and caches it in
+// repEntry. RpAtomicInstance forces that to happen NOW instead, which is what
+// iEnv.cpp:17 does to every atomic of a level as it loads, so that the first
+// frame after a load does not pay for all of it at once.
+//
+// librw's Atomic::instance is the same idea and the same laziness, so this is a
+// forward. What it does NOT do is the thing RenderWare's does when the geometry
+// is locked -- librw instances from whatever is there and leaves the lock flags
+// alone -- which matters only to a caller that instances a geometry it is
+// midway through editing. Nothing does.
+RwBool RpAtomicInstance(RpAtomic* atomic)
+{
+    if (atomic == NULL)
+    {
+        return FALSE;
+    }
+
+    asAtomic(atomic)->instance();
+    return TRUE;
+}

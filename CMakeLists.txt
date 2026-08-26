@@ -235,6 +235,19 @@ add_library(bfbb_platform STATIC
   # through are asserted against librw's in rw/layout_camera.cpp.
   ${PC_DIR}/iLight.cpp
 
+  # Also verbatim. Its FastS16unpack/FastS16weight2/FastS16weight4 are plain
+  # scalar loops on the console too -- no paired-single, no PowerPC intrinsics
+  # -- and none of the three shares a name with a C library function, so the
+  # xSpline trap does not apply. It is the first and only caller of the
+  # RenderWare user-data plugin on the PC path; see rw/usrdata.cpp.
+  ${PC_DIR}/iMorph.cpp
+
+  # Ported, and a verbatim copy as well: gc/iEnv.cpp is RenderWare world and
+  # clump rendering with nothing GameCube-specific in it. The render-state
+  # enumerations it passes through (cull mode, blend, z-write) are asserted
+  # against librw's in rw/layout_camera.cpp.
+  ${PC_DIR}/iEnv.cpp
+
   # Also a verbatim copy, but three of its calls are RenderWare collision-world
   # functions (RpAtomicForAllIntersections, RpCollisionWorldForAllIntersections,
   # RwFrameTransform), so it cannot resolve until librw arrives. Fine in a static
@@ -255,6 +268,12 @@ add_library(bfbb_platform STATIC
   # global, so like the others it resolves when librw does.
   ${PC_DIR}/iCutscene.cpp
 
+  # Ported, and a verbatim copy: gc/iAnim.cpp is a thin front on iAnimSKB plus
+  # one quaternion blend written entirely in RtQuat calls, with nothing
+  # GameCube-specific in it. It passes no RenderWare enumerations through, so
+  # there is nothing new for rw/layout_*.cpp to assert.
+  ${PC_DIR}/iAnim.cpp
+
   # --- STUBS, not implementations ------------------------------------------
   # Eleven modules have a PC header and no PC implementation. These files make
   # the port LINK so that it can be RUN, which is the next gate after the one
@@ -272,9 +291,6 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iModel.cpp
   ${PC_DIR}/iParMgr.cpp
   ${PC_DIR}/iScrFX.cpp
-  ${PC_DIR}/iAnim.cpp
-  ${PC_DIR}/iEnv.cpp
-  ${PC_DIR}/iMorph.cpp
   ${PC_DIR}/iDraw.cpp
   ${PC_DIR}/iFX.cpp
   ${PC_DIR}/iFMV.cpp

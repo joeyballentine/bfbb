@@ -479,6 +479,38 @@ RwVideoMode* RwEngineGetVideoModeInfo(RwVideoMode* modeinfo, RwInt32 modeIndex)
     modeinfo->depth = mode.depth;
     modeinfo->flags = (RwVideoModeFlag)mode.flags;
 
+    // **The CURRENT mode's size is the WINDOW, not the display mode.**
+    //
+    // On the console a video mode IS the framebuffer -- there is one, it is the
+    // screen, and RenderWare's width and height are the pixels the game draws
+    // into. librw's D3D9 backend enumerates the ADAPTER's display modes
+    // instead, so the current one comes back as the desktop's resolution:
+    // 3840x2160 on the machine this was found on, against a 640x480 window.
+    //
+    // That is not academic. xScrFx.cpp:86 draws its full-screen rectangle from
+    // (0,0) to (width,height) in SCREEN coordinates, and xScrFx.cpp:185, 255
+    // and 270 size their effects the same way. With the desktop's numbers the
+    // screen fades, the letterbox bars and the death vignette are all sized for
+    // a rectangle six times wider than the thing being drawn into, so they
+    // cover a corner of it or miss entirely.
+    //
+    // Only the CURRENT mode is rewritten. RwEngineGetVideoModeInfo is also a
+    // mode ENUMERATOR -- a caller walking indices wants each mode's real size,
+    // and lying about all of them would break the enumeration to fix the one
+    // reading the game actually makes.
+    if (modeIndex == rw::Engine::getCurrentVideoMode())
+    {
+        RwInt32 windowWidth = 0;
+        RwInt32 windowHeight = 0;
+        iWindowGetSize(&windowWidth, &windowHeight);
+
+        if (windowWidth > 0 && windowHeight > 0)
+        {
+            modeinfo->width = windowWidth;
+            modeinfo->height = windowHeight;
+        }
+    }
+
     // librw's VideoMode stops there. refRate and format are RenderWare's and
     // have no source on this side, so they are zeroed rather than guessed --
     // nothing in the game reads either one.

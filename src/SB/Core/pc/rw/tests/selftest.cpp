@@ -2323,6 +2323,65 @@ static void test_underscored()
 // from the 112-function list rather than deliberately left out -- see the
 // comment above them in atomic.cpp. All three exist for FullAtomicDupe
 // (xModelBucket.cpp:125), and this test is that function's sequence.
+// The RenderWare user data plugin, which iMorph.cpp is the only caller of --
+// it keeps its DirtyMorph cache in a "MORPHSTATE" integer array on the
+// geometry and reads it back on every morph render. An array that comes back
+// with the wrong element count or the wrong type would corrupt that cache
+// silently, so the round trip is what is checked here rather than the calls
+// merely returning something.
+static void test_userdata()
+{
+    printf("RpUserData\n");
+
+    RpGeometry* geometry = makeQuad();
+    check(geometry != NULL, "a geometry to hang user data on");
+    if (geometry == NULL)
+    {
+        return;
+    }
+
+    check(RpGeometryGetUserDataArrayCount(geometry) == 0, "a new geometry has no user data");
+
+    RwInt32 index = RpGeometryAddUserDataArray(geometry, "MORPHSTATE", rpINTUSERDATA, 8);
+    check(index >= 0, "RpGeometryAddUserDataArray");
+    check(RpGeometryGetUserDataArrayCount(geometry) == 1, "and the count went up");
+
+    RpUserDataArray* usr = RpGeometryGetUserDataArray(geometry, index);
+    check(usr != NULL, "RpGeometryGetUserDataArray");
+    if (usr != NULL)
+    {
+        // Read through RenderWare's OWN field names. This is the mirroring
+        // doing its job -- iMorph.cpp reads usr->data and usr->numElements
+        // directly, so the names have to land on librw's bytes.
+        check(usr->numElements == 8, "the array has the element count it was asked for");
+        check(usr->format == rpINTUSERDATA, "and the format it was asked for");
+        check(usr->data != NULL, "and storage behind it");
+        check(usr->name != NULL && strcmp(usr->name, "MORPHSTATE") == 0, "and its name");
+
+        if (usr->data != NULL)
+        {
+            RwInt32* values = (RwInt32*)usr->data;
+            values[0] = 0x1234;
+            values[7] = 0x5678;
+
+            RpUserDataArray* again = RpGeometryGetUserDataArray(geometry, index);
+            check(again == usr, "asking for it twice gives the same array");
+            check(((RwInt32*)again->data)[0] == 0x1234 && ((RwInt32*)again->data)[7] == 0x5678,
+                  "and what was written to it is still there");
+        }
+    }
+
+    check(RpGeometryGetUserDataArray(geometry, 99) == NULL,
+          "an out-of-range index is refused rather than indexed");
+    check(RpGeometryGetUserDataArray(NULL, 0) == NULL, "and so is a NULL geometry");
+    check(RpGeometryGetUserDataArrayCount(NULL) == 0, "counting NULL is zero, not a fault");
+
+    check(RpUserDataGetFormatSize(rpINTUSERDATA) == 4, "RpUserDataGetFormatSize(int)");
+    check(RpUserDataGetFormatSize(rpREALUSERDATA) == 4, "RpUserDataGetFormatSize(real)");
+
+    reinterpret_cast<rw::Geometry*>(geometry)->destroy();
+}
+
 static void test_atomic_stream()
 {
     printf("RpAtomicDestroy / RpAtomicStreamWrite / RpAtomicStreamRead\n");
@@ -2500,6 +2559,7 @@ int main()
     test_slerp();
     test_object_frames();
     test_underscored();
+    test_userdata();
     test_atomic_stream();
     test_engine_shutdown();
 

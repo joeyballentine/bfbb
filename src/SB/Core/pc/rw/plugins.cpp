@@ -3,8 +3,14 @@
 // RpSkin, RpMatFX, RpPTank, RpWorld and RpCollision each have a file of their
 // own because the game calls into them. These two it only ATTACHES: iSystem's
 // RWAttachPlugins registers them so that the objects they extend come out the
-// right size and their chunks survive a stream round trip, and no game code
-// calls an RpHAnim* or RpUserData* function on the PC path.
+// right size and their chunks survive a stream round trip.
+//
+// **HAnim only, as of the iMorph port.** This comment used to say that no game
+// code called an RpHAnim* or RpUserData* function on the PC path. That stopped
+// being true when iMorph.cpp landed: it keeps its DirtyMorph cache in a
+// "MORPHSTATE" array on the geometry, and the three RpGeometry*UserDataArray
+// functions it needs are in rw/usrdata.cpp. The attach below is still the only
+// thing this file does for it.
 //
 // They still have to be attached rather than skipped. Both grow an object --
 // HAnim an atomic and a frame, UserData a geometry, a material and a world --
