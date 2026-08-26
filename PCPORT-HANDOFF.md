@@ -490,8 +490,26 @@ the offsets from the compiler, not from reading librw's header -- it has macros
 and static members that make eyeballing it unreliable. The failure this guards
 against is silent: game code keeps compiling and starts reading the wrong field.
 
-`src/SB/Core/pc/rw/README.md` is the design record and `TODO.md` tracks all 112
-with the command that regenerates the list.
+**Status: 110 of 112 written, and the shim runs.** `src/SB/Core/pc/rw/README.md`
+is the design record, `TODO.md` tracks the list, and
+`src/SB/Core/pc/rw/tests/selftest.cpp` is 405 checks against a live librw engine.
+
+The two that are not written are `RpWorldStreamRead` and
+`RpCollisionWorldForAllIntersections`, and they are one job rather than two:
+**librw has no world sectors at all.** That is the largest thing between here
+and a playable port and it is written up in PCPORT.md -- read it before planning
+phase 4, because the way out is a project-level decision, not a function to
+write.
+
+Three more are missing that the old regeneration command was hiding, because its
+`sed 's/^_*//'` stripped the leading underscore off names like
+`_rwObjectHasFrameSetFrame` and left something the `^(Rw|Rp|Rt|Rx)` filter
+dropped. The command in TODO.md is fixed. They will fail the link the moment
+there is one:
+
+  - `_rwFrameSyncDirty` -- 7 call sites; librw has `Frame::syncDirty`
+  - `_rwInvSqrt` -- 3 call sites; no librw counterpart, write it out
+  - `_rpMeshHeaderForAllMeshes` -- 1 call site, xJSP.cpp
 
 `LIBRW_PLATFORM=NULL` is what was tested, which is the core with no renderer
 backend. `GL3` or `D3D9` will want OpenGL or Direct3D present; neither was
