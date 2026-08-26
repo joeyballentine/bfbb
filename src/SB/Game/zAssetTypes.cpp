@@ -158,7 +158,19 @@ static void* Model_Read(void* param_1, U32 param_2, void* indata, U32 insize, U3
             tmpModel->boundingSphere.center.y = 0.0f;
             tmpModel->boundingSphere.center.z = 0.0f;
 
+#ifndef PLATFORM_PC
             tmpModel->interpolator.flags &= ~2;
+#else
+    // PORT: rpINTERPOLATORDIRTYSPHERE (bit 1) tells RenderWare not to recompute
+    // the bounding sphere from the morph targets, because the one just written
+    // above is the authoritative one. librw has no such flag and never
+    // recomputes -- its Atomic::boundingSphere is plain state, and
+    // SAMEBOUNDINGSPHERE is a parameter to setGeometry rather than something it
+    // stores. So the behaviour this line asks for is already librw's default,
+    // and there is no field to clear: RpAtomic mirrors rw::Atomic exactly, and
+    // librw does the allocating, so a member with nowhere to live would be a
+    // write past the end of the object.
+#endif
         }
         break;
     }

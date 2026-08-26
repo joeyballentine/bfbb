@@ -160,7 +160,19 @@ RpAtomic* HackBoundCB(RpAtomic* atomic, void* data)
     atomic->worldBoundingSphere.radius = *(RwReal*)data;
     atomic->boundingSphere.radius = *(RwReal*)data;
     atomic->geometry->morphTarget->boundingSphere.radius = *(RwReal*)data;
+#ifndef PLATFORM_PC
     atomic->interpolator.flags = atomic->interpolator.flags & 0xfffffffd;
+#else
+    // PORT: rpINTERPOLATORDIRTYSPHERE (bit 1) tells RenderWare not to recompute
+    // the bounding sphere from the morph targets, because the one just written
+    // above is the authoritative one. librw has no such flag and never
+    // recomputes -- its Atomic::boundingSphere is plain state, and
+    // SAMEBOUNDINGSPHERE is a parameter to setGeometry rather than something it
+    // stores. So the behaviour this line asks for is already librw's default,
+    // and there is no field to clear: RpAtomic mirrors rw::Atomic exactly, and
+    // librw does the allocating, so a member with nowhere to live would be a
+    // write past the end of the object.
+#endif
     return atomic;
 }
 
