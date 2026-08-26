@@ -57,7 +57,7 @@ longer includes a `dolphin` header anywhere.
 | `iFMV` (1) | header only | Bink is proprietary; re-encode or drop |
 | `ngcrad3d` | not ported | GameCube radiosity; no host counterpart |
 
-115 of the 178 interface functions game code actually calls are implemented.
+117 of the 178 interface functions game code actually calls are implemented.
 The count is what `src/SB` *references*, not what the headers declare — the
 headers declare a good deal that nothing outside `src/SB/Core/gc` ever used,
 and that surface has been dropped rather than reproduced.

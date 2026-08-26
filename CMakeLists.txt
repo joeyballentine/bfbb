@@ -116,6 +116,13 @@ add_library(bfbb_platform STATIC
   # library, which is why it is here and not in pc_selftest below.
   ${PC_DIR}/iCollide.cpp
 
+  # Ported rather than copied: gc/iAnimSKB.cpp defines std::fabsf with
+  # __declspec(weak) to reproduce where retail's one copy of that symbol lives,
+  # which collides with compat/_stdfloatmath.h on a host. The definition is
+  # guarded there; gc/ is untouched. Needs RtQuatSetupSlerpCache, so like
+  # iCollide it links when librw does.
+  ${PC_DIR}/iAnimSKB.cpp
+
   ${INPUT_SOURCES}
   ${AUDIO_SOURCES}
   ${HOST_SOURCES}

@@ -241,7 +241,7 @@ cmake -S . -B build-pc -G Ninja && cmake --build build-pc && ./build-pc/pc_selft
 
 ## 4. What exists
 
-`src/SB/Core/pc/` — 17 implementation files, 115 of the 178 interface functions
+`src/SB/Core/pc/` — 18 implementation files, 117 of the 178 interface functions
 game code actually calls, on Linux and on Windows.
 
 **Done:** `iTime` `iMath` `iMemMgr` `iFile` `iPad` `iSystem` `iTRC` `iColor`
@@ -252,7 +252,12 @@ and defines neither).
 stand:** `iMath3` (13 fns, pure geometry), `iCollide` (10), `iCollideFast` (1).
 Recorded in `VERBATIM.txt`, so `--drift` reports it if the gc original moves.
 `iCollide` needs three RenderWare collision calls and so cannot link until
-phase 3; it is in the library, not the selftest. None of the three has selftest
+phase 3; it is in the library, not the selftest. `iAnimSKB` is *ported* rather
+than copied and so is not in `VERBATIM.txt`: it defines `std::fabsf` with
+`__declspec(weak)` to put retail's one copy of that symbol where the DOL has
+it, which collides with `compat/_stdfloatmath.h` on a host. The definition is
+guarded for `__MWERKS__` in the port's copy only. It wants
+`RtQuatSetupSlerpCache`, so it links when librw does. None of the three has selftest
 coverage, and the reason is argued in `CMakeLists.txt` at the target: they are
 copies of shipping code, so what is unproven is only that they build on a host.
 
@@ -416,9 +421,15 @@ by hand.
 
 Three do NOT compile as they stand, and want real work rather than a copy:
 `iDraw.cpp`, `iFMV.cpp` and `iFX.cpp` include `dolphin/gx.h` or `dolphin/os.h`
-directly. `iCutscene.cpp` and `iAnimSKB.cpp` fail on the game's own types
-(`tag_iFile` has no `fileInfo` member on this side), which is a smaller problem
-than it looks.
+directly.
+
+`iCutscene.cpp` is blocked on something else entirely, and it is worth knowing
+which: it computes where a cutscene starts inside its HIP as
+`(ainfo.sector - File.ps.fileInfo.startAddr) << 5` -- a **disc sector** delta,
+from `DVDFileInfo`, which the host `tag_iFile` has no equivalent of and should
+not grow one. What it needs is the asset's byte offset within the HIP, which is
+an asset-pipeline question (PCPORT.md, phase 4), not a librw one. `iSnd`'s
+loader wants the same number for the same reason. Answer it once, for both.
 
 **Do not start until the asset question is answered.** The plan is Xbox assets
 (see PCPORT.md), and librw's GameCube format support is its weakest -- which is
