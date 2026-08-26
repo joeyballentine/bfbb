@@ -747,7 +747,7 @@ namespace oob_state
 
             if (assume_player_is_stupid())
             {
-                shared.tutorial->start_talk(xStrHash("TODO"), (ztalkbox::callback*)&cb, NULL);
+                shared.tutorial->start_talk(xStrHash("out_of_bounds_txt"), (ztalkbox::callback*)&cb, NULL);
                 return SS_TUTORIAL;
             }
 
