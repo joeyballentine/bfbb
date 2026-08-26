@@ -20,6 +20,26 @@
 #include <stdlib.h>
 #endif
 
+// basic_rect<F32> is specialized wholesale below: the target has hand-written
+// bodies for these rather than the ones the template would generate. A
+// specialization has to be DECLARED before anything instantiates it, and the
+// first use is xFontMeter::char_rect several hundred lines above the
+// definitions -- so the declarations go here rather than being reordered.
+//
+// Unlike xFX, none of this leaves the .cpp: nothing outside this file uses the
+// specializations, so putting them in xMath2.h would push them at 100+ units
+// that do not need them.
+template <> basic_rect<F32>& basic_rect<F32>::scale(F32 x, F32 y);
+template <> basic_rect<F32>& basic_rect<F32>::scale(F32 x, F32 y, F32 w, F32 h);
+template <> basic_rect<F32>& basic_rect<F32>::assign(F32 x, F32 y, F32 w, F32 h);
+template <> bool basic_rect<F32>::empty() const;
+template <> void basic_rect<F32>::clip(basic_rect<F32>& a, basic_rect<F32>& b) const;
+template <> basic_rect<F32>& basic_rect<F32>::operator|=(const basic_rect<F32>& other);
+template <> void basic_rect<F32>::set_bounds(F32 x1, F32 y1, F32 x2, F32 y2);
+template <> void basic_rect<F32>::get_bounds(F32& x1, F32& y1, F32& x2, F32& y2) const;
+template <> basic_rect<F32>& basic_rect<F32>::move(F32 x, F32 y);
+template <> basic_rect<F32>& basic_rect<F32>::scale(F32 s);
+
 /* xtextbox flags */
 
 #define FLAG_UNK40 0x40
@@ -3684,12 +3704,12 @@ namespace
     }
 } // namespace
 
-basic_rect<F32>& basic_rect<F32>::scale(F32 x, F32 y)
+template <> basic_rect<F32>& basic_rect<F32>::scale(F32 x, F32 y)
 {
     return scale(x, y, x, y);
 }
 
-basic_rect<F32>& basic_rect<F32>::scale(F32 x, F32 y, F32 w, F32 h)
+template <> basic_rect<F32>& basic_rect<F32>::scale(F32 x, F32 y, F32 w, F32 h)
 {
     this->x *= x;
     this->y *= y;
@@ -3698,7 +3718,7 @@ basic_rect<F32>& basic_rect<F32>::scale(F32 x, F32 y, F32 w, F32 h)
     return *this;
 }
 
-basic_rect<F32>& basic_rect<F32>::assign(F32 x, F32 y, F32 w, F32 h)
+template <> basic_rect<F32>& basic_rect<F32>::assign(F32 x, F32 y, F32 w, F32 h)
 {
     this->x = x;
     this->y = y;
@@ -3707,12 +3727,12 @@ basic_rect<F32>& basic_rect<F32>::assign(F32 x, F32 y, F32 w, F32 h)
     return *this;
 }
 
-bool basic_rect<F32>::empty() const
+template <> bool basic_rect<F32>::empty() const
 {
     return (w <= 0.0f || h <= 0.0f);
 }
 
-void basic_rect<F32>::clip(basic_rect<F32>& a, basic_rect<F32>& b) const
+template <> void basic_rect<F32>::clip(basic_rect<F32>& a, basic_rect<F32>& b) const
 {
     F32 bwaw = b.w / a.w;
     F32 bwah = b.h / a.h;
@@ -3758,7 +3778,7 @@ void basic_rect<F32>::clip(basic_rect<F32>& a, basic_rect<F32>& b) const
     }
 }
 
-basic_rect<F32>& basic_rect<F32>::operator|=(const basic_rect<F32>& other)
+template <> basic_rect<F32>& basic_rect<F32>::operator|=(const basic_rect<F32>& other)
 {
     F32 x1, y1, x2, y2;
     F32 _x1, _y1, _x2, _y2;
@@ -3791,7 +3811,7 @@ basic_rect<F32>& basic_rect<F32>::operator|=(const basic_rect<F32>& other)
     return *this;
 }
 
-void basic_rect<F32>::set_bounds(F32 x1, F32 y1, F32 x2, F32 y2)
+template <> void basic_rect<F32>::set_bounds(F32 x1, F32 y1, F32 x2, F32 y2)
 {
     x = x1;
     w = x2 - x1;
@@ -3799,7 +3819,7 @@ void basic_rect<F32>::set_bounds(F32 x1, F32 y1, F32 x2, F32 y2)
     h = y2 - y1;
 }
 
-void basic_rect<F32>::get_bounds(F32& x1, F32& y1, F32& x2, F32& y2) const
+template <> void basic_rect<F32>::get_bounds(F32& x1, F32& y1, F32& x2, F32& y2) const
 {
     F32 tx = x;
     F32 ty = y;
@@ -3810,14 +3830,14 @@ void basic_rect<F32>::get_bounds(F32& x1, F32& y1, F32& x2, F32& y2) const
     y2 = ty + h;
 }
 
-basic_rect<F32>& basic_rect<F32>::move(F32 x, F32 y)
+template <> basic_rect<F32>& basic_rect<F32>::move(F32 x, F32 y)
 {
     this->x += x;
     this->y += y;
     return *this;
 }
 
-basic_rect<F32>& basic_rect<F32>::scale(F32 s)
+template <> basic_rect<F32>& basic_rect<F32>::scale(F32 s)
 {
     return scale(s, s, s, s);
 }

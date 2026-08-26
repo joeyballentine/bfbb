@@ -84,10 +84,11 @@ struct xFXRibbon
 
     bool debug_need_update() const;
 
-    void clear()
-    {
-        joints.clear();
-    }
+    // Defined below, past the specialization declarations. Leaving the body
+    // here would instantiate tier_queue<joint_data>::clear() at this point,
+    // which is before the specialization in xFX.cpp is visible -- and joint_data
+    // is nested in this class, so the declaration cannot be hoisted above it.
+    void clear();
 
     void init(const char*, const char*);
     void init(S32, const char*);
@@ -115,6 +116,25 @@ struct xFXRibbon
     void render();
     void set_raster(RwRaster*);
 };
+
+// tier_queue<xFXRibbon::joint_data> is specialized wholesale in xFX.cpp -- the
+// target has hand-written bodies for these three rather than the template ones.
+// A specialization has to be DECLARED before anything instantiates it, and the
+// only instantiation in this header is xFXRibbon::clear() just above, whose body
+// therefore lives below these lines rather than in the class.
+//
+// They cannot go any earlier: naming xFXRibbon::joint_data requires xFXRibbon to
+// be complete, so this is the first point in the file where these are sayable.
+template <> void tier_queue<xFXRibbon::joint_data>::clear();
+template <> xFXRibbon::joint_data& tier_queue<xFXRibbon::joint_data>::operator[](S32);
+template <>
+tier_queue<xFXRibbon::joint_data>::iterator*
+tier_queue<xFXRibbon::joint_data>::iterator::operator--();
+
+inline void xFXRibbon::clear()
+{
+    joints.clear();
+}
 
 struct xFXStreakElem
 {
