@@ -14,6 +14,10 @@
 #include <string.h>
 
 #include <rwcore.h>
+#include <rpcollis.h>
+#include <rpmatfx.h>
+#include <rpptank.h>
+#include <rpskin.h>
 #include <rpworld.h>
 
 // ../stream.h rather than "rw.h": it pulls in librw's header itself, and that
@@ -78,6 +82,17 @@ static void test_engine_startup()
     // Refused rather than accepted twice: a second init would strand librw's
     // first plugin list and every object allocated against its sizes.
     check(RwEngineInit(&memoryFns, 0, 0x60000) == FALSE, "a second RwEngineInit is refused");
+
+    // Strictly between init and open, which is not a style choice: each of
+    // these registers plugins that grow the size of an atomic, a geometry or a
+    // material, and Engine::open freezes those sizes. Attaching after open
+    // would hand out plugin offsets past the end of every object allocated
+    // afterwards. iSystem.cpp's RWAttachPlugins sequences the real game's
+    // calls in exactly this window.
+    check(RpSkinPluginAttach() != FALSE, "RpSkinPluginAttach");
+    check(RpMatFXPluginAttach() != FALSE, "RpMatFXPluginAttach");
+    check(RpPTankPluginAttach() != FALSE, "RpPTankPluginAttach");
+    check(_rpPTankAtomicDataOffset > 0, "RpPTank got a slot in the atomic's plugin block");
 
     RwEngineOpenParams params;
     params.displayID = NULL;
@@ -550,8 +565,7 @@ static void test_lights()
           "the colour lands in RpLight's own field");
     check(reinterpret_cast<rw::Light*>(light)->color.green == 1.0f,
           "librw reads back the colour the RenderWare call wrote");
-    check(light->object.object.privateFlags == 0,
-          "a coloured light is not flagged as grey");
+    check(light->object.object.privateFlags == 0, "a coloured light is not flagged as grey");
 
     RwRGBAReal grey = { 0.5f, 0.5f, 0.5f, 1.0f };
     RpLightSetColor(light, &grey);
@@ -735,8 +749,7 @@ static void test_immediate()
     RwIm2DVertex quad[4];
     memset(quad, 0, sizeof(quad));
 
-    void (*savedIm2D)(rw::PrimitiveType, void*, rw::int32) =
-        rw::engine->device.im2DRenderPrimitive;
+    void (*savedIm2D)(rw::PrimitiveType, void*, rw::int32) = rw::engine->device.im2DRenderPrimitive;
     void (*savedIm3D)(rw::PrimitiveType) = rw::engine->device.im3DRenderPrimitive;
     void (*savedEnd)(void) = rw::engine->device.im3DEnd;
     rw::engine->device.im2DRenderPrimitive = captureIm2DRenderPrimitive;
@@ -783,6 +796,556 @@ static void test_immediate()
     rw::engine->device.im3DEnd = savedEnd;
 }
 
+// A unit quad in the XZ plane, as two triangles, used by the geometry and
+// intersection tests. Four vertices from (-1,0,-1) to (1,0,1); triangle 0 is
+// the half with z < x, triangle 1 the half with z > x.
+static RpGeometry* makeQuad()
+{
+    RpGeometry* geometry = RpGeometryCreate(4, 2, rpGEOMETRYPOSITIONS | rpGEOMETRYTEXTURED);
+    if (geometry == NULL)
+    {
+        return NULL;
+    }
+
+    RwV3d* v = geometry->morphTarget[0].verts;
+    v[0].x = -1.0f;
+    v[0].y = 0.0f;
+    v[0].z = -1.0f;
+    v[1].x = 1.0f;
+    v[1].y = 0.0f;
+    v[1].z = -1.0f;
+    v[2].x = 1.0f;
+    v[2].y = 0.0f;
+    v[2].z = 1.0f;
+    v[3].x = -1.0f;
+    v[3].y = 0.0f;
+    v[3].z = 1.0f;
+
+    RpGeometryTriangleSetVertexIndices(geometry, &geometry->triangles[0], 0, 1, 2);
+    RpGeometryTriangleSetVertexIndices(geometry, &geometry->triangles[1], 0, 2, 3);
+    return geometry;
+}
+
+static bool near(float a, float b)
+{
+    float d = a - b;
+    return d > -0.0005f && d < 0.0005f;
+}
+
+static RpMaterial* countMaterialsCB(RpMaterial* material, void* data)
+{
+    (void)material;
+    (*(int*)data)++;
+    return material;
+}
+
+static RpMaterial* stopAfterFirstCB(RpMaterial* material, void* data)
+{
+    (void)material;
+    (*(int*)data)++;
+    return NULL;
+}
+
+static void test_geometry()
+{
+    printf("RpGeometry / RpMaterial / RpMorphTarget\n");
+
+    RpGeometry* geometry = makeQuad();
+    check(geometry != NULL, "RpGeometryCreate");
+    if (geometry == NULL)
+    {
+        return;
+    }
+
+    // Read out of the RenderWare struct, which is the mirroring doing its job:
+    // zFX.cpp and xJSP.cpp reach for exactly these fields.
+    check(geometry->numVertices == 4 && geometry->numTriangles == 2,
+          "a new geometry has the counts it was asked for");
+    check(geometry->numMorphTargets == 1,
+          "RpGeometryCreate makes the one morph target RenderWare's does");
+    check(geometry->numTexCoordSets == 1, "rpGEOMETRYTEXTURED means one texture coordinate set");
+    check(geometry->morphTarget != NULL && geometry->morphTarget[0].verts != NULL,
+          "the morph target has vertices");
+    check(geometry->morphTarget[0].parentGeom == geometry,
+          "the morph target points back at its geometry");
+    check(geometry->refCount == 1, "a new geometry starts with one reference");
+
+    RwUInt16 a = 0;
+    RwUInt16 b = 0;
+    RwUInt16 c = 0;
+    RpGeometryTriangleGetVertexIndices(geometry, &geometry->triangles[1], &a, &b, &c);
+    check(a == 0 && b == 2 && c == 3, "RpGeometryTriangleGet/SetVertexIndices round-trip");
+
+    // No material yet: librw writes 0xFFFF into a fresh triangle's index and
+    // RenderWare reads that as -1, so this checks the two agree on "none".
+    check(RpGeometryTriangleGetMaterial(geometry, &geometry->triangles[0]) == NULL,
+          "a triangle with no material has no material");
+
+    RpMaterial* material = reinterpret_cast<RpMaterial*>(rw::Material::create());
+    check(material != NULL, "a material to put on it");
+    if (material == NULL)
+    {
+        return;
+    }
+
+    RpGeometryTriangleSetMaterial(geometry, &geometry->triangles[0], material);
+    check(geometry->matList.numMaterials == 1,
+          "RpGeometryTriangleSetMaterial appends to the material list");
+    check(RpGeometryTriangleGetMaterial(geometry, &geometry->triangles[0]) == material,
+          "RpGeometryTriangleGetMaterial finds it again");
+    check(material->refCount == 2, "the geometry took a reference on it");
+
+    // The same material on a second triangle must not append it twice.
+    RpGeometryTriangleSetMaterial(geometry, &geometry->triangles[1], material);
+    check(geometry->matList.numMaterials == 1, "a material shared by two triangles appears once");
+
+    int seen = 0;
+    check(RpGeometryForAllMaterials(geometry, countMaterialsCB, &seen) == geometry,
+          "RpGeometryForAllMaterials");
+    check(seen == 1, "it visited the one material");
+
+    RpMaterial* second = reinterpret_cast<RpMaterial*>(rw::Material::create());
+    RpGeometryTriangleSetMaterial(geometry, &geometry->triangles[1], second);
+    check(geometry->matList.numMaterials == 2, "a second material appends");
+
+    seen = 0;
+    RpGeometryForAllMaterials(geometry, stopAfterFirstCB, &seen);
+    check(seen == 1, "a callback returning NULL stops the walk early");
+
+    // RpMaterialSetTexture is reference counted, which is what lets
+    // zParPTank.cpp hand over a texture it found in a dictionary.
+    RwTexture* texture = RwTextureCreate(NULL);
+    check(texture != NULL && texture->refCount == 1, "a texture for the material");
+    RpMaterialSetTexture(material, texture);
+    check(material->texture == texture, "RpMaterialSetTexture");
+    check(texture->refCount == 2, "the material took a reference on the texture");
+    RpMaterialSetTexture(material, NULL);
+    check(material->texture == NULL && texture->refCount == 1,
+          "setting it back to NULL gives the reference up again");
+    RwTextureDestroy(texture);
+
+    // Bounding sphere of the quad: centre at the origin, radius to a corner.
+    // The morph target's own sphere is stamped first so that "it does not
+    // store the result" is a real check and not a read of whatever
+    // RpGeometryCreate left there.
+    geometry->morphTarget[0].boundingSphere.radius = 99.0f;
+
+    RwSphere sphere;
+    sphere.center.x = 99.0f;
+    sphere.radius = 99.0f;
+    check(RpMorphTargetCalcBoundingSphere(&geometry->morphTarget[0], &sphere) ==
+              &geometry->morphTarget[0],
+          "RpMorphTargetCalcBoundingSphere");
+    check(near(sphere.center.x, 0.0f) && near(sphere.center.y, 0.0f) && near(sphere.center.z, 0.0f),
+          "the quad's bounding sphere is centred on the origin");
+    check(near(sphere.radius, 1.41421f), "and reaches its corners");
+    check(near(geometry->morphTarget[0].boundingSphere.radius, 99.0f),
+          "it computes into the caller's sphere and does not store it");
+
+    // Lock throws the mesh away and unlock rebuilds it, which is the half of
+    // RenderWare's pair that matters here.
+    check(RpGeometryUnlock(geometry) == geometry, "RpGeometryUnlock");
+    check(geometry->mesh != NULL, "unlocking built the mesh");
+    check(geometry->mesh->numMeshes == 2, "one mesh per material");
+
+    check(RpGeometryLock(geometry, 1 /* rpGEOMETRYLOCKPOLYGONS */) == geometry, "RpGeometryLock");
+    check(geometry->mesh == NULL, "locking the polygons threw the mesh away");
+    check(geometry->lockedSinceLastInst & 1, "and recorded that it did");
+
+    RpGeometryUnlock(geometry);
+    check(geometry->mesh != NULL, "unlocking built it again");
+
+    // A vertex-only lock leaves the mesh alone: the indices still describe the
+    // triangles, only the positions moved. xCutscene.cpp locks this way every
+    // frame it morphs a model.
+    RpGeometryLock(geometry, 2 /* rpGEOMETRYLOCKVERTICES */);
+    check(geometry->mesh != NULL, "locking only the vertices keeps the mesh");
+    RpGeometryUnlock(geometry);
+
+    reinterpret_cast<rw::Material*>(second)->destroy();
+    reinterpret_cast<rw::Material*>(material)->destroy();
+    reinterpret_cast<rw::Geometry*>(geometry)->destroy();
+}
+
+// What RpAtomicForAllIntersections handed back, for the checks below.
+struct IsxLog
+{
+    int calls;
+    RwInt32 lastIndex;
+    RwReal lastDistance;
+    RwV3d lastVertex0;
+    RwV3d lastNormal;
+};
+
+static RpCollisionTriangle* logIsxCB(RpIntersection* intersection, RpCollisionTriangle* tri,
+                                     RwReal distance, void* data)
+{
+    (void)intersection;
+    IsxLog* log = (IsxLog*)data;
+    log->calls++;
+    log->lastIndex = tri->index;
+    log->lastDistance = distance;
+    log->lastVertex0 = *tri->vertices[0];
+    log->lastNormal = tri->normal;
+    return tri;
+}
+
+static RpCollisionTriangle* stopIsxCB(RpIntersection* intersection, RpCollisionTriangle* tri,
+                                      RwReal distance, void* data)
+{
+    logIsxCB(intersection, tri, distance, data);
+    return NULL;
+}
+
+static void test_atomics()
+{
+    printf("RpAtomic\n");
+
+    RpAtomic* atomic = reinterpret_cast<RpAtomic*>(rw::Atomic::create());
+    check(atomic != NULL, "an atomic to hang it all off");
+    if (atomic == NULL)
+    {
+        return;
+    }
+
+    RwFrame* frame = RwFrameCreate();
+    check(RpAtomicSetFrame(atomic, frame) == atomic, "RpAtomicSetFrame");
+    check(RpAtomicGetFrame(atomic) == frame, "the atomic is on the frame");
+
+    RpGeometry* geometry = makeQuad();
+    RpMorphTargetCalcBoundingSphere(&geometry->morphTarget[0],
+                                    &geometry->morphTarget[0].boundingSphere);
+
+    check(RpAtomicSetGeometry(atomic, geometry, 0) == atomic, "RpAtomicSetGeometry");
+    check(RpAtomicGetGeometry(atomic) == geometry, "the atomic has the geometry");
+    check(geometry->refCount == 2, "and took a reference on it");
+    check(near(RpAtomicGetBoundingSphere(atomic)->radius, 1.41421f),
+          "it copied morph target 0's bounding sphere");
+
+    // --- intersections ----------------------------------------------------
+    //
+    // The primitive goes in in WORLD space and the triangles come back in
+    // OBJECT space. Moving the frame is what tells the two apart, and getting
+    // it backwards is the failure that would make every collision in the game
+    // happen at the origin.
+
+    RwV3d ten = { 10.0f, 0.0f, 0.0f };
+    RwFrameTranslate(frame, &ten, rwCOMBINEREPLACE);
+
+    RpIntersection isx;
+    IsxLog log;
+
+    // A sphere half a unit above the quad, in world space, so over the moved
+    // atomic rather than over the origin.
+    memset(&log, 0, sizeof(log));
+    isx.type = rpINTERSECTSPHERE;
+    isx.t.sphere.center.x = 10.0f;
+    isx.t.sphere.center.y = 0.5f;
+    isx.t.sphere.center.z = 0.0f;
+    isx.t.sphere.radius = 1.0f;
+    check(RpAtomicForAllIntersections(atomic, &isx, logIsxCB, &log) == atomic,
+          "RpAtomicForAllIntersections, sphere");
+    check(log.calls == 2, "a sphere over the middle of the quad hits both triangles");
+    check(near(log.lastDistance, 0.5f), "and reports the distance from its centre");
+    check(near(log.lastVertex0.x, -1.0f), "the triangle comes back in object space");
+    check(near(log.lastNormal.y, 1.0f) || near(log.lastNormal.y, -1.0f),
+          "with a unit normal off the quad's plane");
+
+    // Same sphere at the origin: the atomic is ten units away, so nothing.
+    memset(&log, 0, sizeof(log));
+    isx.t.sphere.center.x = 0.0f;
+    RpAtomicForAllIntersections(atomic, &isx, logIsxCB, &log);
+    check(log.calls == 0, "and the frame is honoured -- at the origin it misses entirely");
+
+    // A line straight down through triangle 0's half of the quad. t comes back
+    // normalised along the segment, which is what rayHitsEnvCB scales.
+    memset(&log, 0, sizeof(log));
+    isx.type = rpINTERSECTLINE;
+    isx.t.line.start.x = 10.3f;
+    isx.t.line.start.y = 1.0f;
+    isx.t.line.start.z = -0.3f;
+    isx.t.line.end.x = 10.3f;
+    isx.t.line.end.y = -1.0f;
+    isx.t.line.end.z = -0.3f;
+    RpAtomicForAllIntersections(atomic, &isx, logIsxCB, &log);
+    check(log.calls == 1, "a line through one half of the quad hits one triangle");
+    check(log.lastIndex == 0, "and it is the triangle that half belongs to");
+    check(near(log.lastDistance, 0.5f), "at the halfway point of the segment");
+
+    // Off the edge of the quad entirely.
+    memset(&log, 0, sizeof(log));
+    isx.t.line.start.x = 20.0f;
+    isx.t.line.end.x = 20.0f;
+    RpAtomicForAllIntersections(atomic, &isx, logIsxCB, &log);
+    check(log.calls == 0, "a line beside the quad hits nothing");
+
+    // A box around the whole quad, again in world space.
+    memset(&log, 0, sizeof(log));
+    isx.type = rpINTERSECTBOX;
+    isx.t.box.inf.x = 9.0f;
+    isx.t.box.inf.y = -1.0f;
+    isx.t.box.inf.z = -2.0f;
+    isx.t.box.sup.x = 11.0f;
+    isx.t.box.sup.y = 1.0f;
+    isx.t.box.sup.z = 2.0f;
+    RpAtomicForAllIntersections(atomic, &isx, logIsxCB, &log);
+    check(log.calls == 2, "a box around the quad hits both triangles");
+
+    // The early stop iCollide.cpp uses once its collision array is full.
+    memset(&log, 0, sizeof(log));
+    isx.type = rpINTERSECTSPHERE;
+    isx.t.sphere.center.x = 10.0f;
+    RpAtomicForAllIntersections(atomic, &isx, stopIsxCB, &log);
+    check(log.calls == 1, "a callback returning NULL stops the walk early");
+
+    // Neither of these is a triangle query on either side.
+    memset(&log, 0, sizeof(log));
+    isx.type = rpINTERSECTPOINT;
+    RpAtomicForAllIntersections(atomic, &isx, logIsxCB, &log);
+    check(log.calls == 0, "a point intersection against an atomic is refused");
+
+    RpAtomicSetFrame(atomic, NULL);
+    RwFrameDestroy(frame);
+    reinterpret_cast<rw::Geometry*>(geometry)->destroy();
+    reinterpret_cast<rw::Atomic*>(atomic)->destroy();
+}
+
+static void test_skin()
+{
+    printf("RpSkin\n");
+
+    RpGeometry* geometry = makeQuad();
+    if (geometry == NULL)
+    {
+        return;
+    }
+
+    check(RpSkinGeometryGetSkin(geometry) == NULL, "an unskinned geometry has no skin");
+    check(RpSkinGetNumBones(NULL) == 0, "RpSkinGetNumBones(NULL) is refused");
+
+    // There is no RpSkinGeometrySetSkin on the game's list and no skinned
+    // model to stream in here, so the skin is built the way librw's own stream
+    // reader builds one: allocate, init for the bone and vertex counts, attach.
+    // What is being checked is the four accessors' strides, which is where a
+    // wrong cast would silently mix up bones.
+    rw::Skin* skin = rwNewT(rw::Skin, 1, rw::MEMDUR_EVENT | rw::ID_SKIN);
+    memset(skin, 0, sizeof(*skin));
+    skin->init(3, 3, geometry->numVertices);
+    rw::Skin::set(reinterpret_cast<rw::Geometry*>(geometry), skin);
+
+    check(RpSkinGeometryGetSkin(geometry) == reinterpret_cast<RpSkin*>(skin),
+          "RpSkinGeometryGetSkin finds the skin in the geometry's plugin block");
+
+    RpSkin* rpskin = RpSkinGeometryGetSkin(geometry);
+    check(RpSkinGetNumBones(rpskin) == 3, "RpSkinGetNumBones");
+
+    // Bone 1's matrix is the second sixteen floats.
+    skin->inverseMatrices[16 + 12] = 7.0f; // bone 1, pos.x
+    const RwMatrix* mats = RpSkinGetSkinToBoneMatrices(rpskin);
+    check(mats != NULL && near(mats[1].pos.x, 7.0f),
+          "RpSkinGetSkinToBoneMatrices strides one RwMatrix per bone");
+
+    // Vertex 2's weights are the third group of four floats.
+    skin->weights[2 * 4 + 1] = 0.25f;
+    const RwMatrixWeights* weights = RpSkinGetVertexBoneWeights(rpskin);
+    check(weights != NULL && near(weights[2].w1, 0.25f),
+          "RpSkinGetVertexBoneWeights strides four floats per vertex");
+
+    // Vertex 2's bone indices are the third group of four bytes, and the game
+    // unpacks index j with (word >> 8*j) & 0xff.
+    skin->indices[2 * 4 + 0] = 5;
+    skin->indices[2 * 4 + 3] = 9;
+    const RwUInt32* indices = RpSkinGetVertexBoneIndices(rpskin);
+    check(indices != NULL && ((indices[2] >> 0) & 0xFF) == 5 && ((indices[2] >> 24) & 0xFF) == 9,
+          "RpSkinGetVertexBoneIndices packs four of librw's index bytes per vertex");
+
+    // RpSkinAtomicSetType picks a pipeline. There is only one on this side --
+    // librw's Skin::setPipeline casts the type to void -- so what is checked is
+    // that the atomic ends up on the skin pipeline at all.
+    RpAtomic* atomic = reinterpret_cast<RpAtomic*>(rw::Atomic::create());
+    check(RpSkinAtomicSetType(atomic, rpSKINTYPEMATFX) == atomic, "RpSkinAtomicSetType");
+    check(atomic->pipeline != NULL &&
+              reinterpret_cast<void*>(atomic->pipeline) ==
+                  reinterpret_cast<void*>(rw::skinGlobals.pipelines[rw::platform]),
+          "it put the atomic on librw's skin pipeline");
+
+    reinterpret_cast<rw::Atomic*>(atomic)->destroy();
+    reinterpret_cast<rw::Geometry*>(geometry)->destroy();
+}
+
+static void test_matfx()
+{
+    printf("RpMatFX\n");
+
+    RpMaterial* material = reinterpret_cast<RpMaterial*>(rw::Material::create());
+    check(material != NULL, "a material to put an effect on");
+    if (material == NULL)
+    {
+        return;
+    }
+
+    check(RpMatFXMaterialGetEffects(material) == rpMATFXEFFECTNULL,
+          "a material with no effect block has no effect");
+
+    check(RpMatFXMaterialSetEffects(material, rpMATFXEFFECTENVMAP) == material,
+          "RpMatFXMaterialSetEffects");
+    check(RpMatFXMaterialGetEffects(material) == rpMATFXEFFECTENVMAP,
+          "RpMatFXMaterialGetEffects reads it back");
+
+    RwTexture* env = RwTextureCreate(NULL);
+    RwFrame* frame = RwFrameCreate();
+    check(RpMatFXMaterialSetupEnvMap(material, env, frame, FALSE, 0.75f) == material,
+          "RpMatFXMaterialSetupEnvMap");
+
+    rw::MatFX* fx = rw::MatFX::get(reinterpret_cast<rw::Material*>(material));
+    check(fx != NULL, "the effect block exists");
+    check(reinterpret_cast<RwTexture*>(fx->getEnvTexture()) == env, "it kept the texture");
+    check(reinterpret_cast<RwFrame*>(fx->getEnvFrame()) == frame, "and the frame");
+    check(near(fx->getEnvCoefficient(), 0.75f), "and the coefficient");
+    check(env->refCount == 2, "setting an env map texture takes a reference on it");
+
+    check(RpMatFXMaterialSetEnvMapCoefficient(material, 0.25f) == material,
+          "RpMatFXMaterialSetEnvMapCoefficient");
+    check(near(fx->getEnvCoefficient(), 0.25f), "which is what xFX.cpp calls every frame");
+
+    // The bump map lives in the other slot, and only when the effect asks for
+    // both. On an env-map-only material a bump setup is a no-op on both sides.
+    check(RpMatFXMaterialSetupBumpMap(material, NULL, NULL, 0.5f) == material,
+          "RpMatFXMaterialSetupBumpMap on a material with no bump effect is harmless");
+    check(near(fx->getEnvCoefficient(), 0.25f), "and left the env map alone");
+
+    RpMatFXMaterialSetEffects(material, rpMATFXEFFECTBUMPENVMAP);
+    RwTexture* bump = RwTextureCreate(NULL);
+    RpMatFXMaterialSetupBumpMap(material, bump, frame, 0.5f);
+    check(near(fx->getBumpCoefficient(), 0.5f), "RpMatFXMaterialSetupBumpMap sets the coefficient");
+    check(reinterpret_cast<RwTexture*>(fx->getBumpTexture()) == bump, "and the texture");
+
+    check(RpMatFXMaterialSetBumpMapCoefficient(material, 0.125f) == material,
+          "RpMatFXMaterialSetBumpMapCoefficient");
+    check(near(fx->getBumpCoefficient(), 0.125f), "reads back");
+
+    RpAtomic* atomic = reinterpret_cast<RpAtomic*>(rw::Atomic::create());
+    check(RpMatFXAtomicEnableEffects(atomic) == atomic, "RpMatFXAtomicEnableEffects");
+    check(reinterpret_cast<void*>(atomic->pipeline) ==
+              reinterpret_cast<void*>(rw::matFXGlobals.pipelines[rw::platform]),
+          "it put the atomic on librw's material-effects pipeline");
+
+    reinterpret_cast<rw::Atomic*>(atomic)->destroy();
+    RwFrameDestroy(frame);
+    reinterpret_cast<rw::Material*>(material)->destroy();
+    RwTextureDestroy(bump);
+    RwTextureDestroy(env);
+}
+
+static void test_ptank()
+{
+    printf("RpPTank\n");
+
+    // Structure of arrays, which is what xPtankPool.cpp asks for: each cluster
+    // is its own contiguous block and strides by its own size alone.
+    RwUInt32 flags = rpPTANKDFLAGPOSITION | rpPTANKDFLAGCOLOR | rpPTANKDFLAGVTX2TEXCOORDS |
+                     rpPTANKDFLAGSTRUCTURE;
+    RpAtomic* ptank = RpPTankAtomicCreate(64, flags, 0);
+    check(ptank != NULL, "RpPTankAtomicCreate");
+    if (ptank == NULL)
+    {
+        return;
+    }
+
+    RpPTankAtomicExtPrv* ext = RPATOMICPTANKPLUGINDATA(ptank);
+    check(ext != NULL, "the tank is reachable through RPATOMICPTANKPLUGINDATA");
+    check(ext->maxPCount == 64 && ext->actPCount == 0, "with the particle count it was given");
+    check(ext->isAStructure != FALSE, "and in structure-of-arrays form");
+    check(ext->publicData.format.numClusters == 3, "three clusters were asked for");
+
+    // xPtankPool.cpp and zParPTank.cpp both read this, and a ptank with no
+    // material would fault there rather than here.
+    check(ptank->geometry != NULL, "a ptank has a geometry");
+    check(ptank->geometry->numVertices == 64 * 4, "four billboard vertices per particle");
+    check(ptank->geometry->numTriangles == 64 * 2, "two triangles per particle");
+    check(ptank->geometry->matList.numMaterials == 1 &&
+              ptank->geometry->matList.materials[0] != NULL,
+          "and a material for the game to hang a texture on");
+
+    RpPTankLockStruct pos;
+    RpPTankLockStruct uv;
+    memset(&pos, 0, sizeof(pos));
+    memset(&uv, 0, sizeof(uv));
+
+    check(RpPTankAtomicLock(ptank, &pos, rpPTANKDFLAGPOSITION, rpPTANKLOCKWRITE) != FALSE,
+          "RpPTankAtomicLock, positions");
+    check(pos.data != NULL && pos.stride == (RwInt32)sizeof(RwV3d),
+          "a structure-of-arrays position cluster strides one RwV3d");
+
+    check(RpPTankAtomicLock(ptank, &uv, rpPTANKDFLAGVTX2TEXCOORDS, rpPTANKLOCKWRITE) != FALSE,
+          "RpPTankAtomicLock, texture coordinates");
+    check(uv.data != NULL && uv.stride == (RwInt32)(2 * sizeof(RwTexCoords)),
+          "and the UV cluster strides two RwTexCoords");
+    check(uv.data != pos.data, "the two clusters are different blocks");
+
+    // A cluster this ptank was not created with, and a multi-cluster lock,
+    // are both refused rather than answered with something plausible.
+    RpPTankLockStruct nope;
+    check(RpPTankAtomicLock(ptank, &nope, rpPTANKDFLAGNORMAL, rpPTANKLOCKWRITE) == FALSE,
+          "locking a cluster the format does not have is refused");
+    check(RpPTankAtomicLock(ptank, &nope, rpPTANKDFLAGPOSITION | rpPTANKDFLAGCOLOR,
+                            rpPTANKLOCKWRITE) == FALSE,
+          "locking two clusters at once is refused");
+
+    // The game writes through the pointers it was handed, so this is what a
+    // particle update actually does.
+    *(RwV3d*)(pos.data + 3 * pos.stride) = ptank->geometry->morphTarget[0].verts[0];
+    ((RwTexCoords*)(uv.data + 3 * uv.stride))[1].u = 0.5f;
+
+    check(RpPTankAtomicUnlock(ptank) == ptank, "RpPTankAtomicUnlock");
+    check(ext->lockFlags == 0, "which clears the lock");
+    check((ext->instFlags & rpPTANKIFLAGPOSITION) && (ext->instFlags & rpPTANKIFLAGVTX2TEXCOORDS),
+          "and marks both written clusters for re-instancing");
+    check(!(ext->instFlags & rpPTANKIFLAGCOLOR), "but not the one that was never locked");
+
+    // Reading back through the cluster the game kept: the data survived.
+    check(near(((RwTexCoords*)(ext->publicData.clusters[RPPTANKSIZEVTX2TEXCOORDS].data +
+                               3 * uv.stride))[1]
+                   .u,
+               0.5f),
+          "what was written through the lock is still there afterwards");
+
+    RpPTankAtomicDestroy(ptank);
+
+    // Array form -- zParPTank.cpp's -- interleaves every cluster into one
+    // record per particle, so both clusters stride by the whole record.
+    RpAtomic* aos = RpPTankAtomicCreate(
+        16, rpPTANKDFLAGPOSITION | rpPTANKDFLAGVTX2TEXCOORDS | rpPTANKDFLAGARRAY, 0);
+    check(aos != NULL, "RpPTankAtomicCreate, array form");
+    if (aos == NULL)
+    {
+        return;
+    }
+
+    RpPTankLockStruct aosPos;
+    RpPTankLockStruct aosUv;
+    RpPTankAtomicLock(aos, &aosPos, rpPTANKDFLAGPOSITION, rpPTANKLOCKWRITE);
+    RpPTankAtomicLock(aos, &aosUv, rpPTANKDFLAGVTX2TEXCOORDS, rpPTANKLOCKWRITE);
+    check(aosPos.stride == aosUv.stride, "an array-form ptank strides both clusters the same");
+    check(aosPos.stride >= (RwInt32)(sizeof(RwV3d) + 2 * sizeof(RwTexCoords)),
+          "by at least one whole record");
+    check(aosUv.data > aosPos.data && aosUv.data < aosPos.data + aosPos.stride,
+          "and interleaves them inside it");
+    RpPTankAtomicUnlock(aos);
+
+    RpPTankAtomicDestroy(aos);
+
+    check(RpPTankAtomicCreate(0, rpPTANKDFLAGPOSITION, 0) == NULL,
+          "a ptank with no particles is refused");
+    check(RpPTankAtomicLock(NULL, &aosPos, rpPTANKDFLAGPOSITION, rpPTANKLOCKWRITE) == FALSE,
+          "RpPTankAtomicLock(NULL, ...) is refused");
+
+    // Not exercised: instancing and rendering. Turning particle positions into
+    // billboard vertices needs the camera's right and up vectors, and there is
+    // no camera on this side yet. A ptank created here draws nothing rather
+    // than drawing something wrong -- its vertices are zeroed at create.
+}
+
 static void test_engine_shutdown()
 {
     printf("RwEngine teardown\n");
@@ -815,6 +1378,11 @@ int main()
     test_lights();
     test_renderstate();
     test_immediate();
+    test_geometry();
+    test_atomics();
+    test_skin();
+    test_matfx();
+    test_ptank();
     test_engine_shutdown();
 
     printf("\n%d failure%s\n", failures, failures == 1 ? "" : "s");

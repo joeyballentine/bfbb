@@ -23,8 +23,17 @@ typedef struct RpSector RpSector;
 typedef struct RpWorld RpWorld;
 typedef struct RpLight RpLight;
 
-
 /* RpLight is typedef'd above */
+
+// Mirrored onto rw::Material: librw's field ORDER under RenderWare's field
+// NAMES, so an RpMaterial* IS an rw::Material*. See the RwFrame comment in
+// rwcore.h for why the port mirrors rather than converts, and
+// src/SB/Core/pc/rw/layout_geometry.cpp, which asserts every offset.
+//
+// Only two things move. librw swaps pipeline and surfaceProps, and it widens
+// refCount from RenderWare's RwInt16-plus-padding to a full RwInt32 -- which
+// lands in the same four bytes, so the struct is 28 bytes either way.
+#ifndef PLATFORM_PC
 struct RpMaterial
 {
     RwTexture* texture;
@@ -34,6 +43,16 @@ struct RpMaterial
     RwInt16 refCount;
     RwInt16 pad;
 };
+#else
+struct RpMaterial
+{
+    RwTexture* texture;
+    RwRGBA color;
+    RwSurfaceProperties surfaceProps;
+    RxPipeline* pipeline;
+    RwInt32 refCount; // RenderWare splits these four bytes into refCount + pad
+};
+#endif
 
 typedef RpMaterial* (*RpMaterialCallBack)(RpMaterial* material, void* data);
 
@@ -135,6 +154,19 @@ struct RpMorphTarget
     RwV3d* normals;
 };
 
+// Mirrored onto rw::Geometry. The reorder is substantial: librw moves the
+// arrays ahead of matList, puts refCount at the very end instead of packing it
+// beside lockedSinceLastInst, and grows the struct from 96 bytes to 100. Every
+// offset is asserted in src/SB/Core/pc/rw/layout_geometry.cpp.
+//
+// One RenderWare field has no counterpart. `repEntry` is a RwResEntry* into
+// RenderWare's resource arena, which librw does not have -- it keeps an
+// InstanceDataHeader* in the same slot instead, allocated on demand by the
+// driver. The PC struct carries librw's name and type for that slot rather
+// than RenderWare's, so that any game code reaching for repEntry stops the
+// build instead of silently reading a different kind of pointer. Nothing in
+// the game does today.
+#ifndef PLATFORM_PC
 struct RpGeometry
 {
     RwObject object;
@@ -153,6 +185,27 @@ struct RpGeometry
     RwResEntry* repEntry;
     RpMorphTarget* morphTarget;
 };
+#else
+struct RpGeometry
+{
+    RwObject object;
+    RwUInt32 flags;
+    RwUInt16 lockedSinceLastInst; // librw calls this 'lockedSinceInst'
+    RwUInt16 pad; // librw pads here; RenderWare puts refCount in it
+    RwInt32 numTriangles;
+    RwInt32 numVertices;
+    RwInt32 numMorphTargets;
+    RwInt32 numTexCoordSets;
+    RpTriangle* triangles;
+    RwRGBA* preLitLum; // librw calls this 'colors'
+    RwTexCoords* texCoords[8];
+    RpMorphTarget* morphTarget; // librw calls this 'morphTargets'
+    RpMaterialList matList;
+    RpMeshHeader* mesh; // librw calls this 'meshHeader'
+    void* instData; // librw only, and NOT RenderWare's repEntry -- see above
+    RwInt32 refCount;
+};
+#endif
 
 enum RpGeometryFlag
 {
@@ -280,11 +333,19 @@ typedef RpAtomic* (*RpAtomicCallBackRender)(RpAtomic* atomic);
 
 #define RpAtomicGetClumpMacro(_atomic) ((_atomic)->clump)
 
+#ifndef PLATFORM_PC
 #define RpAtomicGetBoundingSphereMacro(_atomic)                                                    \
     ((((_atomic)->interpolator.flags & rpINTERPOLATORDIRTYSPHERE) ?                                \
       _rpAtomicResyncInterpolatedSphere(_atomic),                                                  \
       0 : 0),                                                                                      \
      &((_atomic)->boundingSphere))
+#else
+// The resync is what recomputes the sphere after morph-target interpolation
+// has moved between two targets. librw does not interpolate morph targets, so
+// the sphere is only ever the one RpAtomicSetGeometry copied out of morph
+// target 0, and there is nothing that could have made it stale.
+#define RpAtomicGetBoundingSphereMacro(_atomic) (&((_atomic)->boundingSphere))
+#endif
 
 #define RpAtomicGetFrameMacro(_atomic) ((RwFrame*)rwObjectGetParent(_atomic))
 
@@ -355,6 +416,27 @@ typedef RpAtomic* (*RpAtomicCallBackRender)(RpAtomic* atomic);
 #define RpAtomicSetPipeline RpAtomicSetPipelineMacro
 #define RpAtomicGetPipeline RpAtomicGetPipelineMacro
 
+// Mirrored onto rw::Atomic, and the one type in this header where the mirror
+// loses fields rather than only reordering them. librw's atomic is 84 bytes to
+// RenderWare's 112, and four RenderWare members have nowhere to go:
+//
+//   repEntry               RenderWare's resource-arena handle. librw instances
+//                          through the atomic's pipeline instead.
+//   interpolator           morph-target interpolation, which librw does not do
+//                          at all -- its own source says "TODO: interpolator".
+//   renderFrame            RenderWare's per-frame "already rendered" stamp,
+//                          used by the world's render traversal.
+//   llWorldSectorsInAtomic which world sectors the atomic straddles; librw
+//                          keeps a single World* rather than a sector list.
+//
+// They are LEFT OUT rather than appended, because appending them would put
+// them inside the plugin block librw allocates behind every atomic -- the
+// silent corruption these mirrors exist to prevent. Reaching for one is a
+// compile error on PC, which is the honest outcome; three sites clear
+// interpolator.flags today (zAssetTypes.cpp, zCutsceneMgr.cpp, and the
+// GameCube-only iModel.cpp) and will have to be looked at when the PC build
+// reaches them. Nothing reads the other three.
+#ifndef PLATFORM_PC
 struct RpAtomic
 {
     RwObjectHasFrame object;
@@ -371,6 +453,27 @@ struct RpAtomic
     RwLinkList llWorldSectorsInAtomic;
     RxPipeline* pipeline;
 };
+#else
+struct RpAtomic
+{
+    RwObjectHasFrame object;
+    RpGeometry* geometry;
+    RwSphere boundingSphere;
+    RwSphere worldBoundingSphere;
+    RpClump* clump;
+    RwLLLink inClumpLink; // librw calls this 'inClump'
+    RxPipeline* pipeline;
+    // librw's renderCB returns void where RenderWare's returns the atomic. The
+    // slot is one pointer either way and both are cdecl, so a call through this
+    // declaration reaches librw's default callback correctly and only the
+    // return value is undefined -- which every call site in the game discards.
+    // Game code assigns its own callbacks here with RenderWare's signature, so
+    // this is the declaration that has to stay.
+    RpAtomicCallBackRender renderCallBack;
+    void* world; // librw only: the RpWorld the atomic was added to
+    void* originalSync; // librw only: the frame-sync callback its world hooked
+};
+#endif
 
 typedef RpAtomic* (*RpAtomicCallBack)(RpAtomic* atomic, void* data);
 

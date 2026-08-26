@@ -14,7 +14,7 @@ zNPCTypePrawn.cpp:568 and 622 -- and it is what `RwCameraSetFrame` and
 groups even though it is not in the 112. librw has the counterpart
 (`ObjectWithFrame::setFrame`); nobody has written the shim for it yet.
 
-## Done (65)
+## Done (95)
 
 `value.cpp` -- value types only, so no object layout is involved and the
 reinterpret_casts are backed by static_asserts that fail the build if librw
@@ -238,6 +238,123 @@ impossible any other way.
     sites use the result only as "may I render now", and returning NULL would
     silently stop every effect in the game from drawing. Nothing may
     dereference it.
+The model path -- geometries, materials, atomics, and the three plugins that
+hang off them. RpMaterial, RpGeometry and RpAtomic are mirrored the way RwFrame
+is, with their offsets asserted in `layout_geometry.cpp`; RpTriangle,
+RpMaterialList, RpMorphTarget, RpMesh and RpMeshHeader needed no reordering and
+are asserted anyway. RpSkin and RpMatFX are mirrored not at all, because
+RenderWare keeps both opaque to the game.
+
+`geometry.cpp`:
+
+  - `RpGeometryCreate`
+  - `RpGeometryLock`
+  - `RpGeometryUnlock`
+  - `RpGeometryForAllMaterials`
+  - `RpGeometryTriangleGetVertexIndices`
+  - `RpGeometryTriangleSetVertexIndices`
+  - `RpGeometryTriangleGetMaterial`
+  - `RpGeometryTriangleSetMaterial`
+  - `RpMaterialSetTexture`
+  - `RpMorphTargetCalcBoundingSphere`
+
+`atomic.cpp` -- `RpAtomicForAllIntersections` is written out rather than
+forwarded, because librw has no collision code at all. It is a linear scan
+where RenderWare descends a collision BSP tree, so it reports the same
+triangles in geometry order instead of tree order and costs O(triangles) per
+query. iCollide.cpp already times these calls in `collide_rwtime`:
+
+  - `RpAtomicSetFrame`
+  - `RpAtomicSetGeometry`
+  - `RpAtomicForAllIntersections` -- sphere, line and box
+
+`skin.cpp` -- the one group that needed no struct mirrored, because rpskin.h
+never defines RpSkin. What the accessors hand back is not opaque though, and
+the strides are asserted:
+
+  - `RpSkinPluginAttach`
+  - `RpSkinGeometryGetSkin`
+  - `RpSkinGetNumBones`
+  - `RpSkinGetSkinToBoneMatrices`
+  - `RpSkinGetVertexBoneWeights`
+  - `RpSkinGetVertexBoneIndices`
+  - `RpSkinAtomicSetType`
+
+`matfx.cpp`:
+
+  - `RpMatFXPluginAttach`
+  - `RpMatFXAtomicEnableEffects`
+  - `RpMatFXMaterialSetEffects`
+  - `RpMatFXMaterialGetEffects`
+  - `RpMatFXMaterialSetupEnvMap`
+  - `RpMatFXMaterialSetupBumpMap`
+  - `RpMatFXMaterialSetEnvMapCoefficient`
+  - `RpMatFXMaterialSetBumpMapCoefficient`
+
+`ptank.cpp` -- written out end to end, because librw has no PTank at all:
+
+  - `RpPTankPluginAttach`
+  - `RpPTankAtomicCreate`
+  - `RpPTankAtomicDestroy`
+  - `RpPTankAtomicLock`
+  - `RpPTankAtomicUnlock`
+
+The three `Rp*PluginAttach` calls are the answer to where librw's
+`registerSkinPlugin`/`registerMatFXPlugin` and the PTank atomic plugin belong.
+They are not on the 112-function list, but `RWAttachPlugins` in iSystem.cpp
+already calls them between `RwEngineInit` and `RwEngineOpen`, which is exactly
+the window each one needs: all three grow the size of an atomic, a geometry or
+a material, and `Engine::open` freezes those sizes. Putting them in
+`RwEngineInit` instead would attach plugins the game never asked for.
+
+`tests/selftest.cpp` runs all of it against a live engine: the intersection
+walk against a known quad with the atomic's frame moved, so that the world-in
+object-out contract is checked rather than assumed; the skin accessors against
+a skin built by hand; the matfx effect block read back through librw; and both
+PTank memory layouts, structure-of-arrays and interleaved.
+
+### What the model path does NOT do yet
+
+Four things, each of which will show up as a visible difference rather than as
+a crash. None of them is on the 112-function list; all four need writing before
+the port draws a frame that looks right.
+
+**PTank particles are invisible.** `RpPTankAtomicCreate` builds the atomic, the
+geometry and the particle buffers, and lock/unlock are complete -- but nothing
+turns particle positions into billboard vertices. That instancing step needs
+the camera's right and up vectors and there is no camera yet (see
+`RwEngineInstance->curCamera` below), so the ptank's vertices stay at the zeros
+`RpPTankAtomicCreate` wrote and every triangle is degenerate. Nothing draws;
+nothing draws *wrongly*. Whoever writes `RwCameraBeginUpdate` should come back
+for this. It is NOT tested, because it does not exist.
+
+**Skinned models get the plain skin pipeline.** `RpSkinAtomicSetType` passes the
+type through, but librw's `Skin::setPipeline` casts it to void and installs the
+one skin pipeline it has per platform. The two calls asking for
+`rpSKINTYPEMATFX` -- xFX.cpp and zEntCruiseBubble.cpp, both wanting an
+environment-mapped skinned model -- will render without the effect.
+
+**RpAtomic has lost four of RenderWare's fields**, because librw's atomic is 84
+bytes to RenderWare's 112 and there is nowhere to put them that is not inside
+librw's plugin block: `repEntry`, `interpolator`, `renderFrame` and
+`llWorldSectorsInAtomic`. rpworld.h says which and why. Reaching for one is a
+compile error on PC, which is the point; three sites clear
+`interpolator.flags` today (zAssetTypes.cpp, zCutsceneMgr.cpp, and the
+GameCube-only iModel.cpp) and need looking at when the PC build reaches them.
+`RpAtomicGetBoundingSphere` already has a PC spelling that does not need the
+interpolator, because with no morph interpolation the sphere is never stale.
+
+**`RpAtomicForAllIntersections` is a linear scan.** RenderWare descends the
+collision BSP tree the model was built with; there is no tree here, and
+`RpCollisionPluginAttach` is unwritten. Same triangles, geometry order instead
+of tree order, O(triangles) instead of O(log triangles). iCollide.cpp's
+`collide_rwtime` is where that will show.
+
+Not tested, and said plainly: nothing in this group reaches a render backend
+EXCEPT the pipelines that `RpSkinAtomicSetType` and `RpMatFXAtomicEnableEffects`
+install, which are librw's dummy pipelines under `LIBRW_PLATFORM=NULL`. The
+selftest checks that the atomic ends up pointing at them, not that they draw
+anything -- they cannot.
 
 ## Do this next
 
@@ -252,7 +369,7 @@ linked. `RwEngineOpen` is the other half of that: it passes no
 `displayID` (a GameCube `RwGameCubeDeviceConfig*`) has nothing to translate
 into. It refuses to compile against a real backend rather than pass null to one.
 
-## Blocked on the object-layout decision (47)
+## Blocked on the object-layout decision (17)
 
 RESOLVED -- the port mirrors librw's layouts (method 1), so these are no longer
 blocked on a decision, only unwritten. Each needs its type mirrored in
@@ -260,11 +377,7 @@ include/rwsdk with matching static_asserts alongside layout.cpp, in the same
 commit. What is left of the 112 looks like this. A group with no entries under
 it is one that is finished.
 
-**RpAtomic** (3)
-
-  - `RpAtomicForAllIntersections`
-  - `RpAtomicSetFrame`
-  - `RpAtomicSetGeometry`
+**RpAtomic** (0)
 
 **RpClump** (6)
 
@@ -279,53 +392,20 @@ it is one that is finished.
 
   - `RpCollisionWorldForAllIntersections`
 
-**RpGeometry** (8)
-
-  - `RpGeometryCreate`
-  - `RpGeometryForAllMaterials`
-  - `RpGeometryLock`
-  - `RpGeometryTriangleGetMaterial`
-  - `RpGeometryTriangleGetVertexIndices`
-  - `RpGeometryTriangleSetMaterial`
-  - `RpGeometryTriangleSetVertexIndices`
-  - `RpGeometryUnlock`
+**RpGeometry** (0)
 
 **RpLight** (0)
 
 
-**RpMatFX** (7)
+**RpMatFX** (0)
 
-  - `RpMatFXAtomicEnableEffects`
-  - `RpMatFXMaterialGetEffects`
-  - `RpMatFXMaterialSetBumpMapCoefficient`
-  - `RpMatFXMaterialSetEffects`
-  - `RpMatFXMaterialSetEnvMapCoefficient`
-  - `RpMatFXMaterialSetupBumpMap`
-  - `RpMatFXMaterialSetupEnvMap`
+**RpMaterial** (0)
 
-**RpMaterial** (1)
+**RpMorphTarget** (0)
 
-  - `RpMaterialSetTexture`
+**RpPTank** (0)
 
-**RpMorphTarget** (1)
-
-  - `RpMorphTargetCalcBoundingSphere`
-
-**RpPTank** (4)
-
-  - `RpPTankAtomicCreate`
-  - `RpPTankAtomicDestroy`
-  - `RpPTankAtomicLock`
-  - `RpPTankAtomicUnlock`
-
-**RpSkin** (6)
-
-  - `RpSkinAtomicSetType`
-  - `RpSkinGeometryGetSkin`
-  - `RpSkinGetNumBones`
-  - `RpSkinGetSkinToBoneMatrices`
-  - `RpSkinGetVertexBoneIndices`
-  - `RpSkinGetVertexBoneWeights`
+**RpSkin** (0)
 
 **RpWorld** (7)
 
@@ -342,6 +422,11 @@ it is one that is finished.
   - `RtIntersectionBBoxTriangle`
   - `RtIntersectionSphereTriangle`
   - `RtQuatSetupSlerpCache`
+
+  The first two already exist as file-static helpers in `atomic.cpp`, written
+  for `RpAtomicForAllIntersections`. Whoever writes the public pair should lift
+  them out rather than write them twice, so that a collision the game finds one
+  way is a collision it finds the other.
 
 **RwCamera** (0)
 
