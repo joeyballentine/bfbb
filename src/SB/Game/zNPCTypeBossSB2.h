@@ -12,6 +12,16 @@ namespace auto_tweak
 {
     template <class T1, class T2>
     void load_param(T1&, T2, T2, T2, xModelAssetParam*, U32, const char*);
+
+    // These are defined at the bottom of the matching .cpp, below every use.
+    // Declaring them here is what makes a use see the specialization instead of
+    // instantiating the primary -- which has no definition anywhere, so the
+    // primary was never what any of this resolved to. Standard C++ requires the
+    // declaration to come first; CodeWarrior does not.
+    template <> void load_param<S32, S32>(S32&, S32, S32, S32, xModelAssetParam*, U32, const char*);
+    template <> void load_param<bool, S32>(bool&, S32, S32, S32, xModelAssetParam*, U32, const char*);
+    template <> void load_param<xVec3, S32>(xVec3&, S32, S32, S32, xModelAssetParam*, U32, const char*);
+    template <> void load_param<F32, F32>(F32&, F32, F32, F32, xModelAssetParam*, U32, const char*);
 };
 
 struct zNPCB_SB2 : zNPCBoss
@@ -298,7 +308,7 @@ struct zNPCB_SB2 : zNPCBoss
 
 struct zNPCGoalBossSB2Intro : zNPCGoalCommon
 {
-    zNPCGoalBossSB2Intro::zNPCGoalBossSB2Intro(S32 goalID, zNPCB_SB2& npc)
+    zNPCGoalBossSB2Intro(S32 goalID, zNPCB_SB2& npc)
         : zNPCGoalCommon(goalID), owner(npc)
     {
     }
@@ -313,7 +323,7 @@ struct zNPCGoalBossSB2Intro : zNPCGoalCommon
 
 struct zNPCGoalBossSB2Idle : zNPCGoalCommon
 {
-    zNPCGoalBossSB2Idle::zNPCGoalBossSB2Idle(S32 goalID, zNPCB_SB2& npc)
+    zNPCGoalBossSB2Idle(S32 goalID, zNPCB_SB2& npc)
         : zNPCGoalCommon(goalID), owner(npc)
     {
     }
@@ -329,7 +339,7 @@ struct zNPCGoalBossSB2Idle : zNPCGoalCommon
 
 struct zNPCGoalBossSB2Taunt : zNPCGoalCommon
 {
-    zNPCGoalBossSB2Taunt::zNPCGoalBossSB2Taunt(S32 goalID, zNPCB_SB2& npc)
+    zNPCGoalBossSB2Taunt(S32 goalID, zNPCB_SB2& npc)
         : zNPCGoalCommon(goalID), owner(npc)
     {
     }
@@ -344,7 +354,7 @@ struct zNPCGoalBossSB2Taunt : zNPCGoalCommon
 
 struct zNPCGoalBossSB2Dizzy : zNPCGoalCommon
 {
-    zNPCGoalBossSB2Dizzy::zNPCGoalBossSB2Dizzy(S32 goalID, zNPCB_SB2& npc)
+    zNPCGoalBossSB2Dizzy(S32 goalID, zNPCB_SB2& npc)
         : zNPCGoalCommon(goalID), owner(npc)
     {
     }
@@ -360,7 +370,7 @@ struct zNPCGoalBossSB2Dizzy : zNPCGoalCommon
 
 struct zNPCGoalBossSB2Hit : zNPCGoalCommon
 {
-    zNPCGoalBossSB2Hit::zNPCGoalBossSB2Hit(S32 goalID, zNPCB_SB2& npc)
+    zNPCGoalBossSB2Hit(S32 goalID, zNPCB_SB2& npc)
         : zNPCGoalCommon(goalID), owner(npc)
     {
     }
@@ -375,7 +385,7 @@ struct zNPCGoalBossSB2Hit : zNPCGoalCommon
 
 struct zNPCGoalBossSB2Hunt : zNPCGoalCommon
 {
-    zNPCGoalBossSB2Hunt::zNPCGoalBossSB2Hunt(S32 goalID, zNPCB_SB2& npc)
+    zNPCGoalBossSB2Hunt(S32 goalID, zNPCB_SB2& npc)
         : zNPCGoalCommon(goalID), owner(npc)
     {
     }
@@ -391,7 +401,7 @@ struct zNPCGoalBossSB2Hunt : zNPCGoalCommon
 
 struct zNPCGoalBossSB2Swipe : zNPCGoalCommon
 {
-    zNPCGoalBossSB2Swipe::zNPCGoalBossSB2Swipe(S32 goalID, zNPCB_SB2& npc)
+    zNPCGoalBossSB2Swipe(S32 goalID, zNPCB_SB2& npc)
         : zNPCGoalCommon(goalID), owner(npc)
     {
     }
@@ -413,7 +423,7 @@ struct zNPCGoalBossSB2Swipe : zNPCGoalCommon
 
 struct zNPCGoalBossSB2Chop : zNPCGoalCommon
 {
-    zNPCGoalBossSB2Chop::zNPCGoalBossSB2Chop(S32 goalID, zNPCB_SB2& npc)
+    zNPCGoalBossSB2Chop(S32 goalID, zNPCB_SB2& npc)
         : zNPCGoalCommon(goalID), owner(npc)
     {
     }
@@ -434,7 +444,7 @@ struct zNPCGoalBossSB2Chop : zNPCGoalCommon
 
 struct zNPCGoalBossSB2Karate : zNPCGoalCommon
 {
-    zNPCGoalBossSB2Karate::zNPCGoalBossSB2Karate(S32 goalID, zNPCB_SB2& npc)
+    zNPCGoalBossSB2Karate(S32 goalID, zNPCB_SB2& npc)
         : zNPCGoalCommon(goalID), owner(npc)
     {
     }
@@ -452,7 +462,7 @@ struct zNPCGoalBossSB2Karate : zNPCGoalCommon
 
 struct zNPCGoalBossSB2Death : zNPCGoalCommon
 {
-    zNPCGoalBossSB2Death::zNPCGoalBossSB2Death(S32 goalID, zNPCB_SB2& npc)
+    zNPCGoalBossSB2Death(S32 goalID, zNPCB_SB2& npc)
         : zNPCGoalCommon(goalID), owner(npc)
     {
     }

@@ -271,8 +271,28 @@ substitute is `tools/pcprogress.py`: does each unit of `src/SB` compile, on a
 modern toolchain, against the PC platform headers? That is a real gate, not a
 proxy, and anything failing it names its reason.
 
-It went **6.6% → 89.4%** (13 → 177 of 198 units). None of the remainder is
-waiting on librw, because compiling is not linking.
+It reports three numbers, and the split is the interesting part:
+
+    compiles            163 / 198 units   82.32%
+    pointer width only   23 / 198 units   11.62%
+    needs other work     12 / 198 units
+
+**The percentage was wrong for two rounds and is corrected here.** The tool
+passed `-fpermissive`, which downgrades real errors to warnings, so it counted
+34 units that no build would accept -- it read 97.5% where the honest figure
+was 80.3%. `CMakeLists.txt` never passed that flag, so the two disagreed and
+only the looser one was being reported. The flag is gone.
+
+What it hid is worth having found: the largest remaining class is **casting a
+pointer to `U32`**. That is not a defect to fix unit by unit, it is the open
+question under **Asset caveats** arriving as a compile error, so it gets its
+own line. 23 units fail for that reason and no other -- 186 of 198 are either
+compiling or waiting on a decision that has not been made.
+
+`-m32` could not be tested here; this container has no multilib. That
+experiment is still the cheapest way to settle the question.
+
+None of the remainder is waiting on librw, because compiling is not linking.
 
 `src/SB/Core/pc/tests/selftest.cpp` is the other half: 37 checks over every
 implemented interface, so that "implemented" is measured rather than asserted.
@@ -329,14 +349,15 @@ reserved at twice the size. One more for the latent-retail-bugs list.
    What survives is the shape, because `xsavegame.cpp` is shared and asks all
    the same questions.
 2. **`iSnd`** — 22 functions, and the largest group after rendering.
-3. **The remaining 21 units** that do not compile, now all singletons. Two are
-   real porting work rather than conformance: `xVec3.cpp` implements
-   `xVec3Dot` in paired-single PPC assembly and needs a scalar body, and
-   `zMain.cpp` calls `CARDMount`/`CARDFormatAsync` directly to drive the
+3. **The 23 pointer-width units**, which are one decision rather than 23 fixes.
+4. **The 12 that need other work.** `zMain.cpp` and `zSaveLoad.cpp` call
+   `CARDMount`, `CARDFormatAsync` and `CARDProbeEx` directly to drive the
    memory-card format screen -- a platform leak in game code that belongs
-   behind an interface. The rest are C++ conformance: explicit specializations
-   missing `template<>` or appearing after an instantiation, namespace-qualified
-   definitions written outside their namespace, and arithmetic on `void*`.
+   behind an interface, and the last dolphin dependency in `src/SB`.
+   `xModelBucket.cpp` includes a GameCube RenderWare driver header. `xFX.cpp`
+   needs its `tier_queue` member specializations declared before `xFX.h`
+   instantiates them, and `xFX.h` is included by 71 other units, so the
+   declaration cannot simply go there -- that was tried and cost 71 units.
 4. **librw**, which is phase 3 and gates the other 14 interfaces.
 
 ### `jump to case label`, and what measuring it cost
@@ -361,6 +382,15 @@ that jumps forward over `xSurface* surf = ...`, and no block can contain both
 the jump and the label; that one splits the declaration from its initializer
 instead, which a jump is allowed to cross.
 
+### The 32-bit question, as a measurement
+
+`xVec3Dot` was the last piece of PowerPC assembly in `src/SB`: Gekko
+paired-single, two floats per register. The scalar body preserves what the
+assembly actually computes -- `ps_sum0` gives `(x*x2 + y*y2) + z*z2`, and float
+addition is not associative, so the order is the part worth keeping. The console
+also gets the first two terms from one `ps_madd`, one rounding where the scalar
+version has two.
+
 ### CodeWarrior-isms, second pass
 
 - **`namespace std` re-declarations.** Eight files declare or define MSL's
@@ -375,3 +405,25 @@ instead, which a jump is allowed to cross.
 - **`<dolphin.h>` in `xAnim.cpp`**, which the file does not use -- no OS, DVD
   or CARD call anywhere in it. Gated, like `xpkrsvc.h` before it. That leaves
   `zMain.cpp` as the only unit in `src/SB` that genuinely reaches for dolphin.
+
+
+### Third pass
+
+- **Explicit specializations declared after they were instantiated.**
+  `range_limit` (4 specializations, declared in `xMath.h` now),
+  `auto_tweak::load_param` (4 headers), `xListItem<NPCConfig>` members.
+  CodeWarrior resolves these regardless of order; standard C++ requires the
+  declaration first. Note that `range_limit`'s primary template has no
+  definition anywhere -- every use always resolved to a specialization, so
+  declaring them changes nothing about what runs.
+- **Redundant qualification.** `void zhud::init()` written *inside*
+  `namespace zhud`, and `X::X(...)` written inside `struct X`. 34 sites.
+- **`u32` and `size_t` are the same type on the GameCube ABI** -- both
+  `unsigned long` -- and are not on LP64. `ztalkbox::load` is declared taking
+  one and defined taking the other, which only became a mismatch here.
+- **Placement `operator new`,** defined in `xHud.cpp` because MSL's `<new>`
+  does not declare it. libstdc++ does.
+- **`__fabs` and `__fabsf`.** glibc *declares* both -- they are its internal
+  aliases for `fabs` -- and does not define them, so the host layer supplies
+  the bodies in `src/SB/Core/pc/intrin.cpp`. Defining them in a header instead
+  is a static redeclaration of an extern, which is how this was found.

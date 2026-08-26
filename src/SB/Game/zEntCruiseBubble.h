@@ -21,6 +21,14 @@ namespace auto_tweak
 {
     template <class T1, class T2>
     void load_param(T1&, T2, T2, T2, xModelAssetParam*, U32, const char*);
+
+    // Defined at the bottom of the matching .cpp, below every use; declared here
+    // so a use sees the specialization rather than instantiating the primary,
+    // which has no definition anywhere.
+    template <> void load_param<U32, S32>(U32&, S32, S32, S32, xModelAssetParam*, U32, const char*);
+    template <> void load_param<xVec3, S32>(xVec3&, S32, S32, S32, xModelAssetParam*, U32, const char*);
+    template <> void load_param<S32, S32>(S32&, S32, S32, S32, xModelAssetParam*, U32, const char*);
+    template <> void load_param<F32, F32>(F32&, F32, F32, F32, xModelAssetParam*, U32, const char*);
 };
 
 namespace cruise_bubble

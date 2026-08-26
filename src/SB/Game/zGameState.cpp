@@ -1,8 +1,8 @@
 #include "zGameState.h"
 
-#include "..\Core\x\xSnd.h"
-#include "..\Core\x\xEvent.h"
-#include "..\Core\x\xserializer.h"
+#include "../Core/x/xSnd.h"
+#include "../Core/x/xEvent.h"
+#include "../Core/x/xserializer.h"
 
 #include "zGlobals.h"
 #include "zGame.h"

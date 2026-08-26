@@ -2366,6 +2366,7 @@ void xFXRibbon::init(const char* group, const char* name)
     debug_init(group, name);
 }
 
+template <>
 void tier_queue<xFXRibbon::joint_data>::clear()
 {
     u32 block = get_block(first);
@@ -3328,11 +3329,13 @@ void xFXRibbon::debug_update(F32)
 // These four are inline members of the containers in containers.h; they are
 // weak in the target object. containers.h is shared with 75 TUs, so the bodies
 // live here (marked inline, which reproduces the weak scope) rather than there.
+template <>
 inline xFXRibbon::joint_data& tier_queue<xFXRibbon::joint_data>::operator[](S32 index)
 {
     return get_at(wrap_index(first + index));
 }
 
+template <>
 inline tier_queue<xFXRibbon::joint_data>::iterator*
 tier_queue<xFXRibbon::joint_data>::iterator::operator--()
 {

@@ -3496,7 +3496,7 @@ void zNPCB_SB2::say(int which)
 
 xFactoryInst* zNPCGoalBossSB2Intro::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalBossSB2Intro(who, (zNPCB_SB2&)*info);
+    return new (who, grow) zNPCGoalBossSB2Intro(who, *(zNPCB_SB2*)info);
 }
 
 S32 zNPCGoalBossSB2Intro::Enter(F32 dt, void* updCtxt)
@@ -3530,7 +3530,7 @@ S32 zNPCGoalBossSB2Intro::Exit(F32 dt, void* updCtxt)
 
 xFactoryInst* zNPCGoalBossSB2Idle::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalBossSB2Idle(who, (zNPCB_SB2&)*info);
+    return new (who, grow) zNPCGoalBossSB2Idle(who, *(zNPCB_SB2*)info);
 }
 
 S32 zNPCGoalBossSB2Idle::Enter(F32 dt, void* updCtxt)
@@ -3576,7 +3576,7 @@ S32 zNPCGoalBossSB2Idle::Process(en_trantype* trantype, F32 dt, void* updCtxt, x
 
 xFactoryInst* zNPCGoalBossSB2Taunt::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalBossSB2Taunt(who, (zNPCB_SB2&)*info);
+    return new (who, grow) zNPCGoalBossSB2Taunt(who, *(zNPCB_SB2*)info);
 }
 
 S32 zNPCGoalBossSB2Taunt::Enter(F32 dt, void* updCtxt)
@@ -3604,7 +3604,7 @@ S32 zNPCGoalBossSB2Taunt::Exit(F32 dt, void* updCtxt)
 
 xFactoryInst* zNPCGoalBossSB2Dizzy::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalBossSB2Dizzy(who, (zNPCB_SB2&)*info);
+    return new (who, grow) zNPCGoalBossSB2Dizzy(who, *(zNPCB_SB2*)info);
 }
 
 S32 zNPCGoalBossSB2Dizzy::Enter(F32 dt, void* updCtxt)
@@ -3654,7 +3654,7 @@ S32 zNPCGoalBossSB2Dizzy::Process(en_trantype* trantype, F32 dt, void* updCtxt, 
 
 xFactoryInst* zNPCGoalBossSB2Hit::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalBossSB2Hit(who, (zNPCB_SB2&)*info);
+    return new (who, grow) zNPCGoalBossSB2Hit(who, *(zNPCB_SB2*)info);
 }
 
 S32 zNPCGoalBossSB2Hit::Enter(F32 dt, void* updCtxt) 
@@ -3690,7 +3690,7 @@ S32 zNPCGoalBossSB2Hit::Exit(F32 dt, void* updCtxt)
 
 xFactoryInst* zNPCGoalBossSB2Hunt::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalBossSB2Hunt(who, (zNPCB_SB2&)*info);
+    return new (who, grow) zNPCGoalBossSB2Hunt(who, *(zNPCB_SB2*)info);
 }
 
 S32 zNPCGoalBossSB2Hit::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene* xscn)
@@ -3813,7 +3813,7 @@ S32 zNPCGoalBossSB2Hunt::Process(en_trantype* trantype, F32 dt, void* updCtxt, x
 
 xFactoryInst* zNPCGoalBossSB2Swipe::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalBossSB2Swipe(who, (zNPCB_SB2&)*info);
+    return new (who, grow) zNPCGoalBossSB2Swipe(who, *(zNPCB_SB2*)info);
 }
 
 S32 zNPCGoalBossSB2Swipe::Enter(F32 dt, void* updCtxt)
@@ -3910,7 +3910,7 @@ bool zNPCGoalBossSB2Swipe::can_start() const
 
 xFactoryInst* zNPCGoalBossSB2Chop::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalBossSB2Chop(who, (zNPCB_SB2&)*info);
+    return new (who, grow) zNPCGoalBossSB2Chop(who, *(zNPCB_SB2*)info);
 }
 
 S32 zNPCGoalBossSB2Chop::Enter(F32 dt, void* updCtxt)
@@ -4029,7 +4029,7 @@ bool zNPCGoalBossSB2Chop::can_start() const
 
 xFactoryInst* zNPCGoalBossSB2Karate::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalBossSB2Karate(who, (zNPCB_SB2&)*info);
+    return new (who, grow) zNPCGoalBossSB2Karate(who, *(zNPCB_SB2*)info);
 }
 
 S32 zNPCGoalBossSB2Karate::Enter(F32 dt, void* updCtxt)
@@ -4160,7 +4160,7 @@ bool zNPCGoalBossSB2Karate::can_start() const
 
 xFactoryInst* zNPCGoalBossSB2Death::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalBossSB2Death(who, (zNPCB_SB2&)*info);
+    return new (who, grow) zNPCGoalBossSB2Death(who, *(zNPCB_SB2*)info);
 }
 
 S32 zNPCGoalBossSB2Death::Enter(F32 dt, void* updCtxt)

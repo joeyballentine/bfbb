@@ -102,13 +102,13 @@ namespace zhud
         }
     } // namespace
 
-    void zhud::init()
+    void init()
     {
         inited = true;
         xhud::init();
     }
 
-    void zhud::setup()
+    void setup()
     {
         S32 i;
         U32 id;
@@ -172,7 +172,7 @@ namespace zhud
         }
     }
 
-    void zhud::destroy()
+    void destroy()
     {
         inited = false;
         memset(widgets, 0x0, 0x24);
@@ -180,7 +180,7 @@ namespace zhud
         last_paused = true;
     }
 
-    void zhud::update(F32 dt)
+    void update(F32 dt)
     {
         S32 i = 0;
 
@@ -273,12 +273,12 @@ namespace zhud
         xhud::update(dt);
     }
 
-    void zhud::render()
+    void render()
     {
         xhud::render();
     }
 
-    void zhud::show()
+    void show()
     {
         xhud::widget** it = widgets;
         xhud::widget** end = widgets + 9;
@@ -309,7 +309,7 @@ namespace zhud
         }
     }
 
-    void zhud::hide()
+    void hide()
     {
         xhud::widget** it = widgets;
         xhud::widget** end = widgets + 9;

@@ -43,7 +43,9 @@ CXXFLAGS = [
     "-std=c++17",
     "-fsyntax-only",
     "-fno-strict-aliasing",
-    "-fpermissive",
+    # No -fpermissive. It downgrades real errors to warnings, so the count came
+    # out higher than any build that would actually succeed -- CMakeLists.txt
+    # does not pass it, and the two disagreed.
     "-w",
     "-DPLATFORM_PC",
     "-DNON_MATCHING",
@@ -67,6 +69,23 @@ def compile_one(path):
     cmd.append(str(path))
     r = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
     return path, r.returncode == 0, r.stderr
+
+
+# Casting a pointer to U32/S32. On the GameCube a pointer is 32 bits and this
+# is exact; on an LP64 host it truncates, and the game does it constantly --
+# every asset-overlaid struct addresses memory with U32. This is the open
+# question in PCPORT.md's "Asset caveats", not a defect to fix unit by unit, so
+# it gets its own line rather than being mixed in with real porting work.
+POINTER_WIDTH = re.compile(r"cast from .*\*.* to .* loses precision")
+
+
+def all_errors(stderr):
+    return re.findall(r"(?:fatal error|error): (.*)", stderr)
+
+
+def pointer_width_only(stderr):
+    errs = all_errors(stderr)
+    return bool(errs) and all(POINTER_WIDTH.search(e) for e in errs)
 
 
 def first_error(stderr):
@@ -168,8 +187,13 @@ def main():
         print()
 
     total = len(results)
-    print(f"compiles      {len(good):4d} / {total} units   {100.0 * len(good) / total:.2f}%")
-    print(f"fails         {len(bad):4d} / {total} units")
+    ptr = [r for r in bad if pointer_width_only(r[2])]
+    other = len(bad) - len(ptr)
+
+    print(f"compiles           {len(good):4d} / {total} units   {100.0 * len(good) / total:.2f}%")
+    print(f"pointer width only {len(ptr):4d} / {total} units   "
+          f"{100.0 * len(ptr) / total:.2f}%   (see PCPORT.md, Asset caveats)")
+    print(f"needs other work   {other:4d} / {total} units")
 
 
 if __name__ == "__main__":

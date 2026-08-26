@@ -25,7 +25,14 @@ did after every edit made so far.
 ## What is implemented
 
 `tools/pcprogress.py` measures the other half of the question — how much of
-`src/SB` compiles against these headers. Right now **177 of 198 units (89.4%)**.
+`src/SB` compiles against these headers:
+
+    compiles            163 / 198 units   82.32%
+    pointer width only   23 / 198 units   11.62%
+    needs other work     12 / 198 units
+
+The middle line is casting a pointer to `U32`, which is one open decision
+(PCPORT.md, **Asset caveats**) rather than 23 separate defects.
 
 | interface | state | notes |
 |---|---|---|

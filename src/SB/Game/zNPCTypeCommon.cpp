@@ -17,6 +17,11 @@
 #include "zGrid.h"
 #include "zNPCFXCinematic.h"
 
+// Same as in xFX.cpp: xListItem is specialized for NPCConfig at the bottom of
+// this file, and this file instantiates it well before that.
+template <> NPCConfig* xListItem<NPCConfig>::Next();
+template <> void xListItem<NPCConfig>::Insert(NPCConfig* list);
+
 #define Unknown 0
 #define LassoGuide_Grab01 1
 #define LassoGuide_Hold01 2
@@ -3605,11 +3610,13 @@ F32 __deadstripped_zNPCTypeCommon_int2flt(S32 i)
     return i;
 }
 
+template <>
 NPCConfig* xListItem<NPCConfig>::Next()
 {
     return this->next;
 }
 
+template <>
 void xListItem<NPCConfig>::Insert(NPCConfig* list)
 {
     NPCConfig* node = (NPCConfig*)this;

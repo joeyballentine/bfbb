@@ -54,6 +54,7 @@ endif()
 # is the right way round.
 add_library(bfbb_platform STATIC
   ${PC_DIR}/iFile.cpp
+  ${PC_DIR}/intrin.cpp
   ${PC_DIR}/iMath.cpp
   ${PC_DIR}/iMemMgr.cpp
   ${PC_DIR}/iPad.cpp
@@ -84,6 +85,8 @@ enable_testing()
 
 add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   ${PC_DIR}/iFile.cpp
+  ${PC_DIR}/intrin.cpp
+  ${PC_DIR}/intrin.cpp
   ${PC_DIR}/iMath.cpp
   ${PC_DIR}/iMemMgr.cpp
   ${PC_DIR}/iTime.cpp

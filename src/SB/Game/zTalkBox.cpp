@@ -1633,7 +1633,10 @@ namespace
 
 } // namespace
 
-void ztalkbox::load(xBase& data, xDynAsset& asset, u32)
+// zTalkBox.h declares this taking size_t. On the GameCube ABI u32 and size_t
+// are both `unsigned long` and the two spellings name one type; on LP64 they
+// do not, and this stops matching its own declaration.
+void ztalkbox::load(xBase& data, xDynAsset& asset, size_t)
 {
     ((ztalkbox&)data).load((const ztalkbox::asset_type&)asset);
 }

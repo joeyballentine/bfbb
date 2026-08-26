@@ -15,18 +15,16 @@
 extern "C" {
 #endif
 
-// The GameCube header defines these as identity macros under #ifndef __MWERKS__
-// -- purely so clangd stops complaining, since only CodeWarrior ever compiles
-// that path. Identity would make FABS(x) return x, so they are real here.
-#define __fabs(x) fabs(x)
-#define __fabsf(x) fabsf(x)
-
-// PowerPC's reciprocal-square-root estimate. The hardware instruction is
-// specified to about 12 bits of mantissa and the exact value is more accurate,
-// not less -- but it is a different value, so anything the game tuned against
-// the estimate's error will drift slightly. See "Floating point divergence" in
-// PCPORT.md.
-#define __frsqrte(x) (1.0 / sqrt(x))
+// __fabs and friends come from compat/intrin.h as real inline functions.
+// Defining them as macros here instead was a mistake: include/intrin.h declares
+// `double __frsqrte(double);`, and a function-like macro of the same name
+// expands inside that declaration.
+//
+// Note that src/PowerPC_EABI_Support/include/math.h defines them as IDENTITY
+// macros for non-CodeWarrior compilers, purely so clangd stops complaining --
+// which would make FABS(x) return x. They are real here, and the selftest
+// checks it.
+#include <intrin.h>
 
 #define FABS(x) (float)__fabs(x)
 

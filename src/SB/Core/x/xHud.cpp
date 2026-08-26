@@ -616,7 +616,7 @@ namespace xhud
         return true;
     }
 
-    void xhud::render_model(xModelInstance& m, const xhud::render_context& rc)
+    void render_model(xModelInstance& m, const xhud::render_context& rc)
     {
         basic_rect<F32> r = { 0 };
         r.x = rc.loc.x;
@@ -683,10 +683,14 @@ inline void widget::dispatch(xBase* b1, U32 event, const F32* toParam, xBase* b2
 
 // NOTE: this belongs in <new.h>. It is inline, so the compiler emits a weak
 // out-of-line copy into every translation unit that placement-news.
+// MSL's <new> does not declare placement new, so the GameCube build defines it
+// here. libstdc++ does declare it, and defining it again is a redefinition.
+#ifdef __MWERKS__
 inline void* operator new(size_t, void* ptr) throw()
 {
     return ptr;
 }
+#endif
 
 // NOTE: the original is a weak symbol, i.e. an inline in xColor.h, but it is
 // emitted only here and nothing in this object references it. Defining it here

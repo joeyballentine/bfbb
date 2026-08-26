@@ -2867,12 +2867,12 @@ void zNPCDutchman::render_halo()
 
 xFactoryInst* zNPCGoalDutchmanNil::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalDutchmanNil(who, (zNPCDutchman&)*info);
+    return new (who, grow) zNPCGoalDutchmanNil(who, *(zNPCDutchman*)info);
 }
 
 xFactoryInst* zNPCGoalDutchmanInitiate::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalDutchmanInitiate(who, (zNPCDutchman&)*info);
+    return new (who, grow) zNPCGoalDutchmanInitiate(who, *(zNPCDutchman*)info);
 }
 
 S32 zNPCGoalDutchmanInitiate::Enter(F32 dt, void* updCtxt)
@@ -2937,7 +2937,7 @@ S32 zNPCGoalDutchmanInitiate::Process(en_trantype* trantype, F32 dt, void* updCt
 
 xFactoryInst* zNPCGoalDutchmanIdle::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalDutchmanIdle(who, (zNPCDutchman&)*info);
+    return new (who, grow) zNPCGoalDutchmanIdle(who, *(zNPCDutchman*)info);
 }
 
 S32 zNPCGoalDutchmanIdle::Enter(F32 dt, void* updCtxt)
@@ -2964,7 +2964,7 @@ S32 zNPCGoalDutchmanIdle::Process(en_trantype* trantype, float dt, void* updCtxt
 
 xFactoryInst* zNPCGoalDutchmanDisappear::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalDutchmanDisappear(who, (zNPCDutchman&)*info);
+    return new (who, grow) zNPCGoalDutchmanDisappear(who, *(zNPCDutchman*)info);
 }
 
 S32 zNPCGoalDutchmanDisappear::Enter(F32 dt, void* updCtxt)
@@ -2993,7 +2993,7 @@ S32 zNPCGoalDutchmanDisappear::Process(en_trantype* trantype, F32 dt, void* updC
 
 xFactoryInst* zNPCGoalDutchmanTeleport::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalDutchmanTeleport(who, (zNPCDutchman&)*info);
+    return new (who, grow) zNPCGoalDutchmanTeleport(who, *(zNPCDutchman*)info);
 }
 
 S32 zNPCGoalDutchmanTeleport::Enter(F32 dt, void* updCtxt)
@@ -3028,7 +3028,7 @@ S32 zNPCGoalDutchmanTeleport::Process(en_trantype* trantype, F32 dt, void* updCt
 
 xFactoryInst* zNPCGoalDutchmanReappear::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalDutchmanReappear(who, (zNPCDutchman&)*info);
+    return new (who, grow) zNPCGoalDutchmanReappear(who, *(zNPCDutchman*)info);
 }
 
 S32 zNPCGoalDutchmanReappear::Enter(F32 dt, void* updCtxt)
@@ -3061,7 +3061,7 @@ S32 zNPCGoalDutchmanReappear::Process(en_trantype* trantype, F32 dt, void* updCt
 
 xFactoryInst* zNPCGoalDutchmanBeam::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalDutchmanBeam(who, (zNPCDutchman&)*info);
+    return new (who, grow) zNPCGoalDutchmanBeam(who, *(zNPCDutchman*)info);
 }
 
 S32 zNPCGoalDutchmanBeam::Enter(F32 dt, void* updCtxt)
@@ -3381,7 +3381,7 @@ void zNPCGoalDutchmanBeam::predict_target(xVec3& target) const
 
 xFactoryInst* zNPCGoalDutchmanFlame::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalDutchmanFlame(who, (zNPCDutchman&)*info);
+    return new (who, grow) zNPCGoalDutchmanFlame(who, *(zNPCDutchman*)info);
 }
 
 S32 zNPCGoalDutchmanFlame::Enter(F32 dt, void* updCtxt)
@@ -3568,7 +3568,7 @@ namespace
 
 xFactoryInst* zNPCGoalDutchmanPostFlame::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalDutchmanPostFlame(who, (zNPCDutchman&)*info);
+    return new (who, grow) zNPCGoalDutchmanPostFlame(who, *(zNPCDutchman*)info);
 }
 
 S32 zNPCGoalDutchmanPostFlame::Enter(F32 dt, void* updCtxt)
@@ -3636,7 +3636,7 @@ S32 zNPCGoalDutchmanPostFlame::Process(en_trantype* trantype, F32 dt, void* updC
 
 xFactoryInst* zNPCGoalDutchmanCaught::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalDutchmanCaught(who, (zNPCDutchman&)*info);
+    return new (who, grow) zNPCGoalDutchmanCaught(who, *(zNPCDutchman*)info);
 }
 
 S32 zNPCGoalDutchmanCaught::Enter(float dt, void* updCtxt)
@@ -3683,7 +3683,7 @@ S32 zNPCGoalDutchmanCaught::Process(en_trantype* trantype, F32 dt, void* updCtxt
 
 xFactoryInst* zNPCGoalDutchmanDamage::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalDutchmanDamage(who, (zNPCDutchman&)*info);
+    return new (who, grow) zNPCGoalDutchmanDamage(who, *(zNPCDutchman*)info);
 }
 
 S32 zNPCGoalDutchmanDamage::Enter(F32 dt, void* updCtxt)
@@ -3733,7 +3733,7 @@ S32 zNPCGoalDutchmanDamage::Process(en_trantype* trantype, F32 dt, void* updCtxt
 
 xFactoryInst* zNPCGoalDutchmanDeath::create(S32 who, RyzMemGrow* grow, void* info)
 {
-    return new (who, grow) zNPCGoalDutchmanDeath(who, (zNPCDutchman&)*info);
+    return new (who, grow) zNPCGoalDutchmanDeath(who, *(zNPCDutchman*)info);
 }
 
 S32 zNPCGoalDutchmanDeath::Enter(F32 dt, void* updCtxt)

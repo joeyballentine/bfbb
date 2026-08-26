@@ -103,6 +103,14 @@ namespace auto_tweak
 {
     template <class T1, class T2>
     void load_param(T1&, T2, T2, T2, xModelAssetParam*, U32, const char*);
+
+    // These are defined at the bottom of the matching .cpp, below every use.
+    // Declaring them here is what makes a use see the specialization instead of
+    // instantiating the primary -- which has no definition anywhere, so the
+    // primary was never what any of this resolved to. Standard C++ requires the
+    // declaration to come first; CodeWarrior does not.
+    template <> void load_param<F32, F32>(F32&, F32, F32, F32, xModelAssetParam*, U32, const char*);
+    template <> void load_param<S32, S32>(S32&, S32, S32, S32, xModelAssetParam*, U32, const char*);
 };
 
 struct aqua_beam

@@ -5,7 +5,11 @@
 #include "xMath.h"
 
 #include <types.h>
+// Paired-single inline assembly; there is no host equivalent and no reason to
+// pretend otherwise.
+#ifdef __MWERKS__
 #include <fastmath.h>
+#endif
 
 const xVec3 xVec3::m_Null = { 0.0f, 0.0f, 0.0f };
 const xVec3 xVec3::m_UnitAxisX = { 1.0f, 0.0f, 0.0f };
@@ -85,6 +89,8 @@ F32 xVec3NormalizeFast(xVec3* o, const xVec3* v)
     return len;
 }
 
+#ifdef __MWERKS__
+
 void xVec3Copy(register xVec3* dst, const register xVec3* src)
 {
     PSVECCopy(dst, src);
@@ -94,3 +100,29 @@ asm F32 xVec3Dot(const register xVec3* a, const register xVec3* b)
 {
     PSVECDotProduct(a, b)
 }
+
+#else
+
+// The GameCube bodies above are Gekko paired-single assembly: two floats per
+// register, two multiplies per instruction. Nothing on a host has that, so
+// these are what the assembly computes, written out.
+
+void xVec3Copy(xVec3* dst, const xVec3* src)
+{
+    *dst = *src;
+}
+
+// PSVECDotProduct loads (y,z) and (x,y) as pairs, multiplies both halves at
+// once, and finishes with ps_sum0, which adds ps0 of one register to ps1 of
+// another. The order that falls out is (x*x2 + y*y2) + z*z2 -- and float
+// addition is not associative, so the order is the part worth preserving.
+//
+// The console also gets the first two terms from a single ps_madd, one rounding
+// where this has two. A host compiler with FMA contraction enabled will
+// usually fuse them back; where it does not, the difference is one ulp.
+F32 xVec3Dot(const xVec3* a, const xVec3* b)
+{
+    return (a->x * b->x + a->y * b->y) + a->z * b->z;
+}
+
+#endif
