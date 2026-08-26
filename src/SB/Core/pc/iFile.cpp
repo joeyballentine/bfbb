@@ -31,6 +31,28 @@ void iFileInit()
 {
     sBasePath[0] = '\0';
 
+    // **Where the game's assets are.**
+    //
+    // On the console this question does not exist: iFileFullPath is a strcpy
+    // because the DVD root is the only place a name can mean. A host has a
+    // working directory that is almost never the asset root, and NOTHING in the
+    // game ever calls iFileSetPath -- the console had no use for it, so the
+    // port has to answer the question itself.
+    //
+    // Without this the game asks for "FONT.HIP" relative to the working
+    // directory, does not find it, and retries FOREVER inside zMainLoadFontHIP:
+    // no error, no message, just a process sitting there. That was the first
+    // hang the port ever reached, and it took a watchdog to find.
+    //
+    // An environment variable rather than a command-line argument, because
+    // main() is the game's own in zMain.cpp and its argv handling is retail's.
+    // Same arrangement as BFBB_WATCHDOG.
+    const char* assets = getenv("BFBB_ASSETS");
+    if (assets != NULL && assets[0] != 0)
+    {
+        iFileSetPath((char*)assets);
+    }
+
     for (S32 i = 0; i < 4; i++)
     {
         file_queue[i].stat = IFILE_RDSTAT_NOOP;

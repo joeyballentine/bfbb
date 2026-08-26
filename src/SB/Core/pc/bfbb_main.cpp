@@ -49,6 +49,122 @@ namespace
     // on, so a STACK OVERFLOW skips it entirely. A vectored handler is called
     // first-chance, before unwinding, while the guard page is still doing its
     // job -- so it gets to say what happened when the filter cannot.
+    // Walks one thread's stack and prints it, symbolised. Shared by the crash
+    // handler and the watchdog: a crash and a hang want the same answer --
+    // "where is it" -- and differ only in how they come by a CONTEXT.
+    void PrintBacktrace(HANDLE thread, CONTEXT* context)
+    {
+        HANDLE process = GetCurrentProcess();
+        SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
+        SymInitialize(process, NULL, TRUE);
+
+                STACKFRAME64 frame;
+        memset(&frame, 0, sizeof(frame));
+        frame.AddrPC.Offset = context->Eip;
+        frame.AddrPC.Mode = AddrModeFlat;
+        frame.AddrFrame.Offset = context->Ebp;
+        frame.AddrFrame.Mode = AddrModeFlat;
+        frame.AddrStack.Offset = context->Esp;
+        frame.AddrStack.Mode = AddrModeFlat;
+
+        char symbolBuffer[sizeof(SYMBOL_INFO) + 512];
+        SYMBOL_INFO* symbol = (SYMBOL_INFO*)symbolBuffer;
+        memset(symbolBuffer, 0, sizeof(symbolBuffer));
+        symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+        symbol->MaxNameLen = 500;
+
+        for (int depth = 0; depth < 32; depth++)
+        {
+            if (!StackWalk64(IMAGE_FILE_MACHINE_I386, process, thread, &frame,
+                             context, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL))
+            {
+                break;
+            }
+
+            if (frame.AddrPC.Offset == 0)
+            {
+                break;
+            }
+
+            DWORD64 displacement = 0;
+            const char* name = "?";
+            if (SymFromAddr(process, frame.AddrPC.Offset, &displacement, symbol))
+            {
+                name = symbol->Name;
+            }
+
+            IMAGEHLP_LINE64 line;
+            memset(&line, 0, sizeof(line));
+            line.SizeOfStruct = sizeof(line);
+            DWORD lineDisplacement = 0;
+
+            if (SymGetLineFromAddr64(process, frame.AddrPC.Offset, &lineDisplacement, &line))
+            {
+                printf("bfbb:   #%-2d %s  (%s:%lu)\n", depth, name, line.FileName,
+                       (unsigned long)line.LineNumber);
+            }
+            else
+            {
+                printf("bfbb:   #%-2d %s + 0x%llx\n", depth, name,
+                       (unsigned long long)displacement);
+            }
+        }
+
+        fflush(stdout);
+    }
+
+    HANDLE sMainThread;
+
+    // The watchdog, for HANGS.
+    //
+    // A crash announces itself; a hang does not. The port reaches further into
+    // startup with every module ported and then stops somewhere without saying
+    // where, and lldb would not attach on this machine -- so the process reports
+    // on itself: a thread that wakes every few seconds, suspends the main
+    // thread, walks its stack with the same code the crash handler uses, and
+    // prints it.
+    //
+    // Repeating rather than firing once is deliberate. One trace cannot tell a
+    // deadlock from slow progress. Two identical traces can; two different ones
+    // say it is running and simply not finishing.
+    //
+    // Off unless BFBB_WATCHDOG names a number of seconds. Suspending the main
+    // thread is not free, and nothing should do it to a build that works.
+    DWORD WINAPI WatchdogThread(LPVOID param)
+    {
+        const DWORD seconds = (DWORD)(uintptr_t)param;
+
+        for (int sample = 1;; sample++)
+        {
+            Sleep(seconds * 1000);
+
+            printf("\nbfbb: WATCHDOG sample %d -- main thread stack:\n", sample);
+
+            if (SuspendThread(sMainThread) == (DWORD)-1)
+            {
+                printf("bfbb:   (could not suspend the main thread)\n");
+                continue;
+            }
+
+            CONTEXT context;
+            memset(&context, 0, sizeof(context));
+            context.ContextFlags = CONTEXT_FULL;
+
+            if (GetThreadContext(sMainThread, &context))
+            {
+                PrintBacktrace(sMainThread, &context);
+            }
+            else
+            {
+                printf("bfbb:   (could not read the main thread context)\n");
+            }
+
+            ResumeThread(sMainThread);
+        }
+
+        return 0;
+    }
+
     LONG WINAPI FirstChanceHandler(EXCEPTION_POINTERS* info)
     {
         const DWORD code = info->ExceptionRecord->ExceptionCode;
@@ -89,63 +205,7 @@ namespace
                    (void*)info->ExceptionRecord->ExceptionInformation[1]);
         }
 
-        HANDLE process = GetCurrentProcess();
-        SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
-        SymInitialize(process, NULL, TRUE);
-
-        CONTEXT* context = info->ContextRecord;
-        STACKFRAME64 frame;
-        memset(&frame, 0, sizeof(frame));
-        frame.AddrPC.Offset = context->Eip;
-        frame.AddrPC.Mode = AddrModeFlat;
-        frame.AddrFrame.Offset = context->Ebp;
-        frame.AddrFrame.Mode = AddrModeFlat;
-        frame.AddrStack.Offset = context->Esp;
-        frame.AddrStack.Mode = AddrModeFlat;
-
-        char symbolBuffer[sizeof(SYMBOL_INFO) + 512];
-        SYMBOL_INFO* symbol = (SYMBOL_INFO*)symbolBuffer;
-        memset(symbolBuffer, 0, sizeof(symbolBuffer));
-        symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
-        symbol->MaxNameLen = 500;
-
-        for (int depth = 0; depth < 32; depth++)
-        {
-            if (!StackWalk64(IMAGE_FILE_MACHINE_I386, process, GetCurrentThread(), &frame,
-                             context, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL))
-            {
-                break;
-            }
-
-            if (frame.AddrPC.Offset == 0)
-            {
-                break;
-            }
-
-            DWORD64 displacement = 0;
-            const char* name = "?";
-            if (SymFromAddr(process, frame.AddrPC.Offset, &displacement, symbol))
-            {
-                name = symbol->Name;
-            }
-
-            IMAGEHLP_LINE64 line;
-            memset(&line, 0, sizeof(line));
-            line.SizeOfStruct = sizeof(line);
-            DWORD lineDisplacement = 0;
-
-            if (SymGetLineFromAddr64(process, frame.AddrPC.Offset, &lineDisplacement, &line))
-            {
-                printf("bfbb:   #%-2d %s  (%s:%lu)\n", depth, name, line.FileName,
-                       (unsigned long)line.LineNumber);
-            }
-            else
-            {
-                printf("bfbb:   #%-2d %s + 0x%llx\n", depth, name,
-                       (unsigned long long)displacement);
-            }
-        }
-
+        PrintBacktrace(GetCurrentThread(), info->ContextRecord);
         fflush(stdout);
         return EXCEPTION_EXECUTE_HANDLER;
     }
@@ -159,6 +219,15 @@ namespace
         StartupBanner()
         {
             AddVectoredExceptionHandler(1, FirstChanceHandler);
+
+            const char* watchdogSeconds = getenv("BFBB_WATCHDOG");
+            if (watchdogSeconds != NULL)
+            {
+                DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(),
+                                &sMainThread, 0, FALSE, DUPLICATE_SAME_ACCESS);
+                CreateThread(NULL, 0, WatchdogThread,
+                             (LPVOID)(uintptr_t)atoi(watchdogSeconds), 0, NULL);
+            }
             SetUnhandledExceptionFilter(CrashHandler);
             setvbuf(stdout, NULL, _IONBF, 0);
             setvbuf(stderr, NULL, _IONBF, 0);
