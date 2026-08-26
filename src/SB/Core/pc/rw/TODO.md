@@ -14,7 +14,7 @@ zNPCTypePrawn.cpp:568 and 622 -- and it is what `RwCameraSetFrame` and
 groups even though it is not in the 112. librw has the counterpart
 (`ObjectWithFrame::setFrame`); nobody has written the shim for it yet.
 
-## Done (95)
+## Done (101)
 
 `value.cpp` -- value types only, so no object layout is involved and the
 reinterpret_casts are backed by static_asserts that fail the build if librw
@@ -356,6 +356,94 @@ install, which are librw's dummy pipelines under `LIBRW_PLATFORM=NULL`. The
 selftest checks that the atomic ends up pointing at them, not that they draw
 anything -- they cannot.
 
+The world, as far as librw has one. `RpWorld` is mirrored onto `rw::World`,
+with its offsets asserted in `layout_world.cpp` -- but it is the one type in the
+layer that needed a PLUGIN to be mirrored at all. librw's own source calls
+`World` "a bit of a stub" and it is not exaggerating: the whole struct is an
+`Object` and three linked lists, against RenderWare's fifteen members. Eleven
+have no counterpart, and two of the eleven are read by game code that has to
+keep compiling -- `boundingBox` by `iEnvGetBBox` (an inline in `iEnv.h`, so it
+reaches every unit that includes `xEnv.h`) and `matList` by xFX.cpp:425/443 and
+zEnv.cpp:106/115 -- so the `RpAtomic` answer of dropping them was not available.
+`RpWorldPluginAttach` registers the eleven as a librw World plugin instead, so
+they live in memory librw allocated at an offset librw handed out, and both
+`layout_world.cpp` and the attach itself check that offset is the one the struct
+declaration assumes:
+
+`world.cpp`:
+
+  - `RpWorldCreate`
+  - `RpWorldDestroy`
+  - `RpWorldAddCamera`
+  - `RpWorldRemoveCamera`
+  - `RpWorldAddLight`
+  - `RpWorldRemoveLight`
+  - `RpWorldPluginAttach` -- not on the 112-function list, but iSystem.cpp's
+    `RWAttachPlugins` already calls it first of all seven attaches, in exactly
+    the window it needs. Nothing may create a world before it runs, and
+    `RpWorldCreate` checks rather than assumes.
+
+`tests/selftest.cpp` runs all of it against a live engine, including the pair
+that could not be checked before there was a world to check them with:
+`RwCameraGetWorld` answering with the RpWorld the camera was added to, and
+`RwCameraBeginUpdate` putting that world in `RwEngineInstance->curWorld`. The
+two light lists are read back through RenderWare's OWN names -- librw's
+"local"/"global" split is RenderWare's `lightList`/`directionalLightList`, and
+getting the pair the wrong way round would light the world off the wrong set
+without any other symptom.
+
+### What the world path does NOT do yet
+
+**There is no world reader, so there is no level.** `RpWorldStreamRead` returns
+NULL, and every BSP asset comes through it (zAssetTypes.cpp:220). What is
+missing is not a shim but a subsystem: librw has no world sector code of any
+kind -- no `RpWorldSector` counterpart, no plane sectors, no world chunk reader,
+and `World::render`'s own comment is "this is very wrong, we really want world
+sectors". Writing it is two separable jobs:
+
+  1. the portable world chunk -- header, material list, and the plane/atomic
+     sector tree with its vertices, normals, prelit colours, texture coordinates
+     and polygons. `rw::MaterialList::streamRead` already covers part of it.
+  2. the GameCube native path, which is what BFBB's own BSPs actually are. A
+     native world's atomic sectors carry no portable geometry; the real data is
+     a GameCube display list in a platform extension chunk, and librw has PS2,
+     D3D and OpenGL pipelines but no GameCube one. iFX.cpp:107 reading
+     `_rpDlWorldVtxFmtOffset` off the current world is the game's own evidence
+     for which kind it is loading.
+
+A partial reader was considered and rejected: filling in the material list and
+leaving the geometry empty would report success and hand back a level with
+nothing in it. NULL is honest and the game is already loud about it -- BSP_Read
+prints "BSP_Read RpWorldStreamRead failed".
+
+**`RpCollisionWorldForAllIntersections` is blocked on the same thing**, which is
+why `collision_world.cpp` is a file with one refusal in it and a long comment.
+The maths it needs already exists -- atomic.cpp's sphere, segment and box
+triangle tests, written for `RpAtomicForAllIntersections` -- but there is
+nothing to run it over, because `rootSector` is always NULL. Until both are
+written, everything in the game walks through the level geometry and falls
+through the floor. Model-to-model collision is unaffected: that is
+`RpAtomicForAllIntersections`, and xClumpColl and the JSP path go through it.
+
+**`RpWorldSector` is not mirrored, and deliberately so.** There is no librw type
+to mirror it onto, so it keeps RenderWare's own layout untouched and nothing
+allocates one. `layout_world.cpp` asserts `RpPolygon` instead, because
+iCollide.cpp and xCollide.cpp read `sector->polygons[tri->index].matIndex` and
+that stride is what the whole collision system's object ids come out of.
+
+**Nothing maintains most of RpWorld's plugin tail.** `boundingBox`, `matList`
+and `renderOrder` are real; `rootSector`, `numClumpsInWorld`, `currentClumpLink`,
+`numTexCoordSets`, `worldOrigin`, `flags`, `renderCallBack` and `pipeline` stay
+at the zeros the plugin constructor wrote, because nothing in the port writes
+them and nothing in the game reads them. A world reader will change that.
+
+**`RpWorldDestroy` detaches where RenderWare dangles.** Retail leaves whatever
+is still in a world holding a link into freed memory; librw notices later, by
+asserting when the light or clump is destroyed. So the shim removes every clump
+and light first. Cameras are the one thing it cannot find -- neither library
+keeps a list of them, only a `World*` on the camera -- and the game already
+removes those by hand (iCamera.cpp:54, zGame.cpp:1476).
+
 ## Do this next
 
 **There is no video mode.** `LIBRW_PLATFORM=NULL` has no render device, and
@@ -392,6 +480,11 @@ it is one that is finished.
 
   - `RpCollisionWorldForAllIntersections`
 
+  The symbol exists, in `collision_world.cpp`, and returns NULL. It is not
+  written because there is nothing for it to walk: librw has no world sector
+  code at all, so no world on this side ever has a `rootSector`. It and
+  `RpWorldStreamRead` are one job, not two.
+
 **RpGeometry** (0)
 
 **RpLight** (0)
@@ -407,15 +500,13 @@ it is one that is finished.
 
 **RpSkin** (0)
 
-**RpWorld** (7)
+**RpWorld** (1)
 
-  - `RpWorldAddCamera`
-  - `RpWorldAddLight`
-  - `RpWorldCreate`
-  - `RpWorldDestroy`
-  - `RpWorldRemoveCamera`
-  - `RpWorldRemoveLight`
   - `RpWorldStreamRead`
+
+  Blocked on the same missing piece as `RpCollisionWorldForAllIntersections`
+  above, and the two have to be written together. See "What the world path does
+  NOT do yet".
 
 **Rt** (3)
 

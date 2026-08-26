@@ -39,16 +39,40 @@ one of those reading the wrong bytes.
 
 **That decision is settled: the port mirrors librw's layouts.** In a PC build
 `RwFrame` is declared with librw's field *order* under RenderWare's field
-*names*, guarded by `GAMECUBE` so the console keeps retail's own struct. An
-`RwFrame*` is then an `rw::Frame*` and nothing converts at the seam.
+*names*, guarded by `#ifndef PLATFORM_PC` (retail's struct) / `#else` (the
+mirrored one) so the console keeps retail's own. An `RwFrame*` is then an
+`rw::Frame*` and nothing converts at the seam.
 
-One type does not fit that shape and is the documented exception: `RwStream`.
+`PLATFORM_PC` and not `GAMECUBE`, which is what the guards used to say: `-DGAMECUBE`
+only covers `src/SB`, so `src/rwsdk`, `src/dolphin` and `src/bink` were silently
+getting the port's layouts and `src/rwsdk` eventually stopped compiling.
+`PLATFORM_PC` is a positive marker only the port defines, and it fails safe. See
+commit `549e40c8`.
+
+Two types do not fit that shape and are the documented exceptions.
+
+`RwStream` is the first.
 RenderWare's stream is a POD tagged union, librw's is an abstract class with a
 vtable, and there is no assignment of RenderWare's names to librw's bytes that
 would not be a lie. So `rwsdk` leaves it INCOMPLETE on PC and the shim defines
 it in `stream.h`, deriving from `rw::Stream`. That works only because no game
 code reads a stream's fields -- and leaving the type incomplete is what keeps
 it that way, since any attempt is now a compile error.
+
+`RpWorld` is the second, and it is the one to read before mirroring anything
+else that librw only half has. librw's `World` is an `Object` and three linked
+lists against RenderWare's fifteen members; eleven have no counterpart, and two
+of those eleven -- `boundingBox` and `matList` -- are read by game code, so the
+`RpAtomic` answer of dropping what will not fit was not available. What made it
+fit was the mechanism RenderWare itself grows objects with: librw's `World`
+carries `PLUGINBASE`, so `RpWorldPluginAttach` registers the missing eleven as a
+plugin and they live in memory **librw allocated**, at an offset **librw handed
+out**. That is the whole difference between this and appending a member to a
+struct somebody else mallocs, which is a write past the end of the object. Two
+things make it safe and both are non-negotiable for the next type that needs it:
+the C declaration's tail offset is `static_assert`ed to equal `sizeof` librw's
+struct, and the offset librw actually returns is checked against it at attach
+time. See `world.cpp` and `layout_world.cpp`.
 
 Converting instead was considered and does not work: the game holds `RwFrame*`
 for an entity's lifetime and writes `->modelling` directly, while librw mutates

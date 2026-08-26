@@ -596,6 +596,31 @@ typedef enum RpWorldRenderOrder RpWorldRenderOrder;
 
 typedef RpWorldSector* (*RpWorldSectorCallBackRender)(RpWorldSector* worldSector);
 
+// Mirrored onto rw::World, and the one type in this header that needed a
+// PLUGIN to be mirrored at all.
+//
+// librw's own comment on World is "a bit of a stub", and it is not exaggerating:
+// the whole struct is an Object and three linked lists. Eleven of RenderWare's
+// fifteen members have no librw counterpart, and two of the eleven are read by
+// game code -- `boundingBox` by iEnvGetBBox (an inline in iEnv.h, so it reaches
+// every unit that includes xEnv.h) and `matList` by xFX.cpp:425/443 and
+// zEnv.cpp:106/115. So the RpAtomic treatment -- drop what librw cannot back,
+// and let reaching for it be a compile error -- is not available here.
+//
+// What IS available is the mechanism RenderWare itself uses to grow an object:
+// librw's World carries PLUGINBASE, and `RpWorldPluginAttach` registers the
+// eleven remaining members as a plugin. They then live in memory librw
+// allocated for them, at the offset librw handed out, which is the difference
+// between this and appending a member to a struct somebody else mallocs.
+// src/SB/Core/pc/rw/world.cpp registers it and asserts the offset it gets back
+// is the one this declaration assumes; layout_world.cpp asserts the head.
+//
+// The first four members are librw's, in librw's order, under RenderWare's
+// names. `lightList` is librw's `localLights` (types >= rpLIGHTPOINT, the ones
+// with a position) and `directionalLightList` is its `globalLights`
+// (directional and ambient) -- the same split under different names, which is
+// why the mapping is exact rather than approximate.
+#ifndef PLATFORM_PC
 struct RpWorld
 {
     RwObject object;
@@ -614,6 +639,37 @@ struct RpWorld
     RpWorldSectorCallBackRender renderCallBack;
     RxPipeline* pipeline;
 };
+#else
+struct RpWorld
+{
+    // --- rw::World itself, field for field ---
+    RwObject object;
+    RwLinkList lightList; // librw calls this 'localLights'
+    RwLinkList directionalLightList; // librw calls this 'globalLights'
+    RwLinkList clumpList; // librw calls this 'clumps'
+
+    // --- the port's plugin block, in RenderWare's own order ---
+    //
+    // Nothing below this line exists in librw. It is real memory, because
+    // RpWorldPluginAttach reserved it; it is not maintained by librw, because
+    // librw does not know it is here. world.cpp says which of these the port
+    // keeps up to date and which stay at the zeros the plugin constructor
+    // wrote -- `rootSector` is always NULL, in particular, because the only
+    // thing that would build sectors is RpWorldStreamRead and that is not
+    // written.
+    RwUInt32 flags;
+    RpWorldRenderOrder renderOrder;
+    RpMaterialList matList;
+    RpSector* rootSector;
+    RwInt32 numTexCoordSets;
+    RwInt32 numClumpsInWorld;
+    RwLLLink* currentClumpLink;
+    RwV3d worldOrigin;
+    RwBBox boundingBox;
+    RpWorldSectorCallBackRender renderCallBack;
+    RxPipeline* pipeline;
+};
+#endif
 
 #define rpLIGHTPOSITIONINGSTART 0x80
 

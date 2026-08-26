@@ -89,6 +89,8 @@ static void test_engine_startup()
     // would hand out plugin offsets past the end of every object allocated
     // afterwards. iSystem.cpp's RWAttachPlugins sequences the real game's
     // calls in exactly this window.
+    check(RpWorldPluginAttach() != FALSE, "RpWorldPluginAttach");
+    check(RpWorldPluginAttach() != FALSE, "and again -- attaching twice is idempotent");
     check(RpSkinPluginAttach() != FALSE, "RpSkinPluginAttach");
     check(RpMatFXPluginAttach() != FALSE, "RpMatFXPluginAttach");
     check(RpPTankPluginAttach() != FALSE, "RpPTankPluginAttach");
@@ -587,6 +589,167 @@ static void test_lights()
     check(RpLightDestroy(light) != FALSE, "RpLightDestroy");
     check(RpLightDestroy(NULL) == FALSE, "RpLightDestroy(NULL) is refused");
     check(RpLightSetColor(NULL, &grey) == NULL, "RpLightSetColor(NULL) is refused");
+}
+
+// Counts calls without ever being reached, which is the point: nothing may call
+// back out of RpCollisionWorldForAllIntersections while it is unimplemented,
+// least of all with a made-up triangle.
+static int sWorldTrianglesSeen;
+
+static RpCollisionTriangle* countWorldTriangleCB(RpIntersection*, RpWorldSector*,
+                                                 RpCollisionTriangle* tri, RwReal, void*)
+{
+    sWorldTrianglesSeen++;
+    return tri;
+}
+
+static void test_worlds()
+{
+    printf("RpWorld\n");
+
+    // sup then inf, which is RwBBox's own order and the opposite of the one
+    // most engines use.
+    RwBBox bbox = { { 10.0f, 20.0f, 30.0f }, { -1.0f, -2.0f, -3.0f } };
+
+    RpWorld* world = RpWorldCreate(&bbox);
+    check(world != NULL, "RpWorldCreate");
+    if (world == NULL)
+    {
+        return;
+    }
+
+    // The head of the struct is librw's, so this reads the type librw's own
+    // World::create wrote.
+    check(world->object.type == rpWORLD, "a new world is an rpWORLD object");
+    check(reinterpret_cast<rw::World*>(world)->object.type == rpWORLD,
+          "and an RpWorld* IS an rw::World*");
+
+    // The plugin block. Everything checked here lives in memory librw allocated
+    // for the port at the offset RpWorldPluginAttach asked for, so a wrong
+    // offset shows up as one of these reading back something else.
+    check(RpWorldGetBBox(world)->sup.x == 10.0f && RpWorldGetBBox(world)->sup.z == 30.0f &&
+              RpWorldGetBBox(world)->inf.y == -2.0f,
+          "the caller's bounding box lands in RpWorld::boundingBox");
+    check(RpWorldGetNumMaterials(world) == 0, "a new world has no materials");
+    check(world->matList.materials == NULL, "and no material array to free");
+    check(world->rootSector == NULL, "and no root sector -- there is no world reader");
+    check(RpWorldGetRenderOrder(world) == rpWORLDRENDERNARENDERORDER,
+          "RpWorld::renderOrder starts at NA rather than at whatever rwMalloc returned");
+
+    RpWorld* unbounded = RpWorldCreate(NULL);
+    check(unbounded != NULL, "RpWorldCreate(NULL) is allowed -- an unbounded world");
+    RpWorldDestroy(unbounded);
+
+    // --- cameras -----------------------------------------------------------
+
+    RwCamera* camera = RwCameraCreate();
+    check(camera != NULL, "a camera to put in it");
+    if (camera == NULL)
+    {
+        return;
+    }
+
+    check(RwCameraGetWorld(camera) == NULL, "which is in no world to start with");
+    check(RpWorldAddCamera(world, camera) == world, "RpWorldAddCamera");
+    check(RwCameraGetWorld(camera) == world, "and RwCameraGetWorld answers with the RpWorld");
+    check(RpWorldAddCamera(world, camera) == NULL,
+          "adding it twice is refused rather than asserted on");
+
+    // curWorld is the reason RwCameraBeginUpdate mirrors librw's engine rather
+    // than assigning its own: librw's beginUpdate chain sets currentWorld from
+    // the camera's world, and until there was a world to put a camera in, that
+    // could only be checked against NULL.
+    RwCameraBeginUpdate(camera);
+    check(RwEngineInstance->curWorld == world, "an update on it makes it RwEngineInstance->curWorld");
+    RwCameraEndUpdate(camera);
+    check(RwEngineInstance->curWorld == NULL, "and ending the update clears it");
+
+    RpWorld* other = RpWorldCreate(&bbox);
+    check(RpWorldRemoveCamera(other, camera) == NULL,
+          "removing a camera from a world it is not in is refused");
+    check(RpWorldRemoveCamera(world, camera) == world, "RpWorldRemoveCamera");
+    check(RwCameraGetWorld(camera) == NULL, "and the camera is in no world again");
+    RpWorldDestroy(other);
+
+    // librw asserts a camera has left its world before it may be destroyed, so
+    // this getting as far as returning TRUE is itself the check that the remove
+    // above really unhooked it.
+    check(RwCameraDestroy(camera) != FALSE, "the camera destroys cleanly afterwards");
+
+    // --- lights ------------------------------------------------------------
+    //
+    // The two lists are the assertion that matters here. librw splits lights
+    // into "local" (positioned) and "global" (directional and ambient) where
+    // RenderWare splits them into lightList and directionalLightList, and the
+    // mirror claims those are the same two lists under different names. Reading
+    // them back through RenderWare's names is what checks that claim.
+
+    RpLight* point = RpLightCreate(rpLIGHTPOINT);
+    RpLight* directional = RpLightCreate(rpLIGHTDIRECTIONAL);
+    check(point != NULL && directional != NULL, "a positioned light and a directional one");
+    if (point == NULL || directional == NULL)
+    {
+        return;
+    }
+
+    check(rwLinkListEmpty(&world->lightList) && rwLinkListEmpty(&world->directionalLightList),
+          "a new world's light lists are both empty");
+
+    check(RpWorldAddLight(world, point) == world, "RpWorldAddLight, positioned");
+    check(!rwLinkListEmpty(&world->lightList), "the point light lands in RpWorld::lightList");
+    check(rwLinkListEmpty(&world->directionalLightList), "and not in the directional one");
+
+    check(RpWorldAddLight(world, directional) == world, "RpWorldAddLight, directional");
+    check(!rwLinkListEmpty(&world->directionalLightList),
+          "the directional light lands in RpWorld::directionalLightList");
+
+    check(RpWorldAddLight(world, point) == NULL, "adding a light twice is refused");
+    check(RpWorldRemoveLight(NULL, point) == NULL, "RpWorldRemoveLight(NULL, ...) is refused");
+
+    check(RpWorldRemoveLight(world, point) == world, "RpWorldRemoveLight");
+    check(rwLinkListEmpty(&world->lightList), "and the list is empty again");
+    check(RpWorldRemoveLight(world, point) == NULL,
+          "removing it a second time is refused rather than corrupting the list");
+    check(RpLightDestroy(point) != FALSE, "a removed light destroys cleanly");
+
+    // --- refusals ----------------------------------------------------------
+
+    check(RpWorldStreamRead(NULL) == NULL, "RpWorldStreamRead is not implemented and says so");
+
+    RpIntersection isx;
+    isx.type = rpINTERSECTSPHERE;
+    isx.t.sphere.center.x = 0.0f;
+    isx.t.sphere.center.y = 0.0f;
+    isx.t.sphere.center.z = 0.0f;
+    isx.t.sphere.radius = 1000.0f;
+    sWorldTrianglesSeen = 0;
+    check(RpCollisionWorldForAllIntersections(world, &isx, countWorldTriangleCB, NULL) == NULL,
+          "RpCollisionWorldForAllIntersections is not implemented and says so");
+    check(sWorldTrianglesSeen == 0, "and reports no triangles rather than invented ones");
+
+    // --- destroy -----------------------------------------------------------
+    //
+    // The directional light and a clump are deliberately left in the world.
+    // RenderWare would leave both holding a link into freed memory; the shim
+    // detaches them, so that destroying either afterwards is safe instead of
+    // tripping librw's assert at a call site with nothing to do with this one.
+    //
+    // The clump is made through librw rather than through RpClumpCreate,
+    // because what is being checked is RpWorldDestroy's walk of the clump list,
+    // not the clump shim.
+    rw::Clump* clump = rw::Clump::create();
+    reinterpret_cast<rw::World*>(world)->addClump(clump);
+    check(clump->world == reinterpret_cast<rw::World*>(world), "a clump in the world too");
+
+    check(RpWorldDestroy(world) != FALSE, "RpWorldDestroy with a light and a clump still in it");
+    check(directional->world == NULL, "which took the light back out of it first");
+    check(clump->world == NULL, "and the clump");
+    check(RpLightDestroy(directional) != FALSE, "so the light still destroys cleanly");
+    clump->destroy();
+
+    check(RpWorldDestroy(NULL) == FALSE, "RpWorldDestroy(NULL) is refused");
+    check(RpWorldAddLight(NULL, NULL) == NULL, "RpWorldAddLight(NULL, NULL) is refused");
+    check(RpWorldAddCamera(NULL, NULL) == NULL, "RpWorldAddCamera(NULL, NULL) is refused");
 }
 
 // The null device swallows every render state, so what actually reaches librw
@@ -1363,6 +1526,13 @@ static void test_engine_shutdown()
     check(RwEngineInstance == NULL, "RwEngineInstance is null after term");
     check(RwEngineTerm() == FALSE, "RwEngineTerm on a dead engine is refused");
 
+    // Term frees every plugin, which takes RpWorld's tail with it. A world made
+    // now would have no memory behind ->matList or ->boundingBox, so the shim
+    // refuses instead of handing one out. This is the same check that catches a
+    // port whose startup forgot RpWorldPluginAttach, which is otherwise silent.
+    RwBBox anyBox = { { 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 0.0f } };
+    check(RpWorldCreate(&anyBox) == NULL, "RpWorldCreate without the world plugin is refused");
+
     check(sNumFree > 0, "librw freed through the memory functions it was given");
 }
 
@@ -1376,6 +1546,7 @@ int main()
     test_images();
     test_cameras();
     test_lights();
+    test_worlds();
     test_renderstate();
     test_immediate();
     test_geometry();
