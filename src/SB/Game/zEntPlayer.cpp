@@ -13196,10 +13196,7 @@ static void CalcCombinedDepen(F32& dx, F32& dz, F32 ax, F32 az, F32 bx, F32 bz, 
                 dz = 0.5f * (az + bz);
             }
 
-            if (dot2 < 0.25f)
-            {
-                dot2 = 0.25f;
-            }
+            dot2 = MAX(dot2, 0.25f);
             dx = dx + (la * nby) / dot2;
             dz = dz + (la * ubx) / dot2;
             dx = dx * fudge + 0.5f * (ax + bx) * (1.0f - fudge);
