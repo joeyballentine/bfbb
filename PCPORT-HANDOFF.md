@@ -466,10 +466,32 @@ compile today, concentrated in a few areas.
 Expect it to grow as the seven librw-gated `i*` units above come in, though
 they overlap heavily with this set.
 
-That shim is a real project, but it is a bounded and very parallelisable one --
-each function is a small mapping onto a `rw::` call, and `include/rwsdk` already
-has every declaration. It is also the right shape: it keeps the decompiled call
-sites untouched, so the GameCube build and the port stay one codebase.
+That shim is a real project, but bounded and very parallelisable, and it keeps
+the decompiled call sites untouched so the GameCube build and the port stay one
+codebase.
+
+**How it works, decided and in place:** the port makes the two libraries share
+objects rather than convert between them. In a PC build each RenderWare struct
+is declared in `include/rwsdk/` with **librw's field ORDER under RenderWare's
+field NAMES**, guarded by `GAMECUBE` so the console keeps retail's own layout.
+An `RwFrame*` is then literally an `rw::Frame*`, every shim function is a cast
+and a call, and **game code compiles unmodified** -- 197/198 before the reorder
+and after.
+
+Converting at the seam was the alternative and does not work: the game holds an
+`RwFrame*` for an entity's lifetime and writes `->modelling` directly at dozens
+of sites, while librw mutates the same objects through its own parent/child
+links. Two copies would need syncing both ways, and direct field access offers
+no call boundary to hook.
+
+**The rule: a type mirrored in `include/rwsdk` gets its size and every field
+offset asserted in `src/SB/Core/pc/rw/layout*.cpp`, in the same commit.** Take
+the offsets from the compiler, not from reading librw's header -- it has macros
+and static members that make eyeballing it unreliable. The failure this guards
+against is silent: game code keeps compiling and starts reading the wrong field.
+
+`src/SB/Core/pc/rw/README.md` is the design record and `TODO.md` tracks all 112
+with the command that regenerates the list.
 
 `LIBRW_PLATFORM=NULL` is what was tested, which is the core with no renderer
 backend. `GL3` or `D3D9` will want OpenGL or Direct3D present; neither was
