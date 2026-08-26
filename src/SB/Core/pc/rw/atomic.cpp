@@ -11,10 +11,10 @@
 #include <rwcore.h>
 #include <rpcollis.h>
 #include <rpworld.h>
+#include <rtintsec.h>
 
+#include "intersect.h"
 #include "rw.h"
-
-#include <math.h>
 
 static inline rw::Atomic* asAtomic(RpAtomic* a)
 {
@@ -81,208 +81,11 @@ RpAtomic* RpAtomicSetGeometry(RpAtomic* atomic, RpGeometry* geometry, RwUInt32 f
 // handled. rpINTERSECTPOINT and rpINTERSECTATOMIC are world-sector queries and
 // have no meaning against a triangle list on either side.
 
-namespace
-{
-    struct Vec
-    {
-        float x, y, z;
-    };
-
-    inline Vec sub(const Vec& a, const Vec& b)
-    {
-        Vec r = { a.x - b.x, a.y - b.y, a.z - b.z };
-        return r;
-    }
-
-    inline Vec cross(const Vec& a, const Vec& b)
-    {
-        Vec r = { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
-        return r;
-    }
-
-    inline float dot(const Vec& a, const Vec& b)
-    {
-        return a.x * b.x + a.y * b.y + a.z * b.z;
-    }
-
-    inline Vec madd(const Vec& a, const Vec& b, float s)
-    {
-        Vec r = { a.x + b.x * s, a.y + b.y * s, a.z + b.z * s };
-        return r;
-    }
-
-    inline const Vec& asVec(const RwV3d& v)
-    {
-        return reinterpret_cast<const Vec&>(v);
-    }
-
-    // Closest point on triangle abc to p, and the distance to it. Ericson's
-    // Voronoi-region form: it is the version that stays correct when the
-    // closest feature is an edge or a vertex, which is most of the time for a
-    // character-sized sphere against a floor made of long thin triangles.
-    float distancePointTriangle(const Vec& p, const Vec& a, const Vec& b, const Vec& c)
-    {
-        Vec ab = sub(b, a);
-        Vec ac = sub(c, a);
-        Vec ap = sub(p, a);
-
-        float d1 = dot(ab, ap);
-        float d2 = dot(ac, ap);
-
-        Vec closest;
-        if (d1 <= 0.0f && d2 <= 0.0f)
-        {
-            closest = a;
-        }
-        else
-        {
-            Vec bp = sub(p, b);
-            float d3 = dot(ab, bp);
-            float d4 = dot(ac, bp);
-
-            Vec cp = sub(p, c);
-            float d5 = dot(ab, cp);
-            float d6 = dot(ac, cp);
-
-            float vc = d1 * d4 - d3 * d2;
-            float vb = d5 * d2 - d1 * d6;
-            float va = d3 * d6 - d5 * d4;
-
-            if (d3 >= 0.0f && d4 <= d3)
-            {
-                closest = b;
-            }
-            else if (d6 >= 0.0f && d5 <= d6)
-            {
-                closest = c;
-            }
-            else if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f)
-            {
-                closest = madd(a, ab, d1 / (d1 - d3));
-            }
-            else if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f)
-            {
-                closest = madd(a, ac, d2 / (d2 - d6));
-            }
-            else if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f)
-            {
-                closest = madd(b, sub(c, b), (d4 - d3) / ((d4 - d3) + (d5 - d6)));
-            }
-            else
-            {
-                float denom = 1.0f / (va + vb + vc);
-                closest = madd(madd(a, ab, vb * denom), ac, vc * denom);
-            }
-        }
-
-        Vec d = sub(p, closest);
-        return sqrtf(dot(d, d));
-    }
-
-    // Moller-Trumbore, double sided, against a segment rather than a ray: t
-    // comes back already normalised to [0,1] along start->end, which is the
-    // number rayHitsEnvCB scales by its own max_t.
-    bool intersectSegmentTriangle(const Vec& start, const Vec& end, const Vec& a, const Vec& b,
-                                  const Vec& c, float* t)
-    {
-        Vec edge1 = sub(b, a);
-        Vec edge2 = sub(c, a);
-        Vec dir = sub(end, start);
-
-        Vec pvec = cross(dir, edge2);
-        float det = dot(edge1, pvec);
-        if (det > -1e-12f && det < 1e-12f)
-        {
-            // The segment lies in the triangle's plane. RenderWare reports no
-            // hit here too: a line in the plane of a triangle has no single
-            // point of intersection to report a distance for.
-            return false;
-        }
-
-        float invDet = 1.0f / det;
-
-        Vec tvec = sub(start, a);
-        float u = dot(tvec, pvec) * invDet;
-        if (u < 0.0f || u > 1.0f)
-        {
-            return false;
-        }
-
-        Vec qvec = cross(tvec, edge1);
-        float v = dot(dir, qvec) * invDet;
-        if (v < 0.0f || u + v > 1.0f)
-        {
-            return false;
-        }
-
-        float hit = dot(edge2, qvec) * invDet;
-        if (hit < 0.0f || hit > 1.0f)
-        {
-            return false;
-        }
-
-        *t = hit;
-        return true;
-    }
-
-    inline bool axisSeparates(float p0, float p1, float p2, float boxRadius)
-    {
-        float mn = p0 < p1 ? (p0 < p2 ? p0 : p2) : (p1 < p2 ? p1 : p2);
-        float mx = p0 > p1 ? (p0 > p2 ? p0 : p2) : (p1 > p2 ? p1 : p2);
-        return mn > boxRadius || mx < -boxRadius;
-    }
-
-    // Akenine-Moller's separating-axis test: the box's three face normals, the
-    // triangle's plane normal, and the nine edge-cross-edge axes.
-    bool intersectBoxTriangle(const Vec& boxCenter, const Vec& boxHalf, const Vec& a, const Vec& b,
-                              const Vec& c)
-    {
-        Vec v0 = sub(a, boxCenter);
-        Vec v1 = sub(b, boxCenter);
-        Vec v2 = sub(c, boxCenter);
-
-        if (axisSeparates(v0.x, v1.x, v2.x, boxHalf.x) ||
-            axisSeparates(v0.y, v1.y, v2.y, boxHalf.y) ||
-            axisSeparates(v0.z, v1.z, v2.z, boxHalf.z))
-        {
-            return false;
-        }
-
-        Vec e[3] = { sub(v1, v0), sub(v2, v1), sub(v0, v2) };
-
-        for (int i = 0; i < 3; i++)
-        {
-            float fx = fabsf(e[i].x);
-            float fy = fabsf(e[i].y);
-            float fz = fabsf(e[i].z);
-
-            // axis = cross(x, e[i])
-            if (axisSeparates(e[i].y * v0.z - e[i].z * v0.y, e[i].y * v1.z - e[i].z * v1.y,
-                              e[i].y * v2.z - e[i].z * v2.y, boxHalf.y * fz + boxHalf.z * fy))
-            {
-                return false;
-            }
-            // axis = cross(y, e[i])
-            if (axisSeparates(e[i].z * v0.x - e[i].x * v0.z, e[i].z * v1.x - e[i].x * v1.z,
-                              e[i].z * v2.x - e[i].x * v2.z, boxHalf.x * fz + boxHalf.z * fx))
-            {
-                return false;
-            }
-            // axis = cross(z, e[i])
-            if (axisSeparates(e[i].x * v0.y - e[i].y * v0.x, e[i].x * v1.y - e[i].y * v1.x,
-                              e[i].x * v2.y - e[i].y * v2.x, boxHalf.x * fy + boxHalf.y * fx))
-            {
-                return false;
-            }
-        }
-
-        // The triangle's own plane against the box.
-        Vec n = cross(e[0], sub(v2, v0));
-        float r = boxHalf.x * fabsf(n.x) + boxHalf.y * fabsf(n.y) + boxHalf.z * fabsf(n.z);
-        float s = dot(n, v0);
-        return fabsf(s) <= r;
-    }
-} // namespace
+// Only the maths that has no RenderWare name of its own stays here. The
+// sphere and box tests moved to intersect.cpp as RtIntersectionSphereTriangle
+// and RtIntersectionBBoxTriangle, and this file calls them, so that a triangle
+// the game finds by walking an atomic is a triangle it also finds by walking
+// that atomic's collision tree in xClumpColl.cpp.
 
 RpAtomic* RpAtomicForAllIntersections(RpAtomic* atomic, RpIntersection* intersection,
                                       RpIntersectionCallBackGeometryTriangle callBack, void* data)
@@ -333,29 +136,24 @@ RpAtomic* RpAtomicForAllIntersections(RpAtomic* atomic, RpIntersection* intersec
     }
 
     // The primitive, in object space.
-    Vec sphereCenter = { 0.0f, 0.0f, 0.0f };
-    float sphereRadius = 0.0f;
-    Vec lineStart = { 0.0f, 0.0f, 0.0f };
-    Vec lineEnd = { 0.0f, 0.0f, 0.0f };
-    Vec boxCenter = { 0.0f, 0.0f, 0.0f };
-    Vec boxHalf = { 0.0f, 0.0f, 0.0f };
+    RwSphere sphere = {};
+    RwV3d lineStart = {};
+    RwV3d lineEnd = {};
+    RwBBox box = {};
 
     switch (intersection->type)
     {
     case rpINTERSECTSPHERE:
     {
-        RwV3dTransformPoints(reinterpret_cast<RwV3d*>(&sphereCenter),
-                             &intersection->t.sphere.center, 1, &inverse);
-        sphereRadius = intersection->t.sphere.radius / scale;
+        RwV3dTransformPoints(&sphere.center, &intersection->t.sphere.center, 1, &inverse);
+        sphere.radius = intersection->t.sphere.radius / scale;
         break;
     }
 
     case rpINTERSECTLINE:
     {
-        RwV3dTransformPoints(reinterpret_cast<RwV3d*>(&lineStart), &intersection->t.line.start, 1,
-                             &inverse);
-        RwV3dTransformPoints(reinterpret_cast<RwV3d*>(&lineEnd), &intersection->t.line.end, 1,
-                             &inverse);
+        RwV3dTransformPoints(&lineStart, &intersection->t.line.start, 1, &inverse);
+        RwV3dTransformPoints(&lineEnd, &intersection->t.line.end, 1, &inverse);
         break;
     }
 
@@ -380,31 +178,26 @@ RpAtomic* RpAtomicForAllIntersections(RpAtomic* atomic, RpIntersection* intersec
         }
         RwV3dTransformPoints(corners, corners, 8, &inverse);
 
-        Vec mn = asVec(corners[0]);
-        Vec mx = mn;
+        // RwBBoxCalculate is RenderWare's own name for this and is not written
+        // yet; it is four lines here and would be a second unasserted claim
+        // about RwBBox's field order there.
+        box.inf = corners[0];
+        box.sup = corners[0];
         for (int i = 1; i < 8; i++)
         {
-            const Vec& v = asVec(corners[i]);
-            if (v.x < mn.x)
-                mn.x = v.x;
-            if (v.y < mn.y)
-                mn.y = v.y;
-            if (v.z < mn.z)
-                mn.z = v.z;
-            if (v.x > mx.x)
-                mx.x = v.x;
-            if (v.y > mx.y)
-                mx.y = v.y;
-            if (v.z > mx.z)
-                mx.z = v.z;
+            if (corners[i].x < box.inf.x)
+                box.inf.x = corners[i].x;
+            if (corners[i].y < box.inf.y)
+                box.inf.y = corners[i].y;
+            if (corners[i].z < box.inf.z)
+                box.inf.z = corners[i].z;
+            if (corners[i].x > box.sup.x)
+                box.sup.x = corners[i].x;
+            if (corners[i].y > box.sup.y)
+                box.sup.y = corners[i].y;
+            if (corners[i].z > box.sup.z)
+                box.sup.z = corners[i].z;
         }
-
-        boxCenter.x = 0.5f * (mn.x + mx.x);
-        boxCenter.y = 0.5f * (mn.y + mx.y);
-        boxCenter.z = 0.5f * (mn.z + mx.z);
-        boxHalf.x = 0.5f * (mx.x - mn.x);
-        boxHalf.y = 0.5f * (mx.y - mn.y);
-        boxHalf.z = 0.5f * (mx.z - mn.z);
         break;
     }
 
@@ -421,35 +214,30 @@ RpAtomic* RpAtomicForAllIntersections(RpAtomic* atomic, RpIntersection* intersec
         RwV3d* pb = &verts[triangles[i].vertIndex[1]];
         RwV3d* pc = &verts[triangles[i].vertIndex[2]];
 
-        const Vec& a = asVec(*pa);
-        const Vec& b = asVec(*pb);
-        const Vec& c = asVec(*pc);
+        RpCollisionTriangle collTriangle;
 
-        float distance;
+        RwReal distance;
         switch (intersection->type)
         {
         case rpINTERSECTSPHERE:
-            // The distance from the sphere's centre to the triangle, which is
-            // what a sphere query's `distance` means. iCollide.cpp's sphere
-            // callbacks recompute it for themselves out of cbisx_local and
-            // ignore this one, so what it really decides is whether there is a
-            // hit to report at all.
-            distance = distancePointTriangle(sphereCenter, a, b, c);
-            if (distance > sphereRadius)
+            // Fills collTriangle.normal on the way, which is the same normal
+            // the other two cases compute below.
+            if (!RtIntersectionSphereTriangle(&sphere, pa, pb, pc, &collTriangle.normal, &distance))
             {
                 continue;
             }
             break;
 
         case rpINTERSECTLINE:
-            if (!intersectSegmentTriangle(lineStart, lineEnd, a, b, c, &distance))
+            if (!rwshim::intersectSegmentTriangle(&lineStart, &lineEnd, pa, pb, pc, &distance))
             {
                 continue;
             }
+            rwshim::triangleNormal(pa, pb, pc, &collTriangle.normal);
             break;
 
         default: // rpINTERSECTBOX
-            if (!intersectBoxTriangle(boxCenter, boxHalf, a, b, c))
+            if (!RtIntersectionBBoxTriangle(&box, pa, pb, pc))
             {
                 continue;
             }
@@ -458,10 +246,10 @@ RpAtomic* RpAtomicForAllIntersections(RpAtomic* atomic, RpIntersection* intersec
             // Zero is what an overlap test can honestly report. No caller in
             // the game reaches this, so nothing depends on the guess.
             distance = 0.0f;
+            rwshim::triangleNormal(pa, pb, pc, &collTriangle.normal);
             break;
         }
 
-        RpCollisionTriangle collTriangle;
         collTriangle.index = i;
         collTriangle.vertices[0] = pa;
         collTriangle.vertices[1] = pb;
@@ -472,22 +260,6 @@ RpAtomic* RpAtomicForAllIntersections(RpAtomic* atomic, RpIntersection* intersec
         // dot(normal, point). Vertex 0 is on the plane by construction, which
         // is all that equation needs.
         collTriangle.point = *pa;
-
-        Vec n = cross(sub(b, a), sub(c, a));
-        float len = sqrtf(dot(n, n));
-        if (len > 0.0f)
-        {
-            n.x /= len;
-            n.y /= len;
-            n.z /= len;
-        }
-        // A degenerate triangle keeps a zero normal rather than being skipped,
-        // so the callback still sees it and decides for itself -- which is
-        // what iCollide.cpp does, discarding the hit when the plane distance
-        // comes out as exactly zero.
-        collTriangle.normal.x = n.x;
-        collTriangle.normal.y = n.y;
-        collTriangle.normal.z = n.z;
 
         if (callBack(intersection, &collTriangle, distance, data) == NULL)
         {

@@ -245,6 +245,19 @@ typedef enum RpAtomicFlag RpAtomicFlag;
 /* RpClump is typedef'd above */
 typedef RpClump* (*RpClumpCallBack)(RpClump* clump, void* data);
 
+// On PC this is rw::Clump: RenderWare's names, librw's order, asserted in
+// layout_clump.cpp. librw carries a World* between the camera list and the
+// in-world link that RenderWare has no counterpart for, so it is named here
+// rather than left as padding -- an unnamed hole is a field somebody will
+// later put something in.
+//
+// `callback` is DROPPED on PC, for the same reason RpAtomic's four missing
+// fields are: librw's clump is 44 bytes and there is nowhere to append to that
+// is not inside the plugin block librw allocates behind the object. Nothing in
+// the game sets or reads it -- RenderWare only ever calls it from
+// RpClumpClone, which the port does not have -- so reaching for it is a
+// compile error on PC and that is the whole of the loss.
+#ifndef PLATFORM_PC
 struct RpClump
 {
     RwObject object;
@@ -254,6 +267,17 @@ struct RpClump
     RwLLLink inWorldLink;
     RpClumpCallBack callback;
 };
+#else
+struct RpClump
+{
+    RwObject object;
+    RwLinkList atomicList; // librw calls this 'atomics'
+    RwLinkList lightList; // librw calls this 'lights'
+    RwLinkList cameraList; // librw calls this 'cameras'
+    void* world; // librw only: the RpWorld the clump was added to
+    RwLLLink inWorldLink; // librw calls this 'inWorld'
+};
+#endif
 
 struct RpInterpolator
 {

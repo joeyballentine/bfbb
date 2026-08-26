@@ -3,19 +3,27 @@
 Regenerate this list with:
 
     llvm-nm <every game object> | awk '$1=="U"{print $2}' \
-      | sed 's/^?*//;s/@.*//;s/^_*//' | grep -E '^(Rw|Rp|Rt|Rx)' | sort -u
+      | sed 's/^?*//;s/@.*//' | grep -E '^_*(Rw|Rp|Rt|Rx|rw|rp|rt|rx)' | sort -u
 
-That regex drops one symbol the game does need: `_rwObjectHasFrameSetFrame`
-comes out of the `^_*` strip as a lowercase `rw`, which `^(Rw|Rp|Rt|Rx)` does
-not match. It is called at eight sites -- zGame.cpp:1270, iModel.cpp:67,
-xLightKit.cpp:76 and 142, xModel.cpp:495 and 525, xShadow.cpp:95, 693 and 1114,
-zNPCTypePrawn.cpp:568 and 622 -- and it is what `RwCameraSetFrame` and
-`RpLightSetFrame` are macros for, so it is needed by the camera and light
-groups even though it is not in the 112. librw has the counterpart
-(`ObjectWithFrame::setFrame`); nobody has written the shim for it yet.
+**That command used to end `s/^_*//' | grep -E '^(Rw|Rp|Rt|Rx)'`, and the strip
+and the anchor together dropped every symbol RenderWare spells with a leading
+underscore** -- `_rwObjectHasFrameSetFrame` came out of the strip as a
+lowercase `rw` that `^(Rw|Rp|Rt|Rx)` did not match. The leading underscore is
+part of the name here; these are PowerPC objects, so nothing prefixes a `_` of
+its own. Keeping the underscore and letting the grep skip over it is what makes
+the list right.
 
-## Done (101)
+Four functions were hidden that way. One of them is now written
+(`_rwObjectHasFrameSetFrame`, in `frame.cpp`); the other three are listed under
+"Do this next" below. Everything else the corrected command turns up is either
+GameCube-only (`_rwDl*`, `_rwDolphin*`, `_RwGameCubeRasterExtOffset`,
+`_rxPipelineDestroy`, `_rpMaterialListGetMaterial` -- all reached only from
+`src/SB/Core/gc`), already provided (`_rpPTankAtomicDataOffset` and
+`_rpPTankGlobalsOffset`, which `ptank.cpp` defines), or defined by the game
+itself (`_rpCollBSPTreeForAllCapsuleLeafNodeIntersections`, in xCollide.cpp and
+xShadow.cpp).
 
+## Done (110 of 112)
 `value.cpp` -- value types only, so no object layout is involved and the
 reinterpret_casts are backed by static_asserts that fail the build if librw
 rearranges anything:
@@ -443,8 +451,99 @@ asserting when the light or clump is destroyed. So the shim removes every clump
 and light first. Cameras are the one thing it cannot find -- neither library
 keeps a list of them, only a `World*` on the camera -- and the game already
 removes those by hand (iCamera.cpp:54, zGame.cpp:1476).
+The clump group, the Rt maths, and the one function the list was hiding.
+`RpClump` is mirrored the way `RwFrame` is, with its offsets asserted in
+`layout_clump.cpp`. The Rt functions need no type mirrored at all: they are
+pure maths on value types.
 
+`clump.cpp` -- five of the six forward to librw. `RpClumpAddAtomic` does NOT,
+and the reason is that RenderWare's own implementation is in this repository:
+`src/rwsdk/world/baclump.c` is decompiled matching code, and its
+`RpClumpAddAtomic` inserts at the HEAD (`rwLinkListAddLLLink`) where librw's
+`Clump::addAtomic` appends. xJSP.cpp:171-177 moves every atomic of one clump
+into another by walking an array backwards, which preserves their order only if
+each add goes to the front -- and xJSP indexes its baked strip vectors by
+position in that list, so appending would attach the vertex data of a merged
+JSP to the wrong pieces of the level. The shim does the two list writes itself:
+
+  - `RpClumpStreamRead`
+  - `RpClumpDestroy`
+  - `RpClumpAddAtomic`
+  - `RpClumpRemoveAtomic`
+  - `RpClumpForAllAtomics`
+  - `RpClumpGetNumAtomics`
+
+`intersect.cpp` -- the two intersection tests were file-static helpers in
+`atomic.cpp`, written for `RpAtomicForAllIntersections`. They are the public
+functions now and `atomic.cpp` calls them, because the game reaches the same
+triangles two ways: `iCollide.cpp` asks `RpAtomicForAllIntersections` for a
+model with no collision tree, and `xClumpColl.cpp` walks the tree and calls
+these directly for a model that has one. `RtQuatSetupSlerpCache` is the other
+half of `RtQuatSlerpMacro` in rtslerp.h, which never divides by anything -- so
+the `1/sin(omega)` a slerp needs is folded into the cached quaternions here,
+which is what that header means by the "scaled" initial and final quaternions:
+
+  - `RtIntersectionSphereTriangle`
+  - `RtIntersectionBBoxTriangle`
+  - `RtQuatSetupSlerpCache`
+
+`frame.cpp` -- and the function the regeneration command was hiding. Eleven
+call sites, and `RwCameraSetFrame` and `RpLightSetFrame` are macros for it, so
+the camera and light groups were never complete without it:
+
+  - `_rwObjectHasFrameSetFrame`
+
+`tests/selftest.cpp` runs all ten against a live engine: the clump's atomic
+list including the head-insert and the xJSP move, a clump written out through
+librw and read back in through `RpClumpStreamRead` with the atomics matched up
+by where their frames sit, the sphere test against the cases a plane-distance
+test would get wrong, the box test against a box inside the triangle's bounds
+and past its diagonal, and a slerp checked at its midpoint, its endpoints, its
+shortest-arc flip and its two degenerate cases.
+
+### What the clump group does NOT do
+
+**`RpClumpStreamRead`'s atomic ORDER is the one thing here that could not be
+checked against retail.** Every other function in this group has decompiled
+RenderWare source in `src/rwsdk/world/baclump.c` to compare against; the stream
+reader does not. librw appends each atomic as it reads it, so
+`RpClumpForAllAtomics` afterwards walks them in the order the file lists them,
+and the selftest confirms a write/read round trip through librw is order
+preserving. That is also the only order consistent with RenderWare's own
+exporter, given that `RpClumpAddAtomic` prepends -- a reader built on
+`RpClumpAddAtomic` would not round-trip its own files. It is still an inference.
+`iModel.cpp` returns the FIRST atomic of a multi-atomic model as the model, so
+if a model ever comes out inside-out, this is the line to doubt first.
+
+**`RpClump` has lost `callback`.** librw's clump is 44 bytes and there is
+nowhere to append to that is not inside its plugin block. Nothing in the game
+sets or reads it -- RenderWare only calls it from `RpClumpClone`, which the
+port does not have -- so reaching for it is a compile error on PC and that is
+the whole of the loss. rpworld.h says so at the struct.
+
+**librw asserts a clump is not still in a world when it is destroyed**, where
+RenderWare frees it and leaves the world holding a dangling link. Nothing calls
+`RpWorldAddClump`, so neither path is reachable today.
+
+**A box query reports a distance of zero.** `RpAtomicForAllIntersections` has
+no single point of contact to measure to for a box, and RenderWare's
+documentation does not say what it puts there. No caller in the game issues one.
 ## Do this next
+
+**Three more functions the corrected regeneration command turned up.** All
+three are called from units the PC build compiles, and all three are missing,
+so the link will fail on them the moment there is a link:
+
+  - `_rwFrameSyncDirty` -- seven sites (iCamera.cpp:52, xLightKit.cpp:138,
+    xModel.cpp:521, xModelBucket.cpp:166 and 622, xShadow.cpp:689,
+    zGame.cpp:1461). librw has the counterpart in `Frame::syncDirty`.
+  - `_rwInvSqrt` -- three sites (xClumpColl.cpp:701 and 789, xCollide.cpp:1413,
+    plus the `rwInvSqrtMacro` in xCollide.cpp:29). No librw counterpart; it is
+    a reciprocal square root and the console's is a Newton step off the
+    PowerPC estimate instruction, which a host has no reason to reproduce.
+  - `_rpMeshHeaderForAllMeshes` -- one site (xJSP.cpp:35). A walk over the mesh
+    array behind an `RpMeshHeader`, whose stride is already asserted in
+    `layout_geometry.cpp`.
 
 **There is no video mode.** `LIBRW_PLATFORM=NULL` has no render device, and
 librw's null device answers every request with 1 -- including reporting success
@@ -457,7 +556,7 @@ linked. `RwEngineOpen` is the other half of that: it passes no
 `displayID` (a GameCube `RwGameCubeDeviceConfig*`) has nothing to translate
 into. It refuses to compile against a real backend rather than pass null to one.
 
-## Blocked on the object-layout decision (17)
+## Blocked on the object-layout decision (8)
 
 RESOLVED -- the port mirrors librw's layouts (method 1), so these are no longer
 blocked on a decision, only unwritten. Each needs its type mirrored in
@@ -467,14 +566,7 @@ it is one that is finished.
 
 **RpAtomic** (0)
 
-**RpClump** (6)
-
-  - `RpClumpAddAtomic`
-  - `RpClumpDestroy`
-  - `RpClumpForAllAtomics`
-  - `RpClumpGetNumAtomics`
-  - `RpClumpRemoveAtomic`
-  - `RpClumpStreamRead`
+**RpClump** (0)
 
 **RpCollisionWorld** (1)
 
@@ -508,16 +600,7 @@ it is one that is finished.
   above, and the two have to be written together. See "What the world path does
   NOT do yet".
 
-**Rt** (3)
-
-  - `RtIntersectionBBoxTriangle`
-  - `RtIntersectionSphereTriangle`
-  - `RtQuatSetupSlerpCache`
-
-  The first two already exist as file-static helpers in `atomic.cpp`, written
-  for `RpAtomicForAllIntersections`. Whoever writes the public pair should lift
-  them out rather than write them twice, so that a collision the game finds one
-  way is a collision it finds the other.
+**Rt** (0)
 
 **RwCamera** (0)
 
