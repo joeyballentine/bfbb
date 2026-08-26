@@ -292,6 +292,30 @@ add_library(bfbb_platform STATIC
   # It also owns the gRenderArr / gRenderBuffer globals.
   ${PC_DIR}/iParMgr.cpp
 
+
+  # Ported, and the first of these that is NOT a verbatim copy. gc/iScrFX.cpp is
+  # RenderWare 2D rendering and one dead motion-blur state machine, and all of
+  # it copies -- except that iCameraOverlayRender brackets its draw with
+  # RwRasterLock/RwRasterUnlock, which the shim does not have and which a host
+  # must not do anyway: a locked raster is one the device cannot sample from.
+  # The bracket is dropped, with the reasoning at the site. Everything else is
+  # byte-for-byte gc/. The blend, filter and primitive-type enumerations it
+  # passes through are all asserted in rw/layout_camera.cpp already.
+  #
+  # Note that iScrFX.h is deliberately diverged rather than copied -- see the
+  # comment about rwGameCube2DVertex in VERBATIM.txt -- so this module is off
+  # the drift list at both ends.
+  ${PC_DIR}/iScrFX.cpp
+
+  # Ported, and the first module in the port that LOSES a rendering behaviour
+  # rather than relocating one. gc/iDraw.cpp is three functions: two empty ones
+  # and iDrawSetFBMSK, which is a frame-buffer colour/alpha write mask and has
+  # no spelling in RenderWare's portable render state or in librw's. It is a
+  # documented no-op; the comment in the file names the six call sites and says
+  # what each one will look like wrong. Fixing it means adding a colour write
+  # mask to librw, not editing this file.
+  ${PC_DIR}/iDraw.cpp
+
   # --- STUBS, not implementations ------------------------------------------
   # Eleven modules have a PC header and no PC implementation. These files make
   # the port LINK so that it can be RUN, which is the next gate after the one
@@ -306,8 +330,6 @@ add_library(bfbb_platform STATIC
   #
   # A file leaves this block when it stops being a stub. It does not need to
   # move -- it needs to stop including iStub.h.
-  ${PC_DIR}/iScrFX.cpp
-  ${PC_DIR}/iDraw.cpp
   ${PC_DIR}/iFX.cpp
   ${PC_DIR}/iFMV.cpp
 
