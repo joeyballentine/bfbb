@@ -654,7 +654,7 @@ void zEntTeleportBox_Close(_zEntTeleportBox* ent)
     }
 }
 
-S32 zEntTeleportBox_isOpen(_zEntTeleportBox* ent)
+U32 zEntTeleportBox_isOpen(_zEntTeleportBox* ent)
 {
     _zEntTeleportBox* target = (_zEntTeleportBox*)ent->target;
 
@@ -666,7 +666,7 @@ S32 zEntTeleportBox_isOpen(_zEntTeleportBox* ent)
     return 0;
 }
 
-S32 zEntTeleportBox_isClosed(_zEntTeleportBox* ent)
+U32 zEntTeleportBox_isClosed(_zEntTeleportBox* ent)
 {
     return zEntTeleportBox_isOpen(ent) == 0;
 }
