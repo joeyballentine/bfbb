@@ -576,9 +576,8 @@ namespace
             if (shared.sounds.size() > 0)
             {
                 shared.sounds.pop();
-                return 1;
             }
-            break;
+            return true;
         case sound_context::ACTION_SET:
             shared.sounds.clear();
             speak_stop();
