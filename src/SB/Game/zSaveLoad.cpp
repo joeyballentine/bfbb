@@ -1494,7 +1494,7 @@ S32 zSaveLoad_GameSelect(S32 mode)
                 strcpy(zSaveLoadGameTable[i].date, "Empty");
                 zSaveLoadGameTable[i].progress = 0;
                 zSaveLoadGameTable[i].size = 0;
-                zSaveLoadGameTable[i].thumbIconIndex = -1;
+                zSaveLoadGameTable[i].thumbIconIndex = 255;
             }
             else
             {
@@ -1514,7 +1514,7 @@ S32 zSaveLoad_GameSelect(S32 mode)
                 zSaveLoadGameTable[i].thumbIconIndex = xSGGameThumbIndex(svinst, i);
                 if (strcmpi(zSaveLoadGameTable[i].label, "") == 0)
                 {
-                    zSaveLoadGameTable[i].thumbIconIndex = -1;
+                    zSaveLoadGameTable[i].thumbIconIndex = 255;
                 }
             }
             xSGDone(svinst);
