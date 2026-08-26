@@ -154,3 +154,46 @@ void _rwFrameSyncDirty(void)
 {
     rw::Frame::syncDirty();
 }
+
+// The frame HIERARCHY calls, which iModel.cpp needs to build and tear down a
+// model's skeleton.
+
+RwFrame* RwFrameGetRoot(const RwFrame* frame)
+{
+    if (frame == NULL)
+    {
+        return NULL;
+    }
+
+    // Mirrored, so this is a field read either way -- but going through the
+    // struct rather than librw keeps it honest if the mirroring ever changes.
+    return const_cast<RwFrame*>(frame)->root;
+}
+
+RwBool RwFrameDestroyHierarchy(RwFrame* frame)
+{
+    if (frame == NULL)
+    {
+        return FALSE;
+    }
+
+    // Destroys the frame AND every frame below it. iModel.cpp:iModelUnload
+    // calls this on a model's root, which is what frees a skeleton -- the
+    // per-frame destroy would leave every child leaked and still linked.
+    asFrame(frame)->destroyHierarchy();
+    return TRUE;
+}
+
+RwFrame* RwFrameForAllChildren(RwFrame* frame, RwFrameCallBack callBack, void* data)
+{
+    if (frame == NULL || callBack == NULL)
+    {
+        return frame;
+    }
+
+    // librw's forAllChildren visits the IMMEDIATE children only, which is
+    // RenderWare's contract too -- iModel.cpp recurses itself when it wants the
+    // whole subtree (GetChildFrameHierarchy).
+    asFrame(frame)->forAllChildren(reinterpret_cast<rw::Frame::Callback>(callBack), data);
+    return frame;
+}

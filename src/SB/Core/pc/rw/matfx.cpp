@@ -175,3 +175,34 @@ RpMaterial* RpMatFXMaterialSetEnvMapCoefficient(RpMaterial* material, RwReal coe
     fx->setEnvCoefficient(coef);
     return material;
 }
+
+// The MatFX pipeline, by GameCube name.
+//
+// iModel.cpp:111 assigns this to an atomic whose material has an effect on it:
+//
+//     model->pipeline = RpMatFXGetGameCubePipeline(rpMATFXGAMECUBEATOMICPIPELINE);
+//
+// It is the one GameCube-specific line in a 1087-line file that is otherwise
+// entirely portable, and the port answers it with the equivalent for whatever
+// backend is linked. librw keeps one MatFX pipeline per platform in
+// matFXGlobals.pipelines[], indexed by rw::platform, which is what the console's
+// GameCube pipeline IS on its side -- the same object under a name that only
+// makes sense there.
+//
+// So this is not a stub: an atomic that gets it renders with the environment
+// and bump map effects, and an atomic that gets NULL falls back to the default
+// pipeline and renders without them.
+RxPipeline* RpMatFXGetGameCubePipeline(RpMatFXGameCubePipeline gamecubePipeline)
+{
+    if (gamecubePipeline != rpMATFXGAMECUBEATOMICPIPELINE)
+    {
+        return NULL;
+    }
+
+    if (rw::platform < 0 || rw::platform >= rw::NUM_PLATFORMS)
+    {
+        return NULL;
+    }
+
+    return reinterpret_cast<RxPipeline*>(rw::matFXGlobals.pipelines[rw::platform]);
+}

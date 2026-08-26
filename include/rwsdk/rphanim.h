@@ -17,6 +17,7 @@ struct RpHAnimNodeInfo
     RwFrame* pFrame;
 };
 
+#ifndef PLATFORM_PC
 struct RpHAnimHierarchy
 {
     RwInt32 flags;
@@ -29,6 +30,30 @@ struct RpHAnimHierarchy
     RwInt32 rootParentOffset;
     RtAnimInterpolator* currentAnim;
 };
+#else
+// Mirrored onto rw::HAnimHierarchy, the usual bargain: librw's field ORDER
+// under RenderWare's field NAMES, asserted in rw/layout_hanim.cpp.
+//
+// **rootParentOffset is dropped**, because librw has no counterpart for it and
+// nothing in the game reads it. The only two fields game code touches are
+// pMatrixArray (three sites) and flags (one), and both sit ahead of where the
+// two layouts diverge, so nothing has to move to accommodate this -- the field
+// simply is not there, and reaching for it is a compile error rather than a
+// silent read of currentAnim's low half.
+//
+// The same reasoning as RpAtomic's four dropped fields; see rpworld.h.
+struct RpHAnimHierarchy
+{
+    RwInt32 flags;
+    RwInt32 numNodes;
+    RwMatrix* pMatrixArray;
+    void* pMatrixArrayUnaligned;
+    RpHAnimNodeInfo* pNodeInfo;
+    RwFrame* parentFrame;
+    RpHAnimHierarchy* parentHierarchy;
+    RtAnimInterpolator* currentAnim; // librw calls this 'interpolator'
+};
+#endif
 
 enum RpHAnimHierarchyFlag
 {

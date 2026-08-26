@@ -2329,6 +2329,77 @@ static void test_underscored()
 // with the wrong element count or the wrong type would corrupt that cache
 // silently, so the round trip is what is checked here rather than the calls
 // merely returning something.
+// RpHAnim, the skeleton behind every animated model. iModel.cpp builds one per
+// model as it loads and xAnim drives it every frame, writing bone matrices
+// through pMatrixArray -- so a wrong offset here animates a model out of the
+// wrong memory rather than failing, which is why the round trip is checked and
+// not just the return values.
+static void test_hanim()
+{
+    printf("RpHAnim\n");
+
+    RwInt32 nodeIDs[3] = { 0, 1, 2 };
+    RwUInt32 nodeFlags[3] = { 0, 0, 0 };
+
+    RpHAnimHierarchy* hierarchy =
+        RpHAnimHierarchyCreate(3, nodeFlags, nodeIDs, rpHANIMHIERARCHYUPDATELTMS, 36);
+    check(hierarchy != NULL, "RpHAnimHierarchyCreate");
+    if (hierarchy == NULL)
+    {
+        return;
+    }
+
+    // Read back through RenderWare's OWN names -- the mirroring doing its job.
+    check(hierarchy->numNodes == 3, "the hierarchy has the node count it was asked for");
+    check(hierarchy->pMatrixArray != NULL, "and a matrix array behind pMatrixArray");
+    check(hierarchy->pNodeInfo != NULL, "and node info");
+    check((hierarchy->flags & rpHANIMHIERARCHYUPDATELTMS) != 0, "and the flags it was given");
+
+    // The node ids have to survive, because iModel matches bones to frames by
+    // id and getting it wrong attaches the skeleton to the wrong joints.
+    check(hierarchy->pNodeInfo[0].nodeID == 0 && hierarchy->pNodeInfo[2].nodeID == 2,
+          "the node ids round-trip through RpHAnimNodeInfo");
+
+    // Writing a bone matrix and reading it back is what xAnim does every frame.
+    hierarchy->pMatrixArray[1].pos.x = 12.0f;
+    check(near(hierarchy->pMatrixArray[1].pos.x, 12.0f),
+          "a bone matrix written through pMatrixArray reads back");
+
+    // The frame association, which is how a model finds its skeleton again.
+    RwFrame* root = RwFrameCreate();
+    check(root != NULL, "a frame to attach it to");
+    if (root != NULL)
+    {
+        check(RpHAnimFrameGetHierarchy(root) == NULL, "a fresh frame has no hierarchy");
+        check(RpHAnimFrameSetHierarchy(root, hierarchy) != FALSE, "RpHAnimFrameSetHierarchy");
+        check(RpHAnimFrameGetHierarchy(root) == hierarchy, "RpHAnimFrameGetHierarchy finds it");
+
+        // The frame hierarchy walk iModel uses to find bones.
+        check(RwFrameGetRoot(root) == root, "a lone frame is its own root");
+
+        RpAtomic* skinned = reinterpret_cast<RpAtomic*>(rw::Atomic::create());
+        if (skinned != NULL)
+        {
+            check(RpSkinAtomicSetHAnimHierarchy(skinned, hierarchy) == skinned,
+                  "RpSkinAtomicSetHAnimHierarchy");
+            check(rw::Skin::getHierarchy(reinterpret_cast<rw::Atomic*>(skinned)) ==
+                      reinterpret_cast<rw::HAnimHierarchy*>(hierarchy),
+                  "and the atomic's skin plugin holds it");
+            reinterpret_cast<rw::Atomic*>(skinned)->destroy();
+        }
+
+        RpHAnimFrameSetHierarchy(root, NULL);
+        RwFrameDestroy(root);
+    }
+
+    check(RpHAnimFrameGetHierarchy(NULL) == NULL, "RpHAnimFrameGetHierarchy(NULL) is refused");
+    check(RpHAnimFrameSetHierarchy(NULL, hierarchy) == FALSE, "and so is setting one on NULL");
+    check(RwFrameGetRoot(NULL) == NULL, "RwFrameGetRoot(NULL) is refused");
+    check(RwFrameDestroyHierarchy(NULL) == FALSE, "RwFrameDestroyHierarchy(NULL) is refused");
+
+    reinterpret_cast<rw::HAnimHierarchy*>(hierarchy)->destroy();
+}
+
 static void test_userdata()
 {
     printf("RpUserData\n");
@@ -2559,6 +2630,7 @@ int main()
     test_slerp();
     test_object_frames();
     test_underscored();
+    test_hanim();
     test_userdata();
     test_atomic_stream();
     test_engine_shutdown();

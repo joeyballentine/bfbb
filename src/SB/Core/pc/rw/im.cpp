@@ -133,3 +133,24 @@ RwBool RwIm3DEnd(void)
     rw::im3d::End();
     return TRUE;
 }
+
+// The indexed 3D primitive, which iParMgr.cpp:540 is the first and only PC
+// caller of -- iRenderTrianglesImmediate draws every particle system's
+// triangles through it.
+//
+// Takes only the indices: the vertices are the ones RwIm3DTransform was handed,
+// which librw is still holding. That is why this cannot be reordered with
+// respect to the transform, and why there is nothing to pass but the indices.
+// librw's rw::im3d::RenderIndexedPrimitive has the same three arguments in the
+// same order.
+RwBool RwIm3DRenderIndexedPrimitive(RwPrimitiveType primType, RwImVertexIndex* indices,
+                                    RwInt32 numIndices)
+{
+    if (indices == NULL || numIndices <= 0)
+    {
+        return FALSE;
+    }
+
+    rw::im3d::RenderIndexedPrimitive((rw::PrimitiveType)primType, indices, numIndices);
+    return TRUE;
+}

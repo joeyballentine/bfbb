@@ -242,6 +242,14 @@ add_library(bfbb_platform STATIC
   # RenderWare user-data plugin on the PC path; see rw/usrdata.cpp.
   ${PC_DIR}/iMorph.cpp
 
+  # NOT verbatim, and the only one of the ported modules that is not. 1087
+  # lines, of which exactly one needed changing: it clears
+  # rpINTERPOLATORDIRTYSPHERE on an RpAtomic, and the port's RpAtomic has no
+  # interpolator because librw's is 84 bytes to RenderWare's 112. rw/TODO.md
+  # predicted this would be the third such site. Its skeleton support is
+  # rw/hanim.cpp.
+  ${PC_DIR}/iModel.cpp
+
   # Ported, and a verbatim copy as well: gc/iEnv.cpp is RenderWare world and
   # clump rendering with nothing GameCube-specific in it. The render-state
   # enumerations it passes through (cull mode, blend, z-write) are asserted
@@ -288,7 +296,6 @@ add_library(bfbb_platform STATIC
   #
   # A file leaves this block when it stops being a stub. It does not need to
   # move -- it needs to stop including iStub.h.
-  ${PC_DIR}/iModel.cpp
   ${PC_DIR}/iParMgr.cpp
   ${PC_DIR}/iScrFX.cpp
   ${PC_DIR}/iDraw.cpp

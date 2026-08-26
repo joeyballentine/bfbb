@@ -255,3 +255,22 @@ RpMeshHeader* _rpMeshHeaderForAllMeshes(RpMeshHeader* meshHeader, RpMeshCallBack
 
     return meshHeader;
 }
+
+// Index a material list.
+//
+// RenderWare's own accessor, and iModel.cpp:110 walks a geometry's list with it
+// looking for a material that has a MatFX effect on it. librw's MaterialList
+// needed no mirroring -- {materials, numMaterials, space} is RenderWare's
+// {materials, numMaterials, space} -- and layout_geometry.cpp asserts it.
+//
+// Out-of-range is NULL rather than undefined, which is what the caller's loop
+// tests for.
+RpMaterial* _rpMaterialListGetMaterial(const RpMaterialList* matList, RwInt32 matIndex)
+{
+    if (matList == NULL || matIndex < 0 || matIndex >= matList->numMaterials)
+    {
+        return NULL;
+    }
+
+    return matList->materials[matIndex];
+}

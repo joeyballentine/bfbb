@@ -120,3 +120,24 @@ RpAtomic* RpSkinAtomicSetType(RpAtomic* atomic, RpSkinType type)
     rw::Skin::setPipeline(reinterpret_cast<rw::Atomic*>(atomic), (rw::int32)type);
     return atomic;
 }
+
+// Bind an atomic's skin to a bone hierarchy.
+//
+// The skin plugin keeps one HAnimHierarchy* per ATOMIC (librw registers it as
+// `Atomic::registerPlugin(sizeof(HAnimHierarchy*), ID_SKIN, ...)`), separately
+// from the Skin itself which lives on the GEOMETRY. That split is what lets two
+// atomics share one skinned geometry and animate independently, which is
+// exactly what xModelBucket's duplicated atomics do.
+//
+// iModel.cpp calls this as it builds a model, right after RpHAnimHierarchyCreate.
+RpAtomic* RpSkinAtomicSetHAnimHierarchy(RpAtomic* atomic, RpHAnimHierarchy* hierarchy)
+{
+    if (atomic == NULL)
+    {
+        return NULL;
+    }
+
+    rw::Skin::setHierarchy(reinterpret_cast<rw::Atomic*>(atomic),
+                           reinterpret_cast<rw::HAnimHierarchy*>(hierarchy));
+    return atomic;
+}
