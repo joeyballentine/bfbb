@@ -17,9 +17,11 @@
 #include <rwcore.h>
 #include <rpcollis.h>
 #include <rpcollbsptree.h>
+#include <rphanim.h>
 #include <rpmatfx.h>
 #include <rpptank.h>
 #include <rpskin.h>
+#include <rpusrdat.h>
 #include <rpworld.h>
 #include <rtintsec.h>
 #include <rtquat.h>
@@ -110,6 +112,14 @@ static void test_engine_startup()
     // first word as an RpCollisionData* and hand xCollide.cpp garbage that
     // passes its `colldata && colldata->tree` check.
     check(RpCollisionPluginAttach() != FALSE, "RpCollisionPluginAttach");
+
+    // The same SEVEN the game attaches, in the same order (iSystem.cpp's
+    // RWAttachPlugins). Attaching a different set than the game does makes this
+    // test a check of a configuration nothing ships -- and HAnim in particular
+    // registers an Engine plugin and a Frame plugin, so it changes the size and
+    // the lifecycle of objects every other check here creates.
+    check(RpHAnimPluginAttach() != FALSE, "RpHAnimPluginAttach");
+    check(RpUserDataPluginAttach() != FALSE, "RpUserDataPluginAttach");
     check(_rpCollisionGeometryDataOffset > 0,
           "RpCollision got a slot in the geometry's plugin block, not offset zero");
 
@@ -2104,6 +2114,33 @@ static void test_object_frames()
         check(RpLightGetFrame(light) == frame, "RpLightSetFrame reaches the same code");
         _rwObjectHasFrameSetFrame(light, NULL);
         RpLightDestroy(light);
+    }
+
+    // xFX.cpp's LightResetFrame, reproduced: attach a light to a frame and then
+    // ROTATE the frame. The port booted as far as this and faulted, and nothing
+    // above caught it -- the checks above move a frame that has a CAMERA on it,
+    // and detach the light before touching the frame again, so the
+    // light-on-a-moving-frame path had never run.
+    RpLight* rotLight = RpLightCreate(rpLIGHTDIRECTIONAL);
+    RwFrame* rotFrame = RwFrameCreate();
+    check(rotLight != NULL && rotFrame != NULL, "a light and a frame to rotate");
+    if (rotLight != NULL && rotFrame != NULL)
+    {
+        RpLightSetFrame(rotLight, rotFrame);
+
+        RwV3d xAxis = { 1.0f, 0.0f, 0.0f };
+        RwV3d yAxis = { 0.0f, 1.0f, 0.0f };
+        RwFrameRotate(rotFrame, &xAxis, 45.0f, rwCOMBINEREPLACE);
+        RwFrameRotate(rotFrame, &yAxis, 45.0f, rwCOMBINEPOSTCONCAT);
+        check(true, "rotating a frame with a light on it does not fault");
+
+        // And the flush, which is what actually runs the light's sync callback.
+        _rwFrameSyncDirty();
+        check(true, "and flushing the dirty list afterwards does not either");
+
+        _rwObjectHasFrameSetFrame(rotLight, NULL);
+        RpLightDestroy(rotLight);
+        RwFrameDestroy(rotFrame);
     }
 
     _rwObjectHasFrameSetFrame(NULL, frame); // must not fault
