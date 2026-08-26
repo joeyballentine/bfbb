@@ -8,7 +8,11 @@
 #include <string.h>
 
 #include <dirent.h>
+#if defined(_WIN32) && !defined(__CYGWIN__)
+// The Microsoft CRT has no <strings.h>; compat/string.h maps the POSIX names.
+#else
 #include <strings.h>
+#endif
 #include <unistd.h>
 
 struct file_queue_entry

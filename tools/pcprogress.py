@@ -18,6 +18,7 @@ Usage:
 
 import argparse
 import collections
+import functools
 import concurrent.futures
 import hashlib
 import pathlib
@@ -43,13 +44,47 @@ CXXFLAGS = [
     "-std=c++17",
     "-fsyntax-only",
     "-fno-strict-aliasing",
-    # No -fpermissive. It downgrades real errors to warnings, so the count came
-    # out higher than any build that would actually succeed -- CMakeLists.txt
-    # does not pass it, and the two disagreed.
-    "-w",
     "-DPLATFORM_PC",
     "-DNON_MATCHING",
+    # Microsoft's STL hard-errors (STL1000) when the clang major version is not
+    # the one it shipped against, which has nothing to do with this port and
+    # took 24 units out of the measurement. A no-op everywhere else.
+    "-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH",
 ]
+
+# Silencing warnings is not optional -- the sources produce thousands -- but HOW
+# you silence them decides whether this tool measures anything.
+#
+# g++ makes `(U32)somePointer` a hard error in C++ mode, so -w is safe there:
+# the pointer-width class still fails the build and still gets counted.
+#
+# clang makes the same cast a *warning*. Under -w it vanishes, and every unit
+# whose only problem is pointer width silently passes -- the tool would report
+# ~195/198 and mean nothing by it. Worse, -w in clang cannot be overridden:
+# -Werror=... placed either side of it is ignored. -Wno-everything can be, so
+# that is the idiom here, with the pointer casts promoted back to errors.
+#
+# The point is that both compilers classify the same unit the same way, so the
+# -m32 experiment measures the pointer width and not the diagnostic policy.
+PTR_CAST_WARNINGS = [
+    "void-pointer-to-int-cast",
+    "pointer-to-int-cast",
+    "int-to-pointer-cast",
+]
+
+
+def quiet_flags(cc):
+    if "clang" in cc:
+        return ["-Wno-everything"] + ["-Werror=" + w for w in PTR_CAST_WARNINGS]
+    return ["-w"]
+
+
+def detect_cc():
+    import shutil
+    for c in ("g++", "clang++"):
+        if shutil.which(c):
+            return c
+    sys.exit("no g++ or clang++ on PATH; pass --cc")
 
 
 def units(filters):
@@ -62,8 +97,9 @@ def units(filters):
     return out
 
 
-def compile_one(path):
-    cmd = ["g++", *CXXFLAGS]
+def compile_one(path, cc=None, extra=()):
+    cc = cc or detect_cc()
+    cmd = [cc, *CXXFLAGS, *quiet_flags(cc), *extra]
     for inc in INCLUDES:
         cmd += ["-I", str(ROOT / inc)]
     cmd.append(str(path))
@@ -76,7 +112,11 @@ def compile_one(path):
 # every asset-overlaid struct addresses memory with U32. This is the open
 # question in PCPORT.md's "Asset caveats", not a defect to fix unit by unit, so
 # it gets its own line rather than being mixed in with real porting work.
-POINTER_WIDTH = re.compile(r"cast from .*\*.* to .* loses precision")
+# g++:   cast from 'void*' to 'U32' loses precision
+# clang: cast to smaller integer type 'unsigned int' from 'void *'
+POINTER_WIDTH = re.compile(
+    r"cast from .*[*].* to .* loses precision"
+    r"|cast to smaller integer type .* from .*[*]")
 
 
 def all_errors(stderr):
@@ -149,18 +189,27 @@ def main():
     ap.add_argument("--errors", action="store_true")
     ap.add_argument("--drift", action="store_true",
                     help="check the headers pc/ copied verbatim from gc/")
+    ap.add_argument("--cc", default=None,
+                    help="host compiler (default: g++, else clang++)")
+    ap.add_argument("--m32", action="store_true",
+                    help="compile 32-bit; tests whether the pointer-width "
+                         "class is really one decision (PCPORT.md, Asset caveats)")
     args = ap.parse_args()
 
     if args.drift:
         sys.exit(0 if check_drift() else 1)
+
+    cc = args.cc or detect_cc()
+    extra = ["-m32"] if args.m32 else []
 
     todo = units(args.filters)
     if not todo:
         sys.exit("no units matched")
 
     results = []
+    work = functools.partial(compile_one, cc=cc, extra=extra)
     with concurrent.futures.ThreadPoolExecutor(max_workers=16) as ex:
-        for path, ok, err in ex.map(compile_one, todo):
+        for path, ok, err in ex.map(work, todo):
             results.append((path, ok, err))
 
     results.sort(key=lambda r: r[0].as_posix())
@@ -189,6 +238,8 @@ def main():
     total = len(results)
     ptr = [r for r in bad if pointer_width_only(r[2])]
     other = len(bad) - len(ptr)
+
+    print(f"{cc}{' -m32' if args.m32 else ''}")
 
     print(f"compiles           {len(good):4d} / {total} units   {100.0 * len(good) / total:.2f}%")
     print(f"pointer width only {len(ptr):4d} / {total} units   "

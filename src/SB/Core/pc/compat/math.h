@@ -11,6 +11,10 @@
 // include_next, so everything standard still comes from the system.
 #include_next <math.h>
 
+// The game also reaches std::floorf and friends through <math.h>, not only
+// through <cmath>; MSL declares them both ways.
+#include "_stdfloatmath.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

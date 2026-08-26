@@ -241,30 +241,45 @@ defines neither).
 
 ## 5. Open work, ranked
 
-### (a) The 32-bit decision — 26 units, one call
+### (a) The 32-bit decision — ANSWERED: build 32-bit
 
-The largest blocker is `(U32)somePointer`. `xMemInitHeap` does arithmetic on
-`gMemInfo.DRAM.addr`, a `U32`; asset-overlaid structs address memory in 32
-bits throughout. On LP64 every such cast truncates.
+The blocker was `(U32)somePointer`. `xMemInitHeap` does arithmetic on
+`gMemInfo.DRAM.addr`, a `U32`; asset-overlaid structs address memory in 32 bits
+throughout, so on LP64 every such cast truncates. This was listed as one open
+decision, never tested, and the single highest-value next step.
 
-**This is not 26 fixes.** It is the open question in `PCPORT.md` →
-**Asset caveats**: build 32-bit, or separate on-disk formats from in-memory
-structs. Changing `(U32)` to `(uintptr_t)` at the cast sites does *not* solve
-it — the *storage* is 32 bits wide.
+**Tested 2026-08-26 on Windows with clang 16. It clears the whole class.**
 
-The cheapest experiment: **build with `-m32` and re-run `pcprogress.py`.** If
-the 26 clear, "build 32-bit" is validated cheaply. **This was never tested** —
-this container has no multilib (`g++ -m32` cannot find `bits/libc-header-start.h`).
-Install `gcc-multilib` and try it; it is the single highest-value next step.
+Controlled: same compiler, same flags, same compat headers, one variable.
 
-`iMemInit` already assumes the answer: it reserves its arena with
-`mmap(MAP_32BIT)` and refuses to start above 4 GB rather than truncating
-silently. That buys the allocator only, not asset layouts.
+| | compiles | failing | pointer-width |
+|---|---|---|---|
+| 64-bit | 162 / 198 (81.82%) | 36 | 8 |
+| **`--m32`** | **195 / 198 (98.48%)** | **3** | **0** |
 
-The 26: `xAnim xCM xClumpColl xCutscene xHud xMemMgr xMorph xPartition
-xShadowSimple xSnd xpkrsvc xserializer zAnimList zAssetTypes zCollGeom
-zCutsceneMgr zGame zLOD zNPCHazard zNPCMessenger zNPCSupport
-zNPCTypeBossPlankton zNPCTypeCommon zParPTank zScene zTalkBox`.
+33 units fixed, **0 broken**, and the 3 survivors are exactly the structural
+units already named in (c) below — `xFX`, `xFont`, `xModelBucket`. Nothing else
+is left in this class.
+
+```sh
+python3 tools/pcprogress.py --m32
+```
+
+So `iMemInit` reserving its arena with `mmap(MAP_32BIT)` is not a hedge any
+more, it is the design. Treat 32-bit as a project-wide constraint rather than
+an open question, and keep `CMakeLists.txt` in step with it.
+
+Two cautions about the measurement, both of which cost a wrong number first:
+
+- **`pcprogress.py` hardcoded `g++`** and its pointer-width regex only matched
+  g++'s phrasing. It now detects the compiler and accepts both. More
+  importantly, **g++ makes `(U32)ptr` a hard error while clang makes it a
+  warning**, so under the old `-w` the entire pointer-width class vanished and
+  the tool read ~195/198 in *64-bit* — measuring the diagnostic policy, not the
+  port. clang's `-w` cannot be overridden by a later `-Werror=`;
+  `-Wno-everything` can, so that is the idiom now.
+- The tool compiles game code against the pc/ *headers*. It does not build the
+  pc/ *implementation*, which is a separate question — see (f).
 
 ### (b) `iSnd` — 22 functions
 
@@ -299,6 +314,22 @@ code compiles against RenderWare's declarations today; only linking needs
 librw. re3/reVC is the precedent.
 
 ---
+
+### (f) The platform layer implementation is Linux-only
+
+Distinct from (a), and not visible to `pcprogress.py`. The 10 implementation
+files were written in a Linux container and use POSIX directly: `sys/mman.h`,
+`CLOCK_MONOTONIC`, `localtime_r`, `mmap`/`munmap`, `opendir`/`readdir`. On
+Windows `cmake --build` fails immediately.
+
+26 sites across 5 files — `isavegame.cpp` (8), `iMemMgr.cpp` (6),
+`iFile.cpp` (6), `iTime.cpp` (4), `iSystem.cpp` (2).
+
+This is bounded and well isolated, and it is exactly the seam `iPadHost.h`
+already models: put the host calls behind a small backend interface with one
+implementation per platform, rather than `#ifdef`-ing each call site. Until
+then, the layer builds on Linux only, and "72 of 178 interface functions
+implemented" should be read as *implemented for Linux*.
 
 ## 6. Conventions that are not negotiable
 
