@@ -33,6 +33,21 @@ set(PC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/pc)
 # PCPORT.md.
 add_compile_options(-fno-strict-aliasing)
 
+# 32-bit is a project-wide constraint, not a preference. gMemInfo.DRAM.addr is
+# a U32 and xMemInitHeap does pointer arithmetic on it as an integer; every
+# asset-overlaid struct addresses memory in 32 bits; and sizeof(xSndVoiceInfo)
+# is 100, which iSndPlay divides a byte offset by. On LP64 all of that is
+# wrong. See PCPORT-HANDOFF.md 5(a): 162/198 units compile 64-bit against these
+# headers and 195/198 under -m32.
+#
+# tools/pcprogress.py measures with the same flag. If you change it here, change
+# it there -- the two disagreeing is how the metric lied once before.
+option(BFBB_BUILD_32BIT "Build 32-bit, which the asset layouts require" ON)
+if(BFBB_BUILD_32BIT)
+  add_compile_options(-m32)
+  add_link_options(-m32)
+endif()
+
 # --- input backend -----------------------------------------------------------
 # "null" reports no controllers and is always available. It is a real
 # configuration, not a missing implementation: a build with no input library
@@ -45,6 +60,21 @@ if(BFBB_INPUT_BACKEND STREQUAL "null")
   set(INPUT_SOURCES ${PC_DIR}/iPadHostNull.cpp)
 else()
   message(FATAL_ERROR "unknown BFBB_INPUT_BACKEND '${BFBB_INPUT_BACKEND}'")
+endif()
+
+# --- audio backend ---------------------------------------------------------
+# Same arrangement as the input backend. "null" is silent but keeps time: it
+# knows each sample's length and reports a voice as playing for exactly that
+# long, because a great deal of the game waits on a sound -- dialogue lines,
+# cutscene beats, NPC barks. A backend that finished everything instantly would
+# desynchronise all of them and look like a bug in the game code.
+set(BFBB_AUDIO_BACKEND "null" CACHE STRING "Host audio backend: null")
+set_property(CACHE BFBB_AUDIO_BACKEND PROPERTY STRINGS null)
+
+if(BFBB_AUDIO_BACKEND STREQUAL "null")
+  set(AUDIO_SOURCES ${PC_DIR}/iSndHostNull.cpp)
+else()
+  message(FATAL_ERROR "unknown BFBB_AUDIO_BACKEND '${BFBB_AUDIO_BACKEND}'")
 endif()
 
 # --- host backend ---------------------------------------------------------
@@ -73,7 +103,9 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iTRC.cpp
   ${PC_DIR}/iTime.cpp
   ${PC_DIR}/isavegame.cpp
+  ${PC_DIR}/iSnd.cpp
   ${INPUT_SOURCES}
+  ${AUDIO_SOURCES}
   ${HOST_SOURCES}
 )
 
@@ -102,7 +134,9 @@ add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   ${PC_DIR}/iMemMgr.cpp
   ${PC_DIR}/iTime.cpp
   ${PC_DIR}/isavegame.cpp
+  ${PC_DIR}/iSnd.cpp
   ${INPUT_SOURCES}
+  ${AUDIO_SOURCES}
   ${HOST_SOURCES}
 )
 target_include_directories(pc_selftest PRIVATE

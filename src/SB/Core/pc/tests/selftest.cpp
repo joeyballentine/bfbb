@@ -14,6 +14,9 @@
 
 #include "iFile.h"
 #include "iHost.h"
+#include "iSnd.h"
+#include "iSndHost.h"
+#include "xSnd.h"
 #include "iMath.h"
 #include "iMemMgr.h"
 #include "iPadHost.h"
@@ -381,6 +384,190 @@ static void test_savegame()
     iHostSetEnv("BFBB_SAVE_DIR", NULL);
 }
 
+// The game owns gSnd; the platform layer only reads and writes it. Defining it
+// here is what makes this a unit test of the seam rather than of the game.
+xSndGlobals gSnd;
+
+// The sound table layout iSnd.cpp parses. Declared independently on purpose:
+// if the two ever disagree, this test fails rather than the port silently
+// reading the wrong field out of a real asset.
+struct test_sndhdr
+{
+    U32 num_samples; // 0x00
+    U32 num_nibbles; // 0x04
+    U32 sample_rate; // 0x08
+    U16 loop_flag; // 0x0C
+    U16 format; // 0x0E
+    U32 loop_start; // 0x10
+    U32 loop_end; // 0x14
+    U32 cur_addr; // 0x18
+    S16 coef[16]; // 0x1C
+    U16 gain; // 0x3C
+    U16 pred_scale; // 0x3E
+    U16 yn1; // 0x40
+    U16 yn2; // 0x42
+    U16 loop_pred_scale; // 0x44
+    U16 loop_yn1; // 0x46
+    U16 loop_yn2; // 0x48
+    U16 pad[11]; // 0x4A
+    U32 assetID; // 0x60
+};
+
+struct test_sndinfo
+{
+    U32 num_sfx;
+    U32 total_size;
+    U32 num_streams;
+    U32 num_cutscene;
+    test_sndhdr entry[2];
+};
+
+// What xSnd.cpp casts iSndLookup's result to. Reproduced here so the offsets
+// this file checks are the ones the game actually reads.
+struct test_lookup
+{
+    U32 num_samples; // 0x00
+    U32 num_nibbles; // 0x04
+    U32 sample_rate; // 0x08
+    U8 pad0C[0x58]; // 0x0C
+    S32 ID; // 0x64
+};
+
+#define SND_ASSET 0x11111111
+#define STRM_ASSET 0x22222222
+
+static void test_snd()
+{
+    printf("iSnd\n");
+
+    check(sizeof(xSndVoiceInfo) == 100,
+          "xSndVoiceInfo is 100 bytes, as iSndPlay's offset/100 assumes");
+    check(offsetof(test_lookup, ID) == 0x64, "the lookup id sits at 0x64, where xSnd.cpp reads it");
+
+    memset(&gSnd, 0, sizeof(gSnd));
+    for (S32 i = 0; i < 8; i++)
+    {
+        gSnd.categoryVolFader[i] = 1.0f;
+    }
+
+    iSndInit();
+
+    // A table with one sound and one stream, in the order iSndLookup walks:
+    // sfx first, then streams, then cutscene.
+    static test_sndinfo table;
+    memset(&table, 0, sizeof(table));
+    table.num_sfx = 1;
+    table.num_streams = 1;
+    table.num_cutscene = 0;
+
+    table.entry[0].assetID = SND_ASSET;
+    table.entry[0].sample_rate = 32000;
+    table.entry[0].num_samples = 3200; // 0.1 s at 32 kHz
+
+    table.entry[1].assetID = STRM_ASSET;
+    table.entry[1].sample_rate = 32000;
+    table.entry[1].num_samples = 32000; // 1.0 s
+
+    check(iSndLoadSounds(&table) == 1, "iSndLoadSounds accepts a table");
+
+    check(iSndLookup(0) == NULL, "asset id 0 looks up to nothing");
+    check(iSndLookup(0x99999999) == NULL, "an unknown asset looks up to nothing");
+
+    test_lookup* lk = (test_lookup*)iSndLookup(SND_ASSET);
+    check(lk != NULL, "a sound is found");
+    if (lk != NULL)
+    {
+        check(lk->sample_rate == 32000, "the lookup reports the sample rate");
+        check(lk->num_samples == 3200, "the lookup reports the sample count");
+        check(lk->ID >= 0x1000, "a sound gets an id at or above 0x1000");
+    }
+
+    test_lookup* sk = (test_lookup*)iSndLookup(STRM_ASSET);
+    check(sk != NULL, "a stream is found");
+    if (sk != NULL)
+    {
+        check(sk->ID > 0 && sk->ID < 0x1000, "a stream gets an id below 0x1000");
+    }
+
+    // Voice allocation: flag 4 means stream, and streams live in the first six
+    // slots. Everything else lands at 6 or above.
+    S32 sv = iSndFindFreeVoice(128, 0x4, 0);
+    check(sv >= 0 && sv < 6, "a stream voice comes from the first six slots");
+
+    S32 nv = iSndFindFreeVoice(128, 0x2, 0);
+    check(nv >= 6 && nv < 64, "a sound voice comes from slot 6 or above");
+
+    // Exhaust the stream slots; the sixth request must fail rather than spill
+    // into the sound range.
+    S32 taken = 1;
+    while (taken < 6 && iSndFindFreeVoice(128, 0x4, 0) >= 0)
+    {
+        taken++;
+    }
+    check(taken == 6, "all six stream slots can be taken");
+    check(iSndFindFreeVoice(128, 0x4, 0) == -1,
+          "a seventh stream request fails rather than using a sound slot");
+
+    iSndSceneExit();
+
+    // Timing. The null backend is silent but keeps the clock, because the game
+    // waits on sounds; a voice must report playing for the sample's length.
+    lk = (test_lookup*)iSndLookup(SND_ASSET);
+    S32 v = iSndFindFreeVoice(128, 0x2, 0);
+    check(v >= 6, "a voice for the timing test");
+
+    xSndVoiceInfo* vp = &gSnd.voice[v];
+    vp->assetID = SND_ASSET;
+    vp->sndID = 0x4242;
+    vp->sample_rate = 32000;
+    vp->vol = 1.0f;
+    vp->pitch = 1.0f;
+    vp->flags = 0x2 | 1;
+    vp->category = (sound_category)0;
+
+    check(iSndPlay(vp) == 0x4242, "iSndPlay returns the handle");
+    check(iSndIsPlaying(SND_ASSET), "the sound is playing straight after starting");
+    check(iSndIsPlayingByHandle(0x4242), "and by handle");
+    check(!iSndIsPlayingByHandle(0), "handle 0 is never playing");
+
+    check(iSndGetVol(0x4242) == 1.0f, "iSndGetVol reports what was set");
+    iSndSetVol(0x4242, 0.25f);
+    check(iSndGetVol(0x4242) == 0.25f, "iSndSetVol updates it");
+
+    // 0.1 s of samples: still playing well before, finished well after.
+    iHostSleepUntilNs(iHostMonotonicNs() + 30000000ULL); // 0.03 s
+    check(iSndIsPlayingByHandle(0x4242), "still playing a third of the way in");
+
+    iHostSleepUntilNs(iHostMonotonicNs() + 120000000ULL); // past the end
+    check(!iSndHostIsPlaying(0), "the device retires the voice when its time is up");
+
+    iSndUpdate();
+    check(!iSndIsPlayingByHandle(0x4242), "iSndUpdate clears the finished handle");
+    check(gSnd.voice[v].sndID == 0, "and the game-side slot with it");
+
+    // Pause holds a voice past its natural end.
+    lk = (test_lookup*)iSndLookup(SND_ASSET);
+    v = iSndFindFreeVoice(128, 0x2, 0);
+    vp = &gSnd.voice[v];
+    vp->assetID = SND_ASSET;
+    vp->sndID = 0x4343;
+    vp->sample_rate = 32000;
+    vp->vol = 1.0f;
+    vp->pitch = 1.0f;
+    iSndPlay(vp);
+
+    iSndPause(0x4343, 1);
+    iHostSleepUntilNs(iHostMonotonicNs() + 150000000ULL); // past its length
+    iSndUpdate();
+    check(iSndIsPlayingByHandle(0x4343), "a paused voice does not finish on its own");
+
+    iSndStop(0x4343);
+    check(!iSndIsPlayingByHandle(0x4343), "iSndStop ends it");
+    check(gSnd.voice[v].sndID == 0, "and clears the game-side handle");
+
+    iSndExit();
+}
+
 int main()
 {
     printf("bfbb PC platform layer selftest\n\n");
@@ -391,6 +578,7 @@ int main()
     test_file();
     test_pad();
     test_savegame();
+    test_snd();
 
     printf("\n%s (%d failure%s)\n", failures ? "FAILED" : "passed", failures,
            failures == 1 ? "" : "s");

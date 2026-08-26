@@ -217,10 +217,15 @@ and means nothing by it. clang's `-w` cannot be overridden by a later
 promoted back to errors. The rule underneath both: if a flag changes the number,
 check that it changed the *port* and not the *diagnostic policy*.
 
-`src/SB/Core/pc/tests/selftest.cpp` is the other half: **84 checks** over every
+`src/SB/Core/pc/tests/selftest.cpp` is the other half: **113 checks** over every
 implemented interface that does not need a renderer, so "implemented" is a
-measurement rather than a claim. (86 `check()` call sites; two are the
+measurement rather than a claim. (Two further `check()` call sites are the
 could-not-make-a-temp-directory arms, which do not run when it works.)
+
+It also checks `sizeof(xSndVoiceInfo) == 100`, which is only true in a 32-bit
+build -- `iSndPlay` divides a byte offset by it. That check is what caught
+`CMakeLists.txt` still building 64-bit after 5(a) settled the question; the two
+now agree, and `BFBB_BUILD_32BIT` is on by default.
 
 `--host` is the third: both `iHost` backends must implement everything
 `iHost.h` declares. Nothing else notices when they diverge, because the layer
@@ -236,18 +241,17 @@ cmake -S . -B build-pc -G Ninja && cmake --build build-pc && ./build-pc/pc_selft
 
 ## 4. What exists
 
-`src/SB/Core/pc/` — 12 implementation files, 72 of the 178 interface functions
+`src/SB/Core/pc/` — 14 implementation files, 94 of the 178 interface functions
 game code actually calls, on Linux and on Windows.
 
 **Done:** `iTime` `iMath` `iMemMgr` `iFile` `iPad` `iSystem` `iTRC` `iColor`
-`isavegame`, plus `intrin.cpp` (`__fabs`/`__fabsf` — glibc declares both and
-defines neither).
+`isavegame` `iSnd`, plus `intrin.cpp` (`__fabs`/`__fabsf` — glibc declares both
+and defines neither).
 
-**Header only, no body:** `iSnd` (22 fns, the largest group after rendering),
-`iModel` (19), `iMath3` (10), `iCollide` (10), `iScrFX` (10), `iEnv` (7),
+**Header only, no body:** `iModel` (19), `iMath3` (10), `iCollide` (10), `iScrFX` (10), `iEnv` (7),
 `iLight` (7), `iAnim` (5), `iCutscene` (4), `iParMgr` (4), `iDraw` (3),
-`iMorph` (2), `iFX` (1), `iCollideFast` (1), `iFMV` (1). All but `iSnd`,
-`iMath3` and `iCollide` need librw.
+`iMorph` (2), `iFX` (1), `iCollideFast` (1), `iFMV` (1). All but `iMath3` and
+`iCollide` need librw.
 
 **Not interfaces:**
 
@@ -266,6 +270,9 @@ defines neither).
   gets `FABS(-3) == -3`. The selftest checks this specifically.
 - `iPadHost.h` / `iPadHostNull.cpp` — the device end of input, behind a seam of
   its own, older than `iHost` and the model for it.
+- `iSndHost.h` / `iSndHostNull.cpp` — the device end of audio, same shape.
+  `null` is silent and still keeps time; see 5(b) for why that matters. Select
+  with `-DBFBB_AUDIO_BACKEND=`, as with `BFBB_INPUT_BACKEND`.
   `null` is a real configuration (no controllers), not a placeholder. Nothing
   is wired to a real device yet; SDL2 is the obvious first backend.
 - `VERBATIM.txt` — the 16 headers copied unchanged from `gc/`, with the hash
@@ -315,13 +322,34 @@ Two cautions about the measurement, both of which cost a wrong number first:
 - The tool compiles game code against the pc/ *headers*. It does not build the
   pc/ *implementation*, which is a separate question — see (f).
 
-### (b) `iSnd` — 22 functions
+### (b) `iSnd` — DONE, with a silent backend
 
-The largest interface group that does not need a renderer. Follow the `iPad`
-shape: put the device end behind a backend seam with a null implementation that
-always compiles, and keep the mapping onto the game's semantics on this side.
-Do **not** make the layer depend on an audio library being present at build
-time.
+All 29 entry points are implemented in `src/SB/Core/pc/iSnd.cpp`, with the
+device end behind `iSndHost.h` and `iSndHostNull.cpp` under it. The GameCube
+original is 2051 lines, nearly all of it AX, MIX, ARAM and DVD; none of that
+has a host counterpart, so what is here is the part with the game's semantics
+in it -- the voice table, the handle scheme, the six-stream/58-sound division,
+the lookup and its id ranges.
+
+**The null backend is silent but keeps time**, and that is the design decision
+worth knowing. The obvious null audio backend reports nothing ever playing.
+That is wrong here in a way that gets blamed on the game rather than the audio:
+zTalkBox holds a line on screen until its clip finishes, cutscenes gate on
+`iSndIsPlayingByHandle`, and NPCs stagger barks by asking whether the last one
+is done. Finish every sound instantly and dialogue flashes past and cutscenes
+desynchronise -- which reads as the port getting the game code wrong. So the
+backend records each sample's length and reports the voice as playing for
+exactly that long, scaled by pitch. No sound, every sound-derived timing still
+correct.
+
+29 selftest checks cover it, including that a paused voice does not finish on
+its own and that `iSndUpdate` clears both the platform slot and the game's.
+
+**What a real backend still has to add:** `iSndLoadSounds` registers the table
+so lookup and timing work, but does not open the HIP holding the sample data or
+convert loop points to nibble addresses. That is said at the site. Reverb
+(`iSndSetEnvironmentalEffect`) is deliberately not on the seam -- a backend with
+reverb should be handed the game's parameters, not a GameCube DSP preset index.
 
 ### (c) The 3 structural units — a design question, not a grind
 

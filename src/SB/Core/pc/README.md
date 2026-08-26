@@ -57,7 +57,7 @@ longer includes a `dolphin` header anywhere.
 | `iFMV` (1) | header only | Bink is proprietary; re-encode or drop |
 | `ngcrad3d` | not ported | GameCube radiosity; no host counterpart |
 
-72 of the 178 interface functions game code actually calls are implemented.
+94 of the 178 interface functions game code actually calls are implemented.
 The count is what `src/SB` *references*, not what the headers declare — the
 headers declare a good deal that nothing outside `src/SB/Core/gc` ever used,
 and that surface has been dropped rather than reproduced.
@@ -80,6 +80,14 @@ and that surface has been dropped rather than reproduced.
   notice: the layer is only ever built for one host at a time, so a function
   added to one backend and forgotten in the other builds clean on that host and
   fails to link on the other.
+- **`iSndHost.h`** and **`iSndHostNull.cpp`** are the device end of audio, the
+  same arrangement as input. `null` plays nothing and still **keeps time**: it
+  knows each sample's length and reports the voice as playing for exactly that
+  long. That is not decoration. zTalkBox holds a line until its clip finishes,
+  cutscenes gate on `iSndIsPlayingByHandle`, and NPCs stagger barks by asking
+  whether the last one is done -- a backend that finished everything instantly
+  would desynchronise all of them, and it would look like the port getting the
+  game code wrong rather than the audio.
 - **`iPadHost.h`** and **`iPadHostNull.cpp`** are the device end of input. The
   GameCube has one controller API that is always there; a host has several and
   none is guaranteed at build time, so the part that touches hardware is behind
@@ -92,7 +100,7 @@ and that surface has been dropped rather than reproduced.
   reach this one. `tools/pcprogress.py --drift` says when that has happened.
 - **`tests/selftest.cpp`** exercises every implemented interface that does not
   need a renderer. The GameCube side is scored by a byte-identical DOL; a port
-  has no such thing, so this is the substitute — 84 checks, so that
+  has no such thing, so this is the substitute — 113 checks, so that
   "implemented" is a measurement rather than a claim.
 
 ## Building
