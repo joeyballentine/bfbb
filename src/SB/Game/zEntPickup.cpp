@@ -2209,9 +2209,7 @@ void zEntPickup_SceneUpdate(F32 dt)
                 }
             }
 
-            sRewards[i].currRequest++;
-
-            if (sRewards[i].currRequest >= sRewards[i].num)
+            if (++sRewards[i].currRequest >= sRewards[i].num)
             {
                 memset(&sRewards[i], 0, sizeof(RewardList));
             }
