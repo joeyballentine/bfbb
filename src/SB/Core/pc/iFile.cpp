@@ -27,6 +27,32 @@ static file_queue_entry file_queue[4];
 // asset root, so both do their jobs here.
 static char sBasePath[512];
 
+// The asset root, from BFBB_ASSETS, kept separately from sBasePath.
+//
+// It exists because the GAME overwrites sBasePath: zMain.cpp:890 reads a PATH
+// setting out of SB.INI and hands it to iFileSetPath. On the console that is
+// harmless -- SB.INI's "PATH=." means the DVD root, which is the only place
+// there is -- but on a host "." is the working directory, and the port lost
+// every asset the moment it read its own INI. FONT.HIP and SB.INI loaded from
+// the asset root, and BOOT.HIP was then looked for in the build directory.
+//
+// So a RELATIVE path from the INI is resolved against the asset root, which is
+// what it means on the console, and an absolute one is honoured as given.
+static char sAssetRoot[512];
+
+static bool iPathIsAbsolute(const char* path)
+{
+    if (path == NULL || path[0] == 0)
+    {
+        return false;
+    }
+
+    // "/..." or "X:..." -- the second covers Windows drive letters, which the
+    // console never had to think about.
+    return path[0] == '/' || path[0] == '\\' ||
+           (path[1] == ':' && ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')));
+}
+
 void iFileInit()
 {
     sBasePath[0] = '\0';
@@ -47,9 +73,20 @@ void iFileInit()
     // An environment variable rather than a command-line argument, because
     // main() is the game's own in zMain.cpp and its argv handling is retail's.
     // Same arrangement as BFBB_WATCHDOG.
+    sAssetRoot[0] = 0;
+
     const char* assets = getenv("BFBB_ASSETS");
     if (assets != NULL && assets[0] != 0)
     {
+        snprintf(sAssetRoot, sizeof(sAssetRoot), "%s", assets);
+
+        size_t n = strlen(sAssetRoot);
+        if (n > 0 && sAssetRoot[n - 1] != '/' && n + 1 < sizeof(sAssetRoot))
+        {
+            sAssetRoot[n] = '/';
+            sAssetRoot[n + 1] = 0;
+        }
+
         iFileSetPath((char*)assets);
     }
 
@@ -71,7 +108,25 @@ void iFileSetPath(char* path)
         return;
     }
 
-    snprintf(sBasePath, sizeof(sBasePath), "%s", path);
+    // A relative path means "relative to the asset root", because that is what
+    // it means on the console. "." is the common case and means exactly the
+    // root. See the note at sAssetRoot.
+    if (!iPathIsAbsolute(path) && sAssetRoot[0] != 0)
+    {
+        if (path[0] == '.' && (path[1] == 0 || path[1] == '/'))
+        {
+            snprintf(sBasePath, sizeof(sBasePath), "%s%s", sAssetRoot,
+                     path[1] == '/' ? path + 2 : "");
+        }
+        else
+        {
+            snprintf(sBasePath, sizeof(sBasePath), "%s%s", sAssetRoot, path);
+        }
+    }
+    else
+    {
+        snprintf(sBasePath, sizeof(sBasePath), "%s", path);
+    }
 
     size_t n = strlen(sBasePath);
     if (n > 0 && sBasePath[n - 1] != '/' && n + 1 < sizeof(sBasePath))
@@ -160,6 +215,7 @@ U32 iFileOpen(const char* name, S32 flags, tag_xFile* file)
     {
         iResolveCaseInsensitive(ps->path, sizeof(ps->path));
     }
+
 
     FILE* fp = fopen(ps->path, mode);
     if (fp == NULL)

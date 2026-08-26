@@ -93,6 +93,31 @@ namespace
         } char_pos[127]; // 0x94
     };
 
+// Indexing font_data::char_index, which is 256 entries wide because a character
+// is a BYTE -- and which retail indexes with a signed `char`.
+//
+// On the console that is what the compiler emitted and the decomp reproduces
+// it: making the variable U8 costs a function against retail, so `char` is
+// what shipped. It is also a latent out-of-bounds WRITE. char_index sits at
+// offset 8 of font_data, straight after `asset` and `index_max`, so any
+// character with the high bit set gives a negative index that lands on top of
+// those two fields.
+//
+// Retail never trips it because the fonts it was built against are ASCII. THIS
+// GAME'S XBOX FONT IS NOT: its char_set is 71 characters and fourteen of them
+// have the high bit set, so the loop in init_font_data overwrites fd.asset
+// with a glyph index and the next dereference of it faults. That is where the
+// port stopped, in get_tex_bounds, having read the same pointer successfully
+// forty lines earlier.
+//
+// So the console keeps retail's expression exactly and the port makes the
+// index unsigned, which is what the 256-entry array was always sized for.
+#ifdef PLATFORM_PC
+#define XFONT_CHARIDX(_c) ((U8)(_c))
+#else
+#define XFONT_CHARIDX(_c) (_c)
+#endif
+
     struct font_data
     {
         font_asset* asset;
@@ -377,15 +402,15 @@ namespace
             i = fd.index_max;
             c = a.char_set[i];
 
-            fd.char_index[c] = i;
+            fd.char_index[XFONT_CHARIDX(c)] = i;
 
             if ((a.flags & 0x1) && c >= 'A' && c <= 'Z')
             {
-                fd.char_index[c + 0x20] = i;
+                fd.char_index[XFONT_CHARIDX(c + 0x20)] = i;
             }
             else if ((a.flags & 0x2) && c >= 'a' && c <= 'z')
             {
-                fd.char_index[c - 0x20] = i;
+                fd.char_index[XFONT_CHARIDX(c - 0x20)] = i;
             }
 
             fd.tex_bounds[i] = get_tex_bounds(fd, i);
@@ -655,9 +680,9 @@ void xfont::restore_render_state()
 basic_rect<F32> xfont::bounds(char c) const
 {
     font_data& fd = active_fonts[id];
-    U32 char_index = fd.char_index[c];
+    U32 char_index = fd.char_index[XFONT_CHARIDX(c)];
 
-    if (fd.char_index[c] == 0xFF)
+    if (fd.char_index[XFONT_CHARIDX(c)] == 0xFF)
     {
         return basic_rect<F32>::m_Null;
     }
