@@ -123,6 +123,13 @@ add_library(bfbb_platform STATIC
   # iCollide it links when librw does.
   ${PC_DIR}/iAnimSKB.cpp
 
+  # Ported: retail seeks to a cutscene inside its HIP with a DVD sector delta,
+  # (ainfo.sector - fileInfo.startAddr) << 5. There is no disc and tag_iFile has
+  # no DVDFileInfo, so the port does the same arithmetic without it -- exactly,
+  # not approximately; the comment at the site shows why. Needs the RwEngineInstance
+  # global, so like the others it resolves when librw does.
+  ${PC_DIR}/iCutscene.cpp
+
   ${INPUT_SOURCES}
   ${AUDIO_SOURCES}
   ${HOST_SOURCES}
