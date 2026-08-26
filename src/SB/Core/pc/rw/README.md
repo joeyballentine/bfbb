@@ -66,3 +66,28 @@ targeting the MSVC ABI, which was checked before any of this was written.
 
 `LIBRW_PLATFORM=NULL` is the core with no renderer backend, which is all the
 shim needs to compile against. `GL3` or `D3D9` come later, with a window.
+
+## Checking it
+
+A clean compile proves nothing here: the shim compiled and linked for a whole
+commit before anyone found out that it could not create a frame, because librw's
+engine had never been started. `tests/selftest.cpp` is the answer to that --
+it runs the shim and checks the values that come back:
+
+    clang++ -m32 -std=c++17 -Wno-everything -D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH \
+      -DPLATFORM_PC -DNON_MATCHING \
+      -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd \
+      -Xclang --dependent-lib=ucrtd -Xclang --dependent-lib=vcruntimed \
+      -Xlinker /NODEFAULTLIB:libucrt.lib -Xlinker /NODEFAULTLIB:libucrtd.lib \
+      -Iinclude -Iinclude/rwsdk -Isrc/SB/Core/pc/compat -Isrc/SB/Core/pc \
+      -Isrc/SB/Core/x -Isrc/SB/Game -Ilibrw -Ilibrw/src \
+      src/SB/Core/pc/rw/tests/selftest.cpp src/SB/Core/pc/rw/*.cpp \
+      librw-build/src/librw.lib -o rwselftest.exe
+
+The CRT flags are the fiddly part and are not optional: librw was built debug,
+and a mismatch here surfaces as unresolved `__imp__*` symbols that look like a
+missing library rather than like the wrong CRT. CMake will handle all of it
+once librw is vendored.
+
+Add to `tests/selftest.cpp` whenever you add to this directory. The test is not
+in `CMakeLists.txt` for the same reason the shim is not.

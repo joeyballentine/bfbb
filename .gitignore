@@ -47,3 +47,4 @@ classify.json
 
 # PC port build (CMake); see CMakeLists.txt
 build-pc/
+/.claude/worktrees/
