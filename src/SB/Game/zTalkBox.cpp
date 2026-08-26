@@ -1807,14 +1807,12 @@ namespace
                 shared.cb->on_answer(answer);
             }
 
+            U32 event = 0x1C6;
             if (this->answer_yes)
             {
-                trigger(0x1C5);
+                event = 0x1C5;
             }
-            else
-            {
-                trigger(0x1C6);
-            }
+            trigger(event);
         }
 
         shared.wait.reset_type();
