@@ -6,40 +6,39 @@
 // in the same order -- but the VERTEX FORMAT is not settled, and that is the
 // thing to read before touching this file.
 //
-// RwIm2DVertex is a typedef for rwGameCube2DVertex (rwplcore.h) and
-// RwIm3DVertex for RxObjSpace3DVertex (rwcore.h). Both are GameCube layouts,
-// and the game fills them through the RwIm2DVertexSet*/RwIm3DVertexSet* macros,
-// which write named fields. librw's are per backend and neither matches:
+// RwIm2DVertex was the thing that kept this file from compiling against a real
+// backend, and it is now resolved. rwplcore.h declares it per backend: the
+// console keeps rwGameCube2DVertex, and PLATFORM_PC gets a 28-byte struct with
+// librw's field order under RenderWare's field names, asserted against the
+// backend's own struct in layout_im2d.cpp.
 //
 //   RxObjSpace3DVertex   x y z  nx ny nz  r g b a (bytes)  u v
 //   gl3::Im3DVertex      x y z  nx ny nz  r g b a (bytes)  u v     -- agrees
 //
 //   rwGameCube2DVertex   x y z        RwRGBA        u v            -- 24 bytes
-//   gl3::Im2DVertex      x y z w      r g b a       u v            -- 32 bytes
+//   gl3::Im2DVertex      x y z w      r g b a       u v            -- 28 bytes
 //   d3d::Im2DVertex      x y z w      uint32 ARGB   u v            -- 28 bytes
 //
-// The 3D vertex happens to line up with GL3's. The 2D one does not line up with
-// anything: both real backends carry a w (the camera z the rasteriser needs for
-// perspective-correct interpolation) that the GameCube format has no room for,
-// and RwIm2DVertexSetRecipCameraZ is a no-op macro on this header because the
-// console did not need it either.
+// The 3D vertex happens to line up with GL3's and needed nothing. The 2D one
+// gained the `w` both real backends carry, and RwIm2DVertexSetRecipCameraZ --
+// a no-op macro on the console, because the GameCube driver had no use for it
+// -- now writes it.
 //
-// So RwIm2DVertex has to become the backend's layout at the same time a backend
-// is linked -- which means editing rwplcore.h's typedef and the twelve macros
-// under it, and it means RwIm2DVertexSetRecipCameraZ has to stop being nothing.
-// That is a decision for whoever links GL3 or D3D9, not a decision to guess at
-// now, so this file refuses to compile against a real backend rather than hand
-// one 24-byte vertices it will read 32 bytes out of. Same shape as the guard in
-// RwEngineOpen.
+// The trap that cost the most to find is recorded at the struct in rwplcore.h
+// and is worth repeating here: on D3D9 a vertex whose w is left at zero draws
+// NOTHING, because librw's im2d vertex shader multiplies the position by w
+// before the hardware divides by it. Most of the game's 2D call sites never set
+// a camera z, so RwIm2DVertex's default constructor puts 1.0 there.
 
 #include <rwcore.h>
 
 #include "rw.h"
 
-#if defined(RW_GL3) || defined(RW_GLES2) || defined(RW_GLES3) || defined(RW_D3D8) ||               \
-    defined(RW_D3D9) || defined(RW_WDGL) || defined(RW_PS2)
-#error                                                                                             \
-    "RwIm2DVertex is still the GameCube's 24-byte format. Give it the backend's Im2DVertex layout, and make RwIm2DVertexSetRecipCameraZ write the w, before rendering through a real device."
+// PS2 is the one backend still refused. Its Im2DVertex is a different shape
+// again -- fixed point, interleaved with the GIF tag -- and nothing here has
+// been written or checked against it.
+#if defined(RW_PS2)
+#error "RwIm2DVertex has no PS2 layout. See layout_im2d.cpp before rendering through the PS2 device."
 #endif
 
 // ---------------------------------------------------------------------------

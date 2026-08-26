@@ -1,30 +1,43 @@
 // Does librw read BFBB's actual Xbox assets, through the shim's RenderWare C API?
 //
-// Answer, measured against hb01.HOP (Hoop Boulevard) on 2026-08-26:
+// Answer, measured against hb01.HOP (Hoop Boulevard) with LIBRW_PLATFORM=D3D9
+// on 2026-08-26:
 //
-//   RWTX 17576   bytes -> read ok, 1 textures; first 128x128 8-bit raster=EMPTY
+//   RWTX 17576   bytes -> read ok, 1 textures; 128x128 32-bit raster=has pixels
+//   RWTX 2216    bytes -> read ok, 1 textures; 32x32   32-bit raster=has pixels
+//   RWTX 5288    bytes -> read ok, 1 textures; 64x64   32-bit raster=has pixels
+//   RWTX 17576   bytes -> read ok, 1 textures; 128x128 32-bit raster=has pixels
 //   JSP  1758696 bytes -> read ok, 296 atomics, 31268 verts, 33539 tris
+//   JSP  509172  bytes -> no CLUMP chunk at the start
 //
-// Geometry comes through whole: that is the level's real mesh, read by
-// RpClumpStreamRead out of a retail Xbox pack with no conversion step. Texture
-// dictionaries parse and their headers are right -- the dimensions and the
-// 8-bit palettised depth are what an Xbox TXD should say.
+// Every texture dictionary reads and every raster comes back with real pixel
+// data in it. The second JSP is not a failure: it is Heavy Iron's own 0xbeef01
+// chunk, which xJSP_MultiStreamRead reads separately for the node list and the
+// collision tree.
 //
-// The rasters are empty because LIBRW_PLATFORM=NULL has no render backend to
-// upload pixels to; librw's null driver does nothing in rasterCreate. That is
-// the NULL platform, not a format problem, and it is the next thing to retest
-// against a GL3 or D3D9 librw. Note the shim deliberately #errors against those
-// backends today (see engine_start.cpp and im.cpp) because EngineOpenParams and
-// RwIm2DVertex are unresolved for them -- so this is a measurement of where the
-// line currently is, not a claim that textures work.
+// TWO THINGS THAT LOOKED LIKE FAILURES AND WERE NOT, both worth knowing before
+// reading a result off this test again:
 //
-// Build: see README.md, then
-//   assettest.exe "<path>/hb/hb01.HOP"
+//   * Under LIBRW_PLATFORM=NULL every raster reported EMPTY. That was true --
+//     there was no device to upload pixels to -- and it stayed true after a
+//     D3D9 backend was linked, for a different reason: librw hands back NATIVE
+//     Xbox rasters and calls Raster::convertTexToCurrentPlatform from nowhere
+//     at all. The conversion is the application's job and the shim now does it
+//     in RwTexDictionaryStreamRead. A missing conversion looks exactly like a
+//     missing backend.
+//   * The check for "has pixels" used to read raster->originalPixels and
+//     ->cpPixels. Those are STAGING pointers, live only while a raster is
+//     locked; a device-backed raster keeps its pixels in the driver and reports
+//     NULL for both. The test locks the raster now and scans for a nonzero
+//     byte, because a freshly created raster locks just as successfully as a
+//     loaded one and hands back a page of zeros.
 //
-// Not a unit test: it opens a retail HOP, walks its table of contents with the
-// same AHDR layout xpkrsvc uses, and hands the raw asset bytes to
-// RwTexDictionaryStreamRead and RpClumpStreamRead. Everything the game would do
-// to load a level's textures and geometry, minus the game.
+// STILL UNEXPLAINED: every texture's name comes back empty. The selftest
+// confirms RwTexture::name is mirrored at the right offset, so the names are
+// genuinely absent from these dictionaries rather than misread. BFBB looks up
+// RWTX assets by their HIP directory name, so nothing may depend on the
+// texture's own -- but zAssetTypes.cpp's RWTX_Read is the place to check
+// before trusting that.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +47,14 @@
 #include <rpworld.h>
 #include <rpskin.h>
 #include <rpmatfx.h>
+
+// Pulls in librw's own header. The raster check below asks librw directly --
+// locking a raster is not something the RenderWare C API exposes here -- and
+// this is the one include that provides it. Not "rw.h": librw's header has no
+// include guard, and stream.h is the file that owns including it.
+#include "../stream.h"
+
+#include "iWindow.h"
 
 static unsigned char* g_file;
 static long g_size;
@@ -47,8 +68,34 @@ static RwTexture* CountTexCB(RwTexture* t, void*)
     if (g_texcount == 0 && t)
     {
         snprintf(g_firstname, sizeof(g_firstname), "%s", t->name);
-        if (t->raster) { g_w = t->raster->width; g_h = t->raster->height; g_d = t->raster->depth;
-                         g_haspixels = (t->raster->originalPixels != NULL) || (t->raster->cpPixels != NULL); }
+        if (t->raster)
+        {
+            g_w = t->raster->width; g_h = t->raster->height; g_d = t->raster->depth;
+
+            // originalPixels/cpPixels are STAGING pointers, live only while a
+            // raster is locked. A device-backed raster keeps its pixels in the
+            // driver's texture object, so both are NULL and reading them says
+            // "EMPTY" about a raster that is perfectly full -- which is what
+            // this test reported until the day a D3D9 backend was linked.
+            //
+            // Locking is the portable question: it hands back the pixels
+            // whatever platform they live on. The nonzero scan is the rest of
+            // it, because a freshly created raster locks just as successfully
+            // as a loaded one and returns a page of zeros.
+            rw::Raster* ras = reinterpret_cast<rw::Raster*>(t->raster);
+            rw::uint8* px = ras->lock(0, rw::Raster::LOCKREAD);
+            g_haspixels = false;
+            if (px != NULL)
+            {
+                int span = ras->width * (ras->depth / 8);
+                if (span > 4096) { span = 4096; }
+                for (int i = 0; i < span; i++)
+                {
+                    if (px[i] != 0) { g_haspixels = true; break; }
+                }
+                ras->unlock(0);
+            }
+        }
     }
     g_texcount++;
     return t;
@@ -78,6 +125,23 @@ int main(int argc, char** argv)
     fread(g_file, 1, g_size, f);
     fclose(f);
     printf("%s  (%ld bytes)\n\n", argv[1], g_size);
+
+    // A real backend needs a window before the engine can open on it. Under
+    // LIBRW_PLATFORM=NULL there is none and this stays headless -- which is the
+    // configuration this test was first written against, where every raster
+    // came back EMPTY because there was no device to upload pixels to.
+#ifndef RW_NULL
+    iWindowParams windowParams;
+    windowParams.title = "bfbb assettest";
+    windowParams.width = 640;
+    windowParams.height = 480;
+    windowParams.fullscreen = false;
+    if (!iWindowOpen(&windowParams))
+    {
+        printf("could not open a window; the render backend cannot start" );
+        return 1;
+    }
+#endif
 
     RwEngineInit(NULL, 0, 0);
     RpWorldPluginAttach();

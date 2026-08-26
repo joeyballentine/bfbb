@@ -24,6 +24,22 @@ static inline rw::TexDictionary* asTexDictionary(const RwTexDictionary* d)
     return const_cast<rw::TexDictionary*>(reinterpret_cast<const rw::TexDictionary*>(d));
 }
 
+// Hands each texture's raster to librw's platform conversion and puts back
+// whatever comes out. convertTexToCurrentPlatform DESTROYS the old raster when
+// it converts and returns the same pointer when no conversion is needed, so the
+// result has to be stored rather than assumed either way.
+static rw::Texture* convertRasterToPlatform(rw::Texture* texture, void* data)
+{
+    (void)data;
+
+    if (texture != NULL && texture->raster != NULL)
+    {
+        texture->raster = rw::Raster::convertTexToCurrentPlatform(texture->raster);
+    }
+
+    return texture;
+}
+
 RwTexDictionary* RwTexDictionaryStreamRead(RwStream* stream)
 {
     if (stream == NULL)
@@ -34,7 +50,46 @@ RwTexDictionary* RwTexDictionaryStreamRead(RwStream* stream)
     // Both sides expect the rwID_TEXDICTIONARY chunk header to have been eaten
     // already -- zAssetTypes.cpp calls RwStreamFindChunk first -- and pick up
     // at the STRUCT chunk inside it.
-    return reinterpret_cast<RwTexDictionary*>(rw::TexDictionary::streamRead(stream));
+    rw::TexDictionary* dict = rw::TexDictionary::streamRead(stream);
+    if (dict == NULL)
+    {
+        return NULL;
+    }
+
+    // **The conversion librw will not do for you.**
+    //
+    // A TXD holds NATIVE rasters -- BFBB's are Xbox ones, because these are the
+    // Xbox game's assets -- and TexDictionary::streamRead gives back exactly
+    // that: a raster whose `platform` is PLATFORM_XBOX, holding swizzled or DXT
+    // Xbox pixel data that the D3D9 device cannot bind.
+    //
+    // librw has the conversion (Raster::convertTexToCurrentPlatform, with real
+    // xbox_to_d3d and xbox_to_gl3 paths behind it) and **calls it from nowhere
+    // at all**: grep the whole library and the only hits are its definition and
+    // its declaration. It is the application's job, and RenderWare's own
+    // RwTexDictionaryStreamRead did it as part of reading, because on a console
+    // the native format WAS the device's format and no step was visible.
+    //
+    // Without this every texture in the game reads successfully and stays
+    // blank, which is precisely what the asset test reported for a whole day:
+    // "read ok, 1 textures; 128x128 8-bit raster=EMPTY". A missing conversion
+    // looks exactly like a missing backend.
+    // Walked by hand: librw's TexDictionary has no ForAllTextures of its own,
+    // only the LinkList. The `next` link is read before the body runs, matching
+    // what RwTexDictionaryForAllTextures below does, so that this stays correct
+    // if a conversion ever has to replace a texture rather than its raster.
+    rw::LinkList& textures = dict->textures;
+    for (rw::LLLink* cur = textures.link.next; cur != textures.end();)
+    {
+        rw::Texture* texture = rw::Texture::fromDict(cur);
+        rw::LLLink* next = cur->next;
+
+        convertRasterToPlatform(texture, NULL);
+
+        cur = next;
+    }
+
+    return reinterpret_cast<RwTexDictionary*>(dict);
 }
 
 RwBool RwTexDictionaryDestroy(RwTexDictionary* dict)

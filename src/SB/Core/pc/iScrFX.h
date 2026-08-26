@@ -8,7 +8,11 @@ struct _iMotionBlurData
 {
     S32 motionBlurAlpha;
     RwRaster* motionBlurFrontBuffer;
-    rwGameCube2DVertex vertex[4];
+    // RwIm2DVertex, not rwGameCube2DVertex. They are the same type on the
+    // console -- rwplcore.h typedefs one to the other -- but the port declares
+    // RwIm2DVertex per render backend and rwGameCube2DVertex does not exist
+    // here at all. The gc/ copy of this header keeps the concrete name.
+    RwIm2DVertex vertex[4];
     U16 index[6];
     U32 w;
     U32 h;

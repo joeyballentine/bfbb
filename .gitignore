@@ -47,4 +47,10 @@ classify.json
 
 # PC port build (CMake); see CMakeLists.txt
 build-pc/
+
+# Out-of-tree librw builds. Configuring a backend on its own is the quickest
+# way to find out whether it compiles at all before the shim is ready for it --
+# build-librw-d3d9/ was how the D3D9 backend got checked -- and the results are
+# throwaway. build-pc/ above is the one that matters.
+build-librw-*/
 /.claude/worktrees/

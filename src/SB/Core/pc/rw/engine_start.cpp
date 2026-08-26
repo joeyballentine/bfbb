@@ -28,7 +28,18 @@
 
 #include <rwcore.h>
 
+// BEFORE librw's headers, and that ordering is load-bearing: rwd3d.h declares
+// EngineOpenParams as { HWND window; } only when _D3D9_H_ is already defined,
+// and as { uint32 please_include_windows_h; } otherwise. Including these after
+// rw.h gives the second one and a compile error that names the fix.
+#if defined(RW_D3D9) || defined(RW_D3D8)
+#include <windows.h>
+#include <d3d9.h>
+#endif
+
 #include "rw.h"
+
+#include "iWindow.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -230,24 +241,57 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
         return FALSE;
     }
 
-    // librw's EngineOpenParams is declared per backend and has no definition
-    // under LIBRW_PLATFORM=NULL, and what it holds for the backends that do
-    // define it -- a window handle and a size for GL3, a HWND for D3D9 -- has
-    // no counterpart in RwEngineOpenParams, whose displayID is a pointer to the
-    // GameCube's RwGameCubeDeviceConfig. There is nothing to translate, so
-    // nothing is: the null device ignores the argument entirely.
+    // librw's EngineOpenParams is declared per backend and there is nothing in
+    // RwEngineOpenParams to translate from: its displayID is a pointer to the
+    // GameCube's RwGameCubeDeviceConfig, which describes a console's video
+    // encoder. So the parameters are built from the port's own window instead,
+    // and initParams is ignored -- iSystem.cpp opens the window before it
+    // reaches here, which is the same order gc/iSystem.cpp uses when it calls
+    // VIInit before RwEngineOpen.
     //
-    // This is the one place the shim would be wrong rather than merely
-    // incomplete once a renderer is linked, so it refuses to compile then.
-#if defined(RW_GL3) || defined(RW_D3D9) || defined(RW_PS2)
-#error "RwEngineOpen has no EngineOpenParams to give a real backend. Build one from the window."
-#endif
+    // This is the one place in the shim that has to know which backend was
+    // linked, because EngineOpenParams is the only librw type whose SHAPE
+    // changes with it. Everything else the port touches is backend-neutral.
     (void)initParams;
 
+#if defined(RW_D3D9) || defined(RW_D3D8)
+
+    // rw::d3d::EngineOpenParams is { HWND window; }.
+    rw::EngineOpenParams params;
+    params.window = (HWND)iWindowNativeHandle();
+
+    if (params.window == NULL)
+    {
+        // A D3D device cannot be created without one, and librw would assert
+        // rather than say so.
+        return FALSE;
+    }
+
+    if (!rw::Engine::open(&params))
+    {
+        return FALSE;
+    }
+
+#elif defined(RW_GL3)
+
+    // Not written, and not guessed at. GL3's EngineOpenParams differs again by
+    // which gfx library librw was built against -- SDL2, SDL3 and GLFW each
+    // give it a different shape -- so it needs an iWindowGlfw.cpp (or SDL) next
+    // to iWindowWin32.cpp and a matching arm here. The port is built for D3D9
+    // today; this arm is what the second backend costs, and it is small.
+#error "GL3 needs a GLFW or SDL iWindow implementation and the matching EngineOpenParams here."
+
+#else
+
+    // LIBRW_PLATFORM=NULL. The null device ignores the argument entirely, and
+    // there is no window -- which is what lets the shim's own tests run
+    // headless.
     if (!rw::Engine::open(NULL))
     {
         return FALSE;
     }
+
+#endif
 
     sGlobals.engineStatus = rwENGINESTATUSOPENED;
     return TRUE;
@@ -344,10 +388,20 @@ RwBool RwEngineTerm(void)
 // The functions below are the real forwarding path and start working the moment
 // a GL3 or D3D9 librw is linked; until then there is no screen to have a size.
 
+// types.h:146 defines `null` as a macro and librw has a NAMESPACE of that name,
+// so `rw::null::deviceSystem` stops parsing as soon as anything pulls types.h
+// in ahead of it -- which the windows.h at the top of this file now does. The
+// error it gives ("expected unqualified-id") names neither the macro nor the
+// header, so the push/pop is worth more than the two lines it costs.
+#pragma push_macro("null")
+#undef null
+
 static bool haveRenderDevice()
 {
     return rw::engine != NULL && rw::engine->device.system != rw::null::deviceSystem;
 }
+
+#pragma pop_macro("null")
 
 RwInt32 RwEngineGetCurrentVideoMode(void)
 {

@@ -619,6 +619,51 @@ have resolved to it: `?RwGameCubeSetMinRetraceCount@@YAXE@Z` against
 Worth knowing because nothing in the source looks wrong, and the error names a
 symbol that is visibly present in the object file.
 
+## The render backend (D3D9, as of 2026-08-26)
+
+The port targets **D3D9** and keeps GL3 reachable. Three things that were
+blockers here are done:
+
+  - **`RwEngineOpen` builds real `EngineOpenParams`.** rw::d3d's is
+    `{ HWND window; }`, taken from the port's own window seam
+    (`src/SB/Core/pc/iWindow.h`, `iWindowWin32.cpp`). RenderWare's `displayID`
+    is a `RwGameCubeDeviceConfig*` and had nothing to translate, so initParams
+    is ignored. The GL3 arm still `#error`s on purpose: GL3's params differ by
+    whether librw was built against GLFW, SDL2 or SDL3, and there is nothing
+    sensible to write before that choice is made. That arm is what a second
+    backend costs, and it is small.
+  - **`RwIm2DVertex` is the backend's layout.** rwplcore.h declares it per
+    backend, `layout_im2d.cpp` asserts it against the backend's own struct, and
+    `RwIm2DVertexSetRecipCameraZ` writes the `w` instead of being nothing.
+  - **Rasters carry real pixels.** `RwTexDictionaryStreamRead` calls
+    `Raster::convertTexToCurrentPlatform` on every texture it reads. librw HAS
+    that conversion, with working xbox_to_d3d and xbox_to_gl3 paths, and calls
+    it **from nowhere at all** -- it is the application's job, and RenderWare
+    hid it on a console because the native format WAS the device's format.
+    Without it every texture reads successfully and stays blank, which looks
+    exactly like a missing backend.
+
+Four things a real device needs that the null one never did. All four were
+found by the selftest FAULTING, not by reading code, which is the argument for
+running the shim rather than compiling it:
+
+  - A **window** must exist before `RwEngineOpen`.
+  - A camera needs a **frame** before `RwCameraBeginUpdate`: d3ddevice.cpp:1228
+    opens with `Matrix::invert(&inv, cam->getFrame()->getLTM())`, so a frameless
+    camera dereferences NULL inside the driver -- no error, no return value.
+  - A camera needs a **frame buffer and z buffer raster**, the pair
+    iCamera.cpp:27-28 attaches. This is also the first exercise of
+    `RwRasterCreate`'s success path, which NULL could never reach.
+  - A 2D vertex whose **`w` is zero draws nothing**: librw's im2d vertex shader
+    multiplies the position by w before the hardware divides by it. Most of the
+    game's 2D call sites never set a camera z, so `RwIm2DVertex`'s default
+    constructor puts 1.0 there.
+
+`tests/selftest.cpp` runs **460 checks against a live D3D9 device** and 454
+against `LIBRW_PLATFORM=NULL`. Keeping the headless configuration working is
+what lets this layer be tested on a machine with no display, and it is a
+supported configuration rather than a leftover.
+
 ## Do this next
 
 Four symbols the PC build references and this directory does not define. Only

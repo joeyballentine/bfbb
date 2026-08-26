@@ -30,6 +30,8 @@
 // the shim by design.
 #include "../stream.h"
 
+#include "iWindow.h"
+
 static int failures;
 
 static void check(bool ok, const char* what)
@@ -100,10 +102,33 @@ static void test_engine_startup()
     check(RpPTankPluginAttach() != FALSE, "RpPTankPluginAttach");
     check(_rpPTankAtomicDataOffset > 0, "RpPTank got a slot in the atomic's plugin block");
 
+    // A real backend needs a window before the engine can open on it -- D3D9
+    // creates its device against an HWND -- so this test opens one, the way
+    // iSystem.cpp will. Under LIBRW_PLATFORM=NULL there is nothing to open and
+    // the test stays headless, which is what lets it run on a build machine.
+#ifndef RW_NULL
+    iWindowParams windowParams;
+    windowParams.title = "bfbb rw_selftest";
+    windowParams.width = 640;
+    windowParams.height = 480;
+    windowParams.fullscreen = false;
+    check(iWindowOpen(&windowParams) != FALSE, "iWindowOpen for the render backend");
+    printf("  (window backend: %s)\n", iWindowBackendName());
+#endif
+
     RwEngineOpenParams params;
     params.displayID = NULL;
     check(RwEngineOpen(&params) != FALSE, "RwEngineOpen");
-    check(RwEngineInstance->engineStatus == rwENGINESTATUSOPENED, "engineStatus is OPENED");
+
+    // Everything after this dereferences an open engine. Bailing out here turns
+    // "the backend could not start" into one reported failure instead of a
+    // segfault twenty checks later, which is how this first ran under D3D9.
+    if (RwEngineInstance->engineStatus != rwENGINESTATUSOPENED)
+    {
+        check(false, "engineStatus is OPENED -- stopping, the rest needs an open engine");
+        return;
+    }
+    check(true, "engineStatus is OPENED");
 
     check(RwEngineStart() != FALSE, "RwEngineStart");
     check(RwEngineInstance->engineStatus == rwENGINESTATUSSTARTED, "engineStatus is STARTED");
@@ -115,13 +140,26 @@ static void test_engine_startup()
               RwEngineInstance->stringFuncs.vecStrcmp("spec3", "spec4") != 0,
           "RwEngineInstance->stringFuncs.vecStrcmp");
 
+    RwVideoMode videoMode;
+#ifdef RW_NULL
     // No renderer is linked, so there is no video mode. The shim has to say so
     // instead of forwarding librw's null device, which reports success without
     // writing to the struct -- xScrFx would size a full-screen rectangle from
     // whatever was on its own stack.
-    RwVideoMode videoMode;
     check(RwEngineGetCurrentVideoMode() == -1, "no current video mode without a backend");
     check(RwEngineGetVideoModeInfo(&videoMode, 0) == NULL, "no video mode info without a backend");
+#else
+    // With a backend the forwarding path is live, and this is the first thing
+    // that proves it: a mode index that is not -1, and a mode whose width and
+    // height were actually written rather than left as whatever was on the
+    // stack. xScrFx sizes its full-screen rectangle from exactly this.
+    check(RwEngineGetCurrentVideoMode() >= 0, "the backend reports a current video mode");
+    memset(&videoMode, 0xCD, sizeof(videoMode));
+    check(RwEngineGetVideoModeInfo(&videoMode, RwEngineGetCurrentVideoMode()) == &videoMode,
+          "RwEngineGetVideoModeInfo");
+    check(videoMode.width > 0 && videoMode.height > 0,
+          "and it wrote a real width and height into the caller's struct");
+#endif
 }
 
 static void test_frames()
@@ -434,6 +472,25 @@ static void test_cameras()
           "RwCameraGetViewWindow reads the mirrored field");
     check(RwCameraGetRaster(camera) == NULL && RwCameraGetZRaster(camera) == NULL,
           "a new camera has no rasters");
+
+    // With a real backend the camera needs somewhere to draw before anything
+    // begins an update on it: librw hands camera->frameBuffer to the device as
+    // its render target, and a NULL one faults inside the driver rather than
+    // failing. iCamera.cpp:27-28 attaches exactly these two, and this is the
+    // same pair -- so it is also the first exercise of RwRasterCreate's SUCCESS
+    // path, which LIBRW_PLATFORM=NULL could never reach (its driver asserts in
+    // rasterCreate). See rw/TODO.md, "Recorded but not rendered".
+#ifndef RW_NULL
+    RwRaster* cameraRaster = RwRasterCreate(640, 480, 0, rwRASTERTYPECAMERA);
+    RwRaster* zRaster = RwRasterCreate(640, 480, 0, rwRASTERTYPEZBUFFER);
+    check(cameraRaster != NULL, "RwRasterCreate(rwRASTERTYPECAMERA) with a backend linked");
+    check(zRaster != NULL, "RwRasterCreate(rwRASTERTYPEZBUFFER) with a backend linked");
+    check(cameraRaster != NULL && cameraRaster->width == 640 && cameraRaster->height == 480,
+          "and the raster came back the size it was asked for");
+    RwCameraSetRaster(camera, cameraRaster);
+    RwCameraSetZRaster(camera, zRaster);
+    check(RwCameraGetRaster(camera) == cameraRaster, "RwCameraSetRaster");
+#endif
     check(RwCameraGetWorld(camera) == NULL, "and is in no world");
 
     RwCameraSetProjection(camera, rwPARALLEL);
@@ -461,6 +518,20 @@ static void test_cameras()
     // hook. Nothing else in the port would notice this being wrong until
     // someone played a cutscene.
     check(RwEngineInstance->curCamera == NULL, "curCamera is null before an update");
+
+    // A camera needs a FRAME before a real device begins an update on it.
+    // d3ddevice.cpp:1228 opens with
+    //
+    //     Matrix::invert(&inv, cam->getFrame()->getLTM());
+    //
+    // so a frameless camera dereferences NULL inside the driver -- no error, no
+    // return value, just a fault. LIBRW_PLATFORM=NULL's beginUpdate does
+    // nothing at all and never noticed, which is why this test did not attach
+    // one until a backend was linked. zGame.cpp and iCamera.cpp:24-31 always
+    // attach one, so the game was never going to hit this; the test was.
+    RwFrame* cameraFrame = RwFrameCreate();
+    check(cameraFrame != NULL, "a frame for the camera to sit on");
+    RwCameraSetFrame(camera, cameraFrame);
 
     check(RwCameraBeginUpdate(camera) == camera, "RwCameraBeginUpdate");
     check(RwEngineInstance->curCamera == camera,
@@ -540,8 +611,18 @@ static void test_cameras()
     // device's clearCamera. LIBRW_PLATFORM=NULL has neither -- its clearCamera
     // is an empty function -- so a success here would prove nothing about what
     // ends up on screen. Whoever links GL3 or D3D9 finishes these.
+#ifdef RW_NULL
     check(RwCameraShowRaster(camera, NULL, rwRASTERFLIPWAITVSYNC) == NULL,
           "RwCameraShowRaster refuses a camera with no frame buffer");
+#else
+    // With a backend linked this camera HAS a frame buffer -- attached above,
+    // because beginUpdate needs one -- so there is nothing left to refuse and
+    // the old check was only ever testing the absence of a renderer. What
+    // showing it actually puts on screen still is not checked here: that needs
+    // a frame drawn first, and this test draws nothing.
+    check(RwCameraGetRaster(camera) != NULL,
+          "the camera has a frame buffer, so RwCameraShowRaster has nothing to refuse");
+#endif
     check(RwCameraShowRaster(NULL, NULL, 0) == NULL, "RwCameraShowRaster(NULL) is refused");
     check(RwCameraClear(NULL, NULL, rwCAMERACLEARZ) == NULL, "RwCameraClear(NULL) is refused");
 
@@ -663,6 +744,16 @@ static void test_worlds()
     // than assigning its own: librw's beginUpdate chain sets currentWorld from
     // the camera's world, and until there was a world to put a camera in, that
     // could only be checked against NULL.
+    //
+    // The frame and the rasters are the same requirement as in test_cameras:
+    // a real device's beginUpdate dereferences the camera's frame and renders
+    // into its frame buffer. See the note there.
+#ifndef RW_NULL
+    RwCameraSetFrame(camera, RwFrameCreate());
+    RwCameraSetRaster(camera, RwRasterCreate(640, 480, 0, rwRASTERTYPECAMERA));
+    RwCameraSetZRaster(camera, RwRasterCreate(640, 480, 0, rwRASTERTYPEZBUFFER));
+#endif
+
     RwCameraBeginUpdate(camera);
     check(RwEngineInstance->curWorld == world, "an update on it makes it RwEngineInstance->curWorld");
     RwCameraEndUpdate(camera);
@@ -886,6 +977,39 @@ static int sIm2DCount;
 static int sIm3DPrim;
 static int sIm3DEnds;
 
+static int sIm2DIndexedPrim;
+static int sIm2DIndexCount;
+
+// The indexed form needed standing in for too, and that it did not is how this
+// test faulted the first time a real backend was linked: the three stubs below
+// covered im2DRenderPrimitive, im3DRenderPrimitive and im3DEnd, so the indexed
+// call went to D3D9's real rasteriser -- outside any camera update, with no
+// render target bound.
+static void captureIm2DRenderIndexedPrimitive(rw::PrimitiveType type, void* verts,
+                                              rw::int32 numVerts, void* indices,
+                                              rw::int32 numIndices)
+{
+    (void)verts;
+    (void)numVerts;
+    (void)indices;
+    sIm2DIndexedPrim = (int)type;
+    sIm2DIndexCount = (int)numIndices;
+}
+
+static int sIm3DTransforms;
+
+// The last of the four. im3DTransform builds the device's own transformed
+// vertex buffer, so on D3D9 it is real work against real state -- the same
+// reason the indexed 2D call needed standing in for.
+static void captureIm3DTransform(void* verts, rw::int32 num, rw::Matrix* world, rw::uint32 flags)
+{
+    (void)verts;
+    (void)num;
+    (void)world;
+    (void)flags;
+    sIm3DTransforms++;
+}
+
 static void captureIm2DRenderPrimitive(rw::PrimitiveType type, void* verts, rw::int32 num)
 {
     sIm2DPrim = type;
@@ -919,7 +1043,13 @@ static void test_immediate()
     void (*savedIm2D)(rw::PrimitiveType, void*, rw::int32) = rw::engine->device.im2DRenderPrimitive;
     void (*savedIm3D)(rw::PrimitiveType) = rw::engine->device.im3DRenderPrimitive;
     void (*savedEnd)(void) = rw::engine->device.im3DEnd;
+    void (*savedIm2DIndexed)(rw::PrimitiveType, void*, rw::int32, void*, rw::int32) =
+        rw::engine->device.im2DRenderIndexedPrimitive;
+    rw::engine->device.im2DRenderIndexedPrimitive = captureIm2DRenderIndexedPrimitive;
     rw::engine->device.im2DRenderPrimitive = captureIm2DRenderPrimitive;
+    void (*savedIm3DTransform)(void*, rw::int32, rw::Matrix*, rw::uint32) =
+        rw::engine->device.im3DTransform;
+    rw::engine->device.im3DTransform = captureIm3DTransform;
     rw::engine->device.im3DRenderPrimitive = captureIm3DRenderPrimitive;
     rw::engine->device.im3DEnd = captureIm3DEnd;
 
@@ -934,8 +1064,11 @@ static void test_immediate()
           "and so is a zero-vertex primitive");
 
     RwImVertexIndex indices[6] = { 0, 1, 2, 0, 2, 3 };
+    sIm2DIndexedPrim = -1;
     check(RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, quad, 4, indices, 6) != FALSE,
           "RwIm2DRenderIndexedPrimitive");
+    check(sIm2DIndexedPrim == rw::PRIMTYPETRILIST && sIm2DIndexCount == 6,
+          "the primitive type and index count arrive unchanged");
     check(RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, quad, 4, NULL, 6) == FALSE,
           "RwIm2DRenderIndexedPrimitive with no indices is refused");
 
@@ -945,8 +1078,10 @@ static void test_immediate()
     // im.cpp.
     RwIm3DVertex verts[4];
     memset(verts, 0, sizeof(verts));
+    sIm3DTransforms = 0;
     check(RwIm3DTransform(verts, 4, NULL, rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA) != NULL,
           "RwIm3DTransform reports success");
+    check(sIm3DTransforms == 1, "and reaches the device once");
     check(RwIm3DTransform(NULL, 4, NULL, 0) == NULL, "RwIm3DTransform(NULL) is refused");
     check(RwIm3DTransform(verts, 0, NULL, 0) == NULL, "and so is a zero-vertex transform");
 
@@ -958,7 +1093,9 @@ static void test_immediate()
     check(RwIm3DEnd() != FALSE, "RwIm3DEnd");
     check(sIm3DEnds == 1, "and reaches the device once");
 
+    rw::engine->device.im2DRenderIndexedPrimitive = savedIm2DIndexed;
     rw::engine->device.im2DRenderPrimitive = savedIm2D;
+    rw::engine->device.im3DTransform = savedIm3DTransform;
     rw::engine->device.im3DRenderPrimitive = savedIm3D;
     rw::engine->device.im3DEnd = savedEnd;
 }
@@ -2273,10 +2410,20 @@ static void test_engine_shutdown()
     check(RpWorldCreate(&anyBox) == NULL, "RpWorldCreate without the world plugin is refused");
 
     check(sNumFree > 0, "librw freed through the memory functions it was given");
+
+#ifndef RW_NULL
+    iWindowClose();
+#endif
 }
 
 int main()
 {
+    // Unbuffered, so that a crash leaves the last completed check on screen
+    // instead of a half-flushed line. With a real render backend this test
+    // reaches driver code that can fault, and "which check was it" is the whole
+    // diagnosis.
+    setvbuf(stdout, NULL, _IONBF, 0);
+
     test_engine_startup();
     test_frames();
     test_values();

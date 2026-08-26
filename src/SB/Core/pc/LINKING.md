@@ -47,6 +47,14 @@ checks the linkage instead of the linker.
 
 ## What the link left behind
 
+**iFMV will not be a port of gc/iFMV.cpp.** It is the one unported module whose
+GameCube source is mostly Bink calls, and the decision taken is to convert the
+videos with ffmpeg ahead of time and play them back with something else, rather
+than to reimplement or license Bink. So its symbols in the count below are a
+placeholder for a different piece of work, not for a translation of the
+existing file. Nothing else in the port depends on it -- FMV playback is
+skippable -- so it is last.
+
 **The 71 are the known worklist**, not news: eleven modules under
 `src/SB/Core/gc` have a header in `src/SB/Core/pc` and no implementation.
 `iModel` (21) and `iParMgr` (12) dominate. Four of them are globals whose names

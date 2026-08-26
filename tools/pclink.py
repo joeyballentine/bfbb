@@ -80,6 +80,18 @@ MODULE_GLOBALS = {
 
 RENDERWARE = ["_rpCollisionGeometryDataOffset", "AtomicDefaultRenderCallBack"]
 
+# The OS libraries the port genuinely links against, for the same reason the
+# empty translation unit above pulls in the CRT: without them a D3D9 build
+# reports CreateWindowExA, Direct3DCreate9 and a dozen more as unresolved, and
+# they are a deficiency of this probe rather than a gap in the port. CMake
+# passes these through librw's own link interface and iWindowWin32.cpp's needs.
+SYSTEM_LIBS = [
+    "-luser32",
+    "-lgdi32",
+    "-lkernel32",
+    "-ld3d9",
+]
+
 
 def demangled_name(sym):
     """The bare identifier out of an lld-link message, mangled or not."""
@@ -135,7 +147,7 @@ def run_link():
         "-Xlinker", "/subsystem:console",
         "-Xlinker", "/errorlimit:0",
         str(anchor),
-    ] + [str(BUILD / a) for a in ARCHIVES] + [
+    ] + [str(BUILD / a) for a in ARCHIVES] + SYSTEM_LIBS + [
         "-o", str(BUILD / "pclink_probe.exe"),
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True, cwd=BUILD)

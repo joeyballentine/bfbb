@@ -109,6 +109,24 @@ else()
 endif()
 
 
+# --- window backend ---------------------------------------------------------
+# The one host seam whose implementation is chosen by the RENDER backend rather
+# than by the operating system: librw's EngineOpenParams is per backend, so
+# D3D9 wants a raw HWND and GL3 wants whatever GLFW or SDL hands back. See
+# src/SB/Core/pc/iWindow.h.
+if(BFBB_RENDER_BACKEND STREQUAL "GL3")
+  message(FATAL_ERROR
+    "BFBB_RENDER_BACKEND=GL3 needs a GLFW or SDL iWindow implementation that does "
+    "not exist yet -- see the GL3 arm of RwEngineOpen in "
+    "src/SB/Core/pc/rw/engine_start.cpp. Use D3D9 or NULL.")
+elseif(WIN32)
+  set(WINDOW_SOURCES ${PC_DIR}/iWindowWin32.cpp)
+else()
+  # NULL builds headless, so no window is needed and none is provided; a D3D9
+  # build off Windows is not a thing.
+  set(WINDOW_SOURCES)
+endif()
+
 # --- librw -------------------------------------------------------------------
 # A git submodule, pinned. Update it deliberately -- the shim in
 # src/SB/Core/pc/rw mirrors librw's object LAYOUTS, so a librw that reorders a
@@ -118,11 +136,25 @@ endif()
 #
 #     git submodule update --init --recursive
 #
-# LIBRW_PLATFORM=NULL is the core with no render backend. It is what the shim
-# is written and tested against today; GL3 and D3D9 need RwEngineOpen's
-# EngineOpenParams and the RwIm2DVertex layout resolved first, and the shim
-# refuses to compile against them until they are (see rw/TODO.md).
-set(LIBRW_PLATFORM "NULL" CACHE STRING "librw render backend")
+# The render backend. Three of librw's are reachable from here:
+#
+#   NULL   no renderer. Headless, and what the shim's selftest runs against --
+#          keeping this working is what lets the RenderWare layer be tested on
+#          a machine with no display at all.
+#   D3D9   what the port targets today.
+#   GL3    reachable in principle, and NOT yet: it needs an iWindowGlfw.cpp (or
+#          SDL) beside iWindowWin32.cpp and the matching EngineOpenParams arm in
+#          rw/engine_start.cpp, which #errors rather than guessing. GL3's params
+#          differ by which gfx library librw was built against, so there is
+#          nothing sensible to write until that choice is made.
+#
+# RwIm2DVertex follows this: rwplcore.h declares it per backend and
+# rw/layout_im2d.cpp asserts it against the backend's own struct, which is what
+# stops a mismatched vertex reaching a vertex declaration built from offsetof.
+set(BFBB_RENDER_BACKEND "D3D9" CACHE STRING "Render backend: D3D9, GL3 or NULL")
+set_property(CACHE BFBB_RENDER_BACKEND PROPERTY STRINGS D3D9 GL3 NULL)
+
+set(LIBRW_PLATFORM "${BFBB_RENDER_BACKEND}" CACHE STRING "librw render backend" FORCE)
 set(LIBRW_TOOLS OFF CACHE BOOL "" FORCE)
 set(LIBRW_INSTALL OFF CACHE BOOL "" FORCE)
 
@@ -162,7 +194,7 @@ endif()
 # reimplementation of RenderWare, not an implementation of its C API, and the
 # game calls the C API at sites the GameCube build matches against.
 file(GLOB RW_SHIM_SOURCES ${PC_DIR}/rw/*.cpp)
-add_library(bfbb_rw STATIC ${RW_SHIM_SOURCES})
+add_library(bfbb_rw STATIC ${RW_SHIM_SOURCES} ${WINDOW_SOURCES})
 
 target_include_directories(bfbb_rw PUBLIC
   ${PC_DIR}/compat

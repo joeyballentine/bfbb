@@ -42,7 +42,14 @@ typedef struct RwFileFunctions RwFileFunctions;
 typedef struct RwError RwError;
 typedef struct RwRGBAReal RwRGBAReal;
 typedef struct RwRGBA RwRGBA;
+#ifndef PLATFORM_PC
 typedef struct rwGameCube2DVertex rwGameCube2DVertex;
+#else
+// The port's 2D vertex is declared further down, per render backend. Both
+// names are forward declared here because shared game code uses both.
+typedef struct RwIm2DVertex RwIm2DVertex;
+typedef struct RwIm2DVertex rwGameCube2DVertex;
+#endif
 typedef struct RwEngineOpenParams RwEngineOpenParams;
 typedef struct RwGameCubeDeviceConfig RwGameCubeDeviceConfig;
 typedef struct RwDevice RwDevice;
@@ -866,6 +873,8 @@ struct RwRGBA
 
 #define RwRGBAAssign(_target, _source) (*(_target) = *(_source))
 
+#ifndef PLATFORM_PC
+
 struct rwGameCube2DVertex
 {
     RwReal x;
@@ -896,8 +905,6 @@ struct rwGameCube2DVertex
 };
 
 typedef struct rwGameCube2DVertex RwIm2DVertex;
-typedef RwUInt16 RxVertexIndex;
-typedef RxVertexIndex RwImVertexIndex;
 
 #define RwIm2DVertexSetCameraX(vert, camx) /* Nothing */
 #define RwIm2DVertexSetCameraY(vert, camy) /* Nothing */
@@ -943,6 +950,119 @@ typedef RxVertexIndex RwImVertexIndex;
 #define RwIm2DVertexGetGreen(vert) ((vert)->emissiveColor.green)
 #define RwIm2DVertexGetBlue(vert) ((vert)->emissiveColor.blue)
 #define RwIm2DVertexGetAlpha(vert) ((vert)->emissiveColor.alpha)
+
+#else
+
+// The port's RwIm2DVertex, mirrored onto the linked backend's.
+//
+// The GameCube's 24-byte layout above is the one thing in this header that a
+// host CANNOT keep, and it is not a matter of field order. Both real backends
+// carry a `w` -- the camera z -- that rwGameCube2DVertex has no room for, and
+// the console did not need one, which is why RwIm2DVertexSetRecipCameraZ is a
+// no-op macro up there.
+//
+// **w is not decoration on D3D9.** librw's im2d vertex shader
+// (third_party/librw/src/d3d/shaders/im2d_VS.hlsl) ends with
+//
+//     output.Position.xyz *= output.Position.w;
+//
+// and the hardware then divides by w again, so w cancels out of the position
+// and survives only as the fog depth. A vertex that reaches it with w == 0 has
+// its xyz multiplied by zero, collapses onto the origin, and draws nothing.
+// Most of the game's 2D call sites never set a camera z -- only xFont.cpp:3703
+// and the four in xShadow.cpp do -- so the default constructor below puts 1.0
+// there, which is the identity for that shader and means "no fog". Without it
+// every fade, every glyph and every HUD quad would silently vanish.
+//
+// The colour is the other half of the mirroring, and it is the usual bargain:
+// librw's field ORDER under RenderWare's field NAMES. D3D packs it as
+// COLOR_ARGB, so in memory the bytes run blue, green, red, alpha; GL3 keeps
+// four separate bytes in RGBA order. Game code writes ->emissiveColor.red by
+// name at zGame.cpp:853 and zEntPlayerOOBState.cpp:242, so the NAMES have to
+// stay put and the ORDER has to follow the backend. layout_im2d.cpp asserts
+// the result against the backend's own struct.
+
+#if defined(RW_D3D9) || defined(RW_D3D8)
+struct RwIm2DVertexRGBA
+{
+    RwUInt8 blue;
+    RwUInt8 green;
+    RwUInt8 red;
+    RwUInt8 alpha;
+};
+#else
+struct RwIm2DVertexRGBA
+{
+    RwUInt8 red;
+    RwUInt8 green;
+    RwUInt8 blue;
+    RwUInt8 alpha;
+};
+#endif
+
+struct RwIm2DVertex
+{
+    RwReal x;
+    RwReal y;
+    RwReal z;
+    RwReal w;
+    struct RwIm2DVertexRGBA emissiveColor;
+    RwReal u;
+    RwReal v;
+
+#ifdef __cplusplus
+    // Only w. The other fields are left alone on purpose: every call site
+    // fills them, and zeroing them here would make a 120-element stack buffer
+    // (xFont.cpp:179) cost a memset per call for nothing.
+    RwIm2DVertex() : w(1.0f)
+    {
+    }
+#endif
+};
+
+// Both names are already typedef'd at the top of this header. Shared game code
+// spells the type by its concrete CONSOLE name in four units --
+// zEntPlayerOOBState.cpp, zGame.cpp:1310, zNPCTypePrawn.cpp:494 and 1778 -- so
+// rwGameCube2DVertex has to resolve here too, and on PC it names the struct
+// above rather than the GameCube's 24-byte layout. The name is kept only so
+// that those four units compile unmodified.
+
+#define RwIm2DVertexSetCameraX(vert, camx) /* Nothing */
+#define RwIm2DVertexSetCameraY(vert, camy) /* Nothing */
+#define RwIm2DVertexSetCameraZ(vert, camz) ((vert)->w = (camz))
+#define RwIm2DVertexSetRecipCameraZ(vert, recipz) ((vert)->w = 1.0f / (recipz))
+#define RwIm2DVertexGetCameraX(vert) (cause an error)
+#define RwIm2DVertexGetCameraY(vert) (cause an error)
+#define RwIm2DVertexGetCameraZ(vert) ((vert)->w)
+#define RwIm2DVertexGetRecipCameraZ(vert) (1.0f / (vert)->w)
+#define RwIm2DVertexSetScreenX(vert, scrnx) ((vert)->x = (scrnx))
+#define RwIm2DVertexSetScreenY(vert, scrny) ((vert)->y = (scrny))
+#define RwIm2DVertexSetScreenZ(vert, scrnz) ((vert)->z = (scrnz))
+#define RwIm2DVertexGetScreenX(vert) ((vert)->x)
+#define RwIm2DVertexGetScreenY(vert) ((vert)->y)
+#define RwIm2DVertexGetScreenZ(vert) ((vert)->z)
+#define RwIm2DVertexSetU(vert, texU, recipz) ((vert)->u = (texU))
+#define RwIm2DVertexSetV(vert, texV, recipz) ((vert)->v = (texV))
+#define RwIm2DVertexGetU(vert) ((vert)->u)
+#define RwIm2DVertexGetV(vert) ((vert)->v)
+
+#define RwIm2DVertexSetRealRGBA(vert, r, g, b, a)                                                      MACRO_START                                                                                        {                                                                                                      (vert)->emissiveColor.red = (RwUInt8)r;                                                            (vert)->emissiveColor.green = (RwUInt8)g;                                                          (vert)->emissiveColor.blue = (RwUInt8)b;                                                           (vert)->emissiveColor.alpha = (RwUInt8)a;                                                      }                                                                                                  MACRO_STOP
+
+#define RwIm2DVertexSetIntRGBA(vert, r, g, b, a)                                                       MACRO_START                                                                                        {                                                                                                      (vert)->emissiveColor.red = r;                                                                     (vert)->emissiveColor.green = g;                                                                   (vert)->emissiveColor.blue = b;                                                                    (vert)->emissiveColor.alpha = a;                                                               }                                                                                                  MACRO_STOP
+
+#define RwIm2DVertexGetRed(vert) ((vert)->emissiveColor.red)
+#define RwIm2DVertexGetGreen(vert) ((vert)->emissiveColor.green)
+#define RwIm2DVertexGetBlue(vert) ((vert)->emissiveColor.blue)
+#define RwIm2DVertexGetAlpha(vert) ((vert)->emissiveColor.alpha)
+
+#endif
+
+// Neither of these is per backend: an index is 16 bits on every platform the
+// port can reach, and the game uses RwImVertexIndex for both 2D and 3D
+// primitives. They sit outside the block above because they were briefly
+// inside it, and every file that includes this header stopped compiling.
+typedef RwUInt16 RxVertexIndex;
+typedef RxVertexIndex RwImVertexIndex;
 
 #define RwIm2DVertexCopyRGBA(dst, src) ((dst)->emissiveColor = (src)->emissiveColor)
 
