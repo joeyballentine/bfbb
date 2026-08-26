@@ -1248,7 +1248,13 @@ namespace bungee_state
         }
     } // namespace
 
-    void load(class xBase& data, class xDynAsset& asset, unsigned long)
+    // size_t, not unsigned long, to agree with the declaration in the header.
+    // include/types.h typedefs size_t to unsigned long for the console, so this is
+    // character-for-character the same type there and the mangled name does not
+    // move. On 32-bit Windows size_t is unsigned int, and unsigned int and
+    // unsigned long are distinct types for overload resolution even at the same
+    // width -- so the header declared one function and this defined another.
+    void load(class xBase& data, class xDynAsset& asset, size_t)
     {
         xBaseInit(&data, &asset);
         hook_type& hook = (hook_type&)data;

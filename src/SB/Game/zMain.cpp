@@ -91,7 +91,16 @@ void zMenuExit();
 // carries no return type, so the two declarations name the same symbol - and the
 // retail zMain.o assigns the result with a plain `mr`, which only an int-typed
 // declaration produces.
+// PC declares it with the DEFINITION's type. PowerPC CodeWarrior does not
+// encode a return type in a mangled name, so retail resolves both spellings to
+// one symbol; MSVC does encode it, so on PC they are two symbols and one has no
+// definition. The console keeps retail's spelling, which several units are
+// matched against. See src/SB/Core/pc/LINKING.md.
+#ifdef PLATFORM_PC
+bool zMenuCardCheckStartup(S32* bytesNeeded, S32* availOnDisk, S32* neededFiles);
+#else
 S32 zMenuCardCheckStartup(S32* bytesNeeded, S32* availOnDisk, S32* neededFiles);
+#endif
 S32 zMenuGetBadCard();
 U32 zMenuGetCorruptFiles(char name[][64]);
 S32 zMenuIsFirstBoot();

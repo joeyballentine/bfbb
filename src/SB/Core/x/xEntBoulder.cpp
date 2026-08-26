@@ -1077,7 +1077,13 @@ static void RecurseChild(xBase* child, xEntBoulder** boulList, S32& currBoul)
     }
 }
 
-void xBoulderGenerator_Init(xBase& data, xDynAsset& asset, unsigned long)
+// size_t, not unsigned long, to agree with the declaration in the header.
+// include/types.h typedefs size_t to unsigned long for the console, so this is
+// character-for-character the same type there and the mangled name does not
+// move. On 32-bit Windows size_t is unsigned int, and unsigned int and
+// unsigned long are distinct types for overload resolution even at the same
+// width -- so the header declared one function and this defined another.
+void xBoulderGenerator_Init(xBase& data, xDynAsset& asset, size_t)
 {
     xBoulderGenerator_Init((xBoulderGenerator*)&data, (xBoulderGeneratorAsset*)&asset);
 }

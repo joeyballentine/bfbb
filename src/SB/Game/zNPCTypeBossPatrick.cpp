@@ -39,8 +39,22 @@
 //     declaration there loses the function above. Retail's header cannot have
 //     declared it, which is exactly why this local declaration exists.
 //
-// So this stays. Do not "fix" it.
+// So this stays. Do not "fix" it -- on the console.
+//
+// The PLATFORM_PC arm below is NOT that fix: it changes nothing the console
+// compiles, and it exists because MSVC encodes the return type in the mangled
+// name where PowerPC CodeWarrior does not. Retail got one symbol out of these
+// two spellings; a host build gets two, and the U8 one has no definition.
+// PC declares it with the DEFINITION's type. PowerPC CodeWarrior does not
+// encode a return type in a mangled name, so retail resolves both spellings to
+// one symbol; MSVC does encode it, so on PC they are two symbols and one has no
+// definition. The console keeps retail's spelling, which several units are
+// matched against. See src/SB/Core/pc/LINKING.md.
+#ifdef PLATFORM_PC
+S32 zEntPlayerDyingInGoo();
+#else
 U8 zEntPlayerDyingInGoo();
+#endif
 
 #define ANIM_IDLE01 1
 #define ANIM_IDLE02 2

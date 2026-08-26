@@ -118,7 +118,16 @@ S32 zNPCGoalJellyBumped::Process(en_trantype* trantyp, F32 dt, void* updCxt, xSc
 xVec3* NPCC_upDir(xEnt* ent);
 
 F32 SQ(F32 x);
+// PC declares it with the DEFINITION's type. PowerPC CodeWarrior does not
+// encode a return type in a mangled name, so retail resolves both spellings to
+// one symbol; MSVC does encode it, so on PC they are two symbols and one has no
+// definition. The console keeps retail's spelling, which several units are
+// matched against. See src/SB/Core/pc/LINKING.md.
+#ifdef PLATFORM_PC
+xVec3* LERP(float dt, xVec3* pos_update, const xVec3*, const xVec3*);
+#else
 void LERP(float dt, xVec3* pos_update, const xVec3*, const xVec3*);
+#endif
 F32 SMOOTH(float, float, float);
 
 void zNPCGoalJellyBumped::MoveSwoosh(F32 dt)

@@ -45,11 +45,7 @@ exactly: the fix is not vigilance, it is that `engine.cpp` now includes
 `rwsdk/driver/gcn/dlrendst.h`, the header that declares them, so the compiler
 checks the linkage instead of the linker.
 
-## What is left: 81 unresolved symbols
-
-    platform modules not yet ported    71
-    RenderWare the shim lacks           2
-    game code                           8
+## What the link left behind
 
 **The 71 are the known worklist**, not news: eleven modules under
 `src/SB/Core/gc` have a header in `src/SB/Core/pc` and no implementation.
@@ -63,38 +59,62 @@ BSP plugin, the same missing subsystem that makes `RpAtomicForAllIntersections`
 a linear scan -- see `rw/TODO.md`) and `AtomicDefaultRenderCallBack`, which
 retail has in `rwsdk/world/baclump.c` and the shim does not provide at all.
 
-## The 8 "game code" ones are the interesting result
+## The 8 "game code" ones, and what they turned out to be (FIXED)
 
-Six of them are **not missing functions**. They are defined, and they are
-defined with a **different return type than the code calling them declares**:
+All eight are resolved and the gate did not move: DOL
+`306526d90b48e99894c3138f5fc8f2716d9fecf6`, 7249 / 80.66999%.
+
+Six were **not missing functions**. They were defined, and defined with a
+different type than the code calling them declared:
 
 | symbol | defined | declared |
 |---|---|---|
-| `zEntPlayerDyingInGoo` | `S32` (zEntPlayer.cpp:16276) | `U8` (zNPCTypeBossPatrick.cpp:43) |
-| `xSndStreamReady` | `U32` (xSnd.cpp:834) | `U8` (zTalkBox.cpp:20) |
-| `NPCC_LineHitsBound` | `U32` (zNPCSupport.cpp:1087) | `S32` (zNPCGoalRobo.cpp:60) |
-| `zMenuCardCheckStartup` | `bool` (zMenu.cpp:344, and zMenu.h) | `S32` (zMain.cpp:94, a local re-declaration) |
-| `LERP` | -- (zNPCGoalRobo.o on the console) | `xVec3*` (zNPCFXCinematic.cpp:55) vs `void` (zNPCGoalAmbient.cpp:121) |
+| `zEntPlayerDyingInGoo` | `S32` (zEntPlayer.cpp) | `U8` (zNPCTypeBossPatrick.cpp) |
+| `xSndStreamReady` | `U32` (xSnd.cpp) | `U8` (zTalkBox.cpp) |
+| `NPCC_LineHitsBound` | `U32` (zNPCSupport.cpp) | `S32` (zNPCGoalRobo.cpp) |
+| `zMenuCardCheckStartup` | `bool` (zMenu.cpp, zMenu.h) | `S32` (zMain.cpp) |
+| `LERP` (4-arg) | `xVec3*` (zNPCHazard.cpp) | `void` (zNPCGoalAmbient.cpp) |
+| `menu_fmv_played` | `bool` (zMenu.cpp) | `U8` (zDispatcher.cpp) |
 
 **PowerPC CodeWarrior does not encode the return type in a mangled name, and
-MSVC does.** So on the console every one of these resolves to the same symbol
-and links; here they are two different symbols and one of them is undefined.
+MSVC does.** So retail resolves both spellings of each to one symbol and links;
+here they are two symbols and one of them has no definition.
 
-That makes this link a decomp correctness check that the GameCube build cannot
-perform. In each row one side is wrong about what retail's function returns,
-and the disagreement has been invisible. None is fixed here: changing a return
-type can change codegen, so each needs verifying against the DOL on its own.
+**An earlier draft of this file said "in each row one side is wrong about what
+retail returns". That was wrong, and the repository already contained the
+evidence.** Retail itself had these splits, and at least two are load-bearing
+for matching, with the measurements recorded at the call sites:
 
-**`xBoulderGenerator_Init` is a different thing** -- a portability defect, not a
-decomp one. `xEntBoulder.h:83` declares the third parameter `size_t` and
-`xEntBoulder.cpp:1080` defines it `unsigned long`. `include/types.h` typedefs
-`size_t` to `unsigned long` for the console, so they agree there; on 32-bit
-Windows `size_t` is `unsigned int`, and `unsigned int` and `unsigned long` are
-distinct types for overload resolution even though both are 32 bits.
+  - `zNPCTypeBossPatrick.cpp` carries a note saying that declaring
+    `zEntPlayerDyingInGoo` as `S32` there to agree with the definition costs a
+    whole function -- the unit drops 70/71 to 69/71 and the 6040-byte
+    `zNPCBPatrick::Process` is what falls out, because it tests only the low
+    byte of the result. It ends "Do not 'fix' it."
+  - `zMain.cpp` carries a note saying retail's `zMain.o` assigns
+    `zMenuCardCheckStartup`'s result with a plain `mr`, which only an int-typed
+    declaration produces.
 
-**`bungee_state::load` and `menu_fmv_played`** are referenced and are defined
-nowhere -- not here and not in the GameCube build either. They want looking at
-separately.
+So the disagreement is faithful, not a defect, and the console must keep it.
+Each declaration is now guarded: `#ifdef PLATFORM_PC` takes the definition's
+type, `#else` keeps retail's. The console's preprocessed output is unchanged by
+construction, which is why matching cannot regress here -- and the gate was run
+anyway.
+
+The remaining two were a different thing, and are a real portability defect
+rather than a faithfulness one: `xBoulderGenerator_Init`
+(xEntBoulder.cpp) and `bungee_state::load` (zEntPlayerBungeeState.cpp) each
+declared a parameter `size_t` in the header and defined it `unsigned long`.
+`include/types.h` typedefs `size_t` to `unsigned long` for the console, so the
+two agree there; on 32-bit Windows `size_t` is `unsigned int`, and `unsigned
+int` and `unsigned long` are distinct types for overload resolution even at the
+same width. Both definitions now say `size_t`, which is the same declaration on
+the console and needs no guard.
+
+## What is left after that: 73
+
+    platform modules not yet ported    71
+    RenderWare the shim lacks           2
+    game code                           0
 
 ## Running it
 

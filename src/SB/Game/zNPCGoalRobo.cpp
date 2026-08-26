@@ -57,7 +57,16 @@ struct RoboCopMap
 };
 
 void NPCC_DrawPlayerPredict(S32, F32, F32);
+// PC declares it with the DEFINITION's type. PowerPC CodeWarrior does not
+// encode a return type in a mangled name, so retail resolves both spellings to
+// one symbol; MSVC does encode it, so on PC they are two symbols and one has no
+// definition. The console keeps retail's spelling, which several units are
+// matched against. See src/SB/Core/pc/LINKING.md.
+#ifdef PLATFORM_PC
+U32 NPCC_LineHitsBound(xVec3* a, xVec3* b, xBound* bnd, xCollis* callers_colrec);
+#else
 S32 NPCC_LineHitsBound(xVec3* a, xVec3* b, xBound* bnd, xCollis* callers_colrec);
+#endif
 S32 NPCC_chk_hitEnt(xEnt* tgt, xBound* bnd, xCollis* collide);
 void zEntPlayer_LassoNotify(en_LASSO_EVENT event);
 void NPCC_rotHPB(xMat3x3* mat, F32 heading, F32 pitch, F32 bank);

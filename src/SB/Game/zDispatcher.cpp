@@ -29,7 +29,16 @@ S32 g_zdsp_init;
 
 st_ZDISPATCH_DEPOT g_zdsp_depot = { 0 };
 
+// PC declares it with the DEFINITION's type. PowerPC CodeWarrior does not
+// encode a return type in a mangled name, so retail resolves both spellings to
+// one symbol; MSVC does encode it, so on PC they are two symbols and one has no
+// definition. The console keeps retail's spelling, which several units are
+// matched against. See src/SB/Core/pc/LINKING.md.
+#ifdef PLATFORM_PC
+extern bool menu_fmv_played;
+#else
 extern U8 menu_fmv_played;
+#endif
 extern char zEventLogBuf[20][256];
 
 void zDispatcher_Startup()

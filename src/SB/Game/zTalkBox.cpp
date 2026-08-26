@@ -17,7 +17,16 @@ void zEntPlayerSpeakStart(U32 sound, U32 param_2, S32 param_3);
 void zEntPlayer_SNDStopStream();
 U8 xSndStreamLock(U32 lock, sound_category category, bool enable);
 void xSndStreamUnlock(U32 lock);
+// PC declares it with the DEFINITION's type. PowerPC CodeWarrior does not
+// encode a return type in a mangled name, so retail resolves both spellings to
+// one symbol; MSVC does encode it, so on PC they are two symbols and one has no
+// definition. The console keeps retail's spelling, which several units are
+// matched against. See src/SB/Core/pc/LINKING.md.
+#ifdef PLATFORM_PC
+U32 xSndStreamReady(U32 lock);
+#else
 U8 xSndStreamReady(U32 lock);
+#endif
 S32 zGameIsPaused();
 namespace
 {
