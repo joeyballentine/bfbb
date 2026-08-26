@@ -436,10 +436,44 @@ loader wants the same number for the same reason. Answer it once, for both.
 *why* that decision was made. Linking librw against GameCube-native big-endian
 assets buys a renderer that cannot read anything.
 
-**Check first that librw builds 32-bit under clang targeting the MSVC ABI.**
-That is the only genuinely open question about it, and it is a cheap spike --
-the same shape as the `-m32` experiment in (a), which was worth an afternoon
-and settled 33 units.
+**The toolchain question is answered: librw builds.** Spiked 2026-08-26 --
+`aap/librw` at `LIBRW_PLATFORM=NULL`, clang 16, `-m32`, MSVC ABI: configures,
+compiles and links to a static library with **zero errors**, confirmed i386.
+So the ABI worry that motivated the spike is retired.
+
+**But it is not a drop-in, and that is the real finding.** librw is a
+reimplementation in namespace `rw::`, not an implementation of the RenderWare C
+API. Of its 1325 defined text symbols, 1124 are `rw::` C++ and **zero** are
+`Rw*`/`Rp*` C functions:
+
+    RpClumpStreamRead   0        ?create@AnimInterpolator@rw@@SAPAU12@HH@Z
+    RwFrameTransform    0        ?conj@rw@@YA?AUQuat@1@ABU21@@Z
+    RwEngineInit        0        ...
+
+Our situation differs from re3/reVC, which is why the precedent misleads here:
+they *wrote* their code against librw's API. Ours is decompiled and calls the
+RenderWare C API, and it has to keep calling it -- those call sites are what the
+GameCube build matches against.
+
+So phase 3 is not "link librw". It is **write a shim implementing the
+RenderWare C API on top of `rw::`**, and the size of that is now known rather
+than guessed: **99 distinct `Rw*`/`Rp*` functions** across the 208 units that
+compile today, concentrated in a few areas.
+
+    RwCamera 12   RpGeometry 8   RwIm 7   RwFrame 7   RpWorld 7
+    RpSkin 6      RpClump 6      RpLight 5   RwTex 4   RwStream 4
+
+Expect it to grow as the seven librw-gated `i*` units above come in, though
+they overlap heavily with this set.
+
+That shim is a real project, but it is a bounded and very parallelisable one --
+each function is a small mapping onto a `rw::` call, and `include/rwsdk` already
+has every declaration. It is also the right shape: it keeps the decompiled call
+sites untouched, so the GameCube build and the port stay one codebase.
+
+`LIBRW_PLATFORM=NULL` is what was tested, which is the core with no renderer
+backend. `GL3` or `D3D9` will want OpenGL or Direct3D present; neither was
+needed to answer the question this spike asked.
 
 ### (f) The platform layer implementation -- RESOLVED: behind iHost
 
