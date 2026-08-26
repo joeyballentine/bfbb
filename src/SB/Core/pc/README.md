@@ -57,7 +57,7 @@ longer includes a `dolphin` header anywhere.
 | `iFMV` (1) | header only | Bink is proprietary; re-encode or drop |
 | `ngcrad3d` | not ported | GameCube radiosity; no host counterpart |
 
-94 of the 178 interface functions game code actually calls are implemented.
+115 of the 178 interface functions game code actually calls are implemented.
 The count is what `src/SB` *references*, not what the headers declare — the
 headers declare a good deal that nothing outside `src/SB/Core/gc` ever used,
 and that surface has been dropped rather than reproduced.
@@ -94,8 +94,12 @@ and that surface has been dropped rather than reproduced.
   a seam and the part with the game's semantics in it is not. `null` reports no
   controllers, which is the correct answer for a build with no input library —
   the game shows its "please reconnect the controller" screen.
-- **`VERBATIM.txt`** records the 16 headers copied unchanged from `gc/`, with
-  the hash each was copied at. Copying is what keeps the two layers from
+- **`VERBATIM.txt`** records the 19 files copied unchanged from `gc/`, with
+  the hash each was copied at. Sixteen are headers; three are implementations
+  -- `iMath3.cpp`, `iCollide.cpp` and `iCollideFast.cpp` -- which turned out to
+  be pure geometry and collision with no AX, GX, OS or DVD in them, so they
+  port as they stand. Copying beats rewriting: there is nothing a rewrite would
+  improve, and a copy that drifts is caught where a rewrite that drifts is not. Copying is what keeps the two layers from
   sharing an include path, but it means a change to the `gc` header does not
   reach this one. `tools/pcprogress.py --drift` says when that has happened.
 - **`tests/selftest.cpp`** exercises every implemented interface that does not

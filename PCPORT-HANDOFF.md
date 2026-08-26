@@ -241,17 +241,24 @@ cmake -S . -B build-pc -G Ninja && cmake --build build-pc && ./build-pc/pc_selft
 
 ## 4. What exists
 
-`src/SB/Core/pc/` — 14 implementation files, 94 of the 178 interface functions
+`src/SB/Core/pc/` — 17 implementation files, 115 of the 178 interface functions
 game code actually calls, on Linux and on Windows.
 
 **Done:** `iTime` `iMath` `iMemMgr` `iFile` `iPad` `iSystem` `iTRC` `iColor`
 `isavegame` `iSnd`, plus `intrin.cpp` (`__fabs`/`__fabsf` — glibc declares both
 and defines neither).
 
+**Copied unchanged from `gc/`, because they turned out to be portable as they
+stand:** `iMath3` (13 fns, pure geometry), `iCollide` (10), `iCollideFast` (1).
+Recorded in `VERBATIM.txt`, so `--drift` reports it if the gc original moves.
+`iCollide` needs three RenderWare collision calls and so cannot link until
+phase 3; it is in the library, not the selftest. None of the three has selftest
+coverage, and the reason is argued in `CMakeLists.txt` at the target: they are
+copies of shipping code, so what is unproven is only that they build on a host.
+
 **Header only, no body:** `iModel` (19), `iMath3` (10), `iCollide` (10), `iScrFX` (10), `iEnv` (7),
 `iLight` (7), `iAnim` (5), `iCutscene` (4), `iParMgr` (4), `iDraw` (3),
-`iMorph` (2), `iFX` (1), `iCollideFast` (1), `iFMV` (1). All but `iMath3` and
-`iCollide` need librw.
+`iMorph` (2), `iFX` (1), `iFMV` (1). All of these need librw.
 
 **Not interfaces:**
 
@@ -371,11 +378,57 @@ Treat it as unproven under real use.
 
 ### (e) Phase 3 — librw
 
-Gates the other 14 interfaces. `rwcore.h` already parses under GCC, so game
-code compiles against RenderWare's declarations today; only linking needs
-librw. re3/reVC is the precedent.
+`rwcore.h` already parses under clang, so game code compiles against
+RenderWare's declarations today; only linking needs librw. re3/reVC is the
+precedent.
 
----
+Measured 2026-08-26, so the size of the prize is known rather than guessed.
+
+**The link gap.** 208 of 212 units compiled to real 32-bit objects and linked
+against each other leaves 392 distinct undefined symbols:
+
+| | |
+|---|---|
+| game code — absent, or in a unit that fails | 146 |
+| **RenderWare** | **105** |
+| `i*` interfaces not implemented | 91 |
+| C/C++ runtime | 50 |
+
+The first and last buckets are inflated: they include Win32 calls that resolve
+against kernel32 and CRT symbols that resolve at a real link. So librw is
+roughly a quarter of what is left, and necessary rather than sufficient.
+
+**What arrives with it, though, is more than those 105 symbols.** Copying each
+remaining `gc/*.cpp` into `pc/` and compiling it against the PC headers says
+seven of them are *already portable* and blocked only on linking:
+
+    iAnim.cpp       1 RW symbol
+    iMorph.cpp      5
+    iParMgr.cpp     6
+    iScrFX.cpp      7
+    iEnv.cpp       10
+    iLight.cpp     10
+    iModel.cpp     37
+
+That is 44 more interface functions that need no porting work at all -- copy,
+record in `VERBATIM.txt`, link. Do that sweep again before writing any of them
+by hand.
+
+Three do NOT compile as they stand, and want real work rather than a copy:
+`iDraw.cpp`, `iFMV.cpp` and `iFX.cpp` include `dolphin/gx.h` or `dolphin/os.h`
+directly. `iCutscene.cpp` and `iAnimSKB.cpp` fail on the game's own types
+(`tag_iFile` has no `fileInfo` member on this side), which is a smaller problem
+than it looks.
+
+**Do not start until the asset question is answered.** The plan is Xbox assets
+(see PCPORT.md), and librw's GameCube format support is its weakest -- which is
+*why* that decision was made. Linking librw against GameCube-native big-endian
+assets buys a renderer that cannot read anything.
+
+**Check first that librw builds 32-bit under clang targeting the MSVC ABI.**
+That is the only genuinely open question about it, and it is a cheap spike --
+the same shape as the `-m32` experiment in (a), which was worth an afternoon
+and settled 33 units.
 
 ### (f) The platform layer implementation -- RESOLVED: behind iHost
 

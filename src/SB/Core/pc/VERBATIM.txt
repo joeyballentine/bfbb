@@ -1,7 +1,12 @@
-# Headers copied unchanged from src/SB/Core/gc/.
+# Files copied unchanged from src/SB/Core/gc/.
 #
-# These declare interfaces whose types are RenderWare's or the game's own,
+# The headers declare interfaces whose types are RenderWare's or the game's own,
 # with nothing GameCube-specific in them, so the port's copy is identical.
+#
+# The three .cpp files at the bottom are implementations that turned out to be
+# portable as they stand: pure geometry and collision, no AX, GX, OS or DVD in
+# them. Copying beats rewriting -- there is nothing a rewrite would improve, and
+# a copy that drifts is caught, where a rewrite that drifts is not.
 # Copying rather than sharing an include path is what keeps the two builds
 # from being able to see each other's platform layer at all -- but it means
 # a change to the gc header does not reach this one, so tools/pcprogress.py
@@ -24,3 +29,8 @@ ac9f29999a3e84e87b0b1286f9483fb684ef17d9  iCollide.h
 36ab102aadf02a5da8dc3d47f99a4b06488bd5b8  iCollideFast.h
 13c0a7d43d681c14cabdb7bd719a184e41d68276  iCutscene.h
 683a7c52f4e7786bef03082bdd1af239564af47d  iModel.h
+
+# Implementations, not headers.
+b9d3e978e614b169a07454b8681c44d063127e84  iMath3.cpp
+827331f20ee1ce0f5bcf45f3239dcd8e1ebd58e4  iCollide.cpp
+540406ef1d6821eda53e9362af3d2cd3637597ae  iCollideFast.cpp

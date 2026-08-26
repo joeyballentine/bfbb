@@ -187,7 +187,7 @@ def check_host():
 
 
 def check_drift():
-    """The pc/ headers copied unchanged from gc/ can silently fall behind.
+    """The pc/ files copied unchanged from gc/ can silently fall behind.
 
     VERBATIM.txt records the gc hash each was copied at. Copying is what keeps
     the two platform layers from sharing an include path, so it is the right
@@ -220,7 +220,7 @@ def check_drift():
         print(f"  MISSING  {name}")
     for name, why in stale:
         print(f"  DRIFTED  {name}: {why}")
-    print(f"{ok} verbatim headers still match gc/, {len(stale)} drifted, "
+    print(f"{ok} verbatim files still match gc/, {len(stale)} drifted, "
           f"{len(missing)} missing")
     return not stale and not missing
 

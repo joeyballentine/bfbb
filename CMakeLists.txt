@@ -104,6 +104,18 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iTime.cpp
   ${PC_DIR}/isavegame.cpp
   ${PC_DIR}/iSnd.cpp
+
+  # Copied unchanged from gc/ -- pure geometry and collision, nothing
+  # GameCube-specific in them. See VERBATIM.txt; --drift reports divergence.
+  ${PC_DIR}/iMath3.cpp
+  ${PC_DIR}/iCollideFast.cpp
+
+  # Also a verbatim copy, but three of its calls are RenderWare collision-world
+  # functions (RpAtomicForAllIntersections, RpCollisionWorldForAllIntersections,
+  # RwFrameTransform), so it cannot resolve until librw arrives. Fine in a static
+  # library, which is why it is here and not in pc_selftest below.
+  ${PC_DIR}/iCollide.cpp
+
   ${INPUT_SOURCES}
   ${AUDIO_SOURCES}
   ${HOST_SOURCES}
@@ -135,6 +147,21 @@ add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   ${PC_DIR}/iTime.cpp
   ${PC_DIR}/isavegame.cpp
   ${PC_DIR}/iSnd.cpp
+  # The three files copied from gc/ are deliberately absent from this target.
+  #
+  # iMath3 calls xVec3Sub, xVec3Length, xVec3Add and xVec3SMul, whose bodies the
+  # decomp places in xCamera.cpp -- CodeWarrior emitted those weak inlines into
+  # whichever object the linker happened to pick, and matching means putting
+  # them back there. Linking xCamera.cpp to reach four vector helpers drags in
+  # 57 further symbols.
+  #
+  # iCollide needs three RenderWare collision-world calls, so it cannot link at
+  # all until librw arrives. iCollideFastInit is an empty function in retail
+  # too, and a check that calls it and asserts nothing would be padding.
+  #
+  # All three are verbatim copies of shipping code, so what is unproven about
+  # them is only that they build on a host -- which bfbb_platform already shows.
+
   ${INPUT_SOURCES}
   ${AUDIO_SOURCES}
   ${HOST_SOURCES}
