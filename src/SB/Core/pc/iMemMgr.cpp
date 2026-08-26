@@ -1,4 +1,5 @@
 #include "iMemMgr.h"
+#include "iHost.h"
 #include "iSystem.h"
 #include "xMemMgr.h"
 
@@ -6,9 +7,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-
-#include <sys/mman.h>
-#include <unistd.h>
 
 extern xMemInfo_tag gMemInfo;
 
@@ -34,26 +32,12 @@ static U32 sArenaSize;
 // gMemInfo.DRAM.addr is a U32, and xMemInitHeap does pointer arithmetic on it
 // as an integer. Every address the game allocator hands out must therefore fit
 // in 32 bits and survive the round trip back to a pointer. On a 64-bit host
-// that is not true of malloc, so the arena is mapped low on purpose.
-static void* iReserveLowArena(U32 size)
-{
-    int flags = MAP_PRIVATE | MAP_ANONYMOUS;
-#ifdef MAP_32BIT
-    // Linux x86-64: map inside the first 2 GB, where a U32 address is exact.
-    flags |= MAP_32BIT;
-#endif
-    void* p = mmap(NULL, size, PROT_READ | PROT_WRITE, flags, -1, 0);
-    if (p == MAP_FAILED)
-    {
-        return NULL;
-    }
-    return p;
-}
-
+// that is not true of malloc, so the arena comes from iHostReserveLow, which
+// asks the OS for a low address by whatever means that OS offers.
 void iMemInit()
 {
     sArenaSize = IMEM_ARENA_SIZE;
-    sArena = iReserveLowArena(sArenaSize);
+    sArena = iHostReserveLow(sArenaSize);
 
     if (sArena == NULL)
     {
@@ -104,7 +88,7 @@ void iMemExit()
 {
     if (sArena != NULL)
     {
-        munmap(sArena, sArenaSize);
+        iHostRelease(sArena, sArenaSize);
         sArena = NULL;
     }
     gMemInfo.DRAM.addr = 0;

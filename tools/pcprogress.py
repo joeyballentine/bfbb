@@ -143,6 +143,49 @@ def classify(msg):
     return msg[:90]
 
 
+def check_host():
+    """Both iHost backends must implement everything iHost.h declares.
+
+    The seam only holds if the two halves stay in step, and nothing else
+    notices when they do not: the platform layer is built for ONE host at a
+    time, so adding a function to iHostPosix.cpp and forgetting iHostWin32.cpp
+    produces a clean build on Linux and a link error on Windows -- or the
+    other way round, which is worse, because most of this was written on
+    Linux.
+    """
+    root = ROOT / "src/SB/Core/pc"
+    header = root / "iHost.h"
+    if not header.exists():
+        print("no iHost.h")
+        return False
+
+    def names(path):
+        out = set()
+        for line in path.read_text(encoding="utf-8").splitlines():
+            code = line.split("//")[0]
+            out.update(re.findall(r"(iHost[A-Za-z0-9_]*)[ ]*[(]", code))
+        return out
+
+    declared = names(header)
+    ok = True
+    for backend in ("iHostPosix.cpp", "iHostWin32.cpp"):
+        path = root / backend
+        if not path.exists():
+            print(f"  MISSING  {backend}")
+            ok = False
+            continue
+        missing = sorted(declared - names(path))
+        if missing:
+            ok = False
+            print(f"  {backend} does not implement:")
+            for m in missing:
+                print(f"      {m}")
+        else:
+            print(f"  {backend:16s} implements all {len(declared)}")
+
+    return ok
+
+
 def check_drift():
     """The pc/ headers copied unchanged from gc/ can silently fall behind.
 
@@ -189,12 +232,17 @@ def main():
     ap.add_argument("--errors", action="store_true")
     ap.add_argument("--drift", action="store_true",
                     help="check the headers pc/ copied verbatim from gc/")
+    ap.add_argument("--host", action="store_true",
+                    help="check both iHost backends implement the same seam")
     ap.add_argument("--cc", default=None,
                     help="host compiler (default: g++, else clang++)")
     ap.add_argument("--m32", action="store_true",
                     help="compile 32-bit; tests whether the pointer-width "
                          "class is really one decision (PCPORT.md, Asset caveats)")
     args = ap.parse_args()
+
+    if args.host:
+        sys.exit(0 if check_host() else 1)
 
     if args.drift:
         sys.exit(0 if check_drift() else 1)

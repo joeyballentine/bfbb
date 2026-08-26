@@ -1,5 +1,6 @@
 #include "iSystem.h"
 #include "iFile.h"
+#include "iHost.h"
 #include "iPad.h"
 #include "iPadHost.h"
 #include "iTRC.h"
@@ -8,7 +9,6 @@
 #include <types.h>
 
 #include <stdio.h>
-#include <time.h>
 
 #include "xDebug.h"
 #include "xMath.h"
@@ -29,22 +29,11 @@
 #define IVSYNC_PERIOD_NS (1000000000 / 60)
 
 static bool sVSyncStarted;
-static timespec sNextVSync;
-
-static void iTimespecAdd(timespec* t, long ns)
-{
-    t->tv_nsec += ns;
-    while (t->tv_nsec >= 1000000000)
-    {
-        t->tv_nsec -= 1000000000;
-        t->tv_sec += 1;
-    }
-}
+static U64 sNextVSync;
 
 void iVSync()
 {
-    timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
+    U64 now = iHostMonotonicNs();
 
     if (!sVSyncStarted)
     {
@@ -52,19 +41,18 @@ void iVSync()
         sVSyncStarted = true;
     }
 
-    iTimespecAdd(&sNextVSync, IVSYNC_PERIOD_NS);
+    sNextVSync += IVSYNC_PERIOD_NS;
 
     // A frame that overran its budget must not try to catch up by not sleeping
     // for the next several -- that turns one slow frame into a burst. Drop the
     // missed deadlines and pace from now instead.
-    if (sNextVSync.tv_sec < now.tv_sec ||
-        (sNextVSync.tv_sec == now.tv_sec && sNextVSync.tv_nsec < now.tv_nsec))
+    if (sNextVSync < now)
     {
         sNextVSync = now;
         return;
     }
 
-    clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &sNextVSync, NULL);
+    iHostSleepUntilNs(sNextVSync);
 }
 
 // Retail installs this as the floating-point error handler's tail call, purely

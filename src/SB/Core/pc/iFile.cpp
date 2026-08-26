@@ -1,4 +1,5 @@
 #include "iFile.h"
+#include "iHost.h"
 
 #include "xFile.h"
 
@@ -6,14 +7,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include <dirent.h>
-#if defined(_WIN32) && !defined(__CYGWIN__)
-// The Microsoft CRT has no <strings.h>; compat/string.h maps the POSIX names.
-#else
-#include <strings.h>
-#endif
-#include <unistd.h>
 
 struct file_queue_entry
 {
@@ -77,7 +70,7 @@ void iFileFullPath(const char* relname, char* fullname)
 // tree costs nothing.
 static bool iResolveCaseInsensitive(char* path, size_t pathsize)
 {
-    if (access(path, F_OK) == 0)
+    if (iHostPathExists(path))
     {
         return true;
     }
@@ -101,7 +94,7 @@ static bool iResolveCaseInsensitive(char* path, size_t pathsize)
         strcpy(dirbuf, ".");
     }
 
-    DIR* d = opendir(dirbuf);
+    iHostDir* d = iHostDirOpen(dirbuf);
     if (d == NULL)
     {
         return false;
@@ -112,17 +105,17 @@ static bool iResolveCaseInsensitive(char* path, size_t pathsize)
     size_t leafroom = pathsize - (size_t)(leaf - path);
 
     bool found = false;
-    for (dirent* e = readdir(d); e != NULL; e = readdir(d))
+    for (const char* name = iHostDirNext(d); name != NULL; name = iHostDirNext(d))
     {
-        if (strcasecmp(e->d_name, leaf) == 0)
+        if (iHostStrCaseCmp(name, leaf) == 0)
         {
-            snprintf(leaf, leafroom, "%s", e->d_name);
+            snprintf(leaf, leafroom, "%s", name);
             found = true;
             break;
         }
     }
 
-    closedir(d);
+    iHostDirClose(d);
     return found;
 }
 

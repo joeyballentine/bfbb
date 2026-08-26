@@ -9,11 +9,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 #include <types.h>
 
 #include "iFile.h"
+#include "iHost.h"
 #include "iMath.h"
 #include "iMemMgr.h"
 #include "iPadHost.h"
@@ -53,7 +53,7 @@ static void test_time()
           "GET_BUS_FREQUENCY()/4 == iTime tick rate");
 
     iTime t0 = iTimeGet();
-    usleep(120000); // 0.12 s
+    iHostSleepUntilNs(iHostMonotonicNs() + 120000000ULL); // 0.12 s
     iTime t1 = iTimeGet();
 
     check(t1 > t0, "iTimeGet advances");
@@ -125,12 +125,27 @@ static void test_mem()
     check(gMemInfo.DRAM.addr == 0, "iMemExit released the arena");
 }
 
+// mkdtemp is POSIX-only. The monotonic clock is already a seam function and
+// its value differs between runs, which is all the uniqueness a selftest needs.
+static bool scratch_dir(const char* tag, char* out, size_t outsize)
+{
+    char tmp[512];
+    if (!iHostTempDir(tmp, sizeof(tmp)))
+    {
+        return false;
+    }
+
+    snprintf(out, outsize, "%s/bfbb_pc_%s_%llu", tmp, tag,
+             (unsigned long long)(iHostMonotonicNs() % 1000000000ULL));
+    return iHostMakeDir(out);
+}
+
 static void test_file()
 {
     printf("iFile\n");
 
-    char dir[] = "/tmp/bfbb_pc_selftest_XXXXXX";
-    if (mkdtemp(dir) == NULL)
+    char dir[512];
+    if (!scratch_dir("selftest", dir, sizeof(dir)))
     {
         check(false, "could not make a temp directory");
         return;
@@ -205,8 +220,8 @@ static void test_file()
     iFileClose(&afile);
     iFileExit();
 
-    unlink(path);
-    rmdir(dir);
+    iHostRemoveFile(path);
+    iHostRemoveDir(dir);
 }
 
 static void test_pad()
@@ -228,15 +243,15 @@ static void test_savegame()
 {
     printf("isavegame\n");
 
-    char dir[] = "/tmp/bfbb_pc_saves_XXXXXX";
-    if (mkdtemp(dir) == NULL)
+    char dir[512];
+    if (!scratch_dir("saves", dir, sizeof(dir)))
     {
         check(false, "could not make a temp directory");
         return;
     }
 
     // iSGStartup resolves the save root once, so this has to be set first.
-    setenv("BFBB_SAVE_DIR", dir, 1);
+    iHostSetEnv("BFBB_SAVE_DIR", dir);
 
     check(iSGStartup() == 1, "iSGStartup succeeds on first call");
 
@@ -363,7 +378,7 @@ static void test_savegame()
     {
         printf("    (could not clean up %s)\n", dir);
     }
-    unsetenv("BFBB_SAVE_DIR");
+    iHostSetEnv("BFBB_SAVE_DIR", NULL);
 }
 
 int main()

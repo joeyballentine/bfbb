@@ -1,4 +1,5 @@
 #include "isavegame.h"
+#include "iHost.h"
 
 #include <types.h>
 
@@ -6,11 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-
-#include <sys/stat.h>
-#include <sys/statvfs.h>
-#include <sys/types.h>
-#include <unistd.h>
 
 // Saves, on a host filesystem.
 //
@@ -54,22 +50,18 @@ static bool iSG_mkdir_p(const char* path)
         if (*p == '/')
         {
             *p = '\0';
-            mkdir(tmp, 0755);
+            iHostMakeDir(tmp);
             *p = '/';
         }
     }
 
-    if (mkdir(tmp, 0755) != 0)
-    {
-        struct stat st;
-        return stat(tmp, &st) == 0 && S_ISDIR(st.st_mode);
-    }
-
-    return true;
+    return iHostMakeDir(tmp);
 }
 
-// BFBB_SAVE_DIR wins so a player can point saves anywhere; otherwise the XDG
-// location, which is where a Linux user expects to find them.
+// BFBB_SAVE_DIR wins so a player can point saves anywhere; otherwise wherever
+// this host keeps per-user data, which is where its users expect to find it.
+// Which directory that is belongs to iHost; the "/bfbb/saves" under it is this
+// game's policy and belongs here.
 static void iSG_resolve_saveroot()
 {
     const char* explicit_dir = getenv("BFBB_SAVE_DIR");
@@ -79,17 +71,10 @@ static void iSG_resolve_saveroot()
         return;
     }
 
-    const char* xdg = getenv("XDG_DATA_HOME");
-    if (xdg != NULL && xdg[0] != '\0')
+    char base[512];
+    if (iHostUserDataDir(base, sizeof(base)))
     {
-        snprintf(g_saveroot, sizeof(g_saveroot), "%s/bfbb/saves", xdg);
-        return;
-    }
-
-    const char* home = getenv("HOME");
-    if (home != NULL && home[0] != '\0')
-    {
-        snprintf(g_saveroot, sizeof(g_saveroot), "%s/.local/share/bfbb/saves", home);
+        snprintf(g_saveroot, sizeof(g_saveroot), "%s/bfbb/saves", base);
         return;
     }
 
@@ -300,8 +285,8 @@ U32 iSGTgtState(st_ISGSESSION* isgdata, S32 tgtidx, const char* dpath)
     char root[512];
     iSG_target_root(slot, root, sizeof(root));
 
-    struct stat st;
-    if (stat(root, &st) != 0 || !S_ISDIR(st.st_mode))
+    iHostFileInfo st;
+    if (!iHostStat(root, &st) || !st.is_dir)
     {
         // Present as a target, but not yet usable -- the game offers to
         // format, which here means creating the directory.
@@ -346,13 +331,11 @@ S32 iSGCheckForWrongDevice()
 
 static S32 iSG_free_bytes(const char* path)
 {
-    struct statvfs vfs;
-    if (statvfs(path, &vfs) != 0)
+    U64 avail;
+    if (!iHostFreeBytes(path, &avail))
     {
         return 0;
     }
-
-    unsigned long long avail = (unsigned long long)vfs.f_bavail * (unsigned long long)vfs.f_frsize;
 
     // The game compares this against a save size in a S32 and displays it. A
     // modern disk overflows that, and reporting a negative number of free
@@ -392,10 +375,10 @@ static S32 iSG_have_room(st_ISGSESSION* isgdata, S32 fsize, const char* fname, S
         char path[512];
         if (iSG_path(isgdata, fname, path, sizeof(path)))
         {
-            struct stat st;
-            if (stat(path, &st) == 0)
+            iHostFileInfo st;
+            if (iHostStat(path, &st))
             {
-                existing = (S32)st.st_size;
+                existing = (S32)st.size;
                 need_entry = 0;
             }
         }
@@ -451,13 +434,13 @@ S32 iSGFileSize(st_ISGSESSION* isgdata, const char* fname)
         return -1;
     }
 
-    struct stat st;
-    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode))
+    iHostFileInfo st;
+    if (!iHostStat(path, &st) || !st.is_file)
     {
         return -1;
     }
 
-    return (S32)st.st_size;
+    return (S32)st.size;
 }
 
 char* iSGFileModDate(st_ISGSESSION* isgdata, const char* fname)
@@ -471,20 +454,19 @@ char* iSGFileModDate(st_ISGSESSION* isgdata, const char* fname, S32* sec, S32* m
     static char datestr[0x40] = { 0 };
 
     char path[512];
-    struct stat st;
+    iHostFileInfo st;
 
-    if (iSG_path(isgdata, fname, path, sizeof(path)) && stat(path, &st) == 0)
+    if (iSG_path(isgdata, fname, path, sizeof(path)) && iHostStat(path, &st))
     {
-        time_t mtime = st.st_mtime;
-        tm t;
-        localtime_r(&mtime, &t);
+        iHostCalendar t;
+        iHostLocalTimeOf(st.mtime, &t);
 
-        S32 v_sec = t.tm_sec;
-        S32 v_min = t.tm_min;
-        S32 v_hr = t.tm_hour;
-        S32 v_mon = t.tm_mon + 1;
-        S32 v_day = t.tm_mday;
-        S32 v_yr = t.tm_year + 1900;
+        S32 v_sec = t.sec;
+        S32 v_min = t.min;
+        S32 v_hr = t.hour;
+        S32 v_mon = t.mon + 1;
+        S32 v_day = t.mday;
+        S32 v_yr = t.year + 1900;
 
         sprintf(datestr, "%02d/%02d/%04d %02d:%02d:%02d", v_mon, v_day, v_yr, v_hr, v_min, v_sec);
 
@@ -523,12 +505,11 @@ char* iSGFileModDate(st_ISGSESSION* isgdata, const char* fname, S32* sec, S32* m
 
 void iSGMakeTimeStamp(char* str)
 {
-    time_t now = time(NULL);
-    tm t;
-    localtime_r(&now, &t);
+    iHostCalendar t;
+    iHostLocalTime(&t);
 
-    sprintf(str, "%02d/%02d/%04d %02d:%02d:%02d", t.tm_mon + 1, t.tm_mday, t.tm_year + 1900,
-            t.tm_hour, t.tm_min, t.tm_sec);
+    sprintf(str, "%02d/%02d/%04d %02d:%02d:%02d", t.mon + 1, t.mday, t.year + 1900, t.hour, t.min,
+            t.sec);
 }
 
 // "Is there a game to load on this target." Retail answers it by counting the
@@ -616,14 +597,14 @@ S32 iSGSaveFile(st_ISGSESSION* isgdata, const char* fname, char* data, S32 n, S3
 
     if (!wrote)
     {
-        unlink(tmp);
+        iHostRemoveFile(tmp);
         iSG_fail(isgdata, ISG_OPERR_SVWRITE);
         return 0;
     }
 
-    if (rename(tmp, path) != 0)
+    if (!iHostRenameReplace(tmp, path))
     {
-        unlink(tmp);
+        iHostRemoveFile(tmp);
         iSG_fail(isgdata, ISG_OPERR_SVWRITE);
         return 0;
     }
@@ -771,13 +752,13 @@ S32 iSGCheckForCorruptFiles(st_ISGSESSION* isgdata, char files[][64])
             continue;
         }
 
-        struct stat st;
-        if (stat(path, &st) != 0)
+        iHostFileInfo st;
+        if (!iHostStat(path, &st))
         {
             continue;
         }
 
-        bool bad = !S_ISREG(st.st_mode) || st.st_size == 0;
+        bool bad = !st.is_file || st.size == 0;
 
         if (!bad)
         {

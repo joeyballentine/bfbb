@@ -1,28 +1,26 @@
 #include "iTime.h"
+#include "iHost.h"
 #include "iSystem.h"
 
 #include <types.h>
 
 #include <string.h>
-#include <time.h>
 
 static iTime sStartupTime;
 static F32 sGameTime;
 
-// CLOCK_MONOTONIC, not the wall clock: retail reads the GameCube timebase,
+// A monotonic clock, not the wall clock: retail reads the GameCube timebase,
 // which no user action can move. Wall-clock jumps (NTP, DST, the user editing
-// the clock) would otherwise show up as a single enormous frame delta.
-static iTime iHostTicks()
+// the clock) would otherwise show up as a single enormous frame delta. Which
+// clock that is on this host is iHost's problem.
+static iTime iTicksNow()
 {
-    timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (iTime)ts.tv_sec * ITIME_TICKS_PER_SECOND +
-           (iTime)ts.tv_nsec / (1000000000 / ITIME_TICKS_PER_SECOND);
+    return (iTime)(iHostMonotonicNs() / (1000000000ULL / ITIME_TICKS_PER_SECOND));
 }
 
 void iTimeInit()
 {
-    sStartupTime = iHostTicks();
+    sStartupTime = iTicksNow();
 }
 
 void iTimeExit()
@@ -31,7 +29,7 @@ void iTimeExit()
 
 iTime iTimeGet()
 {
-    return iHostTicks() - sStartupTime;
+    return iTicksNow() - sStartupTime;
 }
 
 F32 iTimeDiffSec(iTime time)
@@ -55,56 +53,55 @@ void iTimeSetGame(F32 time)
 }
 
 // The GameCube build reads the calendar through OSTicksToCalendarTime; on a
-// host that is localtime_r. These four live in iSystem.cpp on the GameCube
-// side purely because that is where the OS calls were -- the declarations have
-// always been in iTime.h, so they sit with the rest of the clock here.
+// host it is whatever reentrant local-time call that host has. These four live
+// in iSystem.cpp on the GameCube side purely because that is where the OS calls
+// were -- the declarations have always been in iTime.h, so they sit with the
+// rest of the clock here.
 
-static tm iHostCalendar()
+static iHostCalendar iCalendarNow()
 {
-    time_t now = time(NULL);
-    tm out;
-    localtime_r(&now, &out);
+    iHostCalendar out;
+    iHostLocalTime(&out);
     return out;
 }
 
 S32 iGetMinute()
 {
-    return iHostCalendar().tm_min;
+    return iCalendarNow().min;
 }
 
 S32 iGetHour()
 {
-    return iHostCalendar().tm_hour;
+    return iCalendarNow().hour;
 }
 
 S32 iGetDay()
 {
-    return iHostCalendar().tm_mday;
+    return iCalendarNow().mday;
 }
 
 S32 iGetMonth()
 {
-    return iHostCalendar().tm_mon + 1;
+    return iCalendarNow().mon + 1;
 }
 
 static const char* months[] = { "January ",   "February ", "March ",    "April ",
                                 "May ",       "June ",     "July ",     "August ",
                                 "September ", "October ",  "November ", "December " };
 
-static const char* dotw[] = {
-    "Sunday ", "Monday ", "Tuesday ", "Wednesday ", "Thursday ", "Friday ", "Saturday "
-};
+static const char* dotw[] = { "Sunday ",   "Monday ", "Tuesday ", "Wednesday ",
+                              "Thursday ", "Friday ", "Saturday " };
 
 U32 iGetCurrFormattedDate(char* str)
 {
     char* start = str;
-    tm td = iHostCalendar();
+    iHostCalendar td = iCalendarNow();
 
-    strcpy(str, dotw[td.tm_wday]);
-    strcat(str, months[td.tm_mon]);
+    strcpy(str, dotw[td.wday]);
+    strcat(str, months[td.mon]);
     str += strlen(str);
 
-    S32 mday = td.tm_mday;
+    S32 mday = td.mday;
     if (mday >= 10)
     {
         *str++ = (mday / 10) + '0';
@@ -118,7 +115,7 @@ U32 iGetCurrFormattedDate(char* str)
     // tens digit while year < 2100 -- 2135 would emit '=' where '3' belongs.
     // Ported as % 10 because the port has no matching obligation and every
     // caller displays this to a player.
-    S32 year = td.tm_year + 1900;
+    S32 year = td.year + 1900;
     *str++ = (year / 1000) + '0';
     *str++ = ((year / 100) % 10) + '0';
     *str++ = ((year / 10) % 10) + '0';
@@ -132,9 +129,9 @@ U32 iGetCurrFormattedTime(char* str)
 {
     char* start = str;
     S32 am = 0;
-    tm td = iHostCalendar();
+    iHostCalendar td = iCalendarNow();
 
-    S32 hour = td.tm_hour;
+    S32 hour = td.hour;
     if (hour < 12)
     {
         am = 1;
@@ -156,11 +153,11 @@ U32 iGetCurrFormattedTime(char* str)
 
     *str++ = (hour % 10) + '0';
     *str++ = ':';
-    *str++ = (td.tm_min / 10) + '0';
-    *str++ = (td.tm_min % 10) + '0';
+    *str++ = (td.min / 10) + '0';
+    *str++ = (td.min % 10) + '0';
     *str++ = ':';
-    *str++ = (td.tm_sec / 10) + '0';
-    *str++ = (td.tm_sec % 10) + '0';
+    *str++ = (td.sec / 10) + '0';
+    *str++ = (td.sec % 10) + '0';
     *str++ = ' ';
 
     if (am)

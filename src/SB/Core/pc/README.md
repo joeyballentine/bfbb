@@ -69,6 +69,17 @@ and that surface has been dropped rather than reproduced.
   `strcmpi`, `std::floorf` — chaining to the system headers with `include_next`. It is the
   host counterpart to `src/PowerPC_EABI_Support/include/math.h`, which is what
   the GameCube build sees. It must come first on the include path.
+- **`iHost.h`**, **`iHostPosix.cpp`** and **`iHostWin32.cpp`** are the seam
+  between this layer and the operating system: 21 functions covering the
+  monotonic clock, frame pacing, local time, the low-address arena, and the
+  filesystem. Everything above the seam -- `iTime`, `iMemMgr`, `iFile`,
+  `iSystem`, `isavegame` -- holds the mapping onto the game's semantics and is
+  the same on every host. **An `#ifdef` for the host OS belongs in an
+  `iHost*.cpp`, never above one.** `tools/pcprogress.py --host` checks that both
+  backends implement everything the header declares, which nothing else would
+  notice: the layer is only ever built for one host at a time, so a function
+  added to one backend and forgotten in the other builds clean on that host and
+  fails to link on the other.
 - **`iPadHost.h`** and **`iPadHostNull.cpp`** are the device end of input. The
   GameCube has one controller API that is always there; a host has several and
   none is guaranteed at build time, so the part that touches hardware is behind

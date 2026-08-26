@@ -47,6 +47,17 @@ else()
   message(FATAL_ERROR "unknown BFBB_INPUT_BACKEND '${BFBB_INPUT_BACKEND}'")
 endif()
 
+# --- host backend ---------------------------------------------------------
+# The OS half of the platform layer, behind src/SB/Core/pc/iHost.h. The layer
+# above it -- iTime, iMemMgr, iFile, iSystem, isavegame -- holds the mapping
+# onto the game's semantics and is the same on every host; only this file
+# changes. An #ifdef for the host OS belongs in one of these, never above them.
+if(WIN32)
+  set(HOST_SOURCES ${PC_DIR}/iHostWin32.cpp)
+else()
+  set(HOST_SOURCES ${PC_DIR}/iHostPosix.cpp)
+endif()
+
 # --- the platform layer ------------------------------------------------------
 # Only the interfaces that are implemented. The rest of the i* set is listed in
 # src/SB/Core/pc/README.md with what each one is waiting on; adding a file here
@@ -63,6 +74,7 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iTime.cpp
   ${PC_DIR}/isavegame.cpp
   ${INPUT_SOURCES}
+  ${HOST_SOURCES}
 )
 
 # compat/ shadows <math.h>, <string.h> and <cmath> to add the CodeWarrior
@@ -86,12 +98,12 @@ enable_testing()
 add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   ${PC_DIR}/iFile.cpp
   ${PC_DIR}/intrin.cpp
-  ${PC_DIR}/intrin.cpp
   ${PC_DIR}/iMath.cpp
   ${PC_DIR}/iMemMgr.cpp
   ${PC_DIR}/iTime.cpp
   ${PC_DIR}/isavegame.cpp
   ${INPUT_SOURCES}
+  ${HOST_SOURCES}
 )
 target_include_directories(pc_selftest PRIVATE
   ${PC_DIR}/compat

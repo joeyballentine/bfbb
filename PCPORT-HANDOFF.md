@@ -40,8 +40,9 @@ cmake -S . -B build-pc -G Ninja && cmake --build build-pc && ./build-pc/pc_selft
 python tools/pcprogress.py --m32
 ```
 
-Note that `cmake --build` currently fails on Windows -- the platform layer's own
-implementation is POSIX-only. See 5(f).
+Both build on Linux and on Windows. The OS half of the layer is behind
+`src/SB/Core/pc/iHost.h`, with one backend per platform; `pcprogress.py --host`
+checks that the two stay in step.
 
 ---
 
@@ -216,9 +217,16 @@ and means nothing by it. clang's `-w` cannot be overridden by a later
 promoted back to errors. The rule underneath both: if a flag changes the number,
 check that it changed the *port* and not the *diagnostic policy*.
 
-`src/SB/Core/pc/tests/selftest.cpp` is the other half: **86 checks** over every
+`src/SB/Core/pc/tests/selftest.cpp` is the other half: **84 checks** over every
 implemented interface that does not need a renderer, so "implemented" is a
-measurement rather than a claim.
+measurement rather than a claim. (86 `check()` call sites; two are the
+could-not-make-a-temp-directory arms, which do not run when it works.)
+
+`--host` is the third: both `iHost` backends must implement everything
+`iHost.h` declares. Nothing else notices when they diverge, because the layer
+is only ever built for one host at a time -- adding a function to the POSIX
+backend and forgetting the Win32 one builds clean on Linux and fails to link on
+Windows.
 
 ```sh
 cmake -S . -B build-pc -G Ninja && cmake --build build-pc && ./build-pc/pc_selftest
@@ -228,8 +236,8 @@ cmake -S . -B build-pc -G Ninja && cmake --build build-pc && ./build-pc/pc_selft
 
 ## 4. What exists
 
-`src/SB/Core/pc/` — 10 implementation files, 72 of the 178 interface functions
-game code actually calls.
+`src/SB/Core/pc/` — 12 implementation files, 72 of the 178 interface functions
+game code actually calls, on Linux and on Windows.
 
 **Done:** `iTime` `iMath` `iMemMgr` `iFile` `iPad` `iSystem` `iTRC` `iColor`
 `isavegame`, plus `intrin.cpp` (`__fabs`/`__fabsf` — glibc declares both and
@@ -243,13 +251,21 @@ defines neither).
 
 **Not interfaces:**
 
+- `iHost.h` / `iHostPosix.cpp` / `iHostWin32.cpp` — the OS seam: 21 functions
+  covering the monotonic clock, frame pacing, local time, the low-memory arena,
+  and the filesystem. Everything above it is host-independent, which is what
+  makes the five files that used to call POSIX directly readable as game
+  semantics rather than as one OS's spelling. `pcprogress.py --host` checks the
+  two backends stay in step. See 5(f) for the three things Windows does
+  differently that this exists to absorb.
 - `compat/` shadows `<math.h>` `<string.h>` `<cmath>` `<mem.h>` `<intrin.h>`
   to supply the CodeWarrior extensions the sources use, chaining with
   `include_next`. Must come first on the include path. Note that
   `src/PowerPC_EABI_Support/include/math.h` defines `__fabs` as an **identity**
   macro for non-CodeWarrior compilers to quiet clangd — a port picking that up
   gets `FABS(-3) == -3`. The selftest checks this specifically.
-- `iPadHost.h` / `iPadHostNull.cpp` — the device end of input, behind a seam.
+- `iPadHost.h` / `iPadHostNull.cpp` — the device end of input, behind a seam of
+  its own, older than `iHost` and the model for it.
   `null` is a real configuration (no controllers), not a placeholder. Nothing
   is wired to a real device yet; SDL2 is the obvious first backend.
 - `VERBATIM.txt` — the 16 headers copied unchanged from `gc/`, with the hash
@@ -333,21 +349,48 @@ librw. re3/reVC is the precedent.
 
 ---
 
-### (f) The platform layer implementation is Linux-only
+### (f) The platform layer implementation -- RESOLVED: behind iHost
 
-Distinct from (a), and not visible to `pcprogress.py`. The 10 implementation
-files were written in a Linux container and use POSIX directly: `sys/mman.h`,
-`CLOCK_MONOTONIC`, `localtime_r`, `mmap`/`munmap`, `opendir`/`readdir`. On
-Windows `cmake --build` fails immediately.
+The 10 implementation files used POSIX directly at 26 sites: `sys/mman.h`,
+`CLOCK_MONOTONIC`, `clock_nanosleep`, `localtime_r`, `mmap`/`munmap`,
+`opendir`/`readdir`, `statvfs`, `mkdir`, `unlink`. `cmake --build` failed
+immediately on Windows.
 
-26 sites across 5 files — `isavegame.cpp` (8), `iMemMgr.cpp` (6),
-`iFile.cpp` (6), `iTime.cpp` (4), `iSystem.cpp` (2).
+Those are now behind **`src/SB/Core/pc/iHost.h`** -- 21 functions covering
+time, virtual memory and the filesystem -- with `iHostPosix.cpp` and
+`iHostWin32.cpp` under it. Verified on Windows: the layer builds, links, and
+the selftest passes 84/84.
 
-This is bounded and well isolated, and it is exactly the seam `iPadHost.h`
-already models: put the host calls behind a small backend interface with one
-implementation per platform, rather than `#ifdef`-ing each call site. Until
-then, the layer builds on Linux only, and "72 of 178 interface functions
-implemented" should be read as *implemented for Linux*.
+The rule that keeps it from growing back: **an `#ifdef` for the host OS belongs
+in an `iHost*.cpp`, never above it.** The files above the seam -- `iTime`,
+`iMemMgr`, `iFile`, `iSystem`, `isavegame` -- hold the mapping onto the game's
+semantics, which is the part worth reading and the part that is identical
+everywhere. Run `pcprogress.py --host` after touching either backend.
+
+Three things the port would have got wrong, which only surfaced by building it:
+
+- **`rename()` is not portable.** POSIX `rename()` replaces the destination
+  atomically; the Windows CRT's *fails* when the destination exists.
+  `isavegame` writes to a temporary and renames it over the real save, exactly
+  so a crash mid-write cannot destroy the previous one -- so on Windows every
+  save after the first would have failed. `iHostRenameReplace` is
+  `MOVEFILE_REPLACE_EXISTING`.
+- **`Sleep()` is far too coarse to pace frames.** It rounds to the scheduler
+  tick, about 15.6 ms by default -- most of a frame. `iHostSleepUntilNs` uses a
+  high-resolution waitable timer, and takes an absolute deadline rather than a
+  duration so the pacing cannot drift by the cost of computing the interval.
+- **Windows has no `MAP_32BIT`.** The arena still has to live below 4 GB
+  because `gMemInfo.DRAM.addr` is a `U32`. The Win32 backend asks
+  `VirtualAlloc` for successive low base addresses and takes the first that is
+  free, falling back to letting `iMemInit` refuse to start rather than
+  truncating silently.
+
+**Still Linux-only in one respect:** this was written and tested on Windows,
+and `iHostPosix.cpp` is the original code moved rather than rewritten -- but it
+has not been compiled since the move, because there is no Linux toolchain on
+this machine. Build it there once before trusting it. `--host` confirms the two
+backends declare the same 21 functions, which is the mismatch most likely to
+bite, but it is not a compile.
 
 ## 6. Conventions that are not negotiable
 
