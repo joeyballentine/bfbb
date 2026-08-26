@@ -5,7 +5,7 @@ Regenerate this list with:
     llvm-nm <every game object> | awk '$1=="U"{print $2}' \
       | sed 's/^?*//;s/@.*//;s/^_*//' | grep -E '^(Rw|Rp|Rt|Rx)' | sort -u
 
-## Done (11)
+## Done (19)
 
 `value.cpp` -- value types only, so no object layout is involved and the
 reinterpret_casts are backed by static_asserts that fail the build if librw
@@ -27,11 +27,44 @@ points that have no host counterpart:
   - `RwGameCubeSetMinRetraceCount`
   - `RwMemNative32`
 
+`frame.cpp` -- the first group written against the mirrored layout, and the
+proof that the approach works. RwFrame now has librw's field ORDER under
+RenderWare's field NAMES, so an `RwFrame*` IS an `rw::Frame*` and each of these
+is a cast and a call. `RwFrameOrthoNormalize` is written out rather than
+forwarded, because librw has no counterpart:
+
+  - `RwFrameCreate`
+  - `RwFrameDestroy`
+  - `RwFrameGetLTM`
+  - `RwFrameOrthoNormalize`
+  - `RwFrameRotate`
+  - `RwFrameTransform`
+  - `RwFrameTranslate`
+  - `RwFrameUpdateObjects`
+
+## Do this next: librw's engine startup
+
+Nothing here can *run* until librw's engine is up. `rw::Frame::create()` goes
+through the plugin system, and a test that links cleanly still faults without
+it -- `rw::Engine::init()` alone is not enough; there is memory-function setup,
+plugin registration, then open and start.
+
+That maps onto the `RwEngine` group below plus RenderWare's `RwEngineInit` /
+`RwEngineOpen` / `RwEngineStart`, and it gates every other group, so it is the
+next thing to write rather than more object wrappers.
+
+Verified working today: the shim compiles, and it LINKS against a 32-bit librw
+built with clang. Getting there needs the CRT configuration to match librw's
+own, which CMake will handle once librw is vendored; by hand it wants
+`-D_DEBUG -D_DLL -D_MT`, `--dependent-lib=msvcrtd,ucrtd,vcruntimed` and
+`/NODEFAULTLIB:libucrt.lib`.
+
 ## Blocked on the object-layout decision (101)
 
-Every one of these takes or returns a RenderWare *object*, and ours and
-librw's disagree on layout. Read README.md before starting any of them: both
-answers to that question change what all 101 look like.
+RESOLVED -- the port mirrors librw's layouts (method 1), so these are no longer
+blocked on a decision, only unwritten. Each needs its type mirrored in
+include/rwsdk with matching static_asserts in layout.cpp, in the same commit.
+What is left of 101 look like.
 
 **RpAtomic** (3)
 
@@ -144,14 +177,6 @@ answers to that question change what all 101 look like.
 
 **RwFrame** (8)
 
-  - `RwFrameCreate`
-  - `RwFrameDestroy`
-  - `RwFrameGetLTM`
-  - `RwFrameOrthoNormalize`
-  - `RwFrameRotate`
-  - `RwFrameTransform`
-  - `RwFrameTranslate`
-  - `RwFrameUpdateObjects`
 
 **RwIm2D** (4)
 

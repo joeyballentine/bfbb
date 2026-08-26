@@ -37,8 +37,20 @@ about 120 direct field accesses across 33 files, and `RwFrameGetMatrix(f)` is
 a macro for `&(f)->modelling`. A shim that only wrapped calls would leave every
 one of those reading the wrong bytes.
 
-**That decision is open.** See `TODO.md`; do not start on the object functions
-until it is made, because both answers change what every one of them looks like.
+**That decision is settled: the port mirrors librw's layouts.** In a PC build
+`RwFrame` is declared with librw's field *order* under RenderWare's field
+*names*, guarded by `GAMECUBE` so the console keeps retail's own struct. An
+`RwFrame*` is then an `rw::Frame*` and nothing converts at the seam.
+
+Converting instead was considered and does not work: the game holds `RwFrame*`
+for an entity's lifetime and writes `->modelling` directly, while librw mutates
+the same objects through its own parent/child links. Two copies would need
+syncing both ways, and direct field access offers no call boundary to hook.
+
+The rule that keeps this honest: **a type mirrored in `include/rwsdk` gets its
+offsets asserted in `layout.cpp` in the same commit.** The failure it guards
+against is silent -- game code keeps compiling and starts reading the wrong
+field. `RwFrame` is done; the rest are listed in `TODO.md`.
 
 ## Building it
 

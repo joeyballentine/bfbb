@@ -600,6 +600,24 @@ typedef RwTexture* (*RwTextureCallBack)(RwTexture* texture, void* pData);
 
 #define RwTextureGetAddressingV(_tex) RwTextureGetAddressingVMacro(_tex)
 
+// The port mirrors librw's field ORDER while keeping RenderWare's field NAMES,
+// so that an RwFrame* and an rw::Frame* are the same bytes and game code
+// compiles unmodified. Nothing converts at the seam: the game holds RwFrame*
+// for the lifetime of an entity and writes ->modelling directly at dozens of
+// sites, while librw mutates the same objects through its own parent/child
+// links, so two layouts with a copy between them could not stay in step.
+//
+// The offsets are librw's, taken from the compiler rather than read off the
+// header: object 0, inDirtyList 8, objectList 16, matrix 24, ltm 88,
+// child 152, next 156, root 160, sizeof 164 (32-bit). src/SB/Core/pc/rw/
+// static_asserts every one of them, so this stops compiling if librw moves.
+//
+// The GameCube keeps retail's own order, because that build has to stay
+// byte-identical. Guarded on GAMECUBE rather than __MWERKS__ deliberately: this
+// is a question about the console, not the compiler. Safe here because nothing
+// outside src/SB includes this header, and src/SB is the only thing built with
+// -DGAMECUBE.
+#ifdef GAMECUBE
 struct RwFrame
 {
     RwObject object;
@@ -611,6 +629,19 @@ struct RwFrame
     struct RwFrame* next;
     struct RwFrame* root;
 };
+#else
+struct RwFrame
+{
+    RwObject object;
+    RwLLLink inDirtyListLink;
+    RwLinkList objectList;
+    RwMatrix modelling; // librw calls this 'matrix'
+    RwMatrix ltm;
+    struct RwFrame* child;
+    struct RwFrame* next;
+    struct RwFrame* root;
+};
+#endif
 
 typedef RwFrame* (*RwFrameCallBack)(RwFrame* frame, void* data);
 
