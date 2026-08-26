@@ -290,6 +290,10 @@ void xSndInternalUpdateVoicePos(xSndVoiceInfo* pVoice)
                     pVoice->flags &= 0xffffffef;
                 }
             }
+            // Unreachable: the enclosing `if` already required flags & 8.
+            // The compiler folds it away, which is why this function still
+            // matches -- do not "fix" it into a plain `else`, that would make
+            // the store live and change the emitted code.
             else if (!(pVoice->flags & 8))
             {
                 pVoice->actualPos = gSnd.pos;
@@ -309,13 +313,14 @@ void xSndUpdate()
 
 void xSndSetListenerData(sound_listener_type listenerType, const xMat4x3* pMat)
 {
-    /*
-    * This code appears to be correct but there appears to be a possibility
-    * of accessing this array out of bounds.
-    * It may be possible the dwarf data for sound_listener_type is incorrect
-    * Otherwise it could be a potential bug
-    * (Gamecube audio bug source????)
-    */
+    // Not out of bounds: sound_listener_type has exactly the two values
+    // listenerMat[2] holds, and zGame/zSaveLoad only ever pass those two.
+    //
+    // The trap here is that the two listener enums are ordered OPPOSITELY --
+    // sound_listener_type is CAMERA=0, PLAYER=1, while sound_listener_game_mode
+    // is PLAYER=0, CAMERA=1 -- and both end up indexing this same array.
+    // xSndCalculateListenerPosition and xSndProcessSoundPos therefore index it
+    // with literal 0/1 rather than with a listenerMode value; keep it that way.
     int i = (int)listenerType;
     gSnd.listenerMat[i] = *pMat;
 }
