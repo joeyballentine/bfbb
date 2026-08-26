@@ -190,6 +190,51 @@ GC-derived code exactly, trading the librw format problem back in. If phase 4
 hits layout mismatches that are worse than expected, this is the fallback, and
 a hybrid is legitimate: GC-converted logical assets, Xbox renderable assets.
 
+## librw has no world sectors, and BFBB's levels are world sectors
+
+Found 2026-08-26 while writing `RpWorldStreamRead`, and it is the largest thing
+standing between this port and a playable one, so it goes here rather than in a
+TODO.
+
+**librw does not implement world sectors at all.** No `WorldSector`, no
+`PlaneSector`, no `rootSector`, no world chunk reader. Its `World::render` walks
+the clump list and carries the comment:
+
+    // this is very wrong, we really want world sectors
+
+`rw::World` is an `Object` and three `LinkList`s -- 32 bytes against
+RenderWare's fifteen members. It is a container for clumps and lights, not a
+level.
+
+BFBB's level geometry is a BSP of world sectors, so `RpWorldStreamRead` has
+nothing to read into and `RpCollisionWorldForAllIntersections` has no tree to
+descend. Both return NULL in the shim rather than reporting a success that
+hands back an empty level -- `BSP_Read` then prints that it failed, which is
+the truthful outcome. **The consequence at runtime is no level geometry: the
+player falls through the floor.** Model-to-model collision is unaffected, since
+that goes through `RpAtomicForAllIntersections`.
+
+There is a second problem stacked behind the first: BFBB's BSPs are
+GameCube-native even in the Xbox build's shape -- sector geometry is a display
+list in a platform extension chunk, which is why `iFX.cpp` reads
+`_rpDlWorldVtxFmtOffset` off the current world. librw has PS2, D3D and GL
+pipelines and no GameCube one.
+
+Three ways out, none of them small, and this is the decision phase 4 actually
+turns on:
+
+1. **Implement world sectors in librw.** The honest fix and useful upstream.
+   Sector tree, the BSP chunk reader, and a pipeline for the sector geometry.
+2. **Convert levels offline into clumps.** Flatten each BSP into atomics the
+   existing path already loads. Loses the sector culling the engine expects, so
+   whether it performs acceptably is an open question, and collision would need
+   its own answer.
+3. **Do not use librw for world rendering.** Keep it for models and textures and
+   write the level renderer directly.
+
+Nothing above this line is blocked on it -- models, textures, animation and
+collision between models all work through the shim as it stands.
+
 ## Latent retail bugs, and the NON_MATCHING escape hatch
 
 A category that is **not** a decomp error and still has to be fixed for a port:
