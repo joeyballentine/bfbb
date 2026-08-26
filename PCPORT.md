@@ -1,7 +1,10 @@
 # PC port — follow-up plan
 
-Phase 2 started; see **Phase 2 progress** below and
-`src/SB/Core/pc/README.md`. The rest of this is the design record, written
+Phase 2 started. **If you are picking this work up, read
+`PCPORT-HANDOFF.md` first** -- it is the operating manual: how to recover the
+environment, how to verify a change without fooling yourself, and what is open.
+This file is the design record and the argument; `src/SB/Core/pc/README.md`
+documents the layer itself. The rest of this is the design record, written
 while the decomp is still in progress. Nothing here should change what we work
 on day to day except one thing, flagged under **Priority consequence** below.
 
