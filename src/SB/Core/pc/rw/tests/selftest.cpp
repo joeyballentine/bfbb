@@ -19,6 +19,9 @@
 #include <rpptank.h>
 #include <rpskin.h>
 #include <rpworld.h>
+#include <rtintsec.h>
+#include <rtquat.h>
+#include <rtslerp.h>
 
 // ../stream.h rather than "rw.h": it pulls in librw's header itself, and that
 // header has no include guard, so including both redefines everything in it.
@@ -1346,6 +1349,451 @@ static void test_ptank()
     // than drawing something wrong -- its vertices are zeroed at create.
 }
 
+static RpAtomic* countAtomicCB(RpAtomic* atomic, void* data)
+{
+    (void)atomic;
+    (*(int*)data)++;
+    return atomic;
+}
+
+static RpAtomic* stopAtomicCB(RpAtomic* atomic, void* data)
+{
+    (void)atomic;
+    (*(int*)data)++;
+    return NULL;
+}
+
+static RpAtomic* recordAtomicCB(RpAtomic* atomic, void* data)
+{
+    RpAtomic*** cursor = (RpAtomic***)data;
+    **cursor = atomic;
+    (*cursor)++;
+    return atomic;
+}
+
+// An atomic on its own child frame under `root`, parked at x = `x` so that the
+// stream round trip below can tell one from another: atomics carry no name, but
+// their frames carry a matrix.
+static RpAtomic* makeClumpAtomic(RwFrame* root, RpGeometry* geometry, float x)
+{
+    RpAtomic* atomic = reinterpret_cast<RpAtomic*>(rw::Atomic::create());
+    if (atomic == NULL)
+    {
+        return NULL;
+    }
+
+    RwFrame* frame = RwFrameCreate();
+    RwV3d t = { x, 0.0f, 0.0f };
+    RwFrameTranslate(frame, &t, rwCOMBINEREPLACE);
+    reinterpret_cast<rw::Frame*>(root)->addChild(reinterpret_cast<rw::Frame*>(frame));
+
+    RpAtomicSetFrame(atomic, frame);
+    RpAtomicSetGeometry(atomic, geometry, 0);
+    return atomic;
+}
+
+static void test_clumps()
+{
+    printf("RpClump\n");
+
+    RpClump* clump = reinterpret_cast<RpClump*>(rw::Clump::create());
+    check(clump != NULL, "a clump to hang it all off");
+    if (clump == NULL)
+    {
+        return;
+    }
+
+    // RpClumpCreate is not on the 112-function list -- nothing in the game
+    // creates a clump except by reading one -- so the clump comes from librw
+    // and the mirroring is what makes RpClumpSetFrame, a macro over
+    // rwObjectSetParent, reach the right word.
+    RwFrame* root = RwFrameCreate();
+    RpClumpSetFrame(clump, root);
+    check(RpClumpGetFrame(clump) == root, "RpClumpSetFrame lands where RpClumpGetFrame reads");
+    check(RpClumpGetNumAtomics(clump) == 0, "a new clump has no atomics");
+
+    // One geometry shared by all three, so that its reference count can say
+    // afterwards whether RpClumpDestroy really took the atomics with it.
+    RpGeometry* geometry = makeQuad();
+    RpAtomic* a0 = makeClumpAtomic(root, geometry, 1.0f);
+    RpAtomic* a1 = makeClumpAtomic(root, geometry, 2.0f);
+    RpAtomic* a2 = makeClumpAtomic(root, geometry, 3.0f);
+    check(a0 != NULL && a1 != NULL && a2 != NULL, "three atomics to put in it");
+    if (a0 == NULL || a1 == NULL || a2 == NULL)
+    {
+        return;
+    }
+    check(geometry->refCount == 4, "each atomic took a reference on the shared geometry");
+
+    check(RpClumpAddAtomic(clump, a0) == clump, "RpClumpAddAtomic");
+    RpClumpAddAtomic(clump, a1);
+    RpClumpAddAtomic(clump, a2);
+    check(RpClumpGetNumAtomics(clump) == 3, "RpClumpGetNumAtomics counts them");
+    check(RpAtomicGetClump(a1) == clump, "and each atomic points back at the clump");
+
+    int calls = 0;
+    check(RpClumpForAllAtomics(clump, countAtomicCB, &calls) == clump, "RpClumpForAllAtomics");
+    check(calls == 3, "visits every atomic");
+
+    calls = 0;
+    RpClumpForAllAtomics(clump, stopAtomicCB, &calls);
+    check(calls == 1, "and stops early when a callback returns NULL");
+
+    // The deviation from librw, checked directly: RenderWare's RpClumpAddAtomic
+    // inserts at the HEAD (rwLinkListAddLLLink in src/rwsdk/world/baclump.c),
+    // where librw's Clump::addAtomic appends.
+    RpAtomic* seen[3] = { NULL, NULL, NULL };
+    RpAtomic** cursor = seen;
+    RpClumpForAllAtomics(clump, recordAtomicCB, &cursor);
+    check(seen[0] == a2 && seen[1] == a1 && seen[2] == a0,
+          "RpClumpAddAtomic inserts at the head, as baclump.c does");
+
+    // ...and the reason it has to. This is xJSP.cpp:171-177 exactly: every
+    // atomic of one clump is moved into another, walking the array backwards,
+    // and the merged clump has to end up with them in their original order
+    // because xJSP indexes its baked strip vectors by position in that list.
+    // With an appending add, this check reverses.
+    RpClump* merged = reinterpret_cast<RpClump*>(rw::Clump::create());
+    bool removeAnswered = true;
+    for (int i = 2; i >= 0; i--)
+    {
+        removeAnswered = removeAnswered && RpClumpRemoveAtomic(clump, seen[i]) == clump;
+        RpClumpAddAtomic(merged, seen[i]);
+    }
+    check(removeAnswered, "RpClumpRemoveAtomic answers with the clump");
+    check(RpClumpGetNumAtomics(clump) == 0, "and the clump they came off ends up empty");
+    check(RpAtomicGetClump(a1) == merged, "while the moved atomics point at the new one");
+
+    RpAtomic* seenAgain[3] = { NULL, NULL, NULL };
+    cursor = seenAgain;
+    RpClumpForAllAtomics(merged, recordAtomicCB, &cursor);
+    check(seenAgain[0] == seen[0] && seenAgain[1] == seen[1] && seenAgain[2] == seen[2],
+          "moving every atomic into another clump preserves their order, as xJSP.cpp needs");
+
+    // Move them back. The emptied clump is freed through librw rather than
+    // RpClumpDestroy, which would want a frame hierarchy this one never had.
+    for (int i = 2; i >= 0; i--)
+    {
+        RpClumpRemoveAtomic(merged, seen[i]);
+        RpClumpAddAtomic(clump, seen[i]);
+    }
+    check(RpAtomicGetClump(a1) == clump, "and moving them back clears it again");
+    reinterpret_cast<rw::Clump*>(merged)->destroy();
+
+    RpClumpRemoveAtomic(clump, a1);
+    check(RpClumpGetNumAtomics(clump) == 2, "RpClumpRemoveAtomic drops the count");
+    check(RpAtomicGetClump(a1) == NULL, "and clears the atomic's clump pointer");
+    RpClumpAddAtomic(clump, a1);
+
+    check(RpClumpGetNumAtomics(NULL) == 0, "RpClumpGetNumAtomics(NULL) is refused");
+    check(RpClumpForAllAtomics(NULL, countAtomicCB, &calls) == NULL,
+          "RpClumpForAllAtomics(NULL, ...) is refused");
+    check(RpClumpStreamRead(NULL) == NULL, "RpClumpStreamRead(NULL) is refused");
+    check(RpClumpDestroy(NULL) == FALSE, "RpClumpDestroy(NULL) is refused");
+
+    // --- the stream round trip --------------------------------------------
+    //
+    // The order question RpClumpStreamRead cannot answer from retail source,
+    // asked of the shim instead: librw writes the atomics in list order and
+    // reads them back in file order, so a clump that goes out and comes back
+    // has the atomics in the same sequence. The atomics are told apart by where
+    // their frames sit, which is the only thing about them that survives the
+    // trip.
+    RpAtomic* before[3] = { NULL, NULL, NULL };
+    cursor = before;
+    RpClumpForAllAtomics(clump, recordAtomicCB, &cursor);
+
+    RwMemory mem = { NULL, 0 };
+    RwStream* out = RwStreamOpen(rwSTREAMMEMORY, rwSTREAMWRITE, &mem);
+    check(out != NULL, "a memory stream to write the clump into");
+    if (out == NULL)
+    {
+        return;
+    }
+    bool wrote = reinterpret_cast<rw::Clump*>(clump)->streamWrite(out) != 0;
+    RwStreamClose(out, &mem);
+    check(wrote && mem.start != NULL, "librw wrote the clump out");
+
+    if (wrote)
+    {
+        // Exactly the shape of iModel.cpp:143 and xJSP.cpp:154: find the chunk
+        // first, then read. RpClumpStreamRead picks up inside the header.
+        RwStream* in = RwStreamOpen(rwSTREAMMEMORY, rwSTREAMREAD, &mem);
+        check(RwStreamFindChunk(in, rwID_CLUMP, NULL, NULL) != FALSE,
+              "RwStreamFindChunk finds the clump chunk");
+
+        RpClump* readBack = RpClumpStreamRead(in);
+        RwStreamClose(in, NULL);
+        check(readBack != NULL, "RpClumpStreamRead");
+
+        if (readBack != NULL)
+        {
+            check(RpClumpGetNumAtomics(readBack) == 3, "with all three atomics");
+            check(RpClumpGetFrame(readBack) != NULL, "and a root frame");
+
+            RpAtomic* got[3] = { NULL, NULL, NULL };
+            cursor = got;
+            RpClumpForAllAtomics(readBack, recordAtomicCB, &cursor);
+            check(got[0] != NULL && got[1] != NULL && got[2] != NULL,
+                  "the read-back atomics enumerate");
+            if (got[2] != NULL)
+            {
+                // The atomics come back as new objects, so they are matched up
+                // by where their frames sit -- which is why each one was parked
+                // at a different x.
+                check(near(RpAtomicGetFrame(got[0])->modelling.pos.x,
+                           RpAtomicGetFrame(before[0])->modelling.pos.x) &&
+                          near(RpAtomicGetFrame(got[1])->modelling.pos.x,
+                               RpAtomicGetFrame(before[1])->modelling.pos.x) &&
+                          near(RpAtomicGetFrame(got[2])->modelling.pos.x,
+                               RpAtomicGetFrame(before[2])->modelling.pos.x),
+                      "in the order they were written, not reversed");
+                check(RpAtomicGetGeometry(got[0]) != geometry,
+                      "each with a geometry of its own, read from the stream");
+            }
+
+            check(RpClumpDestroy(readBack) != FALSE, "RpClumpDestroy on the read-back clump");
+        }
+    }
+
+    RwFree(mem.start);
+
+    // RpClumpDestroy takes the atomics, and the atomics drop their references
+    // on the shared geometry. Reading refCount afterwards is safe precisely
+    // because the count is not expected to reach zero.
+    check(RpClumpDestroy(clump) != FALSE, "RpClumpDestroy");
+    check(geometry->refCount == 1, "it destroyed the atomics, which released the geometry");
+    reinterpret_cast<rw::Geometry*>(geometry)->destroy();
+
+    // The frames went with it: root was the clump's frame, and RpClumpDestroy
+    // destroys the whole hierarchy. Nothing here can prove a freed frame is
+    // gone without reading it, so what is checked is that librw's allocator
+    // saw the frees -- four frames, three atomics and the clump.
+    check(sNumFree > 0, "and the frame hierarchy under it");
+}
+
+// --- Rt --------------------------------------------------------------------
+//
+// The intersection pair is exercised directly here as well as through
+// RpAtomicForAllIntersections in test_atomics, because xClumpColl.cpp calls
+// them by name against a collision tree and never goes through an atomic.
+
+static void test_intersections()
+{
+    printf("Rt intersection\n");
+
+    // The same quad's first triangle, in the xz plane. cross(v1-v0, v2-v0)
+    // points down, which is the winding xClumpColl.cpp would hand over for a
+    // ceiling.
+    RwV3d v0 = { -1.0f, 0.0f, -1.0f };
+    RwV3d v1 = { 1.0f, 0.0f, -1.0f };
+    RwV3d v2 = { 1.0f, 0.0f, 1.0f };
+
+    RwSphere sphere = { { 0.0f, 0.5f, 0.0f }, 1.0f };
+    RwV3d normal;
+    RwReal distance = -1.0f;
+
+    check(RtIntersectionSphereTriangle(&sphere, &v0, &v1, &v2, &normal, &distance) != FALSE,
+          "RtIntersectionSphereTriangle, over the face");
+    check(near(distance, 0.5f), "reports the distance from the centre to the triangle");
+    check(near(normal.x, 0.0f) && near(normal.y, -1.0f) && near(normal.z, 0.0f),
+          "and the unit normal of the winding it was given");
+
+    // Just out of reach above the face: the radius is what decides, and the
+    // distance still comes back.
+    sphere.center.y = 2.0f;
+    check(RtIntersectionSphereTriangle(&sphere, &v0, &v1, &v2, &normal, &distance) == FALSE,
+          "a sphere above the face by more than its radius misses");
+    check(near(distance, 2.0f), "and still reports how far away it was");
+
+    // Beyond the edge, in the plane. This is the case a plane-distance test
+    // would get wrong: the sphere is zero units from the triangle's PLANE and
+    // four units from the triangle.
+    sphere.center.x = 5.0f;
+    sphere.center.y = 0.0f;
+    sphere.center.z = 0.0f;
+    check(RtIntersectionSphereTriangle(&sphere, &v0, &v1, &v2, &normal, &distance) == FALSE,
+          "a sphere in the plane but off the edge misses");
+    check(near(distance, 4.0f), "at the distance to the nearest edge, not to the plane");
+
+    // Touching a vertex exactly, which is where the Voronoi-region form earns
+    // its keep.
+    sphere.center.x = -1.5f;
+    sphere.center.y = 0.0f;
+    sphere.center.z = -1.0f;
+    sphere.radius = 0.5f;
+    check(RtIntersectionSphereTriangle(&sphere, &v0, &v1, &v2, &normal, &distance) != FALSE,
+          "a sphere just reaching a vertex hits");
+    check(near(distance, 0.5f), "at exactly its radius");
+
+    check(RtIntersectionSphereTriangle(NULL, &v0, &v1, &v2, &normal, &distance) == FALSE,
+          "RtIntersectionSphereTriangle(NULL, ...) is refused");
+
+    // --- the box ----------------------------------------------------------
+
+    RwBBox bbox;
+    bbox.inf.x = -2.0f;
+    bbox.inf.y = -1.0f;
+    bbox.inf.z = -2.0f;
+    bbox.sup.x = 2.0f;
+    bbox.sup.y = 1.0f;
+    bbox.sup.z = 2.0f;
+    check(RtIntersectionBBoxTriangle(&bbox, &v0, &v1, &v2) != FALSE,
+          "RtIntersectionBBoxTriangle, box around the triangle");
+
+    // Beside it: the box's own face normals separate.
+    bbox.inf.x = 5.0f;
+    bbox.sup.x = 6.0f;
+    check(RtIntersectionBBoxTriangle(&bbox, &v0, &v1, &v2) == FALSE, "a box beside it misses");
+
+    // Above it: separated on y alone.
+    bbox.inf.x = -2.0f;
+    bbox.sup.x = 2.0f;
+    bbox.inf.y = 1.0f;
+    bbox.sup.y = 2.0f;
+    check(RtIntersectionBBoxTriangle(&bbox, &v0, &v1, &v2) == FALSE, "a box above it misses");
+
+    // The case that separates a real triangle test from a bounding-box test:
+    // this box is inside the triangle's AABB and outside the triangle, on the
+    // diagonal edge. Only an edge-cross-edge axis rejects it.
+    bbox.inf.x = -0.95f;
+    bbox.inf.y = -0.1f;
+    bbox.inf.z = 0.5f;
+    bbox.sup.x = -0.55f;
+    bbox.sup.y = 0.1f;
+    bbox.sup.z = 0.9f;
+    check(RtIntersectionBBoxTriangle(&bbox, &v0, &v1, &v2) == FALSE,
+          "a box inside the triangle's bounds but past its diagonal misses");
+
+    check(RtIntersectionBBoxTriangle(NULL, &v0, &v1, &v2) == FALSE,
+          "RtIntersectionBBoxTriangle(NULL, ...) is refused");
+}
+
+static void test_slerp()
+{
+    printf("RtQuat\n");
+
+    const float root2 = 0.70710678f;
+
+    // Identity, and a quarter turn about y. A quaternion's angle is half the
+    // rotation's, so these two are pi/4 apart.
+    RtQuat from = { { 0.0f, 0.0f, 0.0f }, 1.0f };
+    RtQuat to = { { 0.0f, root2, 0.0f }, root2 };
+
+    RtQuatSlerpCache cache;
+    memset(&cache, 0xCD, sizeof(cache));
+    RtQuatSetupSlerpCache(&from, &to, &cache);
+    check(cache.nearlyZeroOm == FALSE, "RtQuatSetupSlerpCache takes the slerp path");
+    check(near(cache.omega, 0.78539816f), "and caches the half-angle between them");
+
+    // The cached quaternions are the originals divided by sin(omega), which is
+    // the division RtQuatSlerpMacro does not do.
+    check(near(cache.raFrom.real, 1.0f / 0.70710678f),
+          "raFrom is the initial quaternion scaled by 1/sin(omega)");
+
+    RtQuat result;
+    RtQuatSlerp(&result, &from, &to, 0.5f, &cache);
+    check(near(result.imag.y, 0.38268343f) && near(result.real, 0.92387953f),
+          "the halfway slerp is an eighth turn");
+    check(near(result.imag.x, 0.0f) && near(result.imag.z, 0.0f), "about the axis it was given");
+    check(near(result.imag.y * result.imag.y + result.real * result.real, 1.0f),
+          "and comes out unit length");
+
+    RtQuatSlerp(&result, &from, &to, 0.0f, &cache);
+    check(result.real == from.real, "t <= 0 is the start quaternion exactly");
+    RtQuatSlerp(&result, &from, &to, 1.0f, &cache);
+    check(result.real == to.real, "t >= 1 is the end quaternion exactly");
+
+    // The shortest arc. -q is the same rotation as q, so this pair describes
+    // the same eighth turn -- but a slerp that did not flip the sign would take
+    // the long way round and iAnimSKB.cpp would spin the bone.
+    RtQuat negated = { { 0.0f, -root2, 0.0f }, -root2 };
+    RtQuatSetupSlerpCache(&from, &negated, &cache);
+    check(cache.nearlyZeroOm == FALSE, "a negated destination still slerps");
+    check(near(cache.omega, 0.78539816f), "over the same angle, not the reflex one");
+    RtQuatSlerp(&result, &from, &negated, 0.5f, &cache);
+    check(near(result.imag.y, 0.38268343f) && near(result.real, 0.92387953f),
+          "and lands on the short way round");
+
+    // Nearly parallel: 1/sin(omega) is where a slerp blows up, so the cache
+    // says lerp instead.
+    RtQuat almost = { { 0.0f, 0.00001f, 0.0f }, 1.0f };
+    RtQuatSetupSlerpCache(&from, &almost, &cache);
+    check(cache.nearlyZeroOm != FALSE, "two nearly equal quaternions fall back to a lerp");
+    check(cache.raFrom.real == 1.0f, "with the quaternions cached unscaled");
+    RtQuatSlerp(&result, &from, &almost, 0.5f, &cache);
+    check(near(result.imag.y, 0.000005f) && near(result.real, 1.0f), "which is the midpoint");
+
+    // Identical quaternions: omega is exactly zero and 1/sin(0) would be an
+    // infinity that reached every bone in the skeleton.
+    RtQuatSetupSlerpCache(&from, &from, &cache);
+    check(cache.nearlyZeroOm != FALSE, "and so do two identical ones");
+    RtQuatSlerp(&result, &from, &from, 0.5f, &cache);
+    check(near(result.real, 1.0f) && near(result.imag.y, 0.0f), "with no NaN in sight");
+}
+
+static void test_object_frames()
+{
+    printf("_rwObjectHasFrameSetFrame\n");
+
+    // Not on the 112-function list, and the reason is a bug in how that list
+    // was generated rather than anything about the function. RwCameraSetFrame
+    // and RpLightSetFrame are macros for it.
+    RwCamera* camera = RwCameraCreate();
+    RwFrame* frame = RwFrameCreate();
+    check(camera != NULL && frame != NULL, "a camera and a frame");
+    if (camera == NULL || frame == NULL)
+    {
+        return;
+    }
+
+    check(RwCameraGetFrame(camera) == NULL, "a new camera is on no frame");
+    RwCameraSetFrame(camera, frame);
+    check(RwCameraGetFrame(camera) == frame, "RwCameraSetFrame attaches it");
+
+    // The other half of the attach, and the half a naive implementation would
+    // miss: the frame has to know about the object too, or moving the frame
+    // never syncs the camera.
+    check(frame->objectList.link.next != &frame->objectList.link,
+          "and the frame's object list is no longer empty");
+
+    RwV3d t = { 4.0f, 5.0f, 6.0f };
+    RwFrameTranslate(frame, &t, rwCOMBINEREPLACE);
+    check(near(RwFrameGetLTM(RwCameraGetFrame(camera))->pos.x, 4.0f),
+          "so the camera reads its frame's LTM");
+
+    // Reattaching has to unhook from the old frame first, or the old frame's
+    // list keeps a link into a camera that is no longer in it.
+    RwFrame* other = RwFrameCreate();
+    RwCameraSetFrame(camera, other);
+    check(RwCameraGetFrame(camera) == other, "reattaching moves it");
+    check(frame->objectList.link.next == &frame->objectList.link,
+          "and empties the frame it came off");
+
+    // The detach. xShadow.cpp:693 and zNPCTypePrawn.cpp:622 both do this
+    // immediately before destroying the frame underneath.
+    _rwObjectHasFrameSetFrame(camera, NULL);
+    check(RwCameraGetFrame(camera) == NULL, "_rwObjectHasFrameSetFrame(obj, NULL) detaches");
+    check(other->objectList.link.next == &other->objectList.link, "leaving the frame empty");
+
+    // A light, because the void* is meant to take any of them and the offset
+    // it relies on is a different struct's.
+    RpLight* light = RpLightCreate(rpLIGHTDIRECTIONAL);
+    if (light != NULL)
+    {
+        RpLightSetFrame(light, frame);
+        check(RpLightGetFrame(light) == frame, "RpLightSetFrame reaches the same code");
+        _rwObjectHasFrameSetFrame(light, NULL);
+        RpLightDestroy(light);
+    }
+
+    _rwObjectHasFrameSetFrame(NULL, frame); // must not fault
+
+    RwFrameDestroy(other);
+    RwFrameDestroy(frame);
+    RwCameraDestroy(camera);
+}
+
 static void test_engine_shutdown()
 {
     printf("RwEngine teardown\n");
@@ -1383,6 +1831,10 @@ int main()
     test_skin();
     test_matfx();
     test_ptank();
+    test_clumps();
+    test_intersections();
+    test_slerp();
+    test_object_frames();
     test_engine_shutdown();
 
     printf("\n%d failure%s\n", failures, failures == 1 ? "" : "s");

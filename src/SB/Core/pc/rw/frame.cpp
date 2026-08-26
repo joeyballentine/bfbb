@@ -74,6 +74,38 @@ RwFrame* RwFrameUpdateObjects(RwFrame* frame)
     return frame;
 }
 
+// The other half of RwFrame: attaching a camera, a light or an atomic TO one.
+//
+// This is not on the 112-function list and its absence from that list is a bug
+// in how the list was generated (see TODO.md), not a statement that nothing
+// needs it. RwCameraSetFrame and RpLightSetFrame are macros for it, and eleven
+// sites call it by name -- so the camera and light groups were never actually
+// complete without this function.
+//
+// The void* is RenderWare's own signature, and it works because every object
+// that can hang off a frame leads with an RwObjectHasFrame: RwCamera, RpLight
+// and RpAtomic all do, on both sides of the mirror. That is asserted for
+// RwObjectHasFrame itself in layout_geometry.cpp; what makes the cast below
+// safe is that librw's Camera, Light and Atomic each lead with an
+// ObjectWithFrame too, so offset zero means the same thing in both.
+//
+// librw's ObjectWithFrame::setFrame is what RenderWare's does, step for step,
+// down to inserting at the HEAD of the frame's object list and running
+// RwFrameUpdateObjects afterwards -- which is the call that makes the newly
+// attached object pick up the frame's LTM before anything reads it.
+void _rwObjectHasFrameSetFrame(void* object, RwFrame* frame)
+{
+    if (object == NULL)
+    {
+        return;
+    }
+
+    // A NULL frame is the detach, and every caller that passes one means it:
+    // xLightKit.cpp:142 parks a light, xShadow.cpp:693 and zNPCTypePrawn.cpp:622
+    // park a camera before its frame is destroyed underneath it.
+    reinterpret_cast<rw::ObjectWithFrame*>(object)->setFrame(asFrame(frame));
+}
+
 // librw has no counterpart for this one, so it is written out rather than
 // forwarded. RenderWare re-orthonormalizes a frame's modelling matrix to undo
 // the drift that accumulates when rotations are concatenated over thousands of
