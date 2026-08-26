@@ -16,6 +16,7 @@
 
 #include <rwcore.h>
 #include <rpcollis.h>
+#include <rpcollbsptree.h>
 #include <rpmatfx.h>
 #include <rpptank.h>
 #include <rpskin.h>
@@ -101,6 +102,16 @@ static void test_engine_startup()
     check(RpMatFXPluginAttach() != FALSE, "RpMatFXPluginAttach");
     check(RpPTankPluginAttach() != FALSE, "RpPTankPluginAttach");
     check(_rpPTankAtomicDataOffset > 0, "RpPTank got a slot in the atomic's plugin block");
+
+    // The collision plugin exists to make RpCollisionGeometryGetData answer
+    // NULL, which sounds like nothing and is not: RWPLUGINOFFSET is
+    // `base + offset`, so it is never NULL and the macro's ternary always
+    // dereferences. With the offset left at 0 it would read a geometry's own
+    // first word as an RpCollisionData* and hand xCollide.cpp garbage that
+    // passes its `colldata && colldata->tree` check.
+    check(RpCollisionPluginAttach() != FALSE, "RpCollisionPluginAttach");
+    check(_rpCollisionGeometryDataOffset > 0,
+          "RpCollision got a slot in the geometry's plugin block, not offset zero");
 
     // A real backend needs a window before the engine can open on it -- D3D9
     // creates its device against an HWND -- so this test opens one, the way
@@ -1173,6 +1184,13 @@ static void test_geometry()
     check(geometry->morphTarget[0].parentGeom == geometry,
           "the morph target points back at its geometry");
     check(geometry->refCount == 1, "a new geometry starts with one reference");
+
+    // The whole contract of the collision plugin, checked on a real geometry.
+    // A model with no collision tree has to report NOT HAVING ONE; every caller
+    // then takes its brute-force path (xCollide.cpp:2093) or skips the query
+    // outright (xShadow.cpp:1454).
+    check(RpCollisionGeometryGetData(geometry) == NULL,
+          "a geometry with no collision data reports none");
 
     RwUInt16 a = 0;
     RwUInt16 b = 0;

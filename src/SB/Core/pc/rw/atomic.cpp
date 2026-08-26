@@ -453,3 +453,30 @@ RpAtomic* RpAtomicStreamRead(RwStream* stream)
 
     return reinterpret_cast<RpAtomic*>(a);
 }
+
+// RenderWare's default atomic render callback, by name.
+//
+// Four sites assign it to restore an atomic's rendering after having replaced
+// it -- xEntBoulder.cpp:158, zCutsceneMgr.cpp:263, zEntCruiseBubble.cpp:934 and
+// zNPCTypeVillager.cpp:2162 -- and RpAtomicSetRenderCallBack's macro in
+// rpworld.h:305 uses it as the value that means "back to normal". So it has to
+// be a real function with a real address, not a forward to librw's, because
+// what those sites store is the POINTER.
+//
+// The signatures differ in their return only: librw's renderCB is
+// void(Atomic*), RenderWare's is RpAtomic*(RpAtomic*). rpworld.h's mirrored
+// RpAtomic keeps RenderWare's spelling deliberately -- game code assigns its own
+// callbacks into that slot -- and the note there explains why the mismatch is
+// safe: one pointer either way, cdecl on both sides, and librw calls it as
+// `this->renderCB(this)` and discards nothing because there is nothing to
+// discard. This function is the other end of that arrangement.
+RpAtomic* AtomicDefaultRenderCallBack(RpAtomic* atomic)
+{
+    if (atomic == NULL)
+    {
+        return NULL;
+    }
+
+    rw::Atomic::defaultRenderCB(asAtomic(atomic));
+    return atomic;
+}
