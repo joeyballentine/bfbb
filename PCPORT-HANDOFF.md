@@ -4,13 +4,13 @@ For whoever picks this up next. `PCPORT.md` is the design record and the
 argument; this is the operating manual. Read this first, then
 `src/SB/Core/pc/README.md` for the layer itself.
 
-Branch: **`treedome`**, off `duplicatotron-3000`.
+Branch: **`treedome`**, off `duplotron`.
 
 ---
 
 ## 0. Setup, and what this branch sits on
 
-`treedome` branches off `duplicatotron-3000` and **inherits the CodeWarrior
+`treedome` branches off `duplotron` and **inherits the CodeWarrior
 patch on purpose**. That costs you nothing if you only want to build the port:
 the PC build is clang/cmake and never invokes CodeWarrior. The patch matters
 only for running the GameCube regression gate in section 1, and inheriting it
@@ -19,7 +19,7 @@ than roughly 7180 against a stock compiler).
 
 The division of labour matters when you add something:
 
-- **`duplicatotron-3000`** is the shared base -- decomp work, the compiler
+- **`duplotron`** is the shared base -- decomp work, the compiler
   patch, and `tools/gcgate.py`. Anything both branches need goes there, and
   `treedome` is rebased on top, so the port never carries a duplicate copy.
 - **`treedome`** is the port and nothing else: `src/SB/Core/pc/`,
@@ -351,7 +351,7 @@ implemented" should be read as *implemented for Linux*.
 
 ## 6. Conventions that are not negotiable
 
-From `DUPLICATOTRON.md` and the `bfbb-decomp` skill, and they apply here too:
+From `DUPLOTRON.md` and the `bfbb-decomp` skill, and they apply here too:
 
 - **Never fabricate.** No stub that returns a constant to make something pass,
   no dead code, no `#if 0`. `PCPORT.md` names a live example of the hazard:
