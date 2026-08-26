@@ -505,11 +505,14 @@ static S32 xSER_xsgclt_svproc_clt(void* cltdata, st_XSAVEGAME_DATA* xsg,
 static S32 xSER_xsgclt_ldproc_clt(void*, st_XSAVEGAME_DATA* xsg, st_XSAVEGAME_READCONTEXT* rctxt,
                                   U32 idtag, S32)
 {
-    if ((g_xserdata.flg_info & 1) == 0)
+    if (g_xserdata.flg_info & 1)
     {
-        st_SERIAL_CLIENTINFO* clt = XSER_get_client(idtag);
-        xSGReadData(xsg, rctxt, (char*)clt->membuf, clt->actsize);
+        return 1;
     }
+
+    st_SERIAL_CLIENTINFO* clt = XSER_get_client(idtag);
+    xSGReadData(xsg, rctxt, (char*)clt->membuf, clt->actsize);
+
     return 1;
 }
 
@@ -543,9 +546,12 @@ static S32 xSER_xsgclt_ldproc_fill(void*, st_XSAVEGAME_DATA* xsg, st_XSAVEGAME_R
                                    U32, S32)
 {
     char filbuf[9] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-    if ((g_xserdata.flg_info & 1) == 0)
+    if (g_xserdata.flg_info & 1)
     {
-        xSGReadData(xsg, rctxt, (char*)&filbuf, 8);
+        return 1;
     }
+
+    xSGReadData(xsg, rctxt, (char*)&filbuf, 8);
+
     return 1;
 }
