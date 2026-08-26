@@ -19,6 +19,13 @@
 //
 // When a module gets a real implementation, its file stops including this
 // header. Nothing else has to change.
+//
+// **Nothing includes this today**, and it is kept anyway. All eleven platform
+// modules that were stubbed this way are now written; the header survives
+// because the next thing that has to be stubbed before it can be built -- a
+// librw backend, an audio device, whatever comes -- should be stubbed the same
+// way, and because the argument in the paragraph above is the part worth
+// keeping. See src/SB/Core/pc/PORTING.md.
 
 #include <stdio.h>
 

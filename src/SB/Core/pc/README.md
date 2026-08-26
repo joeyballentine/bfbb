@@ -54,15 +54,16 @@ up on a D3D9 device. See LINKING.md.
 | `iEnv`, `iLight`, `iAnim`, `iMorph`, `iMath3`, `iCollide`, `iCollideFast` | **done** | all verbatim copies — see VERBATIM.txt and PORTING.md |
 | `iCutscene`, `iAnimSKB` | **done** | ported, not copied; see the notes in CMakeLists.txt |
 | `iDraw` | **done, lossy** | `iDrawSetFBMSK` is a documented no-op. It is a frame-buffer write mask with no spelling in RenderWare's portable render state or librw's, and four call sites use it to make a first pass invisible. Those passes now paint |
-| `iFX` (1 fn) | **stub** | `iFXanimUVCreatePipe`, a custom RxPipeline. The first stub the boot reaches |
-| `iFMV` (1 fn) | **stub, and will not be ported** | Bink is proprietary. The decision taken is to convert the videos with ffmpeg ahead of time and play them back with something else |
+| `iFX` (1 fn) | **refusal** | `iFXanimUVCreatePipe` returns NULL, which xFX.cpp:883 already handles: atomics keep their default pipeline and surfaces with animated texture coordinates draw static. Needs a texture matrix in librw |
+| `iFMV` (1 fn) | **refusal, and will not be ported** | Bink is proprietary. Movies return "ran to the end" immediately so the game advances past them. The plan of record is ffmpeg ahead of time plus a different player; the file lists what that needs |
 | `ngcrad3d` | not ported | GameCube radiosity; no host counterpart |
 
-Nine of the eleven unported platform modules are done; `iFX` and `iFMV` are
-left. Seven of the nine were byte-identical copies of their `gc` counterparts,
+**All eleven are done.** Seven were byte-identical copies of their `gc` counterparts,
 which is the finding PORTING.md is built around: most of this layer is not
 GameCube code, it is RenderWare calls and game logic that happen to live in the
-platform directory.
+platform directory. Two needed one hunk each (`iModel`, `iScrFX`), and two are
+deliberate refusals whose files say what is lost and what closing them costs
+(`iFX`, `iFMV`). `iDraw` is implemented but lossy.
 
 **This table has been wrong before.** It said "header only" for nine interfaces
 that were already implemented, because four rounds of porting updated the code

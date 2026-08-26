@@ -12,9 +12,10 @@
 //      platform modules still stubbed, "which line came last" is the entire
 //      diagnosis, so losing the tail is losing the answer.
 //
-//   2. Say what this build is. A stub-linked port that crashes looks exactly
-//      like a broken port unless the log says up front that most of the
-//      platform layer is not implemented yet.
+//   2. Say what this build is. All eleven platform modules are implemented now,
+//      but two of them -- iFX and iFMV -- are deliberate refusals rather than
+//      ports, so the banner names what is missing instead of letting someone
+//      discover it by watching a cutscene that never plays.
 //
 // This file is also what gives the CMake executable a source of its own, and
 // what makes the compiler driver name the CRT -- linking the archives with no
@@ -161,8 +162,8 @@ namespace
             SetUnhandledExceptionFilter(CrashHandler);
             setvbuf(stdout, NULL, _IONBF, 0);
             setvbuf(stderr, NULL, _IONBF, 0);
-            printf("bfbb: PC port. Eleven platform modules are STUBS -- each reports itself\n");
-            printf("bfbb: the first time it is called. See src/SB/Core/pc/iStub.h.\n");
+            printf("bfbb: PC port, D3D9. iFX and iFMV are refusals rather than ports --\n");
+            printf("bfbb: no animated UVs, movies are skipped. See src/SB/Core/pc/README.md.\n");
             if (getenv("BFBB_TEST_CRASH")) { *(volatile int*)0 = 1; }
         }
     };

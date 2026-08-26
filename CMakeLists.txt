@@ -305,6 +305,19 @@ add_library(bfbb_platform STATIC
   # Note that iScrFX.h is deliberately diverged rather than copied -- see the
   # comment about rwGameCube2DVertex in VERBATIM.txt -- so this module is off
   # the drift list at both ends.
+  # Ported as a REFUSAL, and the game already handles it: xFX.cpp:883 leaves an
+  # atomic on its default pipeline when this returns NULL, so surfaces with
+  # animated texture coordinates draw static instead of moving. The file says
+  # why there is nothing to forward to and what a real implementation costs.
+  # Not a port of gc/iFMV.cpp and never will be -- that file decodes Bink, which
+  # is proprietary middleware that cannot be redistributed. Movies return
+  # immediately as "ran to the end" so the game advances past them. The plan of
+  # record is ffmpeg ahead of time plus a different player; the file lists what
+  # that will need.
+  ${PC_DIR}/iFMV.cpp
+
+  ${PC_DIR}/iFX.cpp
+
   ${PC_DIR}/iScrFX.cpp
 
   # Ported, and the first module in the port that LOSES a rendering behaviour
@@ -316,22 +329,15 @@ add_library(bfbb_platform STATIC
   # mask to librw, not editing this file.
   ${PC_DIR}/iDraw.cpp
 
-  # --- STUBS, not implementations ------------------------------------------
-  # Eleven modules have a PC header and no PC implementation. These files make
-  # the port LINK so that it can be RUN, which is the next gate after the one
-  # tools/pclink.py just closed -- compiling found nothing about symbols, and
-  # linking finds nothing about what actually happens at startup.
+  # The STUBS block that used to sit here is GONE, and that is the milestone:
+  # all eleven platform modules have real implementations above. Seven were
+  # byte-identical copies of their gc counterparts, two needed one hunk each,
+  # and two -- iFX and iFMV -- are documented refusals whose files say what is
+  # lost and what closing them would take.
   #
-  # Every function in them reports itself the first time it is called, and that
-  # log IS the worklist: the order the startup path demands these in decides
-  # which one gets written first. src/SB/Core/gc/<module>.cpp is the source to
-  # port from, and most of them are RenderWare calls and game logic rather than
-  # GameCube hardware.
-  #
-  # A file leaves this block when it stops being a stub. It does not need to
-  # move -- it needs to stop including iStub.h.
-  ${PC_DIR}/iFX.cpp
-  ${PC_DIR}/iFMV.cpp
+  # src/SB/Core/pc/iStub.h is deliberately kept even though nothing includes it
+  # any more. It is the pattern for the next module that has to be stubbed
+  # before it can be written, and PORTING.md points at it.
 
   ${INPUT_SOURCES}
   ${AUDIO_SOURCES}
