@@ -417,7 +417,7 @@ void aqua_beam::render_ring(aqua_beam::ring_segment& r)
 xAnimTable* ZNPC_AnimTable_Prawn()
 {
     // clang-format off
-    S32 ourAnims[10] = {
+    S32 ourAnims[] = {
         ANIM_Idle01,
         ANIM_Fidget01,
         ANIM_Fidget02,
@@ -427,7 +427,7 @@ xAnimTable* ZNPC_AnimTable_Prawn()
         ANIM_AttackLoop01,
         ANIM_AttackEnd01,
         ANIM_Damage01,
-        ANIM_Damage02,
+        ANIM_Damage02 NPCC_ANIM_LIST_END
 
     };
     // clang-format on

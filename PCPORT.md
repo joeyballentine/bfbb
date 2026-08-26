@@ -157,6 +157,50 @@ GC-derived code exactly, trading the librw format problem back in. If phase 4
 hits layout mismatches that are worse than expected, this is the fallback, and
 a hybrid is legitimate: GC-converted logical assets, Xbox renderable assets.
 
+## Latent retail bugs, and the NON_MATCHING escape hatch
+
+A category that is **not** a decomp error and still has to be fixed for a port:
+retail code that reads uninitialised stack, where retail's own frame contents
+happen to make the read harmless. We reproduce the code exactly, inherit the
+read, and do not inherit the luck.
+
+**Confirmed instance.** The Flying Dutchman boss level crashed with
+`Invalid read from 0xbed60419, PC = 0x8004c540`, which is `lbz r8,0(r9)` in
+`xStrTokBuffer`. `ZNPC_AnimTable_Dutchman` declares a 13-entry `ourAnims` with
+no terminator; `NPCC_BuildStandardAnimTran` scans `while (ourAnims[i] != 0)`.
+The scan always reads one word past the array, uses it to index
+`g_strz_subbanim[23]`, and hands the resulting pointer to the tokenizer.
+
+All three functions are faithful: the target's initialiser blob is 0x34 (13
+words, no zero), the target's loop is the same `lwzx / cmpwi 0 / bne+`, and
+`ZNPC_AnimTable_Dutchman` and `ZNPC_AnimTable_Prawn` are both **100% matching**.
+The array sits at 24(r1)..72(r1) and `stmw r20,80(r1)` starts the saved
+registers, so 76(r1) is a hole in retail's frame too. Retail simply had 0 there.
+
+**Why matching harder does not fix it.** The value in that hole is whatever the
+preceding execution left at that address, so it is a property of the whole
+build, not of any one function. 39 of 44 `ZNPC_AnimTable_*` builders already
+match, including the one that runs immediately before Dutchman, and it still
+crashed. Only a 100% tree would inherit retail's stack history -- and a PC port
+never reproduces PowerPC frame layout at all, so the port needs the real fix
+regardless of what the percentage says.
+
+**The escape hatch.** `configure.py` appends `-DNON_MATCHING` to `cflags_bfbb`
+when configured with `--non-matching`. Source guarded by it is absent from the
+matching build -- which is required, since adding a terminator changes codegen --
+and present in every build that has to actually run, including the port.
+
+`NPCC_ANIM_LIST_END` in `zNPCTypeCommon.h` is the first user: it expands to
+`, 0` under `NON_MATCHING` and to nothing otherwise. Applied to the Dutchman
+and Prawn lists, whose blobs go 0x34 -> 0x38 and 0x28 -> 0x2c in the playtest
+build while both objects stay byte-identical in the matching build.
+
+Verify any future use the same way: the matching `.o` must be byte-identical
+before and after, and `main.dol` must stay 306526d90b48e99894c3138f5fc8f2716d9fecf6.
+
+Use this sparingly. It is for defects that are provably retail's, where the
+matching build must not change. It is not a way to avoid fixing our own bugs.
+
 ## Other things that will bite
 
 **Strict aliasing.** The source is full of `*(U32*)&someFloat` casts that exist

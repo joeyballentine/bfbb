@@ -378,7 +378,7 @@ static U32 dutchman_count;
 xAnimTable* ZNPC_AnimTable_Dutchman()
 {
     // clang-format off
-    S32 ourAnims[13] = {
+    S32 ourAnims[] = {
         ANIM_Idle01,
         ANIM_Fidget01, 
         ANIM_Fidget02, 
@@ -391,7 +391,7 @@ xAnimTable* ZNPC_AnimTable_Dutchman()
         ANIM_Attack02Windup01, 
         ANIM_Attack02Loop01, 
         ANIM_Attack02End01,
-        ANIM_LassoGrab01,
+        ANIM_LassoGrab01 NPCC_ANIM_LIST_END
         
     };
     // clang-format on

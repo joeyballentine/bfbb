@@ -328,6 +328,15 @@ cflags_bfbb = [
     "-DGAMECUBE",
 ]
 
+# Guards source that must NOT be in a matching build but must be in a runnable
+# one. Retail contains reads of uninitialised stack that are harmless with its
+# exact frame contents, are not harmless with ours, and will not be harmless in
+# a PC port either -- see "Latent retail bugs" in PCPORT.md. The fix has to be
+# absent from the matching build, because adding it changes codegen, and
+# present everywhere else.
+if config.non_matching:
+    cflags_bfbb.append("-DNON_MATCHING")
+
 config.linker_version = "GC/2.0p1"
 
 # The SB library is built with a patched CodeWarrior that narrows an

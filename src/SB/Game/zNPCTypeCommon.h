@@ -574,6 +574,22 @@ void zNPCSettings_MakeDummy();
 void ZNPC_Common_Startup();
 void zNPCCommon_WonderReset();
 void ZNPC_Common_Shutdown();
+// NPCC_BuildStandardAnimTran walks ourAnims until it reads a 0. Several of
+// retail's lists have no 0 in them -- ZNPC_AnimTable_Dutchman passes 13 non-zero
+// entries, ZNPC_AnimTable_Prawn 10 -- so the scan always reads one element past
+// the end of a stack array. Retail gets away with it because the word after the
+// array happens to hold 0 in its frames; ours does not, and the resulting index
+// into the name table produces a wild pointer that xStrTokBuffer dereferences.
+//
+// Terminating the lists is a deviation from retail, so it is confined to builds
+// that have to actually run. Both anim table functions are 100% matching and
+// must stay that way. See "Latent retail bugs" in PCPORT.md.
+#ifdef NON_MATCHING
+#define NPCC_ANIM_LIST_END , 0
+#else
+#define NPCC_ANIM_LIST_END
+#endif
+
 void NPCC_BuildStandardAnimTran(xAnimTable* table, char** namelist, S32* ourAnims, S32 idx_dflt,
                                 F32 blend);
 void zNPCCommon_Timestep(xScene* xscn, F32 dt);
