@@ -14,7 +14,7 @@
 #include <rtintsec.h>
 
 #include "intersect.h"
-#include "rw.h"
+#include "stream.h" // brings in librw's rw.h, which must not be included twice
 
 static inline rw::Atomic* asAtomic(RpAtomic* a)
 {
@@ -271,4 +271,185 @@ RpAtomic* RpAtomicForAllIntersections(RpAtomic* atomic, RpIntersection* intersec
     }
 
     return atomic;
+}
+
+// Destroy, and the standalone-atomic stream pair.
+//
+// **None of these three was on the 112-function list, and their absence was
+// not deliberate.** The list was regenerated from the undefined RenderWare
+// symbols in the GameCube objects; these are called only from
+// xModelBucket.cpp, and the earlier sweeps read past them. They are found by
+// the corrected command in TODO.md, which now excludes symbols the game
+// defines itself and includes data symbols rather than only text ones.
+//
+// All three exist for one function: FullAtomicDupe (xModelBucket.cpp:125),
+// which duplicates an atomic by writing it to a memory stream and reading it
+// back N times. That is also the caller stream.cpp's hand-written memory
+// stream exists for -- librw's own truncates at its initial capacity where
+// RenderWare's grows -- so the port had already paid for half of this without
+// the other half being there.
+
+RwBool RpAtomicDestroy(RpAtomic* atomic)
+{
+    if (atomic == NULL)
+    {
+        return FALSE;
+    }
+
+    // librw ASSERTS that an atomic is in no clump and no world when it is
+    // destroyed; RenderWare frees it and leaves whichever list it was on
+    // holding a link into freed memory. Detaching first is the same choice
+    // RpWorldDestroy makes in world.cpp, and for the same reason: retail's
+    // dangling link is a latent bug that happens not to fire on the console,
+    // and reproducing it here would trade a silent corruption for a loud
+    // assert without making anything more faithful.
+    //
+    // xModelBucket.cpp:629 destroys bucket atomics that were read out of a
+    // stream and never added to a clump, so neither branch is reached today.
+    rw::Atomic* a = asAtomic(atomic);
+
+    if (a->clump != NULL)
+    {
+        a->clump->removeAtomic(a);
+    }
+
+    if (a->world != NULL)
+    {
+        a->world->removeAtomic(a);
+    }
+
+    // librw's destroy releases the geometry reference and detaches the frame,
+    // which is what RpAtomicDestroy in src/rwsdk/world/baclump.c does through
+    // RpAtomicSetGeometry(atomic, NULL, 0) and _rwObjectHasFrameReleaseFrame.
+    // It does NOT destroy the frame -- FullAtomicDupe destroys that itself,
+    // one line before it calls this.
+    a->destroy();
+    return TRUE;
+}
+
+// The standalone atomic chunk, which is NOT the atomic chunk inside a clump.
+//
+// librw only has the in-clump form (Atomic::streamReadClump and
+// streamWriteClump): there, an atomic names its frame and its geometry by
+// INDEX into the clump's frame and geometry lists, so neither function can be
+// called without a clump to index into. A standalone rwID_ATOMIC has no lists
+// to reference, and RenderWare's answer is to write the geometry inline.
+//
+// That is not a guess. RpAtomicStreamGetSize IS decompiled, in
+// src/rwsdk/world/baclump.c:269, and it says exactly what a standalone atomic
+// contains:
+//
+//     size  = rwCHUNKHEADERSIZE + sizeof(rpAtomicChunkInfo);
+//     size += rwCHUNKHEADERSIZE + RpGeometryStreamGetSize(atomic->geometry);
+//     size += rwCHUNKHEADERSIZE + _rwPluginRegistryGetSize(&atomicTKList, atomic);
+//
+// -- a STRUCT, then a whole GEOMETRY chunk unconditionally, then the plugin
+// extension. So the layout below is retail's, and the only part taken from
+// librw is the shape of the struct, which its version < 0x30400 branch shows
+// is {frameIndex, flags, unused} at 12 bytes and {frameIndex, geomIndex,
+// flags, unused} at 16.
+//
+// The plugin extension is the part that matters and the part that would be
+// easy to skip. RpSkin and RpMatFX both hang off an atomic, and xModelBucket
+// duplicates skinned models -- so an implementation that round-tripped the
+// geometry and dropped the extension would hand back atomics that render
+// unskinned, which looks like a bug in the animation system rather than like a
+// missing chunk here.
+
+RpAtomic* RpAtomicStreamWrite(RpAtomic* atomic, RwStream* stream)
+{
+    if (atomic == NULL || stream == NULL)
+    {
+        return NULL;
+    }
+
+    rw::Atomic* a = asAtomic(atomic);
+
+    if (a->geometry == NULL)
+    {
+        // RenderWare's own size calculation dereferences the geometry, so a
+        // geometryless atomic was never writable there either.
+        return NULL;
+    }
+
+    const rw::int32 structSize = rw::version < 0x30400 ? 12 : 16;
+
+    rw::uint32 size = 12 + structSize;
+    size += 12 + a->geometry->streamGetSize();
+    size += 12 + rw::Atomic::s_plglist.streamGetSize(a);
+
+    rw::writeChunkHeader(stream, rw::ID_ATOMIC, size);
+    rw::writeChunkHeader(stream, rw::ID_STRUCT, structSize);
+
+    // frameIndex and geomIndex are both zero: there are no lists here for them
+    // to index into, and the reader below ignores them for the same reason.
+    // RenderWare leaves them as whatever the clump exporter would have put
+    // there, and nothing reads them back out of a standalone atomic.
+    rw::int32 buf[4] = { 0, 0, 0, 0 };
+    buf[rw::version < 0x30400 ? 1 : 2] = a->object.object.flags;
+    stream->write32(buf, structSize);
+
+    a->geometry->streamWrite(stream);
+    rw::Atomic::s_plglist.streamWrite(stream, a);
+
+    return atomic;
+}
+
+RpAtomic* RpAtomicStreamRead(RwStream* stream)
+{
+    if (stream == NULL)
+    {
+        return NULL;
+    }
+
+    // The rwID_ATOMIC header is already eaten: xModelBucket.cpp calls
+    // RwStreamFindChunk(stream, rwID_ATOMIC, NULL, NULL) first, which is the
+    // same contract RpClumpStreamRead works to.
+    rw::uint32 version;
+    if (!rw::findChunk(stream, rw::ID_STRUCT, NULL, &version))
+    {
+        return NULL;
+    }
+
+    rw::int32 buf[4] = { 0, 0, 0, 0 };
+    const rw::int32 structSize = version < 0x30400 ? 12 : 16;
+    stream->read32(buf, structSize);
+
+    rw::Atomic* a = rw::Atomic::create();
+    if (a == NULL)
+    {
+        return NULL;
+    }
+
+    // No frame. RenderWare's standalone reader has no frame list to resolve
+    // frameIndex against either, and FullAtomicDupe gives the atomic a fresh
+    // RwFrameCreate() on the very next line.
+    if (!rw::findChunk(stream, rw::ID_GEOMETRY, NULL, NULL))
+    {
+        a->destroy();
+        return NULL;
+    }
+
+    rw::Geometry* geometry = rw::Geometry::streamRead(stream);
+    if (geometry == NULL)
+    {
+        a->destroy();
+        return NULL;
+    }
+
+    // setGeometry takes a reference of its own, so the one streamRead handed
+    // back is given up here. Getting this wrong leaks a geometry per duplicate
+    // and FullAtomicDupe runs once per bucket per model.
+    a->setGeometry(geometry, 0);
+    geometry->destroy();
+
+    a->setFlags(buf[version < 0x30400 ? 1 : 2]);
+
+    if (!rw::Atomic::s_plglist.streamRead(stream, a))
+    {
+        a->destroy();
+        return NULL;
+    }
+
+    return reinterpret_cast<RpAtomic*>(a);
 }

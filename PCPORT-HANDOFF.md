@@ -490,12 +490,22 @@ the offsets from the compiler, not from reading librw's header -- it has macros
 and static members that make eyeballing it unreliable. The failure this guards
 against is silent: game code keeps compiling and starts reading the wrong field.
 
-**Status: 110 of 112 written, and the shim runs.** `src/SB/Core/pc/rw/README.md`
+**Status: of the 124 RenderWare symbols the PC build references, 1 is defined by
+the game itself, 119 are defined here, and 4 are left. The shim runs.** `src/SB/Core/pc/rw/README.md`
 is the design record, `TODO.md` tracks the list, and
-`src/SB/Core/pc/rw/tests/selftest.cpp` is 405 checks against a live librw engine.
+`src/SB/Core/pc/rw/tests/selftest.cpp` is 451 checks against a live librw engine.
 
-The two that are not written are `RpWorldStreamRead` and
-`RpCollisionWorldForAllIntersections`, and they are one job rather than two:
+Of the four, three are not this directory's job: one is guarded out on PC
+already, and two are GameCube driver calls made UNGUARDED from portable code in
+xModelBucket.cpp -- which is the single unit of 198 that does not compile, so
+that number and these two symbols are the same fact reported twice. The fourth,
+`_rpCollisionGeometryDataOffset`, is RenderWare's collision-BSP plugin and is
+the same missing subsystem that makes `RpAtomicForAllIntersections` a linear
+scan.
+
+Separately from those, two functions LINK and return NULL --
+`RpWorldStreamRead` and `RpCollisionWorldForAllIntersections`. They are one job
+rather than two:
 **librw has no world sectors at all.** That is the largest thing between here
 and a playable port and it is written up in PCPORT.md -- read it before planning
 phase 4, because the way out is a project-level decision, not a function to

@@ -131,3 +131,26 @@ RwFrame* RwFrameOrthoNormalize(RwFrame* frame)
     asFrame(frame)->updateObjects();
     return frame;
 }
+
+// Flush the dirty frame list.
+//
+// This is the third function the old regeneration command hid (see TODO.md),
+// and like _rwObjectHasFrameSetFrame it is not optional: seven sites call it,
+// and every one of them calls it for the same reason. A frame that is moved
+// does not recompute its LTM there and then -- RwFrameUpdateObjects only marks
+// the frame's root dirty and puts it on a list -- so anything that wants to
+// READ an LTM without going through RwFrameGetLTM has to flush that list
+// first. iCamera.cpp:52 does it before reading the camera's LTM into the view
+// matrix; xModelBucket.cpp:166 and 622 do it before instancing a bucket's
+// worth of atomics, which is the hot path this deferral exists for.
+//
+// librw's Frame::syncDirty is RenderWare's, step for step: it walks
+// engine->frameDirtyList, syncs each root's LTM if the hierarchy needs it,
+// calls the sync callback on every object attached to every frame in the
+// subtree, clears the dirty bits, and empties the list. The one difference is
+// where the list lives -- RWSRCGLOBAL(dirtyFrameList) against rw::engine->
+// frameDirtyList -- and nothing on this side of the seam can tell.
+void _rwFrameSyncDirty(void)
+{
+    rw::Frame::syncDirty();
+}

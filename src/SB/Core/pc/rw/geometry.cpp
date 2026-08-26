@@ -210,3 +210,48 @@ const RpMorphTarget* RpMorphTargetCalcBoundingSphere(const RpMorphTarget* morphT
 
     return morphTarget;
 }
+
+// Walk the meshes behind a mesh header.
+//
+// One call site, xJSP.cpp:35, and it is the one that turns a level's atomics
+// into the flat strip-vertex array the JSP renderer draws from -- so getting
+// the walk wrong would not crash, it would build the level out of the wrong
+// vertices.
+//
+// The subtlety is where the meshes start, and it is recorded at the RpMesh
+// asserts in layout_geometry.cpp: RenderWare stores a byte offset from the end
+// of the header to the first mesh, librw hardcodes the meshes as immediately
+// following the header (`Mesh *getMeshes(void) { return (Mesh*)(this+1); }`)
+// and leaves that field as padding. So this must NOT add firstMeshOffset the
+// way RenderWare's own implementation does -- on a librw mesh header the field
+// holds whatever the reader left there, and adding it would walk off into the
+// index data. Going through librw's accessor rather than writing
+// `(RpMesh*)(meshHeader + 1)` is what keeps that true if librw ever moves them.
+//
+// The early-out on a NULL callback return is RenderWare's documented
+// RpMeshCallBack contract and is what its other ForAll* functions do, but it is
+// inferred rather than checked: src/rwsdk/world/bamesh.c is not decompiled.
+// Nothing depends on it today -- xJSP's AddMeshCB returns its mesh every time.
+RpMeshHeader* _rpMeshHeaderForAllMeshes(RpMeshHeader* meshHeader, RpMeshCallBack fpCallBack,
+                                        void* pData)
+{
+    if (meshHeader == NULL || fpCallBack == NULL)
+    {
+        return meshHeader;
+    }
+
+    rw::MeshHeader* header = reinterpret_cast<rw::MeshHeader*>(meshHeader);
+    RpMesh* mesh = reinterpret_cast<RpMesh*>(header->getMeshes());
+
+    for (RwUInt32 i = 0; i < header->numMeshes; i++)
+    {
+        if (fpCallBack(mesh, meshHeader, pData) == NULL)
+        {
+            break;
+        }
+
+        mesh++;
+    }
+
+    return meshHeader;
+}

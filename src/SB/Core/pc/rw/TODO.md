@@ -1,29 +1,46 @@
-# The 112 RenderWare functions, and what is done
+# The RenderWare functions, and what is done
 
 Regenerate this list with:
 
-    llvm-nm <every game object> | awk '$1=="U"{print $2}' \
-      | sed 's/^?*//;s/@.*//' | grep -E '^_*(Rw|Rp|Rt|Rx|rw|rp|rt|rx)' | sort -u
+    SHIM=<a directory of compiled shim .o files>
+    # what the PC build references. Core/gc is excluded: it is GameCube-only.
+    find build/GQPE78/obj/SB -name "*.o" ! -path "*/Core/gc/*" -print0 | xargs -0 llvm-nm       | awk '$1=="U"{print $2}' | sed 's/^?*//;s/@.*//'       | grep -E '^_*(Rw|Rp|Rt|Rx|rw|rp|rt|rx)' | sort -u > need.txt
+    # what the game defines itself, and what the shim defines
+    find build/GQPE78/obj/SB -name "*.o" -print0 | xargs -0 llvm-nm       | awk '$2!="U" && NF>=3 {print $3}' | sort -u > gamedef.txt
+    llvm-nm $SHIM/*.o | awk '$2!="U" && $2!="a" && NF>=3 {print $3}'       | sed 's/^_//' | sort -u > have.txt
+    comm -23 need.txt have.txt | comm -23 - gamedef.txt
 
-**That command used to end `s/^_*//' | grep -E '^(Rw|Rp|Rt|Rx)'`, and the strip
-and the anchor together dropped every symbol RenderWare spells with a leading
-underscore** -- `_rwObjectHasFrameSetFrame` came out of the strip as a
-lowercase `rw` that `^(Rw|Rp|Rt|Rx)` did not match. The leading underscore is
-part of the name here; these are PowerPC objects, so nothing prefixes a `_` of
-its own. Keeping the underscore and letting the grep skip over it is what makes
-the list right.
+**That command has been wrong twice, and each time it hid real work.**
 
-Four functions were hidden that way. One of them is now written
-(`_rwObjectHasFrameSetFrame`, in `frame.cpp`); the other three are listed under
-"Do this next" below. Everything else the corrected command turns up is either
-GameCube-only (`_rwDl*`, `_rwDolphin*`, `_RwGameCubeRasterExtOffset`,
-`_rxPipelineDestroy`, `_rpMaterialListGetMaterial` -- all reached only from
-`src/SB/Core/gc`), already provided (`_rpPTankAtomicDataOffset` and
-`_rpPTankGlobalsOffset`, which `ptank.cpp` defines), or defined by the game
-itself (`_rpCollBSPTreeForAllCapsuleLeafNodeIntersections`, in xCollide.cpp and
-xShadow.cpp).
+The first version ended `s/^_*//' | grep -E '^(Rw|Rp|Rt|Rx)'`, and the strip and
+the anchor together dropped every symbol RenderWare spells with a leading
+underscore -- `_rwObjectHasFrameSetFrame` came out of the strip as a lowercase
+`rw` that `^(Rw|Rp|Rt|Rx)` did not match. Four functions went missing that way.
+The leading underscore is part of the name here; these are PowerPC objects, so
+nothing prefixes a `_` of its own.
 
-## Done (110 of 112)
+The second version fixed that but still only *listed* undefined symbols, with
+no `have.txt` to subtract. Whoever read it ticked functions off by hand, and
+three that nothing had ever written -- `RpAtomicDestroy`, `RpAtomicStreamRead`
+and `RpAtomicStreamWrite` -- sat under a heading that said `**RpAtomic** (0)`
+for four commits. Comparing against a real list of what the shim DEFINES is
+what makes this list a measurement instead of a memory.
+
+Two details that version also got wrong, both of which cost a false negative:
+
+  - **Data symbols count.** `awk '$2=="T"'` misses `RwEngineInstance` and
+    `_rpPTankAtomicDataOffset`, which are `B` and `D`. Filter on *not* `U`.
+  - **COFF prefixes one underscore of its own**, so the shim's side needs
+    `sed 's/^_//'` and the game's side does not.
+
+As measured: **124 RenderWare symbols referenced by the PC build, 1 defined by
+the game itself, 119 defined here, 4 left** -- and the four are listed under
+"Do this next", where three of them turn out not to be this directory's job.
+
+The list is no longer "112 functions"; that number came from the first,
+broken command and was never right.
+
+## Done
 `value.cpp` -- value types only, so no object layout is involved and the
 reinterpret_casts are backed by static_asserts that fail the build if librw
 rearranges anything:
@@ -75,7 +92,7 @@ that plugin attaches go strictly between init and open, so the GameCube's
   - `RwEngineTerm`
 
 (Nine names, three of which -- `RwEngineInstance` and the two video-mode calls
--- are on the 112-function list; the other six are what it took to get there.)
+-- the game references directly; the other six are what it took to get there.)
 
 Verified by running, not by compiling: `tests/selftest.cpp` creates a frame
 through the C API, moves it, reads `->modelling.pos` back out of the RenderWare
@@ -309,7 +326,7 @@ the strides are asserted:
 
 The three `Rp*PluginAttach` calls are the answer to where librw's
 `registerSkinPlugin`/`registerMatFXPlugin` and the PTank atomic plugin belong.
-They are not on the 112-function list, but `RWAttachPlugins` in iSystem.cpp
+The game never calls them by name, but `RWAttachPlugins` in iSystem.cpp
 already calls them between `RwEngineInit` and `RwEngineOpen`, which is exactly
 the window each one needs: all three grow the size of an atomic, a geometry or
 a material, and `Engine::open` freezes those sizes. Putting them in
@@ -324,7 +341,7 @@ PTank memory layouts, structure-of-arrays and interleaved.
 ### What the model path does NOT do yet
 
 Four things, each of which will show up as a visible difference rather than as
-a crash. None of them is on the 112-function list; all four need writing before
+a crash. None of them is a missing function; all four need writing before
 the port draws a frame that looks right.
 
 **PTank particles are invisible.** `RpPTankAtomicCreate` builds the atomic, the
@@ -386,7 +403,7 @@ declaration assumes:
   - `RpWorldRemoveCamera`
   - `RpWorldAddLight`
   - `RpWorldRemoveLight`
-  - `RpWorldPluginAttach` -- not on the 112-function list, but iSystem.cpp's
+  - `RpWorldPluginAttach` -- never called by name from the game, but iSystem.cpp's
     `RWAttachPlugins` already calls it first of all seven attaches, in exactly
     the window it needs. Nothing may create a world before it runs, and
     `RpWorldCreate` checks rather than assumes.
@@ -528,111 +545,130 @@ RenderWare frees it and leaves the world holding a dangling link. Nothing calls
 **A box query reports a distance of zero.** `RpAtomicForAllIntersections` has
 no single point of contact to measure to for a box, and RenderWare's
 documentation does not say what it puts there. No caller in the game issues one.
+
+The three functions the corrected command turned up, and the three the
+comparison against `have.txt` turned up. Six functions found by fixing the
+measurement rather than by reading the code, which is the argument for the
+command at the top of this file.
+
+`frame.cpp`:
+
+  - `_rwFrameSyncDirty` -- seven sites. A frame that moves does NOT recompute
+    its LTM; `RwFrameUpdateObjects` marks the root dirty and puts it on a list,
+    and this is what flushes it. Anything reading an LTM without going through
+    `RwFrameGetLTM` has to call it first, which is why iCamera.cpp:52 and
+    xModelBucket.cpp:166/622 do. librw's `Frame::syncDirty` is RenderWare's step
+    for step, down to emptying the list at the end.
+
+`value.cpp`:
+
+  - `_rwInvSqrt` -- three sites, plus the `rwInvSqrtMacro` in xCollide.cpp:29.
+    `1.0f / sqrtf(num)`, and **the zero case is load-bearing**: xCollide.cpp:1413
+    scales a degenerate triangle's zero-length normal by this and then rejects
+    the triangle with `isnan(xnorm.x)`. That only fires because a zero input
+    returns +infinity and `0 * inf` is NaN. Guarding the division -- the obvious
+    defensive edit -- silently turns every degenerate triangle into a hit with
+    no surface direction. The selftest checks the infinity for that reason.
+
+`geometry.cpp`:
+
+  - `_rpMeshHeaderForAllMeshes` -- one site, xJSP.cpp:35, and it is the walk
+    that turns a level's atomics into the flat strip-vertex array the JSP
+    renderer draws from. RenderWare starts the meshes `firstMeshOffset` bytes
+    past the header and librw puts them immediately after it, leaving that field
+    as padding -- so this must NOT add it. The selftest stamps `firstMeshOffset`
+    with a value that would walk off the end if anything ever "restores"
+    RenderWare's arithmetic.
+
+`atomic.cpp` -- all three exist for one caller, `FullAtomicDupe`
+(xModelBucket.cpp:125), which duplicates an atomic by writing it to a memory
+stream and reading it back N times. The shim had already written a
+grow-on-demand memory stream *for that function* without anyone noticing the
+other half was missing:
+
+  - `RpAtomicDestroy`
+  - `RpAtomicStreamWrite`
+  - `RpAtomicStreamRead`
+
+  The standalone atomic chunk is NOT the atomic chunk inside a clump, and librw
+  only has the second: `Atomic::streamReadClump` and `streamWriteClump` name the
+  frame and the geometry by INDEX into a clump's lists, so neither can be called
+  without a clump. `RpAtomicStreamGetSize` IS decompiled
+  (src/rwsdk/world/baclump.c:269) and settles the standalone layout -- a STRUCT,
+  then a whole GEOMETRY chunk unconditionally, then the plugin extension.
+
+  The extension is the part that would be easy to skip and expensive to skip:
+  RpSkin and RpMatFX hang off an atomic, xModelBucket duplicates skinned models,
+  and dropping it would hand back atomics that render unskinned -- which reads
+  as a bug in the animation system rather than as a missing chunk.
+
+  `RpAtomicDestroy` detaches from any clump and world first. librw asserts on
+  both; RenderWare frees the atomic and leaves the list holding a dangling link.
+  Same choice, and the same reasoning, as `RpWorldDestroy` in world.cpp.
+
+### One bug this comparison found that was not a missing function
+
+`RwGameCubeSetMinRetraceCount` was **defined, and would not have linked.** It is
+the one RenderWare function in this directory with no declaration in
+include/rwsdk -- zGame.cpp:78 declares it itself, inside an `extern "C" { }`
+block, because on the console it comes out of a GameCube driver library. So the
+definition in engine.cpp had C++ linkage and the call in zGame.cpp:697 would not
+have resolved to it: `?RwGameCubeSetMinRetraceCount@@YAXE@Z` against
+`_RwGameCubeSetMinRetraceCount`. It now says `extern "C"`.
+
+Worth knowing because nothing in the source looks wrong, and the error names a
+symbol that is visibly present in the object file.
+
 ## Do this next
 
-**Three more functions the corrected regeneration command turned up.** All
-three are called from units the PC build compiles, and all three are missing,
-so the link will fail on them the moment there is a link:
+Four symbols the PC build references and this directory does not define. Only
+one of them is the shim's job, and saying which is which is the point of this
+section -- the previous version of this file listed all four kinds of gap
+together and they need different people.
 
-  - `_rwFrameSyncDirty` -- seven sites (iCamera.cpp:52, xLightKit.cpp:138,
-    xModel.cpp:521, xModelBucket.cpp:166 and 622, xShadow.cpp:689,
-    zGame.cpp:1461). librw has the counterpart in `Frame::syncDirty`.
-  - `_rwInvSqrt` -- three sites (xClumpColl.cpp:701 and 789, xCollide.cpp:1413,
-    plus the `rwInvSqrtMacro` in xCollide.cpp:29). No librw counterpart; it is
-    a reciprocal square root and the console's is a Newton step off the
-    PowerPC estimate instruction, which a host has no reason to reproduce.
-  - `_rpMeshHeaderForAllMeshes` -- one site (xJSP.cpp:35). A walk over the mesh
-    array behind an `RpMeshHeader`, whose stride is already asserted in
-    `layout_geometry.cpp`.
+**`_rpCollisionGeometryDataOffset` -- the shim's job, and a subsystem.** The
+plugin offset behind `RpCollisionGeometryGetData`, which xCollide.cpp:2062/2093
+and xShadow.cpp:1250/1454 use unguarded in portable `Core/x` code. It is the
+same missing piece as `RpAtomicForAllIntersections` being a linear scan and
+`RpCollisionPluginAttach` being unwritten: RenderWare hangs a collision BSP tree
+off a geometry as a plugin, and librw has no collision code at all. Writing it
+means the plugin, its stream reader, and the tree walk -- at which point
+`RpAtomicForAllIntersections` stops being O(triangles) as well.
 
-**There is no video mode.** `LIBRW_PLATFORM=NULL` has no render device, and
-librw's null device answers every request with 1 -- including reporting success
-from `DEVICEGETVIDEOMODEINFO` without writing to the struct it was handed.
-`RwEngineGetVideoModeInfo` detects that device and returns NULL rather than
-handing xScrFx an uninitialised width and height off its own stack. The real
-forwarding path is written and starts working the moment a GL3 or D3D9 librw is
-linked. `RwEngineOpen` is the other half of that: it passes no
-`EngineOpenParams` because the null device ignores it and RenderWare's
-`displayID` (a GameCube `RwGameCubeDeviceConfig*`) has nothing to translate
-into. It refuses to compile against a real backend rather than pass null to one.
+**`RwGameCubeSetAlphaCompare` and `_rwDlRenderStateSetZCompLoc` -- NOT the
+shim's job.** Both are GameCube driver entry points, and both are called
+UNGUARDED from portable code: xModelBucket.cpp:524/530/600 and 526/531/601.
+That file is the single unit of 198 that does not compile on PC
+(`use of undeclared identifier 'GX_ALWAYS'`), so the "197 / 198 units" figure in
+PCPORT.md and these two symbols are the same fact reported twice. The fix is a
+`#ifndef PLATFORM_PC` around the alpha-compare and z-compare-location state in
+xModelBucket, plus whatever the host renderer wants instead -- not a shim entry
+point, because there is nothing on a host for one to forward to.
 
-## Blocked on the object-layout decision (8)
+**`_rpAtomicResyncInterpolatedSphere` -- already handled, and listed here only
+so the next person does not chase it.** It appears in the regenerated list
+because the objects being scanned are GameCube builds; rpworld.h:360 guards the
+macro that calls it behind `#ifndef PLATFORM_PC`, and the PC spelling of
+`RpAtomicGetBoundingSphereMacro` does not need it. librw does not interpolate
+morph targets, so the sphere is never stale.
 
-RESOLVED -- the port mirrors librw's layouts (method 1), so these are no longer
-blocked on a decision, only unwritten. Each needs its type mirrored in
-include/rwsdk with matching static_asserts alongside layout.cpp, in the same
-commit. What is left of the 112 looks like this. A group with no entries under
-it is one that is finished.
+## Still unwritten, though the symbol exists
 
-**RpAtomic** (0)
+Two functions that link, and return NULL. They are one job, not two, and it is
+the same job as the world reader -- see "What the world path does NOT do yet".
 
-**RpClump** (0)
+  - `RpWorldStreamRead` (world.cpp) -- every BSP asset comes through it
+    (zAssetTypes.cpp:220). librw has no world sector code of any kind.
+  - `RpCollisionWorldForAllIntersections` (collision_world.cpp) -- the maths it
+    needs already exists in intersect.cpp; there is nothing to run it over,
+    because `rootSector` is always NULL.
 
-**RpCollisionWorld** (1)
+**Neither is on the Xbox asset path.** The Xbox packs carry 0 BSP and 110 JSP
+across all 121 files, and `iEnv.cpp:61` gives a JSP level an empty
+`RpWorldCreate(&tmpbbox)` and takes its collision from
+`xClumpColl_InstancePointers` instead. See PCPORT.md. So these block the
+GameCube assets and not the ones the port is being built against.
 
-  - `RpCollisionWorldForAllIntersections`
-
-  The symbol exists, in `collision_world.cpp`, and returns NULL. It is not
-  written because there is nothing for it to walk: librw has no world sector
-  code at all, so no world on this side ever has a `rootSector`. It and
-  `RpWorldStreamRead` are one job, not two.
-
-**RpGeometry** (0)
-
-**RpLight** (0)
-
-
-**RpMatFX** (0)
-
-**RpMaterial** (0)
-
-**RpMorphTarget** (0)
-
-**RpPTank** (0)
-
-**RpSkin** (0)
-
-**RpWorld** (1)
-
-  - `RpWorldStreamRead`
-
-  Blocked on the same missing piece as `RpCollisionWorldForAllIntersections`
-  above, and the two have to be written together. See "What the world path does
-  NOT do yet".
-
-**Rt** (0)
-
-**RwCamera** (0)
-
-
-**RwEngine** (0)
-
-**RwFrame** (0)
-
-
-**RwIm2D** (0)
-
-
-**RwIm3D** (0)
-
-
-**RwImage** (0)
-
-
-**RwRaster** (0)
-
-
-**RwRenderState** (0)
-
-
-**RwStream** (0)
-
-
-**RwTexDictionary** (0)
-
-
-**RwTexture** (0)
-
-
-**Rx** (0)
-
+The per-group tally that used to live here has been removed: every group in it
+read (0) except these two, and it was a second place to keep the same list up
+to date. The command at the top of this file is the tally now.

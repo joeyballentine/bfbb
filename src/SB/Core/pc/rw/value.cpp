@@ -107,3 +107,38 @@ RwMatrix* RwMatrixTranslate(RwMatrix* matrix, const RwV3d* translation,
     asMatrix(matrix)->translate(asV3d(translation), (rw::CombineOp)combineOp);
     return matrix;
 }
+
+// Reciprocal square root.
+//
+// librw has no counterpart, and RenderWare's own is not in this repository
+// either -- src/rwsdk/src/plcore/bavector.c is decompiled but does not contain
+// it -- so this is written from what the callers need rather than matched
+// against anything.
+//
+// **The zero case is load-bearing and must not be "fixed".** xCollide.cpp
+// computes a triangle normal as a cross product, takes the squared length,
+// calls this, scales by the result, and then asks:
+//
+//     recipLength = _rwInvSqrt(lengthSq);
+//     RwV3dScaleMacro((RwV3d*)&xnorm, (RwV3d*)&xnorm, recipLength);
+//     if (isnan(xnorm.x)) { return 0; }
+//
+// That isnan is the game's degenerate-triangle rejection, and it only fires
+// because a zero-area triangle gives lengthSq == 0, this returns +infinity,
+// and 0 * infinity is NaN. Guarding the division to return 0 on a zero input
+// -- the obvious defensive edit -- would hand back a zero-length normal that
+// isnan does not catch, and collision against degenerate triangles would
+// silently start reporting hits with no surface direction. IEEE division by
+// zero is the behaviour the caller is reading, so the division is left alone.
+//
+// The input is a squared length at all four call sites, so it is never
+// negative and sqrtf is never asked for a NaN of its own.
+//
+// The console's version is a PowerPC frsqrte estimate plus a Newton step,
+// which is a few ULP off a true reciprocal square root; this is exact to the
+// float. Nothing here reproduces the estimate: it exists because the hardware
+// makes it cheaper than a divide, not because the game wants its error.
+RwReal _rwInvSqrt(const RwReal num)
+{
+    return 1.0f / sqrtf(num);
+}

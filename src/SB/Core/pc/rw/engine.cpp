@@ -73,6 +73,16 @@ void RwGameCubeCameraTextureFlush(RwRaster* ras, RwUInt32 param)
 // Caps the frame rate by making the console wait for N video retraces. The
 // host paces frames in iVSync (iHostSleepUntilNs) instead, so this would be a
 // second, conflicting throttle if it did anything.
-void RwGameCubeSetMinRetraceCount(RwUInt8 count)
+//
+// **extern "C" is not decoration.** Unlike every other RenderWare function in
+// this directory, this one has no declaration in include/rwsdk -- zGame.cpp:78
+// declares it itself, inside an `extern "C" { }` block, because on the console
+// it comes out of a GameCube driver library rather than out of a header. So a
+// definition written the ordinary way here gets C++ linkage and the call in
+// zGame.cpp:697 does not resolve to it. The failure is a link error naming a
+// symbol that visibly exists in the object file, which is a bad afternoon; it
+// was found by diffing what the game references against what this directory
+// defines, not by reading the code. See TODO.md.
+extern "C" void RwGameCubeSetMinRetraceCount(RwUInt8 count)
 {
 }

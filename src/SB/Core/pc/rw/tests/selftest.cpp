@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include <rwcore.h>
 #include <rpcollis.h>
@@ -1957,6 +1958,296 @@ static void test_object_frames()
     RwCameraDestroy(camera);
 }
 
+// Count the meshes a walk visits, and record where they were.
+struct MeshWalkLog
+{
+    int calls;
+    RwUInt32 totalIndices;
+    RpMesh* first;
+    RpMesh* last;
+    RpMeshHeader* headerSeen;
+};
+
+static RpMesh* countMeshesCB(RpMesh* mesh, RpMeshHeader* meshHeader, void* pData)
+{
+    MeshWalkLog* log = (MeshWalkLog*)pData;
+    if (log->calls == 0)
+    {
+        log->first = mesh;
+    }
+    log->last = mesh;
+    log->headerSeen = meshHeader;
+    log->calls++;
+    log->totalIndices += mesh->numIndices;
+    return mesh;
+}
+
+static RpMesh* stopAfterFirstMeshCB(RpMesh* mesh, RpMeshHeader* meshHeader, void* pData)
+{
+    countMeshesCB(mesh, meshHeader, pData);
+    return NULL;
+}
+
+// The three functions the old regeneration command hid, and the reason they
+// are tested together is that they have nothing else in common: a `sed
+// 's/^_*//'` in front of a `^(Rw|Rp|Rt|Rx)` anchor dropped every RenderWare
+// symbol spelled with a leading underscore, so these went missing as a group
+// rather than for any reason to do with what they do. See TODO.md.
+//
+// _rwObjectHasFrameSetFrame was the fourth and has its own section above.
+static void test_underscored()
+{
+    printf("_rwFrameSyncDirty / _rwInvSqrt / _rpMeshHeaderForAllMeshes\n");
+
+    // --- _rwFrameSyncDirty ---------------------------------------------
+    //
+    // The whole point of the function is that moving a frame does NOT
+    // recompute its LTM. If it did, all seven call sites would be dead code
+    // and this test would pass while proving nothing -- so the staleness is
+    // checked first, deliberately, by reading ->ltm out of the struct rather
+    // than through RwFrameGetLTM (which syncs on the way past).
+    RwFrame* frame = RwFrameCreate();
+    check(frame != NULL, "a frame to move");
+    if (frame == NULL)
+    {
+        return;
+    }
+
+    RwV3d t = { 7.0f, 8.0f, 9.0f };
+    RwFrameTranslate(frame, &t, rwCOMBINEREPLACE);
+    check(near(frame->modelling.pos.x, 7.0f), "the modelling matrix moved");
+    check(near(frame->ltm.pos.x, 0.0f), "but the LTM is deferred, not recomputed");
+
+    _rwFrameSyncDirty();
+    check(near(frame->ltm.pos.x, 7.0f) && near(frame->ltm.pos.y, 8.0f) &&
+              near(frame->ltm.pos.z, 9.0f),
+          "_rwFrameSyncDirty brings it up to date");
+
+    // The list has to be emptied too, or the next flush walks frames that may
+    // since have been destroyed. Nothing can read the list from this side, so
+    // this checks the consequence: a second flush with nothing dirty is a
+    // no-op rather than a fault.
+    _rwFrameSyncDirty();
+    check(near(frame->ltm.pos.x, 7.0f), "and flushing again with nothing dirty is harmless");
+
+    // A hierarchy, built through librw because the port has no RwFrameAddChild
+    // -- nothing in src/SB calls one, so the C API does not carry it. What is
+    // being checked is librw's subtree recursion, which is the part of
+    // RenderWare's _rwFrameSyncDirty that a one-frame test cannot reach.
+    RwFrame* child = RwFrameCreate();
+    if (child != NULL)
+    {
+        reinterpret_cast<rw::Frame*>(frame)->addChild(reinterpret_cast<rw::Frame*>(child));
+
+        RwV3d ct = { 1.0f, 0.0f, 0.0f };
+        RwFrameTranslate(child, &ct, rwCOMBINEREPLACE);
+        check(near(child->ltm.pos.x, 0.0f), "a child's LTM is deferred too");
+
+        _rwFrameSyncDirty();
+        check(near(child->ltm.pos.x, 8.0f), "and the flush walks the whole subtree");
+
+        reinterpret_cast<rw::Frame*>(child)->removeChild();
+        RwFrameDestroy(child);
+    }
+
+    RwFrameDestroy(frame);
+
+    // --- _rwInvSqrt ----------------------------------------------------
+    check(near(_rwInvSqrt(4.0f), 0.5f), "_rwInvSqrt(4) is 1/2");
+    check(near(_rwInvSqrt(1.0f), 1.0f), "_rwInvSqrt(1) is 1");
+    check(near(_rwInvSqrt(0.25f), 2.0f), "_rwInvSqrt(1/4) is 2");
+
+    // The case the game reads, and the reason this function must not guard
+    // its division. xCollide.cpp:1413 scales a degenerate triangle's zero
+    // normal by this and rejects the triangle when the result is NaN; that
+    // only happens if a zero input gives infinity. A "safe" version returning
+    // 0 here would turn every degenerate triangle into a silent hit with no
+    // surface direction.
+    RwReal recip = _rwInvSqrt(0.0f);
+    check(recip > 3.0e38f, "_rwInvSqrt(0) is +infinity, not a guarded zero");
+
+    RwV3d degenerate = { 0.0f, 0.0f, 0.0f };
+    RwV3dScaleMacro(&degenerate, &degenerate, recip);
+    check(degenerate.x != degenerate.x, "so scaling a zero-area normal by it gives NaN");
+
+    // --- _rpMeshHeaderForAllMeshes -------------------------------------
+    RpGeometry* geometry = makeQuad();
+    check(geometry != NULL, "a geometry to build meshes on");
+    if (geometry == NULL)
+    {
+        return;
+    }
+
+    RpMaterial* m0 = reinterpret_cast<RpMaterial*>(rw::Material::create());
+    RpMaterial* m1 = reinterpret_cast<RpMaterial*>(rw::Material::create());
+    RpGeometryTriangleSetMaterial(geometry, &geometry->triangles[0], m0);
+    RpGeometryTriangleSetMaterial(geometry, &geometry->triangles[1], m1);
+    RpGeometryUnlock(geometry);
+
+    RpMeshHeader* header = geometry->mesh;
+    check(header != NULL && header->numMeshes == 2, "two materials, two meshes");
+    if (header == NULL)
+    {
+        return;
+    }
+
+    // firstMeshOffset is stamped with a value that would walk off the end if
+    // it were added. RenderWare's own implementation DOES add it -- its meshes
+    // start that many bytes past the header -- and librw's start immediately
+    // after the header with the field left as padding, so this is the one
+    // place the two implementations must differ. Anything that "restores"
+    // RenderWare's arithmetic here fails this check rather than corrupting a
+    // level's vertices at xJSP.cpp:35.
+    header->firstMeshOffset = 0x4000;
+
+    MeshWalkLog log = { 0, 0, NULL, NULL, NULL };
+    check(_rpMeshHeaderForAllMeshes(header, countMeshesCB, &log) == header,
+          "_rpMeshHeaderForAllMeshes returns its header");
+    check(log.calls == 2, "it visited both meshes");
+    check(log.headerSeen == header, "and handed the callback the header it was given");
+    check(log.first == (RpMesh*)(header + 1), "the first mesh follows the header immediately");
+    check(log.last == (RpMesh*)(header + 1) + 1, "and they are contiguous");
+    check(log.totalIndices == header->totalIndicesInMesh,
+          "the indices it walked add up to totalIndicesInMesh");
+
+    // xJSP.cpp reads mesh->indices[i] against morphTarget->verts, so an index
+    // out of range would build the level out of whatever follows the vertex
+    // array. Six indices over four vertices.
+    check(log.totalIndices == 6, "six indices for two triangles");
+
+    MeshWalkLog stopped = { 0, 0, NULL, NULL, NULL };
+    _rpMeshHeaderForAllMeshes(header, stopAfterFirstMeshCB, &stopped);
+    check(stopped.calls == 1, "a callback returning NULL stops the walk early");
+
+    check(_rpMeshHeaderForAllMeshes(NULL, countMeshesCB, &log) == NULL,
+          "a NULL header is refused rather than walked");
+
+    reinterpret_cast<rw::Material*>(m1)->destroy();
+    reinterpret_cast<rw::Material*>(m0)->destroy();
+    reinterpret_cast<rw::Geometry*>(geometry)->destroy();
+}
+
+// RpAtomicDestroy and the standalone atomic stream pair, which were missing
+// from the 112-function list rather than deliberately left out -- see the
+// comment above them in atomic.cpp. All three exist for FullAtomicDupe
+// (xModelBucket.cpp:125), and this test is that function's sequence.
+static void test_atomic_stream()
+{
+    printf("RpAtomicDestroy / RpAtomicStreamWrite / RpAtomicStreamRead\n");
+
+    RpAtomic* atomic = reinterpret_cast<RpAtomic*>(rw::Atomic::create());
+    RpGeometry* geometry = makeQuad();
+    check(atomic != NULL && geometry != NULL, "an atomic and a geometry to duplicate");
+    if (atomic == NULL || geometry == NULL)
+    {
+        return;
+    }
+
+    RpMaterial* material = reinterpret_cast<RpMaterial*>(rw::Material::create());
+    RpGeometryTriangleSetMaterial(geometry, &geometry->triangles[0], material);
+    RpGeometryTriangleSetMaterial(geometry, &geometry->triangles[1], material);
+    RpGeometryUnlock(geometry);
+
+    RpAtomicSetGeometry(atomic, geometry, 0);
+    RpAtomicSetFrame(atomic, RwFrameCreate());
+    atomic->object.object.flags = rpATOMICCOLLISIONTEST | rpATOMICRENDER;
+
+    // Write, exactly as FullAtomicDupe does: onto an empty RwMemory, so the
+    // stream has to grow.
+    RwMemory mem = { NULL, 0 };
+    RwStream* stream = RwStreamOpen(rwSTREAMMEMORY, rwSTREAMWRITE, &mem);
+    check(stream != NULL, "a memory stream to write it to");
+    if (stream == NULL)
+    {
+        return;
+    }
+
+    check(RpAtomicStreamWrite(atomic, stream) == atomic, "RpAtomicStreamWrite");
+    RwStreamClose(stream, &mem);
+    check(mem.start != NULL && mem.length > 12, "it wrote something");
+
+    // The length in the chunk header has to be the length actually written.
+    // Getting that wrong is invisible here -- the reader never consults it --
+    // and fatal the moment an atomic is written into a stream that holds
+    // anything after it, because RwStreamFindChunk skips by this number.
+    stream = RwStreamOpen(rwSTREAMMEMORY, rwSTREAMREAD, &mem);
+    RwUInt32 chunkLength = 0;
+    check(RwStreamFindChunk(stream, rwID_ATOMIC, &chunkLength, NULL) != FALSE,
+          "RwStreamFindChunk finds the rwID_ATOMIC chunk");
+    check(chunkLength == mem.length - 12,
+          "and the size it declared is the size it wrote");
+
+    RpAtomic* dupe = RpAtomicStreamRead(stream);
+    RwStreamClose(stream, NULL);
+    check(dupe != NULL, "RpAtomicStreamRead");
+    if (dupe == NULL)
+    {
+        return;
+    }
+
+    check(dupe != atomic, "the duplicate is a different atomic");
+
+    // A COPY of the geometry, not another reference to the same one. This is
+    // the whole point of the round trip: xModelBucket needs N atomics it can
+    // instance separately, and sharing one geometry would defeat it.
+    check(dupe->geometry != NULL && dupe->geometry != geometry,
+          "with a geometry of its own");
+    check(geometry->refCount == 2, "and the original's reference count is untouched");
+
+    check(dupe->geometry->numVertices == 4 && dupe->geometry->numTriangles == 2,
+          "the geometry round-tripped its counts");
+    check(near(dupe->geometry->morphTarget[0].verts[2].x, 1.0f) &&
+              near(dupe->geometry->morphTarget[0].verts[2].z, 1.0f),
+          "and its vertices");
+    check(dupe->geometry->matList.numMaterials == 1, "and its material list");
+
+    check(dupe->object.object.flags == (rpATOMICCOLLISIONTEST | rpATOMICRENDER),
+          "the atomic's flags round-tripped");
+
+    // No frame: a standalone atomic chunk names its frame by an index into a
+    // clump's frame list, and there is no clump here. FullAtomicDupe gives the
+    // atomic a fresh frame on the next line, so this is the state it expects.
+    check(RpAtomicGetFrame(dupe) == NULL, "and it comes back on no frame");
+
+    // Reading twice out of one written block, which is the loop FullAtomicDupe
+    // actually runs -- it reopens the same RwMemory once per duplicate.
+    stream = RwStreamOpen(rwSTREAMMEMORY, rwSTREAMREAD, &mem);
+    RwStreamFindChunk(stream, rwID_ATOMIC, NULL, NULL);
+    RpAtomic* second = RpAtomicStreamRead(stream);
+    RwStreamClose(stream, NULL);
+    check(second != NULL && second != dupe, "the same block reads a second, distinct duplicate");
+
+    // --- RpAtomicDestroy -----------------------------------------------
+    check(RpAtomicDestroy(second) != FALSE, "RpAtomicDestroy");
+    check(RpAtomicDestroy(dupe) != FALSE, "on both duplicates");
+    check(RpAtomicDestroy(NULL) == FALSE, "RpAtomicDestroy(NULL) is refused");
+
+    // The frame survives its atomic: RenderWare releases the frame rather than
+    // destroying it, and FullAtomicDupe destroys it by hand one line earlier.
+    // An implementation that took the frame with it would double-free there.
+    RwFrame* frame = RpAtomicGetFrame(atomic);
+    check(frame != NULL, "the original still has its frame");
+    RpAtomicDestroy(atomic);
+    check(frame->objectList.link.next == &frame->objectList.link,
+          "the destroy detached the atomic from it");
+
+    // Still live memory afterwards, not freed underneath the caller: moving it
+    // and reading the value back is the cheapest way to say so.
+    RwV3d after = { 3.0f, 0.0f, 0.0f };
+    RwFrameTranslate(frame, &after, rwCOMBINEREPLACE);
+    check(near(frame->modelling.pos.x, 3.0f), "and the frame outlives the atomic");
+    RwFrameDestroy(frame);
+
+    // Destroying the atomic gave up its reference on the geometry, so the one
+    // taken by makeQuad's caller is all that is left.
+    check(geometry->refCount == 1, "destroying the atomic released the geometry");
+
+    reinterpret_cast<rw::Material*>(material)->destroy();
+    reinterpret_cast<rw::Geometry*>(geometry)->destroy();
+
+    RwFree(mem.start);
+}
+
 static void test_engine_shutdown()
 {
     printf("RwEngine teardown\n");
@@ -2006,6 +2297,8 @@ int main()
     test_intersections();
     test_slerp();
     test_object_frames();
+    test_underscored();
+    test_atomic_stream();
     test_engine_shutdown();
 
     printf("\n%d failure%s\n", failures, failures == 1 ? "" : "s");

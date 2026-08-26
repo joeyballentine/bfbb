@@ -8,7 +8,9 @@ calls the RenderWare C API, and it has to keep calling it, because those call
 sites are what the GameCube build matches against.
 
 So the port needs this layer: the RenderWare C API, implemented on top of `rw::`.
-112 functions, listed in `TODO.md`.
+As measured today: 124 RenderWare symbols referenced by the PC build, 119
+defined here. `TODO.md` carries the list, the command that regenerates it, and
+the two ways that command has been wrong.
 
 ## The thing to understand before adding to it
 
