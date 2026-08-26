@@ -442,3 +442,21 @@ RwVideoMode* RwEngineGetVideoModeInfo(RwVideoMode* modeinfo, RwInt32 modeIndex)
 
     return modeinfo;
 }
+
+// librw has no resource arena.
+//
+// RenderWare's is a fixed block that instanced geometry is packed into and
+// evicted from -- RwResourcesAllocateResEntry hands out of it, and running out
+// is why the console sizes it at 0x60000 before anything loads. librw
+// allocates instanced data per object and frees it with the object, so there is
+// no arena to size and nothing to run out of.
+//
+// TRUE rather than FALSE: the caller asked for an arena of at most this size
+// and got one that cannot be exceeded, which is the outcome it wanted.
+// iSystem.cpp does not check the result, but RenderWareInit's early returns
+// treat FALSE from anything as a failed startup.
+RwBool RwResourcesSetArenaSize(RwUInt32 size)
+{
+    (void)size;
+    return TRUE;
+}

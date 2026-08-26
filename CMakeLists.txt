@@ -249,6 +249,31 @@ add_library(bfbb_platform STATIC
   # global, so like the others it resolves when librw does.
   ${PC_DIR}/iCutscene.cpp
 
+  # --- STUBS, not implementations ------------------------------------------
+  # Eleven modules have a PC header and no PC implementation. These files make
+  # the port LINK so that it can be RUN, which is the next gate after the one
+  # tools/pclink.py just closed -- compiling found nothing about symbols, and
+  # linking finds nothing about what actually happens at startup.
+  #
+  # Every function in them reports itself the first time it is called, and that
+  # log IS the worklist: the order the startup path demands these in decides
+  # which one gets written first. src/SB/Core/gc/<module>.cpp is the source to
+  # port from, and most of them are RenderWare calls and game logic rather than
+  # GameCube hardware.
+  #
+  # A file leaves this block when it stops being a stub. It does not need to
+  # move -- it needs to stop including iStub.h.
+  ${PC_DIR}/iModel.cpp
+  ${PC_DIR}/iParMgr.cpp
+  ${PC_DIR}/iScrFX.cpp
+  ${PC_DIR}/iLight.cpp
+  ${PC_DIR}/iAnim.cpp
+  ${PC_DIR}/iEnv.cpp
+  ${PC_DIR}/iMorph.cpp
+  ${PC_DIR}/iDraw.cpp
+  ${PC_DIR}/iFX.cpp
+  ${PC_DIR}/iFMV.cpp
+
   ${INPUT_SOURCES}
   ${AUDIO_SOURCES}
   ${HOST_SOURCES}
@@ -297,6 +322,22 @@ add_executable(rw_selftest ${PC_DIR}/rw/tests/selftest.cpp)
 target_link_libraries(rw_selftest PRIVATE bfbb_rw)
 target_compile_options(rw_selftest PRIVATE -Wno-everything)
 add_test(NAME rw_selftest COMMAND rw_selftest)
+
+# --- the game --------------------------------------------------------------
+# It links. Whether it RUNS is the next question, and the reason this target
+# exists: eleven of its platform modules are stubs (see bfbb_platform above),
+# so what this executable is for right now is booting it and reading, in order,
+# which stub the startup path reaches first. That log is the worklist.
+#
+# main() is the game's own, in src/SB/Game/zMain.cpp -- nothing here supplies an
+# entry point.
+add_executable(bfbb ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/pc/bfbb_main.cpp)
+target_link_libraries(bfbb PRIVATE bfbb_game bfbb_platform bfbb_rw)
+target_compile_options(bfbb PRIVATE -Wno-everything)
+
+if(WIN32)
+  target_link_libraries(bfbb PRIVATE user32 gdi32)
+endif()
 
 # --- self-test ---------------------------------------------------------------
 # Exercises the parts of the layer that do not need the renderer, so that

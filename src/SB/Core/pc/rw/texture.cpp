@@ -168,3 +168,31 @@ RwBool RwTextureDestroy(RwTexture* texture)
     asTexture(texture)->destroy();
     return TRUE;
 }
+
+// The three global texture settings RenderWareInit makes, all of which librw
+// has an exact counterpart for.
+
+// The hook the asset system installs so that a texture named inside a model's
+// material list is resolved out of the game's own asset store rather than off a
+// filesystem. iSystem.cpp's TextureRead does exactly that with xSTFindAsset,
+// and without this every textured model would come back untextured.
+//
+// librw declares readCB with the same two arguments in the same order, so the
+// callback the game supplies can be stored directly.
+RwBool RwTextureSetReadCallBack(RwTextureCallBackRead callBack)
+{
+    rw::Texture::readCB = reinterpret_cast<rw::Texture* (*)(const char*, const char*)>(callBack);
+    return TRUE;
+}
+
+RwBool RwTextureSetMipmapping(RwBool enable)
+{
+    rw::Texture::setMipmapping(enable != FALSE);
+    return TRUE;
+}
+
+RwBool RwTextureSetAutoMipmapping(RwBool enable)
+{
+    rw::Texture::setAutoMipmapping(enable != FALSE);
+    return TRUE;
+}
