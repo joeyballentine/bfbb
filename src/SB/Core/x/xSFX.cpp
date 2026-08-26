@@ -78,19 +78,17 @@ void xSFXUpdateEnvironmentalStreamSounds(xSFX* pSFXList, U32 numSounds)
     if (!found && *s_managedEnvSFX != NULL)
     {
         xSFXStop(*s_managedEnvSFX);
-        s_managedEnvSFX[0]->id = 0x0;
+        *s_managedEnvSFX = NULL;
     }
 
     if (*bestSFX != NULL)
     {
-        if (*s_managedEnvSFX != NULL)
+        if (*s_managedEnvSFX == NULL)
         {
             *s_managedEnvSFX = *bestSFX;
         }
-        else
-        {
-            xSFXPlay(*bestSFX);
-        }
+
+        xSFXPlay(*bestSFX);
     }
 }
 
