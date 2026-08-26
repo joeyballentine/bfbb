@@ -193,6 +193,22 @@ F32 ArcLength3(xCoef3* coef, F64 ustart, F64 uend)
 }
 
 // We don't have the implementation provided
+// GameCube only, and the guard is load-bearing.
+//
+// MSL declares sqrt and leaves the body to whoever needs it, so retail supplies
+// this one: a Newton-Raphson refinement of the PowerPC frsqrte estimate. It is
+// the same arrangement as std::sqrtf in xCollide.cpp, which is already guarded
+// this way, and this one was missed.
+//
+// On a host it is not merely unnecessary, it is FATAL. There is no `static`
+// here, so it overrides the CRT's sqrt for the whole process -- including
+// librw's, since MSVC's inline sqrtf is a wrapper over sqrt. The port's
+// __frsqrte is implemented in terms of a square root, so sqrt called __frsqrte
+// called sqrt, and the first RwFrameRotate of the boot recursed until the stack
+// died. It presents as an access violation with no usable stack, so neither an
+// unhandled-exception filter nor a vectored handler nor __except can report it,
+// and a bigger stack does not help. See src/SB/Core/pc/LINKING.md.
+#ifdef __MWERKS__
 double sqrt(double x)
 {
     if (x > 0.0)
@@ -219,6 +235,7 @@ double sqrt(double x)
         return INFINITY;
     }
 }
+#endif
 
 void EvalCoef3(xCoef3* coef, F32 u, U32 deriv, xVec3* o)
 {

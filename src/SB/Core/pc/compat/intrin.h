@@ -51,13 +51,23 @@ float __fnabsf(float);
 double __fabs(double);
 float __fabsf(float);
 
+#include <emmintrin.h>
+
 // PowerPC's reciprocal-square-root estimate is specified to roughly 12 bits of
 // mantissa. The exact value is more accurate, not less -- but it is a different
 // value, so anything tuned against the estimate's error drifts slightly. See
 // "Floating point divergence" in PCPORT.md.
+//
+// The square root is taken with an SSE intrinsic rather than __builtin_sqrt or
+// a call to sqrt, and that is deliberate. At -O0 clang lowers __builtin_sqrt to
+// a CALL to sqrt, so anything that overrides sqrt captures this function too --
+// and src/SB/Core/x/xSpline.cpp used to define a global sqrt implemented in
+// terms of __frsqrte. sqrt called __frsqrte called sqrt, and the boot recursed
+// until the stack died. sqrtsd cannot route back through a symbol the game
+// might define.
 static inline double __frsqrte(double x)
 {
-    return 1.0 / __builtin_sqrt(x);
+    return 1.0 / _mm_cvtsd_f64(_mm_sqrt_sd(_mm_setzero_pd(), _mm_set_sd(x)));
 }
 
 #ifdef __cplusplus

@@ -349,7 +349,11 @@ target_link_libraries(bfbb PRIVATE bfbb_game bfbb_platform bfbb_rw)
 target_compile_options(bfbb PRIVATE -Wno-everything)
 
 if(WIN32)
-  target_link_libraries(bfbb PRIVATE user32 gdi32)
+  # dbghelp is the crash handler in bfbb_main.cpp; see the comment there.
+  target_link_libraries(bfbb PRIVATE user32 gdi32 dbghelp)
+
+  # EXPERIMENT: 64MB stack, to test whether the boot fault is stack depth.
+  target_link_options(bfbb PRIVATE -Xlinker /STACK:67108864)
 endif()
 
 # --- self-test ---------------------------------------------------------------
