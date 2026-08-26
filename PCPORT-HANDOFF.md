@@ -46,14 +46,58 @@ of the six rollbacks cost real work.
 
 ## 1. The one rule
 
-The GameCube build must stay byte-identical. The gate is:
+The GameCube build must stay byte-identical **and must not lose matched
+functions**. Both, every time:
+
+```sh
+ninja > /tmp/gc.log 2>&1; echo "exit: $?"
+python3 tools/gcgate.py
+```
 
 ```
-build/GQPE78/main.dol  ->  306526d90b48e99894c3138f5fc8f2716d9fecf6
+  PASS  DOL       306526d90b48e99894c3138f5fc8f2716d9fecf6
+  PASS  functions 7249 / 80.66999%
 ```
 
 Nothing else counts as proof. Not "this edit is inside `#else`", not "a
-declaration emits no code", not reasoning about scope. Build it and hash it.
+declaration emits no code", not reasoning about scope. Build it and check it.
+
+### Why the hash alone is not enough
+
+An earlier version of this document said the DOL hash was the only thing that
+counted. That is false, and it cost 16 functions before anyone noticed.
+
+Units marked `NonMatching` in `configure.py` link from the **extracted** object,
+not from ours. Their source can regress all the way to 0% and the DOL still
+comes out byte-identical, because our object never reached the link. That is
+exactly where all in-progress decomp work lives, so the hash is blind to the
+work most likely to break.
+
+What it missed here: the CodeWarrior-tolerance pass rewrote
+
+```cpp
+void cruise_bubble::init()      ->      void init()
+```
+
+inside `namespace cruise_bubble { namespace { ... } }`. It reads as removing a
+redundant qualifier. It is not. The qualified form defines the function in the
+**outer** namespace with external linkage; the bare form defines a *different*
+function with internal linkage in the anonymous one. Sixteen zEntCruiseBubble
+functions went 100% -> 0%, eight other translation units lost the symbols they
+call — the `--non-matching` playtest build would no longer link — and the DOL
+hash stayed green throughout.
+
+The fix, which keeps both compilers happy and is byte-identical to retail: close
+the anonymous namespace, define the function unqualified at `cruise_bubble`
+scope, reopen it. `tools/gcgate.py --which <known-good report.json>` names
+anything that slips.
+
+**Any time you touch a namespace, a qualifier, or a `static`, you are editing
+linkage, not formatting.** Check the symbol table:
+
+```sh
+build/binutils/powerpc-eabi-objdump.exe -t build/GQPE78/src/SB/Game/zFoo.o | grep ' g  *F .text'
+```
 
 ### Run the build so you can see it fail
 
