@@ -289,7 +289,22 @@ namespace xhud
         {
             F32 fVar5;
             F32 fVar6;
+            // The dominant axis is the one that gets pinned to the screen edge;
+            // the other is scaled by the ratio. That means dividing by the
+            // LARGER of the two, which is what selects the branch.
             if (iabs(fVar7) > iabs(fVar8))
+            {
+                if (fVar7 >= 0.0f)
+                {
+                    fVar5 = 0.5f + fVar1;
+                }
+                else
+                {
+                    fVar5 = -0.5f - fVar1;
+                }
+                fVar6 = (fVar5 * fVar8) / fVar7;
+            }
+            else
             {
                 if (fVar8 >= 0.0f)
                 {
@@ -301,21 +316,9 @@ namespace xhud
                 }
                 fVar5 = (fVar6 * fVar7) / fVar8;
             }
-            else
-            {
-                if (fVar7 >= 0.5f)
-                {
-                    fVar5 = 0.5f + fVar1;
-                }
-                else
-                {
-                    fVar5 = -0.5f - fVar1;
-                }
-                fVar6 = (fVar5 * fVar8) / fVar7;
-            }
 
-            F32 dVar11 = 255.0f + (fVar6 - 0.5f * sy) - rc.loc.y;
-            F32 dVar12 = 255.0f + (fVar5 - 0.5f * fVar1) - rc.loc.x;
+            F32 dVar11 = 0.5f + (fVar6 - 0.5f * sy) - rc.loc.y;
+            F32 dVar12 = 0.5f + (fVar5 - 0.5f * fVar1) - rc.loc.x;
             F32 dVar10 = xsqrt(dVar12 * dVar12 + dVar11 * dVar11);
 
             add_motive(
