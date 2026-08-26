@@ -61,7 +61,7 @@ void xSFXUpdateEnvironmentalStreamSounds(xSFX* pSFXList, U32 numSounds)
             *bestSFX = &pSFXList[j];
             *bestDist2 = dist;
         }
-        else if ((*bestSFX)->asset->priority == pSFXList[j].asset->priority && dist > *bestDist2)
+        else if ((*bestSFX)->asset->priority == pSFXList[j].asset->priority && *bestDist2 > dist)
         {
             *bestSFX = &pSFXList[j];
             *bestDist2 = dist;
