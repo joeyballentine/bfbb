@@ -150,7 +150,7 @@ void zGridUpdateEnt(xEnt* ent)
     if (!zGridInitted)
         return;
 
-    U8 oversize = 0;
+    S32 oversize = 0;
     xGrid* grid = NULL;
 
     switch (ent->gridb.ingrid)
