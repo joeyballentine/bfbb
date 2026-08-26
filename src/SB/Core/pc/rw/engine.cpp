@@ -8,6 +8,19 @@
 
 #include "rw.h"
 
+// The header that DECLARES the two GameCube driver entry points at the bottom
+// of this file, and the reason to include it rather than write the prototypes
+// out here: it wraps them in extern "C", and without that the definitions get
+// C++ linkage while every caller expects C linkage.
+//
+// That is not hypothetical. RwGameCubeSetMinRetraceCount below shipped with
+// exactly that bug -- it has no declaring header at all -- and it was found by
+// diffing symbol tables. These two were then written the same way and repeated
+// it, and the port's first full link found them in seconds. Including the
+// declaring header is what makes the compiler check this instead of the
+// linker.
+#include <rwsdk/driver/gcn/dlrendst.h>
+
 #include <stddef.h>
 
 // RenderWare streams are little-endian on every platform, so this converts a
@@ -74,15 +87,67 @@ void RwGameCubeCameraTextureFlush(RwRaster* ras, RwUInt32 param)
 // host paces frames in iVSync (iHostSleepUntilNs) instead, so this would be a
 // second, conflicting throttle if it did anything.
 //
-// **extern "C" is not decoration.** Unlike every other RenderWare function in
-// this directory, this one has no declaration in include/rwsdk -- zGame.cpp:78
+// **Linkage is not decoration here.** Unlike every other RenderWare function
+// in this directory, this one has no declaration in include/rwsdk -- zGame.cpp:78
 // declares it itself, inside an `extern "C" { }` block, because on the console
 // it comes out of a GameCube driver library rather than out of a header. So a
-// definition written the ordinary way here gets C++ linkage and the call in
-// zGame.cpp:697 does not resolve to it. The failure is a link error naming a
-// symbol that visibly exists in the object file, which is a bad afternoon; it
-// was found by diffing what the game references against what this directory
-// defines, not by reading the code. See TODO.md.
+// definition written the ordinary way gets C++ linkage and the call in
+// zGame.cpp:697 does not resolve to it. dlrendst.h does NOT cover this one --
+// it declares the other two only -- so the extern "C" below is written by hand
+// and has to stay. See TODO.md.
 extern "C" void RwGameCubeSetMinRetraceCount(RwUInt8 count)
+{
+}
+
+// The two GameCube driver entry points that xModelBucket.cpp calls UNGUARDED.
+//
+// They are here, next to RwGameCubeCameraTextureFlush and
+// RwGameCubeSetMinRetraceCount, for the same reason those are: the call sites
+// are in portable code (src/SB/Core/x), so the port either provides the
+// function or edits game code. It provides the function. Their declarations
+// are in include/rwsdk/driver/gcn/dlrendst.h, which is also where the PC build
+// gets the GX_* constants they are called with.
+//
+// Between them these were the last thing keeping xModelBucket.cpp from
+// compiling on PC -- the 198th unit of 198.
+
+// **This one drops a real rendering behaviour, and it will be visible.**
+//
+// The top byte of a bucket's pipeFlags is an alpha test reference, and
+// xModelBucket.cpp:520-533 turns it into one of two GX states:
+//
+//   ref != 0:  alpha >= ref     (GX_ALWAYS AND GX_GEQUAL ref), z compare after
+//              texture, because the alpha test can now reject a pixel and the
+//              early-z result would be wrong.
+//   ref == 0:  alpha >= 1       (GX_GEQUAL 1 AND GX_ALWAYS), z compare before
+//              texture -- i.e. discard only fully transparent pixels.
+//
+// That is cutout transparency: foliage, fences, grates, chain link. With this
+// as a no-op they render as opaque quads, alpha and all. There is nothing to
+// forward it to today -- RenderWare's portable render state vector has no
+// alpha test function or reference (rwcore.h does not declare one, because the
+// game never used the portable spelling), and LIBRW_PLATFORM=NULL has no
+// device to set one on.
+//
+// So this is not "recorded but not rendered" like the shade mode in
+// renderstate.cpp -- there is no Get for it and nothing would read the record.
+// It is the specification, left where whoever writes the GL3 or D3D9 backend
+// will find it. The two states above are the whole of what has to be
+// reimplemented.
+void RwGameCubeSetAlphaCompare(RwInt32 comp0, RwUInt8 ref0, RwInt32 op, RwInt32 comp1,
+                               RwUInt8 ref1)
+{
+}
+
+// Whether the z buffer is compared before or after the texture lookup.
+//
+// Unlike the alpha compare above, this one is CORRECT as a no-op. It is a TEV
+// pipeline ordering knob specific to the GameCube's hardware: comparing z
+// early saves texture bandwidth, and is only safe when nothing later in the
+// pipeline can reject the pixel -- which is why the call above always pairs
+// it with the alpha test state. A host renderer's driver makes that decision
+// for itself from the pipeline state it was given, and neither OpenGL nor
+// Direct3D exposes it as something to set.
+void _rwDlRenderStateSetZCompLoc(RwInt32 zBeforeTex)
 {
 }

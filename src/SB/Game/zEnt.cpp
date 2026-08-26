@@ -1,6 +1,16 @@
 // Keeps zEnt.h from inlining xSndPlay3D in this TU, so the out-of-line body
 // below stays where this object's layout needs it. See the note in zEnt.h.
+//
+// GameCube only. The trick is that ONE object carries the out-of-line body and
+// every other TU inlines it, which is what CodeWarrior did and what this unit's
+// layout is matched against. A host linker sees that as a strong definition
+// here and a COMDAT definition in each TU that inlined it, and refuses -- it
+// was three of the five duplicate symbols in the port's first full link.
+// Letting every TU use the inline is correct on PC and matches nothing, which
+// is fine, because nothing on PC is scored by matching.
+#ifndef PLATFORM_PC
 #define XSNDPLAY3D_OUT_OF_LINE
+#endif
 
 #include "zEnt.h"
 
@@ -946,11 +956,13 @@ xMat4x3* xEntGetFrame(const xEnt* ent)
     return xModelGetFrame(ent->model);
 }
 
+#ifdef XSNDPLAY3D_OUT_OF_LINE
 void xSndPlay3D(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, const xVec3* pos, F32 radius,
                 sound_category category, F32 delay)
 {
     xSndPlay3D(id, vol, pitch, priority, flags, pos, radius / 4.0f, radius, category, delay);
 }
+#endif
 
 S32 xNPCBasic::SelfType() const
 {

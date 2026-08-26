@@ -1,6 +1,11 @@
 // Expanding xSndPlay3D here adds a .sdata2 literal that shifts this unit's
 // pool and drops four functions to ~99.6%. See the note in zEnt.h.
+//
+// GameCube only, for the reason spelled out at the top of zEnt.cpp: on a host
+// the mixture of one out-of-line body and N inline ones is a duplicate symbol.
+#ifndef PLATFORM_PC
 #define XSNDPLAY3D_OUT_OF_LINE
+#endif
 
 #include "zEntDestructObj.h"
 

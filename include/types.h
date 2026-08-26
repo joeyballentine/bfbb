@@ -62,7 +62,30 @@ typedef double F64;
 // #define asm
 #endif
 
+// WEAK has to survive that stub, and on the PC build it did not.
+//
+// `#define __declspec(x)` above expands __declspec(weak) to NOTHING, so every
+// WEAK definition in the game -- iFileAsyncService, xVec3LengthFast, xSCurve,
+// xVec3DistFast, xMat3x3MulRotC, xVec3ScaleC, xModelAnimCollStop -- became a
+// strong definition on any compiler that is not CodeWarrior. They are WEAK
+// because CodeWarrior emitted one copy of each into whichever object it
+// happened to pick, and the decomp reproduces that placement; a host linker
+// sees two strong definitions of the same function and refuses.
+//
+// Found by linking. It cannot be found by compiling: each translation unit is
+// individually correct, and tools/pcprogress.py compiles them one at a time.
+// iFileAsyncService was the one that fired, against the port's own iFile.cpp.
+//
+// GCC and Clang spell it __attribute__((weak)), which they support on COFF as
+// a weak external -- the same semantics CodeWarrior gives __declspec(weak),
+// and what the definitions are asking for.
+#if defined(__MWERKS__)
 #define WEAK __declspec(weak)
+#elif defined(__GNUC__) || defined(__clang__)
+#define WEAK __attribute__((weak))
+#else
+#define WEAK
+#endif
 
 #if defined(GAMECUBE) || defined(__MWERKS__)
 typedef signed char s8;

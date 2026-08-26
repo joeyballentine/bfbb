@@ -47,7 +47,20 @@ cameraFXTableEntry sCameraFXTable[3] = { { CAMERAFX_TYPE_NONE, NULL, NULL },
                                          { CAMERAFX_TYPE_ZOOM, xCameraFXZoomUpdate, NULL },
                                          { CAMERAFX_TYPE_SHAKE, xCameraFXShakeUpdate, NULL } };
 
+// Retail defines `globals` in BOTH this unit and zMain.cpp, and CodeWarrior
+// merges the two as common symbols -- one allocation, one address, both
+// objects carrying the definition because both need the symbol emitted where
+// their own layouts expect it. C++ has no common symbols and a host linker
+// calls that a duplicate, which is what it did in the port's first full link.
+//
+// zMain.cpp is the owner on PC: it is the entry point and it also publishes
+// `xglobals = &globals`. This unit takes a declaration instead, which changes
+// nothing about what it reads.
+#ifdef PLATFORM_PC
+extern zGlobals globals;
+#else
 zGlobals globals;
+#endif
 
 // These structs were used in deadstripped functions.
 // This function is here to force the symbols to be linked.
