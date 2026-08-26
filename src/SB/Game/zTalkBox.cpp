@@ -590,7 +590,7 @@ namespace
         }
 
         F32 vol = c.volume.left;
-        if (!(vol > c.volume.right))
+        if (vol <= c.volume.right)
         {
             vol = c.volume.right;
         }
@@ -1063,11 +1063,14 @@ namespace
                     active.quit_box->activate();
                 }
             }
-            else if (shared.allow_quit && shared.quit_delay <= 0.0f)
-            {
-                active.quit_box->deactivate();
-            }
-            else if (active.prompt.noquit)
+            // Retail folds the quit_delay test into this branch so the two
+            // deactivate() paths share one call site -- the float compare
+            // branches straight to the tail rather than to a deactivate() of
+            // its own. The negation has to be written distributed like this:
+            // spelling it !(allow_quit && quit_delay <= 0.0f) puts the <= under
+            // a negation, and CW then builds the `le` predicate explicitly
+            // (cror eq,lt,eq + beq) instead of emitting a plain ble.
+            else if ((!shared.allow_quit || shared.quit_delay > 0.0f) && active.prompt.noquit)
             {
                 active.quit_box->set_text(active.prompt.noquit);
                 if (active.flag.visible)
