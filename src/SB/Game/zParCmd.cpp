@@ -311,6 +311,7 @@ void xParCmdCustom_Update(xParCmd* c, xParGroup* ps, float dt)
     switch (cmd->unknown)
     {
     case 0:
+    {
         F32 mdt = 4.0f * dt;
         xVec3 pos;
         pos.x = globals.player.ent.model->Mat->pos.x;
@@ -334,6 +335,7 @@ void xParCmdCustom_Update(xParCmd* c, xParGroup* ps, float dt)
             p->m_size = 1.0f / (10.0f * (mdt / oorSqr) * (r.x + r.z));
         }
         break;
+    }
     case 2:
         for (; p != NULL; p = p->m_next)
         {

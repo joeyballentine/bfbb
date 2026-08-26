@@ -1593,6 +1593,10 @@ void xsqrtfast(F32& out, F32 in)
 }
 
 // We don't have the implementation provided
+// MSL declares this in <cmath> and leaves the body to whoever needs it, so
+// the GameCube build supplies it here. A host already has it, and namespace
+// std is not ours to add to -- compat/cmath brings the global one in instead.
+#ifdef __MWERKS__
 F32 std::sqrtf(F32 x)
 {
     volatile F32 y;
@@ -1611,6 +1615,7 @@ F32 std::sqrtf(F32 x)
         return x;
     }
 }
+#endif
 
 S32 xSweptSphereToSphere(xSweptSphere* sws, xSphere* sph)
 {

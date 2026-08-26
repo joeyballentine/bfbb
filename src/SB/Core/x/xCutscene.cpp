@@ -327,10 +327,15 @@ F32 xlog(F32 x)
     return std::logf(x);
 }
 
+// MSL declares this in <cmath> and leaves the body to whoever needs it, so
+// the GameCube build supplies it here. A host already has it, and namespace
+// std is not ours to add to -- compat/cmath brings the global one in instead.
+#ifdef __MWERKS__
 float std::logf(float x)
 {
     return (float)log((double)x);
 }
+#endif
 
 // A camera chunk's payload sits directly after its xCutsceneData header: the
 // number of fly keys, then the keys themselves.
@@ -1038,17 +1043,33 @@ xCutscene* xCutscene_CurrentCutscene()
     return &sActiveCutscene;
 }
 
+// MSL declares the f-suffixed math functions inside namespace std, and this
+// re-declares the one this file uses. A host has them in the global namespace
+// with an exception specification that makes this a conflicting declaration;
+// compat/cmath brings the global name into std instead.
+#ifdef __MWERKS__
 namespace std
 {
     float atanf(float x);
 }
+#endif
 
+// MSL declares this in <cmath> and leaves the body to whoever needs it, so
+// the GameCube build supplies it here. A host already has it, and namespace
+// std is not ours to add to -- compat/cmath brings the global one in instead.
+#ifdef __MWERKS__
 float std::atan(float x)
 {
     return std::atanf(x);
 }
+#endif
 
+// MSL declares this in <cmath> and leaves the body to whoever needs it, so
+// the GameCube build supplies it here. A host already has it, and namespace
+// std is not ours to add to -- compat/cmath brings the global one in instead.
+#ifdef __MWERKS__
 float std::atanf(float x)
 {
     return (float)::atan((double)x);
 }
+#endif

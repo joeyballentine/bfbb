@@ -420,6 +420,7 @@ void zEntAnimEvent(zEnt* ent, U32 animEvent, const F32* animParam)
         {
         case 0xc3:
         case 0xc4:
+        {
             if (animParam == NULL)
             {
                 break;
@@ -462,6 +463,7 @@ void zEntAnimEvent(zEnt* ent, U32 animEvent, const F32* animParam)
                        0.0f, SND_CAT_GAME, 0.0f);
 
             break;
+        }
         case 0xc5:
             if (strcmp(single->State->Name, "idle") == 0)
             {
@@ -491,6 +493,7 @@ void zEntAnimEvent(zEnt* ent, U32 animEvent, const F32* animParam)
             }
             break;
         case 0xc9:
+        {
             if (animParam == NULL)
             {
                 break;
@@ -521,6 +524,7 @@ void zEntAnimEvent(zEnt* ent, U32 animEvent, const F32* animParam)
             xAnimPlayUpdate(play, 0.0f);
             xAnimPlayEval(play);
             break;
+        }
         case 0xca:
             if (animParam == NULL)
             {
@@ -614,6 +618,7 @@ void zEntAnimEvent_AutoAnim(zEnt* ent, U32 animEvent, const F32* animParam)
     {
     case 0xc3:
     case 0xc4:
+    {
         if (animParam == NULL)
         {
             break;
@@ -655,7 +660,9 @@ void zEntAnimEvent_AutoAnim(zEnt* ent, U32 animEvent, const F32* animParam)
         xAnimPlayUpdate(play, 0.0f);
         xAnimPlayEval(play);
         break;
+    }
     case 0xc5:
+    {
         xAnimTable* tab2 = ent->model->Anim->Table;
         if (tab2 == NULL)
         {
@@ -671,6 +678,7 @@ void zEntAnimEvent_AutoAnim(zEnt* ent, U32 animEvent, const F32* animParam)
             xAnimPlayEval(play);
         }
         break;
+    }
     case 0xc6:
         single->CurrentSpeed = 0.0f;
         break;
@@ -688,6 +696,7 @@ void zEntAnimEvent_AutoAnim(zEnt* ent, U32 animEvent, const F32* animParam)
         }
         break;
     case 0xc9:
+    {
         if (animParam == NULL)
         {
             break;
@@ -727,6 +736,7 @@ void zEntAnimEvent_AutoAnim(zEnt* ent, U32 animEvent, const F32* animParam)
         xAnimPlayUpdate(play, 0.0f);
         xAnimPlayEval(play);
         break;
+    }
     case 0xca:
         if (xUtil_yesno(0.01f * animParam[1]) != 0)
         {

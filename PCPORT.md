@@ -271,9 +271,8 @@ substitute is `tools/pcprogress.py`: does each unit of `src/SB` compile, on a
 modern toolchain, against the PC platform headers? That is a real gate, not a
 proxy, and anything failing it names its reason.
 
-It went **6.6% → 79.8%** (13 → 158 of 198 units) as the PC headers landed. The
-remaining 40 are listed by blocker; none of them is waiting on librw, because
-compiling is not linking.
+It went **6.6% → 89.4%** (13 → 177 of 198 units). None of the remainder is
+waiting on librw, because compiling is not linking.
 
 `src/SB/Core/pc/tests/selftest.cpp` is the other half: 37 checks over every
 implemented interface, so that "implemented" is measured rather than asserted.
@@ -330,7 +329,49 @@ reserved at twice the size. One more for the latent-retail-bugs list.
    What survives is the shape, because `xsavegame.cpp` is shared and asks all
    the same questions.
 2. **`iSnd`** — 22 functions, and the largest group after rendering.
-3. **The remaining 40 units** that do not compile. The big class is 13 units
-   with `jump to case label`, which needs braces per site and a DOL check after,
-   since scoping a case body can move a stack frame.
+3. **The remaining 21 units** that do not compile, now all singletons. Two are
+   real porting work rather than conformance: `xVec3.cpp` implements
+   `xVec3Dot` in paired-single PPC assembly and needs a scalar body, and
+   `zMain.cpp` calls `CARDMount`/`CARDFormatAsync` directly to drive the
+   memory-card format screen -- a platform leak in game code that belongs
+   behind an interface. The rest are C++ conformance: explicit specializations
+   missing `template<>` or appearing after an instantiation, namespace-qualified
+   definitions written outside their namespace, and arithmetic on `void*`.
 4. **librw**, which is phase 3 and gates the other 14 interfaces.
+
+### `jump to case label`, and what measuring it cost
+
+13 units declared a variable in a `case` body that later labels skip past.
+CodeWarrior accepts it; standard C++ does not.
+
+Bracing the case body is the clean fix, and the question was whether it moves
+CodeWarrior's stack frame. `cmp` on the object said it did, in 4 of 12 units.
+That was wrong: adding a line shifts every DWARF line-number entry, so the
+objects differ while the code does not, and DWARF is not linked into the DOL.
+`tools/objsame.py` compares only the sections that reach the DOL, and by that
+measure all 13 are identical -- one uniform fix, no stack frames moved.
+
+The same mistake in a different costume as the `ninja | tail` one: **a baseline
+has to be built, not found.** Copying whatever object happens to be on disk and
+calling it "before" gave a false difference twice before the stash-and-rebuild
+comparison settled it.
+
+One site could not be braced at all. `zEntPlayer.cpp` has a `goto do_bounce`
+that jumps forward over `xSurface* surf = ...`, and no block can contain both
+the jump and the label; that one splits the declaration from its initializer
+instead, which a jump is allowed to cross.
+
+### CodeWarrior-isms, second pass
+
+- **`namespace std` re-declarations.** Eight files declare or define MSL's
+  f-suffixed math functions -- `std::floorf`, `std::powf`, `std::atan2f` --
+  because MSL puts them there and leaves the bodies to whoever needs them. A
+  host has them globally, with an exception specification that makes any
+  redeclaration a conflict. Gated on `__MWERKS__`; `compat/cmath` brings the
+  global names into `std` instead. Two of them were already guarded with
+  `#ifndef INLINE`, which is defined in neither build and so guarded nothing.
+- **`<mem.h>`**, MSL's split-out half of `<string.h>`, and **`strcmpi`**, the
+  other spelling of `stricmp`. Both in `compat/`.
+- **`<dolphin.h>` in `xAnim.cpp`**, which the file does not use -- no OS, DVD
+  or CARD call anywhere in it. Gated, like `xpkrsvc.h` before it. That leaves
+  `zMain.cpp` as the only unit in `src/SB` that genuinely reaches for dolphin.

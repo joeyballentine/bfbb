@@ -18,7 +18,12 @@
 #include <cmath>
 #endif
 
+// Nothing in this file calls into the OS, the DVD or the memory card; the
+// include has always been here and its includers may lean on what it drags in,
+// so it stays for the GameCube and is simply absent on a host.
+#ifdef GAMECUBE
 #include <dolphin.h>
+#endif
 #include <stdio.h>
 
 static xMemPool sxAnimTempTranPool;
@@ -168,6 +173,7 @@ static U8 _xCheckAnimNameInner(const char* name, const char* pattern, S32 patter
             patternCurrent++;
             break;
         case '}':
+        {
             S32 length = &name[nameCurrent] - startExtra;
             if (extra != NULL)
             {
@@ -179,7 +185,9 @@ static U8 _xCheckAnimNameInner(const char* name, const char* pattern, S32 patter
             startExtra = NULL;
             patternCurrent++;
             break;
+        }
         case '(':
+        {
             patternCurrent++;
             U8 done = 0;
             const char* groupStart = &pattern[patternCurrent];
@@ -258,6 +266,7 @@ static U8 _xCheckAnimNameInner(const char* name, const char* pattern, S32 patter
                 return 0;
             }
             break;
+        }
         case '<':
         {
             patternCurrent++;
@@ -365,7 +374,11 @@ void xAnimTempTransitionInit(U32 count)
                   sizeof(xAnimTransition), count, count / 2);
 }
 
-#ifndef INLINE
+// MSL's f-suffixed math functions live in namespace std, and the GameCube
+// build supplies this one's body. A host has it globally, with an exception
+// specification that makes a redeclaration here a conflict; compat/cmath
+// brings the global name into std instead.
+#if defined(__MWERKS__) && !defined(INLINE)
 namespace std
 {
     extern inline float atan2f(float y, float x)
@@ -687,7 +700,11 @@ void xAnimFileEval(xAnimFile* data, F32 time, F32* bilinear, U32 flags, xVec3* t
     }
 }
 
-#ifndef INLINE
+// MSL's f-suffixed math functions live in namespace std, and the GameCube
+// build supplies this one's body. A host has it globally, with an exception
+// specification that makes a redeclaration here a conflict; compat/cmath
+// brings the global name into std instead.
+#if defined(__MWERKS__) && !defined(INLINE)
 namespace std
 {
     extern inline float floorf(float x)

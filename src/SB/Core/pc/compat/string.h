@@ -21,6 +21,13 @@ static inline int strnicmp(const char* a, const char* b, size_t n)
     return strncasecmp(a, b, n);
 }
 
+// The other spelling MSL carries for the same comparison. zSaveLoad.cpp uses
+// this one and zEntPlayer.cpp uses stricmp.
+static inline int strcmpi(const char* a, const char* b)
+{
+    return strcasecmp(a, b);
+}
+
 #ifdef __cplusplus
 }
 #endif

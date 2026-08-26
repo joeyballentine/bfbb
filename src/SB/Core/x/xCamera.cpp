@@ -921,10 +921,15 @@ void xCameraUpdate(xCamera* cam, F32 dt)
 }
 
 #ifndef INLINE
+// MSL declares this in <cmath> and leaves the body to whoever needs it, so
+// the GameCube build supplies it here. A host already has it, and namespace
+// std is not ours to add to -- compat/cmath brings the global one in instead.
+#ifdef __MWERKS__
 float std::ceilf(float x)
 {
     return (float)ceil((double)x);
 }
+#endif
 #endif
 
 void xCameraBegin(xCamera* cam, S32 clear)
@@ -1451,10 +1456,15 @@ F32 xasin(F32 x)
 }
 
 #ifndef INLINE
+// MSL declares this in <cmath> and leaves the body to whoever needs it, so
+// the GameCube build supplies it here. A host already has it, and namespace
+// std is not ours to add to -- compat/cmath brings the global one in instead.
+#ifdef __MWERKS__
 float std::asinf(float x)
 {
     return (float)asin((double)x);
 }
+#endif
 #endif
 
 F32 xQuatGetAngle(const xQuat* q)
@@ -1765,10 +1775,15 @@ F32 xacos(F32 x)
 }
 
 #ifndef INLINE
+// MSL declares this in <cmath> and leaves the body to whoever needs it, so
+// the GameCube build supplies it here. A host already has it, and namespace
+// std is not ours to add to -- compat/cmath brings the global one in instead.
+#ifdef __MWERKS__
 float std::acosf(float x)
 {
     return (float)acos((double)x);
 }
+#endif
 #endif
 
 void xVec3AddTo(xVec3* o, const xVec3* v)
@@ -1793,10 +1808,15 @@ F32 xexp(F32 x)
 }
 
 #ifndef INLINE
+// MSL declares this in <cmath> and leaves the body to whoever needs it, so
+// the GameCube build supplies it here. A host already has it, and namespace
+// std is not ours to add to -- compat/cmath brings the global one in instead.
+#ifdef __MWERKS__
 float std::expf(float x)
 {
     return (float)exp((double)x);
 }
+#endif
 #endif
 
 F32 xrmod(F32 ang)

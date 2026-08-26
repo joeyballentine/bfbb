@@ -11,6 +11,11 @@
 // NOTE: these two belong in headers (std::powf in <math.h>, xpow in
 // xMathInlines.h). They are inline, so the compiler emits a weak out-of-line
 // copy into every translation unit that calls them.
+// MSL's f-suffixed math functions live in namespace std, and the GameCube
+// build supplies this one's body. A host has it globally, with an exception
+// specification that makes a redeclaration here a conflict; compat/cmath
+// brings the global name into std instead.
+#ifdef __MWERKS__
 namespace std
 {
     extern inline float powf(float x, float y)
@@ -18,6 +23,7 @@ namespace std
         return ::pow(x, y);
     }
 }
+#endif
 
 inline F32 xpow(F32 x, F32 y)
 {

@@ -602,12 +602,14 @@ s32 zEntSimpleObjEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam
         zFXGooEventMelt((xEnt*)to);
         break;
     case eEventLaunchShrapnel:
+    {
         zShrapnelAsset* shrap = (zShrapnelAsset*)base3;
         if (shrap != NULL && shrap->initCB != NULL)
         {
             shrap->initCB(shrap, s->model, NULL, NULL);
         }
         break;
+    }
     case eEventDestroy:
         xEntHide((xEnt*)to);
         break;

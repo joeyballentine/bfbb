@@ -25,7 +25,7 @@ did after every edit made so far.
 ## What is implemented
 
 `tools/pcprogress.py` measures the other half of the question — how much of
-`src/SB` compiles against these headers. Right now **158 of 198 units (79.8%)**.
+`src/SB` compiles against these headers. Right now **177 of 198 units (89.4%)**.
 
 | interface | state | notes |
 |---|---|---|
@@ -55,9 +55,9 @@ and that surface has been dropped rather than reproduced.
 
 ## Files that are not interfaces
 
-- **`compat/`** shadows `<math.h>`, `<string.h>` and `<cmath>` to add the
-  CodeWarrior extensions the game's sources use — `FABS`, `stricmp`,
-  `std::floorf` — chaining to the system headers with `include_next`. It is the
+- **`compat/`** shadows `<math.h>`, `<string.h>`, `<cmath>` and `<mem.h>` to
+  add the CodeWarrior extensions the game's sources use — `FABS`, `stricmp`,
+  `strcmpi`, `std::floorf` — chaining to the system headers with `include_next`. It is the
   host counterpart to `src/PowerPC_EABI_Support/include/math.h`, which is what
   the GameCube build sees. It must come first on the include path.
 - **`iPadHost.h`** and **`iPadHostNull.cpp`** are the device end of input. The

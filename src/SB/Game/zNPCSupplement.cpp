@@ -16,10 +16,16 @@
 #include <rwplcore.h>
 
 // MSL's <cmath> is not reachable from here; the target calls floorf__3stdFf.
+// MSL declares the f-suffixed math functions inside namespace std, and this
+// re-declares the one this file uses. A host has them in the global namespace
+// with an exception specification that makes this a conflicting declaration;
+// compat/cmath brings the global name into std instead.
+#ifdef __MWERKS__
 namespace std
 {
     float floorf(float x);
 }
+#endif
 
 U32 xShadowReceiveShadowSetup(xEnt* ent);
 void xShadowReceiveShadow(xEnt* ent, F32 factor, S32 flags, RwMatrixTag* mat, RwRaster* rast);

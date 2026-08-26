@@ -862,6 +862,7 @@ U32 zNPCBSandy::AnimPick(S32 gid, en_NPC_GOAL_SPOT param_2, xGoal* rawgoal)
         index = 6;
         break;
     case 'NGB5':
+    {
         zNPCGoalBossSandyNoHead* noHeadGoal = (zNPCGoalBossSandyNoHead*)rawgoal;
         U32 anid = noHeadGoal->stage;
         if (anid == 0)
@@ -903,6 +904,7 @@ U32 zNPCBSandy::AnimPick(S32 gid, en_NPC_GOAL_SPOT param_2, xGoal* rawgoal)
             index = 27;
         }
         break;
+    }
     case 'NGB6':
         index = 11;
         break;
@@ -910,6 +912,7 @@ U32 zNPCBSandy::AnimPick(S32 gid, en_NPC_GOAL_SPOT param_2, xGoal* rawgoal)
         index = 12;
         break;
     case 'NGB8':
+    {
         zNPCGoalBossSandySit* sitGoal = (zNPCGoalBossSandySit*)rawgoal;
         if ((sitGoal->sitFlags & 2) != 0x0)
         {
@@ -920,10 +923,12 @@ U32 zNPCBSandy::AnimPick(S32 gid, en_NPC_GOAL_SPOT param_2, xGoal* rawgoal)
             index = 16;
         }
         break;
+    }
     case 'NGB:':
         index = 4;
         break;
     case 'NGB;':
+    {
         zNPCGoalBossSandyClothesline* cl = (zNPCGoalBossSandyClothesline*)rawgoal;
         if (cl->stage == 0)
         {
@@ -938,6 +943,7 @@ U32 zNPCBSandy::AnimPick(S32 gid, en_NPC_GOAL_SPOT param_2, xGoal* rawgoal)
             index = 20;
         }
         break;
+    }
     case 'NGB9':
         index = 9;
         break;

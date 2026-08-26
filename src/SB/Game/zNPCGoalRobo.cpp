@@ -6457,11 +6457,13 @@ S32 zNPCGoalDamage::InputInfo(NPCDamageInfo* info)
     case DMGTYP_HITBYTOSS:
     case DMGTYP_BOULDER:
     case DMGTYP_BUBBOWL:
+    {
         flg_howtodie = 2;
         npc->InflictPain(-1, 0);
         zNPCGoalKnock* knock = (zNPCGoalKnock*)(psyche->FindGoal(NPC_GOAL_KNOCK));
         knock->InputInfo(info);
         break;
+    }
     default:
         flg_howtodie = 1;
         npc->InflictPain(-1, 0);
@@ -6986,6 +6988,7 @@ S32 zNPCGoalAfterlife::NPCMessage(NPCMsg* mail)
     switch (mail->msgid)
     {
     case NPC_MID_RESPAWN:
+    {
         if ((psy->GIDInStack(NPC_GOAL_RESPAWN) != NULL) ||
             (psy->GIDOfPending() == NPC_GOAL_RESPAWN))
         {
@@ -7000,6 +7003,7 @@ S32 zNPCGoalAfterlife::NPCMessage(NPCMsg* mail)
         psy->GoalPush(NPC_GOAL_RESPAWN, 0);
         mail->spawning.spawnSuccess = 1;
         break;
+    }
     default:
         snarfed = 1;
         break;

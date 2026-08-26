@@ -8,10 +8,16 @@
 #include <xVec3.h>
 
 // MSL's <cmath> is not reachable from here; the target calls floorf__3stdFf.
+// MSL declares the f-suffixed math functions inside namespace std, and this
+// re-declares the one this file uses. A host has them in the global namespace
+// with an exception specification that makes this a conflicting declaration;
+// compat/cmath brings the global name into std instead.
+#ifdef __MWERKS__
 namespace std
 {
     float floorf(float x);
 }
+#endif
 
 static F32 sBasisUniformBspline[4][4];
 static F32 sBasisBezier[4][4] = { { -1.0f, 3.0f, -3.0f, 1.0f },

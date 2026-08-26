@@ -588,6 +588,7 @@ void zFragLoc_InitDir(zFragLocation* loc, xVec3* vec, xModelInstance* parent)
         xMat3x3RMulVec(vec, (xMat3x3*)parent->Mat, &loc->info.bone.offset);
         break;
     case eFragLocBoneLocal:
+    {
         S32 index = loc->info.bone.index;
         if (index >= parent->BoneCount)
         {
@@ -606,6 +607,7 @@ void zFragLoc_InitDir(zFragLocation* loc, xVec3* vec, xModelInstance* parent)
             xMat3x3RMulVec(vec, (xMat3x3*)&tmpMat, &loc->info.bone.offset);
         }
         break;
+    }
     case eFragLocTag:
         iModelTagEval(parent->Data, &loc->info.tag, parent->Mat, vec);
         break;
@@ -621,6 +623,7 @@ void zFrag_DefaultInit(zFrag* frag, zFragAsset* fasset)
     switch (fasset->type)
     {
     case eFragProjectile:
+    {
         zFragProjectileAsset* passet = (zFragProjectileAsset*)fasset;
 
         frag->info.projectile.fasset = passet;
@@ -658,7 +661,9 @@ void zFrag_DefaultInit(zFrag* frag, zFragAsset* fasset)
         }
         break;
 
+    }
     case eFragLightning:
+    {
         zFragLightningAsset* lasset = (zFragLightningAsset*)fasset;
 
         frag->info.lightning.fasset = lasset;
@@ -671,7 +676,9 @@ void zFrag_DefaultInit(zFrag* frag, zFragAsset* fasset)
         }
         break;
 
+    }
     case eFragParticle:
+    {
         zFragParticleAsset* prasset = (zFragParticleAsset*)fasset;
 
         frag->info.particle.fasset = prasset;
@@ -684,7 +691,9 @@ void zFrag_DefaultInit(zFrag* frag, zFragAsset* fasset)
         }
         break;
 
+    }
     case eFragSound:
+    {
         zFragSoundAsset* sasset = (zFragSoundAsset*)fasset;
 
         frag->info.sound.fasset = sasset;
@@ -696,6 +705,7 @@ void zFrag_DefaultInit(zFrag* frag, zFragAsset* fasset)
             zFragLoc_InitVec(&sasset->source, &frag->info.sound.location, frag->parent[0]);
         }
         break;
+    }
     case eFragShockwave:
         break;
     }
