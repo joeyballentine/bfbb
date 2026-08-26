@@ -154,6 +154,25 @@ The split is roughly:
 - *Renderable* assets (models, textures) are genuinely platform-native and
   different — but that is fine, because librw wants the Xbox ones anyway.
 
+**The HIP container is big-endian even on Xbox.** Verified 2026-08-26 against a
+real Xbox dump. This qualifies the "Xbox assets solve endianness" claim above,
+which is true of asset *payloads* and not of the *container* they arrive in:
+
+    boot.HIP:  HIPA ........ PACK 0000009c  PVER 0000000c  PFLG 00000004
+
+Those chunk sizes are only sensible read big-endian, and the format is the same
+on every platform -- it is the packer's container, not the console's. The
+payloads inside genuinely are little-endian: scanning one level's HOP finds 171
+plausible RenderWare chunk headers little-endian and zero big-endian, at library
+version 0x1400FFFF (RW 3.4), including type 0x16 texture dictionaries, which is
+the Xbox-native form librw handles best.
+
+So the port needs byte-swapping in the HIP/HOP loader and nowhere else. That is
+bounded -- chunk headers and the two tables of contents -- rather than the
+pervasive problem GameCube payloads would have been, and it is worth knowing
+before someone concludes from the section above that no swapping is needed
+anywhere.
+
 **Version and content drift.** The decomp targets `GQPE78` (GameCube NTSC-U).
 The Xbox release is a different SKU and may carry different revisions, fixes or
 content. Do not assume asset IDs and contents correspond 1:1.
