@@ -247,12 +247,34 @@ the assets would be Xbox-derived", now realised in a specific place. The Xbox
 build clearly loaded its environment some other way, and that code is not what
 we decompiled -- ours is the GameCube build's, and it expects BSPs.
 
-**So the fallback recorded below is no longer hypothetical: use GameCube assets,
-converted offline to little-endian.** They carry the BSPs the code we actually
-have was written against. Xbox assets remain the better answer for *models and
-textures*, and PCPORT.md already allows the hybrid; this is the case for taking
-it. Implementing world sectors in librw is then worth doing, and worth doing
-upstream -- but it pays off against GameCube assets, not Xbox ones.
+**Correction, and it reverses what this section first concluded.** The paragraph
+that used to sit here recommended switching to GameCube assets. That was wrong,
+and wrong in a specific way worth recording: it found a gap -- `RpWorldStreamRead`
+needs sectors -- and assumed it was on the critical path without checking whether
+the Xbox asset path reaches it.
+
+It does not. `src/SB/Core/gc/iEnv.cpp:61` shows what a JSP level actually does:
+
+    env->world = RpWorldCreate(&tmpbbox);        // an EMPTY world
+    env->jsp   = jsp;
+    xClumpColl_InstancePointers(env->jsp->colltree, env->jsp->clump);
+
+The world is a container, not the level, and collision comes from the JSP's own
+`colltree`. `xCollide.cpp` branches on it: with a JSP it calls
+`xClumpColl_ForAllCapsuleLeafNodeIntersections(env->geom->jsp->colltree, ...)`
+and only *else* touches `RpCollisionWorldForAllIntersections`. So on Xbox assets
+the engine never reads a BSP, never walks a sector, and the two functions the
+shim cannot implement are not on the path.
+
+Corroborated externally: github.com/seilc/bfbbpc runs this same GameCube-derived
+code against Xbox assets. It uses the real RenderWare 3.4 SDK for D3D8 rather
+than librw -- and the reason that pairing works is worth knowing, because it is
+not "the SDK has world sectors". **Xbox is a D3D8 platform**, so Xbox RenderWare
+assets are D3D8-native and RW 3.4 for D3D8 reads them with no conversion.
+
+Which leaves the live question as a format one rather than a feature one: whether
+librw reads Xbox-native textures and geometry as faithfully as the SDK does.
+That is measurable against the assets themselves, and is being measured.
 
 A second problem sits behind that one either way: GameCube sector geometry is a
 display list in a platform extension chunk, which is why `iFX.cpp` reads
