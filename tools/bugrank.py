@@ -33,6 +33,7 @@ Usage:
   bugrank.py --pool               also list the functions that fully cancelled
 """
 
+import json
 import os
 import re
 import subprocess
@@ -62,6 +63,36 @@ def canon(term):
     t = re.sub(r"0x[0-9a-f]+\(R\)", "OFF(R)", t)
     t = re.sub(r"<\S+>", "<SYM>", t)
     return t
+
+
+OD = os.path.join(ROOT, "build", "binutils", "powerpc-eabi-objdump.exe")
+FRAME = re.compile(r"^\s*[0-9a-f]+:	(?:[0-9a-f]{2} ){4}	stwu\s+r1,(-\d+)\(r1\)$")
+FNLBL = re.compile(r"^[0-9a-f]+ <(.+)>:$")
+
+
+def frame_sizes(obj):
+    """{function: stack frame size}, from its `stwu r1,-N(r1)` prologue.
+
+    A different frame size makes every r1-relative operand differ, so a function
+    whose frames disagree reports a pile of terms that are all one difference:
+    Process__14zNPCGoalWander showed 22 of them (target 0x70, ours 0x60). That is
+    worth knowing before spending time reading the terms, but it is NOT grounds
+    for cancelling the function -- extra stack can equally mean a local retail has
+    and we do not. So it is reported, not filtered.
+    """
+    out = subprocess.run([OD, "-d", "-M", "broadway", os.path.abspath(obj)],
+                         capture_output=True, text=True).stdout
+    res, cur = {}, None
+    for line in out.splitlines():
+        m = FNLBL.match(line)
+        if m:
+            cur = m.group(1)
+            continue
+        if cur and cur not in res:
+            m = FRAME.match(line)
+            if m:
+                res[cur] = -int(m.group(1))
+    return res
 
 
 cmd = [sys.executable, os.path.join(ROOT, "tools", "semdiff.py"), "-v"] + FRAGS
@@ -97,10 +128,24 @@ pool.sort(key=lambda r: -r[0][0])
 
 print("BUG-SHAPED semantic differences, highest match first")
 print("(pool-placement-only differences cancelled out)\n")
-print("  %-9s %-6s %-7s %s" % ("match", "terms", "bytes", "function"))
+# annotate frame-size disagreements: one difference that wears many hats
+frames = {}
+for unit in sorted({u for (_, _, _, u), _, _ in real}):
+    rel = unit.replace("main/", "")
+    t = os.path.join(ROOT, "build/GQPE78/obj", rel + ".o")
+    o = os.path.join(ROOT, "build/GQPE78/src", rel + ".o")
+    if os.path.exists(t) and os.path.exists(o):
+        frames[unit] = (frame_sizes(t), frame_sizes(o))
+
+print("  %-9s %-6s %-7s %-48s %s"
+      % ("match", "terms", "bytes", "function", "unit"))
 for (p, b, n, u), left, tot in real:
-    print("  %7.3f%%  %-6d %-7d %-48s %s"
-          % (p, left, b, n[:48], u.replace("main/SB/", "")))
+    ft, fo = frames.get(u, ({}, {}))
+    note = ""
+    if n in ft and n in fo and ft[n] != fo[n]:
+        note = "   [frame 0x%x vs 0x%x]" % (ft[n], fo[n])
+    print("  %7.3f%%  %-6d %-7d %-48s %s%s"
+          % (p, left, b, n[:48], u.replace("main/SB/", ""), note))
 print("\n  %d bug-shaped, %d pool-placement-only, %d total"
       % (len(real), len(pool), len(rows)))
 
