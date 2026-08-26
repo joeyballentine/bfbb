@@ -14,6 +14,7 @@
 #include <string.h>
 
 #include <rwcore.h>
+#include <rpworld.h>
 
 // ../stream.h rather than "rw.h": it pulls in librw's header itself, and that
 // header has no include guard, so including both redefines everything in it.
@@ -391,6 +392,397 @@ static void test_images()
     check(RwImageSetFromRaster(NULL, NULL) == NULL, "RwImageSetFromRaster(NULL, NULL) is refused");
 }
 
+static void test_cameras()
+{
+    printf("RwCamera\n");
+
+    RwCamera* camera = RwCameraCreate();
+    check(camera != NULL, "RwCameraCreate");
+    if (camera == NULL)
+    {
+        return;
+    }
+
+    // Read out of the RenderWare struct, which is the mirroring doing its job:
+    // librw's Camera::create wrote these and RwCamera names them elsewhere in
+    // the struct than the console does.
+    check(camera->nearPlane == 0.05f && camera->farPlane == 10.0f && camera->fogPlane == 5.0f,
+          "librw's clip plane defaults land in RwCamera's own fields");
+    check(camera->projectionType == rwPERSPECTIVE, "and so does the projection type");
+    check(RwCameraGetViewWindow(camera)->x == 1.0f && RwCameraGetViewWindow(camera)->y == 1.0f,
+          "RwCameraGetViewWindow reads the mirrored field");
+    check(RwCameraGetRaster(camera) == NULL && RwCameraGetZRaster(camera) == NULL,
+          "a new camera has no rasters");
+    check(RwCameraGetWorld(camera) == NULL, "and is in no world");
+
+    RwCameraSetProjection(camera, rwPARALLEL);
+    check(RwCameraGetProjection(camera) == rwPARALLEL, "RwCameraSetProjection");
+    check(reinterpret_cast<rw::Camera*>(camera)->projection == rw::Camera::PARALLEL,
+          "librw reads back the projection the RenderWare call wrote");
+    RwCameraSetProjection(camera, rwPERSPECTIVE);
+
+    RwV2d vw = { 0.5f, 0.375f };
+    RwCameraSetViewWindow(camera, &vw);
+    check(RwCameraGetViewWindow(camera)->x == 0.5f && RwCameraGetViewWindow(camera)->y == 0.375f,
+          "RwCameraSetViewWindow");
+
+    RwCameraSetNearClipPlane(camera, 0.1f);
+    RwCameraSetFarClipPlane(camera, 400.0f);
+    check(RwCameraGetNearClipPlane(camera) == 0.1f && RwCameraGetFarClipPlane(camera) == 400.0f,
+          "RwCameraSetNearClipPlane / RwCameraSetFarClipPlane");
+
+    // ---- the curCamera landmine ----
+    //
+    // This is the check the whole camera group exists for. RwEngineInstance is
+    // a SECOND RwGlobals, not an alias onto rw::engine, so begin/end have to
+    // write both copies -- xCutscene.cpp:716 and xFX.cpp:3044 read
+    // RwEngineInstance->curCamera as a struct field and there is no call to
+    // hook. Nothing else in the port would notice this being wrong until
+    // someone played a cutscene.
+    check(RwEngineInstance->curCamera == NULL, "curCamera is null before an update");
+
+    check(RwCameraBeginUpdate(camera) == camera, "RwCameraBeginUpdate");
+    check(RwEngineInstance->curCamera == camera,
+          "RwCameraBeginUpdate sets RwEngineInstance->curCamera");
+    check(rw::engine->currentCamera == reinterpret_cast<rw::Camera*>(camera),
+          "and rw::engine->currentCamera, which is the other copy");
+    check(RwCameraGetCurrentCamera() == camera,
+          "RwCameraGetCurrentCamera, the macro eleven more game files use");
+    check(RwEngineInstance->curWorld == rw::engine->currentWorld,
+          "curWorld agrees with librw's copy too");
+
+    check(RwCameraEndUpdate(camera) == camera, "RwCameraEndUpdate");
+    // zGame.cpp:910 and zNPCTypePrawn.cpp:1718 both use "curCamera is not null"
+    // as "an update is in progress" and call EndUpdate on the strength of it,
+    // so leaving it set would end an update that had already ended.
+    check(RwEngineInstance->curCamera == NULL, "RwCameraEndUpdate nulls curCamera again");
+    check(rw::engine->currentCamera == NULL, "in both copies");
+    check(RwEngineInstance->curWorld == NULL && rw::engine->currentWorld == NULL,
+          "and curWorld with it");
+
+    // ---- the frustum ----
+    //
+    // The planes only exist once the camera has been synced through its frame,
+    // which is librw's cameraSync running off the frame's update. The frame is
+    // attached through librw because RwCameraSetFrame's helper is not written
+    // yet -- legal because an RwCamera IS an rw::Camera.
+    RwFrame* frame = RwFrameCreate();
+    reinterpret_cast<rw::Camera*>(camera)->setFrame(reinterpret_cast<rw::Frame*>(frame));
+    check(RwCameraGetFrame(camera) == frame, "RwCameraGetFrame after attaching one");
+
+    RwV2d square = { 1.0f, 1.0f };
+    RwCameraSetViewWindow(camera, &square);
+    RwCameraSetNearClipPlane(camera, 1.0f);
+    RwCameraSetFarClipPlane(camera, 100.0f);
+    rw::Frame::syncDirty();
+
+    // Default frame is the identity, so the camera sits at the origin looking
+    // down +z with a 90-degree square view window.
+    RwSphere infront = { { 0.0f, 0.0f, 10.0f }, 1.0f };
+    RwSphere behind = { { 0.0f, 0.0f, -10.0f }, 1.0f };
+    RwSphere beyondFar = { { 0.0f, 0.0f, 200.0f }, 1.0f };
+    RwSphere onTheNearPlane = { { 0.0f, 0.0f, 1.0f }, 1.0f };
+
+    check(RwCameraFrustumTestSphere(camera, &infront) == rwSPHEREINSIDE,
+          "RwCameraFrustumTestSphere: a sphere down the view axis is inside");
+    check(RwCameraFrustumTestSphere(camera, &behind) == rwSPHEREOUTSIDE,
+          "a sphere behind the camera is outside");
+    check(RwCameraFrustumTestSphere(camera, &beyondFar) == rwSPHEREOUTSIDE,
+          "a sphere past the far plane is outside");
+    check(RwCameraFrustumTestSphere(camera, &onTheNearPlane) == rwSPHEREBOUNDARY,
+          "a sphere straddling the near plane is on the boundary");
+
+    // The same planes the game reads by hand -- iCamera.cpp:131 pulls six of
+    // them out by index into an xVec4 array and iModel.cpp:468 walks them --
+    // read here through RenderWare's own struct rather than librw's.
+    //
+    // The INDEX ORDER is the part worth pinning down, because iCamera.cpp picks
+    // planes 0 through 5 by number and gets a different plane if librw's order
+    // is not RenderWare's. librw builds them far, near, right, top, left,
+    // bottom, with each normal pointing out of the frustum: the far plane's is
+    // the camera's own `at`, at the far distance, and the near plane's is its
+    // negation.
+    check(camera->frustumPlanes[0].plane.normal.z == 1.0f &&
+              camera->frustumPlanes[0].plane.distance == 100.0f,
+          "frustumPlanes[0] is the far plane, where SetFarClipPlane put it");
+    check(camera->frustumPlanes[1].plane.normal.z == -1.0f &&
+              camera->frustumPlanes[1].plane.distance == -1.0f,
+          "frustumPlanes[1] is the near plane, facing the other way");
+    check(camera->frustumBoundBox.sup.z == 100.0f && camera->frustumBoundBox.inf.z == 1.0f,
+          "frustumBoundBox spans near to far");
+
+    reinterpret_cast<rw::Camera*>(camera)->setFrame(NULL);
+    RwFrameDestroy(frame);
+
+    // Only the refusals are checkable for these two. RwCameraShowRaster reaches
+    // Raster::show, which is the device's flip; RwCameraClear reaches the
+    // device's clearCamera. LIBRW_PLATFORM=NULL has neither -- its clearCamera
+    // is an empty function -- so a success here would prove nothing about what
+    // ends up on screen. Whoever links GL3 or D3D9 finishes these.
+    check(RwCameraShowRaster(camera, NULL, rwRASTERFLIPWAITVSYNC) == NULL,
+          "RwCameraShowRaster refuses a camera with no frame buffer");
+    check(RwCameraShowRaster(NULL, NULL, 0) == NULL, "RwCameraShowRaster(NULL) is refused");
+    check(RwCameraClear(NULL, NULL, rwCAMERACLEARZ) == NULL, "RwCameraClear(NULL) is refused");
+
+    check(RwCameraDestroy(camera) != FALSE, "RwCameraDestroy");
+    check(RwCameraDestroy(NULL) == FALSE, "RwCameraDestroy(NULL) is refused");
+}
+
+static void test_lights()
+{
+    printf("RpLight\n");
+
+    RpLight* light = RpLightCreate(rpLIGHTPOINT);
+    check(light != NULL, "RpLightCreate");
+    if (light == NULL)
+    {
+        return;
+    }
+
+    check(RpLightGetType(light) == rpLIGHTPOINT, "RpLightGetType reads the mirrored object");
+    check(RpLightGetFlags(light) == (rpLIGHTLIGHTATOMICS | rpLIGHTLIGHTWORLD),
+          "a new light lights both atomics and the world");
+
+    RwRGBAReal green = { 0.0f, 1.0f, 0.25f, 1.0f };
+    check(RpLightSetColor(light, &green) == light, "RpLightSetColor");
+    check(RpLightGetColor(light)->red == 0.0f && RpLightGetColor(light)->green == 1.0f &&
+              RpLightGetColor(light)->blue == 0.25f,
+          "the colour lands in RpLight's own field");
+    check(reinterpret_cast<rw::Light*>(light)->color.green == 1.0f,
+          "librw reads back the colour the RenderWare call wrote");
+    check(light->object.object.privateFlags == 0,
+          "a coloured light is not flagged as grey");
+
+    RwRGBAReal grey = { 0.5f, 0.5f, 0.5f, 1.0f };
+    RpLightSetColor(light, &grey);
+    check(light->object.object.privateFlags != 0,
+          "and a grey one is -- the flag both libraries use to take a cheaper path");
+
+    check(RpLightSetRadius(light, 12.5f) == light, "RpLightSetRadius");
+    check(RpLightGetRadius(light) == 12.5f, "the radius lands in RpLight's own field");
+    check(reinterpret_cast<rw::Light*>(light)->radius == 12.5f, "and librw agrees");
+
+    // Stored as -cos(angle), not as the angle, which is the thing a hand-written
+    // assignment to the field would get wrong.
+    check(RpLightSetConeAngle(light, 0.0f) == light, "RpLightSetConeAngle");
+    check(light->minusCosAngle == -1.0f, "a zero cone angle stores -cos(0) = -1");
+    RpLightSetConeAngle(light, rwPIOVER2);
+    check(light->minusCosAngle > -0.0001f && light->minusCosAngle < 0.0001f,
+          "and a right angle stores -cos(pi/2) = 0");
+
+    check(RpLightDestroy(light) != FALSE, "RpLightDestroy");
+    check(RpLightDestroy(NULL) == FALSE, "RpLightDestroy(NULL) is refused");
+    check(RpLightSetColor(NULL, &grey) == NULL, "RpLightSetColor(NULL) is refused");
+}
+
+// The null device swallows every render state, so what actually reaches librw
+// cannot be read back out of it. These stand in for the device's own entry
+// points for the length of one call, which is what makes the state-id mapping
+// and the fog colour swizzle checkable without a backend.
+static int sCapturedState;
+static void* sCapturedValue;
+
+static void captureSetRenderState(rw::int32 state, void* value)
+{
+    sCapturedState = state;
+    sCapturedValue = value;
+}
+
+static void test_renderstate()
+{
+    printf("RwRenderState\n");
+
+    // A Set has to be readable by the matching Get, because that is the whole
+    // basis of xfont::set_render_state / restore_render_state and of every
+    // other overlay in the game. librw cannot answer this: rw::GetRenderState
+    // asks the device, and the null device answers 0 to everything.
+    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+
+    RwBlendFunction src = rwBLENDNABLEND;
+    RwBlendFunction dst = rwBLENDNABLEND;
+    check(RwRenderStateGet(rwRENDERSTATESRCBLEND, &src) != FALSE, "RwRenderStateGet(SRCBLEND)");
+    check(RwRenderStateGet(rwRENDERSTATEDESTBLEND, &dst) != FALSE, "RwRenderStateGet(DESTBLEND)");
+    check(src == rwBLENDSRCALPHA && dst == rwBLENDINVSRCALPHA,
+          "a Get returns what the matching Set was given");
+
+    RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+    RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+    RwBool zwrite = 123;
+    RwBool valpha = 123;
+    RwRenderStateGet(rwRENDERSTATEZWRITEENABLE, &zwrite);
+    RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, &valpha);
+    check(zwrite == TRUE && valpha == FALSE, "the boolean states round-trip");
+
+    RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+    RwTextureFilterMode filter = rwFILTERNAFILTERMODE;
+    RwRenderStateGet(rwRENDERSTATETEXTUREFILTER, &filter);
+    check(filter == rwFILTERLINEAR, "and so does the filter mode");
+
+    // Recorded but not rendered: librw has no shade mode at all, so the Set
+    // says FALSE. It still has to round-trip, because xFont.cpp:626 saves it
+    // and xFont.cpp:649 puts it back.
+    check(RwRenderStateSet(rwRENDERSTATESHADEMODE, (void*)rwSHADEMODEFLAT) == FALSE,
+          "SHADEMODE reports that librw did not take it");
+    RwShadeMode shade = rwSHADEMODENASHADEMODE;
+    check(RwRenderStateGet(rwRENDERSTATESHADEMODE, &shade) != FALSE && shade == rwSHADEMODEFLAT,
+          "but it is still recorded, so xfont can restore it");
+
+    check(RwRenderStateSet(rwRENDERSTATEFOGDENSITY, (void*)0) == FALSE,
+          "FOGDENSITY is refused rather than recorded under a guessed encoding");
+    RwUInt32 density = 0xCDCDCDCD;
+    check(RwRenderStateGet(rwRENDERSTATEFOGDENSITY, &density) == FALSE && density == 0xCDCDCDCD,
+          "and a Get for it leaves the caller's variable alone");
+
+    // The combined address query answers only when the two axes agree, which is
+    // what RenderWare does.
+    RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSWRAP);
+    RwTextureAddressMode addr = rwTEXTUREADDRESSNATEXTUREADDRESS;
+    check(RwRenderStateGet(rwRENDERSTATETEXTUREADDRESS, &addr) != FALSE &&
+              addr == rwTEXTUREADDRESSWRAP,
+          "TEXTUREADDRESS sets and gets both axes");
+    RwRenderStateSet(rwRENDERSTATETEXTUREADDRESSV, (void*)rwTEXTUREADDRESSCLAMP);
+    check(RwRenderStateGet(rwRENDERSTATETEXTUREADDRESS, &addr) == FALSE,
+          "and refuses the combined query once the axes differ");
+    RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSWRAP);
+
+    // What actually reaches librw. The device's setRenderState is replaced for
+    // the length of these calls, because the null device keeps nothing.
+    void (*saved)(rw::int32, void*) = rw::engine->device.setRenderState;
+    rw::engine->device.setRenderState = captureSetRenderState;
+
+    sCapturedState = -1;
+    RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+    check(sCapturedState == rw::VERTEXALPHA && sCapturedValue == (void*)1,
+          "rwRENDERSTATEVERTEXALPHAENABLE reaches librw as VERTEXALPHA");
+
+    sCapturedState = -1;
+    RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLBACK);
+    check(sCapturedState == rw::CULLMODE && sCapturedValue == (void*)rw::CULLBACK,
+          "and rwCULLMODECULLBACK reaches it as CULLBACK");
+
+    // The one conversion in this file that would be invisible if it were wrong.
+    // iCamera.cpp:373 packs the fog colour ARGB by hand; librw's backends read
+    // red out of the LOW byte. Forwarding the word unchanged would swap red and
+    // blue in every foggy level and nothing would fail.
+    sCapturedState = -1;
+    const RwUInt32 argb = 0xFF204080; // a=FF r=20 g=40 b=80
+    RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)argb);
+    check(sCapturedState == rw::FOGCOLOR, "rwRENDERSTATEFOGCOLOR reaches librw as FOGCOLOR");
+    check(sCapturedValue == (void*)0xFF804020,
+          "with red and blue swapped, which is the packing librw reads");
+
+    rw::engine->device.setRenderState = saved;
+
+    RwUInt32 fog = 0;
+    check(RwRenderStateGet(rwRENDERSTATEFOGCOLOR, &fog) != FALSE && fog == argb,
+          "and a Get hands back the same ARGB word the Set was given");
+
+    check(RwRenderStateSet((RwRenderState)999, NULL) == FALSE, "an unknown state is refused");
+    check(RwRenderStateGet(rwRENDERSTATESRCBLEND, NULL) == FALSE,
+          "RwRenderStateGet(NULL) is refused");
+
+    // RxRenderStateVectorLoadDriverState is the same copy, handed over whole.
+    // xShadowSimple.cpp:687 unpacks bits 2 and 3 of Flags by hand, so those two
+    // are what this checks.
+    RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+    RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDDESTCOLOR);
+
+    RxRenderStateVector rsv;
+    memset(&rsv, 0xCD, sizeof(rsv));
+    check(RxRenderStateVectorLoadDriverState(&rsv) == &rsv, "RxRenderStateVectorLoadDriverState");
+    check(((rsv.Flags >> 2) & 1) == 1, "Flags bit 2 is z-write, as xShadowSimple reads it");
+    check(((rsv.Flags >> 3) & 1) == 0, "Flags bit 3 is vertex alpha, as xShadowSimple reads it");
+    check(rsv.SrcBlend == rwBLENDDESTCOLOR, "and the blend functions come across whole");
+    check(RxRenderStateVectorLoadDriverState(NULL) == NULL,
+          "RxRenderStateVectorLoadDriverState(NULL) is refused");
+}
+
+static int sIm2DPrim;
+static void* sIm2DVerts;
+static int sIm2DCount;
+static int sIm3DPrim;
+static int sIm3DEnds;
+
+static void captureIm2DRenderPrimitive(rw::PrimitiveType type, void* verts, rw::int32 num)
+{
+    sIm2DPrim = type;
+    sIm2DVerts = verts;
+    sIm2DCount = num;
+}
+
+static void captureIm3DRenderPrimitive(rw::PrimitiveType type)
+{
+    sIm3DPrim = type;
+}
+
+static void captureIm3DEnd(void)
+{
+    sIm3DEnds++;
+}
+
+static void test_immediate()
+{
+    printf("RwIm2D / RwIm3D\n");
+
+    // The null device's depth range. Real numbers, from the device rather than
+    // from here -- but 0 and 1 only because there is no backend to have a real
+    // depth buffer. xFont.cpp:425 and zGame.cpp:848 put their overlays at these.
+    check(RwIm2DGetNearScreenZ() == 0.0f, "RwIm2DGetNearScreenZ comes from the device");
+    check(RwIm2DGetFarScreenZ() == 1.0f, "RwIm2DGetFarScreenZ comes from the device");
+
+    RwIm2DVertex quad[4];
+    memset(quad, 0, sizeof(quad));
+
+    void (*savedIm2D)(rw::PrimitiveType, void*, rw::int32) =
+        rw::engine->device.im2DRenderPrimitive;
+    void (*savedIm3D)(rw::PrimitiveType) = rw::engine->device.im3DRenderPrimitive;
+    void (*savedEnd)(void) = rw::engine->device.im3DEnd;
+    rw::engine->device.im2DRenderPrimitive = captureIm2DRenderPrimitive;
+    rw::engine->device.im3DRenderPrimitive = captureIm3DRenderPrimitive;
+    rw::engine->device.im3DEnd = captureIm3DEnd;
+
+    sIm2DPrim = -1;
+    check(RwIm2DRenderPrimitive(rwPRIMTYPETRISTRIP, quad, 4) != FALSE, "RwIm2DRenderPrimitive");
+    check(sIm2DPrim == rw::PRIMTYPETRISTRIP && sIm2DVerts == quad && sIm2DCount == 4,
+          "the primitive type, the vertices and the count all arrive unchanged");
+
+    check(RwIm2DRenderPrimitive(rwPRIMTYPETRISTRIP, NULL, 4) == FALSE,
+          "RwIm2DRenderPrimitive(NULL) is refused");
+    check(RwIm2DRenderPrimitive(rwPRIMTYPETRISTRIP, quad, 0) == FALSE,
+          "and so is a zero-vertex primitive");
+
+    RwImVertexIndex indices[6] = { 0, 1, 2, 0, 2, 3 };
+    check(RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, quad, 4, indices, 6) != FALSE,
+          "RwIm2DRenderIndexedPrimitive");
+    check(RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, quad, 4, NULL, 6) == FALSE,
+          "RwIm2DRenderIndexedPrimitive with no indices is refused");
+
+    // Every one of the twenty call sites uses the result of RwIm3DTransform as
+    // "may I render now", so a NULL here would silently stop every effect in
+    // the game from drawing. Nothing dereferences it -- see the comment in
+    // im.cpp.
+    RwIm3DVertex verts[4];
+    memset(verts, 0, sizeof(verts));
+    check(RwIm3DTransform(verts, 4, NULL, rwIM3D_VERTEXXYZ | rwIM3D_VERTEXRGBA) != NULL,
+          "RwIm3DTransform reports success");
+    check(RwIm3DTransform(NULL, 4, NULL, 0) == NULL, "RwIm3DTransform(NULL) is refused");
+    check(RwIm3DTransform(verts, 0, NULL, 0) == NULL, "and so is a zero-vertex transform");
+
+    sIm3DPrim = -1;
+    check(RwIm3DRenderPrimitive(rwPRIMTYPETRILIST) != FALSE, "RwIm3DRenderPrimitive");
+    check(sIm3DPrim == rw::PRIMTYPETRILIST, "the primitive type arrives unchanged");
+
+    sIm3DEnds = 0;
+    check(RwIm3DEnd() != FALSE, "RwIm3DEnd");
+    check(sIm3DEnds == 1, "and reaches the device once");
+
+    rw::engine->device.im2DRenderPrimitive = savedIm2D;
+    rw::engine->device.im3DRenderPrimitive = savedIm3D;
+    rw::engine->device.im3DEnd = savedEnd;
+}
+
 static void test_engine_shutdown()
 {
     printf("RwEngine teardown\n");
@@ -419,6 +811,10 @@ int main()
     test_streams();
     test_textures();
     test_images();
+    test_cameras();
+    test_lights();
+    test_renderstate();
+    test_immediate();
     test_engine_shutdown();
 
     printf("\n%d failure%s\n", failures, failures == 1 ? "" : "s");

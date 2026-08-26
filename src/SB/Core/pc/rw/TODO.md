@@ -5,7 +5,16 @@ Regenerate this list with:
     llvm-nm <every game object> | awk '$1=="U"{print $2}' \
       | sed 's/^?*//;s/@.*//;s/^_*//' | grep -E '^(Rw|Rp|Rt|Rx)' | sort -u
 
-## Done (38)
+That regex drops one symbol the game does need: `_rwObjectHasFrameSetFrame`
+comes out of the `^_*` strip as a lowercase `rw`, which `^(Rw|Rp|Rt|Rx)` does
+not match. It is called at eight sites -- zGame.cpp:1270, iModel.cpp:67,
+xLightKit.cpp:76 and 142, xModel.cpp:495 and 525, xShadow.cpp:95, 693 and 1114,
+zNPCTypePrawn.cpp:568 and 622 -- and it is what `RwCameraSetFrame` and
+`RpLightSetFrame` are macros for, so it is needed by the camera and light
+groups even though it is not in the 112. librw has the counterpart
+(`ObjectWithFrame::setFrame`); nobody has written the shim for it yet.
+
+## Done (65)
 
 `value.cpp` -- value types only, so no object layout is involved and the
 reinterpret_casts are backed by static_asserts that fail the build if librw
@@ -127,17 +136,110 @@ null driver asserts in `rasterCreate`), the success path of
 `RwTexDictionaryStreamRead` (the textures inside a TXD are native rasters).
 Whoever links a GL3 or D3D9 librw should come back and finish those three.
 
+The camera, light, render state and immediate mode group. `RwCamera` and
+`RpLight` are mirrored the way `RwFrame` is, with their offsets asserted in
+`layout_camera.cpp` -- which also asserts every enumeration these cast straight
+through, because a renumbering in librw would otherwise be silent.
+
+`camera.cpp` -- `RwCameraBeginUpdate` and `RwCameraEndUpdate` are what close out
+the `curCamera`/`curWorld` item that used to be at the top of "Do this next".
+They mirror both fields out of `rw::engine` on begin and null both on end,
+because the game uses "curCamera is not null" as "an update is in progress"
+(zGame.cpp:910, zNPCTypePrawn.cpp:1718). `RwCameraSetViewWindow` does not
+maintain a `recipViewWindow`: librw has no such field and the mirrored struct
+therefore does not either:
+
+  - `RwCameraCreate`
+  - `RwCameraDestroy`
+  - `RwCameraBeginUpdate`
+  - `RwCameraEndUpdate`
+  - `RwCameraClear`
+  - `RwCameraShowRaster`
+  - `RwCameraGetWorld`
+  - `RwCameraSetProjection`
+  - `RwCameraSetViewWindow`
+  - `RwCameraSetNearClipPlane`
+  - `RwCameraSetFarClipPlane`
+  - `RwCameraFrustumTestSphere`
+
+`light.cpp` -- `RpLightSetRadius` is written out, because librw has no setter
+for it:
+
+  - `RpLightCreate`
+  - `RpLightDestroy`
+  - `RpLightSetColor`
+  - `RpLightSetRadius`
+  - `RpLightSetConeAngle`
+
+`renderstate.cpp` -- the one group here that is not a cast and a call. The game
+reads render state back (nine `RwRenderStateGet` calls in `xfont::
+set_render_state` alone, plus `RxRenderStateVectorLoadDriverState` in
+xShadowSimple) and forwarding a Get to librw would not answer it: librw asks the
+render device, and the device under `LIBRW_PLATFORM=NULL` answers 0 to
+everything. So the shim keeps its own copy of the state vector, forwards every
+state librw models on the way in, and answers a Get out of the copy:
+
+  - `RwRenderStateGet`
+  - `RwRenderStateSet`
+  - `RxRenderStateVectorLoadDriverState`
+
+`im.cpp`:
+
+  - `RwIm2DGetNearScreenZ`
+  - `RwIm2DGetFarScreenZ`
+  - `RwIm2DRenderPrimitive`
+  - `RwIm2DRenderIndexedPrimitive`
+  - `RwIm3DTransform`
+  - `RwIm3DRenderPrimitive`
+  - `RwIm3DEnd`
+
+`tests/selftest.cpp` runs all twenty-seven against a live engine, including the
+`curCamera`/`curWorld` pair, the frustum planes at the indices iCamera.cpp reads
+them at, and the fog colour swizzle. The render state and immediate mode calls
+are checked by standing in for the device's own entry points -- `rw::engine->
+device.setRenderState` and friends are replaced for the length of a call -- so
+what reaches librw is checked rather than assumed, which the null device makes
+impossible any other way.
+
+### Recorded but not rendered, or not reachable without a backend
+
+  - `rwRENDERSTATESHADEMODE` -- librw has no shade mode; its own header says
+    "? shademode". Fifteen call sites. The value is recorded so that
+    xFont.cpp:626/649 can still save and restore it, and `RwRenderStateSet`
+    returns FALSE to say it did not reach a renderer. Everything the game draws
+    flat will come out gouraud, which for single-colour untextured geometry is
+    the same picture -- the outlined text in xFont.cpp:3230 is not.
+  - `rwRENDERSTATETEXTUREPERSPECTIVE`, `rwRENDERSTATEBORDERCOLOR`,
+    `rwRENDERSTATEFOGTYPE` -- same treatment, no call sites that matter.
+  - `rwRENDERSTATEFOGDENSITY` -- refused outright rather than recorded. The one
+    caller passes a POINTER to a float (iCamera.cpp:380), so the encoding is a
+    console driver detail this side cannot check, and librw has no fog density
+    state to forward to.
+  - `rwRENDERSTATECULLMODE` -- set and forwarded, but a Get for it asks librw,
+    because `RxRenderStateVector` has no field to shadow it in. That is
+    RenderWare's own omission and xShadowSimple does not restore cull mode
+    either. Under `LIBRW_PLATFORM=NULL` the Get answers 0. No caller in src/SB.
+  - `RwCameraClear` and `RwCameraShowRaster` -- exercised only for their
+    refusals. Both reach the device (`clearCamera`, `Raster::show`), and the
+    null device's clear is an empty function, so a success would prove nothing
+    about what ends up on screen.
+  - `RwIm2DVertex` is **still the GameCube's 24-byte layout** and does not match
+    either real backend's -- both carry a `w` for the camera z that
+    `rwGameCube2DVertex` has no room for, and `RwIm2DVertexSetRecipCameraZ` is a
+    no-op macro on this header. `im.cpp` refuses to compile against `RW_GL3`,
+    `RW_D3D9` and the rest rather than hand a backend vertices it will read past
+    the end of. Whoever links one has to give the typedef in `rwplcore.h` the
+    backend's layout and make the twelve `RwIm2DVertexSet*` macros write it.
+    `RwIm3DVertex` (`RxObjSpace3DVertex`) happens to match GL3's `Im3DVertex`
+    field for field, so only the 2D one is outstanding.
+  - `RwIm3DTransform` returns the caller's own vertex array as its success
+    answer. RenderWare returns a pointer into its immediate-mode heap and librw
+    returns nothing, so there is no equivalent to hand back; all twenty call
+    sites use the result only as "may I render now", and returning NULL would
+    silently stop every effect in the game from drawing. Nothing may
+    dereference it.
+
 ## Do this next
-
-Two things the startup could not finish, both of which need another group
-written first:
-
-**`RwEngineInstance->curCamera` and `->curWorld` are always null.** librw keeps
-the same two fields in `rw::engine`, and RwGlobals agrees with `rw::Engine` on
-those first two offsets and on nothing after them, so the shim has a second
-RwGlobals rather than an alias. xCutscene.cpp and xFX.cpp read the fields
-directly, which leaves no call to hook -- so whoever writes `RwCameraBeginUpdate`
-/ `RwCameraEndUpdate` and `RpWorldRender` has to assign both copies.
 
 **There is no video mode.** `LIBRW_PLATFORM=NULL` has no render device, and
 librw's null device answers every request with 1 -- including reporting success
@@ -150,7 +252,7 @@ linked. `RwEngineOpen` is the other half of that: it passes no
 `displayID` (a GameCube `RwGameCubeDeviceConfig*`) has nothing to translate
 into. It refuses to compile against a real backend rather than pass null to one.
 
-## Blocked on the object-layout decision (74)
+## Blocked on the object-layout decision (47)
 
 RESOLVED -- the port mirrors librw's layouts (method 1), so these are no longer
 blocked on a decision, only unwritten. Each needs its type mirrored in
@@ -188,13 +290,8 @@ it is one that is finished.
   - `RpGeometryTriangleSetVertexIndices`
   - `RpGeometryUnlock`
 
-**RpLight** (5)
+**RpLight** (0)
 
-  - `RpLightCreate`
-  - `RpLightDestroy`
-  - `RpLightSetColor`
-  - `RpLightSetConeAngle`
-  - `RpLightSetRadius`
 
 **RpMatFX** (7)
 
@@ -246,38 +343,19 @@ it is one that is finished.
   - `RtIntersectionSphereTriangle`
   - `RtQuatSetupSlerpCache`
 
-**RwCamera** (12)
+**RwCamera** (0)
 
-  - `RwCameraBeginUpdate`
-  - `RwCameraClear`
-  - `RwCameraCreate`
-  - `RwCameraDestroy`
-  - `RwCameraEndUpdate`
-  - `RwCameraFrustumTestSphere`
-  - `RwCameraGetWorld`
-  - `RwCameraSetFarClipPlane`
-  - `RwCameraSetNearClipPlane`
-  - `RwCameraSetProjection`
-  - `RwCameraSetViewWindow`
-  - `RwCameraShowRaster`
 
 **RwEngine** (0)
 
 **RwFrame** (0)
 
 
-**RwIm2D** (4)
+**RwIm2D** (0)
 
-  - `RwIm2DGetFarScreenZ`
-  - `RwIm2DGetNearScreenZ`
-  - `RwIm2DRenderIndexedPrimitive`
-  - `RwIm2DRenderPrimitive`
 
-**RwIm3D** (3)
+**RwIm3D** (0)
 
-  - `RwIm3DEnd`
-  - `RwIm3DRenderPrimitive`
-  - `RwIm3DTransform`
 
 **RwImage** (0)
 
@@ -285,10 +363,8 @@ it is one that is finished.
 **RwRaster** (0)
 
 
-**RwRenderState** (2)
+**RwRenderState** (0)
 
-  - `RwRenderStateGet`
-  - `RwRenderStateSet`
 
 **RwStream** (0)
 
@@ -299,7 +375,5 @@ it is one that is finished.
 **RwTexture** (0)
 
 
-**Rx** (1)
-
-  - `RxRenderStateVectorLoadDriverState`
+**Rx** (0)
 

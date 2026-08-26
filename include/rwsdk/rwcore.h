@@ -781,6 +781,11 @@ enum RwFrustumTestResult
 };
 typedef enum RwFrustumTestResult RwFrustumTestResult;
 
+// Needs no PC variant: rw::FrustumPlane declares only closestX/Y/Z and the
+// compiler pads it to the same 20 bytes RenderWare spells out with `pad`, so
+// the two already agree field for field. layout_camera.cpp asserts that rather
+// than leaving it on trust -- a frustum plane is read as an array element in
+// iCamera.cpp and iModel.cpp, so the STRIDE matters as much as the offsets.
 struct RwFrustumPlane
 {
     RwPlane plane;
@@ -794,6 +799,32 @@ struct RwFrustumPlane
 typedef RwCamera* (*RwCameraBeginUpdateFunc)(RwCamera* camera);
 typedef RwCamera* (*RwCameraEndUpdateFunc)(RwCamera* camera);
 
+// Mirrored onto rw::Camera the way RwFrame is: librw's field ORDER under
+// RenderWare's field NAMES, so an RwCamera* IS an rw::Camera*. Every offset is
+// asserted in src/SB/Core/pc/rw/layout_camera.cpp, taken from the compiler.
+//
+// Three things to know about the PC variant.
+//
+// `recipViewWindow` is GONE. RenderWare caches 1/viewWindow next to the view
+// window; librw recomputes it in cameraSync and keeps nothing. Nothing in the
+// game reads the field, and dropping it is what keeps every later offset equal
+// to librw's -- so a port that starts wanting it has to compute it, not read it.
+//
+// The last six fields are librw's own and have no RenderWare counterpart. They
+// are named after librw's members, as RwRaster::platform is, so that the
+// assertions can name them: devView/devProj are the device-side view and
+// projection matrices a GL or D3D backend builds in beginUpdate (RawMatrix, 16
+// floats each), and clump/inClump/world/originalSync/originalBeginUpdate/
+// originalEndUpdate are how librw implements what RenderWare does with plugin
+// extensions on RwCamera. Game code must not touch any of them. Their
+// counterparts on the RenderWare side -- the world sector list and the camera's
+// clump link -- live in plugin blocks past the end of the struct there.
+//
+// beginUpdate and endUpdate keep RenderWare's NAMES but librw's SIGNATURES:
+// librw's callbacks return void where RenderWare's return the camera. Nothing
+// in the game reads or calls them, and this way a call through RenderWare's
+// RwCameraBeginUpdateFunc is a compile error rather than a wrong return value.
+#ifdef GAMECUBE
 struct RwCamera
 {
     RwObjectHasFrame object;
@@ -814,6 +845,35 @@ struct RwCamera
     RwBBox frustumBoundBox;
     RwV3d frustumCorners[8];
 };
+#else
+struct RwCamera
+{
+    RwObjectHasFrame object;
+    void (*beginUpdate)(RwCamera*); // librw calls this 'beginUpdateCB'
+    void (*endUpdate)(RwCamera*); // librw calls this 'endUpdateCB'
+    RwV2d viewWindow;
+    RwV2d viewOffset;
+    RwReal nearPlane;
+    RwReal farPlane;
+    RwReal fogPlane;
+    RwCameraProjection projectionType; // librw calls this 'projection'
+    RwMatrix viewMatrix;
+    RwReal zScale, zShift;
+    RwFrustumPlane frustumPlanes[6];
+    RwV3d frustumCorners[8];
+    RwBBox frustumBoundBox;
+    RwRaster* frameBuffer;
+    RwRaster* zBuffer;
+    RwReal devView[16]; // librw only, from here down
+    RwReal devProj[16];
+    void* clump;
+    RwLLLink inClump;
+    void* world;
+    void* originalSync;
+    void* originalBeginUpdate;
+    void* originalEndUpdate;
+};
+#endif
 
 typedef RwCamera* (*RwCameraCallBack)(RwCamera* camera, void* data);
 

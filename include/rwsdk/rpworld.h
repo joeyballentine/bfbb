@@ -537,6 +537,21 @@ enum RpLightFlag
 };
 typedef enum RpLightFlag RpLightFlag;
 
+// Mirrored onto rw::Light the way RwFrame is: librw's field ORDER under
+// RenderWare's field NAMES, so an RpLight* IS an rw::Light*. Every offset is
+// asserted in src/SB/Core/pc/rw/layout_camera.cpp.
+//
+// Two RenderWare fields are GONE on this side and cannot come back without
+// moving everything after them. `WorldSectorsInLight` is the list of world
+// sectors a positioned light touches, which librw rebuilds per frame in
+// World::enumerateLights instead of caching; `lightFrame` is the render-frame
+// stamp RenderWare uses to avoid lighting a sector twice, and librw's
+// enumerateLights has no such pass. Nothing in src/SB reads either one.
+//
+// The last four are librw's own, named after its members so the assertions can
+// name them: clump/inClump and world/originalSync are how librw implements what
+// RenderWare does with plugin extensions on RpLight.
+#ifdef GAMECUBE
 struct RpLight
 {
     RwObjectHasFrame object;
@@ -548,6 +563,20 @@ struct RpLight
     RwUInt16 lightFrame;
     RwUInt16 pad;
 };
+#else
+struct RpLight
+{
+    RwObjectHasFrame object;
+    RwReal radius;
+    RwRGBAReal color;
+    RwReal minusCosAngle;
+    RwLLLink inWorld;
+    void* clump; // librw only, from here down
+    RwLLLink inClump;
+    void* world;
+    void* originalSync;
+};
+#endif
 
 typedef RpLight* (*RpLightCallBack)(RpLight* light, void* data);
 
