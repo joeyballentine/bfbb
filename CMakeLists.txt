@@ -279,6 +279,19 @@ add_library(bfbb_platform STATIC
   ${HOST_SOURCES}
 )
 
+# NOT just for the include path: this is what gives bfbb_platform the backend
+# define. librw exports RW_D3D9 (or RW_GL3, or RW_NULL) as a PUBLIC compile
+# definition, bfbb_rw passes it on, and include/rwsdk/rwplcore.h declares
+# RwIm2DVertex PER BACKEND -- so a target that compiles without it gets a
+# different struct than the rest of the port.
+#
+# That is an ODR violation and it was live: bfbb_platform built with
+# -DPLATFORM_PC alone while bfbb_rw and bfbb_game built with -DRW_D3D9, so
+# iScrFX.h's _iMotionBlurData had one colour order in iScrFX.cpp and another
+# everywhere that touches it. Same size, so nothing failed to link and nothing
+# asserted -- it would have surfaced as wrong colours, or worse.
+target_link_libraries(bfbb_platform PUBLIC bfbb_rw)
+
 # compat/ shadows <math.h>, <string.h> and <cmath> to add the CodeWarrior
 # extensions the game's sources use, chaining to the system headers with
 # include_next. It has to come first for that to work.

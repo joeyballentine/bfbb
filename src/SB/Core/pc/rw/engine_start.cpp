@@ -267,6 +267,51 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
         return FALSE;
     }
 
+    // **Check for a usable adapter BEFORE handing librw the window.**
+    //
+    // librw does not tell you when the device fails to open: Engine::open calls
+    // device.system(DEVICEOPEN, ...) and DISCARDS the result (engine.cpp:276),
+    // then sets Engine::state = Opened and returns 1. The fault lands later,
+    // inside RwEngineStart, dereferencing a nil d3d9Globals.d3d9 with nothing
+    // on screen to explain it -- and checking AFTER the fact does not work
+    // either, because by then the device query faults on the same nil pointer.
+    //
+    // So the probe happens here, with its own IDirect3D9 that is released
+    // again. It is a few lines and it turns a segfault into a sentence.
+    //
+    // Worth knowing while reading librw's output: it reports BOTH of openD3D's
+    // failures with the same string, "Direct3DCreate9() failed". The second
+    // one, at d3d/d3ddevice.cpp:1533, actually means Direct3DCreate9 SUCCEEDED
+    // and no adapter reported D3DDEVTYPE_HAL support -- a very different
+    // problem, and usually an environmental one rather than a missing D3D9.
+    {
+        IDirect3D9* probe = Direct3DCreate9(D3D_SDK_VERSION);
+
+        if (probe == NULL)
+        {
+            return FALSE;
+        }
+
+        D3DCAPS9 caps;
+        bool haveHardwareAdapter = false;
+
+        for (UINT adapter = 0; adapter < probe->GetAdapterCount(); adapter++)
+        {
+            if (SUCCEEDED(probe->GetDeviceCaps(adapter, D3DDEVTYPE_HAL, &caps)))
+            {
+                haveHardwareAdapter = true;
+                break;
+            }
+        }
+
+        probe->Release();
+
+        if (!haveHardwareAdapter)
+        {
+            return FALSE;
+        }
+    }
+
     if (!rw::Engine::open(&params))
     {
         return FALSE;
