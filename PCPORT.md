@@ -17,7 +17,10 @@ buys it nothing.
 
 So the gate for phase 1 is **not** the project's headline percentage. It is
 "every function in `src/SB/**` is written and behaves correctly." Today that is
-**6240 / 7673 game-code functions**. The remaining library work —
+**7529 / 7673 game-code functions** (tools/srcprogress.py, 2026-08-26): 7243
+exact + 257 codegen-only + 29 reload-only = 92.37% by bytes, against 80.41%
+exact. Only 144 functions still need source written, and 153 of 221 units are
+source-complete. The remaining library work —
 `rwsdk` (1039 functions, 4% matched), `bink` (336, 1.9%), `MSL` (324, 49%) —
 is *irrelevant to the port*, and in the case of rwsdk and bink actively so,
 since we replace one and delete the other.
