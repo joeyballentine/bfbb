@@ -27,7 +27,7 @@ since we replace one and delete the other.
 
 **Priority consequence:** finishing rwsdk matching would be ~1039 functions of
 effort a port discards. Every `src/SB/**` function is dual-purpose. This is an
-independent argument for the game-code-first rule already in DUPLICATOTRON.md,
+independent argument for the game-code-first rule already in DUPLOTRON.md,
 and against ever treating rwsdk as the biggest lever just because its function
 count is large.
 

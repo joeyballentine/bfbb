@@ -1,6 +1,6 @@
 # frida instrumentation for mwcceppc.exe (clause H toolkit, 2026-08-25)
 
-Live-compile instrumentation that found clause H (see DUPLICATOTRON.md and
+Live-compile instrumentation that found clause H (see DUPLOTRON.md and
 tools/patch_compiler.py). Requires `pip install frida`. All scripts spawn
 mwcceppc.exe DIRECTLY (bypassing sjiswrap) so the hooks land in the compiler
 process; static VAs are rebased from the module base at runtime.

@@ -23,7 +23,7 @@ THE RELOAD-ONLY CLASS
 ---------------------
 One family of "semantic" differences is not a source problem at all. Retail
 reloads a static it has just stored; our mwcc forwards the stored value and
-skips the load. DUPLICATOTRON records this as a known compiler defect, gated
+skips the load. DUPLOTRON.md records this as a known compiler defect, gated
 at the -O2 threshold inside the optimizer, deliberately deprioritised, and
 already worked around at a handful of sites with the `volatile` device.
 

@@ -1,4 +1,4 @@
-# duplicatotron-3000
+# duplotron
 
 Experimental branch. **Not intended to be merged into `main`.**
 
