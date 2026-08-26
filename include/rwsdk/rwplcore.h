@@ -597,6 +597,26 @@ struct RwMemory
     RwUInt32 length;
 };
 
+typedef RwBool (*rwCustomStreamFnClose)(void* data);
+typedef RwUInt32 (*rwCustomStreamFnRead)(void* data, void* buffer, RwUInt32 length);
+typedef RwBool (*rwCustomStreamFnWrite)(void* data, const void* buffer, RwUInt32 length);
+typedef RwBool (*rwCustomStreamFnSkip)(void* data, RwUInt32 offset);
+
+// RwStream is the one object in the asset-reading path the port does NOT
+// mirror onto librw, and the reason is structural rather than a matter of
+// field order: RenderWare's stream is a POD tagged union, librw's is an
+// abstract class with a vtable. There is no assignment of RenderWare's names
+// to librw's bytes that would not be a lie, so instead the type is left
+// INCOMPLETE here. That is not a loss -- no game code reads a stream's fields,
+// every one of the 30 mentions in src/SB just passes the pointer along -- and
+// leaving it incomplete turns any future attempt to do so into a compile error
+// instead of a silent misread, which is the failure the mirrored types guard
+// against too.
+//
+// src/SB/Core/pc/rw/stream.h defines it, as a class deriving from rw::Stream,
+// so the shim's own conversions are checked by the compiler rather than
+// reinterpret_cast'd.
+#ifdef GAMECUBE
 struct RwStreamMemory
 {
     RwUInt32 position;
@@ -609,11 +629,6 @@ union RwStreamFile
     void* fpFile;
     const void* constfpFile;
 };
-
-typedef RwBool (*rwCustomStreamFnClose)(void* data);
-typedef RwUInt32 (*rwCustomStreamFnRead)(void* data, void* buffer, RwUInt32 length);
-typedef RwBool (*rwCustomStreamFnWrite)(void* data, const void* buffer, RwUInt32 length);
-typedef RwBool (*rwCustomStreamFnSkip)(void* data, RwUInt32 offset);
 
 struct RwStreamCustom
 {
@@ -639,6 +654,7 @@ struct RwStream
     RwStreamUnion Type;
     RwBool rwOwned;
 };
+#endif
 
 typedef void* (*RwPluginObjectConstructor)(void* object, RwInt32 offsetInObject,
                                            RwInt32 sizeInObject);

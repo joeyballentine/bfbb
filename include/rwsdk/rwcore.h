@@ -405,6 +405,18 @@ typedef enum RwRasterPrivateFlag RwRasterPrivateFlag;
 #define rwRASTERPALETTELOCKED (rwRASTERPALETTELOCKEDREAD | rwRASTERPALETTELOCKEDWRITE)
 #define rwRASTERLOCKED (rwRASTERPIXELLOCKED | rwRASTERPALETTELOCKED)
 
+// Mirrored onto rw::Raster: librw's field ORDER under RenderWare's field
+// NAMES, so an RwRaster* IS an rw::Raster*. See the RwFrame comment further
+// down and src/SB/Core/pc/rw/layout_stream.cpp, which asserts every offset.
+//
+// Two differences from RenderWare beyond the reordering. librw widens the four
+// byte-sized descriptors (cType, cFlags, privateFlags, cFormat) and the two
+// sub-raster offsets to RwInt32, and it stores cFormat unshifted -- the whole
+// rwRASTERFORMAT* value rather than RenderWare's value>>8 -- so
+// RwRasterGetFormat is spelled differently below. And it carries a `platform`
+// field RenderWare has no counterpart for, naming the driver that owns the
+// pixels; it is librw's, not ours, and nothing in the game should read it.
+#ifdef GAMECUBE
 struct RwRaster
 {
     RwRaster* parent;
@@ -422,6 +434,26 @@ struct RwRaster
     RwInt32 originalHeight;
     RwInt32 originalStride;
 };
+#else
+struct RwRaster
+{
+    RwInt32 platform; // librw only: which driver owns the pixels
+    RwInt32 cType;
+    RwInt32 cFlags;
+    RwInt32 privateFlags;
+    RwInt32 cFormat; // librw calls this 'format', and does NOT shift it down
+    RwInt32 width, height, depth;
+    RwInt32 stride;
+    RwUInt8* cpPixels; // librw calls this 'pixels'
+    RwUInt8* palette;
+    RwUInt8* originalPixels;
+    RwInt32 originalWidth;
+    RwInt32 originalHeight;
+    RwInt32 originalStride;
+    RwRaster* parent;
+    RwInt32 nOffsetX, nOffsetY;
+};
+#endif
 
 #define RwRasterGetWidth(_raster) ((_raster)->width)
 
@@ -431,8 +463,14 @@ struct RwRaster
 
 #define RwRasterGetDepth(_raster) ((_raster)->depth)
 
+#ifdef GAMECUBE
 #define RwRasterGetFormat(_raster) ((((_raster)->cFormat) & (rwRASTERFORMATMASK >> 8)) << 8)
+#else
+#define RwRasterGetFormat(_raster) (((_raster)->cFormat) & rwRASTERFORMATMASK)
+#endif
 
+// Same expression either way: RenderWare and librw both keep the low three
+// bits of the raster flags word here, unshifted.
 #define RwRasterGetType(_raster) (((_raster)->cType) & rwRASTERTYPEMASK)
 
 #define RwRasterGetParent(_raster) ((_raster)->parent)
@@ -452,6 +490,13 @@ struct RxRenderStateVector
     RwRGBA FogColor;
 };
 
+// Mirrored onto rw::Image. The only difference is the `bpp` librw caches
+// between depth and stride; every other field lines up under RenderWare's own
+// name. Note that `flags` does NOT mean what it means on the console: librw
+// uses bit 0 and bit 1 to record whether it owns the pixels and the palette,
+// where RenderWare kept rwIMAGEGAMMACORRECTED there. Nothing in the game reads
+// image->flags, and the port must not start.
+#ifdef GAMECUBE
 struct RwImage
 {
     RwInt32 flags;
@@ -462,6 +507,19 @@ struct RwImage
     RwUInt8* cpPixels;
     RwRGBA* palette;
 };
+#else
+struct RwImage
+{
+    RwInt32 flags;
+    RwInt32 width;
+    RwInt32 height;
+    RwInt32 depth;
+    RwInt32 bpp; // librw only: bytes per pixel, cached from depth
+    RwInt32 stride;
+    RwUInt8* cpPixels; // librw calls this 'pixels'
+    RwRGBA* palette;
+};
+#endif
 
 #define RwImageSetStrideMacro(_image, _stride) (((_image)->stride = (_stride)), (_image))
 
@@ -499,13 +557,21 @@ struct RwImage
 
 #define RwImageGetPalette(_image) RwImageGetPaletteMacro(_image)
 
+// RenderWare's and librw's texture dictionaries already agree byte for byte --
+// object, then the list of textures, then the link into the global list of
+// dictionaries -- so this one needs no PC variant. layout_stream.cpp asserts
+// that, so it stops being taken on trust the moment librw changes.
 struct RwTexDictionary
 {
     RwObject object;
     RwLinkList texturesInDict;
-    RwLLLink lInInstance;
+    RwLLLink lInInstance; // librw calls this 'inGlobalList'
 };
 
+// Mirrored onto rw::Texture, which agrees with RenderWare all the way down and
+// then appends a second link. Keeping the trailing member is what makes the
+// sizes match, and the size is what a caller allocating a texture depends on.
+#ifdef GAMECUBE
 struct RwTexture
 {
     RwRaster* raster;
@@ -516,6 +582,20 @@ struct RwTexture
     RwUInt32 filterAddressing;
     RwInt32 refCount;
 };
+#else
+struct RwTexture
+{
+    RwRaster* raster;
+    RwTexDictionary* dict;
+    RwLLLink lInDictionary; // librw calls this 'inDict'
+    RwChar name[32];
+    RwChar mask[32];
+    RwUInt32 filterAddressing;
+    RwInt32 refCount;
+    RwLLLink lInGlobalList; // librw only, and librw's own comment says so:
+                            // "actually not in RW"
+};
+#endif
 
 typedef RwTexture* (*RwTextureCallBackRead)(const RwChar* name, const RwChar* maskName);
 typedef RwTexture* (*RwTextureCallBack)(RwTexture* texture, void* pData);

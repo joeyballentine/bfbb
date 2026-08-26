@@ -42,13 +42,23 @@ one of those reading the wrong bytes.
 *names*, guarded by `GAMECUBE` so the console keeps retail's own struct. An
 `RwFrame*` is then an `rw::Frame*` and nothing converts at the seam.
 
+One type does not fit that shape and is the documented exception: `RwStream`.
+RenderWare's stream is a POD tagged union, librw's is an abstract class with a
+vtable, and there is no assignment of RenderWare's names to librw's bytes that
+would not be a lie. So `rwsdk` leaves it INCOMPLETE on PC and the shim defines
+it in `stream.h`, deriving from `rw::Stream`. That works only because no game
+code reads a stream's fields -- and leaving the type incomplete is what keeps
+it that way, since any attempt is now a compile error.
+
 Converting instead was considered and does not work: the game holds `RwFrame*`
 for an entity's lifetime and writes `->modelling` directly, while librw mutates
 the same objects through its own parent/child links. Two copies would need
 syncing both ways, and direct field access offers no call boundary to hook.
 
 The rule that keeps this honest: **a type mirrored in `include/rwsdk` gets its
-offsets asserted in `layout.cpp` in the same commit.** The failure it guards
+offsets asserted in the same commit** -- in `layout.cpp`, or in a `layout_*.cpp`
+beside it when a group is big enough to be worked on separately, as the
+asset-reading path's types are in `layout_stream.cpp`. The failure it guards
 against is silent -- game code keeps compiling and starts reading the wrong
 field. `RwFrame` is done; the rest are listed in `TODO.md`.
 
