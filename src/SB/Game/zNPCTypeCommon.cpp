@@ -1975,8 +1975,14 @@ void zNPCCommon::ISeePlayer()
     {
         g_tmr_talkless = 3.0f + (xurand() - 0.5f) * 0.25f * 3.0f;
 
-        // case NPC_TYPE_FISH jumps to the `if (ven != eEventUnknown)` at the end
-        // instead of `>= NPC_TYPE_FISH` jumping to the NPC_TYPE_BARNACLEBOY case
+        // The one remaining difference is an extra `beq` on our side for
+        // NPC_TYPE_FISH ('NTF0'): retail uses that value only as a binary-search
+        // pivot, we also emit an equality test for it.
+        //
+        // The obvious reading -- that retail does not have NPC_TYPE_FISH in the
+        // fallthrough group below and lets it reach the `if (ven != eEventUnknown)`
+        // at the end -- was TESTED on 2026-08-26 and is WRONG: commenting the case
+        // out drops this function from 99.39% to 96.83%. Do not retry it.
         switch (this->SelfType())
         {
         //case NPC_TYPE_UNKNOWN:
