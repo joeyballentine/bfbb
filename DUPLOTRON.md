@@ -5929,3 +5929,25 @@ re-tried:
 The function shares 51 of 106 instructions with the target. That is an
 allocation problem, and the source shapes that would fix the load counts cost
 more than they save.
+
+## `ninja | tail` does not tell you the build passed
+
+A gate that can silently pass is worse than no gate. `ninja 2>&1 | tail -4 && sha1sum build/GQPE78/main.dol`
+reports **tail's** exit status, not ninja's, so a failing build runs the
+`sha1sum` anyway and prints the hash of the DOL left over from the last
+successful one. It looks exactly like a pass.
+
+This bit during the PC port work: a change to `include/types.h` broke every
+`src/dolphin` and `src/bink` object -- they are compiled by CodeWarrior
+*without* `-DGAMECUBE`, since only `cflags_bfbb` defines it, so they fell into
+the host branch and asked CodeWarrior for `<stdint.h>`. Two consecutive
+"verifications" reported `306526d9...` while the build was in fact red.
+
+Run the build and the hash as separate steps, and check the exit code:
+
+    ninja > /tmp/gc.log 2>&1; echo "exit: $?"
+    sha1sum build/GQPE78/main.dol
+
+The corollary for shared headers: **gate on `__MWERKS__`, not `GAMECUBE`,
+whenever the question is "can this compiler parse it"**. `GAMECUBE` answers a
+different question and three CodeWarrior-built libraries do not define it.

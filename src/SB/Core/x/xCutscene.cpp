@@ -20,7 +20,11 @@
 
 #include <types.h>
 #include <string.h>
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\cmath>
+#else
+#include <cmath>
+#endif
 
 struct xCutsceneMphFrame
 {

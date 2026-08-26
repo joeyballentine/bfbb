@@ -17,7 +17,11 @@
 
 #include <types.h>
 #include <stdio.h>
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\cmath>
+#else
+#include <cmath>
+#endif
 
 // These structs were used in deadstripped functions.
 // This function is here to force the symbols to be linked.

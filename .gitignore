@@ -32,6 +32,8 @@ compile_commands.json
 
 # Miscellaneous
 /*.txt
+# ...but the PC port's build lives at the root and is not a stray text file.
+!/CMakeLists.txt
 *.exe
 
 # ProDG scratch: ngccc writes <basename><pid>.i / .s into the cwd for every
@@ -42,3 +44,6 @@ compile_commands.json
 
 # Analysis output
 classify.json
+
+# PC port build (CMake); see CMakeLists.txt
+build-pc/

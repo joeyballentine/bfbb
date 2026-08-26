@@ -19,6 +19,24 @@ typedef unsigned long long U64;
 
 typedef float F32;
 typedef double F64;
+#elif !defined(__MWERKS__)
+// Host builds (see PCPORT.md). The GameCube widths above are what the game
+// code assumes everywhere; on a modern host only <stdint.h> guarantees them,
+// because `long` is 64-bit on LP64 and `int` is not guaranteed 32.
+#include <stdint.h>
+
+typedef int8_t S8;
+typedef int16_t S16;
+typedef int32_t S32;
+typedef int64_t S64;
+
+typedef uint8_t U8;
+typedef uint16_t U16;
+typedef uint32_t U32;
+typedef uint64_t U64;
+
+typedef float F32;
+typedef double F64;
 #endif
 
 #ifdef NULL
@@ -46,6 +64,7 @@ typedef double F64;
 
 #define WEAK __declspec(weak)
 
+#if defined(GAMECUBE) || defined(__MWERKS__)
 typedef signed char s8;
 typedef signed short s16;
 typedef signed long s32;
@@ -55,6 +74,21 @@ typedef unsigned short u16;
 typedef unsigned long u32;
 typedef unsigned long size_t;
 typedef unsigned long long u64;
+#else
+// `long` is 32-bit on the GameCube ABI and 64-bit on LP64 hosts, so the
+// spellings above are only correct there. size_t is the host's, not ours --
+// redefining it would fight every libc header the port includes.
+#include <stddef.h>
+
+typedef int8_t s8;
+typedef int16_t s16;
+typedef int32_t s32;
+typedef int64_t s64;
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
+#endif
 
 typedef unsigned short ushort;
 typedef unsigned int uint;
@@ -92,6 +126,14 @@ typedef wchar_t wint_t;
 #define NULL 0
 #endif
 
+#ifdef __MWERKS__
 #define UINT32_MAX 0xffffffff
+#else
+// <stdint.h> already defines this on a host build, and spells it differently,
+// so redefining it unconditionally is a hard error there.
+#ifndef UINT32_MAX
+#define UINT32_MAX 0xffffffff
+#endif
+#endif
 
 #endif // !TYPES_H

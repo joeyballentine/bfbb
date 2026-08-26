@@ -4,7 +4,11 @@
 #include <types.h>
 #include <bink.h>
 #include <rad3d.h>
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\size_t.h>
+#else
+#include <stddef.h>
+#endif
 
 #ifdef __cplusplus
 

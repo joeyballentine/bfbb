@@ -10,7 +10,7 @@
 #include "zNPCGoals.h"
 #include "zRenderState.h"
 #include "xDebug.h"
-#include "xUtil.h"
+#include "xutil.h"
 
 #define Unknown 0
 #define Idle01 1

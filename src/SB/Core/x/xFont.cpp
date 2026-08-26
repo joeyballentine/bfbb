@@ -14,7 +14,11 @@
 
 #include <string.h>
 #include <stdio.h>
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\strtoul.h>
+#else
+#include <stdlib.h>
+#endif
 
 /* xtextbox flags */
 

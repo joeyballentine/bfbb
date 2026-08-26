@@ -11,8 +11,16 @@
 
 #include "iMath.h"
 
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\cmath>
+#else
+#include <cmath>
+#endif
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\cstring>
+#else
+#include <cstring>
+#endif
 
 #define CAMERAFX_ZOOM_MODE_0 0
 #define CAMERAFX_ZOOM_MODE_1 1

@@ -3,8 +3,16 @@
 #include "xMath.h"
 
 #include <ctype.h>
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\stdlib.h>
+#else
+#include <stdlib.h>
+#endif
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support/MSL_C/MSL_Common/ctype_api.h>
+#else
+#include <ctype.h>
+#endif
 
 static S32 g_xutilinit;
 static S32 g_crc_needinit = 1;

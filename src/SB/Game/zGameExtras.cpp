@@ -7,7 +7,7 @@
 #include "xSnd.h"
 #include "xEnt.h"
 #include "xCounter.h"
-#include "xUtil.h"
+#include "xutil.h"
 
 #include "zGameExtras.h"
 #include "zEntPlayer.h"

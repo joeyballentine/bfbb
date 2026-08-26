@@ -3,7 +3,11 @@
 #include "xMemMgr.h"
 
 #include <types.h>
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support/MSL_C/MSL_Common/stdlib.h>
+#else
+#include <stdlib.h>
+#endif
 #include <dolphin.h>
 
 U32 mem_top_alloc;

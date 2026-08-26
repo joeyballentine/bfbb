@@ -3,7 +3,11 @@
 #include <types.h>
 #include <xMath2.h>
 #include <stdio.h>
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support\MSL_C++\MSL_Common\Include\new.h>
+#else
+#include <new>
+#endif
 
 void xhud::font_meter_widget::load(xBase& data, xDynAsset& asset, size_t)
 {

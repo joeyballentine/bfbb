@@ -17,7 +17,11 @@
 #include "zGlobals.h"
 
 #include <types.h>
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\stdlib.h>
+#else
+#include <stdlib.h>
+#endif
 #include <string.h>
 
 RwRGBAReal ShadowLightColor = { 1.0f, 1.0f, 1.0f, 1.0f };

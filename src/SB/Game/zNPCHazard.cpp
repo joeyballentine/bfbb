@@ -10,7 +10,7 @@
 #include "zNPCSupport.h"
 #include "xMath.h"
 #include "xMathInlines.h"
-#include "xUtil.h"
+#include "xutil.h"
 #include "xordarray.h"
 #include "zRenderState.h"
 

@@ -19,8 +19,16 @@
 #include <dolphin/mix.h>
 #include <rwplcore.h>
 
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support/MSL_C/MSL_Common/cmath>
+#else
+#include <cmath>
+#endif
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support/MSL_C/MSL_Common/stdlib.h>
+#else
+#include <stdlib.h>
+#endif
 #include <stdio.h>
 #include <string.h>
 #include <types.h>

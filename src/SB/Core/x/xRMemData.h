@@ -3,7 +3,11 @@
 
 #include "xBase.h"
 
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support\MSL_C++\MSL_Common\Include\new.h>
+#else
+#include <new>
+#endif
 
 struct RyzMemGrow
 {

@@ -3,7 +3,11 @@
 #include "xMemMgr.h"
 
 #include <rpptank.h>
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\stdlib.h>
+#else
+#include <stdlib.h>
+#endif
 #include <string.h>
 #include <types.h>
 

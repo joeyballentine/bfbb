@@ -2,8 +2,17 @@
 #define XPKRSVC_H
 
 #include <types.h>
+// Nothing in this header uses OSTime; it is here because the GameCube build
+// has always had it, and removing it there would change what its includers
+// see. On a host there is no dolphin tree to find it in.
+#ifdef GAMECUBE
 #include <dolphin/os/OSTime.h>
+#endif
+#ifdef __MWERKS__
 #include "PowerPC_EABI_Support\MSL_C\MSL_Common\time.h"
+#else
+#include <time.h>
+#endif
 
 #include "xhipio.h"
 #include "xordarray.h"

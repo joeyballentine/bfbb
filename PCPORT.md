@@ -1,6 +1,7 @@
 # PC port — follow-up plan
 
-Not started. This is a design record so the decision context survives, written
+Phase 2 started; see **Phase 2 progress** below and
+`src/SB/Core/pc/README.md`. The rest of this is the design record, written
 while the decomp is still in progress. Nothing here should change what we work
 on day to day except one thing, flagged under **Priority consequence** below.
 
@@ -235,3 +236,97 @@ definitions, and check the fields land where we expect. That single experiment
 resolves the largest open question in this plan — whether GC-derived structs can
 read Xbox-serialized data — and it can be done with a standalone tool long
 before any of the porting work starts.
+
+
+## Phase 2 progress
+
+### The seam held up
+
+The claim above — that `src/SB/Core/x` is platform-agnostic and `gc` is behind
+25 `i*` headers — was worth checking rather than trusting, and it checks out.
+Of the 198 units in `src/SB`, **three** include a dolphin header, and one of
+those (`xpkrsvc.h`) does not use what it includes. The 49 units that include
+RenderWare headers are not a leak: librw reimplements that same API, and
+`rwcore.h` as it stands already parses under GCC.
+
+So the port did not need `#ifdef` scattered through game code. It needed a
+second directory and an include path.
+
+### How the two builds are kept apart
+
+Game code includes its platform headers unqualified, so the include path alone
+decides which layer it gets: `configure.py` puts `src/SB/Core/gc` on
+CodeWarrior's path, `CMakeLists.txt` puts `src/SB/Core/pc` on the host's, and
+neither is ever on the other's. Shared files that genuinely must differ branch
+on `GAMECUBE`, which only the CodeWarrior build defines.
+
+The gate that actually proves it is the DOL's SHA-1. Every edit to shared
+source was followed by a GameCube rebuild confirming
+`306526d90b48e99894c3138f5fc8f2716d9fecf6`, and it has not moved.
+
+### What can be measured
+
+There is no `report.json` for a port — nothing to score bytes against. The
+substitute is `tools/pcprogress.py`: does each unit of `src/SB` compile, on a
+modern toolchain, against the PC platform headers? That is a real gate, not a
+proxy, and anything failing it names its reason.
+
+It went **6.6% → 79.8%** (13 → 158 of 198 units) as the PC headers landed. The
+remaining 40 are listed by blocker; none of them is waiting on librw, because
+compiling is not linking.
+
+`src/SB/Core/pc/tests/selftest.cpp` is the other half: 37 checks over every
+implemented interface, so that "implemented" is measured rather than asserted.
+
+### CodeWarrior-isms, now counted
+
+This section predicted these. The actual inventory, all fixed:
+
+- **44 MSL-path includes** across 38 files, spelled
+  `<PowerPC_EABI_Support\MSL_C\MSL_Common\cmath>`. Backslashes are not path
+  separators on a host. Gated on `__MWERKS__`, with the standard header on the
+  other branch.
+- **Two case-sensitivity bugs.** `xUtil.h` (7 files) and `xScrFX.h` (1) do not
+  exist; the files are `xutil.h` and `xScrFx.h`. The GameCube build only works
+  because CodeWarrior runs under wibo, which resolves include paths
+  case-insensitively the way Windows does. Nothing in the matching build could
+  ever have reported this.
+- **Tentative definitions with no bound.** `xTRC.h` declares
+  `_tagTRCPadInfo gTrcPad[];`, which `-common on` accepts and standard C++
+  rejects. Gated; the real sizes were already in `xTRC.cpp`.
+- **MSL extensions** — `FABS`, `stricmp`, `std::floorf` — supplied by
+  `src/SB/Core/pc/compat`, which shadows `<math.h>`, `<string.h>` and `<cmath>`
+  and chains on with `include_next`. Note that
+  `src/PowerPC_EABI_Support/include/math.h` defines `__fabs` as *identity* for
+  non-CodeWarrior compilers, to quiet clangd; a port that picked that up would
+  have `FABS(-3) == -3`. The compat header defines it properly and the selftest
+  checks it.
+
+### The 32-bit question, answered for the allocator at least
+
+The open question above — build 32-bit, or separate on-disk formats from
+in-memory structs — did not have to be settled to get the memory manager
+working, but it did have to be confronted. `xMemInitHeap` does its arithmetic
+on `gMemInfo.DRAM.addr`, which is a `U32`, so every address the game allocator
+hands out must fit in 32 bits and survive the round trip back to a pointer.
+
+`iMemInit` therefore reserves its arena with `mmap(MAP_32BIT)` and refuses to
+start if the result is above 4 GB, rather than truncating and corrupting later.
+That is not a decision about asset layouts — it only buys the allocator. The
+choice in **Asset caveats** is still open.
+
+While doing it: `xMemInit` places `gxHeap[1]` and `gxHeap[2]` at
+`DRAM.addr + DRAM.size`, *past* the block retail allocated for DRAM. On the
+console those addresses land in unclaimed OS arena and nothing notices. On a
+host that is a wild write into whatever the allocator put next, so the arena is
+reserved at twice the size. One more for the latent-retail-bugs list.
+
+### What is next
+
+1. **`isavegame`** — 29 functions, the largest group that needs no renderer.
+   The header is written; the body is host files standing in for a memory card.
+2. **`iSnd`** — 22 functions, and the largest group after rendering.
+3. **The remaining 40 units** that do not compile. The big class is 13 units
+   with `jump to case label`, which needs braces per site and a DOL check after,
+   since scoping a case body can move a stack frame.
+4. **librw**, which is phase 3 and gates the other 14 interfaces.

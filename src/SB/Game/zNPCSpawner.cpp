@@ -8,7 +8,7 @@
 #include "zGlobals.h"
 #include "xMathInlines.h"
 #include "zNPCTypeRobot.h"
-#include "xUtil.h"
+#include "xutil.h"
 
 static SMDepot g_smdepot = {};
 static S32 g_drawSpawnBounds;

@@ -27,8 +27,17 @@ struct _tagTRCPadInfo : _tagiTRCPadInfo
     _tagTRCState state;
 };
 
+#ifdef GAMECUBE
 _tagTRCPadInfo gTrcPad[];
 _tagTRCState gTrcDisk[];
+#else
+// Tentative definitions with no bound. CodeWarrior with -common on gives every
+// including TU a common symbol and lets the linker merge them against the real
+// definitions in xTRC.cpp; standard C++ has no common-symbol rule and rejects
+// an array whose size is unknown. Same two objects, declared the portable way.
+extern _tagTRCPadInfo gTrcPad[4];
+extern _tagTRCState gTrcDisk[2];
+#endif
 
 void xTRCInit();
 void xTRCPad(S32 pad_id, _tagTRCState state);

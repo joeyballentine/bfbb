@@ -1,0 +1,26 @@
+# Headers copied unchanged from src/SB/Core/gc/.
+#
+# These declare interfaces whose types are RenderWare's or the game's own,
+# with nothing GameCube-specific in them, so the port's copy is identical.
+# Copying rather than sharing an include path is what keeps the two builds
+# from being able to see each other's platform layer at all -- but it means
+# a change to the gc header does not reach this one, so tools/pcprogress.py
+# --drift checks these hashes and says so when they diverge.
+#
+# sha1  name
+470bbb3490b74ab87d1aefeacb663775cdfbc9c9  iAnim.h
+68ac0dfca34392f2574c4186ad2871f2146c0a7d  iAnimSKB.h
+1c8cfd76f6069613035664bd0511b3c16737d229  iDraw.h
+71fdf6738f9b09d663383c22181539cc2205bb1a  iEnv.h
+a1b38623b3948a7e994b53241455805e6da88214  iFX.h
+5ab3bcb18a261401891d6b7afa43892968c901b2  iLight.h
+0212dfbe0e7775f3417adc49a4ea2395d7cc947b  iMath3.h
+fd1f90d8d0a7e06bb5460b3b88e768f77a332ce1  iMorph.h
+3a69c98e34771dcc0c56efc81469cb837570d625  iParMgr.h
+e429666041bf875db6c157c842d7c023c89ef443  iScrFX.h
+64876d9214a1f89a91e9441102ea3ca0132c70d8  iSnd.h
+13b157b89ddaa07222376363a37ab8b55bc22603  ngcrad3d.h
+ac9f29999a3e84e87b0b1286f9483fb684ef17d9  iCollide.h
+36ab102aadf02a5da8dc3d47f99a4b06488bd5b8  iCollideFast.h
+13c0a7d43d681c14cabdb7bd719a184e41d68276  iCutscene.h
+683a7c52f4e7786bef03082bdd1af239564af47d  iModel.h

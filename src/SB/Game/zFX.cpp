@@ -23,7 +23,11 @@
 #include <types.h>
 #include <string.h>
 #include <stdlib.h>
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\cmath>
+#else
+#include <cmath>
+#endif
 
 void zParPTankSpawnBubbles(xVec3* pos, xVec3* vel, U32 count, F32 scale);
 void zParPTankSpawnMenuBubbles(xVec3* pos, xVec3* vel, U32 count);

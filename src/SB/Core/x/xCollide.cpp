@@ -10,7 +10,11 @@
 #include "xScene.h"
 #include "zGrid.h"
 
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support/MSL_C/MSL_Common/cmath>
+#else
+#include <cmath>
+#endif
 #include <types.h>
 
 static S32 sSweptSphereHitFound;

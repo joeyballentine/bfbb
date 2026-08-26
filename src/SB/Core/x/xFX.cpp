@@ -20,7 +20,11 @@
 #include <rpmatfx.h>
 #include <rwplcore.h>
 #include <rpskin.h>
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support/MSL_C/MSL_Common/stdlib.h>
+#else
+#include <stdlib.h>
+#endif
 
 // no clue why this file is so out of order
 

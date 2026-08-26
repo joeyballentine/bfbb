@@ -3,8 +3,16 @@
 #include <rwplcore.h>
 
 #include <types.h>
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\cstdlib>
+#else
+#include <cstdlib>
+#endif
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\cstring>
+#else
+#include <cstring>
+#endif
 
 char* TrimWhitespace(char* string)
 {

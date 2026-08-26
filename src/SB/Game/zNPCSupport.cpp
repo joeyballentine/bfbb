@@ -15,7 +15,7 @@
 
 #include "xMathInlines.h"
 #include "xMath3.h"
-#include "xUtil.h"
+#include "xutil.h"
 #include "xQuickCull.h"
 #include "xCollide.h"
 

@@ -1,6 +1,10 @@
 #include "iTRC.h"
 
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support/MSL_C/MSL_Common/strtoul.h>
+#else
+#include <stdlib.h>
+#endif
 #include <string.h>
 #include <dolphin/gx/GXCull.h>
 #include <dolphin/gx/GXFrameBuffer.h>

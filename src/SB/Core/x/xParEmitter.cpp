@@ -10,7 +10,11 @@
 #include <zGlobals.h>
 #include <xDebug.h>
 #include <xEvent.h>
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support\MSL_C\MSL_Common\cmath>
+#else
+#include <cmath>
+#endif
 
 static xParEmitterAsset sSaveEmmiterSettings;
 static xParEmitterPropsAsset sSaveEmmiterPropSettings;

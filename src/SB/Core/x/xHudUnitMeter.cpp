@@ -3,7 +3,11 @@
 #include "xMathInlines.h"
 #include "xDebug.h"
 
+#ifdef __MWERKS__
 #include <PowerPC_EABI_Support/MSL_C++/MSL_Common/Include/new.h>
+#else
+#include <new>
+#endif
 #include <math.h>
 #include <types.h>
 
