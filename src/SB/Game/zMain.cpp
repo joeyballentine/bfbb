@@ -865,15 +865,15 @@ void zMainLoop()
 
 void zMainReadINI()
 {
-    char* buf;
+    char* str;
+    void* buf;
     U32 size;
     xIniFile* ini;
-    char* str;
 
-    buf = (char*)iFileLoad("SB.INI", NULL, &size);
+    buf = iFileLoad("SB.INI", NULL, &size);
     if (buf)
     {
-        ini = xIniParse(buf, size);
+        ini = xIniParse((char*)buf, size);
 
         str = xIniGetString(ini, "PATH", NULL);
         if (str)
