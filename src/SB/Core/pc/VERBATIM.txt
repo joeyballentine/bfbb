@@ -12,6 +12,12 @@
 # a change to the gc header does not reach this one, so tools/pcprogress.py
 # --drift checks these hashes and says so when they diverge.
 #
+# iScrFX.h is deliberately NOT here any more. It declares _iMotionBlurData with
+# an RwIm2DVertex in it, and the gc copy spells that type by its concrete
+# console name, rwGameCube2DVertex, which does not exist on PC -- the port
+# declares RwIm2DVertex per render backend. That is a real divergence, not
+# drift, so the file is off the list rather than being re-hashed each time.
+#
 # sha1  name
 470bbb3490b74ab87d1aefeacb663775cdfbc9c9  iAnim.h
 68ac0dfca34392f2574c4186ad2871f2146c0a7d  iAnimSKB.h
@@ -22,7 +28,6 @@ a1b38623b3948a7e994b53241455805e6da88214  iFX.h
 0212dfbe0e7775f3417adc49a4ea2395d7cc947b  iMath3.h
 fd1f90d8d0a7e06bb5460b3b88e768f77a332ce1  iMorph.h
 3a69c98e34771dcc0c56efc81469cb837570d625  iParMgr.h
-e429666041bf875db6c157c842d7c023c89ef443  iScrFX.h
 64876d9214a1f89a91e9441102ea3ca0132c70d8  iSnd.h
 13b157b89ddaa07222376363a37ab8b55bc22603  ngcrad3d.h
 ac9f29999a3e84e87b0b1286f9483fb684ef17d9  iCollide.h
@@ -34,3 +39,4 @@ ac9f29999a3e84e87b0b1286f9483fb684ef17d9  iCollide.h
 b9d3e978e614b169a07454b8681c44d063127e84  iMath3.cpp
 827331f20ee1ce0f5bcf45f3239dcd8e1ebd58e4  iCollide.cpp
 540406ef1d6821eda53e9362af3d2cd3637597ae  iCollideFast.cpp
+52bf7806e2df462226b2809607d9f2c4c7ebf7fa  iLight.cpp

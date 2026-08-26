@@ -229,6 +229,12 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iMath3.cpp
   ${PC_DIR}/iCollideFast.cpp
 
+  # Ported, and a verbatim copy like the two above: gc/iLight.cpp is pure
+  # RenderWare C API with nothing GameCube-specific in it, so there was nothing
+  # for a rewrite to improve. The light flag and type enumerations it passes
+  # through are asserted against librw's in rw/layout_camera.cpp.
+  ${PC_DIR}/iLight.cpp
+
   # Also a verbatim copy, but three of its calls are RenderWare collision-world
   # functions (RpAtomicForAllIntersections, RpCollisionWorldForAllIntersections,
   # RwFrameTransform), so it cannot resolve until librw arrives. Fine in a static
@@ -266,7 +272,6 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iModel.cpp
   ${PC_DIR}/iParMgr.cpp
   ${PC_DIR}/iScrFX.cpp
-  ${PC_DIR}/iLight.cpp
   ${PC_DIR}/iAnim.cpp
   ${PC_DIR}/iEnv.cpp
   ${PC_DIR}/iMorph.cpp
