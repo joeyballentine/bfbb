@@ -221,6 +221,28 @@ static void test_file()
           "iFileAsyncService completes the read");
     check(memcmp(buf, payload, 16) == 0, "the asynchronous read returned the bytes");
 
+    // And it must NOT have moved the file's own offset.
+    //
+    // The console's DVDReadAsync takes the offset as an argument and leaves
+    // ps->offset alone, so advancing past what was read belongs to the
+    // completion callback -- iCutscene.cpp:iCSAsyncReadCB seeks forward by the
+    // amount status reports, and would advance twice if the read did it too.
+    // That cost the cutscene loader a whole chunk per read.
+    check(afile.ps.offset == 0, "an asynchronous read leaves the file offset alone");
+
+    // Which means two reads with no seek between them return the same bytes,
+    // exactly as they would on the console.
+    U8 again[16];
+    memset(again, 0, sizeof(again));
+    S32 key2 = iFileReadAsync(&afile, again, 16, NULL, 0);
+    iFileAsyncService();
+    check(iFileReadAsyncStatus(key2, NULL) == IFILE_RDSTAT_DONE, "a second read completes");
+    check(memcmp(again, payload, 16) == 0, "and returns the same bytes, the offset not having moved");
+
+    // The callback's seek is what advances it.
+    iFileSeek(&afile, 16, IFILE_SEEK_CUR);
+    check(afile.ps.offset == 16, "seeking forward is what advances the position");
+
     iFileClose(&afile);
     iFileExit();
 

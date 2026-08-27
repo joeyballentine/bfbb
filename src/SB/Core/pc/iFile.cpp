@@ -346,7 +346,25 @@ static void iFileServiceEntry(file_queue_entry* entry)
     }
 
     tag_xFile* file = entry->file;
+
+    // A POSITIONED read: it must not move the file's own offset.
+    //
+    // The console's asynchronous read is DVDReadAsync(&fileInfo, buf, size,
+    // ps->offset, cb) -- it takes the offset as an argument and leaves
+    // ps->offset alone, so advancing past what was read is the COMPLETION
+    // CALLBACK's job. iCutscene.cpp:iCSAsyncReadCB does exactly that, seeking
+    // forward by the amount iFileReadAsyncStatus reports.
+    //
+    // Servicing this through iFileRead, which advances ps->offset itself, made
+    // the position run ahead by a whole chunk on every asynchronous read: the
+    // read advanced it once and the callback advanced it again. The cutscene
+    // loader read its time chunk from a chunk's distance past where the chunk
+    // actually was, so csn->Play was filled with whatever happened to be there
+    // -- or with the 0xDEADBEEF the loader poisons the buffer with, if the read
+    // ran off the end of the HIP -- and iCSSoundSetup walked off it.
+    S32 mark = file->ps.offset;
     U32 done = iFileRead(file, entry->buf, entry->size);
+    file->ps.offset = mark;
 
     entry->offset = done;
     entry->stat = (done == entry->size) ? IFILE_RDSTAT_DONE : IFILE_RDSTAT_FAIL;
