@@ -196,6 +196,17 @@ S32 zNPCGoalPlayerNear::Process(en_trantype* trantype, F32 dt, void* updCtxt, xS
         flg_plyrnear &= ~1;
         nextgoal = NPC_GOAL_TALK;
         *trantype = GOAL_TRAN_PUSH;
+
+#ifdef PLATFORM_PC
+        // The far end of the same question. If this fires, R1 reached the goal
+        // system and the talk goal was pushed, so anything still missing is
+        // downstream of here -- the conversation itself, or its UI.
+        if (getenv("BFBB_TALK") != NULL)
+        {
+            printf("bfbb: pushing NPC_GOAL_TALK for npc %u\n", (unsigned)npc->id);
+            fflush(stdout);
+        }
+#endif
     }
     else if (npc->SomethingWonderful() || !npc->PlayerIsStaring())
     {
