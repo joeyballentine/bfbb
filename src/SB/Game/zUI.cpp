@@ -401,6 +401,31 @@ void zUI_Init(_zUI* ent, xEntAsset* asset)
     ent->eventFunc = zUIEventCB;
     ent->uiFlags = sasset->uiFlags;
 
+#ifdef PLATFORM_PC
+    // BFBB_UI: every UI entity as it is built, with the links it carries.
+    //
+    // Sampling the ones that happen to be considered on a frame R1 is pressed
+    // has taken this as far as it goes: it found that the prompt the trigger
+    // shows is only ever made VISIBLE, and that the one entity which is focused
+    // and selected carries no links at all. What is missing is the other half
+    // of the map -- which entity holds the link that asks for a teleport, and
+    // what state it would need to be in to fire it.
+    if (getenv("BFBB_UI") != NULL)
+    {
+        printf("bfbb: ui %08x uiFlags %08x links %u", (unsigned)ent->id,
+               (unsigned)ent->uiFlags, (unsigned)ent->linkCount);
+
+        for (U32 i = 0; i < ent->linkCount; i++)
+        {
+            printf("  [%u: src %u -> %08x dst %u]", (unsigned)i, (unsigned)ent->link[i].srcEvent,
+                   (unsigned)ent->link[i].dstAssetID, (unsigned)ent->link[i].dstEvent);
+        }
+
+        printf("\n");
+        fflush(stdout);
+    }
+#endif
+
     if (ent->uiFlags & 0x4)
     {
         ent->render = NULL;
