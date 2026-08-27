@@ -15,6 +15,8 @@
 #include "iFile.h"
 #include "iHost.h"
 #include "iSnd.h"
+#include "iSndData.h"
+#include "xpkrsvc.h"
 #include "xhipio.h"
 #include "iSndHost.h"
 #include "xSnd.h"
@@ -623,6 +625,107 @@ static void test_savegame()
 // here is what makes this a unit test of the seam rather than of the game.
 xSndGlobals gSnd;
 
+// ---------------------------------------------------------------------------
+// Stand-ins for the rest of the game
+//
+// iSnd.cpp reaches four vector helpers and one xSnd function to compute a
+// voice's mix. Their real definitions are in xVec3.cpp and xSnd.cpp, neither of
+// which this target can link -- see the note beside iMath3 in CMakeLists.txt
+// for why pulling in the vector helpers alone is not possible. The four vector
+// ones are reimplemented rather than stubbed, because the pan and attenuation
+// tests below depend on them being right; the xSnd one is a genuine no-op here,
+// since these tests place a voice's playPos themselves rather than deriving it
+// from an entity.
+
+void xVec3Sub(xVec3* o, const xVec3* a, const xVec3* b)
+{
+    o->x = a->x - b->x;
+    o->y = a->y - b->y;
+    o->z = a->z - b->z;
+}
+
+F32 xVec3Length2(const xVec3* v)
+{
+    return v->x * v->x + v->y * v->y + v->z * v->z;
+}
+
+F32 xVec3Dot(const xVec3* a, const xVec3* b)
+{
+    return a->x * b->x + a->y * b->y + a->z * b->z;
+}
+
+F32 xVec3Normalize(xVec3* o, const xVec3* v)
+{
+    F32 len = sqrtf(xVec3Length2(v));
+    if (len > 0.0f)
+    {
+        o->x = v->x / len;
+        o->y = v->y / len;
+        o->z = v->z / len;
+    }
+    else
+    {
+        o->x = o->y = o->z = 0.0f;
+    }
+    return len;
+}
+
+void xSndInternalUpdateVoicePos(xSndVoiceInfo*)
+{
+}
+
+// ---------------------------------------------------------------------------
+// A fake package, for the sample cache
+//
+// iSndData.cpp finds a sound's bytes through three asset-system calls: which
+// package holds the asset, where in that package it starts, and the string hash
+// that ties the two together. The real ones live in xstransvc.cpp, on top of the
+// whole packer; these three replace them with one file in the scratch
+// directory, which is enough to exercise everything the cache actually does --
+// the sector arithmetic, the read, the refcount and the eviction.
+
+static char sFakePkgName[64];
+static U32 sFakePkgAsset;
+static U32 sFakePkgOffset;
+static U32 sFakePkgSize;
+
+U32 xStrHash(const char* s)
+{
+    // Any hash works: the only requirement is that the two calls agree, and
+    // xSTGetAssetInfoInHxP below ignores the value entirely.
+    U32 h = 0;
+    while (*s != '\0')
+    {
+        h = h * 31 + (U8)*s++;
+    }
+    return h;
+}
+
+char* xST_xAssetID_HIPFullPath(U32 aid)
+{
+    return aid == sFakePkgAsset ? sFakePkgName : NULL;
+}
+
+S32 xSTGetAssetInfoInHxP(U32 aid, st_PKR_ASSET_TOCINFO* info, U32)
+{
+    if (aid != sFakePkgAsset)
+    {
+        return 0;
+    }
+
+    memset(info, 0, sizeof(*info));
+    info->aid = aid;
+
+    // The split PKR_GetAssetInfo performs, against a base sector of 0 -- which
+    // is what iFileGetInfo reports on a host. iSndData has to put it back
+    // together to reach the bytes.
+    info->sector = sFakePkgOffset / 32;
+    info->plus_offset = sFakePkgOffset % 32;
+    info->size = sFakePkgSize;
+
+    return 1;
+}
+
 // The Xbox sound table layout iSnd.cpp parses -- a 12-byte count header and
 // fixed 44-byte entries built around a WAVEFORMATEX, which is what the retail
 // Xbox assets this port reads actually contain. Declared independently on
@@ -665,9 +768,318 @@ struct test_lookup
 #define SND_ASSET 0x11111111
 #define STRM_ASSET 0x22222222
 
+// ---------------------------------------------------------------------------
+// The sample cache
+
+static void test_snd_data()
+{
+    printf("iSndData\n");
+
+    char dir[512];
+    if (!scratch_dir("snddata", dir, sizeof(dir)))
+    {
+        printf("  (no scratch directory; skipped)\n");
+        return;
+    }
+
+    // A package with a recognisable payload at an offset that is NOT a multiple
+    // of the 32-byte sector, so a sector calculation that drops the remainder
+    // fails here rather than silently reading the wrong bytes in the game.
+    const U32 kOffset = 32 * 5 + 13;
+    const U32 kSize = 256;
+
+    char path[600];
+    snprintf(path, sizeof(path), "%s/fake.HOP", dir);
+
+    FILE* f = fopen(path, "wb");
+    check(f != NULL, "the fake package could be created");
+    if (f == NULL)
+    {
+        return;
+    }
+
+    for (U32 i = 0; i < kOffset; i++)
+    {
+        fputc(0xAA, f);
+    }
+    for (U32 i = 0; i < kSize; i++)
+    {
+        fputc((int)(i & 0xff), f);
+    }
+    fclose(f);
+
+    iFileInit();
+    iFileSetPath(dir);
+
+    snprintf(sFakePkgName, sizeof(sFakePkgName), "fake.HOP");
+    sFakePkgAsset = 0xABCD1234;
+    sFakePkgOffset = kOffset;
+    sFakePkgSize = kSize;
+
+    iSndDataReset();
+
+    // 16-bit mono PCM: the format almost every asset in the game uses, and the
+    // one iSndDataAcquire passes through untouched.
+    iSndDataFormat pcm;
+    pcm.format_tag = 1;
+    pcm.channels = 1;
+    pcm.block_align = 2;
+
+    U32 bytes = 0;
+    const U8* p = (const U8*)iSndDataAcquire(sFakePkgAsset, &pcm, &bytes);
+
+    check(p != NULL, "a known asset reads");
+    check(bytes == kSize, "with the size the table gave");
+
+    if (p != NULL)
+    {
+        // The whole payload, not just its first byte: an off-by-one in the
+        // sector arithmetic would still get byte 0 right about one time in 32.
+        bool exact = true;
+        for (U32 i = 0; i < kSize; i++)
+        {
+            if (p[i] != (U8)(i & 0xff))
+            {
+                exact = false;
+                break;
+            }
+        }
+        check(exact, "and the bytes at the sector-plus-offset the TOC describes");
+    }
+
+    check(iSndDataAcquire(0x99999999, &pcm, &bytes) == NULL, "an unknown asset reads nothing");
+    check(bytes == 0, "and reports no size");
+
+    // Cached: the same pointer, without going back to the file.
+    U32 again = 0;
+    const void* second = iSndDataAcquire(sFakePkgAsset, &pcm, &again);
+    check(second == p, "a second acquire returns the cached block");
+    check(again == kSize, "with the same size");
+
+    U32 entries = 0;
+    U32 total = 0;
+    U32 pinned = 0;
+    iSndDataStats(&entries, &total, &pinned);
+    check(entries == 1, "one entry is cached");
+    check(total == kSize, "holding the asset's bytes");
+    check(pinned == 1, "and it is pinned while two references are out");
+
+    iSndDataRelease(sFakePkgAsset);
+    iSndDataStats(NULL, NULL, &pinned);
+    check(pinned == 1, "still pinned after one of the two is released");
+
+    iSndDataRelease(sFakePkgAsset);
+    iSndDataStats(NULL, NULL, &pinned);
+    check(pinned == 0, "and unpinned once both are");
+
+    // A release without a matching acquire must not underflow into a pin that
+    // can never be lifted.
+    iSndDataRelease(sFakePkgAsset);
+    iSndDataStats(NULL, NULL, &pinned);
+    check(pinned == 0, "an unmatched release does not corrupt the count");
+
+    iSndDataReset();
+    iSndDataStats(&entries, &total, NULL);
+    check(entries == 0 && total == 0, "reset empties the cache");
+
+    // --- Xbox ADPCM ---------------------------------------------------------
+    // The 21 menu music tracks are format tag 0x69 in 36-byte mono blocks, and
+    // they reach the mixer decoded. Two things have to be right: the sample
+    // count, which is 65 per block and not the 64 the assets' own header field
+    // implies; and the decode itself, checked here against values worked out by
+    // hand from the IMA step table.
+    const U32 kBlock = 36;
+
+    snprintf(path, sizeof(path), "%s/adpcm.HOP", dir);
+    f = fopen(path, "wb");
+    check(f != NULL, "the ADPCM package could be created");
+    if (f == NULL)
+    {
+        return;
+    }
+
+    // One block: predictor 1000, step index 0 (step 7), then 32 payload bytes.
+    // The first two nibbles are 0 and 8 -- +step/8 and -step/8 -- so the first
+    // three samples are 1000, 1000, 1000. Every later byte is 0x00, which is
+    // nibble 0 twice: a rise of step>>3 each, with the index walking down and
+    // staying at 0.
+    fputc(1000 & 0xff, f);
+    fputc((1000 >> 8) & 0xff, f);
+    fputc(0, f); // step index
+    fputc(0, f); // reserved
+    fputc(0x80, f); // low nibble 0, high nibble 8
+    for (U32 i = 1; i < kBlock - 4; i++)
+    {
+        fputc(0x00, f);
+    }
+    fclose(f);
+
+    snprintf(sFakePkgName, sizeof(sFakePkgName), "adpcm.HOP");
+    sFakePkgAsset = 0x0AD9C000;
+    sFakePkgOffset = 0;
+    sFakePkgSize = kBlock;
+
+    iSndDataFormat adpcm;
+    adpcm.format_tag = 0x69;
+    adpcm.channels = 1;
+    adpcm.block_align = kBlock;
+
+    U32 abytes = 0;
+    const S16* a = (const S16*)iSndDataAcquire(sFakePkgAsset, &adpcm, &abytes);
+
+    check(a != NULL, "an ADPCM asset decodes");
+    check(abytes == 65 * sizeof(S16),
+          "a 36-byte block is 65 samples, not the 64 its own header implies");
+
+    if (a != NULL)
+    {
+        check(a[0] == 1000, "the block's stored predictor is its first sample");
+        check(a[1] == 1000, "nibble 0 raises it by step/8, which is 0 at step 7");
+        check(a[2] == 1000, "and nibble 8 lowers it by the same");
+
+        // Index walks 0 -> 0 (kImaIndex[0] is -1, clamped at 0), so step stays
+        // 7 and every remaining nibble adds 7>>3 == 0. A decoder that got the
+        // table or the clamp wrong drifts away from this immediately.
+        bool flat = true;
+        for (U32 i = 3; i < 65; i++)
+        {
+            if (a[i] != 1000)
+            {
+                flat = false;
+                break;
+            }
+        }
+        check(flat, "and the rest of the block holds, with the index clamped at zero");
+    }
+
+    iSndDataRelease(sFakePkgAsset);
+    iSndDataReset();
+}
+
+// ---------------------------------------------------------------------------
+// The mixer
+//
+// Only built against the win32 backend, which is the only one that has a mixer.
+// The null backend's contract -- silent, but keeps time -- is checked by
+// test_snd below and holds for both.
+
+#ifdef BFBB_AUDIO_BACKEND_WIN32
+void iSndHostWin32TestMix(U32 rate, float* out, U32 frames);
+
+static void test_snd_mixer()
+{
+    printf("iSndHost (mixer)\n");
+
+    iSndHostInit();
+
+    // A ramp, so that any read position can be checked against the value it
+    // should have produced. 16-bit mono at 1000 Hz: 100 frames, one tenth of a
+    // second, and sample n is n/32768.
+    static S16 ramp[100];
+    for (S32 i = 0; i < 100; i++)
+    {
+        ramp[i] = (S16)(i * 100);
+    }
+
+    iSndHostSample s;
+    memset(&s, 0, sizeof(s));
+    s.data = ramp;
+    s.bytes = sizeof(ramp);
+    s.channels = 1;
+    s.bits = 16;
+    s.sample_rate = 1000;
+    s.num_samples = 100;
+
+    static float out[512];
+
+    // --- rate conversion -----------------------------------------------------
+    // Mixed at twice the source rate, so each output frame advances half a
+    // source frame and the block covers 50 source frames.
+    S32 v = iSndHostAcquire(0);
+    check(v >= 0, "a voice for the mixer test");
+
+    iSndHostSetVol(v, 1.0f, 1.0f);
+    iSndHostStart(v, &s);
+
+    iSndHostWin32TestMix(2000, out, 100);
+
+    check(fabsf(out[0] - 0.0f) < 0.001f, "the first output frame is the first sample");
+    check(fabsf(out[2 * 2] - (100.0f / 32768.0f)) < 0.001f,
+          "output frame 2 is source frame 1 at double the rate");
+    check(fabsf(out[2 * 99] - (4950.0f / 32768.0f)) < 0.001f,
+          "and output frame 99 is halfway through the sample");
+    check(iSndHostIsPlaying(v), "which is not the end of it");
+
+    // Interpolated, not held: an odd output frame falls between two samples.
+    // Frame 3 is source position 1.5, so halfway between ramp[1] and ramp[2].
+    check(fabsf(out[2 * 3] - (150.0f / 32768.0f)) < 0.001f,
+          "a fractional position interpolates between neighbours");
+
+    // Both sides carry a mono source.
+    check(fabsf(out[2 * 2] - out[2 * 2 + 1]) < 0.0001f, "a mono source reaches both sides");
+
+    // --- running out ---------------------------------------------------------
+    iSndHostWin32TestMix(2000, out, 100);
+    check(!iSndHostIsPlaying(v), "the voice finishes when the samples run out");
+
+    // --- volume per side -----------------------------------------------------
+    iSndHostSetVol(v, 0.5f, 0.0f);
+    iSndHostStart(v, &s);
+    iSndHostWin32TestMix(1000, out, 16);
+
+    check(fabsf(out[2 * 8] - (800.0f / 32768.0f) * 0.5f) < 0.001f, "the left gain applies");
+    check(fabsf(out[2 * 8 + 1]) < 0.0001f, "and a zero right gain silences that side");
+
+    // --- looping -------------------------------------------------------------
+    s.looping = true;
+    iSndHostSetVol(v, 1.0f, 1.0f);
+    iSndHostStart(v, &s);
+
+    // 150 output frames at the source rate: past the 100-frame sample, so the
+    // last 50 are the loop's second pass.
+    iSndHostWin32TestMix(1000, out, 150);
+    check(iSndHostIsPlaying(v), "a looping voice does not finish on its own");
+    check(fabsf(out[2 * 120] - (2000.0f / 32768.0f)) < 0.001f,
+          "and wraps to the start rather than running off the end");
+
+    iSndHostStop(v);
+    check(!iSndHostIsPlaying(v), "iSndHostStop ends it");
+
+    // --- a voice with no samples --------------------------------------------
+    // The case a missing or unreadable asset produces. It must still finish on
+    // time, because that is what everything in the game that waits on a sound
+    // depends on.
+    iSndHostSample q = s;
+    q.data = NULL;
+    q.bytes = 0;
+    q.looping = false;
+    q.num_samples = 100;
+
+    iSndHostStart(v, &q);
+    check(iSndHostIsPlaying(v), "a voice with no samples still starts");
+
+    iSndHostWin32TestMix(1000, out, 50);
+    check(iSndHostIsPlaying(v), "and is still going halfway through its length");
+    check(fabsf(out[0]) < 0.0001f, "while contributing nothing to the mix");
+
+    iSndHostWin32TestMix(1000, out, 60);
+    check(!iSndHostIsPlaying(v), "and finishes at the end of it");
+
+    iSndHostRelease(v);
+    iSndHostExit();
+}
+#endif
+
 static void test_snd()
 {
     printf("iSnd\n");
+
+    // Force the silent path. The win32 backend opens a real endpoint otherwise,
+    // which would make the timing below depend on an audio device being present
+    // and on its render thread's schedule. What is under test here is the
+    // timing contract, which both paths must keep identically -- the mixing
+    // itself is tested above.
+    iHostSetEnv("BFBB_AUDIO", "0");
 
     check(sizeof(xSndVoiceInfo) == 100,
           "xSndVoiceInfo is 100 bytes, as iSndPlay's offset/100 assumes");
@@ -779,6 +1191,16 @@ static void test_snd()
     check(iSndIsPlayingByHandle(0x4242), "still playing a third of the way in");
 
     iHostSleepUntilNs(iHostMonotonicNs() + 120000000ULL); // past the end
+
+    // Through iSndHostUpdate, because that is where iSndHost.h says a backend
+    // retires voices -- "a backend that finishes voices on its own clock
+    // retires them here". The null backend also happens to answer correctly
+    // between updates, since it recomputes a deadline on every call; a mixer
+    // cannot, because a voice ends when its samples have been consumed and
+    // nothing consumes them until the block is mixed. Only the weaker promise
+    // is common to both, and it is the one the game relies on: iSndUpdate calls
+    // iSndHostUpdate before its own retirement sweep, every frame.
+    iSndHostUpdate();
     check(!iSndHostIsPlaying(0), "the device retires the voice when its time is up");
 
     iSndUpdate();
@@ -806,6 +1228,7 @@ static void test_snd()
     check(gSnd.voice[v].sndID == 0, "and clears the game-side handle");
 
     iSndExit();
+    iHostSetEnv("BFBB_AUDIO", NULL);
 }
 
 // ---------------------------------------------------------------------------
@@ -991,6 +1414,10 @@ int main()
     test_idtag();
     test_pad();
     test_savegame();
+    test_snd_data();
+#ifdef BFBB_AUDIO_BACKEND_WIN32
+    test_snd_mixer();
+#endif
     test_snd();
     test_hip();
 

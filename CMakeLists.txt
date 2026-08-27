@@ -106,11 +106,28 @@ endif()
 # long, because a great deal of the game waits on a sound -- dialogue lines,
 # cutscene beats, NPC barks. A backend that finished everything instantly would
 # desynchronise all of them and look like a bug in the game code.
-set(BFBB_AUDIO_BACKEND "null" CACHE STRING "Host audio backend: null")
-set_property(CACHE BFBB_AUDIO_BACKEND PROPERTY STRINGS null)
+#
+# "win32" is a software mixer feeding one WASAPI stream: 64 voices summed here
+# rather than handed to an API that has its own idea of what a voice is. It
+# keeps the null backend's timing promise -- if no device opens, it goes silent
+# and the voices still advance on the clock, so nothing the game derives from a
+# sound's length changes.
+if(WIN32)
+  set(BFBB_AUDIO_BACKEND "win32" CACHE STRING "Host audio backend: win32, null")
+else()
+  set(BFBB_AUDIO_BACKEND "null" CACHE STRING "Host audio backend: null")
+endif()
+set_property(CACHE BFBB_AUDIO_BACKEND PROPERTY STRINGS win32 null)
 
+set(AUDIO_DEFINES)
 if(BFBB_AUDIO_BACKEND STREQUAL "null")
   set(AUDIO_SOURCES ${PC_DIR}/iSndHostNull.cpp)
+elseif(BFBB_AUDIO_BACKEND STREQUAL "win32")
+  if(NOT WIN32)
+    message(FATAL_ERROR "BFBB_AUDIO_BACKEND=win32 needs a Windows host")
+  endif()
+  set(AUDIO_SOURCES ${PC_DIR}/iSndHostWin32.cpp)
+  set(AUDIO_DEFINES BFBB_AUDIO_BACKEND_WIN32)
 else()
   message(FATAL_ERROR "unknown BFBB_AUDIO_BACKEND '${BFBB_AUDIO_BACKEND}'")
 endif()
@@ -241,6 +258,7 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iTime.cpp
   ${PC_DIR}/isavegame.cpp
   ${PC_DIR}/iSnd.cpp
+  ${PC_DIR}/iSndData.cpp
 
   # Copied unchanged from gc/ -- pure geometry and collision, nothing
   # GameCube-specific in them. See VERBATIM.txt; --drift reports divergence.
@@ -433,7 +451,10 @@ target_compile_options(bfbb PRIVATE -Wno-everything)
 
 if(WIN32)
   # dbghelp is the crash handler in bfbb_main.cpp; see the comment there.
-  target_link_libraries(bfbb PRIVATE user32 gdi32 dbghelp)
+  # ole32 is CoCreateInstance in the WASAPI backend; the interfaces themselves
+  # are declared by the SDK headers and their GUIDs are defined in
+  # iSndHostWin32.cpp, so uuid.lib is deliberately not needed.
+  target_link_libraries(bfbb PRIVATE user32 gdi32 dbghelp ole32)
 
   # EXPERIMENT: 64MB stack, to test whether the boot fault is stack depth.
   target_link_options(bfbb PRIVATE -Xlinker /STACK:67108864)
@@ -453,6 +474,13 @@ add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   ${PC_DIR}/iTime.cpp
   ${PC_DIR}/isavegame.cpp
   ${PC_DIR}/iSnd.cpp
+
+  # The sample cache, with test doubles in selftest.cpp standing in for the
+  # three asset-system calls it makes. Linking it here rather than stubbing it
+  # is what makes its eviction and pinning rules testable at all; the real
+  # xstransvc closure is far too large for this target.
+  ${PC_DIR}/iSndData.cpp
+
   # The three files copied from gc/ are deliberately absent from this target.
   #
   # iMath3 calls xVec3Sub, xVec3Length, xVec3Add and xVec3SMul, whose bodies the
@@ -487,7 +515,7 @@ add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   ${AUDIO_SOURCES}
   ${HOST_SOURCES}
 )
-target_compile_definitions(pc_selftest PRIVATE ${INPUT_DEFINES})
+target_compile_definitions(pc_selftest PRIVATE ${INPUT_DEFINES} ${AUDIO_DEFINES})
 target_include_directories(pc_selftest PRIVATE
   ${PC_DIR}/compat
   ${PC_DIR}
@@ -496,5 +524,12 @@ target_include_directories(pc_selftest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x
   ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Game
 )
+
+if(WIN32)
+  # Same COM dependency as the game: the self-test links the real audio backend
+  # rather than a stub, so that what it checks about voice timing is what the
+  # game will actually do.
+  target_link_libraries(pc_selftest PRIVATE ole32)
+endif()
 
 add_test(NAME pc_selftest COMMAND pc_selftest)

@@ -18,6 +18,24 @@
 
 struct iSndHostSample
 {
+    // The samples themselves, interleaved, or NULL when the caller could not
+    // find them. A backend that can play is expected to fall back to timing the
+    // voice out silently rather than refusing it: the game waits on sounds it
+    // cannot hear just as hard as on ones it can, and one missing asset must
+    // not stall a cutscene.
+    //
+    // The memory belongs to the caller and stays alive until the voice is
+    // stopped or released, which is what iSnd's sample cache guarantees. A
+    // backend must not free it, and must not read it after iSndHostStop.
+    const void* data;
+    U32 bytes;
+
+    // 1 or 2, and 8 or 16. Every asset the port has met is 16-bit mono, but the
+    // table says so per entry rather than by convention, so the backend is told
+    // rather than assuming.
+    U32 channels;
+    U32 bits;
+
     U32 sample_rate;
     U32 num_samples;
 

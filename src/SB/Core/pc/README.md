@@ -32,6 +32,23 @@ Everything below is off unless set, and each costs a load per frame when it is.
                         zNPCGoalVillager.cpp, and whether the talk goal was
                         pushed. Silent until the player presses R1.
 
+    BFBB_SND=<n>        the first n sounds that reach the mixer: asset id,
+                        rate, channels, sample count and whether the bytes were
+                        found. An inaudible sound has failed at one of four
+                        places -- not in the table, bytes did not read, mixed at
+                        zero, or no device -- and this separates the first two
+                        from the rest. Defaults to 32 if set to anything but a
+                        number.
+
+    BFBB_AUDIO=0        force the silent path in the win32 backend. Voices still
+                        keep time exactly as they do with a device, so this is
+                        the way to tell a bug in the mixer apart from a bug in
+                        the game logic that waits on it.
+
+    BFBB_SNDCACHE=<mb>  how much decoded audio to keep resident. Default 192.
+                        Sounds are read on first play and kept; the cache evicts
+                        least-recently-used entries that no voice is playing.
+
     BFBB_TEX            textures that did not convert, with the format that
                         defeated the conversion, and textures a material named
                         that the asset store does not have. A missing asset and
@@ -87,7 +104,7 @@ up on a D3D9 device. See LINKING.md.
 | `iTRC` | **done** | the three entry points game code uses; no disc, no error screen |
 | `iColor` | **done** | pure; copied from `gc` unchanged |
 | `isavegame` | **done** | a directory per target; saves written atomically |
-| `iSnd` | **done** | 22 entry points; null backend is silent but keeps time |
+| `iSnd` | **done** | 22 entry points, plus 3D volume and pan; `win32` backend is a software mixer on WASAPI, `null` is silent but keeps time |
 | `iModel` | **done** | not verbatim: RpAtomic has no interpolator on PC. Needed the RpHAnim group |
 | `iParMgr` | **done** | verbatim; the particle renderer, and `gRenderArr`/`gRenderBuffer` |
 | `iScrFX` | **done** | not verbatim: a `RwRasterLock` bracket a host must not honour. Its motion blur was cut from retail before ship |
@@ -127,14 +144,30 @@ and not the table. If you port something, edit the row.
   notice: the layer is only ever built for one host at a time, so a function
   added to one backend and forgotten in the other builds clean on that host and
   fails to link on the other.
-- **`iSndHost.h`** and **`iSndHostNull.cpp`** are the device end of audio, the
-  same arrangement as input. `null` plays nothing and still **keeps time**: it
-  knows each sample's length and reports the voice as playing for exactly that
-  long. That is not decoration. zTalkBox holds a line until its clip finishes,
-  cutscenes gate on `iSndIsPlayingByHandle`, and NPCs stagger barks by asking
-  whether the last one is done -- a backend that finished everything instantly
-  would desynchronise all of them, and it would look like the port getting the
-  game code wrong rather than the audio.
+- **`iSndHost.h`**, **`iSndHostWin32.cpp`** and **`iSndHostNull.cpp`** are the
+  device end of audio, the same arrangement as input. `win32` mixes all 64
+  voices in software and feeds one WASAPI stream; no host API offers 64
+  independent voices with their own rates, and the ones that offer voices at all
+  bring a submix graph and a threading model with them. Mixing here makes the
+  resampling exact and asks the operating system for nothing but somewhere to
+  put the result.
+
+  Both backends **keep time**, and that is not decoration. zTalkBox holds a line
+  until its clip finishes, cutscenes gate on `iSndIsPlayingByHandle`, and NPCs
+  stagger barks by asking whether the last one is done -- a backend that
+  finished everything instantly would desynchronise all of them, and it would
+  look like the port getting the game code wrong rather than the audio. So
+  `null` reports a voice as playing for exactly its sample length, and `win32`
+  does the same on the wall clock when no device opens. **Failing to find an
+  output device is a configuration, not an error.**
+- **`iSndData.cpp`** is where the samples come from, and the answer is not the
+  asset system. A scene's sound assets are all in one layer, `PKR_LTYPE_SRAM`,
+  which the packer maps to `PKR_LDDEST_SKIP` -- on the GameCube that layer goes
+  to ARAM, which the CPU cannot address, so it is never loaded into main memory
+  and `xSTFindAsset` on a `SND ` returns NULL and always will. The bytes are
+  found the way `src/SB/Core/gc/iSnd.cpp` finds them, through the table of
+  contents, and read on first play into a capped LRU cache. Xbox ADPCM is
+  decoded on the way in, so the mixer only ever sees 16-bit PCM.
 - **`iPadHost.h`** and **`iPadHostNull.cpp`** are the device end of input. The
   GameCube has one controller API that is always there; a host has several and
   none is guaranteed at build time, so the part that touches hardware is behind

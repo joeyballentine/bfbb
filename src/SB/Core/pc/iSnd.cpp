@@ -1,9 +1,13 @@
 #include "iSnd.h"
+#include "iSndData.h"
 #include "iSndHost.h"
 
 #include "xSnd.h"
+#include "xMath.h"
 
+#include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 // The host side of the sound interface.
@@ -143,12 +147,26 @@ struct pcvoice
     U32 aid;
     bool in_use;
     bool paused;
+
+    // Whether this slot is holding a reference on the sample cache. Tracked
+    // rather than inferred from `aid`, because a voice can hold a slot for an
+    // asset whose data could not be read, and releasing a reference that was
+    // never taken would unpin somebody else's sample.
+    bool holds_data;
 };
 
 static pcvoice sVoices[ISND_TOTAL_VOICES];
+
+// How many more plays BFBB_SND has left to report. See iStartVoice.
+static S32 sReportPlays;
+
 static iSndExternalCallback sExternalCallback;
 static bool sStereo = true;
 static bool sSuspended;
+
+// Defined further down with the rest of the mix, but called from the update
+// sweep above it.
+static void iApplyVoiceMix(S32 i);
 
 static void iReleaseVoice(S32 i)
 {
@@ -159,8 +177,17 @@ static void iReleaseVoice(S32 i)
 
     if (sVoices[i].host >= 0)
     {
+        // Stop before releasing the samples, in that order. iSndHostStop drops
+        // the backend's pointer to them under its own lock, so once it returns
+        // the mixer cannot reach the memory the next line unpins.
         iSndHostStop(sVoices[i].host);
         iSndHostRelease(sVoices[i].host);
+    }
+
+    if (sVoices[i].holds_data)
+    {
+        iSndDataRelease(sVoices[i].aid);
+        sVoices[i].holds_data = false;
     }
 
     sVoices[i].host = -1;
@@ -177,6 +204,7 @@ void iSndInit()
         sVoices[i].aid = 0;
         sVoices[i].in_use = false;
         sVoices[i].paused = false;
+        sVoices[i].holds_data = false;
     }
 
     for (S32 i = 0; i < ISND_MAX_TABLES; i++)
@@ -191,7 +219,24 @@ void iSndInit()
 
     memset(&snd, 0, sizeof(snd));
 
+    iSndDataReset();
     iSndHostInit();
+
+    sReportPlays = 0;
+    {
+        const char* env = getenv("BFBB_SND");
+        if (env != NULL)
+        {
+            sReportPlays = atoi(env);
+            if (sReportPlays <= 0)
+            {
+                sReportPlays = 32;
+            }
+        }
+    }
+
+    printf("iSnd: audio backend is %s\n", iSndHostName());
+    fflush(stdout);
 }
 
 void iSndExit()
@@ -202,6 +247,7 @@ void iSndExit()
     }
 
     iSndHostExit();
+    iSndDataReset();
     sinfo_array_max = 0;
 }
 
@@ -289,6 +335,30 @@ bool iSndIsPlayingByHandle(U32 handle)
 // xSnd.cpp, num_samples by iStartVoice to time the voice out. The rest are
 // zeroed rather than invented -- there are no DSP coefficients on this platform
 // and nothing reads them.
+// How many sample frames an entry's asset holds.
+//
+// For PCM that is bytes over the frame size, which is what block_align means
+// there. For ADPCM block_align is the size of a compressed BLOCK instead, each
+// holding one predictor sample and two more per payload byte -- so the same
+// division gives a block count, about 65 times too small. Nothing in the game
+// reads this, but the play path uses it to time a voice whose samples could not
+// be read, and being 65 times short would cut the menu music off instantly.
+static U32 entry_frames(const xbox_sndhdr& e)
+{
+    if (e.block_align == 0)
+    {
+        return 0;
+    }
+
+    if (e.format_tag == 0x69 && e.block_align >= 5)
+    {
+        U32 blocks = e.data_size / e.block_align;
+        return blocks * ((e.block_align - 4) * 2 + 1);
+    }
+
+    return e.data_size / e.block_align;
+}
+
 static void fill_lookup(const xbox_sndhdr& e)
 {
     memset(&snd.hdr, 0, sizeof(snd.hdr));
@@ -296,11 +366,43 @@ static void fill_lookup(const xbox_sndhdr& e)
     snd.hdr.sample_rate = e.samples_per_sec;
     snd.hdr.format = e.format_tag;
     snd.hdr.assetID = e.assetID;
+    snd.hdr.num_samples = entry_frames(e);
+}
 
-    // block_align is bytes per sample frame, so this is the frame count the
-    // backend needs to time the voice. A malformed entry would divide by zero;
-    // report no samples instead, which plays as a voice that ends immediately.
-    snd.hdr.num_samples = e.block_align != 0 ? e.data_size / e.block_align : 0;
+// The table entry for one asset, without the side effects of iSndLookup.
+//
+// iSndLookup hands out a fresh internal id on every call and rewrites the
+// static it returns, so the play path cannot use it to answer "what shape is
+// this sound?" -- it would burn an id and disturb the record the caller is
+// still holding. This walks the same tables and reads nothing but the entry,
+// so iStartVoice can ask about the voice it is starting rather than trusting
+// that a lookup happened immediately before.
+static const xbox_sndhdr* find_entry(U32 assetID)
+{
+    if (assetID == 0)
+    {
+        return NULL;
+    }
+
+    for (S32 i = sinfo_array_max - 1; i >= 0; i--)
+    {
+        sndinfo* info = sinfo_array[i];
+        if (info == NULL)
+        {
+            continue;
+        }
+
+        U32 n = info->num_sfx + info->num_streams + info->num_cutscene;
+        for (U32 j = 0; j < n; j++)
+        {
+            if (info->entry[j].assetID == assetID)
+            {
+                return &info->entry[j];
+            }
+        }
+    }
+
+    return NULL;
 }
 
 iSndFileInfo* iSndLookup(U32 id)
@@ -433,6 +535,20 @@ void iSndUpdate()
 {
     iSndHostUpdate();
 
+    // Retail's iSndVolUpdate: follow each live emitter and recompute its mix.
+    // This has to run before the retirement sweep below, so that a voice which
+    // ends this frame is not re-mixed after being released.
+    for (S32 i = 0; i < ISND_TOTAL_VOICES; i++)
+    {
+        if (!sVoices[i].in_use)
+        {
+            continue;
+        }
+
+        xSndInternalUpdateVoicePos(&gSnd.voice[i]);
+        iApplyVoiceMix(i);
+    }
+
     // Retire voices the device has finished, so the game's table does not hold
     // handles for sounds that have stopped. Retail does this from its AX
     // callback; here the frame is the only clock there is.
@@ -494,6 +610,12 @@ S32 iSndFindFreeVoice(U32 priority, U32 flags, U32 owner)
                 return -1;
             }
 
+            if (sVoices[i].holds_data)
+            {
+                iSndDataRelease(sVoices[i].aid);
+                sVoices[i].holds_data = false;
+            }
+
             sVoices[i].host = host;
             sVoices[i].in_use = true;
             sVoices[i].paused = false;
@@ -513,6 +635,12 @@ S32 iSndFindFreeVoice(U32 priority, U32 flags, U32 owner)
         if (host < 0)
         {
             return -1;
+        }
+
+        if (sVoices[i].holds_data)
+        {
+            iSndDataRelease(sVoices[i].aid);
+            sVoices[i].holds_data = false;
         }
 
         sVoices[i].host = host;
@@ -535,6 +663,103 @@ S32 iSndFindFreeVoice(U32 priority, U32 flags, U32 owner)
 // converge here. They stay four entry points because iSndPlay dispatches on
 // them and iSnd.h declares them.
 
+// ---------------------------------------------------------------------------
+// The mix
+//
+// This is iSndCalcVol and iSndCalcVol3d from src/SB/Core/gc/iSnd.cpp, which
+// the port had been missing entirely. The GameCube runs both from
+// iSndVolUpdate once a frame per voice, so distance attenuation and panning are
+// not properties of a sound -- they are recomputed as the emitter and the
+// listener move. Without them every sound in the level plays at full volume in
+// both ears, which was invisible only because the null backend threw the
+// volume away.
+//
+// The one thing that cannot be reproduced is retail's units. AX takes a
+// logarithmic fader and a 0..127 pan index and MIX interpolates between them;
+// the seam here takes a linear gain per side, because that is what a host
+// mixer wants and converting to decibels and back would only lose precision.
+// So the curve is the same and the last step differs: an equal-power pan, which
+// keeps a sound's loudness constant as it crosses in front of the listener.
+
+static void iApplyVoiceMix(S32 i)
+{
+    if (i < 0 || i >= ISND_TOTAL_VOICES || !sVoices[i].in_use)
+    {
+        return;
+    }
+
+    xSndVoiceInfo* vp = &gSnd.voice[i];
+
+    F32 vol = vp->vol * gSnd.categoryVolFader[vp->category];
+
+    // Retail's pan index, 0 hard left through 0x40 centre to 0x7f hard right.
+    // A voice with no position stays centred, which is what iSndCalcVol does.
+    F32 pan01 = 0.5f;
+
+    if (vp->flags & 0x8)
+    {
+        xVec3 to;
+        xVec3Sub(&to, &vp->playPos, &gSnd.pos);
+        F32 dist2 = xVec3Length2(&to);
+
+        F32 scale;
+        if (dist2 > vp->outerRadius2)
+        {
+            scale = 0.0f;
+        }
+        else if (dist2 <= vp->innerRadius2)
+        {
+            scale = 1.0f;
+        }
+        else
+        {
+            F32 fadeRange = vp->outerRadius2 - vp->innerRadius2;
+            scale = sqrtf((fadeRange - (dist2 - vp->innerRadius2)) / fadeRange);
+        }
+
+        vol *= scale;
+
+        // Retail normalises unconditionally. A listener standing exactly on an
+        // emitter would divide by zero there; on AX that produced a harmless
+        // garbage pan index, but here it would put a NaN into the mix and the
+        // whole output with it, so the degenerate case is centred instead.
+        if (dist2 > 1e-8f)
+        {
+            xVec3Normalize(&to, &to);
+            F32 pan = xVec3Dot(&to, &gSnd.right);
+
+            S32 ipan = (S32)(64.0f * pan) + 0x40;
+            if (ipan < 0)
+            {
+                ipan = 0;
+            }
+            else if (ipan > 0x7f)
+            {
+                ipan = 0x7f;
+            }
+
+            pan01 = (F32)ipan / 127.0f;
+        }
+    }
+
+    if (vol < 0.0f)
+    {
+        vol = 0.0f;
+    }
+    else if (vol > 1.0f)
+    {
+        vol = 1.0f;
+    }
+
+    if (!sStereo)
+    {
+        pan01 = 0.5f;
+    }
+
+    F32 theta = pan01 * 1.5707963f;
+    iSndHostSetVol(sVoices[i].host, cosf(theta) * vol, sinf(theta) * vol);
+}
+
 static S32 iStartVoice(xSndVoiceInfo* vp)
 {
     S32 i = (S32)(vp - gSnd.voice);
@@ -543,23 +768,95 @@ static S32 iStartVoice(xSndVoiceInfo* vp)
         return 0;
     }
 
+    // Whatever this slot was holding, it is not holding it any more.
+    if (sVoices[i].holds_data)
+    {
+        iSndDataRelease(sVoices[i].aid);
+        sVoices[i].holds_data = false;
+    }
+
     sVoices[i].aid = vp->assetID;
 
-    // snd still holds the entry the caller looked up on its way here: xSnd
-    // calls iSndLookup and then iSndPlay without another lookup in between.
-    // That is retail's arrangement too, and it is why iSndLookup can hand back
-    // a pointer to one static.
+    const xbox_sndhdr* e = find_entry(vp->assetID);
+
     iSndHostSample sample;
-    sample.sample_rate = vp->sample_rate != 0 ? vp->sample_rate : snd.hdr.sample_rate;
-    sample.num_samples = snd.hdr.num_samples;
-    sample.looping = (snd.hdr.loop_flag != 0);
-    sample.loop_start = snd.hdr.loop_start;
+    memset(&sample, 0, sizeof(sample));
+
+    // The samples themselves, pinned for as long as this voice plays them. A
+    // sound whose asset will not read still starts, with no data: it is
+    // inaudible and finishes when it would have, which is what everything in
+    // the game that waits on a sound needs it to do.
+    iSndDataFormat fmt;
+    fmt.format_tag = e != NULL ? e->format_tag : 1;
+    fmt.channels = (e != NULL && e->channels != 0) ? e->channels : 1;
+    fmt.block_align = e != NULL ? e->block_align : 2;
+
+    U32 bytes = 0;
+    sample.data = iSndDataAcquire(vp->assetID, &fmt, &bytes);
+    sample.bytes = bytes;
+    sVoices[i].holds_data = (sample.data != NULL);
+
+    sample.channels = fmt.channels;
+
+    // Always 16, whatever the table says: iSndDataAcquire decodes on the way
+    // in, so a 4-bit ADPCM asset reaches the backend as PCM. Passing the
+    // table's own bits_per_sample here is what a reader expects to see and is
+    // exactly wrong -- it would make the mixer read 16-bit samples as bytes.
+    sample.bits = 16;
+
+    // vp->sample_rate is the rate xSnd read out of the same table on its way
+    // here, so the two agree; it is preferred only because a caller is free to
+    // have changed it.
+    sample.sample_rate = vp->sample_rate != 0
+                             ? vp->sample_rate
+                             : (e != NULL ? e->samples_per_sec : snd.hdr.sample_rate);
+
+    // The Xbox table carries no loop points -- its entries are a WAVEFORMATEX
+    // and a size, and nothing else. The GameCube reads loop_flag out of the
+    // DSPADPCM header OR takes the caller's 0x8000 (src/SB/Core/gc/iSnd.cpp:
+    // 1304); with no header to read, only the flag is left. zMusic sets it from
+    // a track's `loop` and xSFX sets it for a looping emitter, which is every
+    // looping sound the game has, so nothing is lost -- and a loop restarts at
+    // the beginning, because there is no other point to restart at.
+    sample.looping = (vp->flags & 0x8000) != 0;
+    sample.loop_start = 0;
+
+    U32 frame_bytes = sample.channels * (sample.bits / 8);
+    sample.num_samples = frame_bytes != 0 ? bytes / frame_bytes : 0;
+
+    if (sample.num_samples == 0)
+    {
+        // Nothing was read. Fall back to the length the table implies so the
+        // voice still times out correctly rather than ending instantly.
+        sample.num_samples = e != NULL ? entry_frames(*e) : snd.hdr.num_samples;
+    }
+
+    // BFBB_SND reports what actually reaches the mixer. A sound that is
+    // inaudible has failed at one of four places -- the asset was not in the
+    // table, its bytes did not read, the mix came out at zero, or the device is
+    // not running -- and only the first two are visible from anywhere else.
+    if (sReportPlays > 0)
+    {
+        sReportPlays--;
+        printf("iSnd: play %08x  %u Hz  %u ch  %u-bit  %u frames  %u bytes%s%s\n", vp->assetID,
+               sample.sample_rate, sample.channels, sample.bits, sample.num_samples, bytes,
+               sample.looping ? "  looping" : "", sample.data != NULL ? "" : "  NO DATA");
+        if (sReportPlays == 0)
+        {
+            printf("iSnd:   (that is the last one BFBB_SND will report)\n");
+        }
+        fflush(stdout);
+    }
 
     // Pitch multiplies the sample's own rate and the backend applies it to the
-    // duration, so it has to be set before the voice starts.
+    // step, so it has to be set before the voice starts.
     iSndHostSetPitch(sVoices[i].host, vp->pitch > 0.0f ? vp->pitch : 1.0f);
+
+    // And the mix before it too: iSndHostStart takes the current gain as the
+    // voice's starting gain rather than ramping up to it, so a voice started
+    // before its volume is known would begin at silence and fade in.
+    iApplyVoiceMix(i);
     iSndHostStart(sVoices[i].host, &sample);
-    iSndSetVol(vp->sndID, vp->vol);
 
     return vp->sndID;
 }
@@ -636,20 +933,10 @@ void iSndSetVol(U32 handle, F32 vol)
 
         gSnd.voice[i].vol = vol;
 
-        F32 scaled = vol * gSnd.categoryVolFader[gSnd.voice[i].category];
-        if (scaled < 0.0f)
-        {
-            scaled = 0.0f;
-        }
-        else if (scaled > 1.0f)
-        {
-            scaled = 1.0f;
-        }
-
-        // Retail converts to AX's log scale here (iVolFromX, 43.43 * log). The
-        // seam takes linear because that is what host audio libraries want, and
-        // converting to decibels and back would only lose precision.
-        iSndHostSetVol(sVoices[i].host, scaled, scaled);
+        // Through iApplyVoiceMix rather than straight to the backend, so that
+        // setting a volume does not throw away the pan and the distance
+        // attenuation the last frame computed.
+        iApplyVoiceMix(i);
         return;
     }
 }
