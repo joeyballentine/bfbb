@@ -107,16 +107,19 @@ RpAtomic* RpSkinAtomicSetType(RpAtomic* atomic, RpSkinType type)
         return NULL;
     }
 
-    // The one place this group loses something. RenderWare picks between three
-    // skinning pipelines -- generic, matfx and toon -- and librw has exactly
-    // one per platform: Skin::setPipeline takes the type and casts it to void.
-    // So the two calls in the game that ask for rpSKINTYPEMATFX (xFX.cpp and
-    // zEntCruiseBubble.cpp, both wanting an environment-mapped skinned model)
-    // get the plain skinning pipeline, and the material effect will be missing
-    // from skinned models until librw's skin pipelines learn about matfx.
+    // RenderWare picks between three skinning pipelines -- generic, matfx and
+    // toon -- and librw used to have exactly one per platform, with
+    // Skin::setPipeline casting the type to void. It honours the type now: the
+    // three calls that ask for rpSKINTYPEMATFX (xFX.cpp, zEntCruiseBubble.cpp
+    // and iModel.cpp, all wanting an environment-mapped skinned model) reach a
+    // D3D9 pipeline that skins the vertices AND draws the effect, added on the
+    // fork's bfbb-port branch as src/d3d/d3d9skinmatfx.cpp.
     //
-    // The type is still passed through rather than dropped here, so that the
-    // day librw honours it this needs no change.
+    // Two things are still RenderWare's and not ours. rpSKINTYPETOON has no
+    // pipeline, because nothing in this game asks for one -- these three calls
+    // are the whole list. And a backend that registers no combined pipeline
+    // (LIBRW_PLATFORM=NULL, and GL3 until someone writes its shaders) falls
+    // back to plain skinning, which loses the effect but never the skinning.
     rw::Skin::setPipeline(reinterpret_cast<rw::Atomic*>(atomic), (rw::int32)type);
     return atomic;
 }

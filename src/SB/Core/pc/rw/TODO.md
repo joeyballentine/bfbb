@@ -359,11 +359,36 @@ Not covered: the billboards are built from `rw::engine->currentCamera`, so a
 ptank drawn outside a `BeginUpdate`/`EndUpdate` pair keeps the previous frame's
 vertices rather than getting new ones. Nothing in the game does that today.
 
-**Skinned models get the plain skin pipeline.** `RpSkinAtomicSetType` passes the
-type through, but librw's `Skin::setPipeline` casts it to void and installs the
-one skin pipeline it has per platform. The two calls asking for
-`rpSKINTYPEMATFX` -- xFX.cpp and zEntCruiseBubble.cpp, both wanting an
-environment-mapped skinned model -- will render without the effect.
+**Skinned models get a skin+matfx pipeline.** *(was: the plain skin pipeline,
+with the effect dropped)* `Skin::setPipeline` used to cast the type to void and
+install the one skin pipeline librw had per platform, so the three calls asking
+for `rpSKINTYPEMATFX` -- xFX.cpp, zEntCruiseBubble.cpp and iModel.cpp, all
+wanting an environment-mapped skinned model -- rendered without the effect. That
+was why SpongeBob's bubble came out flat blue: `xFXBubbleRender` draws it in
+three passes and the two that carry the iridescence are both env-map passes on a
+skinned atomic.
+
+librw's fork now keeps a second pipeline per platform in
+`skinGlobals.matfxPipelines[]`, and D3D9 registers one:
+`src/d3d/d3d9skinmatfx.cpp`, built from `skin_matfx_env_VS.hlsl`, which skins
+the vertex and generates the env-map coordinate off the SKINNED normal. It is
+assembled out of the two pipelines it replaces rather than rewritten -- skin
+instancing, matfx's env state and pixel shaders, and the plain skinning vertex
+shaders as the per-mesh fallback -- so the only new code is the one shader that
+has to do both jobs at once. `MatFX::enableEffects` picks it too, because
+`AtomicDisableMatFX` calls that on a skinned bubble every frame without
+re-asserting the skin type, and librw caches instanced vertex data on the
+geometry: an atomic that renders once through the unskinned matfx pipeline gets
+a vertex buffer with no bones in it, and every later pass reads bones that are
+not there.
+
+Still missing: `rpSKINTYPETOON`, which nothing in this game asks for -- those
+three calls are the whole list -- and a combined pipeline for any backend other
+than D3D9, which falls back to plain skinning and loses the effect but never
+the skinning. `test_skin` and `test_skin_matfx` in `tests/selftest.cpp` check
+the selection for all three types on both backends, and under D3D9 draw a
+skinned env-mapped quad and read the coefficient and the texture matrix back
+out of the device. What no test here can check is what the pixels look like.
 
 **RpAtomic has lost four of RenderWare's fields**, because librw's atomic is 84
 bytes to RenderWare's 112 and there is nowhere to put them that is not inside
@@ -381,11 +406,14 @@ collision BSP tree the model was built with; there is no tree here, and
 of tree order, O(triangles) instead of O(log triangles). iCollide.cpp's
 `collide_rwtime` is where that will show.
 
-Not tested, and said plainly: nothing in this group reaches a render backend
-EXCEPT the pipelines that `RpSkinAtomicSetType` and `RpMatFXAtomicEnableEffects`
-install, which are librw's dummy pipelines under `LIBRW_PLATFORM=NULL`. The
-selftest checks that the atomic ends up pointing at them, not that they draw
-anything -- they cannot.
+Said plainly: almost nothing in this group reaches a render backend, and under
+`LIBRW_PLATFORM=NULL` the pipelines `RpSkinAtomicSetType` and
+`RpMatFXAtomicEnableEffects` install are librw's dummy ones, so there the
+selftest can only check that the atomic ends up pointing at them. Under D3D9 it
+now goes further for the skin+matfx pipeline alone and puts a draw through it
+against the real device -- see `test_skin_matfx` -- which is as far as an
+automated check gets. It says the right shader was bound and the right constants
+reached it. It does not say the frame looks right; only a playtest does.
 
 The world, as far as librw has one. `RpWorld` is mirrored onto `rw::World`,
 with its offsets asserted in `layout_world.cpp` -- but it is the one type in the
