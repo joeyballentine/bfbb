@@ -16,6 +16,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <time.h>
+
+// Set from the environment once, so the check costs a load per frame.
+static const bool sReportFps = getenv("BFBB_FPS") != NULL;
+
 static inline rw::Camera* asCamera(RwCamera* camera)
 {
     return reinterpret_cast<rw::Camera*>(camera);
@@ -296,6 +301,65 @@ RwCamera* RwCameraShowRaster(RwCamera* camera, void* pDev, RwUInt32 flags)
     // the frame is 7 ms, which is three orders of magnitude clear of that
     // threshold, so the game runs fast and correct rather than fast and wrong.
     asCamera(camera)->showRaster(flags | rwRASTERFLIPWAITVSYNC);
+
+    // **And cap the rate, because waiting on the display is not the same as
+    // running at the console's speed.**
+    //
+    // Waiting stopped the game running at thousands of frames a second, but it
+    // paces to the MONITOR, and a 240 Hz monitor gives 240 frames a second --
+    // four times what a GameCube title was built for. That is not free even
+    // with a correct dt: every part of this game that counts frames rather
+    // than seconds runs four times too fast, and the parts that do use dt
+    // accumulate four times as much floating-point error per second.
+    //
+    // So the frame is also paced to 60 Hz, which is what the console's video
+    // interface gave it. iVSync does exactly this for the loops that have no
+    // renderer -- see iSystem.cpp -- and this is the same deadline arithmetic
+    // for the loop that does: advance a deadline by one period and sleep to
+    // it, dropping missed deadlines rather than trying to catch up, so one
+    // slow frame does not become a burst of fast ones.
+    //
+    // Vsync is kept as well as the cap rather than instead of it. The cap sets
+    // the rate; waiting on the display is what stops a frame being torn in
+    // half, and on a 60 Hz monitor the two agree anyway.
+    iWindowPaceFrame();
+
+    // BFBB_FPS: how fast the port is ACTUALLY presenting.
+    //
+    // The frame rate is not cosmetic here. zGame.cpp:559 substitutes a
+    // sixtieth of a second for any frame it measures at under ten
+    // microseconds, so a game running far above the display's rate does not
+    // merely look smooth, it runs its simulation too fast. When something
+    // moves at the wrong speed this is the number that says whether the frame
+    // rate or the thing itself is wrong, and it is the only way to tell
+    // whether waiting on the display took effect at all.
+    if (sReportFps)
+    {
+        // clock() rather than iHost or std::chrono: bfbb_rw links neither the
+        // platform layer nor the C++ standard library, and over a one-second
+        // window millisecond resolution is three digits more than this needs.
+        static clock_t windowStart = 0;
+        static U32 frames = 0;
+
+        clock_t now = clock();
+        if (windowStart == 0)
+        {
+            windowStart = now;
+        }
+
+        frames++;
+
+        double seconds = (double)(now - windowStart) / (double)CLOCKS_PER_SEC;
+        if (seconds >= 1.0)
+        {
+            printf("bfbb: %.1f fps (%.2f ms/frame, %u presents in %.2f s)\n",
+                   frames / seconds, (seconds * 1000.0) / frames, frames, seconds);
+            fflush(stdout);
+            windowStart = now;
+            frames = 0;
+        }
+    }
+
     return camera;
 }
 

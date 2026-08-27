@@ -40,6 +40,19 @@ void iWindowClose();
 // which looks exactly like the game hanging.
 void iWindowPump();
 
+// Paces the frame to the rate the game was built for, and returns having slept
+// out whatever was left of it. Called once a frame, next to the pump.
+//
+// This belongs to the window rather than to the renderer because the window is
+// what owns the display. Waiting on vertical retrace is not enough on its own:
+// it paces to the MONITOR, and a 240 Hz monitor gives four times the frames a
+// GameCube title was built for. Every part of the game that counts frames
+// rather than seconds then runs four times too fast, and retail's own guard at
+// zGame.cpp:559 -- which substitutes 1/60 s for any frame it measures under ten
+// microseconds -- is a reminder that its timing was written against a console
+// that could not produce one.
+void iWindowPaceFrame();
+
 // TRUE once the user has asked to close the window.
 //
 // Read at the frame boundary, in RwCameraShowRaster, alongside iWindowPump --

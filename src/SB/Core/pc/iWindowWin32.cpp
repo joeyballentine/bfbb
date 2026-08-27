@@ -145,6 +145,73 @@ void iWindowPump()
     }
 }
 
+// 60 Hz, which is what the GameCube's video interface gave the game.
+#define IWINDOW_FRAME_PERIOD_NS (1000000000ULL / 60)
+
+void iWindowPaceFrame()
+{
+    static LARGE_INTEGER frequency = { 0 };
+    static bool started = false;
+    static ULONGLONG nextFrame = 0;
+
+    if (frequency.QuadPart == 0 && !QueryPerformanceFrequency(&frequency))
+    {
+        return;
+    }
+
+    LARGE_INTEGER counter;
+    if (!QueryPerformanceCounter(&counter))
+    {
+        return;
+    }
+
+    ULONGLONG now =
+        (ULONGLONG)((double)counter.QuadPart * 1e9 / (double)frequency.QuadPart);
+
+    if (!started)
+    {
+        nextFrame = now;
+        started = true;
+    }
+
+    nextFrame += IWINDOW_FRAME_PERIOD_NS;
+
+    // A frame that overran its budget must not be paid for by not sleeping for
+    // the next several -- that turns one slow frame into a burst of fast ones.
+    // Drop the missed deadlines and pace from now instead. Same arrangement as
+    // iVSync in iSystem.cpp, which does this for the loops that have no
+    // renderer to present from.
+    if (nextFrame <= now)
+    {
+        nextFrame = now;
+        return;
+    }
+
+    ULONGLONG remaining = nextFrame - now;
+
+    // Sleep for all but the last millisecond, then spin. Sleep's resolution is
+    // the scheduler's tick and it routinely overshoots by more than a frame at
+    // this rate, which would cost a frame every time rather than pace one.
+    if (remaining > 1500000ULL)
+    {
+        Sleep((DWORD)((remaining - 1000000ULL) / 1000000ULL));
+    }
+
+    for (;;)
+    {
+        if (!QueryPerformanceCounter(&counter))
+        {
+            return;
+        }
+
+        now = (ULONGLONG)((double)counter.QuadPart * 1e9 / (double)frequency.QuadPart);
+        if (now >= nextFrame)
+        {
+            return;
+        }
+    }
+}
+
 S32 iWindowShouldClose()
 {
     return sShouldClose;
