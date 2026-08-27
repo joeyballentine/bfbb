@@ -2794,7 +2794,13 @@ S32 zNPCGoalAlertGlove::CollReview(void*)
 
         xVec3AddTo(&vec_depen, &colrec->depen);
         hitstuff++;
+#ifdef PLATFORM_PC
+        // optr is an xEnt*, and only CodeWarrior's layout lets that be an NPC
+        // pointer unchanged. See xCollisNPC in xEnt.h.
+        zNPCCommon* tgt = xCollisNPC<zNPCCommon>(colrec->optr);
+#else
         zNPCCommon* tgt = (zNPCCommon*)colrec->optr;
+#endif
 
         xVec3Normalize(&pump, &colrec->tohit);
         xVec3SMulBy(&pump, spd);
@@ -6302,7 +6308,13 @@ S32 zNPCGoalLassoThrow::CollReview(void*)
         colrec = &npccol->colls[i];
 
         xVec3AddTo(&vec_depen, &colrec->depen);
+#ifdef PLATFORM_PC
+        // optr is an xEnt*, and only CodeWarrior's layout lets that be an NPC
+        // pointer unchanged. See xCollisNPC in xEnt.h.
+        zNPCCommon* tgt = xCollisNPC<zNPCCommon>(colrec->optr);
+#else
         zNPCCommon* tgt = (zNPCCommon*)colrec->optr;
+#endif
         hitstuff++;
 
         if (tgt != NULL)
@@ -6670,7 +6682,13 @@ S32 zNPCGoalWound::CollReview(void*)
 
         xVec3AddTo(&vec_depen, &colrec->depen);
         hitstuff++;
+#ifdef PLATFORM_PC
+        // optr is an xEnt*, and only CodeWarrior's layout lets that be an NPC
+        // pointer unchanged. See xCollisNPC in xEnt.h.
+        zNPCCommon* tgt = xCollisNPC<zNPCCommon>(colrec->optr);
+#else
         zNPCCommon* tgt = (zNPCCommon*)colrec->optr;
+#endif
 
         xVec3Normalize(&pump, &colrec->tohit);
         xVec3SMulBy(&pump, spd);
@@ -6914,7 +6932,13 @@ S32 zNPCGoalKnock::CollReview(void*)
         colrec = &npccol->colls[i];
 
         xVec3AddTo(&vec_depen, &colrec->depen);
+#ifdef PLATFORM_PC
+        // optr is an xEnt*, and only CodeWarrior's layout lets that be an NPC
+        // pointer unchanged. See xCollisNPC in xEnt.h.
+        zNPCCommon* tgt = xCollisNPC<zNPCCommon>(colrec->optr);
+#else
         zNPCCommon* tgt = (zNPCCommon*)colrec->optr;
+#endif
         hitstuff++;
 
         if (tgt != NULL)

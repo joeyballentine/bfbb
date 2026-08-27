@@ -236,6 +236,40 @@ void xEntEnable(xEnt* ent);
 xVec3* xEntGetCenter(const xEnt* ent);
 xVec3* xEntGetPos(const xEnt* ent);
 U32 xEntIsVisible(const xEnt* ent);
+
+#ifdef PLATFORM_PC
+// Turning an xCollis::optr back into an NPC.
+//
+// The collision system stores `optr` as an xEnt* -- xScene.cpp:554 and
+// xEnt.cpp:1598 both write `coll->optr = ent` from an xEnt* -- and the field is
+// a void*, so every bit of type information is gone by the time a reader picks
+// it up. Retail's readers cast that void* straight to zNPCCommon*, and on the
+// console that is exactly right: xBase declares no virtual functions, so
+// CodeWarrior puts the vptr at the first virtual's DECLARATION, well past the
+// base data, and an xEnt sub-object therefore sits at offset zero of the NPC.
+// xEnt* and zNPCCommon* are the same address and the cast is free.
+//
+// They are not the same address here. The MSVC ABI puts the vptr at offset
+// zero, and xNPCBasic derives from xEnt AND xFactoryInst, so the xEnt
+// sub-object is pushed past both. A void* carries no adjustment, so
+// `(zNPCCommon*)optr` lands four bytes into the object and every read after it
+// is displaced: the virtual call reads xBase::id as a vtable pointer, and
+// `->id` reads baseType/linkCount/baseFlags as a word.
+//
+// Measured, before the fix: the bubble bowl hitting a tiki reported
+// `SelfType()` as 'Bo\x0e\xd9' and `id` as 0x003d002b, which is exactly
+// baseType 0x2b, linkCount 0, baseFlags 0x3d read one word high -- and 0x2b is
+// 43, eBaseTypeNPC. The object was right and the pointer was not.
+//
+// Going through xEnt* is what makes the compiler apply the adjustment, and it
+// is a static downcast along a non-virtual base, so it costs nothing at run
+// time. Same hazard and same shape of fix as zNPCMgr_OrdComp_npcid.
+template <class T>
+inline T* xCollisNPC(void* optr)
+{
+    return static_cast<T*>(reinterpret_cast<xEnt*>(optr));
+}
+#endif
 void xEntHide(xEnt* ent);
 void xEntShow(xEnt* ent);
 void xEntInitShadow(xEnt& ent, xEntShadow& shadow);

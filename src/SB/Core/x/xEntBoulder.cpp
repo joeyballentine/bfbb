@@ -506,7 +506,13 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
         // NPC
         for (iter_npc = ent->collis->npc_sidx; iter_npc < ent->collis->npc_eidx; iter_npc++)
         {
+#ifdef PLATFORM_PC
+            // optr is an xEnt*, and only CodeWarrior's layout lets that be an NPC
+            // pointer unchanged. See xCollisNPC in xEnt.h.
+            zNPCCommon* npc = xCollisNPC<zNPCCommon>(ent->collis->colls[iter_npc].optr);
+#else
             zNPCCommon* npc = (zNPCCommon*)(ent->collis->colls[iter_npc].optr);
+#endif
 
 #ifdef PLATFORM_PC
             // BFBB_BOWL: why the bubble bowl did or did not break what it hit.
@@ -528,9 +534,16 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
                 tag[3] = (char)sel;
                 tag[4] = 0;
 
-                printf("bfbb: bowl hit npc %08x type '%s' | basset->flags %08x (bit3 %s) "
-                       "flg_vuln %d\n",
-                       (unsigned)npc->id, tag, (unsigned)ent->basset->flags,
+                // oid is what the collision system recorded for this hit and
+                // npc->id is read back through the pointer it handed over, so
+                // the two disagreeing means the pointer is not the object the
+                // collision was against. baseType says whether it is an entity
+                // of the kind this loop assumes at all -- eBaseTypeNPC is 45.
+                printf("bfbb: bowl hit | oid %08x ptr %p baseType %d id %08x type '%s' | "
+                       "basset->flags %08x (bit3 %s) flg_vuln %d\n",
+                       (unsigned)ent->collis->colls[iter_npc].oid,
+                       ent->collis->colls[iter_npc].optr, (int)npc->baseType, (unsigned)npc->id,
+                       tag, (unsigned)ent->basset->flags,
                        (ent->basset->flags & 8) ? "SET, event fires" : "CLEAR, no event",
                        (int)npc->flg_vuln);
                 fflush(stdout);
