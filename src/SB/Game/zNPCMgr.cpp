@@ -687,10 +687,36 @@ en_NPCTYPES zNPCMgr::NPCTypeForModel(U32 brainID, U32 mdl_hash)
     return usetype;
 }
 
+// **An NPC's id is not at the front of the object on a host.**
+//
+// Both of these read it positionally, off the first four bytes of whatever the
+// list holds, and on the console that is exactly right: xBase declares id
+// first, and CodeWarrior puts a class's vptr where its first virtual function
+// is DECLARED rather than at offset zero, so an NPC still begins with its
+// xBase. A host compiler has no such rule -- zNPCCommon is the first class in
+// the chain to declare a virtual, so the vptr goes at offset zero and pushes
+// xBase back.
+//
+// Read positionally on a host, every NPC therefore compares as its VTABLE
+// ADDRESS. Every villager shares one vtable, so they all compare equal to each
+// other and none of them compares equal to an id, which means the list is
+// sorted by something meaningless and XOrdLookup can never find anything in it.
+// zNPCMsg_SendMsg silently drops every message it cannot resolve, so pressing
+// R1 next to a villager reached the goal system and stopped there.
+//
+// So the port reads the id through the type, which is the one thing that makes
+// the compiler apply the base adjustment. The console keeps retail's expression
+// exactly. Same hazard, and the same shape of fix, as NPC_SND_OWNER in
+// zNPCTypeCommon.cpp.
+
 S32 zNPCMgr_OrdTest_npcid(const void* vkey, void* vitem)
 {
     S32 rc;
+#ifdef PLATFORM_PC
+    void* key = (void*)((zNPCCommon*)vitem)->id;
+#else
     void* key = *(void**)(vitem);
+#endif
 
     if (vkey < key)
     {
@@ -715,7 +741,12 @@ S32 zNPCMgr_OrdComp_npcid(void* vkey, void* vitem)
     U32 key;
 
     key = *(U32*)vkey;
+#ifdef PLATFORM_PC
+    // vitem is the object; vkey is a pointer to a plain id and needs nothing.
+    item = ((zNPCCommon*)vitem)->id;
+#else
     item = *(U32*)vitem;
+#endif
     if (key < item)
     {
         rc = -1;

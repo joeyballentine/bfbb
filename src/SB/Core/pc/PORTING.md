@@ -83,6 +83,47 @@ report.json in place and the gate then passes on stale output.
 
 ## Things that have already bitten, so that they do not again
 
+### The vptr is at offset 0 on a host and it is not on the console
+
+CodeWarrior puts a class's vptr where its first virtual function is
+**declared**, not at offset zero. A host compiler puts one at offset zero
+whenever there is no polymorphic base to inherit it from. For every entity
+class in this game the difference is real: `xBase`, `xEnt`, `xFactoryInst` and
+`xNPCBasic` declare no virtuals between them and `zNPCCommon` declares
+thirty-nine, so on the console an NPC begins with its `xBase` and on a host it
+begins with a vtable pointer and everything else has moved back four bytes.
+
+A normal C++ cast handles this; the compiler applies the adjustment. Two things
+defeat it, and both are everywhere in this codebase:
+
+* **Casting through an integer.** `(xEnt*)(U32)npc` does not adjust, where
+  `(xEnt*)npc` does. `zNPCCommon` hands the sound system an identity built this
+  way, with a channel number in the low bits, and xSnd.cpp masks it off and
+  dereferences it -- so `xSndPlayInternal` read `ent->model` out of the vptr and
+  the process died in `xModelGetFrame`. Fixed by `NPC_SND_OWNER`, which casts
+  first and flattens second.
+
+* **Reading a field positionally.** `*(U32*)obj` for `obj->id` is correct on the
+  console because `xBase::id` is declared first. On a host it reads the vtable
+  pointer. Both of zNPCMgr's id comparators did this, so the NPC list was sorted
+  by vtable address -- and since every villager shares one vtable, they compared
+  equal to each other and to nothing else. `XOrdLookup` could not find an NPC,
+  and `zNPCMsg_SendMsg` drops a message it cannot resolve **without saying so**,
+  which is why pressing R1 next to a villager did nothing at all.
+
+Both fixes are `#ifdef PLATFORM_PC` and leave retail's expression untouched, the
+way `XFONT_CHARIDX` does in xFont.cpp.
+
+Making `xEnt` polymorphic so it becomes the primary base was tried and does put
+it back at offset zero, but it moves every `xEnt` field, puts a vptr where the
+game memsets, and the vptr it creates carries `zNPCCommon`'s thirty-nine
+virtuals. It also does not help the positional reads, which want `id` at offset
+zero rather than `xBase`. Guarded casts at the sites are the smaller change.
+
+**When something does nothing at all rather than doing it wrongly, suspect this
+first.** A dropped lookup is silent; a bad cast usually is not.
+
+
 **A global that overrides a CRT function takes the whole process with it.**
 `xSpline.cpp` defined a global `double sqrt(double)` -- retail's frsqrte
 refinement -- and on a host it replaced the CRT's sqrt for librw too. The port's
