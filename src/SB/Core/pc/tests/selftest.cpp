@@ -349,6 +349,62 @@ static void test_pad_win32_buttons()
 }
 #endif
 
+// xutil.cpp's only unresolved symbol here. xUtil_yesno and xUtil_wtadjust use
+// it and nothing below calls either; the real one is in xMath.cpp, which cannot
+// be linked into this target for the reason given beside iMath3 in CMakeLists.
+F32 xurand()
+{
+    return 0.0f;
+}
+
+char* xUtil_idtag2string(U32 srctag, S32 bufidx);
+
+static void test_idtag()
+{
+    printf("xUtil_idtag2string\n");
+
+    // The ordinary case. bufidx 0 takes the default branch, which is the one
+    // zMain.cpp:823 uses and the one that reads the way the tag is written.
+    check(strcmp(xUtil_idtag2string(0x48423030, 0), "HB00") == 0,
+          "a printable tag round-trips");
+
+    // bufidx 4 and 5 take the other branch and come out reversed. That is
+    // retail's behaviour on both platforms, not an endian bug in the port: the
+    // swap above turns the console's bytes into the host's order first, so both
+    // reach this switch with the same array.
+    check(strcmp(xUtil_idtag2string(0x48423030, 4), "00BH") == 0,
+          "buffers 4 and 5 come out reversed, on the console too");
+
+    // And the case that aborts the process rather than misprinting.
+    //
+    // uc walks the tag as a SIGNED char, so a byte at or above 0x80 reaches
+    // isprint negative. That is out of range for it, and the host CRT range-
+    // checks and aborts where the console's table lookup shrugs. Asset ids are
+    // hashes, so roughly half of every tag the game prints has such a byte --
+    // zSceneLoad printed one and the port died there.
+    char* s = xUtil_idtag2string(0xDEADBEEF, 4);
+    check(s != NULL, "a tag with the high bit set returns rather than aborting");
+    check(s != NULL && strlen(s) == 4, "and is still four characters");
+
+    // 0xFF is not printable, so it must come back as the placeholder rather
+    // than as itself or as whatever a negative index found.
+    s = xUtil_idtag2string(0xFFFFFFFF, 4);
+    check(s != NULL && strcmp(s, "????") == 0, "an unprintable tag is all placeholders");
+
+    // Every byte value, which is the real assertion: none of them may abort.
+    for (S32 i = 0; i < 256; i++)
+    {
+        U32 tag = (U32)((i << 24) | (i << 16) | (i << 8) | i);
+        char* p = xUtil_idtag2string(tag, 4);
+        if (p == NULL || strlen(p) != 4)
+        {
+            check(false, "every byte value survives idtag2string");
+            break;
+        }
+    }
+    check(true, "every byte value survives idtag2string");
+}
+
 static void test_pad()
 {
     printf("iPad host backend\n");
@@ -910,6 +966,7 @@ int main()
     test_math();
     test_mem();
     test_file();
+    test_idtag();
     test_pad();
     test_savegame();
     test_snd();

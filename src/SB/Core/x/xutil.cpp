@@ -34,6 +34,24 @@ S32 xUtilShutdown()
     return g_xutilinit;
 }
 
+// isprint's argument has to be representable as an unsigned char.
+//
+// uc walks the tag one byte at a time as a signed char -- the build passes
+// -char signed, matching CodeWarrior -- so any byte of an asset id at or above
+// 0x80 arrives here negative. On the console that is a table lookup that reads
+// slightly before the table and returns whatever is there, which at worst
+// prints the wrong character in a debug string. The host CRT range-checks it
+// instead and aborts the process, and asset ids are hashes: roughly half of
+// every tag printed has a high byte set.
+//
+// Same treatment as XFONT_CHARIDX in xFont.cpp, and for the same reason -- the
+// console keeps retail's expression exactly, the port makes the index unsigned.
+#ifdef PLATFORM_PC
+#define XUTIL_PRINTIDX(_c) ((U8)(_c))
+#else
+#define XUTIL_PRINTIDX(_c) (_c)
+#endif
+
 char* xUtil_idtag2string(U32 srctag, S32 bufidx)
 {
     U32 tag = srctag;
@@ -71,17 +89,17 @@ char* xUtil_idtag2string(U32 srctag, S32 bufidx)
     {
     case 4:
     case 5:
-        strptr[0] = isprint(uc[0]) ? uc[0] : '?';
-        strptr[1] = isprint(uc[1]) ? uc[1] : '?';
-        strptr[2] = isprint(uc[2]) ? uc[2] : '?';
-        strptr[3] = isprint(uc[3]) ? uc[3] : '?';
+        strptr[0] = isprint(XUTIL_PRINTIDX(uc[0])) ? uc[0] : '?';
+        strptr[1] = isprint(XUTIL_PRINTIDX(uc[1])) ? uc[1] : '?';
+        strptr[2] = isprint(XUTIL_PRINTIDX(uc[2])) ? uc[2] : '?';
+        strptr[3] = isprint(XUTIL_PRINTIDX(uc[3])) ? uc[3] : '?';
         break;
     case 6:
     default:
-        strptr[0] = isprint(uc[3]) ? uc[3] : '?';
-        strptr[1] = isprint(uc[2]) ? uc[2] : '?';
-        strptr[2] = isprint(uc[1]) ? uc[1] : '?';
-        strptr[3] = isprint(uc[0]) ? uc[0] : '?';
+        strptr[0] = isprint(XUTIL_PRINTIDX(uc[3])) ? uc[3] : '?';
+        strptr[1] = isprint(XUTIL_PRINTIDX(uc[2])) ? uc[2] : '?';
+        strptr[2] = isprint(XUTIL_PRINTIDX(uc[1])) ? uc[1] : '?';
+        strptr[3] = isprint(XUTIL_PRINTIDX(uc[0])) ? uc[0] : '?';
         break;
     }
 
@@ -90,10 +108,10 @@ char* xUtil_idtag2string(U32 srctag, S32 bufidx)
     if (bufidx == 6)
     {
         strptr[4] = '/';
-        strptr[5] = isprint(uc[0]) ? uc[0] : '?';
-        strptr[6] = isprint(uc[1]) ? uc[1] : '?';
-        strptr[7] = isprint(uc[2]) ? uc[2] : '?';
-        strptr[8] = isprint(uc[3]) ? uc[3] : '?';
+        strptr[5] = isprint(XUTIL_PRINTIDX(uc[0])) ? uc[0] : '?';
+        strptr[6] = isprint(XUTIL_PRINTIDX(uc[1])) ? uc[1] : '?';
+        strptr[7] = isprint(XUTIL_PRINTIDX(uc[2])) ? uc[2] : '?';
+        strptr[8] = isprint(XUTIL_PRINTIDX(uc[3])) ? uc[3] : '?';
         strptr[9] = '\0';
     }
 

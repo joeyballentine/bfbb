@@ -474,6 +474,15 @@ add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x/xhipio.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x/xbinio.cpp
 
+  # xUtil_idtag2string, which every asset id in a debug string goes through and
+  # which feeds isprint a signed char. The host CRT aborts on the out-of-range
+  # argument rather than shrugging at it, so this is worth a check that runs
+  # every build. Its only unresolved symbol is xurand, which xMath.cpp defines
+  # and which nothing this file tests calls -- linking xMath.cpp to reach it
+  # drags in the weak-inline placement problem described above, so selftest.cpp
+  # defines it instead.
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x/xutil.cpp
+
   ${INPUT_SOURCES}
   ${AUDIO_SOURCES}
   ${HOST_SOURCES}
