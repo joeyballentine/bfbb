@@ -553,6 +553,14 @@ void zUI_PreUpdate(_zUI* ent, xScene*, F32)
                 if (pad->pressed & XPAD_BUTTON_R1)
                 {
                     ui->uiButton |= XPAD_BUTTON_R1;
+#ifdef PLATFORM_PC
+                    if (getenv("BFBB_EVENT") != NULL)
+                    {
+                        printf("bfbb: CAPTURED R1 on ui %08x (uiFlags %08x)\n",
+                               (unsigned)ui->id, (unsigned)ui->uiFlags);
+                        fflush(stdout);
+                    }
+#endif
                 }
 
                 if (pad->pressed & XPAD_BUTTON_R2)
@@ -640,11 +648,15 @@ void zUI_Update(_zUI* ent, xScene*, F32 dt)
     // of the capture's gates were measured passing -- uiFlags 0x36 has the bits
     // it needs and gTrcPad reads 2 -- so if R1 still does nothing, either this
     // never sees the bit or the else-if chain above R1 swallows the frame.
-    if ((ent->uiButton & XPAD_BUTTON_R1) && getenv("BFBB_EVENT") != NULL)
+    // ANY button, not only R1: this has to tell "the update never sees a button"
+    // apart from "it sees others but not R1", and those have different causes --
+    // the first is ordering against zUI_PreUpdate, which zeroes uiButton before
+    // it captures, and the second is the else-if chain above the R1 arm.
+    if (ent->uiButton != 0 && getenv("BFBB_EVENT") != NULL)
     {
-        printf("bfbb: zUI_Update %08x has R1 in uiButton %08x, trc %d -> %s\n",
-               (unsigned)ent->id, (unsigned)ent->uiButton, (int)gTrcPad[0].state,
-               gTrcPad[0].state == TRC_PadInserted ? "dispatching" : "GATED OUT");
+        printf("bfbb: zUI_Update %08x uiButton %08x%s, trc %d\n", (unsigned)ent->id,
+               (unsigned)ent->uiButton, (ent->uiButton & XPAD_BUTTON_R1) ? " (has R1)" : "",
+               (int)gTrcPad[0].state);
         fflush(stdout);
     }
 #endif
