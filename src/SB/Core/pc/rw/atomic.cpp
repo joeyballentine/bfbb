@@ -12,6 +12,10 @@
 #include <rpcollis.h>
 #include <rpworld.h>
 
+
+#include <stdio.h>
+#include <stdlib.h>
+
 #include "convert.h"
 #include <rtintsec.h>
 
@@ -476,11 +480,67 @@ RpAtomic* RpAtomicStreamRead(RwStream* stream)
 // safe: one pointer either way, cdecl on both sides, and librw calls it as
 // `this->renderCB(this)` and discards nothing because there is nothing to
 // discard. This function is the other end of that arrangement.
+// BFBB_LIGHT: why a model came out darker than it should.
+//
+// librw's lighting has a gate before it ever looks at a light. d3drender.cpp's
+// lightingCB_Shader tests `geometry->flags & rw::Geometry::LIGHT` and, when it
+// is clear, sets the ambient to BLACK and uploads no lights at all -- so an
+// atomic without that flag is not dimly lit, it is unlit. That matters here
+// more than it would elsewhere, because xLightKit_Enable sets
+// iModelHack_DisablePrelight while a light kit is active: the baked vertex
+// colours are switched off on the assumption that the kit will replace them,
+// and an atomic that is both unlit and unprelit has nothing left.
+//
+// The other half is where the lights are. lightingCB_Shader enumerates them
+// from `engine->currentWorld`, while xLightKit_Enable adds them to
+// globals.currWorld, which is the world iEnv.cpp made for the level's JSP.
+// Those being different objects would put every light somewhere nothing reads.
+//
+// Reported for the first few atomics of a frame, twice a second, because the
+// question is about the common case rather than about one model.
+static void iReportLighting(RpAtomic* atomic)
+{
+    // Throttled on the call count rather than the clock: this runs per atomic
+    // per frame, so a plain counter is both cheaper and steadier than asking
+    // the time here would be. Three atomics out of every six hundred draws.
+    static unsigned sCalls;
+
+    unsigned phase = sCalls++ % 600;
+    if (phase >= 3)
+    {
+        return;
+    }
+
+    rw::Atomic* a = asAtomic(atomic);
+    rw::Geometry* geo = a->geometry;
+    rw::World* cur = (rw::World*)rw::engine->currentWorld;
+
+    // librw splits them by whether the type carries a position: globalLights is
+    // ambient and directional, localLights is point and spot. xLightKit adds
+    // all four kinds, so both counts being zero means none of them arrived.
+    int numGlobal = (cur != NULL) ? cur->globalLights.count() : -1;
+    int numLocal = (cur != NULL) ? cur->localLights.count() : -1;
+
+    printf("bfbb: light | geo flags %08x LIGHT %s PRELIT %s MODULATE %s | currentWorld %p "
+           "dir %d local %d | atomic world %p\n",
+           (unsigned)(geo ? geo->flags : 0),
+           (geo && (geo->flags & rw::Geometry::LIGHT)) ? "SET" : "clear",
+           (geo && (geo->flags & rw::Geometry::PRELIT)) ? "SET" : "clear",
+           (geo && (geo->flags & rw::Geometry::MODULATE)) ? "SET" : "clear",
+           (void*)cur, (int)numGlobal, (int)numLocal, (void*)a->world);
+    fflush(stdout);
+}
+
 RpAtomic* AtomicDefaultRenderCallBack(RpAtomic* atomic)
 {
     if (atomic == NULL)
     {
         return NULL;
+    }
+
+    if (getenv("BFBB_LIGHT") != NULL)
+    {
+        iReportLighting(atomic);
     }
 
     rw::Atomic::defaultRenderCB(asAtomic(atomic));

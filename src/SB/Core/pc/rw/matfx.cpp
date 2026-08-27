@@ -35,6 +35,30 @@ static inline rw::Material* asMaterial(const RpMaterial* m)
 RwBool RpMatFXPluginAttach(void)
 {
     rw::registerMatFXPlugin();
+
+    // The environment pass has to be scaled by the MATERIAL colour, which is
+    // how the game controls it.
+    //
+    // librw can take the env colour from either the material or a fixed
+    // MatFX::envMapColor, and picks between them with envMapUseMatColor -- a
+    // bool32 with no initialiser, so it is zero and the fixed colour wins. That
+    // colour is opaque white, which means every environment pass draws at full
+    // strength no matter what the game asked for.
+    //
+    // What the game asks for is the whole of the effect's shape.
+    // xFXBubbleRender (xFX.cpp:669) draws a bubble in three passes and sets
+    // iModelSetMaterialAlpha before each one -- 0 for the fresnel pass and 192
+    // for the environment pass in defaultBFX -- so the material alpha IS the
+    // per-pass strength. Ignoring it makes the fresnel pass, which is meant to
+    // contribute nothing at alpha 0, draw as brightly as the one that is meant
+    // to show, and the bubble comes out washed out and far too bright.
+    //
+    // RenderWare's own PC and GameCube pipelines modulate by the material, so
+    // this is the retail behaviour rather than a preference. envMapApplyLight
+    // is deliberately left alone: that one chooses whether lighting modulates
+    // the env map on top, and nothing in the game sets it either way.
+    rw::MatFX::envMapUseMatColor = TRUE;
+
     return TRUE;
 }
 
