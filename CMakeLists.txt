@@ -432,7 +432,13 @@ target_compile_options(bfbb_game PRIVATE -Wno-everything)
 # 451 checks against a live librw engine. Separate from pc_selftest because it
 # needs librw and pc_selftest deliberately does not -- the platform layer is
 # testable without a renderer and that is worth keeping true.
-add_executable(rw_selftest ${PC_DIR}/rw/tests/selftest.cpp)
+# iFX.cpp is compiled in rather than linked from bfbb_platform, and it is the
+# only platform module that is. It is the one that talks to rw:: directly --
+# everything else in that library reaches RenderWare through the shim -- so it
+# is the one whose behaviour needs a live engine to check, and bfbb_platform
+# would drag in the rest of the layer to get it. The four xFXanimUV globals it
+# reads are stood up by the test itself.
+add_executable(rw_selftest ${PC_DIR}/rw/tests/selftest.cpp ${PC_DIR}/iFX.cpp)
 target_link_libraries(rw_selftest PRIVATE bfbb_rw)
 target_compile_options(rw_selftest PRIVATE -Wno-everything)
 add_test(NAME rw_selftest COMMAND rw_selftest)
