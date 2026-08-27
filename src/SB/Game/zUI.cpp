@@ -831,7 +831,49 @@ void zUIRenderAll()
         {
             qsort(sSorted, sSortedCount, sizeof(_zUI*), iRenderQSort_Face);
         }
+
     }
+
+#ifdef PLATFORM_PC
+    // BFBB_UI: what is on screen right now, in draw order, twice a second.
+    //
+    // `zUI_Init` says what the ASSET asked for. This says what the scene
+    // settled on, which is the number that decides whether anything is drawn,
+    // and it has to be a RECURRING report rather than a one-off: the list is
+    // built once per scene, when nothing is visible yet, and the menu turns
+    // elements on and off as it goes. A one-off report of the moment an entity
+    // first became visible cannot tell "it is being drawn and comes out wrong"
+    // from "it was drawn during a transition and is hidden now", and those have
+    // nothing in common.
+    if (getenv("BFBB_UI") != NULL)
+    {
+        static U32 frame;
+
+        if ((frame++ % 30) == 0)
+        {
+            S32 shown = 0;
+
+            for (S32 i = 0; i < (S32)sSortedCount; i++)
+            {
+                if (!xEntIsVisible(sSorted[i]))
+                {
+                    continue;
+                }
+
+                shown++;
+                printf("bfbb: uishow %2d %08x %s tex %08x pos %.0f,%.0f %ux%u z %.1f\n", (int)i,
+                       (unsigned)sSorted[i]->id,
+                       (sSorted[i]->baseType == eBaseTypeUIFont) ? "UIFT" : "UI  ",
+                       (unsigned)sSorted[i]->sasset->textureID, sSorted[i]->sasset->pos.x,
+                       sSorted[i]->sasset->pos.y, (unsigned)sSorted[i]->sasset->dim[0],
+                       (unsigned)sSorted[i]->sasset->dim[1], sSorted[i]->sasset->pos.z);
+            }
+
+            printf("bfbb: uishow --- %d of %u visible\n", (int)shown, (unsigned)sSortedCount);
+            fflush(stdout);
+        }
+    }
+#endif
 
     bool rendering_models = false;
 
@@ -969,6 +1011,50 @@ void zUI_Render(xEnt* ent)
                 RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)1);
                 RwRenderStateSet(rwRENDERSTATESHADEMODE, (void*)rwSHADEMODEFLAT);
                 RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, 0);
+
+#ifdef PLATFORM_PC
+                // BFBB_UI: what the textured branch actually hands the device.
+                //
+                // A 2D quad that does not appear has failed at one of four
+                // places and they look identical on screen: the entity is never
+                // visible so this is never reached, the texture id resolves to
+                // nothing, it resolves to a texture with no raster, or the
+                // rectangle is off-screen or inside out. Naming all four at the
+                // point of submission separates them in one run.
+                //
+                // Once per entity id, not once per frame: this is inside the
+                // render loop and every UI element in the menu passes through it
+                // sixty times a second.
+                if (getenv("BFBB_UI") != NULL)
+                {
+                    static U32 said[64];
+                    static U32 said_count;
+
+                    bool seen = false;
+
+                    for (U32 i = 0; i < said_count; i++)
+                    {
+                        if (said[i] == ui->id)
+                        {
+                            seen = true;
+                            break;
+                        }
+                    }
+
+                    if (!seen && said_count < 64)
+                    {
+                        said[said_count++] = ui->id;
+
+                        printf("bfbb: uidraw %08x tex %08x -> %s raster %s  rect %.0f,%.0f "
+                               "%.0fx%.0f  uv %.2f,%.2f..%.2f,%.2f  z %g\n",
+                               (unsigned)ui->id, (unsigned)ui->sasset->textureID,
+                               texture ? "found" : "MISSING", raster ? "yes" : "NULL", x1, y1,
+                               x2 - x1, y2 - y1, u1, v1, u3, v3, cz);
+                        fflush(stdout);
+                    }
+                }
+#endif
+
                 RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex, 4, Index, 6);
             }
             else if (ui->model != NULL)
@@ -1026,12 +1112,33 @@ S32 zUIEventCB(xBase*, xBase* to, U32 toEvent, const F32* toParam, xBase*)
     {
     case eEventVisible:
     {
+#ifdef PLATFORM_PC
+        // BFBB_UI: the show/hide traffic itself.
+        //
+        // A menu screen is a cascade -- one element is turned on and its links
+        // turn on its backdrop, its panel and its text -- so an element that is
+        // not on screen has either never been sent this, or been sent it and
+        // then sent the opposite. Only the traffic separates those, and the
+        // difference decides whether to go looking upstream or downstream.
+        if (getenv("BFBB_UI") != NULL)
+        {
+            printf("bfbb: uivis %08x SHOW\n", (unsigned)s->id);
+            fflush(stdout);
+        }
+#endif
         xEntShow(s);
         gUIMgr.Touch(s);
         break;
     }
     case eEventInvisible:
     {
+#ifdef PLATFORM_PC
+        if (getenv("BFBB_UI") != NULL)
+        {
+            printf("bfbb: uivis %08x HIDE\n", (unsigned)s->id);
+            fflush(stdout);
+        }
+#endif
         xEntHide(s);
         gUIMgr.Touch(s);
         break;
