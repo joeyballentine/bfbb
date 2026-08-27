@@ -3038,6 +3038,23 @@ void zSceneUpdate(F32 elapsedSec)
 
     zNPCCommon_EjectPhlemOnPawz();
 
+#ifdef PLATFORM_PC
+    // The pendingPortal a portal sets is only promoted to a state switch while
+    // the game is NOT paused, so a game that thinks it is paused swallows every
+    // level change without a word.
+    if (isPaused && globals.sceneCur != NULL && globals.sceneCur->pendingPortal != NULL &&
+        getenv("BFBB_EVENT") != NULL)
+    {
+        static int said = 0;
+        if (said < 8)
+        {
+            said++;
+            printf("bfbb: pendingPortal set but the game is PAUSED -- not switching\n");
+            fflush(stdout);
+        }
+    }
+#endif
+
     if (!isPaused)
     {
         zActionLineUpdate(elapsedSec);
@@ -3057,6 +3074,18 @@ void zSceneUpdate(F32 elapsedSec)
 
         if (s->pendingPortal)
         {
+#ifdef PLATFORM_PC
+            if (getenv("BFBB_EVENT") != NULL)
+            {
+                static int said = 0;
+                if (said < 8)
+                {
+                    said++;
+                    printf("bfbb: pendingPortal seen, switching game state\n");
+                    fflush(stdout);
+                }
+            }
+#endif
             zGameStateSwitch(eGameState_SceneSwitch);
         }
     }

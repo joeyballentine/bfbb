@@ -16,6 +16,10 @@
 #include "zSaveLoad.h"
 #include "zVolume.h"
 
+#ifdef PLATFORM_PC
+#include <stdlib.h>
+#endif
+
 #include "iDraw.h"
 #include "iSystem.h"
 #include "iTRC.h"
@@ -1072,6 +1076,18 @@ static void zGameUpdateMode()
 
         nextSceneID = d | x;
         x = c | y;
+
+#ifdef PLATFORM_PC
+        if (getenv("BFBB_EVENT") != NULL)
+        {
+            printf("bfbb: eGameState_SceneSwitch: next %08x, compare %08x vs cur %08x -> %s\n",
+                   (unsigned)nextSceneID, (unsigned)x, (unsigned)globals.sceneCur->sceneID,
+                   (g_hiphopReloadHIP || g_hiphopForcePortal || x != globals.sceneCur->sceneID)
+                       ? "LOADING"
+                       : "same scene, staying");
+            fflush(stdout);
+        }
+#endif
 
         if ((g_hiphopReloadHIP != 0) || ((g_hiphopForcePortal != 0) || (x != globals.sceneCur->sceneID)))
         {
