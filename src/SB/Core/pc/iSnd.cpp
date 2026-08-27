@@ -194,6 +194,18 @@ static void iReleaseVoice(S32 i)
         return;
     }
 
+    // BFBB_MUSIC: what kills the music. zMusic goes on believing its track is
+    // playing long after the voice has gone, so the interesting event is not
+    // where the music starts -- it starts fine -- but who ends it.
+    if (sVoices[i].in_use && gSnd.voice[i].category == SND_CAT_MUSIC &&
+        getenv("BFBB_MUSIC") != NULL)
+    {
+        char why[96];
+        snprintf(why, sizeof(why), "music voice %d (%08x, handle %u) released", i,
+                 gSnd.voice[i].assetID, gSnd.voice[i].sndID);
+        iHostPrintCallers(why, 20);
+    }
+
     if (sVoices[i].host >= 0)
     {
         // Stop before releasing the samples, in that order. iSndHostStop drops
@@ -661,6 +673,28 @@ S32 iSndFindFreeVoice(U32 priority, U32 flags, U32 owner)
 
     for (S32 i = begin; i < end; i++)
     {
+        // **A stream slot someone has locked is not free**, even when nothing is
+        // playing on it. Retail tests this (src/SB/Core/gc/iSnd.cpp:1241) and
+        // the port did not, which is why the level music stopped at the first
+        // line of dialogue and never came back.
+        //
+        // zTalkBox reserves up to two of the six stream slots for a
+        // conversation with xSndStreamLock (zTalkBox.cpp:1022), which marks a
+        // slot without playing anything on it. Handing that slot to the music
+        // instead put the music somewhere a talkbox already believed it owned;
+        // its next line came through the reclaim branch above, found its own
+        // lock, and stopped what was there. zMusic never noticed -- it keeps
+        // its track's handle and does not poll it -- so the music was gone for
+        // the rest of the scene.
+        //
+        // Only streams have owners. Retail's arm for the other 58 voices does
+        // not test this and neither does the loop bound here, because `begin`
+        // and `end` already restrict a stream to the first six.
+        if (stream && gSnd.voice[i].lock_owner != 0)
+        {
+            continue;
+        }
+
         if (sVoices[i].in_use)
         {
             continue;

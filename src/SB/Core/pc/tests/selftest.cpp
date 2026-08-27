@@ -1172,6 +1172,29 @@ static void test_snd()
     // So the scene that follows brings its own, exactly as a level load does.
     check(iSndLoadSounds(&table) == 1, "and the next scene's table loads in its place");
 
+    // A locked stream slot is not free, even with nothing playing on it.
+    //
+    // xSndStreamLock reserves a slot for an owner without starting anything --
+    // zTalkBox takes two for a conversation. Handing one of those out to
+    // somebody else puts them where the owner already believes it is, and the
+    // owner's next sound comes through the reclaim path and stops them. That is
+    // what silenced the level music at the first line of dialogue: it took a
+    // slot zTalkBox held, and zTalkBox's next line killed it.
+    gSnd.voice[0].lock_owner = 0xF00D;
+
+    S32 locked = iSndFindFreeVoice(128, 0x4, 0);
+    check(locked >= 1 && locked < 6, "an unowned stream request skips a slot someone has locked");
+
+    S32 owned = iSndFindFreeVoice(128, 0x4, 0xF00D);
+    check(owned == 0, "and its owner still gets it");
+
+    // Locks are a stream thing; the other 58 voices have no owners, and retail
+    // does not test one for them.
+    gSnd.voice[6].lock_owner = 0xF00D;
+    check(iSndFindFreeVoice(128, 0x2, 0) == 6, "a sound voice ignores lock_owner");
+    gSnd.voice[6].lock_owner = 0;
+    gSnd.voice[0].lock_owner = 0;
+
     // Timing. Silent but on the clock, because the game waits on sounds; a
     // voice must report playing for the sample's length.
     lk = (test_lookup*)iSndLookup(SND_ASSET);

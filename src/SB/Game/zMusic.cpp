@@ -1,5 +1,10 @@
 #include <types.h>
 #include "zMusic.h"
+
+#ifdef PLATFORM_PC
+#include <stdio.h>
+#include <stdlib.h>
+#endif
 #include "xSnd.h"
 #include "xMath.h"
 #include "xString.h"
@@ -332,9 +337,59 @@ void zMusicNotifyEvent(const F32* toParam, xBase* base)
     }
 }
 
+#ifdef PLATFORM_PC
+// BFBB_MUSIC: why no music is playing.
+//
+// The port reaches the menu music and then nothing, and every stage between
+// zMusicNotify and xSndPlay is invisible from outside -- the queue, the timer
+// and the situation are all file-static here, and zMusicDo is static too. This
+// reports the gate each track is stuck at, once a second, which is the only
+// thing that distinguishes "never notified" from "notified and never fired".
+static void zMusicReport()
+{
+    static F32 sSince = 0.0f;
+
+    if (getenv("BFBB_MUSIC") == NULL)
+    {
+        return;
+    }
+
+    sSince += 1.0f;
+    if (sSince < 60.0f)
+    {
+        return;
+    }
+    sSince = 0.0f;
+
+    for (S32 i = 0; i < TRACK_COUNT; i++)
+    {
+        zMusicSituation* q = sMusicQueueData[i];
+        printf("zMusic: [%d] snd_id=%u timer=%.3f queue=%s", i, sMusicTrack[i].snd_id,
+               sMusicTimer[i], q != NULL ? "yes" : "NULL");
+
+        if (q != NULL)
+        {
+            printf(" situation=%d enum=%d game_state=%d count=%u/%u delay=%.2f/%.2f punch=%.2f",
+                   q->situation, q->music_enum, q->game_state, q->count, q->countMax, q->delay,
+                   q->elapsedTime, q->punchDelay);
+        }
+
+        printf("  gGameMode=%d isGame=%d NoMusic=%d vol=%.2f\n", (S32)gGameMode,
+               (S32)(gGameMode == eGameMode_Game), (S32)globals.NoMusic, volume.cur);
+    }
+
+    fflush(stdout);
+}
+#endif
+
 void zMusicUpdate(F32 dt)
 {
     S32 i;
+
+#ifdef PLATFORM_PC
+    zMusicReport();
+#endif
+
     if (sMusicPaused == FALSE)
     {
         for (i = 0; i < 8; i++)

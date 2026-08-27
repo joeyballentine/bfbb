@@ -46,6 +46,15 @@ Everything below is off unless set, and each costs a load per frame when it is.
                         that is playing and inaudible and a sound that never
                         started look identical from outside.
 
+    BFBB_MUSIC          once a second, the gate each music track is stuck at --
+                        its handle, its timer, its queued situation, the game
+                        mode and the fader. Everything between zMusicNotify and
+                        xSndPlay is file-static in zMusic.cpp, so "never
+                        notified" and "notified and never fired" are otherwise
+                        indistinguishable. Also prints the calling stack
+                        whenever a music voice is released, which is what found
+                        zTalkBox stopping the level music.
+
     BFBB_SNDWHO=<aid>   the calling stack the first three times that asset is
                         started. The retail Xbox assets carry no ADBG names, so
                         an asset id is all a sound has, and the platform layer
