@@ -1,5 +1,10 @@
 #include "zEntTrigger.h"
 
+#ifdef PLATFORM_PC
+#include <stdio.h>
+#include <stdlib.h>
+#endif
+
 #include "xEvent.h"
 
 void zEntTriggerInit(void* ent, void* asset)
@@ -152,6 +157,31 @@ void zEntTriggerUpdate(zEntTrigger* trig, xScene*, F32)
                         }
                     }
                 }
+
+#ifdef PLATFORM_PC
+                // BFBB_EVENT: trigger volumes firing, and whether their target
+                // resolved. A level change is a trigger linked to a portal --
+                // walk in, the trigger sends its dstEvent, the portal sees
+                // eEventTeleportPlayer and switches scene -- so when walking
+                // through a door does nothing, this says which link of the
+                // chain is missing. A null destination is the interesting case:
+                // zEntEvent on nothing is silent.
+                if (collide && getenv("BFBB_EVENT") != NULL)
+                {
+                    static int said = 0;
+                    if (said < 40)
+                    {
+                        said++;
+                        printf("bfbb: trigger %08x collide, src %u dst %08x -> %s, "
+                               "dstEvent %u\n",
+                               (unsigned)trig->id, (unsigned)link->srcEvent,
+                               (unsigned)link->dstAssetID,
+                               zSceneFindObject(link->dstAssetID) ? "found" : "NOT FOUND",
+                               (unsigned)link->dstEvent);
+                        fflush(stdout);
+                    }
+                }
+#endif
 
                 if (collide)
                 {
