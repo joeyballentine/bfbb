@@ -968,6 +968,42 @@ static void test_renderstate()
     check(src == rwBLENDSRCALPHA && dst == rwBLENDINVSRCALPHA,
           "a Get returns what the matching Set was given");
 
+    // The blend factors the GameCube driver refuses, which the shim has to
+    // refuse the same way: GX has one enum value for the source colour and the
+    // destination colour, so the src slot cannot name the source and the dst
+    // slot cannot name the destination. Fourteen of the game's smoke and steam
+    // particle systems ask for src rwBLENDSRCCOLOR and rely on it being
+    // ignored, leaving the rwBLENDSRCALPHA zRenderState had just set.
+    check(RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCCOLOR) == FALSE,
+          "SRCBLEND refuses rwBLENDSRCCOLOR, as the GameCube driver does");
+    check(RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDINVSRCCOLOR) == FALSE,
+          "and rwBLENDINVSRCCOLOR");
+    check(RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDDESTCOLOR) == FALSE,
+          "DESTBLEND refuses rwBLENDDESTCOLOR");
+    check(RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVDESTCOLOR) == FALSE,
+          "and rwBLENDINVDESTCOLOR");
+    check(RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHASAT) == FALSE,
+          "and neither slot takes rwBLENDSRCALPHASAT");
+    check(RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDSRCALPHASAT) == FALSE,
+          "in either direction");
+    check(RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDNABLEND) == FALSE,
+          "nor rwBLENDNABLEND, which is not a factor at all");
+
+    src = rwBLENDNABLEND;
+    dst = rwBLENDNABLEND;
+    RwRenderStateGet(rwRENDERSTATESRCBLEND, &src);
+    RwRenderStateGet(rwRENDERSTATEDESTBLEND, &dst);
+    check(src == rwBLENDSRCALPHA && dst == rwBLENDINVSRCALPHA,
+          "a refused factor leaves the one in force alone, cache included");
+
+    // The ones both slots do take still go through.
+    check(RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDDESTCOLOR) != FALSE,
+          "SRCBLEND takes rwBLENDDESTCOLOR, which GX can express");
+    check(RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDSRCCOLOR) != FALSE,
+          "and DESTBLEND takes rwBLENDSRCCOLOR");
+    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+
     RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
     RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
     RwBool zwrite = 123;

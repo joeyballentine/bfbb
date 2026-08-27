@@ -34,6 +34,8 @@
 #include "rw.h"
 
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 // ---------------------------------------------------------------------------
@@ -138,6 +140,95 @@ static RwUInt32 packLibrwABGR(const RwRGBA* in)
 }
 
 // ---------------------------------------------------------------------------
+// Blend factors the target hardware refuses
+//
+// **The GameCube driver does not accept every RwBlendFunction in every slot,
+// and the game relies on the ones it refuses being ignored.**
+//
+// _rwDlSetRenderState (rwsdk/driver/gcn/dlrendst.c, disassembled at
+// 0x8024922C for SRCBLEND and 0x802492BC for DESTBLEND) validates the value
+// before it reaches GXSetBlendMode:
+//
+//     SRCBLEND   accepts 1..2 and 5..10; REFUSES 0, 3, 4, 11 and above
+//     DESTBLEND  accepts 1..8;           REFUSES 0 and 9 and above
+//
+// A refused value returns FALSE and changes NOTHING -- not the hardware, not
+// the driver's own cache -- so the previous factor stays in force. The gap is
+// the Flipper's: GX has one enum value for "the source colour" and "the
+// destination colour" (GX_BL_SRCCLR == GX_BL_DSTCLR), so the src slot cannot
+// name the source and the dst slot cannot name the destination. RenderWare
+// answers by refusing rwBLENDSRCCOLOR/rwBLENDINVSRCCOLOR as a source factor
+// and rwBLENDDESTCOLOR/rwBLENDINVDESTCOLOR as a destination one, and
+// rwBLENDSRCALPHASAT in either.
+//
+// D3D9 has no such gap and librw passes the value straight to
+// D3DRS_SRCBLEND, which is where the port and the console part company. It
+// matters, because fourteen of the game's particle systems ask for exactly
+// the refused combination -- src rwBLENDSRCCOLOR, dst rwBLENDINVSRCALPHA --
+// and every one of them is a smoke, steam, mist or dust effect:
+//
+//     b201 STEAM/SMOKESTACK/FREEZE_BREATH, b301 SMOKE/MIST/STEAM,
+//     b302+b303 BIGDUP_SMOKE, bb01 SMOKE/FIRE/DUST_CLOUD, ...
+//
+// On the console the src factor stays at the rwBLENDSRCALPHA that
+// zRenderState() had just set, so those draw as ordinary alpha blends: soft
+// translucent puffs. Honoured literally on D3D9 the source is multiplied by
+// itself instead, and since Particle_cloud is a near-white bitmap whose shape
+// lives entirely in its alpha channel (mean RGB 224/219/197, alpha 0..190),
+// squaring it changes almost nothing and the alpha never gets a say. The
+// result is a flat white square, which is what Robo Patrick's steam drew.
+//
+// So the validation belongs here, in the shim that stands in for the GameCube
+// driver, rather than in librw -- it is this game's device behaviour, not a
+// bug in the library. The Get shadow is left alone on a refusal for the same
+// reason the driver leaves its cache alone: a Get must report the factor that
+// is actually in force.
+static bool blendFactorAccepted(RwRenderState state, RwUInt32 value)
+{
+    if (state == rwRENDERSTATESRCBLEND)
+    {
+        return (value >= rwBLENDZERO && value <= rwBLENDONE) ||
+               (value >= rwBLENDSRCALPHA && value <= rwBLENDINVDESTCOLOR);
+    }
+
+    return value >= rwBLENDZERO && value <= rwBLENDINVDESTALPHA;
+}
+
+// BFBB_BLEND: the blend factors the shim refused, once per state and value.
+//
+// A refusal is silent by design -- that is what the console does -- so there
+// is otherwise nothing to see when an effect quietly keeps the previous
+// factor. This says which ones were asked for and turned down, which is the
+// difference between "the validation is doing its job" and "the validation
+// ate a blend the game needed".
+static void reportRefusedBlend(RwRenderState state, RwUInt32 value)
+{
+    if (getenv("BFBB_BLEND") == NULL)
+    {
+        return;
+    }
+
+    // Two slots, and one flag per value the enumeration can hold. Anything
+    // outside it is reported every time, which is what a value that far wrong
+    // deserves.
+    static bool seen[2][16];
+    const int slot = (state == rwRENDERSTATESRCBLEND) ? 0 : 1;
+
+    if (value < 16)
+    {
+        if (seen[slot][value])
+        {
+            return;
+        }
+        seen[slot][value] = true;
+    }
+
+    printf("bfbb: blend %s factor %u refused, as the GameCube driver refuses it\n",
+           slot == 0 ? "src" : "dest", (unsigned)value);
+    fflush(stdout);
+}
+
+// ---------------------------------------------------------------------------
 
 RwBool RwRenderStateSet(RwRenderState state, void* value)
 {
@@ -176,11 +267,21 @@ RwBool RwRenderStateSet(RwRenderState state, void* value)
         return TRUE;
 
     case rwRENDERSTATESRCBLEND:
+        if (!blendFactorAccepted(state, uvalue))
+        {
+            reportRefusedBlend(state, uvalue);
+            return FALSE;
+        }
         sState.SrcBlend = (RwBlendFunction)uvalue;
         rw::SetRenderState(rw::SRCBLEND, uvalue);
         return TRUE;
 
     case rwRENDERSTATEDESTBLEND:
+        if (!blendFactorAccepted(state, uvalue))
+        {
+            reportRefusedBlend(state, uvalue);
+            return FALSE;
+        }
         sState.DestBlend = (RwBlendFunction)uvalue;
         rw::SetRenderState(rw::DESTBLEND, uvalue);
         return TRUE;
