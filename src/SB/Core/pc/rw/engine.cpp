@@ -156,7 +156,7 @@ extern "C" void RwGameCubeSetMinRetraceCount(RwUInt8 count)
 // Between them these were the last thing keeping xModelBucket.cpp from
 // compiling on PC -- the 198th unit of 198.
 
-// **This one drops a real rendering behaviour, and it will be visible.**
+// Cutout transparency: foliage, fences, grates, chain link.
 //
 // The top byte of a bucket's pipeFlags is an alpha test reference, and
 // xModelBucket.cpp:520-533 turns it into one of two GX states:
@@ -167,21 +167,101 @@ extern "C" void RwGameCubeSetMinRetraceCount(RwUInt8 count)
 //   ref == 0:  alpha >= 1       (GX_GEQUAL 1 AND GX_ALWAYS), z compare before
 //              texture -- i.e. discard only fully transparent pixels.
 //
-// That is cutout transparency: foliage, fences, grates, chain link. With this
-// as a no-op they render as opaque quads, alpha and all. There is nothing to
-// forward it to today -- RenderWare's portable render state vector has no
-// alpha test function or reference (rwcore.h does not declare one, because the
-// game never used the portable spelling), and LIBRW_PLATFORM=NULL has no
-// device to set one on.
+// This used to be a no-op, and the reason given was that there was nothing to
+// forward it to. That was true of RenderWare's portable render state, which has
+// no alpha test function or reference -- rwcore.h does not declare one, because
+// the game never used the portable spelling -- and it is NOT true of librw:
+// `ALPHATESTFUNC` and `ALPHATESTREF` are both in rwrender.h, and the D3D9
+// backend carries them through to D3DRS_ALPHAFUNC and D3DRS_ALPHAREF
+// (d3ddevice.cpp:735-746). So this is an ordinary forward now, and it needed
+// nothing from the librw fork.
 //
-// So this is not "recorded but not rendered" like the shade mode in
-// renderstate.cpp -- there is no Get for it and nothing would read the record.
-// It is the specification, left where whoever writes the GL3 or D3D9 backend
-// will find it. The two states above are the whole of what has to be
-// reimplemented.
+// What was actually missing was the REFERENCE, not the test. D3D9 turns
+// D3DRS_ALPHATESTENABLE on and off by itself, out of whether the texture or the
+// material has alpha (setRasterStage / setVertexAlpha), and initD3D leaves the
+// function at GREATEREQUAL 10. So an alpha-keyed texture was already being cut
+// out -- at librw's fixed 10, not at the threshold the artist put in the model.
+// A bucket asking for 128 got 10, which keeps every half-transparent texel that
+// the console dropped: soft haloes round leaves rather than solid quads. Worth
+// knowing, because it means the visible change here is subtler than "the alpha
+// was ignored" suggests, and because a bucket that asks for 1 was ALREADY being
+// tested more harshly than it asked for.
+//
+// GX's form is more general than a single alpha test: it is two comparisons
+// combined by a boolean op, where librw has one comparison and one reference.
+// The reduction is exact for everything the game produces, because ALWAYS is
+// the identity for AND, so a pair with an ALWAYS side collapses to the other
+// side. Both of the states above are that shape, which is why the console's
+// two-sided register never mattered here.
 void RwGameCubeSetAlphaCompare(RwInt32 comp0, RwUInt8 ref0, RwInt32 op, RwInt32 comp1,
                                RwUInt8 ref1)
 {
+    RwInt32 comp = GX_ALWAYS;
+    RwUInt8 ref = 0;
+
+    if (op == GX_AOP_AND && comp0 == GX_ALWAYS)
+    {
+        comp = comp1;
+        ref = ref1;
+    }
+    else if (op == GX_AOP_AND && comp1 == GX_ALWAYS)
+    {
+        comp = comp0;
+        ref = ref0;
+    }
+    else
+    {
+        // A genuine two-sided test -- a band, or an OR of two half-open ranges.
+        // xModelBucket.cpp is the only caller in the game and never asks for
+        // one, so rather than emulate it with two passes for nobody, this lets
+        // every pixel through and leaves `comp` at GX_ALWAYS.
+        //
+        // Passing everything, rather than picking one side and hoping, is the
+        // deliberate half: an alpha test that rejects too much makes geometry
+        // VANISH, and one that rejects too little only makes it opaque -- which
+        // is exactly what this function did before it was written. Failing back
+        // to the old behaviour is the safe direction for an unreachable case.
+    }
+
+    // GX has eight comparisons; librw has three. The five with no name here are
+    // NEVER, EQUAL, LEQUAL, GREATER and NEQUAL, and they are not equally far
+    // out of reach: EQUAL and NEQUAL genuinely have no single-state spelling,
+    // while GREATER n is GEQUAL n+1 and LEQUAL n is LESS n+1, which would be
+    // exact everywhere except at n = 255.
+    //
+    // They still all land in the default. Writing the off-by-one would be
+    // inventing behaviour for a call the game does not make, and a wrong step
+    // in it is precisely how the edge of a leaf goes missing -- the failure
+    // this whole function exists to fix. Whoever finds a caller that needs one
+    // has the conversion written down here.
+    rw::int32 func;
+    switch (comp)
+    {
+    case GX_GEQUAL:
+        func = rw::ALPHAGREATEREQUAL;
+        break;
+    case GX_LESS:
+        func = rw::ALPHALESS;
+        break;
+    case GX_ALWAYS:
+        func = rw::ALPHAALWAYS;
+        break;
+    default:
+        func = rw::ALPHAALWAYS;
+        ref = 0;
+        break;
+    }
+
+    // Both states on every call. librw's D3D9 cache only forwards a value that
+    // CHANGED, so skipping the reference when the function is ALWAYS would leave
+    // the previous bucket's reference sitting in D3DRS_ALPHAREF, to come back the
+    // moment some later bucket set the function without it. Setting the pair
+    // together makes each call state the whole thing.
+    //
+    // The reference needs no scaling: GX's is 8-bit unsigned and so is
+    // D3DRS_ALPHAREF, and librw hands ALPHATESTREF to it unchanged.
+    rw::SetRenderState(rw::ALPHATESTFUNC, (rw::uint32)func);
+    rw::SetRenderState(rw::ALPHATESTREF, (rw::uint32)ref);
 }
 
 // Whether the z buffer is compared before or after the texture lookup.
