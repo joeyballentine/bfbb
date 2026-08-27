@@ -602,3 +602,85 @@ From `DUPLOTRON.md` and the `bfbb-decomp` skill, and they apply here too:
   `!/CMakeLists.txt` negation; do not remove it.
 - The `report.json` key names differ from what you may expect; the DOL hash is
   the gate, not the report.
+
+## 8. Bugs hunted from a diagnostic, and what the diagnostics found
+
+The `BFBB_*` environment variables are how this port is debugged: a `getenv`
+inside `#ifdef PLATFORM_PC`, a `printf`, and usually a small static seen-array
+so it reports once per distinct object rather than once per frame. The ones
+that answered their question are deleted once the fix lands, because a probe
+that survives its bug is noise the next reader has to rule out. What they
+*found* is written down here instead, since that is the part worth keeping.
+
+### Measure the object you think you are measuring
+
+The most expensive mistake made on this branch, by a wide margin: a probe was
+hung off `zEntSimpleObj_Render` to investigate why trees render too dark, and
+it never fired for a tree even once. `zEntSimpleObj_Render` does not draw --
+it **enqueues into a model bucket**, and the draw happens later at flush time
+in `xModelBucket.cpp`, right before `xModelRenderSingle`. Every reading taken
+that way came from some unrelated object that was working correctly, so every
+reading said "everything checks out", and several confident hypotheses were
+built on top of it over multiple playtest rounds.
+
+What broke the deadlock was a correlation check that **returned zero** -- a
+counter of how many tagged simple objects reached the render callback. Zero
+tagged objects is not a null result; it is proof the probe and the subject
+never coincided. Before trusting a diagnostic, spend one round proving it
+fires on the actual subject. A probe that cannot report "I saw nothing" cannot
+be trusted when it reports something.
+
+### The dark trees — measured, unresolved
+
+Trees in the hub render too dark. Measured at the bucket flush, which is where
+they are actually drawn:
+
+    PipeFlags 00980002 | prelight DISABLED | kit 1412C810
+    geo flags 00000037   PRELIT clear   NORMALS set   MODULATE clear
+
+So a tree is: four directional lights from kit `1412C810`, which has **no
+ambient light at all**, added to librw's constant vertex stream, which is
+**black**, with the material colour substituted white because `MODULATE` is
+clear. A face pointing away from all four directionals therefore receives
+nothing. 88 of 101 buckets are in this state and 13 keep their baked prelight;
+the split is `(PipeFlags & 0xC0) == 0x80`, tested just above the draw, and
+`0x00980002` does not match it.
+
+The open question is narrow and still unanswered: **what does the GameCube use
+as the base colour for a vertex when `PRELIT` is clear?** If it is not black,
+that is the whole bug.
+
+Ruled out by measurement, so that none of it is retried:
+
+- LKIT payload is byte-identical between the Xbox and GameCube assets.
+- `Geometry::LIGHT` is set; `currentWorld` is valid; `RpWorldAddLight` is
+  implemented and the world's light lists are populated.
+- The prelight hack in `iModel.cpp` is verbatim retail.
+- Light type constants match retail and are asserted.
+- The light direction convention matches: `direction = at`, and the shader
+  computes `dot(N, -at)`. The four directions are well spread -- a warm key
+  from above, a cool fill from below.
+- `RwSurfaceProperties` field order is asserted; all surfaceProps are 1.000.
+- `Light::create` sets `LIGHTATOMICS`.
+- The material alpha of 64 that looked suspicious is injected at runtime, not
+  authored: 217 of 219 materials are 255 and one is 128, and 64 is exactly
+  `NPC_BubBud_RenderCB`'s `fade * 127.5 + 0.5` at fade 0.5. Different object.
+
+Two experiments that were **badly designed** and proved nothing, recorded so
+the same shape is not built again:
+
+- `BFBB_PRELITBASE=white` forced the constant stream white to see whether the
+  lights were contributing. The shader clamps before the material colour is
+  applied, so a white base saturates whether or not lighting works -- the
+  experiment could not distinguish the two outcomes. It made everything bright
+  and flat, which was not evidence of anything.
+- An R-to-B channel swap was suspected for a texture that reads blue instead
+  of red. `BFBB_TEXRGB` read the converted texture back and got
+  `R 145.0 G 97.1 B 105.7` against the asset's ground truth of
+  `R 144.0 G 97.1 B 105.8`. The texture arrives correct; the cause is
+  downstream, in the environment pass or its UV generation.
+
+The systematic next step, if this is picked up again, is a known-good case in
+`rw_selftest`: one quad, one directional light, one known normal, and librw's
+output compared against the arithmetic done by hand. Slower than another
+hypothesis, but it terminates.
