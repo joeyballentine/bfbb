@@ -36,7 +36,11 @@ U32 xStrHash(const char* str, size_t size)
 
 U32 xStrHashCat(U32 prefix, const char* str)
 {
-    U32 hash;
+    // The accumulator starts at the prefix -- retail keeps it in r3, the same
+    // register the argument arrives in, so leaving it uninitialised happened to
+    // match. It is still a live read of an indeterminate value anywhere the
+    // parameter is not already in the accumulator's register.
+    U32 hash = prefix;
     U32 i;
 
     while (i = *str, i != NULL)
