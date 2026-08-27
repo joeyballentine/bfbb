@@ -8,6 +8,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#include <dbghelp.h>
 
 // The Win32 half of the iHost seam. See iHost.h for what each of these is for;
 // this file is only the spelling.
@@ -337,4 +338,74 @@ S32 iHostStrCaseCmp(const char* a, const char* b)
 const char* iHostName()
 {
     return "win32";
+}
+
+// Symbolised caller stack, for diagnostics. See iHost.h.
+//
+// CaptureStackBackTrace rather than StackWalk64: this is called from ordinary
+// running code with no CONTEXT to hand, and the frame-pointer walk in
+// bfbb_main.cpp's crash handler needs one. Symbols come from the PDB through
+// dbghelp, the same way, and a build without one prints addresses -- still
+// enough to tell two different callers apart.
+void iHostPrintCallers(const char* why, S32 maxFrames)
+{
+    static bool symbolsReady = false;
+    if (!symbolsReady)
+    {
+        symbolsReady = true;
+        SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
+        SymInitialize(GetCurrentProcess(), NULL, TRUE);
+    }
+
+    if (maxFrames < 1)
+    {
+        maxFrames = 1;
+    }
+    else if (maxFrames > 48)
+    {
+        maxFrames = 48;
+    }
+
+    void* frames[48];
+    USHORT got = CaptureStackBackTrace(1, (DWORD)maxFrames, frames, NULL);
+
+    printf("bfbb: callers -- %s\n", why != NULL ? why : "");
+
+    char symbolBuffer[sizeof(SYMBOL_INFO) + 512];
+    SYMBOL_INFO* symbol = (SYMBOL_INFO*)symbolBuffer;
+    memset(symbolBuffer, 0, sizeof(symbolBuffer));
+    symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+    symbol->MaxNameLen = 500;
+
+    HANDLE process = GetCurrentProcess();
+
+    for (USHORT i = 0; i < got; i++)
+    {
+        DWORD64 addr = (DWORD64)(uintptr_t)frames[i];
+        DWORD64 displacement = 0;
+        const char* name = "?";
+
+        if (SymFromAddr(process, addr, &displacement, symbol))
+        {
+            name = symbol->Name;
+        }
+
+        IMAGEHLP_LINE64 line;
+        memset(&line, 0, sizeof(line));
+        line.SizeOfStruct = sizeof(line);
+        DWORD lineDisplacement = 0;
+
+        if (SymGetLineFromAddr64(process, addr, &lineDisplacement, &line))
+        {
+            printf("bfbb:   #%-2d %s  (%s:%lu)\n", (int)i, name, line.FileName,
+                   (unsigned long)line.LineNumber);
+        }
+        else
+        {
+            printf("bfbb:   #%-2d %s + 0x%llx\n", (int)i, name,
+                   (unsigned long long)displacement);
+        }
+    }
+
+    fflush(stdout);
 }

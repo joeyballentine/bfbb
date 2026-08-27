@@ -90,6 +90,8 @@ SYSTEM_LIBS = [
     "-lgdi32",
     "-lkernel32",
     "-ld3d9",
+    # SymFromAddr and friends, for iHostPrintCallers.
+    "-ldbghelp",
     # CoCreateInstance and friends, for the WASAPI backend in iSndHostWin32.cpp.
     # The audio interfaces themselves need no import library -- their GUIDs are
     # defined in that file rather than taken from uuid.lib.

@@ -40,6 +40,18 @@ Everything below is off unless set, and each costs a load per frame when it is.
                         from the rest. Defaults to 32 if set to anything but a
                         number.
 
+    BFBB_SNDMIX         once a second, every live voice with the gain it is
+                        actually being mixed at, plus the loaded sound tables
+                        and whether each one's package is still open. A sound
+                        that is playing and inaudible and a sound that never
+                        started look identical from outside.
+
+    BFBB_SNDWHO=<aid>   the calling stack the first three times that asset is
+                        started. The retail Xbox assets carry no ADBG names, so
+                        an asset id is all a sound has, and the platform layer
+                        sees the call with no context at all. This is what found
+                        the HUD counter behind a sound playing six times over.
+
     BFBB_AUDIO=0        force the silent path in the win32 backend. Voices still
                         keep time exactly as they do with a device, so this is
                         the way to tell a bug in the mixer apart from a bug in

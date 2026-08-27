@@ -528,8 +528,9 @@ target_include_directories(pc_selftest PRIVATE
 if(WIN32)
   # Same COM dependency as the game: the self-test links the real audio backend
   # rather than a stub, so that what it checks about voice timing is what the
-  # game will actually do.
-  target_link_libraries(pc_selftest PRIVATE ole32)
+  # game will actually do. dbghelp is iHostPrintCallers, in the host backend
+  # this target links whole.
+  target_link_libraries(pc_selftest PRIVATE ole32 dbghelp)
 endif()
 
 add_test(NAME pc_selftest COMMAND pc_selftest)

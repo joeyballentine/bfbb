@@ -136,6 +136,15 @@ bool iHostTempDir(char* out, size_t outsize);
 // Windows spells both _putenv_s.
 bool iHostSetEnv(const char* name, const char* value);
 
+// Print the calling stack, symbolised, prefixed with `why`.
+//
+// For DIAGNOSTICS, not for errors: the question it answers is "which game code
+// leads here", which comes up constantly in a port because the platform layer
+// sees a call with no context and the code that made it is 200 files away.
+// The alternative is guessing from the arguments, which is slow and often
+// wrong. A host that cannot symbolise its own stack prints nothing.
+void iHostPrintCallers(const char* why, S32 maxFrames);
+
 // Case-insensitive compare, for the disc filesystem's benefit. POSIX spells it
 // strcasecmp and Windows spells it _stricmp.
 S32 iHostStrCaseCmp(const char* a, const char* b);

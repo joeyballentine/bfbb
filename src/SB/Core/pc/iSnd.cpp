@@ -2,8 +2,11 @@
 #include "iSndData.h"
 #include "iSndHost.h"
 
+#include "iHost.h"
+
 #include "xSnd.h"
 #include "xMath.h"
+#include "xstransvc.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -148,6 +151,10 @@ struct pcvoice
     bool in_use;
     bool paused;
 
+    // The gain the last mix computed, for BFBB_SNDMIX.
+    F32 last_left;
+    F32 last_right;
+
     // Whether this slot is holding a reference on the sample cache. Tracked
     // rather than inferred from `aid`, because a voice can hold a slot for an
     // asset whose data could not be read, and releasing a reference that was
@@ -160,6 +167,17 @@ static pcvoice sVoices[ISND_TOTAL_VOICES];
 // How many more plays BFBB_SND has left to report. See iStartVoice.
 static S32 sReportPlays;
 
+// BFBB_SNDMIX. See iReportMix.
+static bool sReportMix;
+static U64 sLastMixReportNs;
+
+// BFBB_SNDWHO=<asset id in hex>: the calling stack the first few times that
+// sound is started. "Which code plays this" is otherwise unanswerable -- the
+// retail Xbox assets carry no ADBG names, so an asset id is all there is, and
+// the platform layer sees the call with no context at all.
+static U32 sWhoAsset;
+static S32 sWhoLeft;
+
 static iSndExternalCallback sExternalCallback;
 static bool sStereo = true;
 static bool sSuspended;
@@ -167,6 +185,7 @@ static bool sSuspended;
 // Defined further down with the rest of the mix, but called from the update
 // sweep above it.
 static void iApplyVoiceMix(S32 i);
+static void iReportMix();
 
 static void iReleaseVoice(S32 i)
 {
@@ -232,6 +251,20 @@ void iSndInit()
             {
                 sReportPlays = 32;
             }
+        }
+    }
+
+    sReportMix = getenv("BFBB_SNDMIX") != NULL;
+    sLastMixReportNs = 0;
+
+    sWhoAsset = 0;
+    sWhoLeft = 0;
+    {
+        const char* env = getenv("BFBB_SNDWHO");
+        if (env != NULL)
+        {
+            sWhoAsset = (U32)strtoul(env, NULL, 16);
+            sWhoLeft = 3;
         }
     }
 
@@ -549,6 +582,8 @@ void iSndUpdate()
         iApplyVoiceMix(i);
     }
 
+    iReportMix();
+
     // Retire voices the device has finished, so the game's table does not hold
     // handles for sounds that have stopped. Retail does this from its AX
     // callback; here the frame is the only clock there is.
@@ -664,6 +699,44 @@ S32 iSndFindFreeVoice(U32 priority, U32 flags, U32 owner)
 // them and iSnd.h declares them.
 
 // ---------------------------------------------------------------------------
+// Pitch
+//
+// **The game's pitch is in SEMITONES, not a playback ratio.** Zero is the
+// sample's own rate, +12 an octave up, -12 an octave down, and retail converts
+// with powf(2, pitch/12) at all four places it reaches AX
+// (src/SB/Core/gc/iSnd.cpp:1346, 1417, 1500 and 1626).
+//
+// The seam takes a ratio, because that is what a mixer steps its read position
+// by, so the conversion belongs here. Passing the semitones straight through is
+// wrong in a way that is easy to miss and loud when it happens: the commonest
+// value is 0, which a ratio reads as "stopped" and so gets specially guarded
+// to 1.0, which is right by accident -- and then the HUD's counter ping, which
+// rises to 6.5 semitones as it counts up, plays at six and a half times its
+// rate instead of one and a half.
+static F32 iPitchRatio(F32 semitones)
+{
+    if (semitones == 0.0f)
+    {
+        return 1.0f;
+    }
+
+    F32 ratio = powf(2.0f, semitones / 12.0f);
+
+    // A backend steps a read position by this, so it has to stay sane even if a
+    // caller passes something absurd. Retail's range is -12 to +6.5.
+    if (ratio < 0.01f)
+    {
+        ratio = 0.01f;
+    }
+    else if (ratio > 16.0f)
+    {
+        ratio = 16.0f;
+    }
+
+    return ratio;
+}
+
+// ---------------------------------------------------------------------------
 // The mix
 //
 // This is iSndCalcVol and iSndCalcVol3d from src/SB/Core/gc/iSnd.cpp, which
@@ -757,7 +830,87 @@ static void iApplyVoiceMix(S32 i)
     }
 
     F32 theta = pan01 * 1.5707963f;
-    iSndHostSetVol(sVoices[i].host, cosf(theta) * vol, sinf(theta) * vol);
+    F32 left = cosf(theta) * vol;
+    F32 right = sinf(theta) * vol;
+
+    sVoices[i].last_left = left;
+    sVoices[i].last_right = right;
+
+    iSndHostSetVol(sVoices[i].host, left, right);
+}
+
+// BFBB_SNDMIX: every second, every live voice and the gain it is being mixed
+// at. A sound that is playing and inaudible and a sound that never started look
+// identical from outside, and they have nothing in common.
+static void iReportMix()
+{
+    if (!sReportMix)
+    {
+        return;
+    }
+
+    U64 now = iHostMonotonicNs();
+    if (now - sLastMixReportNs < 1000000000ULL)
+    {
+        return;
+    }
+
+    sLastMixReportNs = now;
+
+    static const char* kCategory[] = { "game", "dialog", "music", "cutscene", "ui" };
+
+    U32 cached = 0;
+    U32 cachedBytes = 0;
+    U32 pinned = 0;
+    iSndDataStats(&cached, &cachedBytes, &pinned);
+
+    printf("iSnd: --- voices  (cache %u entries, %u KB, %u pinned)  faders", cached,
+           cachedBytes / 1024, pinned);
+    for (S32 c = 0; c < 5; c++)
+    {
+        printf(" %s=%.2f", kCategory[c], gSnd.categoryVolFader[c]);
+    }
+    printf("\n");
+
+    // The sound tables, and whether the package each came from is still open.
+    // A table whose package has been unloaded still answers a lookup -- nothing
+    // clears sinfo_array -- but its samples cannot be read any more, so a sound
+    // in it starts and plays silently. That is a different failure from a sound
+    // that was never in a table at all, and only this tells them apart.
+    printf("iSnd:   tables %d:", sinfo_array_max);
+    for (S32 t = 0; t < sinfo_array_max; t++)
+    {
+        if (sinfo_array[t] == NULL)
+        {
+            printf(" [%d empty]", t);
+            continue;
+        }
+
+        U32 n = sinfo_array[t]->num_sfx + sinfo_array[t]->num_streams +
+                sinfo_array[t]->num_cutscene;
+        const char* pkg = n != 0 ? xST_xAssetID_HIPFullPath(sinfo_array[t]->entry[0].assetID) : NULL;
+        printf(" [%d %u in %s]", t, n, pkg != NULL ? pkg : "NO PACKAGE");
+    }
+    printf("\n");
+
+    for (S32 i = 0; i < ISND_TOTAL_VOICES; i++)
+    {
+        if (!sVoices[i].in_use)
+        {
+            continue;
+        }
+
+        xSndVoiceInfo* vp = &gSnd.voice[i];
+        const char* cat = (U32)vp->category < 5 ? kCategory[vp->category] : "?";
+
+        printf("iSnd:   [%2d] %08x %-8s vol=%.3f -> L=%.3f R=%.3f  flags=%08x parent=%08x %s%s%s\n",
+               i, vp->assetID, cat, vp->vol, sVoices[i].last_left, sVoices[i].last_right,
+               vp->flags, vp->parentID,
+               iSndHostIsPlaying(sVoices[i].host) ? "playing" : "SILENT",
+               (vp->flags & 0x8) ? " 3d" : "", sVoices[i].holds_data ? "" : " nodata");
+    }
+
+    fflush(stdout);
 }
 
 static S32 iStartVoice(xSndVoiceInfo* vp)
@@ -848,9 +1001,17 @@ static S32 iStartVoice(xSndVoiceInfo* vp)
         fflush(stdout);
     }
 
+    if (sWhoLeft > 0 && vp->assetID == sWhoAsset)
+    {
+        sWhoLeft--;
+        char why[96];
+        snprintf(why, sizeof(why), "sound %08x started on voice %d", vp->assetID, i);
+        iHostPrintCallers(why, 24);
+    }
+
     // Pitch multiplies the sample's own rate and the backend applies it to the
     // step, so it has to be set before the voice starts.
-    iSndHostSetPitch(sVoices[i].host, vp->pitch > 0.0f ? vp->pitch : 1.0f);
+    iSndHostSetPitch(sVoices[i].host, iPitchRatio(vp->pitch));
 
     // And the mix before it too: iSndHostStart takes the current gain as the
     // voice's starting gain rather than ramping up to it, so a voice started
@@ -971,7 +1132,7 @@ void iSndSetPitch(U32 handle, F32 pitch)
         if (gSnd.voice[i].sndID == handle && sVoices[i].in_use)
         {
             gSnd.voice[i].pitch = pitch;
-            iSndHostSetPitch(sVoices[i].host, pitch);
+            iSndHostSetPitch(sVoices[i].host, iPitchRatio(pitch));
             return;
         }
     }
@@ -1008,7 +1169,7 @@ void iSndSuspendCD(U32)
     // There is no drive.
 }
 
-void iSndSceneExit()
+static void iStopAllVoices()
 {
     for (S32 i = 0; i < ISND_TOTAL_VOICES; i++)
     {
@@ -1018,6 +1179,34 @@ void iSndSceneExit()
             gSnd.voice[i].flags = 0;
             iReleaseVoice(i);
         }
+    }
+}
+
+void iSndSceneExit()
+{
+    iStopAllVoices();
+
+    // **And pop the sound table**, which retail does here and this had been
+    // missing (src/SB/Core/gc/iSnd.cpp:1720). It is not bookkeeping. Every call
+    // site pairs this with an xSTUnLoadScene of the package a table came from --
+    // zScene.cpp:1229 and the three in zEntPlayer.cpp -- so one push in
+    // iSndLoadSounds is matched by one pop here, and without the pop the array
+    // only grows.
+    //
+    // Two things go wrong when it does. The array is twelve long and refuses
+    // anything past that, so after a few level changes a scene loads with no
+    // sounds at all. And worse, a table left behind points into the unloaded
+    // package's memory: iSndLookup walks the array from the top down, so it
+    // reads every stale table BEFORE reaching the live one. Whatever now
+    // occupies that memory is read as a sound entry, and an id that matches by
+    // accident plays at whatever sample rate and format the garbage says.
+    //
+    // Retail also RwFrees the table. The port must not: these point into the
+    // packer's own layer memory, which the packer owns and frees itself.
+    if (sinfo_array_max > 0)
+    {
+        sinfo_array_max--;
+        sinfo_array[sinfo_array_max] = NULL;
     }
 }
 
@@ -1061,7 +1250,12 @@ S32 iSndLoadSounds(void* data)
 
 void iSndDIEDIEDIE()
 {
-    iSndSceneExit();
+    // Voices only. Retail's version silences the hardware and clears
+    // soundInited; what it does NOT do is pop a sound table, and it must not --
+    // it is the reset-button and disc-error kill switch (iSystem.cpp:152),
+    // which is not a scene ending. Calling iSndSceneExit here would drop a
+    // table the loaded scene still needs.
+    iStopAllVoices();
 }
 
 void iSndSetExternalCallback(iSndExternalCallback callback)

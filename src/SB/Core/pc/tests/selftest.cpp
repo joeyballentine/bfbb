@@ -1160,10 +1160,20 @@ static void test_snd()
     check(iSndFindFreeVoice(128, 0x4, 0) == -1,
           "a seventh stream request fails rather than using a sound slot");
 
+    // A scene ending frees the voices AND pops the sound table, because every
+    // caller pairs it with unloading the package that table came from. Without
+    // the pop the array only grows -- twelve deep, so a few level changes leave
+    // a scene with no sound at all -- and worse, each table left behind points
+    // into an unloaded package that iSndLookup goes on reading.
     iSndSceneExit();
 
-    // Timing. The null backend is silent but keeps the clock, because the game
-    // waits on sounds; a voice must report playing for the sample's length.
+    check(iSndLookup(SND_ASSET) == NULL, "a scene ending pops its sound table");
+
+    // So the scene that follows brings its own, exactly as a level load does.
+    check(iSndLoadSounds(&table) == 1, "and the next scene's table loads in its place");
+
+    // Timing. Silent but on the clock, because the game waits on sounds; a
+    // voice must report playing for the sample's length.
     lk = (test_lookup*)iSndLookup(SND_ASSET);
     S32 v = iSndFindFreeVoice(128, 0x2, 0);
     check(v >= 6, "a voice for the timing test");
@@ -1226,6 +1236,49 @@ static void test_snd()
     iSndStop(0x4343);
     check(!iSndIsPlayingByHandle(0x4343), "iSndStop ends it");
     check(gSnd.voice[v].sndID == 0, "and clears the game-side handle");
+
+    // Pitch is in SEMITONES, not a playback ratio: retail converts with
+    // powf(2, pitch/12) everywhere it reaches AX. Checked through the clock
+    // rather than by reading a number back, because the number the backend
+    // holds is the ratio and the thing worth pinning down is that the
+    // conversion happened at all. +12 is an octave, so a 0.1 s sample must be
+    // finished by 0.08 s -- and the same voice at pitch 0 must not be.
+    //
+    // The commonest value is 0, which converts to 1.0 either way, so a port
+    // that forgot the conversion looks correct until the HUD counter reaches
+    // 6.5 semitones and plays six and a half times too fast.
+    for (S32 pass = 0; pass < 2; pass++)
+    {
+        F32 semitones = (pass == 0) ? 12.0f : 0.0f;
+
+        lk = (test_lookup*)iSndLookup(SND_ASSET);
+        v = iSndFindFreeVoice(128, 0x2, 0);
+        vp = &gSnd.voice[v];
+        vp->assetID = SND_ASSET;
+        vp->sndID = 0x4400 + pass;
+        vp->sample_rate = 32000;
+        vp->vol = 1.0f;
+        vp->pitch = semitones;
+        vp->flags = 0x2 | 1;
+        vp->category = (sound_category)0;
+        iSndPlay(vp);
+
+        iHostSleepUntilNs(iHostMonotonicNs() + 80000000ULL); // 0.08 s
+        iSndHostUpdate();
+
+        if (pass == 0)
+        {
+            check(!iSndIsPlayingByHandle(vp->sndID),
+                  "+12 semitones is an octave up, so the sample ends in half the time");
+        }
+        else
+        {
+            check(iSndIsPlayingByHandle(vp->sndID),
+                  "and the same sample at pitch 0 is still playing then");
+        }
+
+        iSndStop(0x4400 + pass);
+    }
 
     iSndExit();
     iHostSetEnv("BFBB_AUDIO", NULL);

@@ -244,3 +244,11 @@ const char* iHostName()
 {
     return "posix";
 }
+
+// No symboliser is assumed on a POSIX host: backtrace()/backtrace_symbols are
+// glibc extensions and give mangled names without line numbers even there.
+// Saying nothing is better than saying something misleading, and this is a
+// diagnostic -- nothing depends on its output.
+void iHostPrintCallers(const char*, S32)
+{
+}
