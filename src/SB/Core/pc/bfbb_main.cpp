@@ -256,8 +256,12 @@ namespace
             SetUnhandledExceptionFilter(CrashHandler);
             setvbuf(stdout, NULL, _IONBF, 0);
             setvbuf(stderr, NULL, _IONBF, 0);
-            printf("bfbb: PC port, D3D9. iFX and iFMV are refusals rather than ports --\n");
-            printf("bfbb: no animated UVs, movies are skipped. See src/SB/Core/pc/README.md.\n");
+            // iFX stopped being a refusal when the animated-UV pipeline went in;
+            // iFMV is still one and is meant to stay one. A banner that names a
+            // gap which has since been filled is worse than no banner, because
+            // it is the first thing anyone reads when a texture does not move.
+            printf("bfbb: PC port, D3D9. iFMV is a refusal rather than a port --\n");
+            printf("bfbb: movies are skipped. See src/SB/Core/pc/README.md.\n");
             if (getenv("BFBB_TEST_CRASH")) { *(volatile int*)0 = 1; }
         }
     };
