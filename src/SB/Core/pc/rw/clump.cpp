@@ -12,7 +12,9 @@
 #include <rwcore.h>
 #include <rpworld.h>
 
-#include "stream.h" // brings in librw's rw.h, which must not be included twice
+#include "stream.h"
+
+#include <stdio.h> // brings in librw's rw.h, which must not be included twice
 
 static inline rw::Clump* asClump(RpClump* clump)
 {
@@ -44,7 +46,47 @@ RpClump* RpClumpStreamRead(RwStream* stream)
     // prepends (below). iModel.cpp cares -- it returns the FIRST atomic of a
     // multi-atomic model as the model -- so if a model ever comes out
     // inside-out, this is the line to doubt first.
-    return reinterpret_cast<RpClump*>(rw::Clump::streamRead(stream));
+    rw::Clump* clump = rw::Clump::streamRead(stream);
+
+    if (clump == NULL)
+    {
+        return NULL;
+    }
+
+    // **An atomic with no geometry is a trap, and it is worth saying so here.**
+    //
+    // Game code does not expect one: xJSP.cpp:15's CountAtomicCB goes straight
+    // to atomic->geometry->mesh with no check, so a null geometry faults
+    // reading address 8 rather than failing the load. Retail never produced one
+    // -- RenderWare's reader would not have got this far -- so there is no
+    // handling anywhere above to add.
+    //
+    // librw CAN produce one: Atomic::streamReadClump takes its geometry by
+    // INDEX out of the clump's geometry list, and an index the list does not
+    // cover leaves the atomic with nil. Reporting it names the asset that did
+    // it, which is the difference between a fault in xJSP and a fact about a
+    // file.
+    {
+        int missing = 0;
+        rw::LinkList& atomics = clump->atomics;
+        for (rw::LLLink* cur = atomics.link.next; cur != atomics.end(); cur = cur->next)
+        {
+            rw::Atomic* a = rw::Atomic::fromClump(cur);
+            if (a->geometry == NULL || a->geometry->meshHeader == NULL)
+            {
+                missing++;
+            }
+        }
+
+        if (missing != 0)
+        {
+            printf("[pcport] RpClumpStreamRead: %d of %d atomics have no geometry or no mesh\n",
+                   missing, clump->atomics.count());
+            fflush(stdout);
+        }
+    }
+
+    return reinterpret_cast<RpClump*>(clump);
 }
 
 RwBool RpClumpDestroy(RpClump* clump)

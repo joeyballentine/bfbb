@@ -32,9 +32,55 @@ static rw::Texture* convertRasterToPlatform(rw::Texture* texture, void* data)
 {
     (void)data;
 
-    if (texture != NULL && texture->raster != NULL)
+    if (texture == NULL || texture->raster == NULL)
     {
-        texture->raster = rw::Raster::convertTexToCurrentPlatform(texture->raster);
+        return texture;
+    }
+
+    // **Xbox stores 24-bit RGB padded to 32, and librw does not expect that.**
+    //
+    // xbox.cpp:745 picks its working depth from the raster's FORMAT -- C888
+    // means 24 -- while natras->bpp comes from the raster's DEPTH, which for
+    // these textures is 32. So image->bpp is 3, natras->bpp is 4, and
+    // xbox.cpp:792 asserts. It is an upstream bug, not a pin that needs moving:
+    // third_party/librw is at the tip of master and there is nothing newer.
+    //
+    // BFBB's Xbox packs really do contain these: 21 textures convert cleanly
+    // out of BOOT.HIP and then a 32x32 C888-at-depth-32 stops the process.
+    //
+    // The fix is to tell librw what the memory actually is -- four bytes per
+    // pixel -- and then put back the one thing that changes: C888 has no alpha,
+    // so the padding byte is not a meaningful one and must not be allowed to
+    // become transparency. Xbox's X8R8G8B8 leaves it undefined, and a texture
+    // whose alpha came out zero would be invisible rather than wrong-looking,
+    // which is the hardest kind of bug to see.
+    const bool paddedRGB = (texture->raster->platform == rw::PLATFORM_XBOX) &&
+                           ((texture->raster->format & 0xF00) == rw::Raster::C888) &&
+                           (texture->raster->depth == 32);
+
+    if (paddedRGB)
+    {
+        texture->raster->format =
+            (texture->raster->format & ~0xF00) | rw::Raster::C8888;
+    }
+
+    texture->raster = rw::Raster::convertTexToCurrentPlatform(texture->raster);
+
+    if (paddedRGB && texture->raster != NULL)
+    {
+        // Opaque, because that is what C888 meant.
+        rw::uint8* pixels = texture->raster->lock(0, rw::Raster::LOCKWRITE);
+
+        if (pixels != NULL)
+        {
+            const rw::int32 count = texture->raster->width * texture->raster->height;
+            for (rw::int32 i = 0; i < count; i++)
+            {
+                pixels[i * 4 + 3] = 0xFF;
+            }
+
+            texture->raster->unlock(0);
+        }
     }
 
     return texture;

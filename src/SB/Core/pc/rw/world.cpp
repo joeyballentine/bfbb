@@ -32,6 +32,18 @@
 
 #include "rw.h"
 
+// Declared rather than included: librw's src/d3d/rwxbox.h has no include guard
+// and redefines InstanceData, InstanceDataHeader and ObjPipeline against what
+// rw.h has already pulled in. One function is all this file needs.
+namespace rw
+{
+    namespace xbox
+    {
+        void registerNativeDataPlugin(void);
+        void registerVertexFormatPlugin(void);
+    }
+}
+
 #include <stddef.h>
 #include <string.h>
 
@@ -128,6 +140,35 @@ static void* worldTailCopy(void* dst, void* src, rw::int32 offset, rw::int32 siz
 // rather than assumes.
 RwBool RpWorldPluginAttach(void)
 {
+    // **The plugins librw expects the APPLICATION to register, and nothing did.**
+    //
+    // A geometry's MESH HEADER does not come out of the portable part of a
+    // RenderWare stream -- it is a plugin chunk, and librw skips a chunk it has
+    // no plugin for. Without registerMeshPlugin, RpClumpStreamRead hands back
+    // clumps whose geometries have a NULL meshHeader, and xJSP.cpp:15 walks
+    // straight into it: atomic->geometry->mesh->totalIndicesInMesh faults
+    // reading address 8, which is where totalIndicesInMesh sits in
+    // RpMeshHeader. 78 clumps in the BOOT scene alone.
+    //
+    // This is not a librw bug. Its own tools do exactly this --
+    // tools/clumpview/main.cpp:261 -- because a plugin costs space on every
+    // object and only the application knows which it needs. What the port had
+    // instead was a shim that registered the plugins the GAME names
+    // (RpSkinPluginAttach and friends) and none of the ones RenderWare links in
+    // for you, which is a seam the game cannot see across.
+    //
+    // Registered here because RpWorldPluginAttach is the first attach
+    // iSystem.cpp's RWAttachPlugins makes, and all of these must land between
+    // RwEngineInit and RwEngineOpen. Engine::init already registers the
+    // per-platform ones (xbox::registerPlatformPlugins and friends), so those
+    // are not repeated.
+    rw::registerMeshPlugin();
+    rw::registerNativeDataPlugin();
+    rw::registerAtomicRightsPlugin();
+    rw::registerMaterialRightsPlugin();
+    rw::xbox::registerVertexFormatPlugin();
+    rw::registerUVAnimPlugin();
+
     // Idempotent within one engine lifetime, and correctly re-registering after
     // a term/init cycle: PluginList::close frees every plugin at RwEngineTerm
     // and getPluginOffset then answers -1 again.
