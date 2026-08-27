@@ -76,6 +76,24 @@ Everything below is off unless set, and each costs a load per frame when it is.
                         an unsupported pixel format look identical on screen and
                         have nothing in common.
 
+    BFBB_TEXDUMP=<dir>  every converted raster at least 128 wide, read back
+                        through librw's own toImage and written out as a PNG.
+                        The other half of BFBB_TEX: that one says a conversion
+                        failed, this one says what a conversion PRODUCED. A
+                        texture that arrives on screen as a flat colour and one
+                        that was never bound look identical, and asking what is
+                        in the surface separates them.
+
+    BFBB_UI             what the UI is doing, in three parts: every UI entity as
+                        the scene builds it with the links it carries, the
+                        show/hide events as they arrive, and twice a second the
+                        entities that are visible IN DRAW ORDER with their
+                        texture, rectangle and z. The draw-order list is the one
+                        that matters -- 2D UI has no depth, so what is on top is
+                        decided by the sort in zUIRenderAll, and an element that
+                        is missing is usually an element something later painted
+                        over.
+
     BFBB_WATCHDOG=<n>   every n seconds, print the main thread's stack. For
                         HANGS -- a crash announces itself and a hang does not.
                         Two identical traces mean a deadlock; two different ones

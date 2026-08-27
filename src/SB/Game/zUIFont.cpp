@@ -273,6 +273,17 @@ S32 zUIFontEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam, xBas
     case eEventVisible:
     case eEventFastVisible:
     {
+#ifdef PLATFORM_PC
+        // A UI font does NOT fall through to zUIEventCB for these two, so the
+        // show/hide trace has to exist here as well or half the cascade is
+        // invisible to it -- and it is the text elements that carry the links
+        // which turn the backdrops on.
+        if (getenv("BFBB_UI") != NULL)
+        {
+            printf("bfbb: uivis %08x SHOW (font)\n", (unsigned)s->id);
+            fflush(stdout);
+        }
+#endif
         if (toParam && *(U32*)&toParam[0])
         {
             set_text(*s, *(U32*)&toParam[0]);
@@ -300,6 +311,13 @@ S32 zUIFontEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam, xBas
     case eEventInvisible:
     case eEventFastInvisible:
     {
+#ifdef PLATFORM_PC
+        if (getenv("BFBB_UI") != NULL)
+        {
+            printf("bfbb: uivis %08x HIDE (font)\n", (unsigned)s->id);
+            fflush(stdout);
+        }
+#endif
         xEntHide(s);
 
         switch (s->fasset->mode)

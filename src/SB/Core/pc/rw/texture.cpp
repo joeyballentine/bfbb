@@ -87,6 +87,48 @@ static rw::Texture* convertRasterToPlatform(rw::Texture* texture, void* data)
         fflush(stdout);
     }
 
+    // BFBB_TEXDUMP=<dir>: the converted raster, read back and written out as a
+    // PNG per texture.
+    //
+    // A texture that arrives on screen as a flat colour cannot be told apart
+    // from one that was never bound, and both look like "the image is missing".
+    // Reading the raster back through librw's own toImage puts the question the
+    // other way round -- what is IN the surface after conversion -- which
+    // separates a conversion that produced nothing from a draw that never
+    // sampled it. Only rasters at least 128 wide, because the ones worth asking
+    // about are backdrops and panels and the game holds six thousand textures.
+    if (texture->raster != NULL && getenv("BFBB_TEXDUMP") != NULL &&
+        texture->raster->width >= 128)
+    {
+        static int seq;
+
+        rw::Image* img = texture->raster->toImage();
+
+        if (img != NULL)
+        {
+            char path[512];
+            sprintf(path, "%s/tex_%03d_%dx%d_was%04x.png", getenv("BFBB_TEXDUMP"), seq++,
+                    (int)texture->raster->width, (int)texture->raster->height,
+                    (unsigned)wasFormat);
+
+            // 24-bit images are exactly the case this was written to look at,
+            // and the PNG writer wants 32.
+            if (img->depth != 32)
+            {
+                img->convertTo32();
+            }
+
+            rw::writePNG(img, path);
+            img->destroy();
+
+            printf("bfbb: texdump %s (was platform %d format %04x depth %d, now format %04x "
+                   "depth %d)\n",
+                   path, (int)wasPlatform, (unsigned)wasFormat, (int)wasDepth,
+                   (unsigned)texture->raster->format, (int)texture->raster->depth);
+            fflush(stdout);
+        }
+    }
+
     if (paddedRGB && texture->raster != NULL)
     {
         // Opaque, because that is what C888 meant.
