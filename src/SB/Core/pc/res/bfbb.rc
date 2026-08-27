@@ -1,0 +1,8 @@
+// The executable's icon.
+//
+// Windows shows the application icon of the lowest-numbered ICON resource, so
+// this one is 1 and there is deliberately no second icon in the binary. The
+// .ico itself carries 16, 32, 48 and 64 pixel images at 32bpp, which is what
+// the shell, the task bar and alt-tab pick between; the window class does not
+// set an icon of its own, so this is also what the window gets.
+1 ICON "bfbb.ico"
