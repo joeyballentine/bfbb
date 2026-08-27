@@ -13528,6 +13528,31 @@ void zEntPlayerCollTrigger(xEnt* ent, xScene* sc)
     U32 inside;
     zEntTrigger* trig;
 
+#ifdef PLATFORM_PC
+    // BFBB_EVENT: the PLAYER's trigger test.
+    //
+    // Not zEntTriggerUpdate, which is where this was first looked for and is
+    // the wrong place: that one handles eEventEnterEntity (212) through
+    // eEventExitEntityFLAG (215), and every trigger in the scene reported
+    // srcEvent 5 or 6 -- eEventEnterPlayer and eEventExitPlayer. Those are
+    // tested HERE, against the player's own bound, and dispatched as events to
+    // the trigger. A level change is one of these linked to a portal.
+    //
+    // So the first thing to know is whether this runs at all and how many
+    // triggers the scene handed it. Once per second is enough to tell a loop
+    // that is not running from one running over an empty list.
+    if (getenv("BFBB_EVENT") != NULL)
+    {
+        static U32 calls = 0;
+        if ((calls++ % 60) == 0)
+        {
+            printf("bfbb: zEntPlayerCollTrigger over %u triggers\n",
+                   (unsigned)sc->num_trigs);
+            fflush(stdout);
+        }
+    }
+#endif
+
     for (i = 0; i < sc->num_trigs; i++)
     {
         trig = (zEntTrigger*)sc->trigs[i];
@@ -13609,6 +13634,20 @@ void zEntPlayerCollTrigger(xEnt* ent, xScene* sc)
         case ZENTTRIGGER_TYPE_5:
             break;
         }
+
+#ifdef PLATFORM_PC
+        if (inside && getenv("BFBB_EVENT") != NULL)
+        {
+            static int said = 0;
+            if (said < 30)
+            {
+                said++;
+                printf("bfbb: player inside trigger %08x (entered %u, flags %02x)\n",
+                       (unsigned)trig->id, (unsigned)trig->entered, (unsigned)tasset->flags);
+                fflush(stdout);
+            }
+        }
+#endif
 
         if (inside && !(trig->entered & 0x1))
         {
