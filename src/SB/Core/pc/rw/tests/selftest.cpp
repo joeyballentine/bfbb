@@ -1043,21 +1043,39 @@ static void test_renderstate()
     // The colour write mask, which iDraw.cpp:iDrawSetFBMSK forwards to. It is
     // not a RenderWare render state -- see the comment on it in
     // renderstate.cpp -- so it is reached by name rather than through
-    // RwRenderStateSet, and read back through librw to confirm it landed.
+    // RwRenderStateSet.
     //
-    // The four values that matter are the ones the game passes: everything on,
-    // everything off, and the two the bubble parameters can produce.
+    // Through the capture hook, not through rw::GetRenderState. These read the
+    // value back out of the device when they were written, which works on D3D9
+    // and cannot on LIBRW_PLATFORM=NULL, whose getRenderState returns 0 to
+    // every question (third_party/librw/src/engine.cpp:461) -- so two of the
+    // three failed there and the third passed only because it was checking for
+    // 0. What is under test is that the shim forwards the mask it was given,
+    // and the hook says that on both backends.
+    //
+    // The three values that matter are the ones the game passes: everything on,
+    // everything off, and the alpha-only case the bubble parameters produce.
+    void (*savedMask)(rw::int32, void*) = rw::engine->device.setRenderState;
+    rw::engine->device.setRenderState = captureSetRenderState;
+
+    sCapturedState = -1;
     rwSetColorWriteMask(rw::COLORWRITEALL);
-    check((RwUInt32)(uintptr_t)rw::GetRenderState(rw::COLORWRITEMASK) == rw::COLORWRITEALL,
+    check(sCapturedState == rw::COLORWRITEMASK &&
+              (RwUInt32)(uintptr_t)sCapturedValue == rw::COLORWRITEALL,
           "the colour write mask lets every channel through");
 
+    sCapturedState = -1;
     rwSetColorWriteMask(0);
-    check((RwUInt32)(uintptr_t)rw::GetRenderState(rw::COLORWRITEMASK) == 0,
+    check(sCapturedState == rw::COLORWRITEMASK && (RwUInt32)(uintptr_t)sCapturedValue == 0,
           "and can shut all four off, which is what a depth-priming pass wants");
 
+    sCapturedState = -1;
     rwSetColorWriteMask(rw::COLORWRITEALPHA);
-    check((RwUInt32)(uintptr_t)rw::GetRenderState(rw::COLORWRITEMASK) == rw::COLORWRITEALPHA,
+    check(sCapturedState == rw::COLORWRITEMASK &&
+              (RwUInt32)(uintptr_t)sCapturedValue == rw::COLORWRITEALPHA,
           "and can leave alpha on with colour off");
+
+    rw::engine->device.setRenderState = savedMask;
 
     // Back to normal, so nothing after this draws into a masked frame buffer.
     rwSetColorWriteMask(rw::COLORWRITEALL);
