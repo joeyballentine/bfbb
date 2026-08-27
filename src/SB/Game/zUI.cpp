@@ -1018,6 +1018,14 @@ S32 zUIEventCB(xBase*, xBase* to, U32 toEvent, const F32* toParam, xBase*)
     }
     case eEventUISelect:
     {
+#ifdef PLATFORM_PC
+        if (getenv("BFBB_EVENT") != NULL)
+        {
+            printf("bfbb: ui %08x SELECTED (uiFlags %08x -> %08x)\n", (unsigned)s->id,
+                   (unsigned)s->uiFlags, (unsigned)(s->uiFlags | 0x2));
+            fflush(stdout);
+        }
+#endif
         if (s->id == xStrHash("MNU4 CONTROL MUSIC GC/XB UIF"))
         {
             xSndPauseCategory(SND_CAT_UI, 0);
@@ -1047,6 +1055,14 @@ S32 zUIEventCB(xBase*, xBase* to, U32 toEvent, const F32* toParam, xBase*)
     }
     case eEventUIFocusOn:
     {
+#ifdef PLATFORM_PC
+        if (getenv("BFBB_EVENT") != NULL)
+        {
+            printf("bfbb: ui %08x FOCUSED (uiFlags %08x -> %08x)\n", (unsigned)s->id,
+                   (unsigned)s->uiFlags, (unsigned)(s->uiFlags | 0x8));
+            fflush(stdout);
+        }
+#endif
         s->uiFlags |= 0x8;
 
         gUIMgr.Touch(s);

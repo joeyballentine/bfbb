@@ -145,7 +145,8 @@ void zEntEvent(xBase* from, U32 fromEvent, xBase* to, U32 toEvent, const F32* to
                     if (getenv("BFBB_EVENT") != NULL &&
                         (idx->srcEvent == eEventEnterPlayer || idx->srcEvent == eEventExitPlayer ||
                          idx->srcEvent == eEventPadPressR1 || idx->srcEvent == eEventDone ||
-                         idx->dstEvent == eEventTeleportPlayer))
+                         idx->dstEvent == eEventTeleportPlayer || idx->dstEvent == eEventUISelect ||
+                         idx->dstEvent == eEventUIFocusOn || idx->dstEvent == eEventUIFocusOn_Select))
                     {
                         static int said = 0;
                         if (said < 200)
