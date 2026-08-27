@@ -45,18 +45,28 @@ RwBool RpMatFXPluginAttach(void)
     // colour is opaque white, which means every environment pass draws at full
     // strength no matter what the game asked for.
     //
-    // What the game asks for is the whole of the effect's shape.
-    // xFXBubbleRender (xFX.cpp:669) draws a bubble in three passes and sets
-    // iModelSetMaterialAlpha before each one -- 0 for the fresnel pass and 192
-    // for the environment pass in defaultBFX -- so the material alpha IS the
-    // per-pass strength. Ignoring it makes the fresnel pass, which is meant to
-    // contribute nothing at alpha 0, draw as brightly as the one that is meant
-    // to show, and the bubble comes out washed out and far too bright.
-    //
     // RenderWare's own PC and GameCube pipelines modulate by the material, so
-    // this is the retail behaviour rather than a preference. envMapApplyLight
-    // is deliberately left alone: that one chooses whether lighting modulates
-    // the env map on top, and nothing in the game sets it either way.
+    // this is retail behaviour rather than a preference: a tinted material
+    // should tint its reflection.
+    //
+    // Being accurate about what this does NOT do, because it was first written
+    // believing otherwise. It does not change how BRIGHT an environment pass
+    // is. matfx_env_PS.hlsl reads `input.EnvColor` and uses only its rgb --
+    // `pass2 = EnvColor * shininess * tex2D(envTex, ...)` and then
+    // `color.rgb = pass1.rgb*pass1.a + pass2.rgb*fba` -- so the alpha carried
+    // in the material colour never reaches the result, and every material the
+    // game hands this is white anyway. Bubble Buddy was still too bright after
+    // this went in.
+    //
+    // The brightness knob the game is actually reaching for is the material
+    // alpha it sets before each pass (NPC_BubBud_RenderCB, and
+    // xFXBubbleRender), and the only route that has into the env pass is `fba`
+    // -- which xFX.cpp:664 closes by passing useFrameBufferAlpha = FALSE, so
+    // disableFBA is 1 and fba collapses to 1. That is retail's own argument, so
+    // the divergence is in what librw's shader does with it, not in the call.
+    //
+    // envMapApplyLight is deliberately left alone: that one chooses whether
+    // lighting modulates the env map on top, and nothing in the game sets it.
     rw::MatFX::envMapUseMatColor = TRUE;
 
     return TRUE;
