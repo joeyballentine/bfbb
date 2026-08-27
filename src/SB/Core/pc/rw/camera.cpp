@@ -11,6 +11,10 @@
 #include <rpworld.h>
 
 #include "rw.h"
+#include "iWindow.h"
+
+#include <stdio.h>
+#include <stdlib.h>
 
 static inline rw::Camera* asCamera(RwCamera* camera)
 {
@@ -151,6 +155,38 @@ RwCamera* RwCameraShowRaster(RwCamera* camera, void* pDev, RwUInt32 flags)
     // nothing being dropped; if one ever passes something, this needs a backend
     // that can act on it rather than a cast.
     (void)pDev;
+
+    // The frame boundary, and so where the port pumps its window.
+    //
+    // A Win32 window whose message queue is never drained stops repainting and
+    // the OS marks the process as not responding, which ghosts the window and
+    // looks exactly like the game hanging -- and only once it has focus, which
+    // is when Windows starts checking. iWindow.h says as much; nothing was
+    // calling iWindowPump.
+    //
+    // It has to happen here because the loop that would normally own the pump
+    // is retail's, in zMenuLoop and zGameLoop, and that code is not the port's
+    // to change. Presenting is the one thing every frame does exactly once on
+    // every platform, so it is the honest place to hang a per-frame host
+    // obligation. D3D wants the window pumped around Present in any case.
+    iWindowPump();
+
+    // And where the close button is answered, for the same reason: the loop
+    // that would normally notice belongs to retail.
+    //
+    // This is NOT the shutdown iWindow.h describes. That one runs the game's
+    // own exit path so that save-on-exit and the RenderWare teardown happen,
+    // and reaching it needs a seam in zMainLoop that does not exist yet -- the
+    // console never exits, so retail has no such path to hook. Until then the
+    // choice is between a window whose close button does nothing at all and a
+    // process that stops when asked, and the second is the better of the two.
+    if (iWindowShouldClose())
+    {
+        printf("bfbb: window closed -- exiting. Note that the game's own "
+               "save-on-exit does not run yet.\n");
+        fflush(stdout);
+        exit(0);
+    }
 
     asCamera(camera)->showRaster(flags);
     return camera;

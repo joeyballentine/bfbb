@@ -170,12 +170,44 @@ RwFrame* RwFrameGetRoot(const RwFrame* frame)
     return const_cast<RwFrame*>(frame)->root;
 }
 
+// Detach everything hanging off this frame and every frame below it.
+//
+// librw asserts that a frame's object list is empty before it destroys the
+// frame (frame.cpp:79), and RenderWare does not: it frees the frames and leaves
+// each attached object pointing at memory that is now free. iModelUnload
+// depends on that -- it destroys the hierarchy FIRST and the clump second, so
+// every atomic in the clump is still attached when the frames go. On the
+// console the atomics are then destroyed before anything reuses the memory and
+// nobody notices; under librw the assertion fires and the process aborts.
+//
+// Clearing the links instead of removing the check reproduces what the game can
+// actually observe -- an object whose frame is gone -- without leaving a
+// dangling pointer for RpClumpDestroy to walk a moment later. It is the strictly
+// safer half of RenderWare's behaviour, not a different one.
+static void DetachObjects(rw::Frame* frame)
+{
+    for (rw::Frame* child = frame->child; child != NULL; child = child->next)
+    {
+        DetachObjects(child);
+    }
+
+    // setFrame(nil) unlinks the object, so the list head moves under us; take
+    // the first entry each time rather than iterating.
+    while (!frame->objectList.isEmpty())
+    {
+        rw::ObjectWithFrame* obj = rw::ObjectWithFrame::fromFrame(frame->objectList.link.next);
+        obj->setFrame(NULL);
+    }
+}
+
 RwBool RwFrameDestroyHierarchy(RwFrame* frame)
 {
     if (frame == NULL)
     {
         return FALSE;
     }
+
+    DetachObjects(asFrame(frame));
 
     // Destroys the frame AND every frame below it. iModel.cpp:iModelUnload
     // calls this on a model's root, which is what frees a skeleton -- the

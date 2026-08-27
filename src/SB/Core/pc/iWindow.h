@@ -40,9 +40,16 @@ void iWindowClose();
 // which looks exactly like the game hanging.
 void iWindowPump();
 
-// TRUE once the user has asked to close the window. iSystem turns this into
-// the game's own shutdown path rather than exiting underneath it, so that
-// save-on-exit and the RenderWare teardown still run.
+// TRUE once the user has asked to close the window.
+//
+// Read at the frame boundary, in RwCameraShowRaster, alongside iWindowPump --
+// see the comment there for why the port's per-frame obligations hang off the
+// present rather off the main loop, which belongs to retail.
+//
+// What SHOULD happen is the game's own shutdown path, so that save-on-exit and
+// the RenderWare teardown still run. What happens today is exit(0): retail
+// never exits -- a GameCube title ends on OSPanic -- so there is no such path
+// to hook, and inventing one needs a seam in zMainLoop.
 S32 iWindowShouldClose();
 
 void iWindowGetSize(S32* width, S32* height);

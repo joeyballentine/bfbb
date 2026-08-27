@@ -228,6 +228,127 @@ static void test_file()
     iHostRemoveDir(dir);
 }
 
+#ifdef BFBB_INPUT_BACKEND_WIN32
+// The two pure conversions inside iPadHostWin32.cpp, which are named rather
+// than static so this file can reach them. Declared here rather than pulled in
+// from a header, so that a change to either signature is caught at link time
+// instead of the test silently retargeting itself at something else.
+#include <windows.h>
+#include <xinput.h>
+void iPadHostWin32ConvertStick(S16 rawX, S16 rawY, S32 deadzone, F32* outX, F32* outY);
+U32 iPadHostWin32ConvertButtons(const XINPUT_GAMEPAD& gp);
+
+// The button bits, restated rather than included from xPad.h -- the same
+// reasoning as the sound table above. These are the values the GAME reads, so
+// a test that took them from the same header as the code under test could not
+// catch either side changing.
+#define TEST_PAD_START 0x1
+#define TEST_PAD_SELECT 0x2
+#define TEST_PAD_UP 0x10
+#define TEST_PAD_RIGHT 0x20
+#define TEST_PAD_DOWN 0x40
+#define TEST_PAD_LEFT 0x80
+#define TEST_PAD_L1 0x100
+#define TEST_PAD_L2 0x200
+#define TEST_PAD_R1 0x1000
+#define TEST_PAD_R2 0x2000
+#define TEST_PAD_X 0x10000 // A on the GameCube
+#define TEST_PAD_O 0x20000 // X on the GameCube
+#define TEST_PAD_SQUARE 0x40000 // Y on the GameCube
+#define TEST_PAD_TRIANGLE 0x80000 // B on the GameCube
+#define TEST_PAD_Z 0x100000
+
+static void test_pad_win32_sticks()
+{
+    const S32 dz = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE;
+    F32 x, y;
+
+    iPadHostWin32ConvertStick(0, 0, dz, &x, &y);
+    check(x == 0.0f && y == 0.0f, "a centred stick reads zero");
+
+    iPadHostWin32ConvertStick((S16)(dz - 1), 0, dz, &x, &y);
+    check(x == 0.0f && y == 0.0f, "inside the deadzone reads zero");
+
+    // The deadzone is radial, so a diagonal push whose components are each
+    // inside it but whose magnitude is not must still register. A per-axis
+    // deadzone reports zero here, and that is the bug this guards.
+    S16 diag = (S16)(dz * 0.8f);
+    iPadHostWin32ConvertStick(diag, diag, dz, &x, &y);
+    check(x > 0.0f && y > 0.0f, "a diagonal past the radial deadzone registers");
+
+    iPadHostWin32ConvertStick(32767, 0, dz, &x, &y);
+    check(fabsf(x - 1.0f) < 0.0001f, "full right deflection reads 1");
+    check(fabsf(y) < 0.0001f, "and nothing on the other axis");
+
+    iPadHostWin32ConvertStick(-32768, 0, dz, &x, &y);
+    check(fabsf(x + 1.0f) < 0.0001f, "full left deflection reads -1, not past it");
+
+    // Just past the deadzone edge the output must start near zero. Rescaling
+    // from that edge is what makes it true; without it the first movement jumps
+    // straight to the deadzone's fraction of full scale.
+    iPadHostWin32ConvertStick((S16)(dz + 40), 0, dz, &x, &y);
+    check(x > 0.0f && x < 0.01f, "just past the deadzone the stick barely moves");
+
+    // A full diagonal is clamped to the unit circle, so its magnitude cannot
+    // exceed what one axis alone reports.
+    iPadHostWin32ConvertStick(32767, 32767, dz, &x, &y);
+    check(sqrtf(x * x + y * y) <= 1.0001f, "a full diagonal does not exceed full scale");
+
+    iPadHostWin32ConvertStick(0, 32767, dz, &x, &y);
+    check(y > 0.99f, "up is positive, as iPadHost.h specifies");
+}
+
+static void test_pad_win32_buttons()
+{
+    XINPUT_GAMEPAD gp;
+    memset(&gp, 0, sizeof(gp));
+
+    check(iPadHostWin32ConvertButtons(gp) == 0, "an idle pad reports no buttons");
+
+    // Face buttons map by name onto the GameCube's, and gc/iPad.cpp is what
+    // says which XPAD_BUTTON_* each of those becomes.
+    gp.wButtons = XINPUT_GAMEPAD_A;
+    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_X, "A is the GameCube's A");
+    gp.wButtons = XINPUT_GAMEPAD_B;
+    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_TRIANGLE, "B is the GameCube's B");
+    gp.wButtons = XINPUT_GAMEPAD_X;
+    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_O, "X is the GameCube's X");
+    gp.wButtons = XINPUT_GAMEPAD_Y;
+    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_SQUARE, "Y is the GameCube's Y");
+
+    gp.wButtons = XINPUT_GAMEPAD_START;
+    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_START, "start is start");
+
+    gp.wButtons = XINPUT_GAMEPAD_DPAD_UP | XINPUT_GAMEPAD_DPAD_LEFT;
+    check(iPadHostWin32ConvertButtons(gp) == (TEST_PAD_UP | TEST_PAD_LEFT),
+          "two d-pad directions come through together");
+
+    // Shoulders: the bumpers are the second pair, the triggers the first, and
+    // the triggers only click past the threshold.
+    gp.wButtons = XINPUT_GAMEPAD_LEFT_SHOULDER | XINPUT_GAMEPAD_RIGHT_SHOULDER;
+    check(iPadHostWin32ConvertButtons(gp) == (TEST_PAD_L2 | TEST_PAD_R2),
+          "the bumpers are L2 and R2");
+
+    gp.wButtons = 0;
+    gp.bLeftTrigger = XINPUT_GAMEPAD_TRIGGER_THRESHOLD - 1;
+    gp.bRightTrigger = XINPUT_GAMEPAD_TRIGGER_THRESHOLD - 1;
+    check(iPadHostWin32ConvertButtons(gp) == 0, "a trigger short of the threshold does nothing");
+
+    gp.bLeftTrigger = XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
+    gp.bRightTrigger = 255;
+    check(iPadHostWin32ConvertButtons(gp) == (TEST_PAD_L1 | TEST_PAD_R1),
+          "the triggers are L1 and R1 once past it");
+
+    // Nothing synthesises the GameCube's Z. It exists on that console only to
+    // reach L2 and R2, and an Xbox pad reaches them directly.
+    gp.wButtons = 0xFFFF;
+    gp.bLeftTrigger = 255;
+    gp.bRightTrigger = 255;
+    check((iPadHostWin32ConvertButtons(gp) & TEST_PAD_Z) == 0,
+          "no combination produces the GameCube's Z modifier");
+}
+#endif
+
 static void test_pad()
 {
     printf("iPad host backend\n");
@@ -235,10 +356,45 @@ static void test_pad()
     iPadHostInit();
     iPadHostPoll();
 
+    // The contract every backend owes, whichever one is linked.
     const iPadHostState* s = iPadHostGet(0);
     check(s != NULL, "port 0 has a state");
-    check(s != NULL && !s->connected, "the null backend reports no controller");
     check(iPadHostGet(99) == NULL, "an out-of-range port is rejected");
+    check(iPadHostGet(-1) == NULL, "so is a negative one");
+
+    for (S32 i = 0; i < IPAD_MAX_CONTROLLERS; i++)
+    {
+        const iPadHostState* p = iPadHostGet(i);
+        check(p != NULL, "every port in range has a state");
+        if (p != NULL && !p->connected)
+        {
+            check(p->buttons == 0 && p->stick_x == 0.0f && p->stick_y == 0.0f &&
+                      p->substick_x == 0.0f && p->substick_y == 0.0f,
+                  "a disconnected port reads as fully neutral");
+        }
+    }
+
+    // Rumbling a port that is out of range, or that has no controller, must be
+    // a no-op rather than a fault -- xPad.cpp rumbles whatever pad the game
+    // thinks is active without checking first.
+    iPadHostRumble(0, 1);
+    iPadHostRumble(0, 0);
+    iPadHostRumble(99, 1);
+    iPadHostRumble(-1, 1);
+    check(true, "rumbling an absent or out-of-range port is harmless");
+
+#ifdef BFBB_INPUT_BACKEND_WIN32
+    // This process has no window, so GetActiveWindow reports none and the
+    // keyboard path takes its unfocused branch: present, but holding nothing.
+    check(s != NULL && s->connected,
+          "win32: the keyboard stands in for port 0 with no controller plugged in");
+    check(s != NULL && s->buttons == 0, "win32: an unfocused keyboard holds nothing");
+
+    test_pad_win32_sticks();
+    test_pad_win32_buttons();
+#else
+    check(s != NULL && !s->connected, "the null backend reports no controller");
+#endif
 
     iPadHostExit();
 }

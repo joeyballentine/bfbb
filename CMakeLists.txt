@@ -69,15 +69,33 @@ if(BFBB_BUILD_32BIT)
 endif()
 
 # --- input backend -----------------------------------------------------------
-# "null" reports no controllers and is always available. It is a real
+# "win32" is XInput for controllers with the keyboard covering port 0 when
+# nothing is plugged into it. XInput is loaded at run time, so this needs no
+# import library and starts on a machine that has none.
+#
+# "null" reports no controllers and is available everywhere. It is a real
 # configuration, not a missing implementation: a build with no input library
 # genuinely has no controllers, and the game handles that -- it shows its
 # "please reconnect the controller" screen.
-set(BFBB_INPUT_BACKEND "null" CACHE STRING "Host input backend: null")
-set_property(CACHE BFBB_INPUT_BACKEND PROPERTY STRINGS null)
+if(WIN32)
+  set(BFBB_INPUT_BACKEND "win32" CACHE STRING "Host input backend: win32, null")
+else()
+  set(BFBB_INPUT_BACKEND "null" CACHE STRING "Host input backend: null")
+endif()
+set_property(CACHE BFBB_INPUT_BACKEND PROPERTY STRINGS win32 null)
 
+set(INPUT_DEFINES)
 if(BFBB_INPUT_BACKEND STREQUAL "null")
   set(INPUT_SOURCES ${PC_DIR}/iPadHostNull.cpp)
+elseif(BFBB_INPUT_BACKEND STREQUAL "win32")
+  if(NOT WIN32)
+    message(FATAL_ERROR "BFBB_INPUT_BACKEND=win32 needs a Windows host")
+  endif()
+  set(INPUT_SOURCES ${PC_DIR}/iPadHostWin32.cpp)
+  # So the self-test knows which backend it is linked against: the contract it
+  # checks is the same either way, but "no controller on port 0" means an
+  # unplugged pad under null and a keyboard under win32.
+  set(INPUT_DEFINES BFBB_INPUT_BACKEND_WIN32)
 else()
   message(FATAL_ERROR "unknown BFBB_INPUT_BACKEND '${BFBB_INPUT_BACKEND}'")
 endif()
@@ -460,6 +478,7 @@ add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   ${AUDIO_SOURCES}
   ${HOST_SOURCES}
 )
+target_compile_definitions(pc_selftest PRIVATE ${INPUT_DEFINES})
 target_include_directories(pc_selftest PRIVATE
   ${PC_DIR}/compat
   ${PC_DIR}

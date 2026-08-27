@@ -24,6 +24,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 
 #include <windows.h>
 #include <dbghelp.h>
@@ -165,6 +166,29 @@ namespace
         return 0;
     }
 
+    // Aborts, which a crash handler does not see.
+    //
+    // An assert() inside librw ends in _wassert, which prints one line naming
+    // the file and raises SIGABRT. No exception is raised, so neither of the
+    // handlers below runs and the process dies having said only which assertion
+    // failed -- not which of the game's calls tripped it, which is the part
+    // worth knowing when the assertion is inside a library the game drives
+    // through a shim.
+    void AbortHandler(int)
+    {
+        printf("\nbfbb: ABORT -- assertion or abort() call\n");
+
+        CONTEXT context;
+        memset(&context, 0, sizeof(context));
+        RtlCaptureContext(&context);
+
+        // The first few frames are this handler and the CRT's raise path.
+        PrintBacktrace(GetCurrentThread(), &context);
+
+        fflush(stdout);
+        _exit(3);
+    }
+
     LONG WINAPI FirstChanceHandler(EXCEPTION_POINTERS* info)
     {
         const DWORD code = info->ExceptionRecord->ExceptionCode;
@@ -219,6 +243,7 @@ namespace
         StartupBanner()
         {
             AddVectoredExceptionHandler(1, FirstChanceHandler);
+            signal(SIGABRT, AbortHandler);
 
             const char* watchdogSeconds = getenv("BFBB_WATCHDOG");
             if (watchdogSeconds != NULL)
