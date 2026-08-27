@@ -131,7 +131,7 @@ up on a D3D9 device. See LINKING.md.
 | `iScrFX` | **done** | not verbatim: a `RwRasterLock` bracket a host must not honour. Its motion blur was cut from retail before ship |
 | `iEnv`, `iLight`, `iAnim`, `iMorph`, `iMath3`, `iCollide`, `iCollideFast` | **done** | all verbatim copies — see VERBATIM.txt and PORTING.md |
 | `iCutscene`, `iAnimSKB` | **done** | ported, not copied; see the notes in CMakeLists.txt |
-| `iDraw` | **done, lossy** | `iDrawSetFBMSK` is a documented no-op. It is a frame-buffer write mask with no spelling in RenderWare's portable render state or librw's, and four call sites use it to make a first pass invisible. Those passes now paint |
+| `iDraw` | **done** | `iDrawSetFBMSK` forwards to a `COLORWRITEMASK` render state added to the librw fork (`D3DRS_COLORWRITEENABLE` on D3D9). It had been a no-op, which made the depth-priming first pass at four call sites paint an opaque copy of itself; iDraw.cpp keeps that reasoning, because it is what the implementation had to satisfy |
 | `iFX` (1 fn) | **refusal** | `iFXanimUVCreatePipe` returns NULL, which xFX.cpp:883 already handles: atomics keep their default pipeline and surfaces with animated texture coordinates draw static. Needs a texture matrix in librw |
 | `iFMV` (1 fn) | **refusal, and will not be ported** | Bink is proprietary. Movies return "ran to the end" immediately so the game advances past them. The plan of record is ffmpeg ahead of time plus a different player; the file lists what that needs |
 | `ngcrad3d` | not ported | GameCube radiosity; no host counterpart |

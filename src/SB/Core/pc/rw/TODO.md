@@ -680,15 +680,24 @@ off a geometry as a plugin, and librw has no collision code at all. Writing it
 means the plugin, its stream reader, and the tree walk -- at which point
 `RpAtomicForAllIntersections` stops being O(triangles) as well.
 
-**`RwGameCubeSetAlphaCompare` and `_rwDlRenderStateSetZCompLoc` -- NOT the
-shim's job.** Both are GameCube driver entry points, and both are called
-UNGUARDED from portable code: xModelBucket.cpp:524/530/600 and 526/531/601.
-That file is the single unit of 198 that does not compile on PC
-(`use of undeclared identifier 'GX_ALWAYS'`), so the "197 / 198 units" figure in
-PCPORT.md and these two symbols are the same fact reported twice. The fix is a
-`#ifndef PLATFORM_PC` around the alpha-compare and z-compare-location state in
-xModelBucket, plus whatever the host renderer wants instead -- not a shim entry
-point, because there is nothing on a host for one to forward to.
+**`RwGameCubeSetAlphaCompare` -- resolved as a shim entry point after all, and
+still the largest RENDERING gap.** Both it and `_rwDlRenderStateSetZCompLoc` are
+GameCube driver entry points called UNGUARDED from portable code
+(xModelBucket.cpp:524/530/600 and 526/531/601), and this section used to argue
+they were not the shim's job because there was nothing on a host to forward to.
+They are defined in engine.cpp now, which is why all 198 units compile at the
+width the port builds at -- `python tools/pcprogress.py --m32 --cc clang++`.
+
+The z-compare one is CORRECT as a no-op, for the reason engine.cpp:186 gives.
+The alpha compare is NOT: it is cutout transparency -- foliage, fences, grates,
+chain link -- and as a no-op those render as opaque quads, alpha and all.
+
+The premise that there is nothing to forward to has also expired. It was true of
+RenderWare's portable render state, which has no alpha test function or
+reference, and the shim was the only place that mattered then. It is not true of
+librw: `ALPHATESTFUNC` and `ALPHATESTREF` are both in rwrender.h. Forwarding the
+two states engine.cpp:160 spells out is now an ordinary change to that function
+and needs nothing from the fork.
 
 **`_rpAtomicResyncInterpolatedSphere` -- already handled, and listed here only
 so the next person does not chase it.** It appears in the regenerated list
