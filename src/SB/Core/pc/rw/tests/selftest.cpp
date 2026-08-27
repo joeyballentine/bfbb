@@ -1722,6 +1722,15 @@ static void test_matfx()
     RwTextureDestroy(env);
 }
 
+// Stands in for librw's own atomic render callback in the instancing checks.
+// The real one rasterises, and this target has no device to rasterise onto;
+// what is under test is what the ptank writes into the geometry before the
+// draw, not the draw.
+static RpAtomic* noopRenderCB(RpAtomic* atomic)
+{
+    return atomic;
+}
+
 static void test_ptank()
 {
     printf("RpPTank\n");
@@ -1825,10 +1834,110 @@ static void test_ptank()
     check(RpPTankAtomicLock(NULL, &aosPos, rpPTANKDFLAGPOSITION, rpPTANKLOCKWRITE) == FALSE,
           "RpPTankAtomicLock(NULL, ...) is refused");
 
-    // Not exercised: instancing and rendering. Turning particle positions into
-    // billboard vertices needs the camera's right and up vectors, and there is
-    // no camera on this side yet. A ptank created here draws nothing rather
-    // than drawing something wrong -- its vertices are zeroed at create.
+    // --- instancing -------------------------------------------------------
+    //
+    // The billboards themselves. A ptank's vertices are zeroed at create, so
+    // every triangle is degenerate until something turns the particle clusters
+    // into corners; that is what the atomic's render callback now does, and it
+    // needs the camera to know which way "up" is on screen.
+    RpAtomic* bb = RpPTankAtomicCreate(
+        8, rpPTANKDFLAGPOSITION | rpPTANKDFLAGSIZE | rpPTANKDFLAGCOLOR | rpPTANKDFLAGSTRUCTURE,
+        0);
+    check(bb != NULL, "RpPTankAtomicCreate for the instancing checks");
+    if (bb == NULL)
+    {
+        return;
+    }
+
+    RpPTankAtomicExtPrv* bext = RPATOMICPTANKPLUGINDATA(bb);
+    bext->defaultRenderCB = noopRenderCB;
+
+    // xPtankPool gives every ptank an identity frame; without one librw's
+    // render path has no transform to place the atomic with.
+    RwFrame* bframe = RwFrameCreate();
+    RpAtomicSetFrame(bb, bframe);
+
+    RpPTankLockStruct bpos;
+    RpPTankLockStruct bsize;
+    RpPTankLockStruct bcol;
+    RpPTankAtomicLock(bb, &bpos, rpPTANKDFLAGPOSITION, rpPTANKLOCKWRITE);
+    RpPTankAtomicLock(bb, &bsize, rpPTANKDFLAGSIZE, rpPTANKLOCKWRITE);
+    RpPTankAtomicLock(bb, &bcol, rpPTANKDFLAGCOLOR, rpPTANKLOCKWRITE);
+
+    // One particle, four units wide and two tall, somewhere off the origin so
+    // that a quad built at the wrong place is obvious.
+    RwV3d* bp = (RwV3d*)bpos.data;
+    bp->x = 10.0f;
+    bp->y = 20.0f;
+    bp->z = 30.0f;
+
+    RwV2d* bs = (RwV2d*)bsize.data;
+    bs->x = 4.0f;
+    bs->y = 2.0f;
+
+    RwRGBA* bc = (RwRGBA*)bcol.data;
+    bc->red = 1;
+    bc->green = 2;
+    bc->blue = 3;
+    bc->alpha = 4;
+
+    RpPTankAtomicUnlock(bb);
+    bext->actPCount = 1;
+
+    // An identity camera frame, so its right is +x and its up is +y and the
+    // expected corners can be written down exactly.
+    RwCamera* bcam = RwCameraCreate();
+    RwFrame* bcamFrame = RwFrameCreate();
+    RwCameraSetFrame(bcam, bcamFrame);
+
+    rw::Camera* wasCurrent = rw::engine->currentCamera;
+    rw::engine->currentCamera = reinterpret_cast<rw::Camera*>(bcam);
+
+    bb->renderCallBack(bb);
+
+    rw::V3d* bv = reinterpret_cast<rw::Geometry*>(bb->geometry)->morphTargets[0].vertices;
+
+    // Top-left, top-right, bottom-right, bottom-left -- the winding the index
+    // buffer was built for.
+    check(near(bv[0].x, 8.0f) && near(bv[0].y, 21.0f) && near(bv[0].z, 30.0f),
+          "the billboard's top-left corner is half a size out along -x and +y");
+    check(near(bv[1].x, 12.0f) && near(bv[1].y, 21.0f), "top-right");
+    check(near(bv[2].x, 12.0f) && near(bv[2].y, 19.0f), "bottom-right");
+    check(near(bv[3].x, 8.0f) && near(bv[3].y, 19.0f), "bottom-left");
+
+    rw::RGBA* bcv = reinterpret_cast<rw::Geometry*>(bb->geometry)->colors;
+    check(bcv != NULL && bcv[0].red == 1 && bcv[0].green == 2 && bcv[0].blue == 3 &&
+              bcv[0].alpha == 4,
+          "the particle's colour reaches all four corners");
+    check(bcv != NULL && bcv[3].red == 1 && bcv[3].alpha == 4, "including the last one");
+
+    // Everything past the active count has to stay degenerate, or a tank that
+    // shrinks keeps drawing the particles it no longer has.
+    check(bv[4].x == 0.0f && bv[4].y == 0.0f && bv[4].z == 0.0f,
+          "particles past the active count are left degenerate");
+
+    // And a tank that shrinks gets its tail cleared rather than keeping the
+    // corners from last frame.
+    bext->actPCount = 0;
+    bb->renderCallBack(bb);
+    check(bv[0].x == 0.0f && bv[0].y == 0.0f && bv[0].z == 0.0f,
+          "dropping the active count to zero clears the billboards it had");
+
+    // With no camera there is no facing, and instancing must decline rather
+    // than read a null pointer.
+    rw::engine->currentCamera = NULL;
+    bext->actPCount = 1;
+    bb->renderCallBack(bb);
+    check(bv[0].x == 0.0f, "with no current camera the vertices are left alone");
+
+    rw::engine->currentCamera = wasCurrent;
+
+    RpAtomicSetFrame(bb, NULL);
+    RwFrameDestroy(bframe);
+    RpPTankAtomicDestroy(bb);
+    RwCameraSetFrame(bcam, NULL);
+    RwFrameDestroy(bcamFrame);
+    RwCameraDestroy(bcam);
 }
 
 static RpAtomic* countAtomicCB(RpAtomic* atomic, void* data)

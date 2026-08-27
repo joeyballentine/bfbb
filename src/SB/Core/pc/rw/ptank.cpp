@@ -10,15 +10,19 @@
 // colours, sizes, texture coordinates -- and the plugin turns those clusters
 // into billboard vertices at render time.
 //
-// This file implements the four calls the game makes into that plugin, plus
-// the attach. It does NOT implement instancing or rendering, and the reason is
-// not effort: turning particle positions into billboard vertices needs the
-// camera's right and up vectors, and there is no camera on this side yet --
-// RwEngineInstance->curCamera is documented as permanently null in
-// engine_start.cpp. So a ptank created here is correctly shaped, correctly
-// locked and correctly unlocked, and draws nothing: its vertices are zeroed at
-// create and never moved, which makes every triangle degenerate. That is
-// visible as missing particles, not as garbage geometry, and TODO.md says so.
+// This file implements the four calls the game makes into that plugin, the
+// attach, and the instancing -- turning the clusters into billboard vertices,
+// down in ptankRenderCB.
+//
+// Instancing came later than the rest. It needs the camera's right and up
+// vectors to know which way a billboard faces, and for a long time there was
+// no camera to ask: RwEngineInstance->curCamera was permanently null. That
+// changed when camera.cpp began publishing the camera for the length of a
+// BeginUpdate/EndUpdate pair, which is what made this writable. Until then a
+// ptank was correctly shaped, correctly locked and correctly unlocked, and
+// drew nothing at all, because its vertices stayed at the zeros create left
+// them and every triangle was degenerate. That was every particle in the
+// game: the bubbles above all.
 //
 // Where the attach goes, as in skin.cpp and matfx.cpp: RpPTankPluginAttach is
 // RenderWare's own entry point, RWAttachPlugins in iSystem.cpp calls it
@@ -32,6 +36,7 @@
 #include "rw.h"
 
 #include <string.h>
+#include <math.h>
 
 // The byte size of one particle's worth of each cluster, indexed by the
 // RPPTANKSIZE* constants in rpptank.h. Declared extern there; this is its
@@ -232,6 +237,266 @@ namespace
     }
 } // namespace
 
+namespace
+{
+    // --- instancing: particles into billboard vertices ---------------------
+    //
+    // This is the half of the plugin that turns a locked particle buffer into
+    // something the rasteriser can draw, and it runs from the atomic's render
+    // callback rather than at unlock time. It has to: a billboard faces the
+    // camera, so the vertices depend on which camera is rendering, and the
+    // same ptank can be drawn by more than one.
+    //
+    // The camera comes from rw::engine->currentCamera, which is set for the
+    // duration of a RwCameraBeginUpdate/EndUpdate pair (camera.cpp). An
+    // earlier revision of this file gave that pointer being permanently null
+    // as the reason there was no instancing at all; that stopped being true
+    // when camera.cpp started publishing it, and this is the work that was
+    // waiting on it.
+    //
+    // Corners are wound to match the index buffer createPTankGeometry built:
+    // 0,1,2 and 0,2,3, round the quad rather than across it.
+    void instancePTank(RpAtomic* atomic, RpPTankAtomicExtPrv* ext)
+    {
+        rw::Atomic* a = reinterpret_cast<rw::Atomic*>(atomic);
+        rw::Geometry* geo = a->geometry;
+
+        if (geo == NULL || geo->morphTargets == NULL)
+        {
+            return;
+        }
+
+        rw::Camera* cam = rw::engine->currentCamera;
+        if (cam == NULL)
+        {
+            // Outside a camera update there is no facing to compute against.
+            // Leaving the vertices alone redraws the last frame's billboards
+            // rather than a frame of garbage.
+            return;
+        }
+
+        RwInt32 count = ext->actPCount;
+        if (count < 0)
+        {
+            count = 0;
+        }
+        if (count > ext->maxPCount)
+        {
+            count = ext->maxPCount;
+        }
+
+        rw::V3d* verts = geo->morphTargets[0].vertices;
+        rw::RGBA* colors = geo->colors;
+        rw::TexCoords* uvs = geo->texCoords[0];
+
+        if (verts == NULL)
+        {
+            return;
+        }
+
+        const RpPTankData& pd = ext->publicData;
+        const RwUInt32 flags = (RwUInt32)pd.format.dataFlags;
+
+        const RwUInt8* posData = (const RwUInt8*)pd.clusters[RPPTANKSIZEPOSITION].data;
+        if (posData == NULL)
+        {
+            // A tank with no positions has nothing to place.
+            return;
+        }
+
+        // The camera axes, in world space. Particle positions are world space
+        // too -- xPtankPool gives every ptank an identity frame -- so each quad
+        // is built straight around its position with no transform in between.
+        rw::Matrix* ltm = cam->getFrame()->getLTM();
+        const rw::V3d camRight = ltm->right;
+        const rw::V3d camUp = ltm->up;
+
+        const RwInt32 posStride = pd.clusters[RPPTANKSIZEPOSITION].stride;
+        const RwUInt8* sizeData = (const RwUInt8*)pd.clusters[RPPTANKSIZESIZE].data;
+        const RwInt32 sizeStride = pd.clusters[RPPTANKSIZESIZE].stride;
+        const RwUInt8* colData = (const RwUInt8*)pd.clusters[RPPTANKSIZECOLOR].data;
+        const RwInt32 colStride = pd.clusters[RPPTANKSIZECOLOR].stride;
+        const RwUInt8* vtxColData = (const RwUInt8*)pd.clusters[RPPTANKSIZEVTXCOLOR].data;
+        const RwInt32 vtxColStride = pd.clusters[RPPTANKSIZEVTXCOLOR].stride;
+        const RwUInt8* rotData = (const RwUInt8*)pd.clusters[RPPTANKSIZE2DROTATE].data;
+        const RwInt32 rotStride = pd.clusters[RPPTANKSIZE2DROTATE].stride;
+        const RwUInt8* uv2Data = (const RwUInt8*)pd.clusters[RPPTANKSIZEVTX2TEXCOORDS].data;
+        const RwInt32 uv2Stride = pd.clusters[RPPTANKSIZEVTX2TEXCOORDS].stride;
+        const RwUInt8* uv4Data = (const RwUInt8*)pd.clusters[RPPTANKSIZEVTX4TEXCOORDS].data;
+        const RwInt32 uv4Stride = pd.clusters[RPPTANKSIZEVTX4TEXCOORDS].stride;
+
+        // rpPTANKDFLAGUSECENTER shifts the quad off its position; without it
+        // the position is the middle of the billboard.
+        const RwReal centerX = (flags & rpPTANKDFLAGUSECENTER) ? pd.cCenter.x : 0.0f;
+        const RwReal centerY = (flags & rpPTANKDFLAGUSECENTER) ? pd.cCenter.y : 0.0f;
+
+        for (RwInt32 i = 0; i < count; i++)
+        {
+            const RwV3d* pos = (const RwV3d*)(posData + (size_t)posStride * i);
+
+            RwReal halfW = pd.cSize.x * 0.5f;
+            RwReal halfH = pd.cSize.y * 0.5f;
+            if (sizeData != NULL)
+            {
+                const RwV2d* sz = (const RwV2d*)(sizeData + (size_t)sizeStride * i);
+                halfW = sz->x * 0.5f;
+                halfH = sz->y * 0.5f;
+            }
+
+            // The billboard's two in-plane axes, turned about the view
+            // direction when the tank carries a 2D rotation. RenderWare's
+            // setters take degrees, so this does too.
+            rw::V3d axisX = camRight;
+            rw::V3d axisY = camUp;
+
+            RwReal rot = (flags & rpPTANKDFLAGCNS2DROTATE) ? pd.cRotate : 0.0f;
+            if (rotData != NULL)
+            {
+                rot = *(const RwReal*)(rotData + (size_t)rotStride * i);
+            }
+
+            if (rot != 0.0f)
+            {
+                const float rad = (float)(rot * (3.14159265358979323846 / 180.0));
+                const float cs = cosf(rad);
+                const float sn = sinf(rad);
+
+                axisX.x = camRight.x * cs + camUp.x * sn;
+                axisX.y = camRight.y * cs + camUp.y * sn;
+                axisX.z = camRight.z * cs + camUp.z * sn;
+
+                axisY.x = camUp.x * cs - camRight.x * sn;
+                axisY.y = camUp.y * cs - camRight.y * sn;
+                axisY.z = camUp.z * cs - camRight.z * sn;
+            }
+
+            // Corner offsets in billboard space, wound top-left, top-right,
+            // bottom-right, bottom-left.
+            const RwReal cx[4] = { -halfW + centerX, halfW + centerX, halfW + centerX,
+                                   -halfW + centerX };
+            const RwReal cy[4] = { halfH + centerY, halfH + centerY, -halfH + centerY,
+                                   -halfH + centerY };
+
+            rw::V3d* v = &verts[i * 4];
+            for (int k = 0; k < 4; k++)
+            {
+                v[k].x = pos->x + axisX.x * cx[k] + axisY.x * cy[k];
+                v[k].y = pos->y + axisX.y * cx[k] + axisY.y * cy[k];
+                v[k].z = pos->z + axisX.z * cx[k] + axisY.z * cy[k];
+            }
+
+            if (colors != NULL)
+            {
+                rw::RGBA* c4 = &colors[i * 4];
+                if (vtxColData != NULL)
+                {
+                    const RwRGBA* src = (const RwRGBA*)(vtxColData + (size_t)vtxColStride * i);
+                    for (int k = 0; k < 4; k++)
+                    {
+                        c4[k].red = src[k].red;
+                        c4[k].green = src[k].green;
+                        c4[k].blue = src[k].blue;
+                        c4[k].alpha = src[k].alpha;
+                    }
+                }
+                else
+                {
+                    RwRGBA col = pd.cColor;
+                    if (colData != NULL)
+                    {
+                        col = *(const RwRGBA*)(colData + (size_t)colStride * i);
+                    }
+                    for (int k = 0; k < 4; k++)
+                    {
+                        c4[k].red = col.red;
+                        c4[k].green = col.green;
+                        c4[k].blue = col.blue;
+                        c4[k].alpha = col.alpha;
+                    }
+                }
+            }
+
+            if (uvs != NULL)
+            {
+                rw::TexCoords* t4 = &uvs[i * 4];
+                if (uv4Data != NULL)
+                {
+                    const RwTexCoords* src = (const RwTexCoords*)(uv4Data + (size_t)uv4Stride * i);
+                    for (int k = 0; k < 4; k++)
+                    {
+                        t4[k].u = src[k].u;
+                        t4[k].v = src[k].v;
+                    }
+                }
+                else
+                {
+                    // Two corners, top-left and bottom-right, opened out to
+                    // four the same way round as the positions above.
+                    RwTexCoords tl = pd.cUV[0];
+                    RwTexCoords br = pd.cUV[1];
+                    if (uv2Data != NULL)
+                    {
+                        const RwTexCoords* src =
+                            (const RwTexCoords*)(uv2Data + (size_t)uv2Stride * i);
+                        tl = src[0];
+                        br = src[1];
+                    }
+
+                    t4[0].u = tl.u;
+                    t4[0].v = tl.v;
+                    t4[1].u = br.u;
+                    t4[1].v = tl.v;
+                    t4[2].u = br.u;
+                    t4[2].v = br.v;
+                    t4[3].u = tl.u;
+                    t4[3].v = br.v;
+                }
+            }
+        }
+
+        // Particles past the active count have to go back to being degenerate,
+        // or the tail of a tank that shrank keeps drawing last frame's
+        // billboards. The whole remainder is cleared rather than tracking what
+        // was live last time, because RpPTankAtomicExtPrv is RenderWare's own
+        // struct and the GameCube build shares this header -- a field added
+        // here for bookkeeping would change a layout that is not ours to
+        // change. The cost is bounded by maxPCount, which is 64 for the ptank
+        // pool: a few kilobytes of memset against a draw call.
+        if (count < ext->maxPCount)
+        {
+            const RwInt32 stale = ext->maxPCount - count;
+            memset(&verts[count * 4], 0, (size_t)stale * 4 * sizeof(rw::V3d));
+        }
+
+        // The vertices changed, so the instanced streams have to be rebuilt.
+        // lock() raises the dirty bits d3d9.cpp's instance path reads; it does
+        // NOT throw the mesh away unless LOCKPOLYGONS is among them, and the
+        // mesh here never changes.
+        geo->lock(rw::Geometry::LOCKVERTICES | rw::Geometry::LOCKPRELIGHT |
+                  rw::Geometry::LOCKTEXCOORDS);
+    }
+
+    // The callback the atomic carries. It instances, then hands over to
+    // whatever librw would have done, which is what actually draws.
+    RpAtomic* ptankRenderCB(RpAtomic* atomic)
+    {
+        RpPTankAtomicExtPrv* ext = extOf(atomic);
+        if (ext == NULL)
+        {
+            return AtomicDefaultRenderCallBack(atomic);
+        }
+
+        instancePTank(atomic, ext);
+        ext->instFlags = 0;
+
+        if (ext->defaultRenderCB != NULL)
+        {
+            return ext->defaultRenderCB(atomic);
+        }
+        return AtomicDefaultRenderCallBack(atomic);
+    }
+} // namespace
+
 RwBool RpPTankPluginAttach(void)
 {
     _rpPTankAtomicDataOffset =
@@ -384,6 +649,10 @@ RpAtomic* RpPTankAtomicCreate(RwInt32 maxParticleNum, RwUInt32 dataFlags, RwUInt
     // draws the degenerate triangles createPTankGeometry zeroed -- i.e.
     // nothing. RenderWare would put the PTank render callback here instead.
     ext->defaultRenderCB = atomic->renderCallBack;
+
+    // And now the ptank's own, which builds billboards out of the particle
+    // clusters and then calls the one saved above.
+    atomic->renderCallBack = ptankRenderCB;
 
     RPATOMICPTANKPLUGINDATA(atomic) = ext;
     return atomic;

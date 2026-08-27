@@ -344,14 +344,20 @@ Four things, each of which will show up as a visible difference rather than as
 a crash. None of them is a missing function; all four need writing before
 the port draws a frame that looks right.
 
-**PTank particles are invisible.** `RpPTankAtomicCreate` builds the atomic, the
-geometry and the particle buffers, and lock/unlock are complete -- but nothing
-turns particle positions into billboard vertices. That instancing step needs
-the camera's right and up vectors and there is no camera yet (see
-`RwEngineInstance->curCamera` below), so the ptank's vertices stay at the zeros
-`RpPTankAtomicCreate` wrote and every triangle is degenerate. Nothing draws;
-nothing draws *wrongly*. Whoever writes `RwCameraBeginUpdate` should come back
-for this. It is NOT tested, because it does not exist.
+**PTank particles are drawn.** *(was: invisible)* The instancing step needed the
+camera's right and up vectors, and `RwEngineInstance->curCamera` used to be
+permanently null; once `RwCameraBeginUpdate` began publishing it, the step
+became writable and `ptankRenderCB` in `ptank.cpp` now builds a camera-facing
+quad per particle -- position, size, colour, 2D rotation, and either the
+two-corner or four-corner texture coordinates -- and marks the geometry dirty
+so librw re-instances it. Until then every triangle was degenerate and every
+particle in the game was invisible, the bubbles most visibly. Covered by
+`test_ptank` in `tests/selftest.cpp`, which checks the four corners against
+exact coordinates for an identity camera.
+
+Not covered: the billboards are built from `rw::engine->currentCamera`, so a
+ptank drawn outside a `BeginUpdate`/`EndUpdate` pair keeps the previous frame's
+vertices rather than getting new ones. Nothing in the game does that today.
 
 **Skinned models get the plain skin pipeline.** `RpSkinAtomicSetType` passes the
 type through, but librw's `Skin::setPipeline` casts it to void and installs the
