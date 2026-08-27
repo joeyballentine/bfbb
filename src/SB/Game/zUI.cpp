@@ -635,6 +635,20 @@ void zUI_Update(_zUI* ent, xScene*, F32 dt)
         xModelEval(ent->model);
     }
 
+#ifdef PLATFORM_PC
+    // The far end: the capture loop sets ent->uiButton, this dispatches it. Both
+    // of the capture's gates were measured passing -- uiFlags 0x36 has the bits
+    // it needs and gTrcPad reads 2 -- so if R1 still does nothing, either this
+    // never sees the bit or the else-if chain above R1 swallows the frame.
+    if ((ent->uiButton & XPAD_BUTTON_R1) && getenv("BFBB_EVENT") != NULL)
+    {
+        printf("bfbb: zUI_Update %08x has R1 in uiButton %08x, trc %d -> %s\n",
+               (unsigned)ent->id, (unsigned)ent->uiButton, (int)gTrcPad[0].state,
+               gTrcPad[0].state == TRC_PadInserted ? "dispatching" : "GATED OUT");
+        fflush(stdout);
+    }
+#endif
+
     if (ent->uiButton && gTrcPad[0].state == TRC_PadInserted)
     {
         if (ent->uiButton & XPAD_BUTTON_UP)
@@ -663,6 +677,14 @@ void zUI_Update(_zUI* ent, xScene*, F32 dt)
         }
         else if (ent->uiButton & XPAD_BUTTON_R1)
         {
+#ifdef PLATFORM_PC
+            if (getenv("BFBB_EVENT") != NULL)
+            {
+                printf("bfbb: zUI_Update %08x firing eEventPadPressR1\n",
+                       (unsigned)ent->id);
+                fflush(stdout);
+            }
+#endif
             zEntEvent(ent, ent, eEventPadPressR1);
             ent->uiButton = XPAD_BUTTON_R1;
         }
