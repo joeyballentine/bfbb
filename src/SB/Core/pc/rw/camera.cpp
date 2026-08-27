@@ -274,7 +274,28 @@ RwCamera* RwCameraShowRaster(RwCamera* camera, void* pDev, RwUInt32 flags)
         exit(0);
     }
 
-    asCamera(camera)->showRaster(flags);
+    // **The flip waits for the display, whatever the caller asked for.**
+    //
+    // iCamera.cpp:124 passes rwRASTERFLIPDONTWAIT, and librw honours it as
+    // D3DPRESENT_INTERVAL_IMMEDIATE, so the game ran as fast as the GPU would
+    // let it. On the console that flag costs nothing -- the GameCube's video
+    // interface paces the frame whether RenderWare waits on it or not, and a
+    // frame there is never shorter than a field.
+    //
+    // On a host it is not free, because of one line in retail's own loop.
+    // zGame.cpp:559 treats a frame shorter than 10 microseconds as impossible
+    // and substitutes a sixtieth of a second for it. Unlocked, this game
+    // produces such frames constantly, and every one of them advances the
+    // simulation by 1/60 s instead of by the time that actually passed -- at a
+    // couple of thousand frames a second that is tens of seconds of game time
+    // per real second. Pickups spinning like drills is what it looks like;
+    // xEntPickup turns PI * dt per frame and means half a revolution a second.
+    //
+    // Waiting on the display is what the console does and what the game's
+    // timing was written against. It also self-limits on any monitor: at 144 Hz
+    // the frame is 7 ms, which is three orders of magnitude clear of that
+    // threshold, so the game runs fast and correct rather than fast and wrong.
+    asCamera(camera)->showRaster(flags | rwRASTERFLIPWAITVSYNC);
     return camera;
 }
 
