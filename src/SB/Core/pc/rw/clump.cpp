@@ -38,20 +38,47 @@ RpClump* RpClumpStreamRead(RwStream* stream)
     // -- iModel.cpp:143 and xJSP.cpp:154 both call RwStreamFindChunk first --
     // and pick up at the STRUCT chunk inside it.
     //
-    // librw appends each atomic as it reads it, so RpClumpForAllAtomics
-    // afterwards walks them in the order the file lists them. RenderWare's own
-    // reader is the one function of this group that is NOT decompiled in
-    // src/rwsdk, so that cannot be checked against retail here; what can be
-    // said is that file order is the only order that survives a write/read
-    // round trip through RenderWare's own exporter, given that RpClumpAddAtomic
-    // prepends (below). iModel.cpp cares -- it returns the FIRST atomic of a
-    // multi-atomic model as the model -- so if a model ever comes out
-    // inside-out, this is the line to doubt first.
     rw::Clump* clump = rw::Clump::streamRead(stream);
 
     if (clump == NULL)
     {
         return NULL;
+    }
+
+    // **The atomic list comes out backwards, and the game reads it by INDEX.**
+    //
+    // librw's Clump::streamRead APPENDS each atomic as it reads it
+    // (clump.cpp:103, atomics.append), so its list is in file order.
+    // RenderWare's reader adds each one with RpClumpAddAtomic, and that
+    // PREPENDS -- baclump.c:150 uses rwLinkListAddLLLink, which inserts at the
+    // head, which is why RpClumpAddAtomic below does list surgery rather than
+    // calling librw. So RenderWare's list is in REVERSE file order, and the two
+    // are exact opposites.
+    //
+    // That is not cosmetic. xCutscene.cpp:841 matches a cutscene's morph data
+    // to an atomic by its position in this list -- `morphModelIndex == visIdx`
+    // -- and then writes that morph target's vertices into the atomic it
+    // landed on. With the list reversed, a four-atomic model of 168, 1625, 127
+    // and 168 vertices handed back as 168, 127, 1625, 168 puts the run list
+    // belonging to the 1625-vertex atomic onto the 127-vertex one, which wrote
+    // 130 vertices past the end of it and over the mesh header that follows.
+    // iModel.cpp also returns the FIRST atomic of a multi-atomic model as the
+    // model, so it was picking the wrong one of those too.
+    //
+    // Reversed in place rather than re-added one at a time: swapping next and
+    // prev on every link including the sentinel reverses a circular doubly
+    // linked list, and it does not disturb the atomics themselves.
+    {
+        rw::LLLink* sentinel = &clump->atomics.link;
+        rw::LLLink* link = sentinel;
+
+        do
+        {
+            rw::LLLink* next = link->next;
+            link->next = link->prev;
+            link->prev = next;
+            link = next;
+        } while (link != sentinel);
     }
 
     // The assets are Xbox and the renderer is D3D9, which to librw are two

@@ -424,6 +424,28 @@ RpAtomic* iModelCacheAtomic(RpAtomic* model)
 //
 // This is a diagnostic, not a fix: anything it reports is a real bug in the
 // port that still has to be found.
+struct atomic_census
+{
+    RpAtomic* self;
+    int index;
+    int selfIndex;
+};
+
+static RpAtomic* CensusAtomicCallback(RpAtomic* atomic, void* data)
+{
+    atomic_census* census = (atomic_census*)data;
+
+    if (atomic == census->self)
+    {
+        census->selfIndex = census->index;
+    }
+
+    printf(" [%d]=%d", census->index,
+           atomic->geometry != NULL ? (int)atomic->geometry->numVertices : -1);
+    census->index++;
+    return atomic;
+}
+
 static bool iModelCheckAtomic(RpAtomic* model, const char* where, bool strict)
 {
     static S32 complaints = 0;
@@ -508,6 +530,28 @@ static bool iModelCheckAtomic(RpAtomic* model, const char* where, bool strict)
                    (int)geom->numVertices, (unsigned)geom->flags);
         }
         printf("\n");
+        // The atomic's place among its clump's, and what every one of them is
+        // sized. xCutscene.cpp matches morph data to an atomic BY INDEX --
+        // `morphModelIndex == visIdx` at line 841 -- so if librw hands the
+        // atomics back in a different order from RenderWare's reader, the morph
+        // run list for one atomic is applied to another, and a run list that
+        // reaches vertex 257 of a 127-vertex geometry is exactly what that
+        // looks like. If a sibling below has 258 or more vertices, that is the
+        // answer, and clump.cpp's note on atomic order is where to go next.
+        if (model != NULL && model->clump != NULL)
+        {
+            atomic_census census;
+            census.self = model;
+            census.index = 0;
+            census.selfIndex = -1;
+
+            printf("bfbb:   clump atomics, in the order they come back:");
+            RpClumpForAllAtomics(model->clump, CensusAtomicCallback, &census);
+            printf("\n");
+            printf("bfbb:   this atomic is index %d of %d\n", census.selfIndex,
+                   census.index);
+        }
+
         if (counted_indices != 0 || first_mesh_ptr != NULL)
         {
             printf("bfbb:   counted %u across the meshes; mesh[0] has %u indices at %p, "

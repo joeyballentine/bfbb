@@ -1834,12 +1834,26 @@ static void test_clumps()
 
     // --- the stream round trip --------------------------------------------
     //
-    // The order question RpClumpStreamRead cannot answer from retail source,
-    // asked of the shim instead: librw writes the atomics in list order and
-    // reads them back in file order, so a clump that goes out and comes back
-    // has the atomics in the same sequence. The atomics are told apart by where
-    // their frames sit, which is the only thing about them that survives the
-    // trip.
+    // **A clump that goes out and comes back has its atomics REVERSED, and that
+    // is retail's behaviour, not a bug.**
+    //
+    // Both libraries write the atomics by walking the list, so the file is in
+    // list order either way. They differ on the read. librw appends
+    // (clump.cpp:103), giving file order. RenderWare adds each one with
+    // RpClumpAddAtomic, which prepends -- baclump.c:150 uses
+    // rwLinkListAddLLLink, and rwplcore.h:329 shows it inserting at the head --
+    // giving reverse file order. So a round trip through RenderWare reverses
+    // the list, and RpClumpStreamRead reverses librw's to match.
+    //
+    // This is worth a check rather than a comment because the game reads the
+    // list by INDEX. xCutscene.cpp:841 picks a cutscene's morph data by an
+    // atomic's position in it and writes that morph target's vertices into
+    // whichever atomic it landed on; with the order wrong, a run list belonging
+    // to a 1625-vertex atomic was applied to a 127-vertex one and wrote 130
+    // vertices past the end of it.
+    //
+    // The atomics are told apart by where their frames sit, which is the only
+    // thing about them that survives the trip.
     RpAtomic* before[3] = { NULL, NULL, NULL };
     cursor = before;
     RpClumpForAllAtomics(clump, recordAtomicCB, &cursor);
@@ -1883,12 +1897,12 @@ static void test_clumps()
                 // by where their frames sit -- which is why each one was parked
                 // at a different x.
                 check(near(RpAtomicGetFrame(got[0])->modelling.pos.x,
-                           RpAtomicGetFrame(before[0])->modelling.pos.x) &&
+                           RpAtomicGetFrame(before[2])->modelling.pos.x) &&
                           near(RpAtomicGetFrame(got[1])->modelling.pos.x,
                                RpAtomicGetFrame(before[1])->modelling.pos.x) &&
                           near(RpAtomicGetFrame(got[2])->modelling.pos.x,
-                               RpAtomicGetFrame(before[2])->modelling.pos.x),
-                      "in the order they were written, not reversed");
+                               RpAtomicGetFrame(before[0])->modelling.pos.x),
+                      "reversed, the way RenderWare's prepending reader leaves them");
                 check(RpAtomicGetGeometry(got[0]) != geometry,
                       "each with a geometry of its own, read from the stream");
             }
