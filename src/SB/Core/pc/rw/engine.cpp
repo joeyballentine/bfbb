@@ -22,6 +22,8 @@
 #include <rwsdk/driver/gcn/dlrendst.h>
 
 #include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 // RenderWare streams are little-endian on every platform, so this converts a
 // buffer from stream order to the host's. On the GameCube that is a swap; on
@@ -81,6 +83,49 @@ RwError* RwErrorGet(RwError* code)
 // nothing to flush.
 void RwGameCubeCameraTextureFlush(RwRaster* ras, RwUInt32 param)
 {
+    (void)param;
+
+    // BFBB_DUMPSHADOW: write the shadow buffer out, once, as a TGA.
+    //
+    // This is the moment it is finished -- xShadow.cpp:809 calls this straight
+    // after rendering the caster and inverting -- so whatever is in the raster
+    // here is exactly what gets projected onto the floor a moment later.
+    //
+    // Worth being able to see. A projected shadow is sampled with CLAMP
+    // addressing, so every texel outside the caster's footprint comes from the
+    // EDGE of this raster, and a dark edge paints the whole receiving surface
+    // dark however small the caster is. Reading the code cannot tell a raster
+    // that came out inverted from one that never got rendered into at all; the
+    // picture can.
+    static int dumped = 0;
+
+    if (dumped < 4 && ras != NULL && getenv("BFBB_DUMPSHADOW") != NULL)
+    {
+        char path[64];
+        snprintf(path, sizeof(path), "bfbb_shadow%d.tga", dumped);
+        dumped++;
+
+        rw::Raster* raster = reinterpret_cast<rw::Raster*>(ras);
+        rw::Image* image = raster->toImage();
+
+        if (image != NULL)
+        {
+            rw::writeTGA(image, path);
+            image->destroy();
+            printf("bfbb: wrote %s -- %dx%d depth %d format %04x type %d\n", path,
+                   (int)raster->width, (int)raster->height, (int)raster->depth,
+                   (unsigned)raster->format, (int)raster->type);
+        }
+        else
+        {
+            printf("bfbb: the shadow raster would not convert to an image "
+                   "(%dx%d depth %d format %04x)\n",
+                   (int)raster->width, (int)raster->height, (int)raster->depth,
+                   (unsigned)raster->format);
+        }
+
+        fflush(stdout);
+    }
 }
 
 // Caps the frame rate by making the console wait for N video retraces. The

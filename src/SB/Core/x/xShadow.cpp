@@ -778,11 +778,37 @@ static RwCamera* ShadowCameraUpdate(RwCamera* shadowCamera, void* model, void (*
 
     GCSaveFrameBuffer();
 
+    // **The border of this raster must not say "shadow".**
+    //
+    // Retail clears one pixel short in each direction, leaving the last row and
+    // column untouched. InvertRaster below then flips the WHOLE raster at its
+    // full size, so those two lines come back inverted from whatever they held
+    // rather than inverted from bgColor.
+    //
+    // That matters because this raster is projected onto the floor with CLAMP
+    // addressing: every texel outside the caster's footprint is sampled from
+    // the EDGE. After the inversion white means "darken fully", so a white edge
+    // paints every receiving polygon solid dark, however small the caster is.
+    // Dumped from the running port, the bottom row and right column came back
+    // 100% white and the top and left 0% -- exactly the two the shrunken clear
+    // misses -- and on screen the floor around the player was as dark as the
+    // shadow itself.
+    //
+    // Why the console can afford the shrink is not established here, and this
+    // does not guess: the GameCube clear goes to a region of the EFB and the
+    // texture is a GXCopyTex out of it, which is a different path with its own
+    // edge behaviour. What IS established is what the raster has to contain for
+    // the projection to be right, so the port clears all of it and the console
+    // keeps retail's expression exactly.
+#ifdef PLATFORM_PC
+    RwCameraClear(shadowCamera, &bgColor, rwCAMERACLEARIMAGE);
+#else
     shadowCamera->frameBuffer->width--;
     shadowCamera->frameBuffer->height--;
     RwCameraClear(shadowCamera, &bgColor, rwCAMERACLEARIMAGE);
     shadowCamera->frameBuffer->width++;
     shadowCamera->frameBuffer->height++;
+#endif
 
     RwFrameOrthoNormalize((RwFrame*)shadowCamera->object.object.parent);
 
