@@ -1,5 +1,9 @@
 #include "zScene.h"
 
+#ifdef PLATFORM_PC
+#include <stdlib.h>
+#endif
+
 #include "zEntTrigger.h"
 #include "zMovePoint.h"
 #include "zEntPickup.h"
@@ -1353,6 +1357,32 @@ void zSceneSwitch(_zPortal* p, S32 forceSameScene)
 
     U32 nextSceneID = (((char*)&passet->sceneID)[0] << 24) | (((char*)&passet->sceneID)[1] << 16) |
                       (((char*)&passet->sceneID)[2] << 8) | ((char*)&passet->sceneID)[3];
+
+#ifdef PLATFORM_PC
+    // BFBB_EVENT: which scene this portal actually resolved to.
+    //
+    // The chain up to here is confirmed: the player is detected inside the
+    // trigger, the enter event fires, the link delivers, and the portal gets
+    // eEventTeleportPlayer. So if a door still does nothing, it is this
+    // arithmetic -- and it has an endianness hack in it, four lines up, that
+    // reverses the tag when byte 3 is not a digit. On the console the asset's
+    // U32 sits in memory as H,B,0,1 and byte 3 is the digit, so it does not
+    // swap; on a host the same U32 sits as 1,0,B,H and it does. Getting that
+    // backwards yields a scene id that names nothing.
+    if (getenv("BFBB_EVENT") != NULL)
+    {
+        char next[5] = { (char)(nextSceneID >> 24), (char)(nextSceneID >> 16),
+                         (char)(nextSceneID >> 8), (char)nextSceneID, 0 };
+        U32 cur = globals.sceneCur->sceneID;
+        char now[5] = { (char)(cur >> 24), (char)(cur >> 16), (char)(cur >> 8), (char)cur, 0 };
+
+        printf("bfbb: zSceneSwitch -> '%s' (%08x) from '%s' (%08x), forceSame %d, %s\n",
+               next, (unsigned)nextSceneID, now, (unsigned)cur, (int)forceSameScene,
+               (!forceSameScene && nextSceneID == cur) ? "SAME scene, teleporting within it"
+                                                       : "different scene, loading it");
+        fflush(stdout);
+    }
+#endif
 
     if (!forceSameScene && nextSceneID == globals.sceneCur->sceneID)
     {
