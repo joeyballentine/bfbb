@@ -454,3 +454,19 @@ RxRenderStateVector* RxRenderStateVectorLoadDriverState(RxRenderStateVector* rsv
     *rsvp = sState;
     return rsvp;
 }
+
+// ---------------------------------------------------------------------------
+// The colour write mask.
+//
+// NOT a RenderWare render state -- rwcore.h has no rwRENDERSTATECOLORWRITE* and
+// inventing one would put something in the C API mirror that retail never had.
+// It is a GameCube/PS2 facility that the port has to reach anyway, because
+// iDraw.cpp:iDrawSetFBMSK forwards to it, so it is a named seam of its own.
+//
+// mask is librw's ColorWriteMask: a set bit means the channel IS written, which
+// is the opposite sense to the GS register iDraw takes. The inversion belongs
+// with the caller that knows the register, not here.
+void rwSetColorWriteMask(RwUInt32 mask)
+{
+    rw::SetRenderState(rw::COLORWRITEMASK, (rw::uint32)mask);
+}

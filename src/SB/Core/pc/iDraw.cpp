@@ -33,7 +33,12 @@
 // third_party/librw/src/rwrender.h -- stops at stencil and alpha test. There is
 // nothing to forward to, so nothing is forwarded.
 //
-// What that costs, at the six call sites that reach it:
+// **This is implemented now.** What follows describes what it cost while it was
+// not, and is kept because the reasoning is what the implementation had to
+// satisfy -- and because the librw side of it lives in patches/, not in the
+// submodule's history. See patches/README.md.
+//
+// What it cost, at the six call sites that reach it:
 //
 //   xModelBucket.cpp:559, zEntPlayerOOBState.cpp:252, zNPCTypeDutchman.cpp:679
 //   and xFX.cpp:727 all use the same idiom -- iDrawSetFBMSK(-1), draw, then
@@ -44,8 +49,8 @@
 //   render one extra opaque copy of themselves over the correct one.
 //
 //   xFX.cpp:678 passes an arbitrary mask out of the bubble parameters
-//   (bp->pass1_fbmsk) rather than one of the two extremes, so its consequence
-//   depends on the data.
+//   (bp->pass1_fbmsk) rather than one of the two extremes, which is why the
+//   inversion below is per channel rather than per word.
 //
 // Emulating it with a blend -- SRCBLEND ZERO, DESTBLEND ONE leaves the
 // destination untouched -- was considered and rejected: the callers set blend
@@ -55,13 +60,40 @@
 // worse than doing nothing visibly, because a wrong blend looks like a shader
 // bug and a missing mask looks like exactly what it is.
 //
-// The fix is a colour write mask in librw (D3DRS_COLORWRITEENABLE on D3D9,
-// glColorMask on GL3) surfaced as an rw::RenderState, then this function
-// forwards to it. That is a change to third_party/librw and to the shim's
-// renderstate.cpp, not to this file.
+// That fix is now in: librw has a COLORWRITEMASK render state
+// (D3DRS_COLORWRITEENABLE on D3D9), and this forwards to it.
+//
+// The argument is a GS write MASK, so a set bit means DO NOT WRITE that
+// channel, and librw's mask is the other way round -- a set bit means DO. Each
+// channel is inverted rather than the word, because the four sites that matter
+// pass 0 (write everything) or -1 (write nothing) and one site, xFX.cpp:678,
+// passes an arbitrary mask out of the bubble parameters. Inverting per channel
+// is right for all of them; inverting the word would only be right for the two
+// extremes.
+//
+// The GS mask is per-BYTE and abgr-ordered; librw's is per-channel. A channel
+// counts as masked off if any bit of its byte is set, which is what every
+// caller here means -- none of them masks a channel partially.
+// Defined in rw/renderstate.cpp, which owns librw. Declared here rather than in
+// a header because it is the only thing the two files pass between them, and
+// the values match librw's ColorWriteMask.
+void rwSetColorWriteMask(U32 mask);
+
+#define IDRAW_WRITE_RED 1
+#define IDRAW_WRITE_GREEN 2
+#define IDRAW_WRITE_BLUE 4
+#define IDRAW_WRITE_ALPHA 8
+
 void iDrawSetFBMSK(U32 abgr)
 {
-    (void)abgr;
+    U32 mask = 0;
+
+    if ((abgr & 0x000000FF) == 0) mask |= IDRAW_WRITE_RED;
+    if ((abgr & 0x0000FF00) == 0) mask |= IDRAW_WRITE_GREEN;
+    if ((abgr & 0x00FF0000) == 0) mask |= IDRAW_WRITE_BLUE;
+    if ((abgr & 0xFF000000) == 0) mask |= IDRAW_WRITE_ALPHA;
+
+    rwSetColorWriteMask(mask);
 }
 
 void iDrawBegin()

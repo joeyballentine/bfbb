@@ -1,0 +1,77 @@
+diff --git a/src/d3d/d3ddevice.cpp b/src/d3d/d3ddevice.cpp
+index 62c46b8..7f1acbc 100644
+--- a/src/d3d/d3ddevice.cpp
++++ b/src/d3d/d3ddevice.cpp
+@@ -88,6 +88,7 @@ struct RwStateCache {
+ 	uint32 stencilwritemask;
+ 	uint32 alphafunc;
+ 	uint32 alpharef;
++	uint32 colorwritemask;
+ 
+ 	// emulation of PS2 GS
+ 	bool32 gsalpha;
+@@ -749,6 +750,14 @@ setRwRenderState(int32 state, void *pvalue)
+ 	case GSALPHATESTREF:
+ 		rwStateCache.gsalpharef = value;
+ 		break;
++	case COLORWRITEMASK:
++		if(rwStateCache.colorwritemask != value){
++			rwStateCache.colorwritemask = value;
++			// The D3DCOLORWRITEENABLE_* bits are in the same order as
++			// ColorWriteMask's, so the value passes straight through.
++			setRenderState(D3DRS_COLORWRITEENABLE, value);
++		}
++		break;
+ 	}
+ }
+ 
+@@ -838,6 +847,9 @@ getRwRenderState(int32 state)
+ 	case GSALPHATESTREF:
+ 		val = rwStateCache.gsalpharef;
+ 		break;
++	case COLORWRITEMASK:
++		val = rwStateCache.colorwritemask;
++		break;
+ 	default:
+ 		val = 0;
+ 	}
+@@ -1678,6 +1690,11 @@ initD3D(void)
+ 	rwStateCache.gsalpha = 0;
+ 	rwStateCache.gsalpharef = 128;
+ 
++	// Everything writes every channel until something says otherwise. Set on the
++	// device as well as cached, so the two cannot disagree after a reset.
++	d3ddevice->SetRenderState(D3DRS_COLORWRITEENABLE, COLORWRITEALL);
++	rwStateCache.colorwritemask = COLORWRITEALL;
++
+ 	d3ddevice->SetRenderState(D3DRS_FOGENABLE, FALSE);
+ 	rwStateCache.fogenable = 0;
+ 	d3ddevice->SetRenderState(D3DRS_FOGTABLEMODE, D3DFOG_LINEAR);
+diff --git a/src/rwrender.h b/src/rwrender.h
+index 49fe0c4..09229a3 100644
+--- a/src/rwrender.h
++++ b/src/rwrender.h
+@@ -37,7 +37,22 @@ enum RenderState
+ 	// emulation of PS2 GS alpha test
+ 	//  in the mode where it still writes color but nor depth
+ 	GSALPHATEST,
+-	GSALPHATESTREF
++	GSALPHATESTREF,
++
++	// Which colour channels a draw is allowed to write, as a mask of
++	// COLORWRITE*. Added for the GameCube/PS2 games' depth-priming passes: they
++	// draw once with colour writes off to fill the z-buffer, then again with
++	// them on, and without this the first pass paints.
++	COLORWRITEMASK
++};
++
++enum ColorWriteMask
++{
++	COLORWRITERED   = 1,
++	COLORWRITEGREEN = 2,
++	COLORWRITEBLUE  = 4,
++	COLORWRITEALPHA = 8,
++	COLORWRITEALL   = 15
+ };
+ 
+ enum AlphaTestFunc

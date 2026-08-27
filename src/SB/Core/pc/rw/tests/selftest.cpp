@@ -893,6 +893,10 @@ static void captureSetRenderState(rw::int32 state, void* value)
     sCapturedValue = value;
 }
 
+// Defined in renderstate.cpp. Declared here rather than pulled from a header so
+// that a change to the signature is caught at link time.
+void rwSetColorWriteMask(RwUInt32 mask);
+
 static void test_renderstate()
 {
     printf("RwRenderState\n");
@@ -1002,6 +1006,28 @@ static void test_renderstate()
     check(rsv.SrcBlend == rwBLENDDESTCOLOR, "and the blend functions come across whole");
     check(RxRenderStateVectorLoadDriverState(NULL) == NULL,
           "RxRenderStateVectorLoadDriverState(NULL) is refused");
+
+    // The colour write mask, which iDraw.cpp:iDrawSetFBMSK forwards to. It is
+    // not a RenderWare render state -- see the comment on it in
+    // renderstate.cpp -- so it is reached by name rather than through
+    // RwRenderStateSet, and read back through librw to confirm it landed.
+    //
+    // The four values that matter are the ones the game passes: everything on,
+    // everything off, and the two the bubble parameters can produce.
+    rwSetColorWriteMask(rw::COLORWRITEALL);
+    check((RwUInt32)(uintptr_t)rw::GetRenderState(rw::COLORWRITEMASK) == rw::COLORWRITEALL,
+          "the colour write mask lets every channel through");
+
+    rwSetColorWriteMask(0);
+    check((RwUInt32)(uintptr_t)rw::GetRenderState(rw::COLORWRITEMASK) == 0,
+          "and can shut all four off, which is what a depth-priming pass wants");
+
+    rwSetColorWriteMask(rw::COLORWRITEALPHA);
+    check((RwUInt32)(uintptr_t)rw::GetRenderState(rw::COLORWRITEMASK) == rw::COLORWRITEALPHA,
+          "and can leave alpha on with colour off");
+
+    // Back to normal, so nothing after this draws into a masked frame buffer.
+    rwSetColorWriteMask(rw::COLORWRITEALL);
 }
 
 static int sIm2DPrim;
