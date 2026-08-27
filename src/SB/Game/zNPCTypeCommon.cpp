@@ -17,6 +17,34 @@
 #include "zGrid.h"
 #include "zNPCFXCinematic.h"
 
+// The identity an NPC hands the sound system, with its channel in the low two
+// bits.
+//
+// It has to be the address of the xEnt SUBOBJECT, because that is what every
+// consumer assumes: xSnd.cpp masks the channel bits off and dereferences the
+// result as an xEnt* -- at line 279, 514 and 518 -- and xEntGetPos reads
+// ent->model through it.
+//
+// On the console `this` already IS that address. zNPCCommon is the first class
+// in the chain to declare a virtual function (xEnt, xFactoryInst and xNPCBasic
+// declare none), and CodeWarrior puts the vptr where the first virtual is
+// declared rather than at offset zero, so the xEnt base still starts the
+// object. A host compiler has no such rule: with no polymorphic base to inherit
+// a vptr from, it puts one at offset zero and shifts xEnt to 4. The C++ cast
+// knows that and an integer cast does not, so `(U32)this` names four bytes
+// before the xEnt and every field read through it comes back one word early --
+// zNPCGoalHurt::Enter played a sound, xSndPlayInternal read ent->model out of
+// the vptr, and the process died in xModelGetFrame.
+//
+// So the port casts first and flattens second. The console keeps retail's
+// expression exactly, the way XFONT_CHARIDX does in xFont.cpp.
+#ifdef PLATFORM_PC
+#define NPC_SND_OWNER(_this) ((U32)(xEnt*)(_this))
+#else
+#define NPC_SND_OWNER(_this) ((U32)(_this))
+#endif
+
+
 // Same as in xFX.cpp: xListItem is specialized for NPCConfig at the bottom of
 // this file, and this file instantiates it well before that.
 template <> NPCConfig* xListItem<NPCConfig>::Next();
@@ -3160,7 +3188,7 @@ U32 zNPCCommon::SndStart(U32 aid_toplay, NPCSndProp* sprop, F32 radius)
     }
 
     xsndflags = 0x10000;
-    owner = (U32)this + (flg_snd & 0x3);
+    owner = NPC_SND_OWNER(this) + (flg_snd & 0x3);
     if (flg_snd & 0x1000)
     {
         xsndflags &= ~0x10000;
@@ -3191,7 +3219,7 @@ U32 zNPCCommon::SndStart(U32 aid_toplay, NPCSndProp* sprop, F32 radius)
 
 S32 zNPCCommon::SndIsAnyPlaying()
 {
-    S32 owner = (S32)this;
+    S32 owner = (S32)NPC_SND_OWNER(this);
     S32 yep;
     for (S32 i = 0; i < 4; i++)
     {
@@ -3204,12 +3232,12 @@ S32 zNPCCommon::SndIsAnyPlaying()
 
 S32 zNPCCommon::SndChanIsBusy(S32 flg_chan)
 {
-    return xSndIsPlaying(0, (U32)this + (flg_chan & 3));
+    return xSndIsPlaying(0, NPC_SND_OWNER(this) + (flg_chan & 3));
 }
 
 void zNPCCommon::SndKillSounds(S32 flg_chan, S32 all)
 {
-    S32 owner = (S32)this;
+    S32 owner = (S32)NPC_SND_OWNER(this);
     if (all != 0)
     {
         for (S32 i = 0; i < 4; i++)
