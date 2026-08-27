@@ -693,21 +693,17 @@ running the shim rather than compiling it:
     game's 2D call sites never set a camera z, so `RwIm2DVertex`'s default
     constructor puts 1.0 there.
 
-`tests/selftest.cpp` runs **513 checks against a live D3D9 device** and 507
-against `LIBRW_PLATFORM=NULL`. Keeping the headless configuration working is
-what lets this layer be tested on a machine with no display, and it is a
-supported configuration rather than a leftover.
+`tests/selftest.cpp` runs **533 checks against a live D3D9 device** and 522
+against `LIBRW_PLATFORM=NULL`, and both are at zero failures. Keeping the
+headless configuration working is what lets this layer be tested on a machine
+with no display, and it is a supported configuration rather than a leftover.
 
-**Two of the 507 FAIL, and have since the colour write mask went in.** They are
-`the colour write mask lets every channel through` and `and can leave alpha on
-with colour off`, and the cause is that they read the state back with
-`rw::GetRenderState` -- which asks the DEVICE, and the null device answers 0 to
-every question, exactly as the comment at the top of `renderstate.cpp` says.
-The fix is to check them through the captured `device.setRenderState` hook
-instead, which is how the alpha compare below is checked and why that one passes
-on both backends. Left alone here because it is a different change from the one
-that found it. The count above is what the D3D9 build gates on; the headless
-build is 507 checks and 2 failures until someone does that.
+The two runs differ by the checks that need a device to mean anything -- the
+video mode, and the animated-UV pipeline with its three compiled vertex
+shaders. Where they differ they do not simply skip: under `NULL` the animated-UV
+test asserts the OPPOSITE, that `iFXanimUVCreatePipe` answers NULL, because "no
+shader, so draw the surface unanimated" is a supported outcome and the point of
+checking it is that it stays a quiet one.
 
 ## Do this next
 

@@ -19,15 +19,25 @@ makes three. Measured GameCube-specific line counts for the rest:
     iParMgr   986 lines, 0     iMorph  303, 0     iFX     213, 37
     iScrFX    210 lines, 2     iAnim   234, 0     iFMV    422, 70
 
-**Nine of the eleven are now done, and seven of those nine were verbatim
+**Ten of the eleven are now done, and seven of those ten were verbatim
 copies**: iLight, iEnv, iAnim, iMorph, iParMgr, plus iMath3 and iCollideFast
 from before. Two needed one hunk each -- iModel for RpAtomic's missing
 interpolator, iScrFX for a RwRasterLock bracket a host must not honour -- and
-iDraw is a documented no-op that loses a behaviour. iFX and iFMV are left.
+iDraw is a documented no-op that loses a behaviour. iFMV is left.
 
-`iFX` and `iFMV` are the only two that are substantially GameCube. `iFMV` is not
-getting ported at all -- the decision taken is to convert the videos with ffmpeg
-and play them back with something else rather than reimplement Bink.
+`iFX` and `iFMV` are the only two that are substantially GameCube, and they went
+opposite ways. `iFX` was **rewritten, not copied**: its 37 GameCube lines are a
+GX texture matrix loaded from four globals, so the port added the equivalent to
+the librw fork -- a texture coordinate transform and a pipeline that applies it
+in a vertex shader -- and iFX.cpp is now the same twenty lines of glue the
+console's is, reading the same four globals into the same eight slots. That is
+the pattern for a GameCube file whose GameCube part is a *hardware feature*
+rather than a hardware *interface*: find the feature's counterpart, add it below
+the shim, and the platform file comes out short.
+
+`iFMV` is not getting ported at all -- the decision taken is to convert the
+videos with ffmpeg and play them back with something else rather than
+reimplement Bink.
 
 ## If you are working in a fresh git worktree
 

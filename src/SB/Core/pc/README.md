@@ -150,16 +150,17 @@ up on a D3D9 device. See LINKING.md.
 | `iEnv`, `iLight`, `iAnim`, `iMorph`, `iMath3`, `iCollide`, `iCollideFast` | **done** | all verbatim copies — see VERBATIM.txt and PORTING.md |
 | `iCutscene`, `iAnimSKB` | **done** | ported, not copied; see the notes in CMakeLists.txt |
 | `iDraw` | **done** | `iDrawSetFBMSK` forwards to a `COLORWRITEMASK` render state added to the librw fork (`D3DRS_COLORWRITEENABLE` on D3D9). It had been a no-op, which made the depth-priming first pass at four call sites paint an opaque copy of itself; iDraw.cpp keeps that reasoning, because it is what the implementation had to satisfy |
-| `iFX` (1 fn) | **refusal** | `iFXanimUVCreatePipe` returns NULL, which xFX.cpp:883 already handles: atomics keep their default pipeline and surfaces with animated texture coordinates draw static. Needs a texture matrix in librw |
+| `iFX` (1 fn) | **done** | `iFXanimUVCreatePipe` returns the texture-coordinate-transform pipeline added to the librw fork, with its own render in front of librw's to read the four `xFXanimUV*` globals into the matrix at draw time — the same shape as `RxGameCubeAllInOneSetRenderCallBack` on the console. D3D9 applies it in a vertex shader variant; GL3 has no shader for it yet and answers NULL, which xFX.cpp:883 handles by leaving the surface unanimated |
 | `iFMV` (1 fn) | **refusal, and will not be ported** | Bink is proprietary. Movies return "ran to the end" immediately so the game advances past them. The plan of record is ffmpeg ahead of time plus a different player; the file lists what that needs |
 | `ngcrad3d` | not ported | GameCube radiosity; no host counterpart |
 
 **All eleven are done.** Seven were byte-identical copies of their `gc` counterparts,
 which is the finding PORTING.md is built around: most of this layer is not
 GameCube code, it is RenderWare calls and game logic that happen to live in the
-platform directory. Two needed one hunk each (`iModel`, `iScrFX`), and two are
-deliberate refusals whose files say what is lost and what closing them costs
-(`iFX`, `iFMV`). `iDraw` is implemented but lossy.
+platform directory. Two needed one hunk each (`iModel`, `iScrFX`), one was
+rewritten against the librw fork rather than copied (`iFX`), and one is a
+deliberate refusal whose file says what is lost and what closing it costs
+(`iFMV`). `iDraw` is implemented but lossy.
 
 **This table has been wrong before.** It said "header only" for nine interfaces
 that were already implemented, because four rounds of porting updated the code

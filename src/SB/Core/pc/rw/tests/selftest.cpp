@@ -49,9 +49,16 @@
 
 #include "iWindow.h"
 
+// The animated-UV pipeline's game-side half. Compiled into this test (see
+// CMakeLists.txt) so that the translation from the game's globals into librw's
+// matrix can be exercised, which is the part of that path a headless check can
+// actually reach.
+#include "iFX.h"
+
 // WITH_D3D above drags in d3d9.h and windows.h behind it, and windows.h still
 // carries the 16-bit memory model's `near` and `far` as empty macros. This file
-// has a float comparison called near().
+// has a float comparison called near(). Undefined after ALL the includes, so
+// that anything added above is covered too.
 #undef near
 #undef far
 
@@ -1704,6 +1711,119 @@ static void test_skin()
     reinterpret_cast<rw::Geometry*>(geometry)->destroy();
 }
 
+// The xFXanimUV* state, which lives in xFX.cpp in the real build and is
+// declared extern by iFX.cpp. Defined here instead, because these four pairs of
+// floats ARE the whole interface between those two files, and standing them up
+// is cheaper and clearer than linking the game in to get them.
+float xFXanimUVRotMat0[2] = { 1.0f, 0.0f };
+float xFXanimUVRotMat1[2] = { 0.0f, 1.0f };
+float xFXanimUVTrans[2] = { 0.0f, 0.0f };
+float xFXanimUVScale[2] = { 1.0f, 1.0f };
+
+// Stood in for librw's render, so that the matrix iFX.cpp builds can be read
+// without a draw. iFXanimUVCreatePipe wraps whatever impl.render it finds and
+// calls through it, so installing this one FIRST makes it the thing the wrapper
+// calls -- and rw::uvTransform at that moment is exactly what a real draw would
+// have uploaded to the vertex shader.
+static rw::float32 sCapturedUVTransform[rw::NUMUVTRANSFORMELEMENTS];
+static int sCapturedUVRenders;
+
+static void captureUVRender(rw::ObjPipeline*, rw::Atomic*)
+{
+    memcpy(sCapturedUVTransform, rw::uvTransform, sizeof(sCapturedUVTransform));
+    sCapturedUVRenders++;
+}
+
+// Animated UVs: the texture coordinate transform, the pipeline that applies it,
+// and iFX.cpp's translation of the game's state into it.
+//
+// What this canNOT check is what the shader DOES with the matrix. That needs a
+// frame and a pair of eyes; nothing here proves a conveyor belt scrolls. What
+// it does check is every step up to the shader -- that the pipeline exists,
+// that the device accepted the three compiled vertex shaders, that the
+// transform reads as the identity until something sets it, that the four
+// globals land in the slots the GameCube's 2x4 texgen put them in, and that a
+// draw leaves the transform where it found it.
+static void test_uvxform()
+{
+    printf("animated UVs\n");
+
+    check(memcmp(rw::uvTransform, rw::UVTRANSFORM_IDENTITY, sizeof(rw::uvTransform)) == 0,
+          "the texture coordinate transform starts as the identity");
+
+    const rw::float32 probe[rw::NUMUVTRANSFORMELEMENTS] = { 2.0f, 3.0f, 4.0f, 5.0f,
+                                                            6.0f, 7.0f, 8.0f, 9.0f };
+    rw::SetUVTransform(probe);
+    check(memcmp(rw::uvTransform, probe, sizeof(probe)) == 0, "rw::SetUVTransform");
+    rw::SetUVTransform(NULL);
+    check(memcmp(rw::uvTransform, rw::UVTRANSFORM_IDENTITY, sizeof(probe)) == 0,
+          "rw::SetUVTransform(nil) puts the identity back");
+
+    rw::ObjPipeline* pipe = rw::GetUVTransformPipeline();
+
+#ifdef RW_NULL
+    // No renderer, so no shader, so nothing to animate with. The contract is
+    // that this is SAFE rather than an error: xFX.cpp:883 leaves the atomic on
+    // its default pipeline and the surface draws unanimated.
+    check(pipe == NULL, "no backend, so no pipeline for animated UVs");
+    check(iFXanimUVCreatePipe() == NULL,
+          "and iFXanimUVCreatePipe says so rather than handing back one that cannot draw");
+    return;
+#else
+    check(pipe != NULL, "the backend has a pipeline for animated UVs");
+    if (pipe == NULL)
+    {
+        return;
+    }
+
+#ifdef RW_D3D9
+    // Compiled by fxc into headers checked into librw, then handed to the
+    // device at driver open. A blob the device rejects leaves these nil, and
+    // then every animated surface would draw with no vertex shader at all.
+    check(rw::d3d::uvxform_amb_VS != NULL && rw::d3d::uvxform_amb_dir_VS != NULL &&
+              rw::d3d::uvxform_all_VS != NULL,
+          "the device accepted all three UV-transform vertex shaders");
+#endif
+
+    void (*librwRender)(rw::ObjPipeline*, rw::Atomic*) = pipe->impl.render;
+    pipe->impl.render = captureUVRender;
+
+    check(reinterpret_cast<void*>(iFXanimUVCreatePipe()) == reinterpret_cast<void*>(pipe),
+          "iFXanimUVCreatePipe hands back librw's pipeline");
+    check(pipe->impl.render != captureUVRender, "with its own render in front of librw's");
+
+    // Eight different values, so that a transposed matrix or a swapped slot
+    // cannot pass. xFXanimUVSetAngle writes the rotation as cos/-sin/sin/cos;
+    // these stand in for what it would have written.
+    xFXanimUVRotMat0[0] = 0.25f;
+    xFXanimUVRotMat0[1] = -0.5f;
+    xFXanimUVRotMat1[0] = 0.5f;
+    xFXanimUVRotMat1[1] = 0.75f;
+    xFXanimUVTrans[0] = 1.5f;
+    xFXanimUVTrans[1] = 2.5f;
+    xFXanimUVScale[0] = 3.5f;
+    xFXanimUVScale[1] = 4.5f;
+
+    sCapturedUVRenders = 0;
+    pipe->impl.render(pipe, NULL);
+    check(sCapturedUVRenders == 1, "a draw through it reaches librw's render");
+
+    // Row order is the GameCube's: rotation, then translation, then scale, and
+    // BOTH of the last two columns are constants that add to the coordinate.
+    // gc/iFX.cpp builds the same eight floats in the same order.
+    const rw::float32 wanted[rw::NUMUVTRANSFORMELEMENTS] = { 0.25f, -0.5f, 1.5f, 3.5f,
+                                                             0.5f, 0.75f, 2.5f, 4.5f };
+    check(memcmp(sCapturedUVTransform, wanted, sizeof(wanted)) == 0,
+          "the xFXanimUV globals reach the matrix in the GameCube's slots");
+    check(memcmp(rw::uvTransform, rw::UVTRANSFORM_IDENTITY, sizeof(wanted)) == 0,
+          "and the draw put the transform back when it was done");
+
+    // Unwrapped again, so that nothing after this draws through a render
+    // callback that belongs to one test.
+    pipe->impl.render = librwRender;
+#endif
+}
+
 static void test_matfx()
 {
     printf("RpMatFX\n");
@@ -3148,6 +3268,7 @@ int main()
     test_skin();
     test_matfx();
     test_skin_matfx();
+    test_uvxform();
     test_ptank();
     test_clumps();
     test_intersections();

@@ -1,51 +1,118 @@
+// librw first, and it has to be: types.h defines `null` as a macro and librw
+// spells one of its namespaces `null`, so a translation unit that takes the
+// game's header first cannot then take librw's. Every other file in this
+// directory reaches librw through the RenderWare C API in rw/ and never has to
+// care; this one talks to rw:: directly.
+#include <rw.h>
+
 #include "iFX.h"
 
 #include <types.h>
 
-// The animated-UV pipeline, and the port does not have one.
+// The animated-UV pipeline: the one an atomic is given when an artist put a
+// uvfx entry on its surface, so that its texture coordinates scroll, rotate or
+// scale over time. Water, conveyor belts and the Industrial Park lava are what
+// this draws.
 //
-// **This is a refusal, not a stub, and the difference is that the game already
-// handles it.** xFX.cpp:883 reads
+// The state it animates from is four pairs of floats in xFX.cpp, which
+// xEntSetupPipeline writes immediately before it hands the model to
+// xFXanimUVAtomicSetup. Nothing here owns them and nothing here caches them:
+// they are read at DRAW time, once per atomic, which is what makes a surface
+// that is drawn twice in a frame with two different transforms come out right.
+//
+// WHY the transform is not simply written into the vertices. RpGeometry is
+// shared between every atomic that instances a model, so rewriting texture
+// coordinates would animate every copy of that model at once -- one lava pool
+// would drag the rest of them with it. The transform therefore has to happen
+// after instancing, per draw, which on hardware means in a shader.
+//
+// So the pieces are split the same way the GameCube's are:
+//
+//   librw   owns the transform itself. rw::uvTransform is the matrix,
+//           rw::SetUVTransform writes it, and rw::GetUVTransformPipeline()
+//           returns the platform's pipeline for applying it -- for D3D9 a
+//           second copy of the default pipeline, drawing with a variant of the
+//           default vertex shader that multiplies the texture coordinates
+//           through the matrix (src/d3d/shaders/default_VS.hlsl, UVXFORM).
+//   here    owns reading the game's globals into that matrix, by taking the
+//           pipeline librw handed over and putting its own render in front of
+//           librw's.
+//
+// gc/iFX.cpp is the same shape: it asks RenderWare for the GameCube AllInOne
+// pipeline and calls RxGameCubeAllInOneSetRenderCallBack to put its own
+// callback in, which reads the same four globals and loads them into a GX 2x4
+// texture matrix. Swapping impl.render here is that call by another name --
+// the pipeline exists for this and nothing else draws through it.
+//
+// A platform whose librw side is not implemented returns nil from
+// GetUVTransformPipeline, and then so does this, and xFX.cpp:883
 //
 //     if (xFXanimUVPipeline == 0) { return atomic; }
 //
-// so an atomic that would have been given this pipeline keeps its default one
-// and renders normally. Nothing checks for the failure, nothing logs, and
-// nothing breaks. What is lost is the animation: surfaces whose texture
-// coordinates scroll, rotate or scale over time -- water, conveyor belts, the
-// lava in the Industrial Park, anything an artist gave a uvfx entry -- draw
-// with static texture coordinates instead of moving ones.
+// leaves the atomic on its default pipeline and draws it unanimated. That is
+// the GL3 situation today: the state and the pipeline hook are portable, the
+// shader is not written yet, and until it is, GL3 draws these surfaces still
+// rather than not at all.
 //
-// WHY there is nothing to forward to, so that the next person does not go
-// looking. gc/iFX.cpp is 213 lines and essentially all of it is GameCube: it
-// builds a custom RenderWare pipeline around RxNodeDefinitionGetGameCubeAtomicAllInOne,
-// installs a render callback, and that callback walks the instanced display
-// lists by hand (GXCallDisplayList), sets the GameCube's own 2x4 texture matrix
-// (GXLoadTexMtxImm / GXSetTexCoordGen) from the xFXanimUV* globals, and reads a
-// GameCube raster extension to decide z-compare location. librw has no
-// equivalent of ANY of that -- no GameCube pipeline, no display lists, and no
-// texture matrix on a material at all.
-//
-// WHAT A REAL IMPLEMENTATION WOULD TAKE, in rough order of preference:
-//
-//   1. A texture matrix in librw, surfaced as material state and applied in the
-//      GL3 and D3D9 pipelines' vertex shaders. That is the same shape as the
-//      GameCube's and the same shape as the fix iDraw.cpp wants for its write
-//      mask -- both are librw changes rather than game-code ones.
-//   2. A custom rw::ObjPipeline here that transforms texture coordinates on the
-//      way to the vertex buffer. Portable, but it duplicates a pipeline per
-//      backend.
-//
-// Rewriting the geometry's texture coordinates each frame is NOT one of the
-// options: RpGeometry is shared between every atomic that instances the model,
-// so animating one surface would animate all of them.
-//
-// The four setters this pipeline reads -- xFXanimUVSetTranslation, SetScale,
-// SetAngle and the 2P variants -- are in xFX.cpp and keep working. They write
-// globals that nothing on this side reads yet, which is exactly the state a
-// future implementation wants to find them in.
+// NOT IMPLEMENTED, because the GameCube does not implement it either: the
+// second-pass state. xFXanimUV2PRotMat0, ...2PTrans, ...2PScale and
+// xFXanimUV2PTexture are written by xEntSetupPipeline and read by nothing --
+// grep gc/iFX.cpp and it uses only the first-pass four. The setters exist and
+// keep working; a second pass would be new behaviour, not restored behaviour.
+
+extern F32 xFXanimUVRotMat0[2];
+extern F32 xFXanimUVRotMat1[2];
+extern F32 xFXanimUVTrans[2];
+extern F32 xFXanimUVScale[2];
+
+// librw's render for the pipeline below, which this one wraps rather than
+// replaces. It does the drawing; all this file adds is the matrix.
+static void (*sAnimUVBaseRender)(rw::ObjPipeline* pipe, rw::Atomic* atomic) = NULL;
+
+static void iFXanimUVRender(rw::ObjPipeline* pipe, rw::Atomic* atomic)
+{
+    // The GameCube's 2x4 texture matrix, laid out exactly as gc/iFX.cpp lays
+    // it out, because it multiplies exactly the same vector: GX_TG_MTX2x4
+    // feeds a texgen the vector (u, v, 1, 1), and the D3D9 shader builds the
+    // same one.
+    //
+    // Which means BOTH of the last two columns are constants that add, and the
+    // scale is in one of them. That is not a transcription slip -- retail
+    // writes the scale there, so a uvfx scale of 1 shifts the coordinates by a
+    // whole tile (invisible on a wrapped texture, which is why it survived)
+    // and a scale of anything else shifts them by that. Scaling the rotation
+    // instead would look more sensible and would not be what the game does.
+    const rw::float32 xform[rw::NUMUVTRANSFORMELEMENTS] = {
+        xFXanimUVRotMat0[0], xFXanimUVRotMat0[1], xFXanimUVTrans[0], xFXanimUVScale[0],
+        xFXanimUVRotMat1[0], xFXanimUVRotMat1[1], xFXanimUVTrans[1], xFXanimUVScale[1],
+    };
+
+    rw::SetUVTransform(xform);
+    sAnimUVBaseRender(pipe, atomic);
+
+    // Nothing else reads the transform -- every other pipeline ignores it --
+    // but leaving it set would make the next reader of rw::uvTransform see one
+    // entity's animation, and a debugger see a value that is nobody's. Put it
+    // back.
+    rw::SetUVTransform(NULL);
+}
 
 RxPipeline* iFXanimUVCreatePipe()
 {
-    return NULL;
+    rw::ObjPipeline* pipe = rw::GetUVTransformPipeline();
+
+    if (pipe == NULL)
+    {
+        return NULL;
+    }
+
+    // xFXanimUVCreate calls this once and keeps the result forever, so this
+    // runs once. Wrapping twice would recurse.
+    if (sAnimUVBaseRender == NULL)
+    {
+        sAnimUVBaseRender = pipe->impl.render;
+        pipe->impl.render = iFXanimUVRender;
+    }
+
+    return reinterpret_cast<RxPipeline*>(pipe);
 }
