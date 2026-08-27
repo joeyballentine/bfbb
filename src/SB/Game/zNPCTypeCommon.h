@@ -222,7 +222,6 @@ enum en_LASSO_STATUS
     LASS_STAT_GRABBING,
     LASS_STAT_TOSSING,
     LASS_STAT_NOMORE,
-    LASS_STAT_UNK_5, // needed to match switch in zNPCCommon::LassoNotify, checks value of 5
     LASS_STAT_FORCEINT = 0x7fffffff
 };
 
