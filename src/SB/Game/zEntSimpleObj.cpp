@@ -3,6 +3,8 @@
 #ifdef PLATFORM_PC
 #include "zGlobals.h"
 
+extern unsigned gBFBBCurrentSimpleObj;
+
 #include <stdio.h>
 #include <stdlib.h>
 #endif
@@ -321,7 +323,13 @@ void zEntSimpleObj_MgrUpdateRender(RpWorld* world, F32 dt)
                     }
                 }
 #endif
+#ifdef PLATFORM_PC
+                gBFBBCurrentSimpleObj = (unsigned)ent->id;
+#endif
                 zEntSimpleObj_Render(ent);
+#ifdef PLATFORM_PC
+                gBFBBCurrentSimpleObj = 0;
+#endif
                 if ((picklod == 0) && ((u16)xrand() < 0x55U))
                 {
                     xVec3 blob_posrnd = { 0.25f, 1.0f, 0.25f };

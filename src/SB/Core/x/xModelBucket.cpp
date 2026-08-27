@@ -1,5 +1,10 @@
 #include "xModelBucket.h"
 
+#ifdef PLATFORM_PC
+#include <stdio.h>
+#include <stdlib.h>
+#endif
+
 #include "iCamera.h"
 #include "iDraw.h"
 #include "iModel.h"
@@ -387,6 +392,45 @@ void xModelBucket_RenderOpaque()
                 iCameraSetFogRenderStates();
             }
 
+#ifdef PLATFORM_PC
+            // BFBB_BUCKET: the trees, measured where they are actually drawn.
+            //
+            // Every earlier probe missed this site. zEntSimpleObj_Render does
+            // not draw, it ENQUEUES into a bucket, and the draw happens here at
+            // flush time -- so a report hung off the simple-object loop never
+            // coincided with one, and everything measured that way came from
+            // some other object and looked fine. Which is exactly why it did.
+            //
+            // Once per distinct bucket atomic. PipeFlags bit 7 is what decides
+            // whether this bucket keeps its baked vertex colours: the test just
+            // above forces iModelHack_DisablePrelight off when
+            // (PipeFlags & 0xC0) == 0x80, so a bucket that does not match keeps
+            // prelight disabled and has only its light kit to draw with.
+            if (getenv("BFBB_BUCKET") != NULL)
+            {
+                static RpAtomic* seen[256];
+                static S32 seenCount;
+                S32 known = 0;
+                for (S32 k = 0; k < seenCount; k++)
+                {
+                    if (seen[k] == data) { known = 1; break; }
+                }
+                if (!known && seenCount < 256)
+                {
+                    seen[seenCount++] = data;
+                    RpGeometry* bg = data ? data->geometry : NULL;
+                    printf("bfbb: bucket %p | PipeFlags %08x | prelight %s | kit %p | "
+                           "geo flags %08x PRELIT %s NORMALS %s MODULATE %s\n",
+                           (void*)data, (unsigned)minst->PipeFlags,
+                           iModelHack_DisablePrelight ? "DISABLED" : "kept",
+                           (void*)minst->LightKit, bg ? (unsigned)bg->flags : 0u,
+                           (bg && (bg->flags & 0x8)) ? "set" : "clear",
+                           (bg && (bg->flags & 0x10)) ? "set" : "clear",
+                           (bg && (bg->flags & 0x40)) ? "set" : "clear");
+                    fflush(stdout);
+                }
+            }
+#endif
             xModelRenderSingle(minst);
 
             if ((minst->PipeFlags & 0x10000) && oldfogtype != rwFOGTYPENAFOGTYPE)
