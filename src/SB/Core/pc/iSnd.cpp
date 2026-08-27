@@ -26,11 +26,26 @@
 // ---------------------------------------------------------------------------
 // Asset layout
 //
-// The GC DSPADPCM header with the asset ID appended, exactly as
-// src/SB/Core/gc/iSnd.cpp describes it. Three fields are read outside this
-// file, and xSnd.cpp reaches them through its own iSndLookupInfo declaration at
-// fixed offsets -- num_samples at 0x00, sample_rate at 0x08 and the internal id
-// at 0x64 -- so this layout is load-bearing and must not be rearranged.
+// Two different shapes meet in this file.
+//
+// `sndhdr` is what iSndLookup HANDS BACK: the GC DSPADPCM header with the asset
+// ID appended, exactly as src/SB/Core/gc/iSnd.cpp describes it. Three fields are
+// read outside this file, and xSnd.cpp reaches them through its own
+// iSndLookupInfo declaration at fixed offsets -- num_samples at 0x00,
+// sample_rate at 0x08 and the internal id at 0x64 -- so this layout is
+// load-bearing and must not be rearranged.
+//
+// `xbox_sndhdr` is what the SNDI assets on disc ACTUALLY CONTAIN. The port
+// reads the Xbox asset set, and the Xbox SNDI is not the GameCube one: it is a
+// 12-byte count header followed by fixed 44-byte entries built around a
+// WAVEFORMATEX, little-endian, with no DSP coefficients and no total_size field.
+// Reading it as a GC table walks entry[] with the wrong stride off counts taken
+// from the wrong words, which is a wild pointer within a few iterations.
+//
+// The layout below is confirmed against every HIP and HOP in the retail Xbox
+// tree: each SNDI asset is exactly 12 + 44 * (num_sfx + num_streams +
+// num_cutscene) bytes, and each entry's data_size matches the byte length of
+// the SND asset its asset_id names.
 
 struct sndhdr
 {
@@ -54,14 +69,30 @@ struct sndhdr
     U32 assetID; // 0x60
 };
 
-// The header of a loaded SNDI asset.
+// One entry of an Xbox SNDI table, as it sits in the asset.
+struct xbox_sndhdr
+{
+    // WAVEFORMATEX, verbatim.
+    U16 format_tag; // 0x00 -- 1 = PCM
+    U16 channels; // 0x02
+    U32 samples_per_sec; // 0x04
+    U32 avg_bytes_per_sec; // 0x08
+    U16 block_align; // 0x0C
+    U16 bits_per_sample; // 0x0E
+    U16 cb_size; // 0x10
+    U16 pad12; // 0x12 -- realigns the fields after the 18-byte WAVEFORMATEX
+    U32 data_size; // 0x14 -- byte length of the SND asset
+    U32 assetID; // 0x18
+    U32 runtime[4]; // 0x1C -- zero on disc; the retail backend's own bookkeeping
+};
+
+// The header of a loaded Xbox SNDI asset.
 struct sndinfo
 {
     U32 num_sfx; // 0x00
-    U32 total_size; // 0x04
-    U32 num_streams; // 0x08
-    U32 num_cutscene; // 0x0C
-    sndhdr entry[1]; // 0x10
+    U32 num_streams; // 0x04
+    U32 num_cutscene; // 0x08
+    xbox_sndhdr entry[1]; // 0x0C
 };
 
 // What iSndLookup hands back. The id has to land at 0x64, immediately after the
@@ -74,6 +105,12 @@ struct sndlookup
 
 // ---------------------------------------------------------------------------
 // Loaded sound tables
+
+// The on-disc stride. Every SNDI in the retail Xbox tree is exactly
+// 12 + 44 * total_entries bytes, so getting this wrong is not a slow drift --
+// the very first lookup walks off the asset.
+static_assert(sizeof(xbox_sndhdr) == 44, "xbox_sndhdr must be the 44-byte on-disc entry");
+static_assert(sizeof(sndinfo) == 12 + 44, "the Xbox SNDI count header must be 12 bytes");
 
 #define ISND_MAX_TABLES 12
 
@@ -247,6 +284,25 @@ bool iSndIsPlayingByHandle(U32 handle)
     return false;
 }
 
+// Translate one Xbox table entry into the DSP-shaped record iSndLookup hands
+// back. Only three of those fields are read anywhere: sample_rate and the id by
+// xSnd.cpp, num_samples by iStartVoice to time the voice out. The rest are
+// zeroed rather than invented -- there are no DSP coefficients on this platform
+// and nothing reads them.
+static void fill_lookup(const xbox_sndhdr& e)
+{
+    memset(&snd.hdr, 0, sizeof(snd.hdr));
+
+    snd.hdr.sample_rate = e.samples_per_sec;
+    snd.hdr.format = e.format_tag;
+    snd.hdr.assetID = e.assetID;
+
+    // block_align is bytes per sample frame, so this is the frame count the
+    // backend needs to time the voice. A malformed entry would divide by zero;
+    // report no samples instead, which plays as a voice that ends immediately.
+    snd.hdr.num_samples = e.block_align != 0 ? e.data_size / e.block_align : 0;
+}
+
 iSndFileInfo* iSndLookup(U32 id)
 {
     // Retail hands out ids from two ranges and wraps each one: streams below
@@ -271,7 +327,7 @@ iSndFileInfo* iSndLookup(U32 id)
             continue;
         }
 
-        sndhdr* entry = info->entry;
+        xbox_sndhdr* entry = info->entry;
         U32 n = info->num_sfx;
         U32 j = 0;
 
@@ -279,7 +335,7 @@ iSndFileInfo* iSndLookup(U32 id)
         {
             if (id == entry[j].assetID)
             {
-                memcpy(&snd.hdr, &entry[j], sizeof(sndhdr));
+                fill_lookup(entry[j]);
                 snd.id = snd_id++;
                 if (snd_id >= 0x7ffa)
                 {
@@ -294,25 +350,19 @@ iSndFileInfo* iSndLookup(U32 id)
         {
             if (id == entry[j].assetID)
             {
-                memcpy(&snd.hdr, &entry[j], sizeof(sndhdr));
+                fill_lookup(entry[j]);
                 snd.id = strm_id++;
                 if (strm_id >= 0xffe)
                 {
                     strm_id = 1;
                 }
 
-                // pad[0] == 0x63 marks a stream held in memory rather than read
-                // from disc; retail gives it a sound-range id so the play path
-                // treats it as one.
-                if (entry[j].pad[0] == 0x63)
-                {
-                    snd.id = 0x1000;
-                    sound_stream = 0;
-                }
-                else
-                {
-                    sound_stream = 1;
-                }
+                // The GameCube table tags a memory-resident stream with
+                // pad[0] == 0x63 and hands it a sound-range id so the play path
+                // treats it as one. The Xbox entry has no such field -- every
+                // entry is the same 44 bytes with nothing spare -- so a stream
+                // here is always a stream.
+                sound_stream = 1;
                 return (iSndFileInfo*)&snd;
             }
         }
@@ -322,7 +372,7 @@ iSndFileInfo* iSndLookup(U32 id)
         {
             if (id == entry[j].assetID)
             {
-                memcpy(&snd.hdr, &entry[j], sizeof(sndhdr));
+                fill_lookup(entry[j]);
                 snd.id = strm_id++;
                 if (strm_id >= 0xffe)
                 {

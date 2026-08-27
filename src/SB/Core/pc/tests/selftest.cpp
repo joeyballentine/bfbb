@@ -389,35 +389,29 @@ static void test_savegame()
 // here is what makes this a unit test of the seam rather than of the game.
 xSndGlobals gSnd;
 
-// The sound table layout iSnd.cpp parses. Declared independently on purpose:
-// if the two ever disagree, this test fails rather than the port silently
-// reading the wrong field out of a real asset.
+// The Xbox sound table layout iSnd.cpp parses -- a 12-byte count header and
+// fixed 44-byte entries built around a WAVEFORMATEX, which is what the retail
+// Xbox assets this port reads actually contain. Declared independently on
+// purpose: if the two ever disagree, this test fails rather than the port
+// silently walking a real asset with the wrong stride.
 struct test_sndhdr
 {
-    U32 num_samples; // 0x00
-    U32 num_nibbles; // 0x04
-    U32 sample_rate; // 0x08
-    U16 loop_flag; // 0x0C
-    U16 format; // 0x0E
-    U32 loop_start; // 0x10
-    U32 loop_end; // 0x14
-    U32 cur_addr; // 0x18
-    S16 coef[16]; // 0x1C
-    U16 gain; // 0x3C
-    U16 pred_scale; // 0x3E
-    U16 yn1; // 0x40
-    U16 yn2; // 0x42
-    U16 loop_pred_scale; // 0x44
-    U16 loop_yn1; // 0x46
-    U16 loop_yn2; // 0x48
-    U16 pad[11]; // 0x4A
-    U32 assetID; // 0x60
+    U16 format_tag; // 0x00
+    U16 channels; // 0x02
+    U32 samples_per_sec; // 0x04
+    U32 avg_bytes_per_sec; // 0x08
+    U16 block_align; // 0x0C
+    U16 bits_per_sample; // 0x0E
+    U16 cb_size; // 0x10
+    U16 pad12; // 0x12
+    U32 data_size; // 0x14
+    U32 assetID; // 0x18
+    U32 runtime[4]; // 0x1C
 };
 
 struct test_sndinfo
 {
     U32 num_sfx;
-    U32 total_size;
     U32 num_streams;
     U32 num_cutscene;
     test_sndhdr entry[2];
@@ -444,6 +438,8 @@ static void test_snd()
     check(sizeof(xSndVoiceInfo) == 100,
           "xSndVoiceInfo is 100 bytes, as iSndPlay's offset/100 assumes");
     check(offsetof(test_lookup, ID) == 0x64, "the lookup id sits at 0x64, where xSnd.cpp reads it");
+    check(sizeof(test_sndhdr) == 44, "an Xbox sound table entry is 44 bytes");
+    check(offsetof(test_sndinfo, entry) == 12, "the Xbox sound table header is 12 bytes");
 
     memset(&gSnd, 0, sizeof(gSnd));
     for (S32 i = 0; i < 8; i++)
@@ -461,13 +457,22 @@ static void test_snd()
     table.num_streams = 1;
     table.num_cutscene = 0;
 
+    // 16-bit mono, so block_align is 2 and the sample count is data_size / 2.
     table.entry[0].assetID = SND_ASSET;
-    table.entry[0].sample_rate = 32000;
-    table.entry[0].num_samples = 3200; // 0.1 s at 32 kHz
+    table.entry[0].format_tag = 1;
+    table.entry[0].channels = 1;
+    table.entry[0].samples_per_sec = 32000;
+    table.entry[0].block_align = 2;
+    table.entry[0].bits_per_sample = 16;
+    table.entry[0].data_size = 3200 * 2; // 0.1 s at 32 kHz
 
     table.entry[1].assetID = STRM_ASSET;
-    table.entry[1].sample_rate = 32000;
-    table.entry[1].num_samples = 32000; // 1.0 s
+    table.entry[1].format_tag = 1;
+    table.entry[1].channels = 1;
+    table.entry[1].samples_per_sec = 32000;
+    table.entry[1].block_align = 2;
+    table.entry[1].bits_per_sample = 16;
+    table.entry[1].data_size = 32000 * 2; // 1.0 s
 
     check(iSndLoadSounds(&table) == 1, "iSndLoadSounds accepts a table");
 

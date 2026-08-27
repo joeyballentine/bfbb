@@ -124,9 +124,14 @@ RwCamera* RwCameraClear(RwCamera* camera, RwRGBA* colour, RwInt32 clearMode)
     }
 
     // colour is allowed to be null -- iCamera.cpp:107 clears Z only and passes
-    // NULL -- and it is the device that decides whether to read it, exactly as
-    // on the console.
-    asCamera(camera)->clear(reinterpret_cast<rw::RGBA*>(colour), (rw::uint32)clearMode);
+    // NULL. librw's d3d9 device builds the clear colour before it looks at the
+    // mode (d3ddevice.cpp:1335), so it faults on that call rather than ignoring
+    // the pointer the way the console device does. Substitute an opaque black:
+    // with rwCAMERACLEARIMAGE clear of the mode, D3D never uses the value.
+    rw::RGBA black = { 0, 0, 0, 255 };
+    rw::RGBA* col = colour != NULL ? reinterpret_cast<rw::RGBA*>(colour) : &black;
+
+    asCamera(camera)->clear(col, (rw::uint32)clearMode);
     return camera;
 }
 
