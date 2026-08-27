@@ -219,8 +219,10 @@ void zUIFont_Update(zUIFont* ent, xScene*, F32)
 #ifdef PLATFORM_PC
             if (getenv("BFBB_EVENT") != NULL)
             {
-                printf("bfbb: zUIFont_Update %08x firing eEventPadPressR1\n",
-                       (unsigned)ent->id);
+                printf("bfbb: zUIFont_Update %08x firing eEventPadPressR1 -- linkCount %u, "
+                       "link %p, sizeof(zUIAsset) %u\n",
+                       (unsigned)ent->id, (unsigned)ent->linkCount, (void*)ent->link,
+                       (unsigned)sizeof(zUIAsset));
                 fflush(stdout);
             }
 #endif
