@@ -476,8 +476,49 @@ namespace
                   rw::Geometry::LOCKTEXCOORDS);
     }
 
-    // The callback the atomic carries. It instances, then hands over to
-    // whatever librw would have done, which is what actually draws.
+    // The callback the atomic carries. It puts the tank's blend state up,
+    // instances, hands over to whatever librw would have done -- which is what
+    // actually draws -- and puts the blend state back.
+    //
+    // **The blend state is the ptank's, not the caller's, and only this
+    // callback knows it.** xPtankPool.cpp writes srcBlend, dstBlend and
+    // vertexAlphaBlend into publicData and buckets whole tanks by those three
+    // (grab_block, sort_buckets, compare_ptanks) so that one draw can serve
+    // every particle that shares them -- and then xPTankPoolRender sets only
+    // the cull mode and the depth states before calling this. Nothing else in
+    // the game ever applies them, which is why the fields exist.
+    //
+    // What RenderWare does with them is not inferred. The GameCube plugin's
+    // render callback is in the target:
+    //
+    //     _rpPTankGameCubeRenderCallBack   rwsdk/plugin/ptank/gcn/
+    //                                      ptankgcncallbacks.s:0x80206F98
+    //
+    //         if(ext->publicData.vertexAlphaBlend){        // +0xAC
+    //             RwRenderStateGet(SRCBLEND,  &saveSrc);
+    //             RwRenderStateSet(SRCBLEND,  ext->publicData.srcBlend);   // +0xA4
+    //             RwRenderStateGet(DESTBLEND, &saveDst);
+    //             RwRenderStateSet(DESTBLEND, ext->publicData.dstBlend);   // +0xA8
+    //             RwRenderStateSet(VERTEXALPHAENABLE, TRUE);
+    //         }else
+    //             RwRenderStateSet(VERTEXALPHAENABLE, FALSE);
+    //
+    //         ext->defaultRenderCB(atomic);                // +0x10
+    //
+    //         if(ext->publicData.vertexAlphaBlend){
+    //             RwRenderStateSet(SRCBLEND,  saveSrc);
+    //             RwRenderStateSet(DESTBLEND, saveDst);
+    //         }
+    //
+    // -- the states are 10, 11 and 12 in the disassembly, which is SRCBLEND,
+    // DESTBLEND and VERTEXALPHAENABLE, and the offsets are where those three
+    // fields land in RpPTankAtomicExtPrv. This is that, in the same order,
+    // with the same save and restore.
+    //
+    // Without it a pooled ptank drew with whatever blend the last thing to
+    // touch the render state had left behind, which for particles that are
+    // meant to be additive is an alpha blend and for particles that are meant
+    // to be alpha-blended is whatever came before.
     RpAtomic* ptankRenderCB(RpAtomic* atomic)
     {
         RpPTankAtomicExtPrv* ext = extOf(atomic);
@@ -489,11 +530,40 @@ namespace
         instancePTank(atomic, ext);
         ext->instFlags = 0;
 
+        RwBlendFunction savedSrc = rwBLENDSRCALPHA;
+        RwBlendFunction savedDst = rwBLENDINVSRCALPHA;
+        const RwBool blending = ext->publicData.vertexAlphaBlend;
+
+        if (blending)
+        {
+            RwRenderStateGet(rwRENDERSTATESRCBLEND, &savedSrc);
+            RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)ext->publicData.srcBlend);
+            RwRenderStateGet(rwRENDERSTATEDESTBLEND, &savedDst);
+            RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)ext->publicData.dstBlend);
+            RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+        }
+        else
+        {
+            RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+        }
+
+        RpAtomic* result;
         if (ext->defaultRenderCB != NULL)
         {
-            return ext->defaultRenderCB(atomic);
+            result = ext->defaultRenderCB(atomic);
         }
-        return AtomicDefaultRenderCallBack(atomic);
+        else
+        {
+            result = AtomicDefaultRenderCallBack(atomic);
+        }
+
+        if (blending)
+        {
+            RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)savedSrc);
+            RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)savedDst);
+        }
+
+        return result;
     }
 } // namespace
 
