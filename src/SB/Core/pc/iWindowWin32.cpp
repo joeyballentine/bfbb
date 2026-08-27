@@ -86,6 +86,26 @@ S32 iWindowOpen(const iWindowParams* params)
     wc.hCursor = LoadCursorA(NULL, IDC_ARROW);
     wc.lpszClassName = kClassName;
 
+    // The window's own icons, which are NOT the same thing as the executable's.
+    //
+    // The shell finds the taskbar and alt-tab icon by reading the lowest-numbered
+    // icon resource out of the .exe, so that one works whether or not anything
+    // here is set. The title bar does not: it draws the small icon of the WINDOW
+    // CLASS, and a class that leaves hIcon and hIconSm null gets the system
+    // default. That is the whole difference between "the taskbar icon is right
+    // and the title bar's is generic" and both being right.
+    //
+    // Resource 1 is the icon in res/bfbb.rc. LoadImage is asked for the two
+    // system metric sizes rather than being left to guess, because the .ico
+    // carries 16, 32, 48 and 64 pixel images and this is what picks the right
+    // one for each slot instead of scaling a large one down.
+    wc.hIcon = (HICON)LoadImageA(sInstance, MAKEINTRESOURCEA(1), IMAGE_ICON,
+                                 GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON),
+                                 LR_DEFAULTCOLOR);
+    wc.hIconSm = (HICON)LoadImageA(sInstance, MAKEINTRESOURCEA(1), IMAGE_ICON,
+                                   GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
+                                   LR_DEFAULTCOLOR);
+
     if (RegisterClassExA(&wc) == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
     {
         return FALSE;
