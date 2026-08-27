@@ -1112,8 +1112,25 @@ void GCSaveFrameBuffer()
     RwGameCubeCameraTextureFlush(gc_saveraster, 0);
 }
 
+// Puts back the corner of the screen the shadow camera trampled on.
+//
+// On the GameCube the shadow camera renders into a region of the EMBEDDED
+// framebuffer -- the same memory the screen is in -- so GCSaveFrameBuffer above
+// copies that corner out first, the shadow is rendered and copied to a texture,
+// and this paints the corner back. SRC ONE, DEST ZERO: a straight overwrite.
+//
+// A host renderer has no such conflict. The shadow camera's raster is its own
+// render target, RwGameCubeCameraTextureFlush has nothing to flush, and the
+// screen was never touched -- so gc_saveraster is empty, and painting it back
+// would be 256x256 of black over the top-left corner, once per shadow-casting
+// entity per frame. Repairing damage that did not happen is the damage.
+//
+// The save is already a no-op because the flush is. This is its other half.
 static void GCRestoreFrameBuffer()
 {
+#ifdef PLATFORM_PC
+    return;
+#else
     RwCamera* cam = *(RwCamera**)RwEngineInstance;
     F32 recipCamZ = (1.0f / cam->farPlane);
 
@@ -1130,6 +1147,7 @@ static void GCRestoreFrameBuffer()
     RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)1);
     RwRenderStateSet(rwRENDERSTATESRCBLEND,     (void*)5);
     RwRenderStateSet(rwRENDERSTATEDESTBLEND,    (void*)6);
+#endif
 }
 
 static RwCamera* ShadowCameraCreatePersp(S32 param)
