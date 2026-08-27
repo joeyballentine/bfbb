@@ -221,13 +221,9 @@ static void zNPCTiki_PickTikisToAnimate()
     {
         if ((coll->flags & 1) != 0 && coll->optr != NULL)
         {
-#ifdef PLATFORM_PC
             // optr is an xEnt*, and only CodeWarrior's layout lets that be an NPC
-            // pointer unchanged. See xCollisNPC in xEnt.h.
-            npc = xCollisNPC<xNPCBasic>(coll->optr);
-#else
-            npc = (xNPCBasic*)coll->optr;
-#endif
+            // pointer unchanged, and the hop through it is free there. See xEnt.h.
+            npc = (xNPCBasic*)(xEnt*)(coll->optr);
             if (npc->baseType == '+' && (npc->SelfType() & ~0xFF) == 'NTT\0')
             {
                 ((zNPCTiki*)npc)->tikiFlag &= ~0xC0;

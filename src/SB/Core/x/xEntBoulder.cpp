@@ -506,13 +506,9 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
         // NPC
         for (iter_npc = ent->collis->npc_sidx; iter_npc < ent->collis->npc_eidx; iter_npc++)
         {
-#ifdef PLATFORM_PC
             // optr is an xEnt*, and only CodeWarrior's layout lets that be an NPC
-            // pointer unchanged. See xCollisNPC in xEnt.h.
-            zNPCCommon* npc = xCollisNPC<zNPCCommon>(ent->collis->colls[iter_npc].optr);
-#else
-            zNPCCommon* npc = (zNPCCommon*)(ent->collis->colls[iter_npc].optr);
-#endif
+            // pointer unchanged, and the hop through it is free there. See xEnt.h.
+            zNPCCommon* npc = (zNPCCommon*)(xEnt*)(ent->collis->colls[iter_npc].optr);
 
 #ifdef PLATFORM_PC
             // BFBB_BOWL: why the bubble bowl did or did not break what it hit.

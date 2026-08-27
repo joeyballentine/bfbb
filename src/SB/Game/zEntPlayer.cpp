@@ -9218,13 +9218,9 @@ void zEntPlayer_CheckCritterContact(xEnt* player, F32 dt)
             continue;
         }
 
-#ifdef PLATFORM_PC
         // optr is an xEnt*, and only CodeWarrior's layout lets that be an NPC
-        // pointer unchanged. See xCollisNPC in xEnt.h.
-        zNPCCommon* npc = xCollisNPC<zNPCCommon>(colrec->optr);
-#else
-        zNPCCommon* npc = (zNPCCommon*)colrec->optr;
-#endif
+        // pointer unchanged, and the hop through it is free there. See xEnt.h.
+        zNPCCommon* npc = (zNPCCommon*)(xEnt*)(colrec->optr);
 
         if (npc->baseType != eBaseTypeNPC)
         {
