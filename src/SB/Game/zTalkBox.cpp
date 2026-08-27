@@ -28,6 +28,24 @@ U32 xSndStreamReady(U32 lock);
 U8 xSndStreamReady(U32 lock);
 #endif
 S32 zGameIsPaused();
+
+#ifdef PLATFORM_PC
+// The asset is read straight out of the HIP, so every byte of asset_type has to
+// land where the packer put it. `trigger_pads` is a U8 on this build and a
+// `bool : 8` bitfield on the console (see zTalkBox.h); interrupting a run of
+// bitfields with a plain member is exactly the kind of thing a host ABI is free
+// to pad, and the failure it would cause -- every field after it off by a few
+// bytes -- reads on screen as talk boxes with the wrong text rather than as a
+// layout problem. So say the offsets out loud where the compiler can check them.
+#include <stddef.h>
+static_assert(offsetof(ztalkbox::asset_type, dialog_box) == 0x10, "talk box asset layout");
+static_assert(offsetof(ztalkbox::asset_type, trigger_pads) == 0x1f, "talk box asset layout");
+static_assert(offsetof(ztalkbox::asset_type, teleport) == 0x24, "talk box asset layout");
+static_assert(offsetof(ztalkbox::asset_type, auto_wait) == 0x28, "talk box asset layout");
+static_assert(offsetof(ztalkbox::asset_type, prompt) == 0x34, "talk box asset layout");
+static_assert(sizeof(ztalkbox::asset_type) == 0x48, "talk box asset layout");
+#endif
+
 namespace
 {
     shared_type shared;

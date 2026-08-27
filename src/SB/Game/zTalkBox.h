@@ -20,7 +20,36 @@ struct ztalkbox : xBase
         bool trap : 8;
         bool pause : 8;
         bool allow_quit : 8;
+#ifdef PLATFORM_PC
+        // This one is not a boolean, whatever the declaration says. The packer
+        // writes one of three values into it -- TP_NEVER 0, TP_TRAPPED 1,
+        // TP_ACTIVE 2 -- and `ztalkbox::update_all` compares the field against
+        // the last two. Counted over every talk box in the retail assets: 114
+        // carry 0, 199 carry 1 and 217 carry 2. Every other byte in this block
+        // really is only ever 0 or 1.
+        //
+        // CodeWarrior reads an eight-bit `bool` bitfield as a whole byte.
+        // Retail's update_all is `lbz r4, 0x1f(r3)` and then `cmpwi r4, 0x2`,
+        // with no masking anywhere in between. A host compiler is entitled to
+        // assume a bool holds 0 or 1 and clang takes it: it emits
+        // `movb 0x1f(%eax), %al; andb $0x1, %al`, so a stored 2 arrives as 0
+        // and the `tp == TP_ACTIVE` arm is unreachable code.
+        //
+        // What that cost: pad handling switched off for all 217 TP_ACTIVE talk
+        // boxes -- every "press R" prompt the player reads while still holding
+        // control, which is every door in the game, including the four out of
+        // SpongeBob's house. TP_TRAPPED survived the truncation by happening to
+        // be 1, so talking to a villager -- which takes control away first --
+        // went on working, and that is why this looked like a UI bug rather
+        // than a talk-box one.
+        //
+        // A U8 here and the retail declaration below: the same byte at the same
+        // offset, read whole. Nothing assigns to this field, so widening what
+        // it can hold cannot change anything else.
+        U8 trigger_pads;
+#else
         bool trigger_pads : 8;
+#endif
         bool page : 8;
         bool show : 8;
         bool hide : 8;
