@@ -9,6 +9,13 @@
 // Not in CMakeLists.txt, because librw is not vendored yet. Build it by hand
 // with the command in README.md.
 
+// Makes librw's rwd3d.h declare d3ddevice, which the combined skin+matfx
+// render check reads: nothing short of asking the device tells you whether a
+// draw bound the shader and the constants it was supposed to. It has to be
+// defined before rw.h is pulled in below, and it does nothing at all under
+// LIBRW_PLATFORM=NULL, where rwd3d.h skips the whole block.
+#define WITH_D3D
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,6 +48,12 @@
 #include <rwsdk/driver/gcn/dlrendst.h>
 
 #include "iWindow.h"
+
+// WITH_D3D above drags in d3d9.h and windows.h behind it, and windows.h still
+// carries the 16-bit memory model's `near` and `far` as empty macros. This file
+// has a float comparison called near().
+#undef near
+#undef far
 
 static int failures;
 
@@ -1644,15 +1657,48 @@ static void test_skin()
     check(indices != NULL && ((indices[2] >> 0) & 0xFF) == 5 && ((indices[2] >> 24) & 0xFF) == 9,
           "RpSkinGetVertexBoneIndices packs four of librw's index bytes per vertex");
 
-    // RpSkinAtomicSetType picks a pipeline. There is only one on this side --
-    // librw's Skin::setPipeline casts the type to void -- so what is checked is
-    // that the atomic ends up on the skin pipeline at all.
+    // RpSkinAtomicSetType picks a pipeline, and the type is now honoured:
+    // rpSKINTYPEMATFX gets the combined skin+matfx pipeline on a backend that
+    // registered one and everything else gets the plain skinning pipeline.
+    // Written against matfxPipelines[] rather than against a backend name
+    // because LIBRW_PLATFORM=NULL has no combined pipeline and must fall back,
+    // which is the behaviour under test as much as the D3D9 one is.
+    rw::ObjPipeline* plainSkin = rw::skinGlobals.pipelines[rw::platform];
+    rw::ObjPipeline* matfxSkin = rw::skinGlobals.matfxPipelines[rw::platform];
+
     RpAtomic* atomic = reinterpret_cast<RpAtomic*>(rw::Atomic::create());
     check(RpSkinAtomicSetType(atomic, rpSKINTYPEMATFX) == atomic, "RpSkinAtomicSetType");
     check(atomic->pipeline != NULL &&
               reinterpret_cast<void*>(atomic->pipeline) ==
-                  reinterpret_cast<void*>(rw::skinGlobals.pipelines[rw::platform]),
-          "it put the atomic on librw's skin pipeline");
+                  reinterpret_cast<void*>(matfxSkin ? matfxSkin : plainSkin),
+          "rpSKINTYPEMATFX asks for the combined skin+matfx pipeline");
+
+    RpSkinAtomicSetType(atomic, rpSKINTYPEGENERIC);
+    check(reinterpret_cast<void*>(atomic->pipeline) == reinterpret_cast<void*>(plainSkin),
+          "rpSKINTYPEGENERIC still gets the plain skinning pipeline");
+
+    // Nothing in the game asks for this one -- the only three RpSkinAtomicSetType
+    // calls in src/SB all pass rpSKINTYPEMATFX -- so it is not implemented, and
+    // what is checked is that it degrades to skinning rather than to nothing.
+    RpSkinAtomicSetType(atomic, rpSKINTYPETOON);
+    check(reinterpret_cast<void*>(atomic->pipeline) == reinterpret_cast<void*>(plainSkin),
+          "rpSKINTYPETOON, which no model in this game asks for, falls back to it too");
+
+#ifdef RW_D3D9
+    check(matfxSkin != NULL, "the D3D9 backend registered a combined skin+matfx pipeline");
+    // The two skinning pipelines MUST instance identically. librw caches the
+    // instanced vertex buffer on the geometry and never rebuilds it because the
+    // atomic changed pipeline, so an atomic that moves between them would
+    // otherwise hand a skinning shader a buffer laid out with no bones in it.
+    check(matfxSkin != NULL && plainSkin != NULL &&
+              reinterpret_cast<rw::d3d9::ObjPipeline*>(matfxSkin)->instanceCB ==
+                  reinterpret_cast<rw::d3d9::ObjPipeline*>(plainSkin)->instanceCB,
+          "and it instances vertices exactly as the plain one does");
+    check(matfxSkin != NULL && plainSkin != NULL &&
+              reinterpret_cast<rw::d3d9::ObjPipeline*>(matfxSkin)->renderCB !=
+                  reinterpret_cast<rw::d3d9::ObjPipeline*>(plainSkin)->renderCB,
+          "and renders through a callback of its own");
+#endif
 
     reinterpret_cast<rw::Atomic*>(atomic)->destroy();
     reinterpret_cast<rw::Geometry*>(geometry)->destroy();
@@ -1709,6 +1755,9 @@ static void test_matfx()
           "RpMatFXMaterialSetBumpMapCoefficient");
     check(near(fx->getBumpCoefficient(), 0.125f), "reads back");
 
+    // On an UNSKINNED atomic -- this one has no geometry at all -- the plain
+    // material-effects pipeline is the right answer. The skinned case is in
+    // test_skin_matfx below, where it has to be a different pipeline.
     RpAtomic* atomic = reinterpret_cast<RpAtomic*>(rw::Atomic::create());
     check(RpMatFXAtomicEnableEffects(atomic) == atomic, "RpMatFXAtomicEnableEffects");
     check(reinterpret_cast<void*>(atomic->pipeline) ==
@@ -1720,6 +1769,196 @@ static void test_matfx()
     reinterpret_cast<rw::Material*>(material)->destroy();
     RwTextureDestroy(bump);
     RwTextureDestroy(env);
+}
+
+// A quad with normals, one material and a one-bone skin that binds every vertex
+// to bone 0 with full weight. That is the smallest thing the combined skin+matfx
+// pipeline will draw: it needs positions to skin, normals to reflect, a material
+// to carry the effect, and bone indices and weights in the vertex buffer.
+static RpGeometry* makeSkinnedQuad(RpMaterial* material, rw::Skin** skinOut)
+{
+    RpGeometry* geometry = RpGeometryCreate(
+        4, 2, rpGEOMETRYPOSITIONS | rpGEOMETRYNORMALS | rpGEOMETRYTEXTURED);
+    if (geometry == NULL)
+    {
+        return NULL;
+    }
+
+    RwV3d* v = geometry->morphTarget[0].verts;
+    RwV3d* n = geometry->morphTarget[0].normals;
+    for (int i = 0; i < 4; i++)
+    {
+        v[i].x = (i == 1 || i == 2) ? 1.0f : -1.0f;
+        v[i].y = 0.0f;
+        v[i].z = (i >= 2) ? 1.0f : -1.0f;
+        n[i].x = 0.0f;
+        n[i].y = 1.0f;
+        n[i].z = 0.0f;
+    }
+
+    RpGeometryTriangleSetVertexIndices(geometry, &geometry->triangles[0], 0, 1, 2);
+    RpGeometryTriangleSetVertexIndices(geometry, &geometry->triangles[1], 0, 2, 3);
+    RpGeometryTriangleSetMaterial(geometry, &geometry->triangles[0], material);
+    RpGeometryTriangleSetMaterial(geometry, &geometry->triangles[1], material);
+    RpGeometryUnlock(geometry);
+
+    // Built by hand for the reason test_skin gives: there is no
+    // RpSkinGeometrySetSkin on the game's list and no skinned model to stream
+    // in here. Skin::init does not zero what it allocates, so every weight and
+    // index has to be written -- a stray weight would move a vertex off screen
+    // and the draw would still succeed, which is the failure this avoids.
+    rw::Skin* skin = rwNewT(rw::Skin, 1, rw::MEMDUR_EVENT | rw::ID_SKIN);
+    memset(skin, 0, sizeof(*skin));
+    skin->init(1, 1, 4);
+    skin->numWeights = 1;
+    skin->usedBones[0] = 0;
+    for (int i = 0; i < 4; i++)
+    {
+        skin->weights[i * 4 + 0] = 1.0f;
+        skin->weights[i * 4 + 1] = 0.0f;
+        skin->weights[i * 4 + 2] = 0.0f;
+        skin->weights[i * 4 + 3] = 0.0f;
+        skin->indices[i * 4 + 0] = 0;
+        skin->indices[i * 4 + 1] = 0;
+        skin->indices[i * 4 + 2] = 0;
+        skin->indices[i * 4 + 3] = 0;
+    }
+    rw::Skin::set(reinterpret_cast<rw::Geometry*>(geometry), skin);
+
+    *skinOut = skin;
+    return geometry;
+}
+
+// The bug this whole pipeline exists to fix: a skinned, environment-mapped
+// model -- SpongeBob's bubble, the cruise bubble, every shiny character -- used
+// to render through plain skinning with the effect silently dropped, because
+// librw's Skin::setPipeline cast the type away and had only one pipeline to
+// give. The pipeline SELECTION is checked in test_skin; this checks that the
+// selected pipeline actually draws the effect.
+static void test_skin_matfx()
+{
+    printf("RpSkin with RpMatFX\n");
+
+    RpMaterial* material = reinterpret_cast<RpMaterial*>(rw::Material::create());
+    rw::Skin* skin = NULL;
+    RpGeometry* geometry = makeSkinnedQuad(material, &skin);
+    check(geometry != NULL && skin != NULL, "a skinned quad with a material on it");
+    if (geometry == NULL)
+    {
+        return;
+    }
+
+    RpAtomic* atomic = reinterpret_cast<RpAtomic*>(rw::Atomic::create());
+    reinterpret_cast<rw::Atomic*>(atomic)->setGeometry(reinterpret_cast<rw::Geometry*>(geometry),
+                                                       0);
+    RwFrame* atomicFrame = RwFrameCreate();
+    reinterpret_cast<rw::Atomic*>(atomic)->setFrame(reinterpret_cast<rw::Frame*>(atomicFrame));
+
+    // This is what AtomicDisableMatFX does to a bubble every frame, through
+    // RpMatFXAtomicEnableEffects, before pass 1: the atomic is put back on the
+    // effects pipeline WITHOUT anyone calling RpSkinAtomicSetType again. For a
+    // skinned atomic that has to still be a skinning pipeline, or the pass
+    // instances the geometry with no bones in it and every later pass -- which
+    // is where the effect lives -- reads the bones that are not there.
+    RpMatFXAtomicEnableEffects(atomic);
+    rw::ObjPipeline* matfxSkin = rw::skinGlobals.matfxPipelines[rw::platform];
+    check(reinterpret_cast<void*>(atomic->pipeline) ==
+              reinterpret_cast<void*>(matfxSkin
+                                          ? matfxSkin
+                                          : rw::skinGlobals.pipelines[rw::platform]),
+          "enabling effects on a SKINNED atomic keeps it on a skinning pipeline");
+
+#ifdef RW_D3D9
+    // --- the draw ----------------------------------------------------------
+    //
+    // Everything above is a pointer comparison. This runs the pipeline against
+    // the real device the test opened, and then asks the device what the draw
+    // left behind. Two things are worth asking about, and both are things that
+    // would still have "worked" -- drawn a model, reported no error -- if the
+    // shader and the C++ disagreed:
+    //
+    //   - the env coefficient, which only the env path writes, and only to the
+    //     pixel shader constant the env pixel shader reads;
+    //   - the texture matrix, which the combined vertex shader reads from a
+    //     register the plain matfx shader does not use, because the bone
+    //     matrices are sitting where matfx normally puts it. Getting that base
+    //     wrong is silent: the shader samples a matrix of zeroes and the model
+    //     renders with the env map collapsed to one texel.
+    //
+    // NOT checked here, and not checkable this way: what the pixels look like.
+    // A shader that compiles, binds, and is fed the right constants can still
+    // be wrong, and only a playtest says otherwise.
+    RwRaster* envRaster = RwRasterCreate(64, 64, 32, rwRASTERTYPETEXTURE | rwRASTERFORMAT8888);
+    RwTexture* envTex = RwTextureCreate(envRaster);
+    check(envTex != NULL && envRaster != NULL, "an env map texture with a real raster behind it");
+
+    RwFrame* envFrame = RwFrameCreate();
+    RpMatFXMaterialSetEffects(material, rpMATFXEFFECTENVMAP);
+    RpMatFXMaterialSetupEnvMap(material, envTex, envFrame, FALSE, 0.75f);
+
+    RwCamera* camera = RwCameraCreate();
+    RwCameraSetFrame(camera, RwFrameCreate());
+    RwCameraSetRaster(camera, RwRasterCreate(64, 64, 0, rwRASTERTYPECAMERA));
+    RwCameraSetZRaster(camera, RwRasterCreate(64, 64, 0, rwRASTERTYPEZBUFFER));
+    RwCameraSetNearClipPlane(camera, 0.1f);
+    RwCameraSetFarClipPlane(camera, 100.0f);
+
+    // Poisoned first, so that reading them back is a check on the draw rather
+    // than on whatever the last test left in the constant file.
+    const float poison[4] = { -1.0f, -1.0f, -1.0f, -1.0f };
+    rw::d3d::d3ddevice->SetPixelShaderConstantF(1, poison, 1);
+    rw::d3d::d3ddevice->SetVertexShaderConstantF(233, poison, 1);
+
+    RwCameraBeginUpdate(camera);
+    reinterpret_cast<rw::Atomic*>(atomic)->render();
+    RwCameraEndUpdate(camera);
+
+    float ps1[4];
+    rw::d3d::d3ddevice->GetPixelShaderConstantF(1, ps1, 1);
+    check(near(ps1[0], 0.75f),
+          "the env map coefficient reached the shininess the env pixel shader reads");
+
+    float texMat[4];
+    rw::d3d::d3ddevice->GetVertexShaderConstantF(233, texMat, 1);
+    check(!near(texMat[0], -1.0f),
+          "and the env texture matrix reached the register past the bone matrices");
+
+    IDirect3DVertexShader9* envVS = NULL;
+    rw::d3d::d3ddevice->GetVertexShader(&envVS);
+    check(envVS != NULL, "the draw bound a vertex shader that exists");
+
+    // The same atomic, the same pipeline, with the effect taken off the
+    // material -- which is exactly the state AtomicDisableMatFX leaves a bubble
+    // in for pass 1. It must fall back to the plain skinning shader, not draw
+    // an env map off a material that no longer has one.
+    RpMatFXMaterialSetEffects(material, rpMATFXEFFECTNULL);
+    RwCameraBeginUpdate(camera);
+    reinterpret_cast<rw::Atomic*>(atomic)->render();
+    RwCameraEndUpdate(camera);
+
+    IDirect3DVertexShader9* plainVS = NULL;
+    rw::d3d::d3ddevice->GetVertexShader(&plainVS);
+    check(plainVS != NULL && plainVS != envVS,
+          "a mesh with no effect on it falls back to a different, plain skinning shader");
+
+    if (envVS)
+    {
+        envVS->Release();
+    }
+    if (plainVS)
+    {
+        plainVS->Release();
+    }
+
+    RwCameraDestroy(camera);
+    RwFrameDestroy(envFrame);
+    RwTextureDestroy(envTex);
+#endif
+
+    reinterpret_cast<rw::Atomic*>(atomic)->destroy();
+    RwFrameDestroy(atomicFrame);
+    reinterpret_cast<rw::Geometry*>(geometry)->destroy();
+    reinterpret_cast<rw::Material*>(material)->destroy();
 }
 
 // Stands in for librw's own atomic render callback in the instancing checks.
@@ -2908,6 +3147,7 @@ int main()
     test_atomics();
     test_skin();
     test_matfx();
+    test_skin_matfx();
     test_ptank();
     test_clumps();
     test_intersections();
