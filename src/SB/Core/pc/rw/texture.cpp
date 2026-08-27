@@ -64,7 +64,28 @@ static rw::Texture* convertRasterToPlatform(rw::Texture* texture, void* data)
             (texture->raster->format & ~0xF00) | rw::Raster::C8888;
     }
 
+    const rw::int32 wasPlatform = texture->raster->platform;
+    const rw::int32 wasFormat = texture->raster->format;
+    const rw::int32 wasDepth = texture->raster->depth;
+    const rw::int32 wasWidth = texture->raster->width;
+    const rw::int32 wasHeight = texture->raster->height;
+
     texture->raster = rw::Raster::convertTexToCurrentPlatform(texture->raster);
+
+    // BFBB_TEX: a texture that did not survive the conversion.
+    //
+    // convertTexToCurrentPlatform returns null for a format it cannot handle,
+    // and nothing above checks -- the texture simply renders as nothing, which
+    // looks like a missing asset rather than an unsupported pixel format. Which
+    // format it was is the whole difference between the two.
+    if (texture->raster == NULL && getenv("BFBB_TEX") != NULL)
+    {
+        printf("bfbb: texture '%s' did not convert -- platform %d format %04x depth %d "
+               "%dx%d\n",
+               texture->name, (int)wasPlatform, (unsigned)wasFormat, (int)wasDepth,
+               (int)wasWidth, (int)wasHeight);
+        fflush(stdout);
+    }
 
     if (paddedRGB && texture->raster != NULL)
     {

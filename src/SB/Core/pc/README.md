@@ -6,6 +6,46 @@ The GameCube implementation of the game's platform interfaces lives in
 Everything here is phase 2 of `PCPORT.md`. To pick the work up, start with
 `PCPORT-HANDOFF.md` at the repository root.
 
+## Running it, and the switches
+
+    BFBB_ASSETS=<dir>   where the retail assets are. Required; without it the
+                        game looks beside the executable and finds nothing.
+
+Everything below is off unless set, and each costs a load per frame when it is.
+
+    BFBB_FPS            what the port is actually presenting, once a second.
+                        The frame rate is not cosmetic: zGame.cpp:559
+                        substitutes 1/60 s for any frame it measures under ten
+                        microseconds, so a game running far above 60 runs its
+                        simulation too fast rather than merely looking smooth.
+                        This is how to tell whether the frame rate or the thing
+                        that looks wrong is at fault.
+
+    BFBB_PAD            port 0's button mask when it changes, names and all.
+                        Every test the game makes against a pad is a bare mask,
+                        so when a button does nothing this says whether the
+                        backend produced the bit or the game ignored it. Those
+                        need different fixes.
+
+    BFBB_TALK           why R1 next to a villager did or did not start a
+                        conversation: the three conditions of the gate in
+                        zNPCGoalVillager.cpp, and whether the talk goal was
+                        pushed. Silent until the player presses R1.
+
+    BFBB_TEX            textures that did not convert, with the format that
+                        defeated the conversion, and textures a material named
+                        that the asset store does not have. A missing asset and
+                        an unsupported pixel format look identical on screen and
+                        have nothing in common.
+
+    BFBB_WATCHDOG=<n>   every n seconds, print the main thread's stack. For
+                        HANGS -- a crash announces itself and a hang does not.
+                        Two identical traces mean a deadlock; two different ones
+                        mean it is running and not finishing.
+
+    BFBB_TEST_CRASH     fault immediately, to check the crash handler still
+                        works.
+
 ## How the two builds stay apart
 
 Game code includes its platform headers unqualified — `#include "iTime.h"` —

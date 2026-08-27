@@ -231,6 +231,18 @@ static RwTexture* TextureRead(const RwChar* name, const RwChar* maskName)
         strcpy(asset->name, name);
         strcpy(asset->mask, maskName);
     }
+    else if (getenv("BFBB_TEX") != NULL)
+    {
+        // BFBB_TEX: a material named a texture the asset store does not have.
+        //
+        // Retail returns null here too and the material renders untextured, so
+        // this is not necessarily wrong -- but a texture that is missing
+        // because its RWTX was never loaded looks exactly like one that failed
+        // to convert, and the two have nothing in common. Naming it separates
+        // them.
+        printf("bfbb: texture '%s' not in the asset store\n", name);
+        fflush(stdout);
+    }
 
     return asset;
 }
