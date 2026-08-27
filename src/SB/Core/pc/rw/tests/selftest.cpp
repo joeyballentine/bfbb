@@ -33,6 +33,13 @@
 // the shim by design.
 #include "../stream.h"
 
+// RwGameCubeSetAlphaCompare, and the GX_* constants xModelBucket.cpp calls it
+// with. Included rather than declared by hand -- which is what the rest of this
+// file does for a shim-private entry point -- for the reason engine.cpp gives
+// on the definition: the header wraps it in extern "C", and a prototype written
+// here would get C++ linkage and fail to resolve to the function under test.
+#include <rwsdk/driver/gcn/dlrendst.h>
+
 #include "iWindow.h"
 
 static int failures;
@@ -897,6 +904,32 @@ static void captureSetRenderState(rw::int32 state, void* value)
 // that a change to the signature is caught at link time.
 void rwSetColorWriteMask(RwUInt32 mask);
 
+// The GameCube alpha compare sets TWO librw states per call, and the capture
+// above keeps only the last one, so it gets a hook of its own that sorts them.
+// Both start at -1 before each call, so "the shim never set this one" is a
+// failure rather than a value that happens to look right.
+static rw::int32 sAlphaFunc;
+static rw::int32 sAlphaRef;
+
+static void captureAlphaState(rw::int32 state, void* value)
+{
+    if (state == rw::ALPHATESTFUNC)
+    {
+        sAlphaFunc = (rw::int32)(uintptr_t)value;
+    }
+    else if (state == rw::ALPHATESTREF)
+    {
+        sAlphaRef = (rw::int32)(uintptr_t)value;
+    }
+}
+
+static void setAlphaCompare(RwInt32 comp0, RwUInt8 ref0, RwInt32 op, RwInt32 comp1, RwUInt8 ref1)
+{
+    sAlphaFunc = -1;
+    sAlphaRef = -1;
+    RwGameCubeSetAlphaCompare(comp0, ref0, op, comp1, ref1);
+}
+
 static void test_renderstate()
 {
     printf("RwRenderState\n");
@@ -1028,6 +1061,70 @@ static void test_renderstate()
 
     // Back to normal, so nothing after this draws into a masked frame buffer.
     rwSetColorWriteMask(rw::COLORWRITEALL);
+
+    // The GameCube alpha compare -- cutout transparency, and the one state in
+    // the port that decides whether foliage has leaves or is a green rectangle.
+    //
+    // Reached by name for the same reason as the colour write mask, and checked
+    // through the device hook rather than through a Get for two reasons: it
+    // sets a PAIR of librw states and both have to be seen, and going through
+    // the hook makes this checkable under LIBRW_PLATFORM=NULL, whose device
+    // answers 0 to every question.
+    //
+    // GX takes two comparisons and a boolean op where librw takes one
+    // comparison and one reference, so the whole of what this checks is the
+    // reduction: which single test comes out, and what reference goes with it.
+    saved = rw::engine->device.setRenderState;
+    rw::engine->device.setRenderState = captureAlphaState;
+
+    // The two states xModelBucket.cpp:520-533 actually produces. ALWAYS is the
+    // identity for AND, so each pair collapses to its other side -- and it is
+    // the SIDE that moves between them, which is exactly the thing a reduction
+    // written for one of the two would get wrong on the other.
+    setAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_GEQUAL, 128);
+    check(sAlphaFunc == rw::ALPHAGREATEREQUAL && sAlphaRef == 128,
+          "a bucket with an alpha reference cuts out at that reference");
+
+    setAlphaCompare(GX_GEQUAL, 1, GX_AOP_AND, GX_ALWAYS, 0);
+    check(sAlphaFunc == rw::ALPHAGREATEREQUAL && sAlphaRef == 1,
+          "and one without discards only fully transparent pixels");
+
+    // The reference is 8-bit on both sides, so the top of the range has to
+    // survive. A scaling step slipped in anywhere would show up here.
+    setAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_GEQUAL, 255);
+    check(sAlphaFunc == rw::ALPHAGREATEREQUAL && sAlphaRef == 255,
+          "the reference reaches librw unscaled");
+
+    setAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
+    check(sAlphaFunc == rw::ALPHAALWAYS && sAlphaRef == 0,
+          "two ALWAYS sides are no test at all");
+
+    setAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_LESS, 64);
+    check(sAlphaFunc == rw::ALPHALESS && sAlphaRef == 64,
+          "GX_LESS maps across as well, though nothing asks for it");
+
+    // The cases the shim cannot express. Both have to come out as "let
+    // everything through" rather than as a guess: an alpha test that rejects
+    // too much makes geometry vanish, and one that rejects too little only
+    // makes it opaque, which is what this function did before it was written.
+    setAlphaCompare(GX_GEQUAL, 32, GX_AOP_OR, GX_LESS, 200);
+    check(sAlphaFunc == rw::ALPHAALWAYS && sAlphaRef == 0,
+          "a genuine two-sided test falls back to passing everything");
+
+    setAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_EQUAL, 5);
+    check(sAlphaFunc == rw::ALPHAALWAYS && sAlphaRef == 0,
+          "and so does a comparison librw has no spelling for");
+
+    // Both states, every time. If the fallback above left the reference alone
+    // instead of clearing it, the previous bucket's 255 would still be in the
+    // device and would come back the moment anything set the function without
+    // the reference -- so the fallback is checked immediately after the call
+    // that loads the highest reference there is.
+    setAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_GEQUAL, 255);
+    setAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_EQUAL, 5);
+    check(sAlphaRef == 0, "and clears the reference with it rather than leaving a stale one");
+
+    rw::engine->device.setRenderState = saved;
 }
 
 static int sIm2DPrim;

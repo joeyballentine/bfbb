@@ -659,17 +659,28 @@ running the shim rather than compiling it:
     game's 2D call sites never set a camera z, so `RwIm2DVertex`'s default
     constructor puts 1.0 there.
 
-`tests/selftest.cpp` runs **460 checks against a live D3D9 device** and 454
+`tests/selftest.cpp` runs **513 checks against a live D3D9 device** and 507
 against `LIBRW_PLATFORM=NULL`. Keeping the headless configuration working is
 what lets this layer be tested on a machine with no display, and it is a
 supported configuration rather than a leftover.
 
+**Two of the 507 FAIL, and have since the colour write mask went in.** They are
+`the colour write mask lets every channel through` and `and can leave alpha on
+with colour off`, and the cause is that they read the state back with
+`rw::GetRenderState` -- which asks the DEVICE, and the null device answers 0 to
+every question, exactly as the comment at the top of `renderstate.cpp` says.
+The fix is to check them through the captured `device.setRenderState` hook
+instead, which is how the alpha compare below is checked and why that one passes
+on both backends. Left alone here because it is a different change from the one
+that found it. The count above is what the D3D9 build gates on; the headless
+build is 507 checks and 2 failures until someone does that.
+
 ## Do this next
 
-Four symbols the PC build references and this directory does not define. Only
-one of them is the shim's job, and saying which is which is the point of this
-section -- the previous version of this file listed all four kinds of gap
-together and they need different people.
+Four symbols the PC build references and this directory did not define. Only one
+of them is still open, and saying which is which is the point of this section --
+the previous version of this file listed all four kinds of gap together and they
+need different people.
 
 **`_rpCollisionGeometryDataOffset` -- the shim's job, and a subsystem.** The
 plugin offset behind `RpCollisionGeometryGetData`, which xCollide.cpp:2062/2093
@@ -680,24 +691,31 @@ off a geometry as a plugin, and librw has no collision code at all. Writing it
 means the plugin, its stream reader, and the tree walk -- at which point
 `RpAtomicForAllIntersections` stops being O(triangles) as well.
 
-**`RwGameCubeSetAlphaCompare` -- resolved as a shim entry point after all, and
-still the largest RENDERING gap.** Both it and `_rwDlRenderStateSetZCompLoc` are
-GameCube driver entry points called UNGUARDED from portable code
-(xModelBucket.cpp:524/530/600 and 526/531/601), and this section used to argue
-they were not the shim's job because there was nothing on a host to forward to.
-They are defined in engine.cpp now, which is why all 198 units compile at the
-width the port builds at -- `python tools/pcprogress.py --m32 --cc clang++`.
+**`RwGameCubeSetAlphaCompare` -- WRITTEN, and no longer a gap.** Both it and
+`_rwDlRenderStateSetZCompLoc` are GameCube driver entry points called UNGUARDED
+from portable code (xModelBucket.cpp:524/530/600 and 526/531/601), and this
+section used to argue they were not the shim's job because there was nothing on
+a host to forward to. Defining them in engine.cpp is what let all 198 units
+compile at the width the port builds at -- `python tools/pcprogress.py --m32
+--cc clang++`.
 
-The z-compare one is CORRECT as a no-op, for the reason engine.cpp:186 gives.
-The alpha compare is NOT: it is cutout transparency -- foliage, fences, grates,
-chain link -- and as a no-op those render as opaque quads, alpha and all.
+The z-compare one is CORRECT as a no-op, for the reason engine.cpp gives on it.
+The alpha compare was NOT -- it is cutout transparency, foliage and fences and
+grates and chain link -- and it now forwards to librw's `ALPHATESTFUNC` and
+`ALPHATESTREF`, which the D3D9 backend carries through to `D3DRS_ALPHAFUNC` and
+`D3DRS_ALPHAREF`. The fork needed no change for it. GX's two-comparison form
+reduces exactly for both of the states xModelBucket produces, because ALWAYS is
+the identity for AND; seven checks in `test_renderstate` pin the reduction down,
+including the two the game actually asks for.
 
-The premise that there is nothing to forward to has also expired. It was true of
-RenderWare's portable render state, which has no alpha test function or
-reference, and the shim was the only place that mattered then. It is not true of
-librw: `ALPHATESTFUNC` and `ALPHATESTREF` are both in rwrender.h. Forwarding the
-two states engine.cpp:160 spells out is now an ordinary change to that function
-and needs nothing from the fork.
+What was missing turned out to be narrower than "the alpha was ignored"
+suggested, and it is worth knowing before anyone judges the visual change:
+D3D9 turns `D3DRS_ALPHATESTENABLE` on by itself out of whether the texture or
+material has alpha, and `initD3D` leaves the function at GREATEREQUAL **10**. So
+alpha-keyed geometry was already being cut out, at a fixed 10 rather than at the
+threshold in the model. A bucket asking for 128 got 10, which keeps the
+half-transparent texels the console dropped -- soft haloes round leaves rather
+than solid quads.
 
 **`_rpAtomicResyncInterpolatedSphere` -- already handled, and listed here only
 so the next person does not chase it.** It appears in the regenerated list
