@@ -7693,7 +7693,7 @@ S32 zNPCGoalTubeAttack::Process(en_trantype* trantype, F32 dt, void* updCtxt, xS
     npc->PosStacked(&npc->frame->mat.pos);
     npc->frame->mode |= 1;
 
-    if (npc->tubespot == (en_tubestat)2)
+    if (npc->tubespot == ROBO_TUBE_MARY)
     {
         MaryAttack(dt, xscn);
     }

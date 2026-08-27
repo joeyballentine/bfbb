@@ -131,7 +131,7 @@ U32 xUtil_crc_init()
 
             for (j = 0; j < 8; j++)
             {
-                if (crc_accum & (1 << 31))
+                if (crc_accum & 0x80000000)
                 {
                     crc_accum = (crc_accum << 1) ^ 0x04C11DB7;
                 }

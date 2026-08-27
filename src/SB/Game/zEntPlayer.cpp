@@ -5315,7 +5315,7 @@ xAnimTable* zEntPlayer_AnimTable()
     xAnimTableAddTransition(animTable, pTran, "BbounceStart01");
     xAnimTableAddTransition(animTable, pTran, "BbashMiss01");
 
-    xAnimTransition* tranTbl2[10];
+    xAnimTransition* tranTbl2[11];
     tranTbl2[0] = xAnimTableNewTransition(animTable, HIT_STATES[0], "Hit01", Hit01Check, Hit01CB, 0,
                                           0, 0.0, 0.0, 0x14, 0, 0.15, NULL);
     tranTbl2[1] = xAnimTableNewTransition(animTable, HIT_STATES[0], "Hit02", Hit02Check, Hit02CB, 0,
@@ -14272,7 +14272,7 @@ static void PlayerRotMatchUpdateEnt(xEnt* ent, xScene* sc, F32 dt, void* fdata)
     xCollis* coll = ent->collis->colls;
     S32 hit_it = coll->flags & 0x1;
     xSurface* surf = zSurfaceGetSurface(coll);
-    U8 grounded = 0;
+    S32 grounded = 0;
 
     if (hit_it && surf && !surf->state && zSurfaceGetMatchOrient(surf))
     {

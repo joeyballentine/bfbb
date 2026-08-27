@@ -296,7 +296,8 @@ void xDecalEmitter::update_frac(xDecalEmitter::unit_data& unit)
     unit.curve_index = i;
 
     F32 curve_time = this->curve[this->curve_index].time;
-    unit.frac = (1.0f / this->curve[this->curve_index + 1].time) * (unit.age - curve_time);
+    unit.frac = (1.0f / (this->curve[this->curve_index + 1].time - curve_time)) *
+               (unit.age - curve_time);
 }
 
 void xDecalEmitter::get_render_data(const xDecalEmitter::unit_data& unit, F32 scale, iColor_tag& color, xMat4x3& mat, xVec2& uv0, xVec2& uv1)
@@ -321,8 +322,8 @@ void xDecalEmitter::get_render_data(const xDecalEmitter::unit_data& unit, F32 sc
         mat.at *= scale;
     }
 
-    uv0.x = this->curve_index * this->texture.size.x + this->cfg.texture.uv[0].x;
-    uv0.y = this->curve_index * this->texture.size.y + this->cfg.texture.uv[0].y;
+    uv0.x = unit.u * this->texture.size.x + this->cfg.texture.uv[0].x;
+    uv0.y = unit.v * this->texture.size.y + this->cfg.texture.uv[0].y;
     uv1.x = uv0.x + this->texture.size.x;
     uv1.y = uv0.y + this->texture.size.y;
 }

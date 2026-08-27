@@ -3462,27 +3462,27 @@ void zNPCCommon::LassoNotify(en_LASSO_EVENT event)
 
     switch (event)
     {
-    case LASS_STAT_DONE:
+    case LASS_EVNT_BEGIN:
     {
         lass->stage = LASS_STAT_PENDING;
         break;
     }
-    case LASS_STAT_PENDING:
+    case LASS_EVNT_ENDED:
     {
         lass->stage = LASS_STAT_DONE;
         break;
     }
-    case LASS_STAT_GRABBING:
+    case LASS_EVNT_GRABSTART:
     {
         lass->stage = LASS_STAT_GRABBING;
         break;
     }
-    case LASS_STAT_NOMORE:
+    case LASS_EVNT_YANK:
     {
         lass->stage = LASS_STAT_TOSSING;
         return;
     }
-    case LASS_STAT_UNK_5:
+    case LASS_EVNT_ABORT:
     {
         lass->stage = LASS_STAT_DONE;
         break;
