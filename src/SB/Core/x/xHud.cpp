@@ -272,63 +272,77 @@ namespace xhud
         }
     }
 
-    // Nonmatching: not finished
+    // Pushes the widget off whichever screen edge its home position is nearest,
+    // fading it out as it goes. Local names are DWARF's (dwarf/SB/Core/x/xHud.cpp
+    // lists x y sx sy cx cy tx ty tcx tcy acx acy dist vx vy ex ey); which name
+    // belongs to which quantity is inferred from the shape of the code.
     void widget::hide()
     {
         activity = ACT_HIDE;
 
-        F32 fVar1 = start_rc.size.x;
+        F32 x = start_rc.loc.x;
+        F32 y = start_rc.loc.y;
+        F32 sx = start_rc.size.x;
         F32 sy = start_rc.size.y;
-        F32 fVar7 = (start_rc.loc.x - 0.5f) + 0.5f * fVar1;
-        F32 fVar8 = (start_rc.loc.y - 0.5f) + 0.5f * sy;
-        if (iabs(iabs(fVar7) + iabs(fVar8)) <= 0.0001f)
+
+        // The widget's centre, measured from the centre of the screen.
+        F32 cx = (x - 0.5f) + 0.5f * sx;
+        F32 cy = (y - 0.5f) + 0.5f * sy;
+        F32 acx = iabs(cx);
+        F32 acy = iabs(cy);
+        if (iabs(acx + acy) <= 0.0001f)
         {
+            // Dead centre: there is no edge to slide towards, so just blank it.
             rc.a = 0.0f;
         }
         else
         {
-            F32 fVar5;
-            F32 fVar6;
-            // The dominant axis is the one that gets pinned to the screen edge;
-            // the other is scaled by the ratio. That means dividing by the
-            // LARGER of the two, which is what selects the branch.
-            if (iabs(fVar7) > iabs(fVar8))
+            // Push along the dominant axis until that axis clears the edge, and
+            // scale the other axis by the same ratio so the widget leaves along
+            // the line through the screen centre.
+            F32 tcx;
+            F32 tcy;
+            if (acx > acy)
             {
-                if (fVar7 >= 0.0f)
+                F32 ex;
+                if (cx >= 0.0f)
                 {
-                    fVar5 = 0.5f + fVar1;
+                    ex = 0.5f + sx;
                 }
                 else
                 {
-                    fVar5 = -0.5f - fVar1;
+                    ex = -0.5f - sx;
                 }
-                fVar6 = (fVar5 * fVar8) / fVar7;
+                tcx = ex;
+                tcy = (ex * cy) / cx;
             }
             else
             {
-                if (fVar8 >= 0.0f)
+                F32 ey;
+                if (cy >= 0.0f)
                 {
-                    fVar6 = 0.5f + sy;
+                    ey = 0.5f + sy;
                 }
                 else
                 {
-                    fVar6 = -0.5f - sy;
+                    ey = -0.5f - sy;
                 }
-                fVar5 = (fVar6 * fVar7) / fVar8;
+                tcy = ey;
+                tcx = (ey * cx) / cy;
             }
 
-            F32 dVar11 = 0.5f + (fVar6 - 0.5f * sy) - rc.loc.y;
-            F32 dVar12 = 0.5f + (fVar5 - 0.5f * fVar1) - rc.loc.x;
-            F32 dVar10 = xsqrt(dVar12 * dVar12 + dVar11 * dVar11);
+            F32 tx = 0.5f + (tcx - 0.5f * sx);
+            F32 ty = 0.5f + (tcy - 0.5f * sy);
+            F32 vx = tx - rc.loc.x;
+            F32 vy = ty - rc.loc.y;
+            F32 dist = xsqrt(vx * vx + vy * vy);
 
-            add_motive(
-                motive(&rc.loc.x, 0.0f, dVar12, dVar12 * dVar10, accelerate_motive_update, NULL));
+            add_motive(motive(&rc.loc.x, 0.0f, vx, vx * dist, accelerate_motive_update, NULL));
+            add_motive(motive(&rc.loc.y, 0.0f, vy, vy * dist, accelerate_motive_update, NULL));
 
-            add_motive(
-                motive(&rc.loc.y, 0.0f, dVar11, dVar11 * dVar10, accelerate_motive_update, NULL));
-
-            fVar1 = -rc.a;
-            add_motive(motive(&rc.a, 0.4f * fVar1, dVar11, 0.0f, linear_motive_update, NULL));
+            // The alpha motive runs the whole way down to zero, so its
+            // max_offset is -rc.a - the mirror of show()'s `start_rc.a - rc.a`.
+            add_motive(motive(&rc.a, 0.4f * -rc.a, -rc.a, 0.0f, linear_motive_update, NULL));
         }
     }
 
