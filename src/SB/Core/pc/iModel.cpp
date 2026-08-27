@@ -388,6 +388,120 @@ RpAtomic* iModelCacheAtomic(RpAtomic* model)
     return model;
 }
 
+// Is this atomic safe to hand to the renderer?
+//
+// PORT: librw's instancing walks the mesh header without checking it -- the
+// d3d9 pipeline reads mesh->indices for every mesh and dereferences it -- so a
+// geometry whose header is wrong takes the process down inside the library,
+// several frames from whatever actually produced it. The console's renderer is
+// no more careful, but it is also never handed one of these: on a host the
+// asset data has been through a stream reader, a plugin registry and a platform
+// conversion that the GameCube build does not have.
+//
+// So the port checks before it hands the atomic over, says which model it
+// refused and why, and carries on with that model missing. A missing model and
+// a line of output is a far better failure than an access violation in a
+// library frame, and it is the difference between finding the NEXT problem this
+// run and finding it next week.
+//
+// This is a diagnostic, not a fix: anything it reports is a real bug in the
+// port that still has to be found.
+static bool iModelRenderable(RpAtomic* model)
+{
+    static S32 complaints = 0;
+    const S32 kMaxComplaints = 8;
+
+    const char* why = NULL;
+    RwUInt32 counted_indices = 0;
+    RwUInt32 first_mesh_indices = 0;
+    void* first_mesh_ptr = NULL;
+    void* first_mesh_material = NULL;
+
+    RpGeometry* geom = model != NULL ? model->geometry : NULL;
+    RpMeshHeader* mh = geom != NULL ? geom->mesh : NULL;
+
+    if (geom == NULL)
+    {
+        why = "no geometry";
+    }
+    else if (mh == NULL)
+    {
+        why = "no mesh header";
+    }
+    else if (mh->numMeshes == 0)
+    {
+        why = "no meshes";
+    }
+    else if (mh->totalIndicesInMesh == 0)
+    {
+        why = "no indices";
+    }
+    else
+    {
+        // librw puts the meshes immediately after the header and ignores
+        // firstMeshOffset, which is why _rpMeshHeaderForAllMeshes does too.
+        RpMesh* mesh = (RpMesh*)(mh + 1);
+        RwUInt32 counted = 0;
+
+        for (RwUInt32 i = 0; i < mh->numMeshes; i++)
+        {
+            if (mesh[i].indices == NULL)
+            {
+                why = "a mesh has no indices";
+                break;
+            }
+
+            counted += mesh[i].numIndices;
+        }
+
+        if (why == NULL && counted != mh->totalIndicesInMesh)
+        {
+            why = "the meshes' indices do not add up to the header's total";
+            counted_indices = counted;
+            first_mesh_indices = mesh[0].numIndices;
+            first_mesh_ptr = mesh[0].indices;
+            first_mesh_material = mesh[0].material;
+        }
+    }
+
+    if (why == NULL)
+    {
+        return true;
+    }
+
+    if (complaints < kMaxComplaints)
+    {
+        complaints++;
+        printf("bfbb: iModelRender refused an atomic -- %s\n", why);
+        printf("bfbb:   atomic %p geometry %p mesh %p", (void*)model, (void*)geom, (void*)mh);
+        if (mh != NULL)
+        {
+            printf(" numMeshes %u totalIndices %u flags %08x", (unsigned)mh->numMeshes,
+                   (unsigned)mh->totalIndicesInMesh, (unsigned)mh->flags);
+        }
+        if (geom != NULL)
+        {
+            printf(" geomTris %d geomVerts %d geomFlags %08x", (int)geom->numTriangles,
+                   (int)geom->numVertices, (unsigned)geom->flags);
+        }
+        printf("\n");
+        if (counted_indices != 0 || first_mesh_ptr != NULL)
+        {
+            printf("bfbb:   counted %u across the meshes; mesh[0] has %u indices at %p, "
+                   "material %p\n",
+                   (unsigned)counted_indices, (unsigned)first_mesh_indices, first_mesh_ptr,
+                   first_mesh_material);
+        }
+        if (complaints == kMaxComplaints)
+        {
+            printf("bfbb:   (further refusals are silent)\n");
+        }
+        fflush(stdout);
+    }
+
+    return false;
+}
+
 void iModelRender(RpAtomic* model, RwMatrixTag* mat)
 {
     RpHAnimHierarchy* hierarchy;
@@ -411,7 +525,10 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
     {
         model->geometry->flags &= 0xfffffff7;
     }
-    iModelCacheAtomic(model)->renderCallBack(iModelCacheAtomic(model));
+    if (iModelRenderable(model))
+    {
+        iModelCacheAtomic(model)->renderCallBack(iModelCacheAtomic(model));
+    }
     if ((iModelHack_DisablePrelight != 0) && (model->geometry->preLitLum != NULL))
     {
         model->geometry->flags |= 8;

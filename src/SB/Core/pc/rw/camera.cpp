@@ -26,9 +26,93 @@ static inline const rw::Camera* asCamera(const RwCamera* camera)
     return reinterpret_cast<const rw::Camera*>(camera);
 }
 
+// ---------------------------------------------------------------------------
+// The live-camera register
+//
+// Neither library keeps a list of the cameras in a world -- there is only a
+// World* on each camera -- so destroying a world leaves every camera that was
+// in it pointing at freed memory. On RenderWare that pointer is merely stale;
+// the next RpWorldAddCamera overwrites it and nothing has looked at it in
+// between. Under librw it is fatal twice over: RpWorldAddCamera refuses a
+// camera that claims to be in a world, so the add is silently dropped and the
+// camera keeps the dead pointer, and then beginUpdate copies it into
+// engine->currentWorld where the d3d9 lighting path dereferences it without a
+// check.
+//
+// That is what killed the cutscene shadow. xShadowSetWorld adds the shadow
+// camera to each scene's world and NOTHING ever removes it, so the first scene
+// change left it in a freed world for good and enumerateLights walked the
+// remains.
+//
+// So the shim keeps the list librw does not. Every camera it hands out is
+// registered here, and RpWorldDestroy sweeps it, which restores the invariant
+// RenderWare gives for free: once a world is gone, no camera claims to be in
+// it.
+
+#define RW_MAX_CAMERAS 16
+
+static RwCamera* sCameras[RW_MAX_CAMERAS];
+
+static void rwRegisterCamera(RwCamera* camera)
+{
+    for (RwInt32 i = 0; i < RW_MAX_CAMERAS; i++)
+    {
+        if (sCameras[i] == NULL)
+        {
+            sCameras[i] = camera;
+            return;
+        }
+    }
+
+    // Worth saying rather than growing silently: the game creates four (the
+    // view, the shadow, iEnv's pipe and iModel's instancing camera), so a full
+    // table means either a leak or a new camera nobody accounted for, and a
+    // camera missing from here is one RpWorldDestroy cannot detach.
+    printf("bfbb: more than %d cameras live at once; one will not be detached "
+           "when its world is destroyed\n",
+           RW_MAX_CAMERAS);
+    fflush(stdout);
+}
+
+static void rwUnregisterCamera(RwCamera* camera)
+{
+    for (RwInt32 i = 0; i < RW_MAX_CAMERAS; i++)
+    {
+        if (sCameras[i] == camera)
+        {
+            sCameras[i] = NULL;
+            return;
+        }
+    }
+}
+
+// Called by RpWorldDestroy, which is in world.cpp. Declared there rather than in
+// a shared header because it is the only thing the two files pass between them.
+void rwDetachCamerasFromWorld(void* world)
+{
+    for (RwInt32 i = 0; i < RW_MAX_CAMERAS; i++)
+    {
+        RwCamera* camera = sCameras[i];
+        if (camera != NULL && camera->world == world)
+        {
+            // The camera is not removed from the world's own bookkeeping --
+            // there is none to remove it from -- so clearing the pointer is the
+            // whole operation.
+            camera->world = NULL;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+
 RwCamera* RwCameraCreate(void)
 {
-    return reinterpret_cast<RwCamera*>(rw::Camera::create());
+    RwCamera* camera = reinterpret_cast<RwCamera*>(rw::Camera::create());
+    if (camera != NULL)
+    {
+        rwRegisterCamera(camera);
+    }
+    return camera;
 }
 
 RwBool RwCameraDestroy(RwCamera* camera)
@@ -37,6 +121,8 @@ RwBool RwCameraDestroy(RwCamera* camera)
     {
         return FALSE;
     }
+
+    rwUnregisterCamera(camera);
 
     // Not the camera's frame: RenderWare leaves that to the caller, and
     // iCamera.cpp:69 relies on it -- it takes the frame off the camera and

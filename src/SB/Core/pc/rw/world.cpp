@@ -223,6 +223,11 @@ RpWorld* RpWorldCreate(RwBBox* boundingBox)
     return result;
 }
 
+// Defined in camera.cpp, which owns the list of live cameras. Declared here
+// rather than in a shared header because it is the only thing the two files
+// pass between them.
+void rwDetachCamerasFromWorld(void* world);
+
 RwBool RpWorldDestroy(RpWorld* world)
 {
     if (world == NULL)
@@ -258,11 +263,19 @@ RwBool RpWorldDestroy(RpWorld* world)
         w->removeLight(rw::Light::fromWorld(link));
     }
 
-    // Cameras are the one thing that cannot be found: neither library keeps a
-    // list of them, only a World* on the camera. A camera still in this world
-    // when it is destroyed keeps a dangling pointer and trips librw's assert in
-    // Camera::destroy. That is retail's hazard too and the game already avoids
-    // it -- iCamera.cpp:54 and zGame.cpp:1476 both remove the camera first.
+    // Cameras cannot be found through the world: neither library keeps a list of
+    // them, only a World* on each camera. camera.cpp keeps that list instead --
+    // see the comment on the register there -- and this is what it is for.
+    //
+    // The game does NOT reliably remove its cameras first, whatever the earlier
+    // note here claimed. iCamera.cpp:54 and zGame.cpp:1476 do, but
+    // xShadowSetWorld adds the shadow camera to every scene's world and nothing
+    // ever takes it out, so from the first scene change onwards it pointed at a
+    // freed world. RpWorldAddCamera then refused to add it to the new one --
+    // it was already in a world, as far as the pointer said -- and the d3d9
+    // lighting path dereferenced the corpse.
+    rwDetachCamerasFromWorld(w);
+
     w->destroy();
     return TRUE;
 }
