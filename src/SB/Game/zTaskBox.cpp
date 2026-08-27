@@ -273,13 +273,13 @@ void ztaskbox::on_talk_stop(ztalkbox::answer_enum answer)
 {
     switch (state)
     {
-    case ztalkbox::ANSWER_YES:
+    case STATE_DESCRIPTION:
         set_state(STATE_REMINDER);
         break;
-    case ztalkbox::ANSWER_3:
+    case STATE_SUCCESS:
         set_state(STATE_END);
         break;
-    case ztalkbox::ANSWER_4:
+    case STATE_FAILURE:
         if (asset->retry != 0)
         {
             set_state(STATE_DESCRIPTION);
@@ -295,9 +295,9 @@ void ztaskbox::on_talk_stop(ztalkbox::answer_enum answer)
             set_state(STATE_BEGIN);
         }
         break;
-    case ztalkbox::ANSWER_CONTINUE:
-    case ztalkbox::ANSWER_NO:
-    case ztalkbox::ANSWER_5:
+    case STATE_BEGIN:
+    case STATE_REMINDER:
+    case STATE_END:
         break;
     }
 

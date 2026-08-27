@@ -269,7 +269,7 @@ void zLightAddLocalEnv()
     for (int i = 0; i < sLightTotal; i++)
     {
         _zLight* zlight = sLight[i];
-        if ((zlight->flags & 1 != 0) && (zlight->tasset->lightFlags & 8))
+        if ((zlight->flags & 1) && (zlight->tasset->lightFlags & 8))
         {
             iLight* light = &zlight->light;
             iLightEnv(light, 1);

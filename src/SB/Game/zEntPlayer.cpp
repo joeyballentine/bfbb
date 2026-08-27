@@ -14267,7 +14267,7 @@ static void PlayerRotMatchUpdateEnt(xEnt* ent, xScene* sc, F32 dt, void* fdata)
     xCollis* coll = ent->collis->colls;
     S32 hit_it = coll->flags & 0x1;
     xSurface* surf = zSurfaceGetSurface(coll);
-    U8 grounded = 0;
+    S32 grounded = 0;
 
     if (hit_it && surf && !surf->state && zSurfaceGetMatchOrient(surf))
     {
