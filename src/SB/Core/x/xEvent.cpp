@@ -1,5 +1,10 @@
 #include <types.h>
 
+#ifdef PLATFORM_PC
+#include <stdio.h>
+#include <stdlib.h>
+#endif
+
 #include "xEvent.h"
 #include "xString.h"
 #include "xstransvc.h"
@@ -114,6 +119,32 @@ void zEntEvent(xBase* from, U32 fromEvent, xBase* to, U32 toEvent, const F32* to
                 if (!idx->chkAssetID || (from && idx->chkAssetID == from->id))
                 {
                     xBase* sendTo = zSceneFindObject(idx->dstAssetID);
+
+#ifdef PLATFORM_PC
+                    // BFBB_EVENT: a link that matched and went nowhere.
+                    //
+                    // This is the last silent step in the chain. The trigger
+                    // fires, the link's srcEvent matches, and then the
+                    // destination is looked up by asset id -- and if that
+                    // lookup comes back empty the event is dropped with no
+                    // trace, which is indistinguishable from the trigger never
+                    // having fired. A level change is exactly this: a trigger
+                    // linked to a portal, so a portal that does not resolve is
+                    // a door that does nothing.
+                    if (!sendTo && getenv("BFBB_EVENT") != NULL)
+                    {
+                        static int said = 0;
+                        if (said < 30)
+                        {
+                            said++;
+                            printf("bfbb: link from %08x event %u -> dst %08x NOT FOUND, "
+                                   "event dropped\n",
+                                   (unsigned)to->id, (unsigned)idx->dstEvent,
+                                   (unsigned)idx->dstAssetID);
+                            fflush(stdout);
+                        }
+                    }
+#endif
 
                     if (sendTo)
                     {
