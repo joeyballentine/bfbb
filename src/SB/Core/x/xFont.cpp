@@ -631,9 +631,14 @@ void xfont::restore_render_state()
 basic_rect<F32> xfont::bounds(char c) const
 {
     font_data& fd = active_fonts[id];
-    U32 char_index = fd.char_index[c];
+    // char is signed here -- the build passes -char signed to match CodeWarrior
+    // -- so a byte at or above 0x80 indexes before the table. CodeWarrior reuses
+    // the zero-extended byte and emits no extsb, so the console has always
+    // behaved unsigned; nothing else is entitled to.
+    U8 uc = c;
+    U32 char_index = fd.char_index[uc];
 
-    if (fd.char_index[c] == 0xFF)
+    if (fd.char_index[uc] == 0xFF)
     {
         return basic_rect<F32>::m_Null;
     }
@@ -670,7 +675,8 @@ basic_rect<F32> xfont::bounds(const char* text, size_t text_size, F32 max_width,
 
     while (i < text_size && *s != '\0')
     {
-        U32 charIndex = fd.char_index[*s];
+        U8 uc = *s;
+        U32 charIndex = fd.char_index[uc];
 
         if (charIndex != 0xFF)
         {
