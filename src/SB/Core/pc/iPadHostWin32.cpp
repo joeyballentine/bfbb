@@ -23,6 +23,8 @@
 #include <windows.h>
 #include <xinput.h>
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 // ---------------------------------------------------------------------------
 // XInput, resolved at run time.
@@ -36,6 +38,9 @@ static XInputSetStateFn sXInputSetState;
 
 static iPadHostState sState[IPAD_MAX_CONTROLLERS];
 static bool sKeyboardOnPort0;
+
+// Read once, so the per-frame cost is a load.
+static const bool sReportPad = getenv("BFBB_PAD") != NULL;
 
 // When each EMPTY port may be asked about again.
 //
@@ -376,6 +381,37 @@ void iPadHostPoll()
     if (sKeyboardOnPort0)
     {
         PollKeyboard(&sState[0]);
+    }
+
+    // BFBB_PAD: what port 0 is actually reporting, printed when it changes.
+    //
+    // The mapping in this file is the only thing between a device and the bits
+    // the game tests, and every one of those tests is a bare mask against
+    // pad->on or pad->pressed. When a button does nothing there are two
+    // possibilities -- this file never produced the bit, or the game did not
+    // act on it -- and they need different fixes. This says which.
+    if (sReportPad)
+    {
+        static U32 lastButtons = 0;
+        static bool lastConnected = false;
+
+        if (sState[0].buttons != lastButtons || sState[0].connected != lastConnected)
+        {
+            printf("bfbb: pad0 %s buttons %08x%s%s%s%s%s%s%s%s\n",
+                   sState[0].connected ? "connected" : "absent", (unsigned)sState[0].buttons,
+                   (sState[0].buttons & XPAD_BUTTON_L1) ? " L1" : "",
+                   (sState[0].buttons & XPAD_BUTTON_L2) ? " L2" : "",
+                   (sState[0].buttons & XPAD_BUTTON_R1) ? " R1" : "",
+                   (sState[0].buttons & XPAD_BUTTON_R2) ? " R2" : "",
+                   (sState[0].buttons & XPAD_BUTTON_X) ? " X(gcA)" : "",
+                   (sState[0].buttons & XPAD_BUTTON_TRIANGLE) ? " TRI(gcB)" : "",
+                   (sState[0].buttons & XPAD_BUTTON_O) ? " O(gcX)" : "",
+                   (sState[0].buttons & XPAD_BUTTON_START) ? " START" : "");
+            fflush(stdout);
+
+            lastButtons = sState[0].buttons;
+            lastConnected = sState[0].connected;
+        }
     }
 }
 
