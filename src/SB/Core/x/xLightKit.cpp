@@ -109,52 +109,6 @@ void xLightKit_Enable(xLightKit* lkit, RpWorld* world)
         if (lkit != NULL)
         {
             iModelHack_DisablePrelight = 1;
-#ifdef PLATFORM_PC
-            // BFBB_KIT: what a light kit actually contains.
-            //
-            // Enabling a kit switches the baked vertex colours OFF, on the
-            // assumption that the kit replaces them -- so from here on the
-            // ONLY thing lighting a model is the list below. If a model looks
-            // too dark, either these lights are dim or the base they are added
-            // to is wrong, and this says which by giving the colours their real
-            // values. Types are the kit's own: 1 ambient, 2 directional,
-            // 3 point, 4 spot.
-            //
-            // Each kit reported once. There are far fewer kits than objects --
-            // most of a scene shares a handful -- so this stays short.
-            if (getenv("BFBB_KIT") != NULL)
-            {
-                static xLightKit* seen[64];
-                static S32 seenCount;
-
-                S32 known = 0;
-                for (S32 k = 0; k < seenCount; k++)
-                {
-                    if (seen[k] == lkit)
-                    {
-                        known = 1;
-                        break;
-                    }
-                }
-
-                if (!known && seenCount < 64)
-                {
-                    seen[seenCount++] = lkit;
-
-                    printf("bfbb: lightkit %p, %d lights\n", (void*)lkit, (int)lkit->lightCount);
-                    for (S32 k = 0; k < (S32)lkit->lightCount; k++)
-                    {
-                        printf("    [%d] type %d  rgba %.3f %.3f %.3f %.3f\n", (int)k,
-                               (int)lkit->lightList[k].type,
-                               (double)lkit->lightList[k].color.red,
-                               (double)lkit->lightList[k].color.green,
-                               (double)lkit->lightList[k].color.blue,
-                               (double)lkit->lightList[k].color.alpha);
-                    }
-                    fflush(stdout);
-                }
-            }
-#endif
             for (i = 0; i < lkit->lightCount; i++)
             {
                 RpWorldAddLight(world, lkit->lightList[i].platLight);

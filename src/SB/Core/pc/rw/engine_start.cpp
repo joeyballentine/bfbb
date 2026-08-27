@@ -261,27 +261,6 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     (void)initParams;
 
 #if defined(RW_D3D9) || defined(RW_D3D8)
-
-    // BFBB_PRELITBASE=white: what an unlit vertex starts from.
-    //
-    // librw fills a constant vertex stream with BLACK and points the colour
-    // element at it for any geometry whose PRELIT flag is clear. That is not a
-    // detail here: xLightKit_Enable sets iModelHack_DisablePrelight while a
-    // light kit is active, and iModelRender then clears PRELIT for the draw, so
-    // every kit-lit model in the game takes that path. Its base colour is
-    // therefore zero and the kit's lights are the only thing that can brighten
-    // it -- and the four-light kits measured in the hub carry no ambient at
-    // all, only directionals. A face pointing away from all four is black.
-    //
-    // Whether the console starts such a vertex at black or at white is the open
-    // question, so this is a switch rather than a change: set it and the trees
-    // and other kit-lit models get a white base to light from. It has to happen
-    // before the device is created, which is what fills the stream.
-    const char* prelitBase = getenv("BFBB_PRELITBASE");
-    rw::d3d::constantVertexColorWhite =
-        (prelitBase != NULL && prelitBase[0] == 'w') ? TRUE : FALSE;
-
-    // rw::d3d::EngineOpenParams is { HWND window; }.
     rw::EngineOpenParams params;
     params.window = (HWND)iWindowNativeHandle();
 

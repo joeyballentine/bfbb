@@ -510,42 +510,6 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
             // pointer unchanged, and the hop through it is free there. See xEnt.h.
             zNPCCommon* npc = (zNPCCommon*)(xEnt*)(ent->collis->colls[iter_npc].optr);
 
-#ifdef PLATFORM_PC
-            // BFBB_BOWL: why the bubble bowl did or did not break what it hit.
-            //
-            // The damage chain from here is portable and reads correctly --
-            // eEventHit becomes ConvertHitEvent becomes DMGTYP_BUBBOWL becomes
-            // zNPCTiki::Damage -- so the question is which link is not reached.
-            // The gate on the event is `basset->flags & 8`, and the tiki's own
-            // gate is flg_vuln, so both are printed next to the type that was
-            // actually hit. Stone tikis are MEANT to shrug the bubble bowl off;
-            // only the other four break.
-            if (getenv("BFBB_BOWL") != NULL && ent == globals.player.bubblebowl)
-            {
-                U32 sel = npc->SelfType();
-                char tag[5];
-                tag[0] = (char)(sel >> 24);
-                tag[1] = (char)(sel >> 16);
-                tag[2] = (char)(sel >> 8);
-                tag[3] = (char)sel;
-                tag[4] = 0;
-
-                // oid is what the collision system recorded for this hit and
-                // npc->id is read back through the pointer it handed over, so
-                // the two disagreeing means the pointer is not the object the
-                // collision was against. baseType says whether it is an entity
-                // of the kind this loop assumes at all -- eBaseTypeNPC is 45.
-                printf("bfbb: bowl hit | oid %08x ptr %p baseType %d id %08x type '%s' | "
-                       "basset->flags %08x (bit3 %s) flg_vuln %d\n",
-                       (unsigned)ent->collis->colls[iter_npc].oid,
-                       ent->collis->colls[iter_npc].optr, (int)npc->baseType, (unsigned)npc->id,
-                       tag, (unsigned)ent->basset->flags,
-                       (ent->basset->flags & 8) ? "SET, event fires" : "CLEAR, no event",
-                       (int)npc->flg_vuln);
-                fflush(stdout);
-            }
-#endif
-
             if (ent->basset->flags & 1)
             {
                 xVec3AddTo(&depen, (xVec3*)(&ent->collis->colls[iter_npc].depen));
@@ -580,22 +544,6 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
 
             numDepens++;
         }
-
-#ifdef PLATFORM_PC
-        // The other half of the question. If the bowl rolls through a tiki and
-        // this never reports an NPC, the fault is in collision detection rather
-        // than anywhere in the damage chain, and nothing above will have
-        // printed at all.
-        if (getenv("BFBB_BOWL") != NULL && ent == globals.player.bubblebowl)
-        {
-            printf("bfbb: bowl frame: %d npc, %d dyn, %d stat, %d env colls\n",
-                   (int)(ent->collis->npc_eidx - ent->collis->npc_sidx),
-                   (int)(ent->collis->dyn_eidx - ent->collis->dyn_sidx),
-                   (int)(ent->collis->stat_eidx - ent->collis->stat_sidx),
-                   (int)(ent->collis->env_eidx - ent->collis->env_sidx));
-            fflush(stdout);
-        }
-#endif
 
         if (numDepens != 0)
         {

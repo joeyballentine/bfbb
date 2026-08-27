@@ -154,20 +154,6 @@ void zUIFont_Update(zUIFont* ent, xScene*, F32)
     _zUI* ui;
     xBase* sendTo;
 
-#ifdef PLATFORM_PC
-    // The OTHER dispatcher. zUI_Update never saw a button in a whole session
-    // while the capture in zUI_PreUpdate was demonstrably setting one, which
-    // means the entity that captured it is not updated by zUI_Update at all --
-    // and a UI font has its own update with its own copy of this chain.
-    if (ent->uiButton != 0 && getenv("BFBB_EVENT") != NULL)
-    {
-        printf("bfbb: zUIFont_Update %08x uiButton %08x%s, trc %d\n", (unsigned)ent->id,
-               (unsigned)ent->uiButton, (ent->uiButton & XPAD_BUTTON_R1) ? " (has R1)" : "",
-               (int)gTrcPad[0].state);
-        fflush(stdout);
-    }
-#endif
-
     if (ent->uiButton && gTrcPad[0].state == TRC_PadInserted)
     {
         if (ent->uiButton & XPAD_BUTTON_UP)
@@ -216,16 +202,6 @@ void zUIFont_Update(zUIFont* ent, xScene*, F32)
         }
         else if (ent->uiButton & XPAD_BUTTON_R1)
         {
-#ifdef PLATFORM_PC
-            if (getenv("BFBB_EVENT") != NULL)
-            {
-                printf("bfbb: zUIFont_Update %08x firing eEventPadPressR1 -- linkCount %u, "
-                       "link %p, sizeof(zUIAsset) %u\n",
-                       (unsigned)ent->id, (unsigned)ent->linkCount, (void*)ent->link,
-                       (unsigned)sizeof(zUIAsset));
-                fflush(stdout);
-            }
-#endif
             zEntEvent(ent, ent, eEventPadPressR1);
             ent->uiButton = XPAD_BUTTON_R1;
         }
@@ -273,17 +249,6 @@ S32 zUIFontEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam, xBas
     case eEventVisible:
     case eEventFastVisible:
     {
-#ifdef PLATFORM_PC
-        // A UI font does NOT fall through to zUIEventCB for these two, so the
-        // show/hide trace has to exist here as well or half the cascade is
-        // invisible to it -- and it is the text elements that carry the links
-        // which turn the backdrops on.
-        if (getenv("BFBB_UI") != NULL)
-        {
-            printf("bfbb: uivis %08x SHOW (font)\n", (unsigned)s->id);
-            fflush(stdout);
-        }
-#endif
         if (toParam && *(U32*)&toParam[0])
         {
             set_text(*s, *(U32*)&toParam[0]);
@@ -311,13 +276,6 @@ S32 zUIFontEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam, xBas
     case eEventInvisible:
     case eEventFastInvisible:
     {
-#ifdef PLATFORM_PC
-        if (getenv("BFBB_UI") != NULL)
-        {
-            printf("bfbb: uivis %08x HIDE (font)\n", (unsigned)s->id);
-            fflush(stdout);
-        }
-#endif
         xEntHide(s);
 
         switch (s->fasset->mode)

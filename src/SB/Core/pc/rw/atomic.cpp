@@ -12,7 +12,6 @@
 #include <rpcollis.h>
 #include <rpworld.h>
 
-
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -21,13 +20,6 @@
 
 #include "intersect.h"
 #include "stream.h" // brings in librw's rw.h, which must not be included twice
-
-// Set by zEntSimpleObj_MgrUpdateRender around each object it draws, so that the
-// report below can say WHICH object an atomic belongs to. Without it the hook
-// samples blindly and a reading taken from Bubble Buddy is indistinguishable
-// from one taken from a tree -- which is exactly the confusion this is here to
-// end.
-unsigned gBFBBCurrentSimpleObj;
 
 static inline rw::Atomic* asAtomic(RpAtomic* a)
 {
@@ -487,155 +479,11 @@ RpAtomic* RpAtomicStreamRead(RwStream* stream)
 // safe: one pointer either way, cdecl on both sides, and librw calls it as
 // `this->renderCB(this)` and discards nothing because there is nothing to
 // discard. This function is the other end of that arrangement.
-// BFBB_LIGHT: why a model came out darker than it should.
-//
-// librw's lighting has a gate before it ever looks at a light. d3drender.cpp's
-// lightingCB_Shader tests `geometry->flags & rw::Geometry::LIGHT` and, when it
-// is clear, sets the ambient to BLACK and uploads no lights at all -- so an
-// atomic without that flag is not dimly lit, it is unlit. That matters here
-// more than it would elsewhere, because xLightKit_Enable sets
-// iModelHack_DisablePrelight while a light kit is active: the baked vertex
-// colours are switched off on the assumption that the kit will replace them,
-// and an atomic that is both unlit and unprelit has nothing left.
-//
-// The other half is where the lights are. lightingCB_Shader enumerates them
-// from `engine->currentWorld`, while xLightKit_Enable adds them to
-// globals.currWorld, which is the world iEnv.cpp made for the level's JSP.
-// Those being different objects would put every light somewhere nothing reads.
-//
-// Reported for the first few atomics of a frame, twice a second, because the
-// question is about the common case rather than about one model.
-static void iReportLighting(RpAtomic* atomic)
-{
-    // Throttled on the call count rather than the clock: this runs per atomic
-    // per frame, so a plain counter is both cheaper and steadier than asking
-    // the time here would be. Three atomics out of every six hundred draws.
-    static unsigned sCalls;
-
-    // While a simple object is being drawn, report it once and unconditionally:
-    // the trees are simple objects, and blind sampling kept returning whichever
-    // atomic happened to be third in the frame. Everything else stays sampled.
-    if (gBFBBCurrentSimpleObj != 0)
-    {
-        static unsigned seen[256];
-        static int seenCount;
-        for (int k = 0; k < seenCount; k++)
-        {
-            if (seen[k] == gBFBBCurrentSimpleObj)
-            {
-                return;
-            }
-        }
-        if (seenCount < 256)
-        {
-            seen[seenCount++] = gBFBBCurrentSimpleObj;
-        }
-    }
-    else
-    {
-        unsigned phase = sCalls++ % 600;
-        if (phase >= 3)
-        {
-            return;
-        }
-    }
-
-    rw::Atomic* a = asAtomic(atomic);
-    rw::Geometry* geo = a->geometry;
-    rw::World* cur = (rw::World*)rw::engine->currentWorld;
-
-    // librw splits them by whether the type carries a position: globalLights is
-    // ambient and directional, localLights is point and spot. xLightKit adds
-    // all four kinds, so both counts being zero means none of them arrived.
-    int numGlobal = (cur != NULL) ? cur->globalLights.count() : -1;
-    int numLocal = (cur != NULL) ? cur->localLights.count() : -1;
-
-    // What librw's lighting will actually SEE, which is not the same as what
-    // the world holds. enumerateLights drops a directional light unless the
-    // geometry has NORMALS, and the shader that gets picked depends on the
-    // counts that come out of it -- with no directionals the ambient-only
-    // shader runs and nothing shades at all. Run the same call lightingCB_Shader
-    // runs, so this reports the real answer rather than a reconstruction.
-    rw::Light* dirs[8];
-    rw::Light* locs[8];
-    rw::WorldLights ld;
-    ld.directionals = dirs;
-    ld.numDirectionals = 8;
-    ld.locals = locs;
-    ld.numLocals = 8;
-    ld.numAmbients = 0;
-    ld.ambient.red = ld.ambient.green = ld.ambient.blue = 0.0f;
-
-    if (cur != NULL && geo != NULL)
-    {
-        cur->enumerateLights(a, &ld);
-    }
-
-    printf("bfbb: light [simpleobj %08x] | geo flags %08x LIGHT %s PRELIT %s MODULATE %s | currentWorld %p "
-           "dir %d local %d | atomic world %p\n",
-           gBFBBCurrentSimpleObj, (unsigned)(geo ? geo->flags : 0),
-           (geo && (geo->flags & rw::Geometry::LIGHT)) ? "SET" : "clear",
-           (geo && (geo->flags & rw::Geometry::PRELIT)) ? "SET" : "clear",
-           (geo && (geo->flags & rw::Geometry::MODULATE)) ? "SET" : "clear",
-           (void*)cur, (int)numGlobal, (int)numLocal, (void*)a->world);
-    printf("bfbb:       -> NORMALS %s | enumerated %d directional, %d local, %d ambient "
-           "(ambient rgb %.3f %.3f %.3f)\n",
-           (geo && (geo->flags & rw::Geometry::NORMALS)) ? "SET" : "CLEAR",
-           (int)ld.numDirectionals, (int)ld.numLocals, (int)ld.numAmbients,
-           (double)ld.ambient.red, (double)ld.ambient.green, (double)ld.ambient.blue);
-
-    // Every directional light's colour AND direction, as the shader will get
-    // them: uploadLights sends the frame's LTM `at` and the shader shades
-    // dot(N, -at). Four lights all pointing the same way light a model from one
-    // side only and leave the rest on the ambient floor, which for these kits
-    // is 0.15 or nothing -- indistinguishable from "the lights are not working"
-    // in every measurement made so far, and the last input to the lighting
-    // equation that has not been looked at.
-    for (rw::int32 li = 0; li < ld.numDirectionals; li++)
-    {
-        rw::Light* L = ld.directionals[li];
-        rw::V3d at = L->getFrame()->getLTM()->at;
-        printf("bfbb:       -> dir[%d] colour %.3f %.3f %.3f  at %.3f %.3f %.3f\n", (int)li,
-               (double)L->color.red, (double)L->color.green, (double)L->color.blue,
-               (double)at.x, (double)at.y, (double)at.z);
-    }
-
-    // The two things that scale everything above before it reaches the frame
-    // buffer. matCol multiplies the lit colour when MODULATE is set, and
-    // surfaceProps are the ambient/diffuse coefficients the shader applies to
-    // the ambient term and to every directional in turn -- a small diffuse
-    // makes four bright lights add up to nothing. Printed per material because
-    // a model can carry several and only one of them need be wrong.
-    if (geo != NULL)
-    {
-        for (rw::int32 m = 0; m < geo->matList.numMaterials && m < 4; m++)
-        {
-            rw::Material* mat = geo->matList.materials[m];
-            if (mat == NULL)
-            {
-                continue;
-            }
-            printf("bfbb:       -> mat[%d] colour %3d %3d %3d %3d | surf ambient %.3f "
-                   "specular %.3f diffuse %.3f | texture %s\n",
-                   (int)m, (int)mat->color.red, (int)mat->color.green, (int)mat->color.blue,
-                   (int)mat->color.alpha, (double)mat->surfaceProps.ambient,
-                   (double)mat->surfaceProps.specular, (double)mat->surfaceProps.diffuse,
-                   mat->texture ? "yes" : "none");
-        }
-    }
-    fflush(stdout);
-}
-
 RpAtomic* AtomicDefaultRenderCallBack(RpAtomic* atomic)
 {
     if (atomic == NULL)
     {
         return NULL;
-    }
-
-    if (getenv("BFBB_LIGHT") != NULL)
-    {
-        iReportLighting(atomic);
     }
 
     rw::Atomic::defaultRenderCB(asAtomic(atomic));

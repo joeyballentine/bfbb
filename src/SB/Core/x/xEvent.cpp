@@ -120,47 +120,6 @@ void zEntEvent(xBase* from, U32 fromEvent, xBase* to, U32 toEvent, const F32* to
                 {
                     xBase* sendTo = zSceneFindObject(idx->dstAssetID);
 
-#ifdef PLATFORM_PC
-                    // BFBB_EVENT: a link that matched and went nowhere.
-                    //
-                    // This is the last silent step in the chain. The trigger
-                    // fires, the link's srcEvent matches, and then the
-                    // destination is looked up by asset id -- and if that
-                    // lookup comes back empty the event is dropped with no
-                    // trace, which is indistinguishable from the trigger never
-                    // having fired. A level change is exactly this: a trigger
-                    // linked to a portal, so a portal that does not resolve is
-                    // a door that does nothing.
-                    // Every forward, not only the dropped ones. Nothing was
-                    // being dropped, which left the question of WHICH events
-                    // are travelling -- a trigger whose link carries the wrong
-                    // dstEvent reaches its portal and asks it for the wrong
-                    // thing, and that is as silent as not arriving.
-                    // Filtered rather than capped. A scene load broadcasts
-                    // init events to every object in it, which exhausted a flat
-                    // budget of sixty lines before the player had moved -- so
-                    // the log went quiet exactly when the interesting scene
-                    // started. Only player enter/exit links and anything asking
-                    // for a teleport are worth a line.
-                    if (getenv("BFBB_EVENT") != NULL &&
-                        (idx->srcEvent == eEventEnterPlayer || idx->srcEvent == eEventExitPlayer ||
-                         idx->srcEvent == eEventPadPressR1 || idx->srcEvent == eEventDone ||
-                         idx->dstEvent == eEventTeleportPlayer || idx->dstEvent == eEventUISelect ||
-                         idx->dstEvent == eEventUIFocusOn || idx->dstEvent == eEventUIFocusOn_Select))
-                    {
-                        static int said = 0;
-                        if (said < 200)
-                        {
-                            said++;
-                            printf("bfbb: link %08x src %u -> %08x dst %u  %s\n",
-                                   (unsigned)to->id, (unsigned)idx->srcEvent,
-                                   (unsigned)idx->dstAssetID, (unsigned)idx->dstEvent,
-                                   sendTo ? "delivered" : "NOT FOUND, dropped");
-                            fflush(stdout);
-                        }
-                    }
-#endif
-
                     if (sendTo)
                     {
                         xBase* b = NULL;

@@ -401,31 +401,6 @@ void zUI_Init(_zUI* ent, xEntAsset* asset)
     ent->eventFunc = zUIEventCB;
     ent->uiFlags = sasset->uiFlags;
 
-#ifdef PLATFORM_PC
-    // BFBB_UI: every UI entity as it is built, with the links it carries.
-    //
-    // Sampling the ones that happen to be considered on a frame R1 is pressed
-    // has taken this as far as it goes: it found that the prompt the trigger
-    // shows is only ever made VISIBLE, and that the one entity which is focused
-    // and selected carries no links at all. What is missing is the other half
-    // of the map -- which entity holds the link that asks for a teleport, and
-    // what state it would need to be in to fire it.
-    if (getenv("BFBB_UI") != NULL)
-    {
-        printf("bfbb: ui %08x uiFlags %08x links %u", (unsigned)ent->id,
-               (unsigned)ent->uiFlags, (unsigned)ent->linkCount);
-
-        for (U32 i = 0; i < ent->linkCount; i++)
-        {
-            printf("  [%u: src %u -> %08x dst %u]", (unsigned)i, (unsigned)ent->link[i].srcEvent,
-                   (unsigned)ent->link[i].dstAssetID, (unsigned)ent->link[i].dstEvent);
-        }
-
-        printf("\n");
-        fflush(stdout);
-    }
-#endif
-
     if (ent->uiFlags & 0x4)
     {
         ent->render = NULL;
@@ -524,26 +499,6 @@ void zUI_PreUpdate(_zUI* ent, xScene*, F32)
         }
         }
 
-#ifdef PLATFORM_PC
-        // BFBB_EVENT: why a UI element did or did not see the button.
-        //
-        // Leaving a room is a UI interaction, not a bare trigger: walking in
-        // sends eEventPadPressR1 (69) to a UI entity, and zUI turns a real R1
-        // press into that same event a few lines below. Talking to an NPC reads
-        // globals.pad0->pressed directly and works, so if the door does not,
-        // the difference is one of these gates -- the entity's own uiFlags, or
-        // gTrcPad, which xTRCPad cannot set because retail's is a single blr
-        // and only iPadEnable writes it.
-        if (pad && (pad->pressed & XPAD_BUTTON_R1) && getenv("BFBB_EVENT") != NULL)
-        {
-            printf("bfbb: R1 at ui %08x: uiFlags %08x (need 8 and (2 or 1)), trc %d "
-                   "(need %d), uiButton %08x\n",
-                   (unsigned)ui->id, (unsigned)ui->uiFlags, (int)gTrcPad[0].state,
-                   (int)TRC_PadInserted, (unsigned)ui->uiButton);
-            fflush(stdout);
-        }
-#endif
-
         if (pad && pad->pressed && ui->uiFlags & 0x8 && (ui->uiFlags & 0x2 || ui->uiFlags & 0x1))
         {
             if (gTrcPad[0].state == TRC_PadInserted)
@@ -578,14 +533,6 @@ void zUI_PreUpdate(_zUI* ent, xScene*, F32)
                 if (pad->pressed & XPAD_BUTTON_R1)
                 {
                     ui->uiButton |= XPAD_BUTTON_R1;
-#ifdef PLATFORM_PC
-                    if (getenv("BFBB_EVENT") != NULL)
-                    {
-                        printf("bfbb: CAPTURED R1 on ui %08x (uiFlags %08x)\n",
-                               (unsigned)ui->id, (unsigned)ui->uiFlags);
-                        fflush(stdout);
-                    }
-#endif
                 }
 
                 if (pad->pressed & XPAD_BUTTON_R2)
@@ -668,24 +615,6 @@ void zUI_Update(_zUI* ent, xScene*, F32 dt)
         xModelEval(ent->model);
     }
 
-#ifdef PLATFORM_PC
-    // The far end: the capture loop sets ent->uiButton, this dispatches it. Both
-    // of the capture's gates were measured passing -- uiFlags 0x36 has the bits
-    // it needs and gTrcPad reads 2 -- so if R1 still does nothing, either this
-    // never sees the bit or the else-if chain above R1 swallows the frame.
-    // ANY button, not only R1: this has to tell "the update never sees a button"
-    // apart from "it sees others but not R1", and those have different causes --
-    // the first is ordering against zUI_PreUpdate, which zeroes uiButton before
-    // it captures, and the second is the else-if chain above the R1 arm.
-    if (ent->uiButton != 0 && getenv("BFBB_EVENT") != NULL)
-    {
-        printf("bfbb: zUI_Update %08x uiButton %08x%s, trc %d\n", (unsigned)ent->id,
-               (unsigned)ent->uiButton, (ent->uiButton & XPAD_BUTTON_R1) ? " (has R1)" : "",
-               (int)gTrcPad[0].state);
-        fflush(stdout);
-    }
-#endif
-
     if (ent->uiButton && gTrcPad[0].state == TRC_PadInserted)
     {
         if (ent->uiButton & XPAD_BUTTON_UP)
@@ -714,14 +643,6 @@ void zUI_Update(_zUI* ent, xScene*, F32 dt)
         }
         else if (ent->uiButton & XPAD_BUTTON_R1)
         {
-#ifdef PLATFORM_PC
-            if (getenv("BFBB_EVENT") != NULL)
-            {
-                printf("bfbb: zUI_Update %08x firing eEventPadPressR1\n",
-                       (unsigned)ent->id);
-                fflush(stdout);
-            }
-#endif
             zEntEvent(ent, ent, eEventPadPressR1);
             ent->uiButton = XPAD_BUTTON_R1;
         }
@@ -833,47 +754,6 @@ void zUIRenderAll()
         }
 
     }
-
-#ifdef PLATFORM_PC
-    // BFBB_UI: what is on screen right now, in draw order, twice a second.
-    //
-    // `zUI_Init` says what the ASSET asked for. This says what the scene
-    // settled on, which is the number that decides whether anything is drawn,
-    // and it has to be a RECURRING report rather than a one-off: the list is
-    // built once per scene, when nothing is visible yet, and the menu turns
-    // elements on and off as it goes. A one-off report of the moment an entity
-    // first became visible cannot tell "it is being drawn and comes out wrong"
-    // from "it was drawn during a transition and is hidden now", and those have
-    // nothing in common.
-    if (getenv("BFBB_UI") != NULL)
-    {
-        static U32 frame;
-
-        if ((frame++ % 30) == 0)
-        {
-            S32 shown = 0;
-
-            for (S32 i = 0; i < (S32)sSortedCount; i++)
-            {
-                if (!xEntIsVisible(sSorted[i]))
-                {
-                    continue;
-                }
-
-                shown++;
-                printf("bfbb: uishow %2d %08x %s tex %08x pos %.0f,%.0f %ux%u z %.1f\n", (int)i,
-                       (unsigned)sSorted[i]->id,
-                       (sSorted[i]->baseType == eBaseTypeUIFont) ? "UIFT" : "UI  ",
-                       (unsigned)sSorted[i]->sasset->textureID, sSorted[i]->sasset->pos.x,
-                       sSorted[i]->sasset->pos.y, (unsigned)sSorted[i]->sasset->dim[0],
-                       (unsigned)sSorted[i]->sasset->dim[1], sSorted[i]->sasset->pos.z);
-            }
-
-            printf("bfbb: uishow --- %d of %u visible\n", (int)shown, (unsigned)sSortedCount);
-            fflush(stdout);
-        }
-    }
-#endif
 
     bool rendering_models = false;
 
@@ -1012,49 +892,6 @@ void zUI_Render(xEnt* ent)
                 RwRenderStateSet(rwRENDERSTATESHADEMODE, (void*)rwSHADEMODEFLAT);
                 RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, 0);
 
-#ifdef PLATFORM_PC
-                // BFBB_UI: what the textured branch actually hands the device.
-                //
-                // A 2D quad that does not appear has failed at one of four
-                // places and they look identical on screen: the entity is never
-                // visible so this is never reached, the texture id resolves to
-                // nothing, it resolves to a texture with no raster, or the
-                // rectangle is off-screen or inside out. Naming all four at the
-                // point of submission separates them in one run.
-                //
-                // Once per entity id, not once per frame: this is inside the
-                // render loop and every UI element in the menu passes through it
-                // sixty times a second.
-                if (getenv("BFBB_UI") != NULL)
-                {
-                    static U32 said[64];
-                    static U32 said_count;
-
-                    bool seen = false;
-
-                    for (U32 i = 0; i < said_count; i++)
-                    {
-                        if (said[i] == ui->id)
-                        {
-                            seen = true;
-                            break;
-                        }
-                    }
-
-                    if (!seen && said_count < 64)
-                    {
-                        said[said_count++] = ui->id;
-
-                        printf("bfbb: uidraw %08x tex %08x -> %s raster %s  rect %.0f,%.0f "
-                               "%.0fx%.0f  uv %.2f,%.2f..%.2f,%.2f  z %g\n",
-                               (unsigned)ui->id, (unsigned)ui->sasset->textureID,
-                               texture ? "found" : "MISSING", raster ? "yes" : "NULL", x1, y1,
-                               x2 - x1, y2 - y1, u1, v1, u3, v3, cz);
-                        fflush(stdout);
-                    }
-                }
-#endif
-
                 RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex, 4, Index, 6);
             }
             else if (ui->model != NULL)
@@ -1112,33 +949,12 @@ S32 zUIEventCB(xBase*, xBase* to, U32 toEvent, const F32* toParam, xBase*)
     {
     case eEventVisible:
     {
-#ifdef PLATFORM_PC
-        // BFBB_UI: the show/hide traffic itself.
-        //
-        // A menu screen is a cascade -- one element is turned on and its links
-        // turn on its backdrop, its panel and its text -- so an element that is
-        // not on screen has either never been sent this, or been sent it and
-        // then sent the opposite. Only the traffic separates those, and the
-        // difference decides whether to go looking upstream or downstream.
-        if (getenv("BFBB_UI") != NULL)
-        {
-            printf("bfbb: uivis %08x SHOW\n", (unsigned)s->id);
-            fflush(stdout);
-        }
-#endif
         xEntShow(s);
         gUIMgr.Touch(s);
         break;
     }
     case eEventInvisible:
     {
-#ifdef PLATFORM_PC
-        if (getenv("BFBB_UI") != NULL)
-        {
-            printf("bfbb: uivis %08x HIDE\n", (unsigned)s->id);
-            fflush(stdout);
-        }
-#endif
         xEntHide(s);
         gUIMgr.Touch(s);
         break;
@@ -1150,14 +966,6 @@ S32 zUIEventCB(xBase*, xBase* to, U32 toEvent, const F32* toParam, xBase*)
     }
     case eEventUISelect:
     {
-#ifdef PLATFORM_PC
-        if (getenv("BFBB_EVENT") != NULL)
-        {
-            printf("bfbb: ui %08x SELECTED (uiFlags %08x -> %08x)\n", (unsigned)s->id,
-                   (unsigned)s->uiFlags, (unsigned)(s->uiFlags | 0x2));
-            fflush(stdout);
-        }
-#endif
         if (s->id == xStrHash("MNU4 CONTROL MUSIC GC/XB UIF"))
         {
             xSndPauseCategory(SND_CAT_UI, 0);
@@ -1187,14 +995,6 @@ S32 zUIEventCB(xBase*, xBase* to, U32 toEvent, const F32* toParam, xBase*)
     }
     case eEventUIFocusOn:
     {
-#ifdef PLATFORM_PC
-        if (getenv("BFBB_EVENT") != NULL)
-        {
-            printf("bfbb: ui %08x FOCUSED (uiFlags %08x -> %08x)\n", (unsigned)s->id,
-                   (unsigned)s->uiFlags, (unsigned)(s->uiFlags | 0x8));
-            fflush(stdout);
-        }
-#endif
         s->uiFlags |= 0x8;
 
         gUIMgr.Touch(s);

@@ -194,40 +194,6 @@ static bool blendFactorAccepted(RwRenderState state, RwUInt32 value)
     return value >= rwBLENDZERO && value <= rwBLENDINVDESTALPHA;
 }
 
-// BFBB_BLEND: the blend factors the shim refused, once per state and value.
-//
-// A refusal is silent by design -- that is what the console does -- so there
-// is otherwise nothing to see when an effect quietly keeps the previous
-// factor. This says which ones were asked for and turned down, which is the
-// difference between "the validation is doing its job" and "the validation
-// ate a blend the game needed".
-static void reportRefusedBlend(RwRenderState state, RwUInt32 value)
-{
-    if (getenv("BFBB_BLEND") == NULL)
-    {
-        return;
-    }
-
-    // Two slots, and one flag per value the enumeration can hold. Anything
-    // outside it is reported every time, which is what a value that far wrong
-    // deserves.
-    static bool seen[2][16];
-    const int slot = (state == rwRENDERSTATESRCBLEND) ? 0 : 1;
-
-    if (value < 16)
-    {
-        if (seen[slot][value])
-        {
-            return;
-        }
-        seen[slot][value] = true;
-    }
-
-    printf("bfbb: blend %s factor %u refused, as the GameCube driver refuses it\n",
-           slot == 0 ? "src" : "dest", (unsigned)value);
-    fflush(stdout);
-}
-
 // ---------------------------------------------------------------------------
 
 RwBool RwRenderStateSet(RwRenderState state, void* value)
@@ -269,7 +235,6 @@ RwBool RwRenderStateSet(RwRenderState state, void* value)
     case rwRENDERSTATESRCBLEND:
         if (!blendFactorAccepted(state, uvalue))
         {
-            reportRefusedBlend(state, uvalue);
             return FALSE;
         }
         sState.SrcBlend = (RwBlendFunction)uvalue;
@@ -279,7 +244,6 @@ RwBool RwRenderStateSet(RwRenderState state, void* value)
     case rwRENDERSTATEDESTBLEND:
         if (!blendFactorAccepted(state, uvalue))
         {
-            reportRefusedBlend(state, uvalue);
             return FALSE;
         }
         sState.DestBlend = (RwBlendFunction)uvalue;

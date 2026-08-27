@@ -133,66 +133,6 @@ static rw::Texture* convertRasterToPlatform(rw::Texture* texture, void* data)
         }
     }
 
-    // BFBB_TEXRGB=<substring>: the mean colour of a converted texture, by name.
-    //
-    // The question this answers is narrower than BFBB_TEXDUMP's and does not
-    // need a PNG to look at: are the channels in the order the artist put them
-    // in, or have red and blue traded places somewhere in the conversion?
-    //
-    // A mean is enough to tell, because the interesting textures are not
-    // grey -- rainbowfilm_smooth32 reads (R 144, G 97, B 106) out of the Xbox
-    // asset as BGRA, and (R 106, G 97, B 144) if the same bytes are taken for
-    // RGBA. Those are far enough apart that one number decides it, and the
-    // asset value is known independently, so this is a comparison against
-    // ground truth rather than against an expectation.
-    //
-    // Matched on a substring of the name so one texture can be asked about
-    // without the other six thousand: BFBB_TEXRGB=rainbowfilm. An empty value
-    // matches everything.
-    const char* texrgb = getenv("BFBB_TEXRGB");
-    if (texrgb != NULL && texture->raster != NULL && texture->name != NULL &&
-        (texrgb[0] == '\0' || strstr(texture->name, texrgb) != NULL))
-    {
-        rw::Image* img = texture->raster->toImage();
-
-        if (img != NULL)
-        {
-            if (img->depth != 32)
-            {
-                img->convertTo32();
-            }
-
-            double sr = 0.0, sg = 0.0, sb = 0.0, sa = 0.0;
-            rw::int32 n = 0;
-
-            for (rw::int32 y = 0; y < img->height; y++)
-            {
-                const rw::uint8* row = img->pixels + (size_t)y * img->stride;
-                for (rw::int32 x = 0; x < img->width; x++)
-                {
-                    // Image pixels are RGBA once converted, which is librw's
-                    // own order and NOT the raster's.
-                    sr += row[x * 4 + 0];
-                    sg += row[x * 4 + 1];
-                    sb += row[x * 4 + 2];
-                    sa += row[x * 4 + 3];
-                    n++;
-                }
-            }
-
-            if (n > 0)
-            {
-                printf("bfbb: texrgb '%s' %dx%d was %04x now %04x | mean R %.1f G %.1f B %.1f "
-                       "A %.1f\n",
-                       texture->name, (int)img->width, (int)img->height, (unsigned)wasFormat,
-                       (unsigned)texture->raster->format, sr / n, sg / n, sb / n, sa / n);
-                fflush(stdout);
-            }
-
-            img->destroy();
-        }
-    }
-
     if (paddedRGB && texture->raster != NULL)
     {
         // Opaque, because that is what C888 meant.

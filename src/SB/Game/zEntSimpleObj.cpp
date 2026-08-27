@@ -1,14 +1,5 @@
 #include "zEntSimpleObj.h"
 
-#ifdef PLATFORM_PC
-#include "zGlobals.h"
-
-extern unsigned gBFBBCurrentSimpleObj;
-
-#include <stdio.h>
-#include <stdlib.h>
-#endif
-
 #include <types.h>
 
 struct zSimpleMgr
@@ -277,59 +268,7 @@ void zEntSimpleObj_MgrUpdateRender(RpWorld* world, F32 dt)
                     iModelAnimMatrices(model->Data, q0, t0, model->Mat + 1);
                 }
                 xLightKit_Enable(ent->lightKit, globals.currWorld);
-#ifdef PLATFORM_PC
-                // BFBB_TREE: which simple objects are drawn unlit, and why.
-                //
-                // librw's lighting sets the ambient to BLACK and uploads no
-                // lights when the world has none, and xLightKit_Enable switches
-                // the baked vertex colours off (iModelHack_DisablePrelight)
-                // while a kit is active -- so an object whose kit is missing or
-                // empty has neither, and renders black rather than merely dim.
-                //
-                // Reported per object rather than sampled, and keyed on the
-                // asset id, so the tree can be told apart from everything else
-                // drawn in the same pass and then looked up in the packages.
-                // Each id is printed once; the answer does not change per frame
-                // and a per-frame log would bury it.
-                if (getenv("BFBB_TREE") != NULL)
-                {
-                    static U32 sSeen[256];
-                    static S32 sSeenCount;
-
-                    S32 known = 0;
-                    for (S32 k = 0; k < sSeenCount; k++)
-                    {
-                        if (sSeen[k] == ent->id)
-                        {
-                            known = 1;
-                            break;
-                        }
-                    }
-
-                    if (!known && sSeenCount < 256)
-                    {
-                        sSeen[sSeenCount++] = ent->id;
-
-                        // The world's own light count is deliberately not read
-                        // here: reaching rw::World from game code drags librw's
-                        // headers in and they collide with these. BFBB_LIGHT
-                        // already reports that side; what only this site can say
-                        // is whose kit was enabled immediately before the draw.
-                        printf("bfbb: simpleobj %08x model %08x | lightKit %s, %d lights\n",
-                               (unsigned)ent->id, (unsigned)ent->asset->modelInfoID,
-                               ent->lightKit ? "yes" : "NULL",
-                               ent->lightKit ? (int)ent->lightKit->lightCount : 0);
-                        fflush(stdout);
-                    }
-                }
-#endif
-#ifdef PLATFORM_PC
-                gBFBBCurrentSimpleObj = (unsigned)ent->id;
-#endif
                 zEntSimpleObj_Render(ent);
-#ifdef PLATFORM_PC
-                gBFBBCurrentSimpleObj = 0;
-#endif
                 if ((picklod == 0) && ((u16)xrand() < 0x55U))
                 {
                     xVec3 blob_posrnd = { 0.25f, 1.0f, 0.25f };
