@@ -6,6 +6,7 @@
 // rather than an assertion.
 
 #include <math.h>
+#include "xordarray.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1392,6 +1393,148 @@ static F32 row_len(const F32* m)
     return sqrtf(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
 }
 
+// xordarray allocates through the game's heap. The ordering test builds its
+// array by hand and never calls XOrdInit, so these exist only to satisfy the
+// linker; malloc is a truthful stand-in for the one path that could reach them.
+U32 gActiveHeap = 0;
+
+void* xMemAlloc(U32, U32 size, S32)
+{
+    return malloc(size);
+}
+
+void* xMemPushTemp(U32 size)
+{
+    return malloc(size);
+}
+
+void xMemPopTemp(void* memory)
+{
+    free(memory);
+}
+
+// The NPC list's ordering, which is what makes talking to a character work.
+//
+// zNPCMgr keeps every NPC in an st_XORDEREDARRAY sorted by id, and
+// zNPCMsg_SendMsg resolves a message's target through XOrdLookup -- a BINARY
+// search. An ordering that disagrees with the lookup's key does not make the
+// search slow, it makes it fail, and a dropped NPC_MID_TALKSTART is a character
+// that cannot be talked to.
+//
+// The hazard is the object layout. Retail's comparators read the id as
+// *(U32*)p, offset zero of the object, which is where CodeWarrior leaves
+// xBase::id because it places the vptr at the first virtual's declaration. The
+// MSVC ABI puts the vptr at offset zero and moves id to four, so the same
+// expression yields a vtable address. These stand-ins have that same shape: a
+// vptr the compiler puts first, and an id behind it.
+struct ord_npc
+{
+    virtual ~ord_npc()
+    {
+    }
+    U32 id;
+};
+
+// Retail's expression, which on a host reads the vptr rather than the id.
+static S32 ord_comp_offset0(void* vkey, void* vitem)
+{
+    U32 key = *(U32*)vkey;
+    U32 item = *(U32*)vitem;
+    return key < item ? -1 : (key > item ? 1 : 0);
+}
+
+// The port's, reading both sides through the type -- the shape
+// zNPCMgr_OrdComp_npcid now has.
+static S32 ord_comp_typed(void* vkey, void* vitem)
+{
+    U32 key = ((ord_npc*)vkey)->id;
+    U32 item = ((ord_npc*)vitem)->id;
+    return key < item ? -1 : (key > item ? 1 : 0);
+}
+
+static S32 ord_test_typed(const void* vkey, void* vitem)
+{
+    void* key = (void*)((ord_npc*)vitem)->id;
+    return vkey < key ? -1 : (vkey > key ? 1 : 0);
+}
+
+static void test_npc_ordering()
+{
+    printf("NPC id ordering (XOrdSort / XOrdLookup)\n");
+
+    check(__builtin_offsetof(ord_npc, id) != 0,
+          "a polymorphic object does not keep its id at offset 0 here");
+
+    // Ids as they really are: xStrHash output, unordered, and above 2^31 often
+    // enough that a signed compare would be its own bug.
+    static const U32 ids[8] = { 0x9995ADB1, 0x1C0FE2A3, 0xF00DBEEF, 0x00000042,
+                                0x7FFFFFFF, 0x80000000, 0xABCDEF01, 0x0000A5A5 };
+
+    ord_npc objs[8];
+    for (S32 i = 0; i < 8; i++)
+    {
+        objs[i].id = ids[i];
+    }
+
+    void* slots[8];
+    st_XORDEREDARRAY arr;
+    arr.list = slots;
+    arr.cnt = 8;
+    arr.max = 8;
+
+    // Sorted the way retail's expression sorts on a host: by vtable pointer,
+    // which every one of these objects shares, so nothing moves.
+    for (S32 i = 0; i < 8; i++)
+    {
+        slots[i] = &objs[i];
+    }
+    XOrdSort(&arr, ord_comp_offset0);
+
+    S32 found_offset0 = 0;
+    for (S32 i = 0; i < 8; i++)
+    {
+        if (XOrdLookup(&arr, (const void*)ids[i], ord_test_typed) >= 0)
+        {
+            found_offset0++;
+        }
+    }
+    check(found_offset0 < 8,
+          "reading the key at offset 0 leaves the list unsorted and lookups fail");
+
+    // Sorted through the type.
+    for (S32 i = 0; i < 8; i++)
+    {
+        slots[i] = &objs[i];
+    }
+    XOrdSort(&arr, ord_comp_typed);
+
+    S32 ascending = 1;
+    for (S32 i = 1; i < 8; i++)
+    {
+        if (((ord_npc*)slots[i - 1])->id > ((ord_npc*)slots[i])->id)
+        {
+            ascending = 0;
+        }
+    }
+    check(ascending == 1, "sorting through the type orders the list by id");
+
+    S32 found = 0;
+    for (S32 i = 0; i < 8; i++)
+    {
+        S32 idx = XOrdLookup(&arr, (const void*)ids[i], ord_test_typed);
+        if (idx >= 0 && ((ord_npc*)slots[idx])->id == ids[i])
+        {
+            found++;
+        }
+    }
+    check(found == 8, "every NPC id is then found by the binary search");
+
+    // The lookup must also not invent a hit, or a message would go to the wrong
+    // NPC rather than nowhere.
+    check(XOrdLookup(&arr, (const void*)0x13579BDF, ord_test_typed) < 0,
+          "an id that is not in the list is not found");
+}
+
 static void test_flykey()
 {
     printf("FLY asset (fly camera keys)\n");
@@ -1593,6 +1736,7 @@ int main()
     test_snd();
     test_hip();
     test_flykey();
+    test_npc_ordering();
 
     printf("\n%s (%d failure%s)\n", failures ? "FAILED" : "passed", failures,
            failures == 1 ? "" : "s");

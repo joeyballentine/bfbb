@@ -740,11 +740,31 @@ S32 zNPCMgr_OrdComp_npcid(void* vkey, void* vitem)
     U32 item;
     U32 key;
 
-    key = *(U32*)vkey;
 #ifdef PLATFORM_PC
-    // vitem is the object; vkey is a pointer to a plain id and needs nothing.
+    // BOTH arguments are list elements. XOrdSort's inner loop is
+    // `test(v, list[j - h])`, where v is also a list entry -- there is no
+    // separate key here the way there is in XOrdLookup, so vkey needs exactly
+    // the same base adjustment vitem does.
+    //
+    // Reading the key as *(U32*)vkey is retail's expression and is right on the
+    // console, where CodeWarrior places the vptr at the first virtual's
+    // declaration rather than at offset 0, leaving xBase::id sitting at 0. The
+    // MSVC ABI puts the vptr at 0 and pushes id to offset 4, so that read
+    // returns a vtable address and the sort compares vtable pointers against
+    // ids. Every zNPCCommon of the same type shares one vtable, so the compare
+    // is not merely wrong, it is constant across most of the list and the
+    // result is not ordered by id at all.
+    //
+    // XOrdLookup is a BINARY search, so an unsorted list does not degrade to a
+    // slow search, it fails outright: zNPCMsg_SendMsg's lookup returns -1,
+    // npc_sendto stays NULL, NPCMessage is never delivered, and
+    // zNPCGoalPlayerNear never sets flg_plyrnear bit 0. That is every talkable
+    // character in the game, which is how this presented -- R1 passed all three
+    // of the goal's own conditions and nothing happened.
+    key = ((zNPCCommon*)vkey)->id;
     item = ((zNPCCommon*)vitem)->id;
 #else
+    key = *(U32*)vkey;
     item = *(U32*)vitem;
 #endif
     if (key < item)

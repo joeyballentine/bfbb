@@ -445,7 +445,26 @@ add_test(NAME rw_selftest COMMAND rw_selftest)
 #
 # main() is the game's own, in src/SB/Game/zMain.cpp -- nothing here supplies an
 # entry point.
-add_executable(bfbb ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/pc/bfbb_main.cpp)
+# The icon is a Windows resource, so it is a source file of the executable
+# rather than anything the linker is told about separately. Only Windows has
+# the concept; on a host without a resource compiler the list is simply empty
+# and the binary has no icon, which is not worth failing a build over.
+set(BFBB_EXE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/pc/bfbb_main.cpp)
+
+if(WIN32)
+  # CMake only knows how to build .rc files if RC is an enabled language, and
+  # enabling it is what finds llvm-rc (or rc.exe) and sets CMAKE_RC_COMPILER.
+  enable_language(RC OPTIONAL)
+
+  if(CMAKE_RC_COMPILER)
+    list(APPEND BFBB_EXE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/pc/res/bfbb.rc)
+    message(STATUS "bfbb: icon resource via ${CMAKE_RC_COMPILER}")
+  else()
+    message(STATUS "bfbb: no resource compiler found, executable will have no icon")
+  endif()
+endif()
+
+add_executable(bfbb ${BFBB_EXE_SOURCES})
 target_link_libraries(bfbb PRIVATE bfbb_game bfbb_platform bfbb_rw)
 target_compile_options(bfbb PRIVATE -Wno-everything)
 
@@ -480,6 +499,11 @@ add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   # is what makes its eviction and pinning rules testable at all; the real
   # xstransvc closure is far too large for this target.
   ${PC_DIR}/iSndData.cpp
+
+  # xordarray is the NPC list's container. It is linked rather than doubled
+  # because the ordering test's whole point is that XOrdSort and XOrdLookup
+  # agree with each other, which only the real pair can show.
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x/xordarray.cpp
 
   # The three files copied from gc/ are deliberately absent from this target.
   #
