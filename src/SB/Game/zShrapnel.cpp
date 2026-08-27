@@ -1432,7 +1432,7 @@ static void zShrapnel_BB03FloorInit(zShrapnelAsset* shrap, xModelInstance* paren
         return;
     }
 
-    if (((zFragAsset*)(shrap + 1))->type != eFragProjectile)
+    if (shrap->fassetCount != 4)
     {
         return;
     }
