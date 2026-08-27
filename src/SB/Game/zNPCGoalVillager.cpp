@@ -1,5 +1,10 @@
 #include <types.h>
 
+#ifdef PLATFORM_PC
+#include <stdio.h>
+#include <stdlib.h>
+#endif
+
 #include "xJaw.h"
 #include "xMath.h"
 #include "xMathInlines.h"
@@ -234,6 +239,27 @@ S32 zNPCGoalPlayerNear::Process(en_trantype* trantype, F32 dt, void* updCtxt, xS
             talk_font->On(npc, 0);
         }
     }
+
+#ifdef PLATFORM_PC
+    // BFBB_TALK: why pressing R1 next to a villager did nothing.
+    //
+    // The backend produces the bit -- BFBB_PAD shows R1 whenever the right
+    // trigger goes down -- so the fault is one of the three conditions below,
+    // and they fail for different reasons: no talk widget was acquired, this
+    // NPC is not the one holding it, or it is held but not shown. Reported only
+    // on the frame R1 is actually pressed, so it says nothing until the player
+    // tries.
+    if ((globals.pad0->pressed & XPAD_BUTTON_R1) && getenv("BFBB_TALK") != NULL)
+    {
+        printf("bfbb: R1 near npc %u: talk_font %s, locker %s, visible %s, dist %.2f "
+               "(show %.2f hide %.2f)\n",
+               (unsigned)npc->id, talk_font != NULL ? "yes" : "NULL",
+               (talk_font != NULL && talk_font->NPCIsTheLocker(npc)) ? "yes" : "no",
+               (talk_font != NULL && talk_font->IsVisible()) ? "yes" : "no",
+               (double)xsqrt(dist_sq), (double)rad_taskshow, (double)rad_taskhide);
+        fflush(stdout);
+    }
+#endif
 
     if (talk_font != NULL && talk_font->NPCIsTheLocker(npc) && talk_font->IsVisible())
     {
