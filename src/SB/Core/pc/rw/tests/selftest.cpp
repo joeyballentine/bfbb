@@ -37,6 +37,11 @@
 
 static int failures;
 
+// Set when the render backend could not be opened. Everything after
+// test_engine_startup dereferences an open engine, so the run stops rather than
+// segfaulting in whichever test touches one first.
+static bool sEngineUnusable;
+
 static void check(bool ok, const char* what)
 {
     printf("  %-58s %s\n", what, ok ? "ok" : "FAIL");
@@ -147,6 +152,13 @@ static void test_engine_startup()
     if (RwEngineInstance->engineStatus != rwENGINESTATUSOPENED)
     {
         check(false, "engineStatus is OPENED -- stopping, the rest needs an open engine");
+
+        // And stop the WHOLE run, not just this function. Everything below
+        // dereferences an open engine, so carrying on segfaults in the first
+        // test that touches one -- which reads as a broken shim when the real
+        // answer is already printed above, usually that no adapter reported
+        // hardware support because the display is asleep.
+        sEngineUnusable = true;
         return;
     }
     check(true, "engineStatus is OPENED");
@@ -2610,6 +2622,14 @@ int main()
     setvbuf(stdout, NULL, _IONBF, 0);
 
     test_engine_startup();
+
+    if (sEngineUnusable)
+    {
+        printf("\nthe render backend could not be opened -- see above; %d failure%s\n",
+               failures, failures == 1 ? "" : "s");
+        return 1;
+    }
+
     test_frames();
     test_values();
     test_streams();

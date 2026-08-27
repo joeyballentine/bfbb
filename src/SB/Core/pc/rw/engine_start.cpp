@@ -234,6 +234,12 @@ RwBool RwEngineInit(const RwMemoryFunctions* memFuncs, RwUInt32 initFlags, RwUIn
     return TRUE;
 }
 
+#ifdef RW_D3D9
+// The probe's IDirect3D9, kept alive for as long as the engine is open. See the
+// comment at the probe in RwEngineOpen for why it is not released there.
+static IDirect3D9* sProbeD3D9;
+#endif
+
 RwBool RwEngineOpen(RwEngineOpenParams* initParams)
 {
     if (RwEngineInstance == NULL)
@@ -307,7 +313,18 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
             }
         }
 
-        probe->Release();
+        // NOT released here.
+        //
+        // Releasing the last reference tears down D3D9's process-wide state,
+        // and openD3D creates a second IDirect3D9 a few instructions later --
+        // a destroy/recreate cycle that this machine has been seen to fault
+        // inside, at Direct3DCreate9Ex+0x25472 writing address 0x14, with the
+        // probe itself having succeeded moments before. Holding the reference
+        // keeps that state alive across the handover, which is also what an
+        // ordinary D3D application does: it creates the object once.
+        //
+        // Released in RwEngineClose, beside the engine it belongs to.
+        sProbeD3D9 = probe;
 
         if (!haveHardwareAdapter)
         {
@@ -433,6 +450,16 @@ RwBool RwEngineClose(void)
     {
         return FALSE;
     }
+
+#ifdef RW_D3D9
+    // After librw has closed its own, so that the probe's reference is the last
+    // one released rather than the one that pulls D3D9 down early.
+    if (sProbeD3D9 != NULL)
+    {
+        sProbeD3D9->Release();
+        sProbeD3D9 = NULL;
+    }
+#endif
 
     sGlobals.engineStatus = rwENGINESTATUSINITED;
     return TRUE;

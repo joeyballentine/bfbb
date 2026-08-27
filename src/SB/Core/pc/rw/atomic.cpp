@@ -11,6 +11,8 @@
 #include <rwcore.h>
 #include <rpcollis.h>
 #include <rpworld.h>
+
+#include "convert.h"
 #include <rtintsec.h>
 
 #include "intersect.h"
@@ -450,6 +452,10 @@ RpAtomic* RpAtomicStreamRead(RwStream* stream)
         a->destroy();
         return NULL;
     }
+
+    // After the plugins, because the skin is one of them and converting is what
+    // fills its bone weights. See convert.cpp.
+    rwConvertAtomicToCurrentPlatform(a);
 
     return reinterpret_cast<RpAtomic*>(a);
 }

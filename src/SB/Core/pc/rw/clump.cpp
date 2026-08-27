@@ -13,6 +13,7 @@
 #include <rpworld.h>
 
 #include "stream.h"
+#include "convert.h"
 
 #include <stdio.h> // brings in librw's rw.h, which must not be included twice
 
@@ -52,6 +53,13 @@ RpClump* RpClumpStreamRead(RwStream* stream)
     {
         return NULL;
     }
+
+    // The assets are Xbox and the renderer is D3D9, which to librw are two
+    // different platforms. Nothing in librw converts a geometry off the one it
+    // was authored for -- the same gap as Raster::convertTexToCurrentPlatform,
+    // and with a louder symptom, since an unconverted skin renders with empty
+    // bone weights. See convert.cpp.
+    rwConvertClumpToCurrentPlatform(clump);
 
     // **An atomic with no geometry is a trap, and it is worth saying so here.**
     //

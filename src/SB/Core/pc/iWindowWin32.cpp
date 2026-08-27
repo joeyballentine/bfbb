@@ -61,6 +61,21 @@ S32 iWindowOpen(const iWindowParams* params)
         return FALSE;
     }
 
+    // Keep the display awake for as long as the game is up.
+    //
+    // The WM_SYSCOMMAND refusal below is not enough on its own: it only reaches
+    // the foreground window and only once there IS one being pumped, so it does
+    // nothing about a screensaver that is already running when the process
+    // starts. This is the API that actually says "do not blank the screen", and
+    // it applies from here rather than from the first frame.
+    //
+    // It matters more than a blanked screen would suggest. When the display
+    // sleeps, this machine's adapters stop reporting D3DDEVTYPE_HAL, so
+    // RenderWare startup fails outright -- and before the probe in
+    // rw/engine_start.cpp existed, it faulted inside D3D9 instead of saying so.
+    // A screensaver could take the game down.
+    SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED);
+
     sInstance = GetModuleHandleA(NULL);
 
     WNDCLASSEXA wc = {};
@@ -114,6 +129,10 @@ void iWindowClose()
     }
 
     UnregisterClassA(kClassName, sInstance);
+
+    // Hand the display back. ES_CONTINUOUS on its own clears the request
+    // without asserting anything in its place.
+    SetThreadExecutionState(ES_CONTINUOUS);
 }
 
 void iWindowPump()
