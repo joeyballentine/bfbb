@@ -1,5 +1,10 @@
 #include "zUI.h"
 
+#ifdef PLATFORM_PC
+#include <stdio.h>
+#include <stdlib.h>
+#endif
+
 #include "zAnimList.h"
 #include "zGlobals.h"
 #include "zUIFont.h"
@@ -493,6 +498,26 @@ void zUI_PreUpdate(_zUI* ent, xScene*, F32)
             break;
         }
         }
+
+#ifdef PLATFORM_PC
+        // BFBB_EVENT: why a UI element did or did not see the button.
+        //
+        // Leaving a room is a UI interaction, not a bare trigger: walking in
+        // sends eEventPadPressR1 (69) to a UI entity, and zUI turns a real R1
+        // press into that same event a few lines below. Talking to an NPC reads
+        // globals.pad0->pressed directly and works, so if the door does not,
+        // the difference is one of these gates -- the entity's own uiFlags, or
+        // gTrcPad, which xTRCPad cannot set because retail's is a single blr
+        // and only iPadEnable writes it.
+        if (pad && (pad->pressed & XPAD_BUTTON_R1) && getenv("BFBB_EVENT") != NULL)
+        {
+            printf("bfbb: R1 at ui %08x: uiFlags %08x (need 8 and (2 or 1)), trc %d "
+                   "(need %d), uiButton %08x\n",
+                   (unsigned)ui->id, (unsigned)ui->uiFlags, (int)gTrcPad[0].state,
+                   (int)TRC_PadInserted, (unsigned)ui->uiButton);
+            fflush(stdout);
+        }
+#endif
 
         if (pad && pad->pressed && ui->uiFlags & 0x8 && (ui->uiFlags & 0x2 || ui->uiFlags & 0x1))
         {

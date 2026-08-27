@@ -52,10 +52,13 @@ S32 zPortalEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam, xBas
     // the player is detected inside triggers, the enter event fires, and every
     // link resolves its destination -- so if a portal never hears from one, the
     // link is carrying an event it does not act on.
-    if (getenv("BFBB_EVENT") != NULL)
+    // Only what it acts on, and only when it acts. A scene load sends every
+    // portal in it a handful of init events, which drowns the one line that
+    // matters.
+    if (toEvent == eEventTeleportPlayer && getenv("BFBB_EVENT") != NULL)
     {
-        printf("bfbb: portal %08x got event %u (acts on %u)\n", (unsigned)to->id,
-               (unsigned)toEvent, (unsigned)eEventTeleportPlayer);
+        printf("bfbb: portal %08x got eEventTeleportPlayer, health %d\n", (unsigned)to->id,
+               (int)globals.player.Health);
         fflush(stdout);
     }
 #endif

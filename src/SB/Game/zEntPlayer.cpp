@@ -13639,7 +13639,7 @@ void zEntPlayerCollTrigger(xEnt* ent, xScene* sc)
         if (inside && getenv("BFBB_EVENT") != NULL)
         {
             static int said = 0;
-            if (said < 30)
+            if (said < 400)
             {
                 said++;
                 printf("bfbb: player inside trigger %08x (entered %u, flags %02x)\n",

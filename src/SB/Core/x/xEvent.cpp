@@ -136,10 +136,18 @@ void zEntEvent(xBase* from, U32 fromEvent, xBase* to, U32 toEvent, const F32* to
                     // are travelling -- a trigger whose link carries the wrong
                     // dstEvent reaches its portal and asks it for the wrong
                     // thing, and that is as silent as not arriving.
-                    if (getenv("BFBB_EVENT") != NULL)
+                    // Filtered rather than capped. A scene load broadcasts
+                    // init events to every object in it, which exhausted a flat
+                    // budget of sixty lines before the player had moved -- so
+                    // the log went quiet exactly when the interesting scene
+                    // started. Only player enter/exit links and anything asking
+                    // for a teleport are worth a line.
+                    if (getenv("BFBB_EVENT") != NULL &&
+                        (idx->srcEvent == eEventEnterPlayer || idx->srcEvent == eEventExitPlayer ||
+                         idx->dstEvent == eEventTeleportPlayer))
                     {
                         static int said = 0;
-                        if (said < 60)
+                        if (said < 200)
                         {
                             said++;
                             printf("bfbb: link %08x src %u -> %08x dst %u  %s\n",

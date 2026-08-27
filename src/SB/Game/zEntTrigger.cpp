@@ -74,7 +74,7 @@ void zEntTriggerUpdate(zEntTrigger* trig, xScene*, F32)
     if (getenv("BFBB_EVENT") != NULL)
     {
         static int census = 0;
-        if (census < 24)
+        if (census < 200)
         {
             census++;
             xLinkAsset* l = trig->link;
