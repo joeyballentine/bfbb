@@ -62,6 +62,36 @@ void zEntTriggerInit(zEntTrigger* ent, xEntAsset* asset)
 
 void zEntTriggerUpdate(zEntTrigger* trig, xScene*, F32)
 {
+#ifdef PLATFORM_PC
+    // BFBB_EVENT, part one: is this trigger even being asked?
+    //
+    // The collide report below only fires when the volume test passes, so
+    // silence there means one of four things and does not say which: the update
+    // never ran, the trigger is disabled, its link is not an enter/exit link, or
+    // the entity it watches did not resolve. A trigger that watches an entity
+    // zSceneFindObject cannot find can never fire, and looks exactly like one
+    // the player never walked into.
+    if (getenv("BFBB_EVENT") != NULL)
+    {
+        static int census = 0;
+        if (census < 24)
+        {
+            census++;
+            xLinkAsset* l = trig->link;
+            printf("bfbb: trigger %08x %s links %u", (unsigned)trig->id,
+                   xBaseIsEnabled(trig) ? "enabled" : "DISABLED", (unsigned)trig->linkCount);
+            if (trig->linkCount != 0 && l != NULL)
+            {
+                printf(" src %u chk %08x -> %s", (unsigned)l->srcEvent, (unsigned)l->chkAssetID,
+                       l->chkAssetID ? (zSceneFindObject(l->chkAssetID) ? "found" : "NOT FOUND")
+                                     : "none");
+            }
+            printf("\n");
+            fflush(stdout);
+        }
+    }
+#endif
+
     if (xBaseIsEnabled(trig))
     {
         U32 i;
