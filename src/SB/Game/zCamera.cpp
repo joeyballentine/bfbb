@@ -315,6 +315,24 @@ static S32 zCameraFlyUpdate(xCamera* cam, F32 dt)
     flyIdx = numKeys + 2 < flySize ? numKeys + 2 : numKeys + 1;
     keys[3] = *((zFlyKey*)zcam_flydata + flyIdx);
 
+#ifdef PLATFORM_PC
+    // The four keys are already in host order, so nothing happens here.
+    //
+    // A FLY asset is authored little-endian and shipped that way on every
+    // platform -- the packer never touches the payload. That is why the
+    // GameCube arm below exists at all: the console has to flip all 64 words of
+    // the four keys it just copied before it can read a float out of them. A
+    // little-endian host does not, and running the flip anyway turns the one
+    // piece of data the flythrough has into noise -- key 0 of hb01_flythrough
+    // is the identity basis, and byte-reversed its first element reads
+    // 4.6e-41 instead of 1.0. Every matrix xQuatFromMat then sees is garbage,
+    // which is the whole flythrough.
+    //
+    // Retail's own source must have had this under a platform ifdef for the
+    // same reason; the decomp only ever saw the GameCube arm of it. The
+    // little-endian asset layout is checked in tests/selftest.cpp against the
+    // bytes of the shipping asset.
+#else
     // Reverses the byte order (endianness) of 64 4-byte blocks
     S8* framePtr = (S8*)&keys[0].frame;
     for (i = 64; i > 0; i--)
@@ -328,6 +346,7 @@ static S32 zCameraFlyUpdate(xCamera* cam, F32 dt)
 
         framePtr += 4;
     }
+#endif
 
     if (0 < numKeys)
     {

@@ -6,6 +6,7 @@
 // rather than an assertion.
 
 #include <math.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,6 +29,9 @@
 #include "iTime.h"
 #include "xFile.h"
 #include "xMemMgr.h"
+
+// Only for zFlyKey, whose layout test_flykey checks against the shipping asset.
+#include "zCamera.h"
 
 // iMemInit fills this in. It lives in xMemMgr.cpp, which needs the renderer to
 // build, so the harness supplies the one object under test rather than linking
@@ -1341,6 +1345,98 @@ static void put_tag(FILE* f, const char* tag)
     fwrite(tag, 1, 4, f);
 }
 
+// The two facts zCameraFlyUpdate's key decoding rests on: a zFlyKey is 64 bytes
+// laid out the way the FLY asset lays one out, and the asset's words are
+// little-endian.
+//
+// The second one is why the byte-reversing loop in zCameraFlyUpdate is behind
+// PLATFORM_PC. On the console the loop is the only reason the flythrough works
+// at all -- it has to flip all 64 words of the four keys before a float can be
+// read out of them -- and on a host it is the only reason it would not.
+// Nothing else in the build says which way round that is, so the bytes below
+// are verbatim from the shipping asset and say it.
+//
+// It is not one asset either: all 17 FLY assets in the retail tree are a whole
+// number of 64-byte keys, and all 17 have frame counters that count up by one
+// read little-endian. None does read big-endian.
+static const U8 hb01_flythrough_keys[128] = {
+    // key 0: frame 0, identity basis at the origin, aperture 0.98/0.735, focal 26.6906
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x48, 0xe1, 0x7a, 0x3f, 0xf6, 0x28, 0x3c, 0x3f, 0x4b, 0x86, 0xd5, 0x41,
+    // key 1: frame 1, the first real pose of the shot
+    0x01, 0x00, 0x00, 0x00, 0x87, 0x88, 0x7c, 0x3f, 0xeb, 0xc1, 0x24, 0xbe, 0x56, 0x57, 0x02, 0xbd,
+    0x25, 0xfe, 0xdb, 0x3d, 0xf9, 0xc8, 0x47, 0x3f, 0x51, 0xb0, 0x1d, 0xbf, 0xe8, 0xd4, 0xfd, 0x3d,
+    0xa4, 0xad, 0x1a, 0x3f, 0x0c, 0x81, 0x49, 0x3f, 0xc9, 0x96, 0x78, 0x42, 0xdd, 0x5c, 0xe0, 0x41,
+    0x03, 0x9d, 0x64, 0x41, 0x48, 0xe1, 0x7a, 0x3f, 0xf6, 0x28, 0x3c, 0x3f, 0x4b, 0x86, 0xd5, 0x41,
+};
+
+// The loop zCameraFlyUpdate runs on the console, over as many words as it is
+// given, so the test can show what it does to host-order data.
+static void reverse_words(U8* p, int words)
+{
+    for (int w = 0; w < words; w++, p += 4)
+    {
+        U8 a = p[0];
+        U8 b = p[1];
+        p[0] = p[3];
+        p[1] = p[2];
+        p[2] = b;
+        p[3] = a;
+    }
+}
+
+static F32 row_len(const F32* m)
+{
+    return sqrtf(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
+}
+
+static void test_flykey()
+{
+    printf("FLY asset (fly camera keys)\n");
+
+    // zCameraFlyUpdate indexes the asset as an array of zFlyKey and derives the
+    // key count as size >> 6, so both of these are load-bearing.
+    check(sizeof(zFlyKey) == 64, "sizeof(zFlyKey) == 64");
+    check(offsetof(zFlyKey, frame) == 0, "zFlyKey::frame at 0x00");
+    check(offsetof(zFlyKey, matrix) == 4, "zFlyKey::matrix at 0x04");
+    check(offsetof(zFlyKey, aperture) == 52, "zFlyKey::aperture at 0x34");
+    check(offsetof(zFlyKey, focal) == 60, "zFlyKey::focal at 0x3c");
+
+    // hb01_flythrough is 12864 bytes in hb01.HIP, which is 201 whole keys.
+    check(12864 % (int)sizeof(zFlyKey) == 0 && 12864 / (int)sizeof(zFlyKey) == 201,
+          "hb01_flythrough's 12864 bytes are 201 whole keys");
+
+    zFlyKey keys[2];
+    memcpy(keys, hb01_flythrough_keys, sizeof(keys));
+
+    // Read straight out of the asset, which is what the port does.
+    check(keys[0].frame == 0 && keys[1].frame == 1, "frame counters read 0 and 1");
+    check(keys[0].matrix[0] == 1.0f && keys[0].matrix[4] == 1.0f && keys[0].matrix[8] == 1.0f,
+          "key 0's basis has a unit diagonal");
+    check(keys[0].matrix[1] == 0.0f && keys[0].matrix[2] == 0.0f && keys[0].matrix[3] == 0.0f,
+          "key 0's basis is the identity");
+    check(fabsf(keys[0].aperture[0] - 0.98f) < 1e-6f && fabsf(keys[0].focal - 26.6906f) < 1e-3f,
+          "key 0's lens is 0.98 aperture / 26.69 focal");
+    check(fabsf(row_len(&keys[1].matrix[0]) - 1.0f) < 1e-4f &&
+              fabsf(row_len(&keys[1].matrix[3]) - 1.0f) < 1e-4f &&
+              fabsf(row_len(&keys[1].matrix[6]) - 1.0f) < 1e-4f,
+          "key 1's basis is orthonormal");
+
+    // And what the console arm would make of the same bytes. Every one of these
+    // feeds xQuatFromMat, so the flythrough this produces is not a wrong camera
+    // path, it is no camera path.
+    zFlyKey flipped[2];
+    memcpy(flipped, hb01_flythrough_keys, sizeof(flipped));
+    reverse_words((U8*)flipped, (int)sizeof(flipped) / 4);
+
+    check(flipped[1].frame == 0x01000000, "byte-reversed, frame 1 reads 16777216");
+    check(flipped[0].matrix[0] != 1.0f, "byte-reversed, the identity is no longer 1.0");
+    check(fabsf(row_len(&flipped[1].matrix[0]) - 1.0f) > 0.5f,
+          "byte-reversed, key 1's basis is not orthonormal");
+}
+
 #define TAG4(a, b, c, d) (((U32)(a) << 24) | ((U32)(b) << 16) | ((U32)(c) << 8) | (U32)(d))
 
 static void test_hip()
@@ -1496,6 +1592,7 @@ int main()
 #endif
     test_snd();
     test_hip();
+    test_flykey();
 
     printf("\n%s (%d failure%s)\n", failures ? "FAILED" : "passed", failures,
            failures == 1 ? "" : "s");
