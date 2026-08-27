@@ -721,7 +721,7 @@ RpAtomic* xFXShinyRender(RpAtomic* atomic)
     RwRenderStateGet(rwRENDERSTATECULLMODE, &cmode);
     RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLBACK);
     iDrawSetFBMSK(-1);
-    iModelSetMaterialAlpha(atomic, rwCULLMODEFORCEENUMSIZEINT);
+    iModelSetMaterialAlpha(atomic, 255);
     AtomicDisableMatFX(atomic);
     (*gAtomicRenderCallBack)(atomic);
     iDrawSetFBMSK(0);
