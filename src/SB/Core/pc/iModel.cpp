@@ -125,6 +125,21 @@ RpAtomic* FindAndInstanceAtomicCallback(RpAtomic* model, void* data)
     return model;
 }
 
+// Defined below, beside iModelRender. Called from here too, so that a model
+// that is already malformed when it comes off the stream can be told apart from
+// one that something corrupts later -- which is the whole question about the
+// cutscene geometry that reports mismatched index counts.
+static bool iModelCheckAtomic(RpAtomic* model, const char* where, bool strict);
+
+static RpAtomic* CheckLoadedAtomicCallback(RpAtomic* atomic, void*)
+{
+    // NOT strict: a geometry that still holds Xbox native data legitimately has
+    // no index arrays yet -- librw's readMesh leaves mesh->indices nil for one
+    // -- so at load time only an outright contradiction is worth reporting.
+    iModelCheckAtomic(atomic, "iModelStreamRead", false);
+    return atomic;
+}
+
 static RpAtomic* iModelStreamRead(RwStream* stream)
 {
     RpClump* clump;
@@ -162,6 +177,9 @@ static RpAtomic* iModelStreamRead(RwStream* stream)
 
     gLastAtomicCount = 0;
     RpClumpForAllAtomics(clump, FindAndInstanceAtomicCallback, 0);
+
+    // Straight off the stream, before anything has had a chance to touch it.
+    RpClumpForAllAtomics(clump, CheckLoadedAtomicCallback, 0);
 
     RpWorldRemoveCamera(instance_world, instance_camera);
     iCameraDestroy(instance_camera);
@@ -406,7 +424,7 @@ RpAtomic* iModelCacheAtomic(RpAtomic* model)
 //
 // This is a diagnostic, not a fix: anything it reports is a real bug in the
 // port that still has to be found.
-static bool iModelRenderable(RpAtomic* model)
+static bool iModelCheckAtomic(RpAtomic* model, const char* where, bool strict)
 {
     static S32 complaints = 0;
     const S32 kMaxComplaints = 8;
@@ -428,13 +446,18 @@ static bool iModelRenderable(RpAtomic* model)
     {
         why = "no mesh header";
     }
-    else if (mh->numMeshes == 0)
+    else if (strict && mh->numMeshes == 0)
     {
         why = "no meshes";
     }
-    else if (mh->totalIndicesInMesh == 0)
+    else if (strict && mh->totalIndicesInMesh == 0)
     {
         why = "no indices";
+    }
+    else if (mh->numMeshes == 0 || mh->totalIndicesInMesh == 0)
+    {
+        // Empty at load time is not yet wrong; there is nothing to cross-check.
+        return true;
     }
     else
     {
@@ -445,7 +468,7 @@ static bool iModelRenderable(RpAtomic* model)
 
         for (RwUInt32 i = 0; i < mh->numMeshes; i++)
         {
-            if (mesh[i].indices == NULL)
+            if (strict && mesh[i].indices == NULL)
             {
                 why = "a mesh has no indices";
                 break;
@@ -525,7 +548,7 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
     {
         model->geometry->flags &= 0xfffffff7;
     }
-    if (iModelRenderable(model))
+    if (iModelCheckAtomic(model, "iModelRender refused", true))
     {
         iModelCacheAtomic(model)->renderCallBack(iModelCacheAtomic(model));
     }

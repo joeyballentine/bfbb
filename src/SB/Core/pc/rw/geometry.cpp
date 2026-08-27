@@ -12,6 +12,8 @@
 
 #include "rw.h"
 
+#include <stdio.h>
+
 static inline rw::Geometry* asGeometry(const RpGeometry* g)
 {
     return const_cast<rw::Geometry*>(reinterpret_cast<const rw::Geometry*>(g));
@@ -33,12 +35,61 @@ RpGeometry* RpGeometryCreate(RwInt32 numVert, RwInt32 numTriangles, RwUInt32 for
     return reinterpret_cast<RpGeometry*>(rw::Geometry::create(numVert, numTriangles, format));
 }
 
+// ---------------------------------------------------------------------------
+// The lock/unlock corruption check
+//
+// PORT DIAGNOSTIC. A cutscene geometry was arriving at the renderer with the
+// bytes AFTER its mesh header overwritten by floats -- mesh[0] reporting
+// 1059433433 indices at BE276C8B, all three fields recognisable as vertex
+// coordinates. iModel.cpp checks the same geometry as it comes off the stream
+// and finds it sound, so something writes over it at run time.
+//
+// The writers are all in xCutscene.cpp -- JDeltaEval and the morph-target path
+// each fill model->geometry->morphTarget->verts from a run list of vertex
+// indices -- and every one of them sits between RpGeometryLock and
+// RpGeometryUnlock. So the shim checks here rather than in six places in shared
+// code: sound at the lock and broken at the unlock means the write in between
+// did it, and the report says how far past the end of the vertex array the mesh
+// header sits, which is the overrun in vertices.
+//
+// Nothing is repaired. This names the culprit; the fix belongs where the bad
+// index comes from.
+
+static RpGeometry* sCheckedGeometry;
+static bool sWasSoundAtLock;
+
+static bool GeometryMeshBlockSound(RpGeometry* geometry)
+{
+    RpMeshHeader* mh = geometry != NULL ? geometry->mesh : NULL;
+
+    if (mh == NULL || mh->numMeshes == 0)
+    {
+        // Nothing to contradict.
+        return true;
+    }
+
+    // librw puts the meshes immediately after the header; firstMeshOffset is
+    // padding on that side. See layout_geometry.cpp.
+    RpMesh* mesh = (RpMesh*)(mh + 1);
+    RwUInt32 counted = 0;
+
+    for (RwUInt32 i = 0; i < mh->numMeshes; i++)
+    {
+        counted += mesh[i].numIndices;
+    }
+
+    return counted == mh->totalIndicesInMesh;
+}
+
 RpGeometry* RpGeometryLock(RpGeometry* geometry, RwInt32 lockMode)
 {
     if (geometry == NULL)
     {
         return NULL;
     }
+
+    sCheckedGeometry = geometry;
+    sWasSoundAtLock = GeometryMeshBlockSound(geometry);
 
     // Both sides record which parts were locked so that the renderer knows to
     // re-instance them, and both throw the mesh away when the polygons are
@@ -60,6 +111,40 @@ RpGeometry* RpGeometryUnlock(RpGeometry* geometry)
     // RpMorphTargetCalcBoundingSphere, which the callers that move vertices
     // (xCutscene.cpp, zFX.cpp) call for themselves.
     asGeometry(geometry)->unlock();
+
+    if (geometry == sCheckedGeometry && sWasSoundAtLock && !GeometryMeshBlockSound(geometry))
+    {
+        static int complaints = 0;
+        if (complaints < 4)
+        {
+            complaints++;
+
+            RpMeshHeader* mh = geometry->mesh;
+            const char* verts = geometry->morphTarget != NULL
+                                    ? (const char*)geometry->morphTarget->verts
+                                    : NULL;
+
+            printf("bfbb: a geometry's mesh block was overwritten between lock and unlock\n");
+            printf("bfbb:   geometry %p numVertices %d numTriangles %d mesh %p\n", (void*)geometry,
+                   (int)geometry->numVertices, (int)geometry->numTriangles, (void*)mh);
+
+            if (verts != NULL && mh != NULL)
+            {
+                // Where the mesh header sits, counted in vertices from the
+                // start of the vertex array. A write to that index is exactly
+                // what lands on it, so this number minus numVertices is how far
+                // past the end the run list went.
+                long delta = (long)((const char*)mh - verts);
+                printf("bfbb:   verts at %p; the mesh header is %ld bytes past it, "
+                       "which is vertex %ld of %d\n",
+                       (const void*)verts, delta, delta / (long)sizeof(RwV3d),
+                       (int)geometry->numVertices);
+            }
+
+            fflush(stdout);
+        }
+    }
+
     return geometry;
 }
 

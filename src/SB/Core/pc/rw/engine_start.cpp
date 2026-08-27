@@ -289,6 +289,9 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
 
         if (probe == NULL)
         {
+            printf("bfbb: Direct3DCreate9 failed -- this machine has no usable "
+                   "Direct3D 9 runtime\n");
+            fflush(stdout);
             return FALSE;
         }
 
@@ -308,12 +311,21 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
 
         if (!haveHardwareAdapter)
         {
+            // Environmental far more often than not: an adapter whose display
+            // is asleep or switched off can stop reporting HAL support, and a
+            // remote session has no hardware adapter at all.
+            printf("bfbb: Direct3D 9 is present but no adapter reports hardware "
+                   "support (checked %u)\n",
+                   (unsigned)probe->GetAdapterCount());
+            fflush(stdout);
             return FALSE;
         }
     }
 
     if (!rw::Engine::open(&params))
     {
+        printf("bfbb: librw refused to open the D3D9 device on this window\n");
+        fflush(stdout);
         return FALSE;
     }
 
@@ -353,6 +365,32 @@ RwBool RwEngineStart(void)
     {
         return FALSE;
     }
+
+#ifdef RW_D3D9
+    // Engine::start DISCARDS what the device said.
+    //
+    // engine.cpp:311 is `engine->device.system(DEVICEINIT, nil, 0);` with the
+    // result thrown away, and DEVICEINIT is where the d3d9 backend actually
+    // creates the device -- d3ddevice.cpp:1622. So start() reports success
+    // whether or not there is a device, and everything afterwards runs against
+    // a null one and dies somewhere with no bearing on the cause. That is what
+    // an intermittent segfault inside RwFrameCreate turned out to be.
+    //
+    // Engine::open discards its DEVICEOPEN result the same way, but the device
+    // does not exist yet at that point, so this is the first place worth
+    // asking. The adapter probe in RwEngineOpen catches the case where no
+    // adapter admits to hardware support; this catches the case where one does
+    // and the device still fails to come up, which on a working machine is
+    // usually a display that has gone to sleep.
+    if (rw::d3d::d3ddevice == NULL)
+    {
+        printf("bfbb: Direct3D 9 reported a hardware adapter but the device did not "
+               "come up\n");
+        printf("bfbb:   (a display that is asleep or switched off does this)\n");
+        fflush(stdout);
+        return FALSE;
+    }
+#endif
 
     sGlobals.engineStatus = rwENGINESTATUSSTARTED;
     return TRUE;

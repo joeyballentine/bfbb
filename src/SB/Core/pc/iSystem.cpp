@@ -159,6 +159,7 @@ static S32 RenderWareInit()
     windowParams.fullscreen = false;
     if (!iWindowOpen(&windowParams))
     {
+        printf("bfbb:   the window could not be opened\n");
         return TRUE;
     }
 
@@ -169,11 +170,13 @@ static S32 RenderWareInit()
     // them. Worth fixing before anything measures memory.
     if (!RwEngineInit(NULL, 0, 0x60000))
     {
+        printf("bfbb:   RwEngineInit failed\n");
         return TRUE;
     }
     RwResourcesSetArenaSize(0x60000);
     if (RWAttachPlugins())
     {
+        printf("bfbb:   a RenderWare plugin failed to attach\n");
         return TRUE;
     }
 
@@ -184,12 +187,14 @@ static S32 RenderWareInit()
     params.displayID = NULL;
     if (!RwEngineOpen(&params))
     {
+        printf("bfbb:   RwEngineOpen failed -- see the line above for why\n");
         RwEngineTerm();
         return TRUE;
     }
     RwEngineGetVideoModeInfo(&sVideoMode, RwEngineGetCurrentVideoMode());
     if (!RwEngineStart())
     {
+        printf("bfbb:   RwEngineStart failed\n");
         RwEngineClose();
         RwEngineTerm();
         return TRUE;
