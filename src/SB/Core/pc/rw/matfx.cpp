@@ -27,6 +27,8 @@
 
 #include "rw.h"
 
+#include <stdlib.h>
+
 static inline rw::Material* asMaterial(const RpMaterial* m)
 {
     return const_cast<rw::Material*>(reinterpret_cast<const rw::Material*>(m));
@@ -68,6 +70,26 @@ RwBool RpMatFXPluginAttach(void)
     // envMapApplyLight is deliberately left alone: that one chooses whether
     // lighting modulates the env map on top, and nothing in the game sets it.
     rw::MatFX::envMapUseMatColor = TRUE;
+
+    // And the brightness knob the game is actually reaching for: let the
+    // diffuse alpha scale the environment pass.
+    //
+    // The game sets a material alpha immediately before every environment pass
+    // it draws -- NPC_BubBud_RenderCB uses `fade * 127.5 + 0.5`, xFXBubbleRender
+    // uses the per-pass alphas out of its bubble parameters -- and those calls
+    // have no other purpose. The only route that alpha has into the pass is the
+    // shader's `fba` term, and librw opens that only when the material asked
+    // for frame-buffer alpha. xFX.cpp:664 passes FALSE, which is retail's own
+    // argument, so on this side the alpha was being discarded and every
+    // environment pass drew at full strength.
+    //
+    // BFBB_ENVFBA=0 turns this back off, because it changes every material
+    // effect in the game and the two symptoms it is meant to address point in
+    // opposite directions -- Bubble Buddy renders too BRIGHT, SpongeBob's
+    // bubbles too DARK -- so they may well not be one bug. Being able to A/B it
+    // without a rebuild is worth the four lines.
+    const char* fba = getenv("BFBB_ENVFBA");
+    rw::MatFX::envMapModulateByAlpha = (fba != NULL && fba[0] == '0') ? FALSE : TRUE;
 
     return TRUE;
 }
