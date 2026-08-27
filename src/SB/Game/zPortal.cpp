@@ -1,6 +1,11 @@
 #include "xBase.h"
 #include "xEvent.h"
 
+#ifdef PLATFORM_PC
+#include <stdio.h>
+#include <stdlib.h>
+#endif
+
 #include "zPortal.h"
 #include "zGlobals.h"
 #include "zScene.h"
@@ -42,6 +47,19 @@ void zPortalLoad(_zPortal* ent, xSerial* s)
 
 S32 zPortalEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam, xBase* b3)
 {
+#ifdef PLATFORM_PC
+    // The far end of the chain. Everything before this is confirmed working --
+    // the player is detected inside triggers, the enter event fires, and every
+    // link resolves its destination -- so if a portal never hears from one, the
+    // link is carrying an event it does not act on.
+    if (getenv("BFBB_EVENT") != NULL)
+    {
+        printf("bfbb: portal %08x got event %u (acts on %u)\n", (unsigned)to->id,
+               (unsigned)toEvent, (unsigned)eEventTeleportPlayer);
+        fflush(stdout);
+    }
+#endif
+
     switch (toEvent)
     {
     case eEventReset:

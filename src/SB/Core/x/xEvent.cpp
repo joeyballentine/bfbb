@@ -131,16 +131,21 @@ void zEntEvent(xBase* from, U32 fromEvent, xBase* to, U32 toEvent, const F32* to
                     // having fired. A level change is exactly this: a trigger
                     // linked to a portal, so a portal that does not resolve is
                     // a door that does nothing.
-                    if (!sendTo && getenv("BFBB_EVENT") != NULL)
+                    // Every forward, not only the dropped ones. Nothing was
+                    // being dropped, which left the question of WHICH events
+                    // are travelling -- a trigger whose link carries the wrong
+                    // dstEvent reaches its portal and asks it for the wrong
+                    // thing, and that is as silent as not arriving.
+                    if (getenv("BFBB_EVENT") != NULL)
                     {
                         static int said = 0;
-                        if (said < 30)
+                        if (said < 60)
                         {
                             said++;
-                            printf("bfbb: link from %08x event %u -> dst %08x NOT FOUND, "
-                                   "event dropped\n",
-                                   (unsigned)to->id, (unsigned)idx->dstEvent,
-                                   (unsigned)idx->dstAssetID);
+                            printf("bfbb: link %08x src %u -> %08x dst %u  %s\n",
+                                   (unsigned)to->id, (unsigned)idx->srcEvent,
+                                   (unsigned)idx->dstAssetID, (unsigned)idx->dstEvent,
+                                   sendTo ? "delivered" : "NOT FOUND, dropped");
                             fflush(stdout);
                         }
                     }
