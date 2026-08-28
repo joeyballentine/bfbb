@@ -22,6 +22,31 @@ Everything above that seam (`src/SB/Core/x` and `src/SB/Game`) is the same code
 the GameCube build uses. It isn't a rewrite, so changes there have to keep the
 GameCube build byte identical. That's checked on every commit.
 
+## What it adds over the GameCube release
+
+The GameCube version shipped with a few things stubbed out. The functions are
+empty in the decomp but still have live call sites, and the Xbox release did
+them for real, so they were recovered from that build rather than invented.
+
+- **Cruise Bubble distortion.** `xScrFxDistortionRender` and `distort_screen`
+  are both empty on GameCube. On Xbox they swirl the picture while you fly the
+  Cruise Bubble. The offset map is a genuine Xbox asset, `BXCruiseBubbleDistort`,
+  which already ships in `plat.HIP`.
+- **Glow**, what people usually call the Xbox version's bloom. A bright pass,
+  two blur passes, then composited back over the frame. Both shaders were
+  decoded from the Xbox build's pixel shader definitions. Set `BFBB_GLOW`.
+- **The loading screen still.** `zGameTakeSnapShot` is empty on GameCube. On
+  Xbox it grabbed the frame that the loading screen bubbles rise over. Set
+  `BFBB_LOADSNAP`.
+
+One retail bug is fixed rather than reproduced:
+
+- **3D sound panned the wrong way.** A sound on your right came out of the left
+  speaker. That's retail's bug and only the GameCube release has it, so the port
+  inherited it by reproducing `iSndCalcVol3d` faithfully. The community's Action
+  Replay fix for the disc negates one constant, and this does the same thing.
+  Fixed on the PC side only, since the GameCube code has to stay byte identical.
+
 ## You need your own copy
 
 No assets are included. The port reads the **Xbox** release's files, which you
