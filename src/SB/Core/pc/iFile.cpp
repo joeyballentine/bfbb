@@ -27,6 +27,10 @@ static file_queue_entry file_queue[4];
 // asset root, so both do their jobs here.
 static char sBasePath[512];
 
+// Whether any file has ever opened. See reportMissingFile: it is what tells a
+// wrong asset root from the asset system probing for a file it can do without.
+static S32 sOpenedAny;
+
 // The asset root, from BFBB_ASSETS, kept separately from sBasePath.
 //
 // It exists because the GAME overwrites sBasePath: zMain.cpp:890 reads a PATH
@@ -196,6 +200,81 @@ static bool iResolveCaseInsensitive(char* path, size_t pathsize)
     return found;
 }
 
+// A file that is not there, said out loud.
+//
+// The game does not check, and cannot be made to: zMainLoadFontHIP ends in
+//
+//     do { } while (xSTLoadStep('FONT') < 1.0f);
+//
+// which never leaves that loop if FONT.HIP never loads. On the console that
+// cannot happen -- the DVD root is the only place a name can mean, and the disc
+// IS the game -- so retail has no handling here to port. On a host, a wrong
+// BFBB_ASSETS produces a hang on a white window with a startup log that looks
+// perfectly normal right up to the last line, and it is the single most common
+// way a first run fails. One line of output is the whole difference.
+//
+// **Only until the first file opens.** A miss is not by itself a problem: the
+// game probes. `PL/PLAT.HIP` is looked for and missed on a perfectly good
+// install, because the asset system tries a per-scene subdirectory before the
+// root. Reporting those would be noise, and noise is what teaches people to
+// ignore the line that matters.
+//
+// What is never normal is reaching the font with nothing opened at all. That
+// separates a wrong asset root from ordinary probing exactly, needs no list of
+// which names are speculative, and cannot go stale as more of the game is
+// ported.
+//
+// Once per NAME as well, because the loop above asks for the same file
+// thousands of times a second, and capped in case a root is wrong in a way that
+// still lets the first open through.
+static void reportMissingFile(const char* name, const char* path)
+{
+    enum
+    {
+        kMaxReported = 8,
+        kMaxName = 64
+    };
+
+    static char sReported[kMaxReported][kMaxName];
+    static S32 sCount;
+    static S32 sSilenced;
+
+    if (sSilenced || sOpenedAny)
+    {
+        return;
+    }
+
+    for (S32 i = 0; i < sCount; i++)
+    {
+        if (iHostStrCaseCmp(sReported[i], name) == 0)
+        {
+            return;
+        }
+    }
+
+    if (sCount == 0)
+    {
+        printf("bfbb: no asset file has opened yet, and the game is asking for them.\n");
+        printf("bfbb:   BFBB_ASSETS must name the directory that DIRECTLY contains\n");
+        printf("bfbb:   boot.HIP, FONT.HIP and fmv/ -- not a folder above it, and not\n");
+        printf("bfbb:   a disc image. The game does not check, so the wrong path is a\n");
+        printf("bfbb:   hang on a blank window rather than an error.\n");
+    }
+
+    printf("bfbb:   not found: %s\n", path);
+
+    snprintf(sReported[sCount], kMaxName, "%s", name);
+    sCount++;
+
+    if (sCount == kMaxReported)
+    {
+        sSilenced = 1;
+        printf("bfbb:   (further missing files are not reported)\n");
+    }
+
+    fflush(stdout);
+}
+
 U32 iFileOpen(const char* name, S32 flags, tag_xFile* file)
 {
     tag_iFile* ps = &file->ps;
@@ -220,6 +299,13 @@ U32 iFileOpen(const char* name, S32 flags, tag_xFile* file)
     FILE* fp = fopen(ps->path, mode);
     if (fp == NULL)
     {
+        // Reads only. A write that fails is a read-only directory rather than a
+        // missing asset, and the advice above would be the wrong advice.
+        if (!(flags & IFILE_OPEN_WRITE))
+        {
+            reportMissingFile(name, ps->path);
+        }
+
         ps->handle = NULL;
         ps->flags = 0;
         ps->length = 0;
@@ -229,6 +315,8 @@ U32 iFileOpen(const char* name, S32 flags, tag_xFile* file)
     fseek(fp, 0, SEEK_END);
     long len = ftell(fp);
     fseek(fp, 0, SEEK_SET);
+
+    sOpenedAny = 1;
 
     ps->handle = fp;
     ps->length = (S32)len;
