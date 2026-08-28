@@ -19,6 +19,69 @@ static S32 sHeight;
 
 static const char* const kClassName = "BFBBWindow";
 
+// **Tell Windows this process means physical pixels.**
+//
+// Without it the process is DPI UNAWARE, and on a machine whose monitors are at
+// different scalings that is not a cosmetic setting. Windows virtualises the
+// window: it is created at one size, and the moment it moves to a monitor at a
+// different scaling the OS resizes it behind the game's back. That resize is
+// indistinguishable from the user resizing it, so the client rect stops matching
+// the back buffer and librw resets the D3D device -- repeatedly, growing the
+// window by the ratio of the two scalings each time. On this machine, one
+// monitor at 100% and one 4K panel at 125%, dragging the window across grew it
+// by a fifth per reset and marched it off the screen.
+//
+// Per-monitor v2 is the one to ask for: it also makes Windows scale the
+// non-client area and send WM_DPICHANGED with the rectangle it wants, which is
+// what the handler below honours.
+//
+// Resolved at run time rather than linked. SetProcessDpiAwarenessContext is
+// Windows 10 1703 and later, SetProcessDpiAwareness is 8.1, and
+// SetProcessDPIAware is Vista -- so the best one available is taken and an older
+// Windows still gets something. Importing the newest by name would make the
+// executable refuse to start on anything older, which is a poor trade for a
+// setting.
+//
+// A manifest would be the conventional way and is deliberately not used: the
+// port already builds with and without a resource compiler (see the icon in
+// CMakeLists), and a setting this load bearing should not be the thing that
+// silently differs between those two builds.
+static void MakeProcessDpiAware()
+{
+    typedef BOOL(WINAPI * PFN_SetProcessDpiAwarenessContext)(HANDLE);
+    typedef HRESULT(WINAPI * PFN_SetProcessDpiAwareness)(int);
+
+    // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, which is a sentinel handle
+    // rather than an enum and so is spelled out here.
+    HANDLE perMonitorV2 = (HANDLE)-4;
+
+    HMODULE user32 = GetModuleHandleA("user32.dll");
+    if (user32 != NULL)
+    {
+        PFN_SetProcessDpiAwarenessContext setContext =
+            (PFN_SetProcessDpiAwarenessContext)GetProcAddress(user32,
+                                                              "SetProcessDpiAwarenessContext");
+        if (setContext != NULL && setContext(perMonitorV2))
+        {
+            return;
+        }
+    }
+
+    HMODULE shcore = LoadLibraryA("shcore.dll");
+    if (shcore != NULL)
+    {
+        PFN_SetProcessDpiAwareness setAwareness =
+            (PFN_SetProcessDpiAwareness)GetProcAddress(shcore, "SetProcessDpiAwareness");
+        // 2 is PROCESS_PER_MONITOR_DPI_AWARE.
+        if (setAwareness != NULL && SUCCEEDED(setAwareness(2)))
+        {
+            return;
+        }
+    }
+
+    SetProcessDPIAware();
+}
+
 static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
     switch (msg)
@@ -39,6 +102,30 @@ static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
         sWidth = LOWORD(lparam);
         sHeight = HIWORD(lparam);
         return 0;
+
+    // The window has moved to a monitor at a different scaling.
+    //
+    // Under per-monitor v2 awareness Windows does not resize the window itself;
+    // it asks, and lparam is the rectangle it suggests -- already scaled, and
+    // already including the non-client area. Honouring it is what keeps the
+    // window the same PHYSICAL size across a move, which is what someone
+    // dragging it between two monitors means to happen.
+    //
+    // Ignoring the message is the thing not to do: the window then keeps its
+    // pixel size while the title bar and borders around it are rescaled, so the
+    // client area changes anyway and the device is reset for a move that should
+    // not have touched it.
+    case WM_DPICHANGED:
+    {
+        const RECT* suggested = (const RECT*)lparam;
+        if (suggested != NULL)
+        {
+            SetWindowPos(hwnd, NULL, suggested->left, suggested->top,
+                         suggested->right - suggested->left, suggested->bottom - suggested->top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        return 0;
+    }
 
     // The screensaver and monitor-power messages, refused while the game runs.
     // Retail did not need this because a GameCube has no screensaver; a host
@@ -75,6 +162,11 @@ S32 iWindowOpen(const iWindowParams* params)
     // rw/engine_start.cpp existed, it faulted inside D3D9 instead of saying so.
     // A screensaver could take the game down.
     SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED);
+
+    // Before the class is registered and long before the window exists: the
+    // awareness of a process is fixed by its first window, and AdjustWindowRect
+    // below already depends on which one is in force.
+    MakeProcessDpiAware();
 
     sInstance = GetModuleHandleA(NULL);
 
