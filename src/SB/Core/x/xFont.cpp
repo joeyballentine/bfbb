@@ -378,6 +378,120 @@ namespace
     }
 
 #ifdef PLATFORM_PC
+    // How much of its cell the atlas being replaced actually fills.
+    //
+    // This is the measurement that makes a substituted font the right SIZE, and
+    // it is a measurement rather than a rule because the alternative kept being
+    // wrong: the font's ink box made text a third too large, its declared line
+    // box left it a few percent too large, and neither number has anything to
+    // do with how much white space the artist happened to leave around the
+    // capitals in an 18x22 cell.
+    //
+    // reset_font_spacing already walks these cells with find_bounds to measure
+    // each glyph horizontally; this is the same walk kept for the vertical
+    // extent it throws away. Reading the atlas is only possible here because
+    // the substitution runs at the END of init_font_data, while fd.raster is
+    // still the texture from the HIP.
+    //
+    // FALSE if the atlas cannot be read, and then the caller falls back to the
+    // font's own line box.
+    // ONE glyph, and the same glyph the substitute is measured by.
+    //
+    // Measuring the whole character set on both sides was wrong and looked it:
+    // the atlas draws the accented capitals and a fan-made TTF usually has none
+    // of them, so the atlas's span included accent marks and the font's did not.
+    // Making those two spans equal then made every ordinary capital
+    // proportionally too big. A single glyph both certainly have avoids the
+    // whole question.
+    bool measure_atlas_glyph(const font_data& fd, char which, S32& inkTop, S32& inkBottom)
+    {
+        const font_asset& a = *fd.asset;
+
+        if (fd.raster == NULL || (a.flags & 0x8))
+        {
+            // 0x8 is the fixed-width flag, where reset_font_spacing does not
+            // measure the glyphs at all and the cell IS the glyph.
+            return false;
+        }
+
+        S32 width = RwRasterGetWidth(fd.raster);
+        S32 height = RwRasterGetHeight(fd.raster);
+
+        RwImage* image = RwImageCreate(width, height, 32);
+        if (image == NULL)
+        {
+            return false;
+        }
+
+        RwImageAllocatePixels(image);
+        RwImageSetFromRaster(image, fd.raster);
+
+        const iColor_tag* bits = (const iColor_tag*)RwImageGetPixels(image);
+
+        basic_rect<S32> cell;
+        cell.w = a.du;
+        cell.h = a.dv;
+
+        S32 top = a.dv;
+        S32 bottom = 0;
+        bool any = false;
+
+        for (S32 i = 0; a.char_set[i] != '\0'; i++)
+        {
+            if (a.char_set[i] != which)
+            {
+                continue;
+            }
+
+            if (a.flags & 0x4)
+            {
+                cell.x = a.u + cell.w * (i / a.line_size);
+                cell.y = a.v + cell.h * (i % a.line_size);
+            }
+            else
+            {
+                cell.x = a.u + cell.w * (i % a.line_size);
+                cell.y = a.v + cell.h * (i / a.line_size);
+            }
+
+            if (cell.x < 0 || cell.y < 0 || cell.x + cell.w > width || cell.y + cell.h > height)
+            {
+                continue;
+            }
+
+            basic_rect<S32> r = find_bounds(bits + width * cell.y + cell.x, cell, width);
+
+            if (r.w <= 0 || r.h <= 0)
+            {
+                continue;
+            }
+
+            S32 t = r.y - cell.y;
+            S32 b = t + r.h;
+
+            if (!any || t < top)
+            {
+                top = t;
+            }
+            if (!any || b > bottom)
+            {
+                bottom = b;
+            }
+            any = true;
+        }
+
+        RwImageDestroy(image);
+
+        if (!any || bottom <= top)
+        {
+            return false;
+        }
+
+        inkTop = top;
+        inkBottom = bottom;
+        return true;
+    }
+
     // Rebuild one font's glyph tables from a TrueType outline.
     //
     // The game's four tables are the whole interface to a font, and this fills
@@ -428,12 +542,28 @@ namespace
         F32 cellHeight = 0.0f;
         F32 baselineRow = 0.0f;
 
-        // The asset's own baseline-in-cell ratio, so the substituted font fills
-        // the cell the way the atlas it replaces does.
-        const F32 baselineFraction = (a.dv > 0) ? ((F32)a.baseline / (F32)a.dv) : 0.0f;
+        // Measured off the atlas being replaced, so the substitute fills its
+        // cell the same way and comes out the same size. Zero when it cannot be
+        // read, and iFont falls back to the font's own line box.
+        // A capital both sides certainly have. 'A' is in every one of the game's
+        // character sets, and a capital is the right thing to measure: it sits
+        // on the baseline with no descender, so its ink bottom IS the baseline.
+        const char refChar = 'A';
 
-        if (!iFontRasterize((const char*)a.char_set, count, 64, baselineFraction, iFontScale(),
-                            &pixels, &width, &height, glyphs, &cellHeight, &baselineRow))
+        F32 inkFraction = 0.0f;
+        F32 baselineFraction = 0.0f;
+
+        S32 atlasInkTop = 0;
+        S32 atlasInkBottom = 0;
+        if (a.dv > 0 && measure_atlas_glyph(fd, refChar, atlasInkTop, atlasInkBottom))
+        {
+            inkFraction = (F32)(atlasInkBottom - atlasInkTop) / (F32)a.dv;
+            baselineFraction = (F32)atlasInkBottom / (F32)a.dv;
+        }
+
+        if (!iFontRasterize((const char*)a.char_set, count, 64, refChar, inkFraction,
+                            baselineFraction, iFontScale(), &pixels, &width, &height, glyphs,
+                            &cellHeight, &baselineRow))
         {
             return;
         }

@@ -88,9 +88,20 @@ F32 iFontScale();
 // few percent depend on which face you substitute: a font's declared line box
 // and a hand-authored atlas cell are different things by a few percent, and no
 // derivation gets every font right.
-S32 iFontRasterize(const char* charset, S32 count, S32 pixelHeight, F32 baselineFraction,
-                   F32 scale, const U8** pixels, S32* width, S32* height, iFontGlyph* glyphs,
-                   F32* cellHeight, F32* baselineRow);
+// `inkFraction` is how much of its cell the atlas being replaced fills, and
+// `baselineFraction` is where the baseline sits in it -- both measured from that
+// atlas by the caller. The cell here is padded so this font fills it the same
+// way, which is what makes the substitute the same SIZE rather than merely a
+// sensible one. Pass 0 for either to fall back to this font's own line box.
+// `refChar` is the character the two fractions were measured from, and it is
+// measured here too. It has to be the SAME glyph on both sides: the atlas draws
+// accented capitals that a substituted font often lacks, so anything measured
+// over the whole character set compares an accent mark against nothing and
+// makes every ordinary capital too large.
+S32 iFontRasterize(const char* charset, S32 count, S32 pixelHeight, char refChar,
+                   F32 inkFraction, F32 baselineFraction, F32 scale, const U8** pixels,
+                   S32* width, S32* height, iFontGlyph* glyphs, F32* cellHeight,
+                   F32* baselineRow);
 
 // The atlas as a texture the game can draw with.
 //

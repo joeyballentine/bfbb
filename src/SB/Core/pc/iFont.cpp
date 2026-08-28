@@ -145,9 +145,10 @@ F32 iFontScale()
     return sScale;
 }
 
-S32 iFontRasterize(const char* charset, S32 count, S32 pixelHeight, F32 baselineFraction,
-                   F32 scale, const U8** pixels, S32* width, S32* height, iFontGlyph* glyphs,
-                   F32* cellHeight, F32* baselineRow)
+S32 iFontRasterize(const char* charset, S32 count, S32 pixelHeight, char refChar,
+                   F32 inkFraction, F32 baselineFraction, F32 scale, const U8** pixels,
+                   S32* width, S32* height, iFontGlyph* glyphs, F32* cellHeight,
+                   F32* baselineRow)
 {
     if (!sLoaded || charset == NULL || glyphs == NULL || count <= 0 || pixelHeight <= 0)
     {
@@ -201,57 +202,82 @@ S32 iFontRasterize(const char* charset, S32 count, S32 pixelHeight, F32 baseline
         return FALSE;
     }
 
-    // **The cell is the font's own LINE BOX, not its ink box.**
+    // **The cell comes from the atlas being replaced, when it can be measured.**
     //
-    // This is what decides the apparent size, and getting it wrong is visible
-    // immediately: the drawn quad is always the whole cell, so the fraction of
-    // the cell the ink fills IS how big the text looks. Sized to the ink, a
-    // capital fills the cell almost completely and comes out about a third
-    // larger than the game's own font -- which was measured against a
-    // side-by-side of the main menu.
+    // What decides the apparent size is how much of the cell the ink fills: the
+    // drawn quad is always the whole cell, so ink over cell IS how big the text
+    // looks. Two rules were tried and both were wrong, because neither has
+    // anything to do with the white space an artist left around the capitals --
+    // the font's ink box made text a third too large, and its declared line box
+    // a few percent too large.
     //
-    // The game's atlas has room above the capitals: its cell is 22 pixels with
-    // the baseline 19 down, and the capitals do not reach the top. A font's
-    // declared ascent and descent describe exactly that kind of box, so they
-    // are the right analogue. Ink that pokes outside it -- an accent on a
-    // capital, a deep descender -- widens the cell rather than being clipped.
-    S32 baseline = (S32)(ascent + 0.5f);
-    if (-inkTop > baseline)
+    // So the caller measures its own atlas and passes the ratio, and the cell
+    // is padded until this font fills it the same way. The baseline is placed
+    // by the same measurement.
+    // The reference glyph, measured the same way the caller measured it in the
+    // atlas. inkTop/inkBottom above are the whole character set and are used
+    // only to keep anything from being clipped.
+    int refX0 = 0, refY0 = 0, refX1 = 0, refY1 = 0;
+    stbtt_GetCodepointBitmapBox(&sFont, (S32)(U8)refChar, pxscale, pxscale, &refX0, &refY0, &refX1,
+                                &refY1);
+
+    const S32 refInk = refY1 - refY0;
+
+    S32 baseline = -inkTop;
+    S32 cell = inkBottom - inkTop;
+
+    if (inkFraction > 0.0f && inkFraction <= 1.0f && refInk > 0)
+    {
+        // The reference glyph must end up filling the same share of the cell it
+        // fills in the atlas, and sitting at the same height in it.
+        cell = (S32)((F32)refInk / inkFraction + 0.5f);
+
+        if (baselineFraction > 0.0f && baselineFraction <= 1.0f)
+        {
+            // Where the glyph's ink BOTTOM should land, minus how far that is
+            // below the baseline -- which for a capital is nothing.
+            baseline = (S32)((F32)cell * baselineFraction + 0.5f) - refY1;
+        }
+        else
+        {
+            baseline = -refY0;
+        }
+    }
+    else
+    {
+        // Nothing measured: the font's own declared line box, which is the
+        // right shape of thing even when it is not the right size.
+        baseline = (S32)(ascent + 0.5f);
+        if (-inkTop > baseline)
+        {
+            baseline = -inkTop;
+        }
+
+        S32 below = (S32)(-descent + 0.5f);
+        if (inkBottom > below)
+        {
+            below = inkBottom;
+        }
+        cell = baseline + below;
+    }
+
+    // Never clip: the ink has to fit above and below wherever the baseline
+    // ended up.
+    if (baseline < -inkTop)
     {
         baseline = -inkTop;
     }
-
-    S32 below = (S32)(-descent + 0.5f);
-    if (inkBottom > below)
+    if (cell < baseline + inkBottom)
     {
-        below = inkBottom;
+        cell = baseline + inkBottom;
     }
 
-    S32 cell = baseline + below;
-
-    // And never let the baseline sit higher in the cell than the caller's own
-    // atlas puts it, which would fill more of the cell and read as too large.
-    if (baselineFraction > 0.0f && baselineFraction < 1.0f)
-    {
-        const S32 wanted = (S32)((F32)baseline / baselineFraction + 0.5f);
-        if (wanted > cell)
-        {
-            cell = wanted;
-        }
-    }
-
-    // The caller's nudge. Padding the cell shrinks the ink's share of it, and
-    // the baseline moves with it so the text does not drift up the line.
+    // The caller's nudge, for taste. Padding the cell shrinks the ink's share
+    // of it, and the baseline moves with it so the text does not drift.
     if (scale > 0.0f && scale != 1.0f)
     {
         cell = (S32)((F32)cell / scale + 0.5f);
         baseline = (S32)((F32)baseline / scale + 0.5f);
-    }
-
-    if (cell <= 0)
-    {
-        fontFail("the font reports no height", NULL);
-        return FALSE;
     }
 
     // Widest ink, so the slots are all the same and the layout is a grid.
