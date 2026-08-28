@@ -1,5 +1,6 @@
 #include "iCamera.h"
 
+#include "xDrawDist.h"
 #include "xScreen.h"
 #include "xShadow.h"
 
@@ -287,9 +288,13 @@ void iCameraSetNearFarClip(F32 nearPlane, F32 farPlane)
 
     sCameraNearClip = nearPlane;
 
+    // A zero far plane means "put it back where it was", which is how
+    // zCutsceneMgr ends a cutscene. On the PC that is the configured draw
+    // distance, not retail's 400 -- restoring the literal would quietly undo
+    // the setting for the rest of the run, one cutscene in.
     if (farPlane <= 0.0f)
     {
-        farPlane = 400.0f;
+        farPlane = xDrawDistFarClip();
     }
 
     sCameraFarClip = farPlane;

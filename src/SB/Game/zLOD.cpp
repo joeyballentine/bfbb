@@ -3,6 +3,7 @@
 #include "xModel.h"
 #include <types.h>
 
+#include "xDrawDist.h"
 #include "xEnt.h"
 #include "xMathInlines.h"
 
@@ -50,7 +51,8 @@ void AddToLODList(xModelInstance* model)
                 }
                 while (minst != NULL)
                 {
-                    minst->FadeEnd = xsqrt(distscale * sTableList[i].noRenderDist);
+                    minst->FadeEnd =
+                        xsqrt(distscale * xDrawDistCull(sTableList[i].noRenderDist));
                     minst->FadeStart = minst->FadeEnd - 4.0f;
                     minst = minst->Next;
                 }
@@ -59,8 +61,8 @@ void AddToLODList(xModelInstance* model)
                 sManagerList[sManagerCount].lod = &sTableList[i];
                 sManagerList[sManagerCount].model = model;
                 sManagerList[sManagerCount].adjustNoRenderDist =
-                    (10.0f + xsqrt(sTableList[i].noRenderDist)) *
-                    (10.0f + xsqrt(sTableList[i].noRenderDist));
+                    (10.0f + xsqrt(xDrawDistCull(sTableList[i].noRenderDist))) *
+                    (10.0f + xsqrt(xDrawDistCull(sTableList[i].noRenderDist)));
                 sManagerCount++;
                 return;
             }
@@ -240,7 +242,8 @@ void zLOD_Update(U32 percent_update)
                 model->Data = (*model->Bucket)->OriginalData;
             }
 
-            for (; lodIndex < 3 && lod->lodBucket[lodIndex] && camdist2 > lod->lodDist[lodIndex];
+            for (; lodIndex < 3 && lod->lodBucket[lodIndex] &&
+                   camdist2 > xDrawDistCull(lod->lodDist[lodIndex]);
                  lodIndex++)
             {
                 model->Bucket = lod->lodBucket[lodIndex];
@@ -296,7 +299,8 @@ void zLOD_UseCustomTable(xEnt* ent, zLODTable* lod)
         {
             sManagerList[i].lod = lod;
             sManagerList[i].adjustNoRenderDist =
-                (10.0f + xsqrt(lod->noRenderDist)) * (10.0f + xsqrt(lod->noRenderDist));
+                (10.0f + xsqrt(xDrawDistCull(lod->noRenderDist))) *
+                (10.0f + xsqrt(xDrawDistCull(lod->noRenderDist)));
 
             xVec3* camPos = &globals.camera.mat.pos;
             F32 camdist2 = 0.0f;
@@ -340,8 +344,8 @@ void zLOD_UseCustomTable(xEnt* ent, zLODTable* lod)
                     model->Data = (*model->Bucket)->OriginalData;
                 }
 
-                for (;
-                     lodIndex < 3 && lod->lodBucket[lodIndex] && camdist2 > lod->lodDist[lodIndex];
+                for (; lodIndex < 3 && lod->lodBucket[lodIndex] &&
+                       camdist2 > xDrawDistCull(lod->lodDist[lodIndex]);
                      lodIndex++)
                 {
                     model->Bucket = lod->lodBucket[lodIndex];

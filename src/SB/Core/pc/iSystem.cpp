@@ -1,5 +1,6 @@
 #include "iSystem.h"
 #include "iConfig.h"
+#include "iDrawDist.h"
 #include "iFile.h"
 #include "iHost.h"
 #include "iPad.h"
@@ -13,6 +14,7 @@
 
 #include <stdio.h>
 
+#include "iCamera.h"
 #include "xDebug.h"
 #include "xMath.h"
 #include "xMath3.h"
@@ -296,6 +298,14 @@ static void ApplyConfig()
     // is read by game code, which must not learn what config.ini is.
     iScreenSetSize(iConfigGetInt("video.width", 640), iConfigGetInt("video.height", 480));
 
+    // The draw distance, before iCameraCreate builds the first frustum. Pushed
+    // into iCamera as well as into iDrawDist because the far clip is a value the
+    // camera holds rather than one it asks for each frame; the wrapped distances
+    // in zLOD and zEntSimpleObj read the switch itself, at scene setup.
+    S32 drawDistance = iConfigGetBool("video.draw_distance", TRUE);
+    iDrawDistSetUnlimited(drawDistance);
+    iCameraSetNearFarClip(0.0f, iDrawDistFarClip());
+
     S32 glow = iConfigGetBool("xbox.glow", TRUE);
     S32 distortion = iConfigGetBool("xbox.distortion", TRUE);
     S32 snapshot = iConfigGetBool("xbox.snapshot", TRUE);
@@ -309,8 +319,10 @@ static void ApplyConfig()
     // sounds like. Someone reporting that the port looks wrong should not have
     // to be asked whether they have a config.ini -- the log already says.
     const char* path = iConfigPath();
-    printf("bfbb: %s -- Xbox features: glow %s, distortion %s, snapshot %s, reverb %s\n",
-           path != NULL ? path : "no config.ini, defaults", glow ? "on" : "off",
+    printf("bfbb: %s -- draw distance %s; Xbox features: glow %s, distortion %s, "
+           "snapshot %s, reverb %s\n",
+           path != NULL ? path : "no config.ini, defaults",
+           drawDistance ? "unlimited" : "console", glow ? "on" : "off",
            distortion ? "on" : "off", snapshot ? "on" : "off", reverb ? "on" : "off");
 }
 

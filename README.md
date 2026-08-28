@@ -112,6 +112,20 @@ every 2D layer work in a 4:3 space, so 1280x720 is the same picture stretched
 rather than a wider view. `docs/RESOLUTION.md` has the details, including what
 raising it does not fix.
 
+The same section holds the draw distance, which is on:
+
+```ini
+[video]
+draw_distance = on
+```
+
+The consoles pop an object out of existence past a distance the level author
+set, swap distant ones for lower-detail models, and clip the world itself at
+400 units. None of that is a budget a PC has. Turning it off puts all three
+back exactly. It leaves fog alone — a fogged level's far plane is where the
+picture is already 100% fog, so there is nothing behind it to reveal — and it
+does not make anything *think* further away than it used to, only draw.
+
 `src/SB/Core/pc/README.md` describes it, and lists the `BFBB_*` diagnostics.
 
 ### Movies (optional)

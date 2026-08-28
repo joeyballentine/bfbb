@@ -7,6 +7,7 @@
 #include "zEntSimpleObj.h"
 #include "zLOD.h"
 
+#include "xDrawDist.h"
 #include "xString.h"
 #include "xDebug.h"
 #include "xMath.h"
@@ -1084,7 +1085,13 @@ void z_disco_floor::refresh_cull_dist()
         }
         else
         {
-            cull_dist_glow = xsqrt(lod->lodDist[0]);
+            // The glow is the disco floor's LOD -- past the first swap distance
+            // it fades out and the floor draws unlit for the rest of its range,
+            // so the switch reaches it. cull_dist_update is the other kind and
+            // does not: it gates update() as well as render(), and a floor that
+            // drew at any distance while frozen on one pattern would be worse
+            // than one that stops.
+            cull_dist_glow = xsqrt(xDrawDistCull(lod->lodDist[0]));
             cull_dist_update = xsqrt(lod->noRenderDist);
         }
     }

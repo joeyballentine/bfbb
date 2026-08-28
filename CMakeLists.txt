@@ -300,6 +300,7 @@ target_compile_options(bfbb_rw PRIVATE -Wno-everything)
 # is the right way round.
 add_library(bfbb_platform STATIC
   ${PC_DIR}/iConfig.cpp
+  ${PC_DIR}/iDrawDist.cpp
   ${PC_DIR}/iFile.cpp
   ${PC_DIR}/intrin.cpp
   ${PC_DIR}/iMath.cpp
@@ -570,6 +571,7 @@ enable_testing()
 
 add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   ${PC_DIR}/iConfig.cpp
+  ${PC_DIR}/iDrawDist.cpp
   ${PC_DIR}/iFile.cpp
   ${PC_DIR}/iScreen.cpp
   ${PC_DIR}/intrin.cpp

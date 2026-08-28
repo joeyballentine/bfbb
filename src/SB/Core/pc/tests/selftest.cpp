@@ -15,6 +15,7 @@
 #include <types.h>
 
 #include "iConfig.h"
+#include "iDrawDist.h"
 #include "iFile.h"
 #include "iHost.h"
 #include "iSnd.h"
@@ -180,6 +181,7 @@ static void test_config()
                                 "[Video]\n"
                                 "width = 1280\n"
                                 "height  =  960\n"
+                                "Draw_Distance = no\n"
                                 "[XBOX]\n"
                                 "  Glow   =   OFF   \n"
                                 "distortion=yes\n"
@@ -215,6 +217,8 @@ static void test_config()
     // file's value nor the table's default, so neither can pass by accident.
     check(iConfigGetInt("video.width", 1) == 1280, "the render width comes off the file");
     check(iConfigGetInt("video.height", 1) == 960, "and the height, past ragged spacing");
+    check(iConfigGetBool("video.draw_distance", TRUE) == FALSE,
+          "'no' is false, in a key that has an underscore in it");
 
     // An unknown key is rejected at load, so it cannot be read back even under
     // its own name. That is what makes the report at load a guarantee rather
@@ -264,6 +268,7 @@ static void test_config()
         check(strstr(buf, "[video]") != NULL, "it has the [video] section header");
         check(strstr(buf, "width = 640") != NULL, "and the render width at its default");
         check(strstr(buf, "height = 480") != NULL, "and the height");
+        check(strstr(buf, "draw_distance = on") != NULL, "and the draw distance");
         check(strstr(buf, "[xbox]") != NULL, "it has the [xbox] section header");
         check(strstr(buf, "glow = on") != NULL, "and glow at its default");
         check(strstr(buf, "distortion = on") != NULL, "and distortion");
@@ -338,6 +343,39 @@ static void test_screen()
     check(iScreenWidth() == 640 && iScreenHeight() == 480, "and it can be set back");
     check(iScreenUIWidthF() == 640.0f && iScreenUIHeightF() == 480.0f,
           "with the UI box back at 640x480");
+}
+
+static void test_drawdist()
+{
+    printf("iDrawDist\n");
+
+    // Off until something says otherwise, and off means retail exactly: 400 is
+    // the far clip iCamera.cpp has always initialised itself to.
+    check(iDrawDistUnlimited() == FALSE, "the switch is off by default");
+    check(iDrawDistFarClip() == 400.0f, "and the far clip is the console's 400");
+
+    iDrawDistSetUnlimited(TRUE);
+    check(iDrawDistUnlimited() == TRUE, "the switch is taken");
+    check(iDrawDistFarClip() > 400.0f, "and the far clip moves out with it");
+
+    // The value xDrawDistCull hands the renderer when the switch is on. Every
+    // distance in these systems is already squared, so 1e38f is compared
+    // against a squared camera distance directly and nothing squares it again
+    // -- except zLOD, which takes its square root first and squares that back
+    // to reach adjustNoRenderDist. That round trip is the one that has to stay
+    // a number: an infinity would make the comparison false by accident rather
+    // than because the distance is unreachable. Checked here rather than in
+    // xDrawDist.h because the macro is a macro and this target does not link
+    // the renderer.
+    const F32 never = 1.0e38f;
+    const F32 adjusted = (10.0f + sqrtf(never)) * (10.0f + sqrtf(never));
+    check(adjusted > 0.0f && adjusted < 3.4e38f, "the 'never' distance survives zLOD's round trip");
+    check(adjusted > 1.0e30f, "and comes back far enough out that nothing reaches it");
+
+    // Global, and nothing else in this process draws, so it goes back rather
+    // than being left where a later test would find it surprising.
+    iDrawDistSetUnlimited(FALSE);
+    check(iDrawDistFarClip() == 400.0f, "and it can be set back");
 }
 
 static void test_file()
@@ -2266,6 +2304,7 @@ int main()
     // file that one parse reads.
     test_config();
     test_screen();
+    test_drawdist();
 
     test_time();
     test_math();

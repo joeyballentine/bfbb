@@ -69,6 +69,13 @@ namespace
           "; switch of its own: the camera keeps its vertical view and widens, so\n"
           "; 1280x720 shows more of the world to the left and right, and the\n"
           "; interface keeps its shape in the middle rather than stretching." },
+        { "video", "draw_distance", "on",
+          "Draw everything, however far away it is. The consoles stop drawing an\n"
+          "; object past a distance the level author set, swap distant ones for\n"
+          "; lower-detail models, and clip the world itself at 400 units; a PC has\n"
+          "; no reason to. Turning this off restores the consoles' distances\n"
+          "; exactly. It does not touch fog, and it does not make anything think\n"
+          "; further away than it used to -- only draw." },
         { "xbox", "glow", "on",
           "The full-screen glow -- what people call the Xbox version's bloom." },
         { "xbox", "distortion", "on", "The Cruise Bubble's screen warp." },

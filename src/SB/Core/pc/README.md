@@ -34,6 +34,16 @@ at load rather than ignored.
                         including the rule that every full-screen camera in the
                         game has to be built at this size or it draws nothing.
 
+    draw_distance       on by default. Draw everything, however far away it is.
+                        The consoles stop drawing an object past a distance the
+                        level author set, swap distant ones for lower-detail
+                        models, and clip the world itself at 400 units; off
+                        restores all three exactly. It leaves fog alone, and it
+                        does not make anything THINK further away than it used
+                        to -- the update cull reads the same numbers and is
+                        deliberately not touched. src/SB/Core/pc/iDrawDist.h
+                        has the account.
+
     [xbox]              Things the Xbox release did that the GameCube release
                         did not, all on by default. Turning one off leaves the
                         GameCube behaviour in its place, which is what the

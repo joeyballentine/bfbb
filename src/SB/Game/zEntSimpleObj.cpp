@@ -1,5 +1,7 @@
 #include "zEntSimpleObj.h"
 
+#include "xDrawDist.h"
+
 #include <types.h>
 
 struct zSimpleMgr
@@ -137,11 +139,14 @@ void zEntSimpleObj_MgrInit(zEntSimpleObj** entList, U32 entCount)
                     distscale = 1.0f;
                 }
 
-                smgr->lodDist[0] = lod->lodDist[0] ? lod->lodDist[0] * distscale : 1e38f;
-                smgr->lodDist[1] = lod->lodDist[1] ? lod->lodDist[1] * distscale : 1e38f;
-                smgr->lodDist[2] = lod->lodDist[2] ? lod->lodDist[2] * distscale : 1e38f;
+                smgr->lodDist[0] =
+                    lod->lodDist[0] ? xDrawDistCull(lod->lodDist[0] * distscale) : 1e38f;
+                smgr->lodDist[1] =
+                    lod->lodDist[1] ? xDrawDistCull(lod->lodDist[1] * distscale) : 1e38f;
+                smgr->lodDist[2] =
+                    lod->lodDist[2] ? xDrawDistCull(lod->lodDist[2] * distscale) : 1e38f;
                 smgr->lodDist[3] =
-                    lod->noRenderDist ? lod->noRenderDist * distscale : 1e38f;
+                    lod->noRenderDist ? xDrawDistCull(lod->noRenderDist * distscale) : 1e38f;
 
                 smgr->lodBucket[0] = lod->baseBucket;
                 smgr->lodBucket[1] = lod->lodBucket[0];
