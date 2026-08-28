@@ -583,7 +583,18 @@ void ZNPC_Common_Shutdown();
 // Terminating the lists is a deviation from retail, so it is confined to builds
 // that have to actually run. Both anim table functions are 100% matching and
 // must stay that way. See "Latent retail bugs" in docs/PCPORT.md.
-#ifdef NON_MATCHING
+//
+// PLATFORM_PC as well as NON_MATCHING, and leaving it out was a real crash: the
+// PC port is a build that has to actually run, and NON_MATCHING is defined only
+// by `configure.py --non-matching`, which is the GameCube playtest build. So the
+// port terminated neither list and walked off the end of both. It cost the
+// Prawn boss -- entering the fight read `ourAnims[10]` out of an uninitialised
+// stack word, indexed the name table with it and dereferenced the result, in
+// the middle of the level load.
+//
+// The GameCube build defines neither symbol and still gets an empty macro, so
+// the two anim tables it compiles are unchanged.
+#if defined(NON_MATCHING) || defined(PLATFORM_PC)
 #define NPCC_ANIM_LIST_END , 0
 #else
 #define NPCC_ANIM_LIST_END
