@@ -20,24 +20,45 @@
 //
 // **What is faithful and what is not.** The parameters are exact: they are
 // the twelve fields the Xbox build stores on its stack before calling
-// SetI3DL2Listener, recovered from that code and reproduced in iSnd.cpp. The
-// algorithm is not, and cannot be -- the Xbox's reverb is proprietary DSP
-// microcode, so no reimplementation samples-matches it. What is reproduced is
-// the description: an I3DL2 reverb driven by the game's own numbers.
+// SetI3DL2Listener, recovered from that code and reproduced in iSnd.cpp.
+//
+// The algorithm is a reconstruction, and here is exactly how good a one. The
+// Xbox runs its reverb as microcode in the APU's global-processor DSP, loaded
+// from the effects image the XDK calls dsstdfx -- DirectSound Standard Effects.
+// That image is not on the game disc and not in the XBE, no disassembly of it
+// has been published, and the emulators that run Xbox audio correctly do so by
+// emulating the DSP and executing the microcode rather than by describing what
+// it computes. So the Xbox's own topology is not available to copy, and nothing
+// here samples-matches it.
+//
+// What IS available is the same company's I3DL2 reverb for the PC, shipped as
+// a DirectSound Media Object in the same years, taking a parameter struct of
+// the same name -- and that one has been reverse engineered, by OpenMPT, whose
+// implementation this design is taken from. The two are siblings rather than
+// the same thing, and the weak link in the chain is exactly there: the Xbox's
+// standard effects are a DSP port of the PC's standard effects suite, but that
+// is an inference from the shared name, API and parameter struct, not a
+// verified fact.
+//
+// It is still a far better bet than a textbook reverb, which is what the first
+// version of this file was.
 //
 // **The structure**, per output channel:
 //
-//   1. a tapped delay line for the early reflections, first tap at
-//      reflections_delay
-//   2. a pre-delay of reflections_delay + reverb_delay into the late network
-//   3. eight parallel combs, each with a one-pole shelf in its feedback loop,
-//      so that low and high frequencies can decay at different rates
-//   4. four series allpasses, to smear what the combs leave periodic
-//   5. summed as room+reflections and room+reverb, and added to the dry mix
+//   1. a one-pole room filter, set by room_hf
+//   2. a delay line the early reflections are tapped from -- five taps spread
+//      across the window between the first reflection and the late onset, with
+//      fixed weights and alternating signs, then one short allpass
+//   3. a sixth tap of the same line, at the late onset, feeding the late chain
+//   4. an energy-preserving 2x2 matrix mixing the two channels' loops
+//   5. six absorbent allpasses in series, delays in a geometric series from
+//      67 ms down to 22 (75 to 25 on the right), each with a damping filter and
+//      a decay gain in its path, plus one more delay in the middle of the chain
+//   6. the chain's output summed from per-stage taps and fed back to step 4
 //
-// The comb and allpass delay lengths are Schroeder-Moorer's, which is a choice;
-// everything about how loud and how long is derived from the parameters and is
-// not.
+// It is a recirculating loop, not a bank of parallel combs: the last stage's
+// output is what closes it. Diffusion is the allpass coefficient, density
+// scales the delays, and the level and decay come out of the parameters.
 //
 // **Threading.** Nothing here is synchronised. iSndReverbProcess runs on the
 // backend's render thread and iSndReverbSet on the game thread, so the caller

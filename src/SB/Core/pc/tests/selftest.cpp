@@ -1356,6 +1356,48 @@ static void test_snd_reverb()
 
     check(sane, "three seconds of full-scale noise neither diverges nor goes non-finite");
 
+    // The late chain recirculates -- the last stage's output is summed back
+    // into the first -- so unlike a bank of parallel combs it can be driven
+    // unstable by parameters alone. The game only ever asks for 1.65 seconds,
+    // but I3DL2 allows twenty, and the loop gain rises with it.
+    iSndReverbExit();
+    iSndReverbInit(rate);
+
+    iSndHostReverb huge = cave;
+    huge.decay_time = 20.0f;
+    huge.decay_hf_ratio = 2.0f;
+    huge.room = 0;
+    huge.reverb = 0;
+    huge.reflections = 0;
+    iSndReverbSet(&huge);
+
+    reverb_seed = 31337;
+    bool sane_long = true;
+
+    for (U32 b = 0; b < 100; b++)
+    {
+        for (U32 n = 0; n < kFrames; n++)
+        {
+            // Silence after the first second, so what is measured is the tail
+            // rather than what is being fed in.
+            float v = (b < 20) ? reverb_noise() : 0.0f;
+            blk[n * 2 + 0] = v;
+            blk[n * 2 + 1] = v;
+        }
+
+        iSndReverbProcess(blk, kFrames);
+
+        for (U32 n = 0; n < 2 * kFrames; n++)
+        {
+            if (!(blk[n] > -8.0f && blk[n] < 8.0f))
+            {
+                sane_long = false;
+            }
+        }
+    }
+
+    check(sane_long, "and the longest decay I3DL2 allows still decays rather than growing");
+
     // --- switching it off ---------------------------------------------------
     // The scene the game leaves a cave for asks for no effect at all, and the
     // dry mix it gets back has to be the one it handed over.
