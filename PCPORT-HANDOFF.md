@@ -630,57 +630,46 @@ never coincided. Before trusting a diagnostic, spend one round proving it
 fires on the actual subject. A probe that cannot report "I saw nothing" cannot
 be trusted when it reports something.
 
-### The dark trees — measured, unresolved
+### The dark trees -- FOUND, and the earlier account here was wrong
 
-Trees in the hub render too dark. Measured at the bucket flush, which is where
-they are actually drawn:
+**librw lit every object in proportion to its own scale.** `uploadMatrices` set
+the normal matrix to the world matrix, under a `// TODO: inverse transpose` that
+had been sitting in librw's source the whole time. Normals do not transform by
+the matrix: under a scale of s the world matrix lengthens a unit normal to s,
+where the correct matrix shortens it to 1/s. Neither is unit, and the shaders do
+not normalise -- the normal goes straight into `max(0, dot(N, -L))` -- so the
+scale multiplied every directional term.
 
-    PipeFlags 00980002 | prelight DISABLED | kit 1412C810
-    geo flags 00000037   PRELIT clear   NORMALS set   MODULATE clear
+Bikini Bottom's props run from 0.11 to 9.0. The 47 objects at exactly 1.0 always
+looked right; `plant_purple_curly` at 0.6756 and `plant_purple_dots` at 0.2500
+went dark; objects at 9.0 saturated and looked FLAT AND UNSHADED. That is the
+whole of the original report: "PC: tree shaded, missile not, GC: missile shaded,
+tree not" was ONE bug sampled at two scales, not two bugs. Ambient was never
+affected because it does not touch the normal, and the GameCube is right because
+GX normalises in the transform unit. Fixed in the fork as `d3d9: take the scale
+out of the normal matrix`.
 
-So a tree is: four directional lights from kit `1412C810`, which has **no
-ambient light at all**, added to librw's constant vertex stream, which is
-**black**, with the material colour substituted white because `MODULATE` is
-clear. A face pointing away from all four directionals therefore receives
-nothing. 88 of 101 buckets are in this state and 13 keep their baked prelight;
-the split is `(PipeFlags & 0xC0) == 0x80`, tested just above the draw, and
-`0x00980002` does not match it.
+**Everything the previous version of this section said about trees was measured
+off the wrong object.** It recorded the tree as `PipeFlags 00980002`, `kit
+1412C810`, `geo flags 00000037`. `00980002` is `bubble_buddy_bind.dff` in hb01's
+PIPT -- the translucent figure standing a few feet from the plant. The plant is
+`plant_purple_curly`, `PipeFlags 80986500`, and its real numbers are `geo flags
+00000077`, no prelight at all (`colors 0`), ambient 0, four directionals with
+correct colours and directions. This is the second time this exact mistake was
+made on this bug, directly below the section warning about it.
 
-The open question is narrow and still unanswered: **what does the GameCube use
-as the base colour for a vertex when `PRELIT` is clear?** If it is not black,
-that is the whole bug.
+Cleared by measurement, each after being believed: the pipeline split (80
+objects on the default pipeline, 29 on skin) is a real correlation and NOT the
+cause, most of the 29 being props that merely carry skin data; the frozen vertex
+declaration; the `c4` collision between `uploadMatrices` and the shaders' `def`
+block (real in the disassembly, but `def` constants are baked by the driver, so
+writes to c4 never mattered); the shader-constant caches; the skin bone matrices
+and hierarchy; the blend indices; and the light enumeration.
 
-Ruled out by measurement, so that none of it is retried:
-
-- LKIT payload is byte-identical between the Xbox and GameCube assets.
-- `Geometry::LIGHT` is set; `currentWorld` is valid; `RpWorldAddLight` is
-  implemented and the world's light lists are populated.
-- The prelight hack in `iModel.cpp` is verbatim retail.
-- Light type constants match retail and are asserted.
-- The light direction convention matches: `direction = at`, and the shader
-  computes `dot(N, -at)`. The four directions are well spread -- a warm key
-  from above, a cool fill from below.
-- `RwSurfaceProperties` field order is asserted; all surfaceProps are 1.000.
-- `Light::create` sets `LIGHTATOMICS`.
-- The material alpha of 64 that looked suspicious is injected at runtime, not
-  authored: 217 of 219 materials are 255 and one is 128, and 64 is exactly
-  `NPC_BubBud_RenderCB`'s `fade * 127.5 + 0.5` at fade 0.5. Different object.
-
-Two experiments that were **badly designed** and proved nothing, recorded so
-the same shape is not built again:
-
-- `BFBB_PRELITBASE=white` forced the constant stream white to see whether the
-  lights were contributing. The shader clamps before the material colour is
-  applied, so a white base saturates whether or not lighting works -- the
-  experiment could not distinguish the two outcomes. It made everything bright
-  and flat, which was not evidence of anything.
-- An R-to-B channel swap was suspected for a texture that reads blue instead
-  of red. `BFBB_TEXRGB` read the converted texture back and got
-  `R 145.0 G 97.1 B 105.7` against the asset's ground truth of
-  `R 144.0 G 97.1 B 105.8`. The texture arrives correct; the cause is
-  downstream, in the environment pass or its UV generation.
-
-The systematic next step, if this is picked up again, is a known-good case in
-`rw_selftest`: one quad, one directional light, one known normal, and librw's
-output compared against the arithmetic done by hand. Slower than another
-hypothesis, but it terminates.
+**What worked was a binary split, not another hypothesis.** Forcing ambient to
+white lit the objects, proving the whole chain -- constants, shader selection,
+vertex colour, pixel shader, blending -- and leaving only terms that touch the
+normal. Forcing `surfDiffuse` to 20 lit them again, proving the directional loop
+ran and the dot products were merely small. Between those two readings the
+answer was two lines of C++. Reach for the test that halves the space before
+reading further up the chain.
