@@ -99,7 +99,18 @@ build-pc\bfbb.exe
 
 It writes a `config.ini` beside the executable on the first run, with every
 setting at its default and a comment on each. That is where the Xbox features
-above are turned on and off.
+above are turned on and off, and where the resolution is set:
+
+```ini
+[video]
+width = 1280
+height = 960
+```
+
+The default is the consoles' 640x480. Keep the ratio at 4:3 — the camera and
+every 2D layer work in a 4:3 space, so 1280x720 is the same picture stretched
+rather than a wider view. `docs/RESOLUTION.md` has the details, including what
+raising it does not fix.
 
 `src/SB/Core/pc/README.md` describes it, and lists the `BFBB_*` diagnostics.
 

@@ -3,6 +3,7 @@
 #include "iModel.h"
 
 #include "iCamera.h"
+#include "iScreen.h"
 #include "xMemMgr.h"
 
 static S32 sBeginDrawFX;
@@ -60,7 +61,7 @@ void iEnvLoad(iEnv* env, const void* data, U32, S32 dataType)
 
             env->world = RpWorldCreate(&tmpbbox);
 
-            sPipeCamera = iCameraCreate(640, 480, 0);
+            sPipeCamera = iCameraCreate(iScreenWidth(), iScreenHeight(), 0);
             sPipeWorld = env->world;
 
             RpWorldAddCamera(sPipeWorld, sPipeCamera);

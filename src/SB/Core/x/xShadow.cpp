@@ -7,6 +7,7 @@
 #include "xRay3.h"
 #include "xQuickCull.h"
 #include "xScene.h"
+#include "xScreen.h"
 #include "zGrid.h"
 #include "iCollide.h"
 #include "iCamera.h"
@@ -126,7 +127,7 @@ static S32 SetupShadow()
     // equal to either display width or height.
     // On GCN, this routine normally won't happen,
     // as we're already below both dimensions.
-    for (; (res > 640) || (res > 480); res >>= 1);
+    for (; (res > xScreenWidth()) || (res > xScreenHeight()); res >>= 1);
 
     ShadowCamera = ShadowCameraCreatePersp(res);
     if (ShadowCamera == NULL)

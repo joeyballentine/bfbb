@@ -34,6 +34,7 @@
 #include "xMath.h"
 #include "xMemMgr.h"
 #include "xModel.h"
+#include "xScreen.h"
 #include "xScrFx.h"
 #include "xSkyDome.h"
 #include "xTRC.h"
@@ -396,7 +397,7 @@ void zGameInit(U32 theSceneID)
     g_hiphopReloadHIP = 0;
     g_hiphopForcePortal = 0;
     gGameWhereAmI = eGameWhere_InitCamera;
-    xCameraInit(&globals.camera, 640, 480);
+    xCameraInit(&globals.camera, xScreenWidth(), xScreenHeight());
     zCameraReset(&globals.camera);
     xCameraSetScene(&globals.camera, globals.sceneCur);
     gGameWhereAmI = eGameWhere_InitMusic;
@@ -923,7 +924,7 @@ static void zGame_HackPostPortalAutoSaveDraw()
 	
     sprintf(str, "{font=0}{i:MNU4 AUTO SAVE TXT}");
 	
-    ccam = (RwCamera *)iCameraCreate(640, 480, 0);
+    ccam = (RwCamera *)iCameraCreate(xScreenWidth(), xScreenHeight(), 0);
 	
     xtextbox tb = xtextbox::create
 	(
@@ -960,10 +961,16 @@ static void zGame_HackPostPortalAutoSaveDraw()
             rast = NULL;
         }
 		
-        zGame_HackDrawCard(0.0f,   0.0f,   320.0f, 240.0f, rast);
-        zGame_HackDrawCard(320.0f, 0.0f,   320.0f, 240.0f, rast);
-        zGame_HackDrawCard(0.0f,   240.0f, 320.0f, 240.0f, rast);
-        zGame_HackDrawCard(320.0f, 240.0f, 320.0f, 240.0f, rast);
+        // Four quarters of the screen, so the smoke tiles it whatever size it
+        // is. Written as halves of the render size rather than as 320 and 240,
+        // which are what those halves come to on a 640x480 framebuffer.
+        F32 hw = 0.5f * xScreenWidthF();
+        F32 hh = 0.5f * xScreenHeightF();
+
+        zGame_HackDrawCard(0.0f, 0.0f, hw,   hh,   rast);
+        zGame_HackDrawCard(hw,   0.0f, hw,   hh,   rast);
+        zGame_HackDrawCard(0.0f, hh,   hw,   hh,   rast);
+        zGame_HackDrawCard(hw,   hh,   hw,   hh,   rast);
 		
         tex = (RwTexture*)xSTFindAsset(xStrHash("ui_savinggame"), NULL);
         if (tex == NULL)
@@ -979,7 +986,14 @@ static void zGame_HackPostPortalAutoSaveDraw()
             rast = NULL;
         }
 
-        zGame_HackDrawCard(275.0f, 350.0f, 90.0f, 90.0f, rast);
+        // The icon is placed and sized in 640x480 pixels, so it is measured in
+        // the same fractions of whatever the screen actually is. Both axes,
+        // because a 4:3 render size scales them equally and a square icon that
+        // used one factor for both would stop being square on one that is not.
+        F32 sx = xScreenWidthF() / 640.0f;
+        F32 sy = xScreenHeightF() / 480.0f;
+
+        zGame_HackDrawCard(275.0f * sx, 350.0f * sy, 90.0f * sx, 90.0f * sy, rast);
 
         if (yextent > 0.0f)
         {
@@ -1278,7 +1292,7 @@ void zGameScreenTransitionBegin()
     gGameWhereAmI = eGameWhere_TransitionBegin;
     zGameSetOstrich(eGameOstrich_Loading);
     globals.dontShowPadMessageDuringLoadingOrCutScene = '\0';
-    sGameScreenTransCam = iCameraCreate(640, 480, 0);
+    sGameScreenTransCam = iCameraCreate(xScreenWidth(), xScreenHeight(), 0);
     if (sGameScreenTransCam != NULL)
     {
         DirectionalLight = RpLightCreate(1);
@@ -1435,7 +1449,7 @@ void zGameScreenTransitionUpdate(F32 percentComplete, char* msg, U8* rgba)
             vx[0].v = bgv1;
 
             vx[1].x = 0.0f;
-            vx[1].y = 480.0f;
+            vx[1].y = xScreenHeightF();
             vx[1].z = z;
             vx[1].emissiveColor.red   = bgr;
             vx[1].emissiveColor.green = bgb;
@@ -1444,7 +1458,7 @@ void zGameScreenTransitionUpdate(F32 percentComplete, char* msg, U8* rgba)
             vx[1].u = bgu1;
             vx[1].v = bgv2;
 
-            vx[2].x = 640.0f;
+            vx[2].x = xScreenWidthF();
             vx[2].y = 0.0f;
             vx[2].z = z;
             vx[2].emissiveColor.red   = bgr;
@@ -1454,8 +1468,8 @@ void zGameScreenTransitionUpdate(F32 percentComplete, char* msg, U8* rgba)
             vx[2].u = bgu2;
             vx[2].v = bgv1;
 
-            vx[3].x = 640.0f;
-            vx[3].y = 480.0f;
+            vx[3].x = xScreenWidthF();
+            vx[3].y = xScreenHeightF();
             vx[3].z = z;
             vx[3].emissiveColor.red   = bgr;
             vx[3].emissiveColor.green = bgb;

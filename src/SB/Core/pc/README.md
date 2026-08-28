@@ -19,6 +19,21 @@ then `config.ini` beside the executable. Booleans take on/off, true/false,
 yes/no or 1/0, and a key that is not one of the ones below is reported by name
 at load rather than ignored.
 
+    [video]             The size the game renders at. The window opens at it,
+                        but the two are independent from there: the picture is
+                        scaled into the back buffer at present time, so resizing
+                        the window never resizes the picture.
+
+    width               640 by default, the consoles' framebuffer
+    height              480
+
+                        Keep the ratio at 4:3. The camera's frustum and every
+                        2D layer work in a 4:3 space, so 1280x720 is the same
+                        picture stretched to fit rather than a wider view of
+                        the world. docs/RESOLUTION.md is the whole account,
+                        including the rule that every full-screen camera in the
+                        game has to be built at this size or it draws nothing.
+
     [xbox]              Things the Xbox release did that the GameCube release
                         did not, all on by default. Turning one off leaves the
                         GameCube behaviour in its place, which is what the

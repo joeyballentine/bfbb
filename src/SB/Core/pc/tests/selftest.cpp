@@ -27,6 +27,7 @@
 #include "iMath.h"
 #include "iMemMgr.h"
 #include "iPadHost.h"
+#include "iScreen.h"
 #include "iSystem.h"
 #include "isavegame.h"
 #include "iTime.h"
@@ -176,6 +177,9 @@ static void test_config()
     // spellings, ragged whitespace, a blank line, three spellings of true, and
     // one key that does not exist.
     static const char kFile[] = "; the port's settings\n"
+                                "[Video]\n"
+                                "width = 1280\n"
+                                "height  =  960\n"
                                 "[XBOX]\n"
                                 "  Glow   =   OFF   \n"
                                 "distortion=yes\n"
@@ -206,6 +210,11 @@ static void test_config()
     check(iConfigGetBool("xbox.distortion", FALSE) == TRUE, "'yes' is true");
     check(iConfigGetBool("xbox.snapshot", FALSE) == TRUE, "'1' is true, past a # comment");
     check(iConfigGetBool("xbox.reverb", FALSE) == TRUE, "'TRUE' is true");
+
+    // The render size. Read as ints against a fallback that is neither the
+    // file's value nor the table's default, so neither can pass by accident.
+    check(iConfigGetInt("video.width", 1) == 1280, "the render width comes off the file");
+    check(iConfigGetInt("video.height", 1) == 960, "and the height, past ragged spacing");
 
     // An unknown key is rejected at load, so it cannot be read back even under
     // its own name. That is what makes the report at load a guarantee rather
@@ -252,6 +261,9 @@ static void test_config()
         fclose(r);
         buf[n] = '\0';
 
+        check(strstr(buf, "[video]") != NULL, "it has the [video] section header");
+        check(strstr(buf, "width = 640") != NULL, "and the render width at its default");
+        check(strstr(buf, "height = 480") != NULL, "and the height");
         check(strstr(buf, "[xbox]") != NULL, "it has the [xbox] section header");
         check(strstr(buf, "glow = on") != NULL, "and glow at its default");
         check(strstr(buf, "distortion = on") != NULL, "and distortion");
@@ -261,6 +273,38 @@ static void test_config()
 
     iHostRemoveFile(written);
     iHostRemoveDir(dir);
+}
+
+static void test_screen()
+{
+    printf("iScreen\n");
+
+    // The console's framebuffer, and what the port renders at until config.ini
+    // says otherwise. Checked first because everything below moves it.
+    check(iScreenWidth() == 640 && iScreenHeight() == 480, "the default is 640x480");
+    check(iScreenWidthF() == 640.0f && iScreenHeightF() == 480.0f,
+          "and the float pair agrees with the int pair");
+
+    iScreenSetSize(1280, 960);
+    check(iScreenWidth() == 1280 && iScreenHeight() == 960, "a size is taken");
+    check(iScreenWidthF() == 1280.0f && iScreenHeightF() == 960.0f, "by both pairs");
+
+    // A refusal must LEAVE the size alone rather than fall back to 640x480:
+    // the window has already been opened at whatever is in force by the time
+    // anything could pass a bad one, and every camera raster in the game is
+    // about to be built at it.
+    iScreenSetSize(0, 480);
+    check(iScreenWidth() == 1280 && iScreenHeight() == 960, "a zero width is refused");
+    iScreenSetSize(640, -1);
+    check(iScreenWidth() == 1280 && iScreenHeight() == 960, "a negative height is refused");
+    iScreenSetSize(100000, 100000);
+    check(iScreenWidth() == 1280 && iScreenHeight() == 960, "and a size no surface could be");
+
+    // Nothing else in this process renders, but the value is global, so it goes
+    // back to the default rather than being left where a later test would find
+    // it surprising.
+    iScreenSetSize(640, 480);
+    check(iScreenWidth() == 640 && iScreenHeight() == 480, "and it can be set back");
 }
 
 static void test_file()
@@ -2188,6 +2232,7 @@ int main()
     // First: iConfig parses once per process, and this is what decides which
     // file that one parse reads.
     test_config();
+    test_screen();
 
     test_time();
     test_math();

@@ -339,18 +339,22 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
 
     // Fix the size the game renders at, before the device is made.
     //
-    // The game's framebuffer is a fixed part of its design -- zGame.cpp:395
-    // builds the main camera's raster at a constant size, and librw takes the
-    // viewport from that raster while the back buffer follows the window. So a
-    // window larger than the raster does not enlarge the picture, it leaves the
-    // picture at its own size in the top-left corner with the rest of the window
-    // around it. A virtual screen makes the picture the thing that scales.
+    // The game's framebuffer is a fixed part of its design -- zGame.cpp builds
+    // the main camera's raster at one size and never changes it, and librw takes
+    // the viewport from that raster while the back buffer follows the window. So
+    // a window larger than the raster does not enlarge the picture, it leaves
+    // the picture at its own size in the top-left corner with the rest of the
+    // window around it. A virtual screen makes the picture the thing that
+    // scales.
     //
     // The size comes from the window rather than from a constant repeated here,
     // because iSystem opens the window at the size it intends the game to render
-    // at, and that has to agree with the raster zGame builds. Read now, before
-    // anything can resize it: this is the size the port booted with, and it is
-    // deliberately NOT updated afterwards.
+    // at and then pushes back whatever the window actually gave, so what
+    // iWindowGetSize answers here is the same number iScreen hands the camera
+    // rasters. They have to agree: a camera raster that does not match the
+    // virtual screen fails to bind a depth surface and draws nothing. Read now,
+    // before anything can resize it -- this is the size the port booted with,
+    // and it is deliberately NOT updated afterwards.
     {
         RwInt32 screenWidth = 0;
         RwInt32 screenHeight = 0;

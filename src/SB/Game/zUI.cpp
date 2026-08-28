@@ -17,6 +17,7 @@
 #include "xEvent.h"
 #include "xGroup.h"
 #include "xMath2.h"
+#include "xScreen.h"
 #include "xScrFx.h"
 #include "xSnd.h"
 #include "xstransvc.h"
@@ -836,10 +837,23 @@ void zUI_Render(xEnt* ent)
                 F32 v3 = ui->sasset->uvc[1];
                 F32 u4 = ui->sasset->uvd[0];
                 F32 v4 = ui->sasset->uvd[1];
+                // The two 640s in `w * pos.x / w` are different numbers that
+                // happen to be equal on a 640x480 framebuffer. UI sprites are
+                // authored in 640x480 pixels and drawn as raw pixels, so the
+                // denominator is what the artist measured against and stays at
+                // 640; only the numerator is the screen. The model branch below
+                // already normalises by 640/480 and needs nothing.
+#ifdef PLATFORM_PC
+                F32 x1 = xScreenWidthF() * ui->sasset->pos.x / w;
+                F32 y1 = xScreenHeightF() * ui->sasset->pos.y / h;
+                F32 x2 = xScreenWidthF() * (ui->sasset->pos.x + ui->sasset->dim[0]) / w;
+                F32 y2 = xScreenHeightF() * (ui->sasset->pos.y + ui->sasset->dim[1]) / h;
+#else
                 F32 x1 = w * ui->sasset->pos.x / w;
                 F32 y1 = h * ui->sasset->pos.y / h;
                 F32 x2 = w * (ui->sasset->pos.x + ui->sasset->dim[0]) / w;
                 F32 y2 = h * (ui->sasset->pos.y + ui->sasset->dim[1]) / h;
+#endif
 
                 F32 z = RwIm2DGetNearScreenZ();
                 F32 cz = z;

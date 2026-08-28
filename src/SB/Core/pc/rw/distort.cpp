@@ -53,6 +53,12 @@ namespace
 // size at va 0x6e44d.
 static const F32 kDisplacePixels = 15.0f;
 
+// And the screen those 15 pixels are 15 pixels of. Both consoles rendered at
+// 640x480, so this is the frame buffer size at va 0x6e44d and the only reason
+// it appears as its own constant is that the port need not render at it.
+static const F32 kReferenceWidth = 640.0f;
+static const F32 kReferenceHeight = 480.0f;
+
 // Radians per millisecond. `fmul [0x26d774]` in the same function, applied to a
 // tick count read through the call at va 0x1b5085.
 //
@@ -207,11 +213,20 @@ void iDistortRender(RwCamera* cam, RwTexture* map, F32 amount, F32 width, F32 he
     double ms = (double)clock() * (1000.0 / CLOCKS_PER_SEC);
     double turn = 2.0 * 3.14159265358979323846;
     F32 phase = (F32)fmod(ms * (double)kRadiansPerMs, turn);
+
     F32 amplitude = amount * kDisplacePixels;
 
+    // Divided by the size the 15 pixels were MEASURED against, not by the size
+    // being rendered at. Those are the same number on the console and on the
+    // Xbox, which is why the original divides by the screen -- but taken
+    // literally at a larger render size it would shrink the warp, since the
+    // same 15 pixels are a smaller fraction of a wider screen. Dividing by the
+    // reference keeps the bubble's distortion the same size on screen at any
+    // resolution, which is what it is: a fraction of the picture, not a count
+    // of pixels.
     F32 displace[4];
-    displace[0] = (amplitude * sinf(phase)) / width;
-    displace[1] = (amplitude * cosf(phase)) / height;
+    displace[0] = (amplitude * sinf(phase)) / kReferenceWidth;
+    displace[1] = (amplitude * cosf(phase)) / kReferenceHeight;
     displace[2] = 0.0f;
     displace[3] = 0.0f;
 

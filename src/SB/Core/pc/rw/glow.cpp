@@ -45,9 +45,14 @@ namespace blur_ps
 // 0x370544, 0x370540 and 0x370530, built by the calls at va 0x1712d8, 0x1712ee
 // and 0x171304. Halving one axis per pass is what makes a four-tap kernel cover
 // as much as it does.
-static const RwInt32 kHalfW = 320, kHalfH = 240;
-static const RwInt32 kVertW = 320, kVertH = 120;
-static const RwInt32 kQuarterW = 160, kQuarterH = 120;
+//
+// The Xbox's numbers are 320x240, 320x120 and 160x120, which are a half and a
+// quarter of its 640x480 frame -- so they are computed from the frame here
+// rather than written down. A chain nailed to those three sizes would still
+// run at a larger render size, and the glow would tighten as the resolution
+// went up: the blur's tap distances are in texels OF THE TEXTURE BEING SAMPLED,
+// so what fixes the bloom's radius as a fraction of the screen is the
+// downsample RATIO, not the target's size.
 
 // The blur weights, from the Xbox's two tables. They sum to one.
 static const F32 kNearWeight = 1.0f / 3.0f;
@@ -114,6 +119,36 @@ static bool makeTarget(GlowTarget* t, RwInt32 w, RwInt32 h)
     RwCameraSetNearClipPlane(t->camera, 0.05f);
     RwCameraSetFarClipPlane(t->camera, 400.0f);
     return true;
+}
+
+// The frame and the raster by hand, then the camera. RenderWare leaves both to
+// the caller -- librw's Camera::destroy only detaches the frame -- which is the
+// same order iCamera.cpp:69 takes them in. There is no Z raster here; makeTarget
+// does not give these one.
+static void destroyTarget(GlowTarget* t)
+{
+    if (t->camera != NULL)
+    {
+        RwFrame* frame = RwCameraGetFrame(t->camera);
+        if (frame != NULL)
+        {
+            RwCameraSetFrame(t->camera, NULL);
+            RwFrameDestroy(frame);
+        }
+
+        RwCameraSetRaster(t->camera, NULL);
+        RwCameraDestroy(t->camera);
+    }
+
+    if (t->raster != NULL)
+    {
+        RwRasterDestroy(t->raster);
+    }
+
+    t->camera = NULL;
+    t->raster = NULL;
+    t->width = 0;
+    t->height = 0;
 }
 
 // One full-screen quad in the current camera, textured with `src`, through
@@ -274,16 +309,6 @@ void iGlowRender(RwCamera* cam, F32 strength)
         }
     }
 
-    if (sHalf.camera == NULL)
-    {
-        if (!makeTarget(&sHalf, kHalfW, kHalfH) || !makeTarget(&sVert, kVertW, kVertH) ||
-            !makeTarget(&sQuarter, kQuarterW, kQuarterH))
-        {
-            glowFail("the glow's render targets would not be made", 0);
-            return;
-        }
-    }
-
     // The passes render into their own cameras, and the copy needs the scene
     // closed, so the frame's camera goes down for the duration. The Xbox does
     // the same, at va 0x171e5e and 0x1720f0.
@@ -293,6 +318,54 @@ void iGlowRender(RwCamera* cam, F32 strength)
     {
         RwCameraBeginUpdate(cam);
         return;
+    }
+
+    // The chain, sized from the frame that was just captured -- see the note on
+    // the ratios above. Made after the capture rather than before it because
+    // this is where the frame's size is known, and remade if it ever changes,
+    // for the reason snapshot.cpp rebuilds its raster: nothing in the port
+    // resizes the render target today, and a stale chain would silently start
+    // scaling instead of downsampling.
+    {
+        RwInt32 halfW = sScreen->width / 2;
+        RwInt32 halfH = sScreen->height / 2;
+        RwInt32 quarterW = halfW / 2;
+        RwInt32 quarterH = halfH / 2;
+
+        // A render size small enough to divide to nothing is not a case worth
+        // handling, but a zero-sized raster is a failure several calls further
+        // on, so the floor is here rather than there.
+        if (quarterW < 1)
+        {
+            quarterW = 1;
+        }
+        if (quarterH < 1)
+        {
+            quarterH = 1;
+        }
+        if (halfW < 1)
+        {
+            halfW = 1;
+        }
+        if (halfH < 1)
+        {
+            halfH = 1;
+        }
+
+        if (sHalf.camera == NULL || sHalf.width != halfW || sHalf.height != halfH)
+        {
+            destroyTarget(&sHalf);
+            destroyTarget(&sVert);
+            destroyTarget(&sQuarter);
+
+            if (!makeTarget(&sHalf, halfW, halfH) || !makeTarget(&sVert, halfW, quarterH) ||
+                !makeTarget(&sQuarter, quarterW, quarterH))
+            {
+                glowFail("the glow's render targets would not be made", 0);
+                RwCameraBeginUpdate(cam);
+                return;
+            }
+        }
     }
 
     // 1. threshold and halve

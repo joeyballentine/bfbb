@@ -24,6 +24,7 @@ extern "C" int sprintf(char*, const char*, ...);
 #include "xsavegame.h"
 #include "xBehaveMgr.h"
 #include "xModel.h"
+#include "xScreen.h"
 #include "xShadowSimple.h"
 #include "iMath.h"
 #include "xString.h"
@@ -941,7 +942,7 @@ void zMainReadINI()
 
 void zMainFirstScreen(S32 mode)
 {
-    RwCamera* cam = iCameraCreate(640, 480, 0);
+    RwCamera* cam = iCameraCreate(xScreenWidth(), xScreenHeight(), 0);
     RwRGBA bg = {};
     S32 i;
     S32 vbl;
@@ -1292,7 +1293,7 @@ static void zMainMemCardQueryPost(S32 needed, S32 available, S32 neededFiles, S3
     RwRGBA colour = {};
     RwInt32 clearMode = 3;
 
-    cam = iCameraCreate(640, 480, 0);
+    cam = iCameraCreate(xScreenWidth(), xScreenHeight(), 0);
     RwCameraClear(cam, &colour, clearMode);
     RwCameraBeginUpdate(cam);
     render_mem_card_no_space(needed, available, neededFiles, unk0 != 0);
@@ -1307,7 +1308,7 @@ void zMainMemCardRenderText(const char* a, bool enabled)
     RwRGBA colour = {};
     RwInt32 clearMode = 3;
 
-    cam = iCameraCreate(640, 480, 0);
+    cam = iCameraCreate(xScreenWidth(), xScreenHeight(), 0);
     RwCameraClear(cam, &colour, clearMode);
     RwCameraBeginUpdate(cam);
     RenderText(a, enabled);

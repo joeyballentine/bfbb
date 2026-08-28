@@ -1,165 +1,168 @@
-# Rendering above 640x480: what it would take
+# Rendering above 640x480
 
 ## Where things stand
 
-The port opens its window at 640x480 (`iSystem.cpp:157`) and renders at that
-size. Nothing chooses it at run time, and nothing else in the port disagrees with
-it, which is the whole reason it works.
+The port renders at whatever `config.ini`'s `[video] width` and `height` say,
+and opens its window at that size. The default is 640x480, which is retail's
+framebuffer, so a fresh install behaves exactly as it did before this existed.
 
-This is a much smaller job than [UNCAPPED.md](UNCAPPED.md). That one is about 250
-scattered gameplay constants, each needing a judgement call about whether it is a
-rate or a unit conversion. This is about twenty call sites, all of them in
-rendering, none of them ambiguous. The risk is not getting a decision wrong, it
-is missing one -- and the failure mode is a black screen rather than a subtle
-one, for the reason two sections down.
+    [video]
+    width = 1280
+    height = 960
 
-This is a static audit. Nothing below has been built or run.
+This document was an audit of what it would take. It is now an account of how it
+works and of what raising the number does NOT fix.
 
-## What already works, and why
+## The one number
+
+`src/SB/Core/pc/iScreen.h` holds the render size for the whole game.
+`iSystem.cpp` sets it from `config.ini` before the window is opened, opens the
+window at it, and then sets it again from the client area the window actually
+gave -- because `rw/engine_start.cpp` takes the virtual screen from the window,
+and the two must not disagree. It is fixed from that point on.
+
+Shared code reaches it through `src/SB/Core/x/xScreen.h`, which expands to
+`iScreen` on the PC and to the literals `640`, `480`, `640.0f` and `480.0f` on
+the GameCube. Every call site therefore preprocesses to exactly the constant it
+used to hold when built for the console, and the GameCube DOL is byte-identical
+with the matched-function count unchanged. That is checked, not assumed:
+`python tools/gcgate.py` after a `ninja`.
+
+## Why the render size and the window size are independent
 
 The port does not render into the back buffer. It renders into a **virtual
 screen** -- a render target of a fixed size -- which `blitVirtualScreen`
-(`third_party/librw/src/d3d/d3ddevice.cpp:1543`) stretches into the back buffer at
-present time, keeping its aspect and filling the rest with black. The back buffer
-follows the window; the picture does not.
+(`third_party/librw/src/d3d/d3ddevice.cpp:1543`) stretches into the back buffer
+at present time, keeping its aspect and filling the rest with black. The back
+buffer follows the window; the picture does not. Set the render size above the
+window and you get supersampling; below it and you get a scaler. Resizing the
+window never resizes the picture.
 
-So the render resolution and the window size are **already independent**. Set the
-render size above the window and you get supersampling; below it and you get a
-scaler. That part needs no work at all.
-
-`engine_start.cpp:352-361` sets the virtual screen from the window, once, before
-the D3D device is made. `RwEngineGetVideoModeInfo` (`engine_start.cpp:585-611`)
-then reports the virtual screen as the current video mode rather than the
-adapter's desktop mode, which is what stops `xScrFx` sizing its full-screen
-rectangles to a 4K desktop.
-
+`RwEngineGetVideoModeInfo` (`engine_start.cpp:585-611`) reports the virtual
+screen as the current video mode rather than the adapter's desktop mode, which
+is what stops `xScrFx` sizing its full-screen rectangles to a 4K desktop.
 Everything that asks the video mode for the screen size is therefore correct at
-any resolution, today, with no change:
+any resolution with no change of its own:
 
-    xScrFx.cpp:171-173, 270-272    the fade to black, the death vignette
-    xScrFx.cpp:340-343             the letterbox bars
-    xScrFx.cpp:355-373             the safe-area frame
-    xScrFx.cpp:451                 the distort effect's extent
-    iFMV.cpp:287-291               movie placement, via fitRect
-    rw/distort.cpp:111-122         the screen copy it samples
-    rw/snapshot.cpp:138            the loading-screen still
-    xShadow.cpp:718-720            InvertRaster, which reads its own raster
+    xScrFx.cpp     the fade to black, the death vignette, the letterbox bars,
+                   the safe-area frame, the distort effect's extent
+    iFMV.cpp:287   movie placement, via fitRect
+    rw/distort.cpp the screen copy it samples
+    rw/snapshot.cpp the loading-screen still
+    xShadow.cpp:719 InvertRaster, which reads its own raster
 
-## The hard constraint
+## The hard constraint: every full-screen camera moves together
 
 A `Raster::CAMERA` has no surface of its own. `setRenderSurfaces`
-(`d3ddevice.cpp:1010`) sees a null texture and binds the **default** render target
--- the virtual screen -- and `setViewport` (`d3ddevice.cpp:1045`) then takes the
-viewport from the camera raster's own width and height.
+(`d3ddevice.cpp:1010`) sees a null texture and binds the **default** render
+target -- the virtual screen -- and `setViewport` (`d3ddevice.cpp:1045`) then
+takes the viewport from the camera raster's own width and height.
 
-That alone would only mean a small camera draws into a corner. The part that bites
-is the depth buffer. `rasterCreateZbuffer` (`d3d.cpp:499-503`) shares the engine's
-default depth surface **only when the Z raster's size equals
+That alone would only mean a small camera draws into a corner. The part that
+bites is the depth buffer. `rasterCreateZbuffer` (`d3d.cpp:499-503`) shares the
+engine's default depth surface **only when the Z raster's size equals
 `getScreenExtent()`**, and allocates a private surface otherwise. A depth surface
 smaller than the render target is invalid in D3D9. So a camera raster that does
 not match the virtual screen does not draw small -- it fails to bind depth and
 draws nothing.
 
-Every full-screen camera therefore has to move together:
+Every one of these is now built at the render size:
 
-    zGame.cpp:399         xCameraInit(&globals.camera, 640, 480)   the main camera
-    zMenu.cpp:68          the same, written 0x280, 0x1e0
-    zGame.cpp:1013        the autosave text camera
-    zGame.cpp:1368        the screen-transition camera
-    zMain.cpp:944         zMainFirstScreen
-    zMain.cpp:1295, 1310  the memory-card screens
-    pc/iEnv.cpp:63        the JSP instancing camera
-    pc/iModel.cpp:175     the model instancing camera
+    zGame.cpp:400    xCameraInit, the main camera
+    zGame.cpp:927    the autosave text camera
+    zGame.cpp:1295   the screen-transition camera
+    zMenu.cpp:69     the menu's camera
+    zMain.cpp:945    zMainFirstScreen
+    zMain.cpp:1296   the memory-card screens
+    zMain.cpp:1311
+    pc/iEnv.cpp:64   the JSP instancing camera
+    pc/iModel.cpp:176 the model instancing camera
 
 The last two are the ones to miss. They never draw a pixel -- they exist so
 `RpAtomicInstance` has a camera to run under -- but they still call
-`RwCameraBeginUpdate`, so they still bind a depth surface, and they are subject to
-the same rule as the ones that do draw.
+`RwCameraBeginUpdate`, so they still bind a depth surface, and they are subject
+to the same rule as the ones that do draw. **A new full-screen camera anywhere
+in the game has to join this list.** The failure mode is a black screen, not a
+small picture.
 
-The size itself comes from `iSystem.cpp:157-158`, where the window is opened.
-`config.ini` is already read before that point and already has an integer
-accessor -- a `[video]` section with `width` and `height` is two entries in
-`iConfig.cpp`'s settings table -- and `engine_start.cpp:360` picks the window's
-size up for the virtual screen with no further change.
-
-The six game-code sites need the `#ifdef PLATFORM_PC` treatment the fixed-step
-loop used in `zGame.cpp`, so the GameCube build still compiles the literals it
-always had and stays byte identical.
+`xModelBucket.cpp:125` creates a 0x0 camera and is deliberately left alone:
+nothing ever begins an update on it.
 
 ## The 2D layer
 
-The UI is already resolution independent in its coordinate system. `xFont` lays
-everything out in 0..1 and converts to pixels at exactly one place:
+The UI is resolution independent in its coordinate system. `xFont` lays
+everything out in 0..1 and converts to pixels in one shape, `r.scale(w, h)`,
+which now takes the render size:
 
-    r.scale(640.0f, 480.0f);
+    xFont.cpp:494    every glyph the game draws
+    xFont.cpp:3710   render_fill_rect
+    zTextBox.cpp:56  the text box backdrop
+    xCM.cpp:180-183  the cutscene overlay textures
 
-That line, or the same shape, is the entire conversion:
+Three sites are the INVERSE conversion -- an author's pixel measurement into the
+normalized space -- and must stay at 640 and 480:
 
-    xFont.cpp:493      every glyph the game draws
-    xFont.cpp:3709     render_fill_rect
-    zTextBox.cpp:55    the text box backdrop
-    xCM.cpp:179-182    the cutscene overlay textures
+    xFont.h:287-296  NSCREENX/NSCREENY, 1/640 and 1/480
+    xFont.cpp:3441   get_texture_size, raster.width / 640.0f
+    zUI.cpp:915-918  the model branch, pos / 640 and pos / 480
 
-`zUI.cpp:824-842` is the one that does not follow the pattern. It sets
-`w = 640.0f` and then computes `x1 = w * pos.x / w`, where the `w` cancels: UI
-sprite assets are authored in 640x480 pixels and drawn as raw pixels. The fix is
-not to swap the constant but to put the real screen width in the numerator and
-leave 640 in the denominator. `zUI.cpp:901-904`, the model branch a few lines
-down, already normalises by 640/480 and is correct as it stands.
+`zUI.cpp:843-861` is the one that does not follow the pattern, and the only site
+in the game that needs a `#ifdef PLATFORM_PC`. It set `w = 640.0f` and computed
+`x1 = w * pos.x / w`, where the `w` cancels: UI sprite assets are authored in
+640x480 pixels and drawn as raw pixels. The two 640s are different numbers that
+happen to be equal on a 640x480 framebuffer, so only the numerator became the
+screen.
 
-Three sites must be **left alone**, or the UI stops scaling proportionally:
+Full-screen quads written directly in pixels, all now sized from the screen:
 
-    xFont.h:288-294    NSCREENX/NSCREENY, 1/640 and 1/480
-    xFont.cpp:3439     get_texture_size, raster.width / 640.0f
+    zEntPlayerOOBState.cpp:224  the out-of-bounds fade
+    xScrFx.cpp:583              the full-screen glare
+    zGame.cpp:1444-1472         the screen-transition background
+    zGame.cpp:966-973           zGame_HackDrawCard, four quarters of the screen
+    zGame.cpp:993-1000          the saving icon, placed as a fraction of 640x480
 
-These convert an author's pixel measurement *into* the normalized space. They are
-the inverse of the conversion above, not another instance of it.
+## Quality, not correctness
 
-Full-screen quads written directly in pixels:
+**Glow.** `rw/glow.cpp` used to nail its chain to 320x240, 320x120 and 160x120 --
+half and quarter of 640x480. The blur tap distances are in texels *of the texture
+being sampled*, so what fixes the bloom's radius as a fraction of the screen is
+the downsample RATIO, not the target's size: a chain left at those three numbers
+would tighten the glow as the resolution went up. The chain is now computed from
+the captured frame, and comes to the Xbox's own three sizes at 640x480.
 
-    zEntPlayerOOBState.cpp:223    the out-of-bounds fade
-    xScrFx.cpp:582                the full-screen glare
-    zGame.cpp:1514-1546           the screen-transition background
-    zGame.cpp:1050-1053           zGame_HackDrawCard, four 320x240 quarters
-    zGame.cpp:1069                a 90x90 icon at 275,350
+**Distort.** `rw/distort.cpp` divides its 15-pixel amplitude by
+`kReferenceWidth`/`kReferenceHeight` rather than by the screen. The 15 pixels
+were measured against a 640x480 frame, so what they describe is a fraction of
+the picture; dividing by the real screen would shrink the cruise bubble's warp
+at higher resolutions.
 
-## Scales, but does not look right
-
-These are quality, not correctness. Nothing breaks if they are left.
-
-**Shadows.** `xShadow.cpp:123-129` sets `res = 256` and then halves it while
-`res > 640 || res > 480`. That loop derives the shadow map's size from the
-display, and on a 640x480 framebuffer it has never once executed. It is the hook
-the original code left for exactly this.
-
-**Glow.** `rw/glow.cpp:43-45` nails the chain to 320x240, 320x120 and 160x120 --
-half and quarter of 640x480 -- and the blur tap distances are in texels *of the
-texture being sampled*. The bright pass samples the whole frame, so raising the
-render size changes the downsample ratio and the bloom's radius as a fraction of
-the screen shrinks. Scaling the three sizes with the screen preserves the look.
-
-**Distort.** `rw/distort.cpp:210-211` divides the amplitude by the screen width
-and height, so the cruise bubble's warp shrinks the same way for the same reason.
+**Shadows.** `xShadow.cpp:130` halves a 256-pixel shadow map while it exceeds
+either screen dimension. That loop now reads the render size, so it means what
+it says -- but 256 is still 256 on a 4K screen, and shadows stay as soft as they
+are on a console. Raising the base is a deliberate look-and-memory change and
+has not been made.
 
 **Art.** Every HUD texture, font atlas and UI sprite is authored for 640x480 and
-gets magnified, with linear filtering (`xFont.cpp:664`). Text and HUD go soft.
+gets magnified, with linear filtering (`xFont.cpp:665`). Text and HUD go soft.
 Nothing in the code fixes that; it needs assets.
 
-## Widescreen is a separate job
+## Widescreen is still a separate job
 
-`iCamera.cpp:229` is the only aspect-ratio assumption in the game:
+Keep the ratio at 4:3. `iCamera.cpp:229` is the only aspect-ratio assumption in
+the game:
 
     vw.y = 0.75f * vw.x;
 
 Changing it to the real height over width gives a genuine widescreen frustum, one
 line. But every 2D thing in the section above lives in a 4:3 normalized space, so
-the UI would need its own aspect correction, and the safe-area and letterbox maths
-in `xScrFx` would have to be reread against a non-4:3 screen. Raising the
-resolution does not require any of it.
+the UI would need its own aspect correction, and the safe-area and letterbox
+maths in `xScrFx` would have to be reread against a non-4:3 screen. Until that is
+done, 1280x720 is the same picture as 1280x960 stretched to fit rather than a
+wider view of the world.
 
-## One caveat for shipping it
+## What is not done
 
-The virtual screen is read once, at boot, and deliberately never updated
-(`engine_start.cpp:352-361`). Changing resolution at run time means recreating
-every camera raster in the table above while the game is live. Make it a
-launch-time setting first; a settings-menu version is a second piece of work.
+Changing resolution at RUN TIME. The virtual screen is read once, inside
+`RwEngineOpen`, and deliberately never updated; changing it while the game is
+live means recreating every camera raster in the table above at once. This is a
+launch-time setting. A settings-menu version is a second piece of work.

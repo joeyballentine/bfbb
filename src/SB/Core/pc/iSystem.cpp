@@ -4,6 +4,7 @@
 #include "iHost.h"
 #include "iPad.h"
 #include "iPadHost.h"
+#include "iScreen.h"
 #include "iTRC.h"
 #include "iSnapshot.h"
 #include "iTime.h"
@@ -156,19 +157,43 @@ static U32 RWAttachPlugins()
 
 static S32 RenderWareInit()
 {
-    // The window, where VIInit was. 640x480 is retail's framebuffer; nothing in
-    // the port is resolution-independent yet, and xScrFx sizes its full-screen
-    // rectangles from the video mode this produces.
+    // The window, where VIInit was. It opens at the render size because that is
+    // the least surprising thing to do, not because anything requires it: the
+    // port draws into a virtual screen which is scaled into the back buffer at
+    // present time, so the two are independent from here on and the window may
+    // be resized freely.
     iWindowParams windowParams;
     windowParams.title = "SpongeBob SquarePants: Battle for Bikini Bottom";
-    windowParams.width = 640;
-    windowParams.height = 480;
+    windowParams.width = iScreenWidth();
+    windowParams.height = iScreenHeight();
     windowParams.fullscreen = false;
     if (!iWindowOpen(&windowParams))
     {
         printf("bfbb:   the window could not be opened\n");
         return TRUE;
     }
+
+    // What the window ACTUALLY gave, which is what rw/engine_start.cpp takes the
+    // virtual screen from a few lines further on. The two must not disagree:
+    // every full-screen camera raster in the game is built at iScreenWidth by
+    // iScreenHeight, and a camera raster that does not match the virtual screen
+    // fails to bind a depth surface and draws nothing at all. See iScreen.h.
+    {
+        S32 clientWidth = 0;
+        S32 clientHeight = 0;
+        iWindowGetSize(&clientWidth, &clientHeight);
+
+        if (clientWidth > 0 && clientHeight > 0 &&
+            (clientWidth != iScreenWidth() || clientHeight != iScreenHeight()))
+        {
+            printf("bfbb: asked for a %dx%d window and got %dx%d; rendering at that\n",
+                   (int)iScreenWidth(), (int)iScreenHeight(), (int)clientWidth,
+                   (int)clientHeight);
+            iScreenSetSize(clientWidth, clientHeight);
+        }
+    }
+
+    printf("bfbb: rendering at %dx%d\n", (int)iScreenWidth(), (int)iScreenHeight());
 
     // NULL rather than psGetMemoryFunctions(): that is the console's hook for
     // handing RenderWare the game's own allocator, and the port has no
@@ -266,6 +291,11 @@ static RwTexture* TextureRead(const RwChar* name, const RwChar* maskName)
 // directly.
 static void ApplyConfig()
 {
+    // The render size, before RenderWareInit opens the window at it. Pushed the
+    // same way the three render features are, and for a stronger reason: iScreen
+    // is read by game code, which must not learn what config.ini is.
+    iScreenSetSize(iConfigGetInt("video.width", 640), iConfigGetInt("video.height", 480));
+
     S32 glow = iConfigGetBool("xbox.glow", TRUE);
     S32 distortion = iConfigGetBool("xbox.distortion", TRUE);
     S32 snapshot = iConfigGetBool("xbox.snapshot", TRUE);

@@ -13,6 +13,7 @@
 #include "xMath.h"
 #include "xPad.h"
 #include "xsavegame.h"
+#include "xScreen.h"
 #include "xScrFx.h"
 #include "xSFX.h"
 #include "xSnd.h"
@@ -65,7 +66,7 @@ void zMenuInit(U32 theSceneID)
     iTimeGet();
     xrand();
     zSceneInit(theSceneID, 0);
-    xCameraInit(&globals.camera, 0x280, 0x1e0);
+    xCameraInit(&globals.camera, xScreenWidth(), xScreenHeight());
     zCameraReset(&globals.camera);
     xCameraSetScene(&globals.camera, globals.sceneCur);
     zMusicInit();

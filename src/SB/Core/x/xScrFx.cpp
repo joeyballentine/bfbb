@@ -4,6 +4,7 @@
 #include "zMenu.h"
 #include "xDebug.h"
 #include "zGlobals.h"
+#include "xScreen.h"
 #include "xstransvc.h"
 
 #ifdef PLATFORM_PC
@@ -579,7 +580,7 @@ void xScrFXFullScreenGlareRender()
     RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
     RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
 
-    xScrFxDrawBox(0.0f, 0.0f, 640.0f, 480.0f, color.red, color.green, color.blue, color.alpha, dp, 0.0f);
+    xScrFxDrawBox(0.0f, 0.0f, xScreenWidthF(), xScreenHeightF(), color.red, color.green, color.blue, color.alpha, dp, 0.0f);
 }
 
 void xScrFXGlareRender(xCamera* cam)

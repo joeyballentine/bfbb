@@ -9,6 +9,7 @@
 #include <world/bageomet.h>
 
 #include "iCamera.h"
+#include "iScreen.h"
 #include "iAnim.h"
 #include "xMathInlines.h"
 
@@ -172,7 +173,7 @@ static RpAtomic* iModelStreamRead(RwStream* stream)
     RwBBox bbox = { { 1000.0f, 1000.0f, 1000.0f }, { -1000.0f, -1000.0f, -1000.0f } };
 
     instance_world = RpWorldCreate(&bbox);
-    instance_camera = (RwCamera*)iCameraCreate(0x280, 0x1e0, 0);
+    instance_camera = (RwCamera*)iCameraCreate(iScreenWidth(), iScreenHeight(), 0);
     RpWorldAddCamera(instance_world, instance_camera);
 
     gLastAtomicCount = 0;

@@ -59,6 +59,15 @@ namespace
     };
 
     const Setting kSettings[] = {
+        { "video", "width", "640",
+          "The width the game renders at, in pixels. 640x480 is what the consoles\n"
+          "; drew, and is what every texture, font and HUD element was authored for,\n"
+          "; so anything larger magnifies the 2D art -- the 3D gets sharper, the\n"
+          "; interface does not." },
+        { "video", "height", "480",
+          "The height, in pixels. Keep the ratio at 4:3: the camera's frustum and\n"
+          "; every 2D layer work in a 4:3 space, so 1280x960 is the picture at twice\n"
+          "; the size and 1280x720 is the same picture stretched to fit." },
         { "xbox", "glow", "on",
           "The full-screen glow -- what people call the Xbox version's bloom." },
         { "xbox", "distortion", "on", "The Cruise Bubble's screen warp." },
@@ -315,7 +324,13 @@ bool iConfigWriteDefaults(const char* path)
 
             // The one thing the per-setting comments cannot say, said once
             // where the section is introduced.
-            if (strcmp(section, "xbox") == 0)
+            if (strcmp(section, "video") == 0)
+            {
+                fprintf(f, "; The size the game renders at. The window opens at this size too,\n");
+                fprintf(f, "; but the two are independent -- the picture is scaled to whatever\n");
+                fprintf(f, "; the window becomes.\n");
+            }
+            else if (strcmp(section, "xbox") == 0)
             {
                 fprintf(f, "; Things the Xbox release did that the GameCube release did not.\n");
                 fprintf(f, "; Turning one off leaves the GameCube behaviour in its place.\n");

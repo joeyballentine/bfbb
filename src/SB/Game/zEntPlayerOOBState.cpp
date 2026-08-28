@@ -8,6 +8,7 @@
 #include "zEntPlayerBungeeState.h"
 #include "zEntCruiseBubble.h"
 #include "zGameState.h"
+#include "xScreen.h"
 #include "xScrFx.h"
 #include "zSaveLoad.h"
 
@@ -220,7 +221,8 @@ namespace oob_state
             F32 rcz = RwIm2DGetFarScreenZ();
 
             RwIm2DVertex vert[4];
-            set_rect_verts((rwGameCube2DVertex*)vert, 0.0f, 0.0f, 640.0f, 480.0f, color, rcz, nsz);
+            set_rect_verts((rwGameCube2DVertex*)vert, 0.0f, 0.0f, xScreenWidthF(),
+                           xScreenHeightF(), color, rcz, nsz);
             RwIm2DRenderPrimitive(rwPRIMTYPETRISTRIP, (RwIm2DVertex*)vert, 4);
         }
 
