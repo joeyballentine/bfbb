@@ -423,6 +423,7 @@ namespace xhud
             U8* end = it + count * type_size;
             while (it != end)
             {
+                xhud_anchor_for(*(widget*)(it + sizeof(xBase)));
                 f(*(widget*)(it + sizeof(xBase)));
                 it += type_size;
             }
@@ -630,6 +631,22 @@ namespace xhud
         }
         return true;
     }
+
+#ifdef PLATFORM_PC
+    void anchor_for(const widget& w)
+    {
+        if (w.a != NULL)
+        {
+            iScreenSetAnchorRect(w.a->loc.x, w.a->loc.y, w.a->size.x, w.a->size.y);
+        }
+        else
+        {
+            // No asset to have been authored anywhere, so it belongs to the
+            // middle, which is the offset that moves nothing.
+            iScreenSetAnchorRect(0.5f, 0.5f, 0.0f, 0.0f);
+        }
+    }
+#endif
 
     void render_model(xModelInstance& m, const xhud::render_context& rc)
     {

@@ -1,4 +1,5 @@
 #include "xHudFontMeter.h"
+#include "xScreen.h"
 
 #include <types.h>
 #include <xMath2.h>
@@ -29,6 +30,11 @@ xhud::font_meter_widget::font_meter_widget(const xhud::font_meter_asset& init)
 
     this->xf.color = *(iColor_tag*)&this->font.c;
     this->xf.clip = screen_bounds;
+
+    // The clip is the screen, and on a widescreen render size the screen is
+    // wider than the 0..1 box this was authored against. Without this a counter
+    // carried out to the edge is cut in half by the box it used to live in.
+    xScreenWidenToScreen(this->xf.clip);
 }
 
 void xhud::font_meter_widget::destruct()
@@ -137,8 +143,8 @@ void xhud::font_meter_widget::render()
     F32 temp_x;
     F32 y;
 
-    temp_x = this->offset.x + this->rc.loc.x;
-    y = this->offset.y + this->rc.loc.y;
+    temp_x = xScreenAnchorX(this->offset.x + this->rc.loc.x);
+    y = xScreenAnchorY(this->offset.y + this->rc.loc.y);
     if (this->font.drop_c.a != 0)
     {
         this->xf.color = this->font.drop_c;

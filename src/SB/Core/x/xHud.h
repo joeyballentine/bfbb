@@ -234,6 +234,23 @@ namespace xhud
     bool delay_motive_update(widget& w, motive& m, F32);
 
     xModelInstance* load_model(U32);
+
+#ifdef PLATFORM_PC
+    // Tell the anchor which widget is about to be looked at, so that the
+    // positions it hands out belong to that widget's group. See
+    // iScreenSetAnchorRect for why the authored rect and not the live one.
+    void anchor_for(const widget& w);
+#endif
 }; // namespace xhud
+
+// One call, in the loop that visits every widget, rather than one at each of
+// the places a position becomes a draw -- there are three of those, they are in
+// three files, and a missed one is a widget that silently stays behind while
+// its group moves. The console compiles nothing at all here.
+#ifdef PLATFORM_PC
+#define xhud_anchor_for(w) xhud::anchor_for(w)
+#else
+#define xhud_anchor_for(w) ((void)0)
+#endif
 
 #endif

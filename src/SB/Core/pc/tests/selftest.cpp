@@ -359,6 +359,7 @@ static void test_screen()
     // anyone playing at the default, and every HUD position goes through it.
     iScreenSetSize(640, 480);
     iScreenSetUIMode(iSCREENUI_NATIVE);
+    iScreenSetAnchorRect(0.08f, 0.83f, 0.09f, 0.09f);
     check(iScreenAnchorX(0.0f) == 0.0f && iScreenAnchorX(0.25f) == 0.25f &&
               iScreenAnchorX(1.0f) == 1.0f,
           "at 4:3 the anchor is the identity");
@@ -371,19 +372,67 @@ static void test_screen()
     check(fabsf(iScreenUIMarginXF() - margin) < 0.0001f, "16:9 puts the screen 1/6 past the box");
     check(iScreenUIMarginYF() == 0.0f, "and nothing past it vertically");
 
-    // The three that matter: the centre is fixed, and the two edges map to the
-    // screen's own edges rather than the box's.
-    check(fabsf(iScreenAnchorX(0.5f) - 0.5f) < 0.0001f, "the centre does not move");
+    // A widget authored at the left goes left by the whole margin, so the
+    // position the box called 0 is the screen's own edge.
+    iScreenSetAnchorRect(0.0f, 0.0f, 0.0f, 0.0f);
     check(fabsf(iScreenAnchorX(0.0f) - -margin) < 0.0001f, "the left edge reaches the screen");
+
+    // And one authored at the right goes right by it.
+    iScreenSetAnchorRect(1.0f, 0.0f, 0.0f, 0.0f);
     check(fabsf(iScreenAnchorX(1.0f) - (1.0f + margin)) < 0.0001f, "and so does the right");
-    check(iScreenAnchorY(0.3f) == 0.3f, "the vertical axis is untouched on a wide screen");
+
+    // What was authored in the middle stays in the middle rather than being
+    // pushed to one side of it.
+    iScreenSetAnchorRect(0.44f, 0.115f, 0.07f, 0.07f);
+    check(iScreenAnchorX(0.44f) == 0.44f, "the middle is left alone");
+    check(iScreenAnchorY(0.115f) == 0.115f, "the vertical axis is untouched on a wide screen");
+
+    // The property the whole thing exists for, on the real HUD: a counter and
+    // its icon are authored a fixed distance apart, and they have to still be
+    // that distance apart afterwards. Retail's four counters, each measured as
+    // the icon's rect and then the number's.
+    struct
+    {
+        F32 ix, iy, iw, ih;
+        F32 nx, ny, nw, nh;
+    } counters[] = {
+        { 0.44f, 0.115f, 0.07f, 0.07f, 0.51f, 0.100f, 0.05f, 0.07f }, // spatulas
+        { 0.63f, 0.125f, 0.06f, 0.06f, 0.71f, 0.100f, 0.05f, 0.07f }, // shiny objects
+        { 0.08f, 0.830f, 0.09f, 0.09f, 0.18f, 0.793f, 0.05f, 0.07f }, // the pickup counter
+        { 0.73f, 0.815f, 0.09f, 0.09f, 0.83f, 0.793f, 0.05f, 0.07f }, // socks
+    };
+
+    for (U32 i = 0; i < sizeof(counters) / sizeof(counters[0]); i++)
+    {
+        iScreenSetAnchorRect(counters[i].ix, counters[i].iy, counters[i].iw, counters[i].ih);
+        F32 icon = iScreenAnchorX(counters[i].ix);
+
+        iScreenSetAnchorRect(counters[i].nx, counters[i].ny, counters[i].nw, counters[i].nh);
+        F32 number = iScreenAnchorX(counters[i].nx);
+
+        check(fabsf((number - icon) - (counters[i].nx - counters[i].ix)) < 0.0001f,
+              "the number stays the distance from its icon that it was drawn at");
+    }
+
+    // The reach: what the culling and the clipping are allowed to let through.
+    // It is the margin while the anchor is using it...
+    check(fabsf(iScreenAnchorMarginXF() - margin) < 0.0001f, "native reaches the margin");
 
     // Pillarbox is the identity whatever the shape, which is what makes it the
     // way back to exactly what the console drew.
     iScreenSetUIMode(iSCREENUI_PILLARBOX);
+    iScreenSetAnchorRect(0.08f, 0.83f, 0.09f, 0.09f);
     check(iScreenAnchorX(0.0f) == 0.0f && iScreenAnchorX(1.0f) == 1.0f,
           "pillarbox leaves every position alone");
+
+    // ...and zero when it is not, so that a widget sliding in from off the box
+    // is culled at the box edge exactly as the console culled it, rather than
+    // being revealed sliding through the pillar bars.
+    check(iScreenAnchorMarginXF() == 0.0f && iScreenAnchorMarginYF() == 0.0f,
+          "and pillarbox reaches nothing, so the box culls as the console did");
+    check(iScreenUIMarginXF() > 0.0f, "though the box is still inset from the screen");
     iScreenSetUIMode(iSCREENUI_NATIVE);
+    iScreenSetAnchorRect(0.5f, 0.5f, 0.0f, 0.0f);
 
     // Nothing else in this process renders, but the value is global, so it goes
     // back to the default rather than being left where a later test would find

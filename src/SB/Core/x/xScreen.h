@@ -61,8 +61,19 @@
 // comparison it always did. The bounds are 0..1 only while nothing is anchored;
 // once the HUD reaches past the box, the screen does too.
 #define xScreenUIRectOffscreen(r)                                                             \
-    ((r).x + (r).w < -iScreenUIMarginXF() || (r).x > 1.0f + iScreenUIMarginXF() ||             \
-     (r).y + (r).h < -iScreenUIMarginYF() || (r).y > 1.0f + iScreenUIMarginYF())
+    ((r).x + (r).w < -iScreenAnchorMarginXF() || (r).x > 1.0f + iScreenAnchorMarginXF() || \
+     (r).y + (r).h < -iScreenAnchorMarginYF() || (r).y > 1.0f + iScreenAnchorMarginYF())
+
+// Grow a clip rect from the 0..1 box out to the whole screen.
+//
+// For the one thing that CLIPS rather than culls: the font, which is handed the
+// box when it is built because on the console the box is all there is. A
+// counter anchored out to a real screen edge is outside that rect, and would be
+// cut in half by the box it used to live in.
+#define xScreenWidenToScreen(r)                                                               \
+    ((r).x = -iScreenAnchorMarginXF(), (r).y = -iScreenAnchorMarginYF(),                      \
+     (r).w = 1.0f + 2.0f * iScreenAnchorMarginXF(),                                           \
+     (r).h = 1.0f + 2.0f * iScreenAnchorMarginYF())
 
 #else
 
@@ -89,6 +100,8 @@
 
 #define xScreenUIRectOffscreen(r)                                                             \
     ((r).x + (r).w < 0.0f || (r).x > 1.0f || (r).y + (r).h < 0.0f || (r).y > 1.0f)
+
+#define xScreenWidenToScreen(r) ((void)0)
 
 #endif
 

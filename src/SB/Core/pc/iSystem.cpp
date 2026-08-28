@@ -392,19 +392,19 @@ static void ApplyConfig()
 
     // How the interface sits on a screen that is not 4:3. Nothing to report
     // when it cannot matter, which is every 4:3 render size.
-    const char* uiMode = iConfigGetString("video.ui", "native");
-    if (iHostStrCaseCmp(uiMode, "pillarbox") == 0)
+    const char* uiMode = iConfigGetString("video.ui", "pillarbox");
+    if (iHostStrCaseCmp(uiMode, "native") == 0)
     {
-        iScreenSetUIMode(iSCREENUI_PILLARBOX);
+        iScreenSetUIMode(iSCREENUI_NATIVE);
     }
     else
     {
-        if (iHostStrCaseCmp(uiMode, "native") != 0)
+        if (iHostStrCaseCmp(uiMode, "pillarbox") != 0)
         {
-            printf("bfbb: config: video.ui is not native or pillarbox, using the default: %s\n",
+            printf("bfbb: config: video.ui is not pillarbox or native, using the default: %s\n",
                    uiMode);
         }
-        iScreenSetUIMode(iSCREENUI_NATIVE);
+        iScreenSetUIMode(iSCREENUI_PILLARBOX);
     }
 
     // The draw distance, before iCameraCreate builds the first frustum. Pushed

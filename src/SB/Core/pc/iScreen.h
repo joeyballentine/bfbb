@@ -86,13 +86,13 @@ F32 iScreenUIFracYF();
 //
 //   PILLARBOX  everything in the centred 4:3 box. Nothing moves relative to
 //              anything else; the interface simply sits in the middle with
-//              black either side of it.
-//   NATIVE     the HUD is anchored: its POSITIONS are read as fractions of the
-//              real screen while its SIZES stay uniform, so a counter authored
-//              near the left edge ends up near the real left edge at the size
-//              it would have had. Menus, textboxes and cutscene overlays stay
-//              in the 4:3 box -- they are full-screen art, and there is nothing
-//              in them to anchor to an edge.
+//              black either side of it. This is the default, and it is the
+//              only mode that is exactly what the console drew.
+//   NATIVE     each HUD widget is anchored: the group it belongs to is carried
+//              out to the edge of the real screen, so a counter authored near
+//              the left edge ends up near the real left edge. Menus, textboxes
+//              and cutscene overlays stay in the 4:3 box -- they are
+//              full-screen art, and there is nothing in them to anchor.
 //
 // The two are IDENTICAL on a 4:3 render size, where the box is the screen and
 // the anchor is the identity, so this only ever means anything in widescreen.
@@ -104,14 +104,32 @@ enum iScreenUIMode
 
 void iScreenSetUIMode(iScreenUIMode mode);
 
-// A normalized UI-space coordinate, moved to where the mode wants it -- still
-// in UI space, so the pillarbox mapping that follows lands it on the screen.
+// The anchor is a TRANSLATION, and this is the widget it currently translates.
 //
-// The whole of the anchor is `x / frac - margin`: dividing by the box's share of
-// the screen turns a fraction of the box into a fraction of the screen, and the
-// margin takes off the offset the box's own centring will add back. It is the
-// identity at 4:3, it fixes 0.5 wherever the box is, and it needs no widths,
-// no thresholds and no per-widget knowledge of which edge is nearest.
+// The rect is the one the widget was AUTHORED at -- asset loc and size, not the
+// live position, which slides around as widgets show and hide. Two things come
+// out of that choice. A widget animating across the screen keeps whatever
+// motion the artist gave it, because its offset does not change while it moves;
+// and, more importantly, an icon and the number beside it get the SAME offset,
+// so they stay the distance apart they were drawn.
+//
+// That is the whole reason this is not the one-liner it looks like it should
+// be. Reading a position as a fraction of the real screen -- x / frac - margin,
+// the obvious mapping -- moves the centre of a group correctly and pulls the
+// group apart, because the gap between two widgets is a distance and gets
+// scaled along with everything else. On a 16:9 screen that is a third again on
+// every gap, which is a counter no longer touching its icon.
+//
+// So the offset is quantized: a widget belongs to the left edge, to the right
+// edge, or to the middle, and every member of a group lands in the same one.
+void iScreenSetAnchorRect(F32 x, F32 y, F32 w, F32 h);
+
+// A normalized UI-space coordinate, translated by the offset the rect above
+// asked for -- still in UI space, so the pillarbox mapping that follows lands
+// it on the screen.
+//
+// Identity in PILLARBOX, and identity at 4:3 whatever the mode, where the
+// margin is zero because the box IS the screen.
 F32 iScreenAnchorX(F32 x);
 F32 iScreenAnchorY(F32 y);
 
@@ -120,6 +138,16 @@ F32 iScreenAnchorY(F32 y);
 // rect outside 0..1, which is the screen only while nothing is anchored.
 F32 iScreenUIMarginXF();
 F32 iScreenUIMarginYF();
+
+// The same distance, but only as far as the anchor will actually reach: zero in
+// PILLARBOX, where nothing moves and the box IS everything the HUD may touch.
+//
+// This is the one the culling and the clipping want. Using the geometric margin
+// there would let a widget that slides in from off the box become visible in
+// the pillar bars in a mode whose whole promise is that it draws what the
+// console drew.
+F32 iScreenAnchorMarginXF();
+F32 iScreenAnchorMarginYF();
 
 // Set by iSystem, from config.ini, before the window is opened -- and again
 // with what the window actually gave, because engine_start takes the virtual

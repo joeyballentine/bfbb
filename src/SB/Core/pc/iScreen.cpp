@@ -36,7 +36,41 @@ namespace
     F32 sUIMarginX;
     F32 sUIMarginY;
 
-    iScreenUIMode sUIMode = iSCREENUI_NATIVE;
+    iScreenUIMode sUIMode = iSCREENUI_PILLARBOX;
+
+    // How far from the middle a widget has to be authored before it belongs to
+    // an edge rather than to the centre of the screen.
+    //
+    // The number is not arbitrary. Retail's HUD is five groups, and measuring
+    // where they sit gives their centres as: the health meter at 0.13, the
+    // pickup counter at 0.13 and 0.21, the spatula counter at 0.48 and 0.54,
+    // the shiny counter at 0.66 and 0.74, the sock counter at 0.78 and 0.86.
+    // A zone of a tenth either side of the middle -- edges at 0.4 and 0.6 --
+    // puts every one of those groups WHOLLY inside one zone, with the nearest
+    // miss two thirds of the zone away from a boundary. That is what keeps a
+    // number beside its icon: both halves get the same offset.
+    const F32 kAnchorZone = 0.1f;
+
+    // The offset in force, in UI units. Set per widget, because which edge a
+    // widget belongs to is a property of the widget and not of the screen.
+    F32 sAnchorOffsetX = 0.0f;
+    F32 sAnchorOffsetY = 0.0f;
+
+    // Left edge, right edge, or neither.
+    F32 anchorOffset(F32 centre, F32 margin)
+    {
+        if (centre < 0.5f - kAnchorZone)
+        {
+            return -margin;
+        }
+
+        if (centre > 0.5f + kAnchorZone)
+        {
+            return margin;
+        }
+
+        return 0.0f;
+    }
 
     // The largest 4:3 rectangle that fits, centred. The same fit iFMV.cpp puts
     // a 4:3 movie through, and for the same reason: what is left over stays
@@ -134,19 +168,47 @@ F32 iScreenUIMarginYF()
     return sUIMarginY;
 }
 
+F32 iScreenAnchorMarginXF()
+{
+    return sUIMode == iSCREENUI_NATIVE ? sUIMarginX : 0.0f;
+}
+
+F32 iScreenAnchorMarginYF()
+{
+    return sUIMode == iSCREENUI_NATIVE ? sUIMarginY : 0.0f;
+}
+
 void iScreenSetUIMode(iScreenUIMode mode)
 {
     sUIMode = mode;
+
+    // Nothing is anchored until a widget asks to be, and pillarbox never
+    // anchors anything at all.
+    sAnchorOffsetX = 0.0f;
+    sAnchorOffsetY = 0.0f;
+}
+
+void iScreenSetAnchorRect(F32 x, F32 y, F32 w, F32 h)
+{
+    if (sUIMode != iSCREENUI_NATIVE)
+    {
+        sAnchorOffsetX = 0.0f;
+        sAnchorOffsetY = 0.0f;
+        return;
+    }
+
+    sAnchorOffsetX = anchorOffset(x + 0.5f * w, sUIMarginX);
+    sAnchorOffsetY = anchorOffset(y + 0.5f * h, sUIMarginY);
 }
 
 F32 iScreenAnchorX(F32 x)
 {
-    return sUIMode == iSCREENUI_NATIVE ? x / sUIFracX - sUIMarginX : x;
+    return x + sAnchorOffsetX;
 }
 
 F32 iScreenAnchorY(F32 y)
 {
-    return sUIMode == iSCREENUI_NATIVE ? y / sUIFracY - sUIMarginY : y;
+    return y + sAnchorOffsetY;
 }
 
 void iScreenSetSize(S32 width, S32 height)
