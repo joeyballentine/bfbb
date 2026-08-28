@@ -310,6 +310,7 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iMemMgr.cpp
   ${PC_DIR}/iPad.cpp
   ${PC_DIR}/iSystem.cpp
+  ${PC_DIR}/iTextPatch.cpp
   ${PC_DIR}/iTRC.cpp
   ${PC_DIR}/iTime.cpp
   ${PC_DIR}/isavegame.cpp
@@ -576,6 +577,7 @@ add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   ${PC_DIR}/iDrawDist.cpp
   ${PC_DIR}/iFile.cpp
   ${PC_DIR}/iScreen.cpp
+  ${PC_DIR}/iTextPatch.cpp
   ${PC_DIR}/intrin.cpp
   ${PC_DIR}/iMath.cpp
   ${PC_DIR}/iMemMgr.cpp

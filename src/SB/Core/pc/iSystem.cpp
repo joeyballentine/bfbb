@@ -8,6 +8,7 @@
 #include "iScreen.h"
 #include "iTRC.h"
 #include "iSnapshot.h"
+#include "iTextPatch.h"
 #include "iTime.h"
 
 #include <types.h>
@@ -368,6 +369,12 @@ static void ApplyConfig()
     iDistortSetEnabled(distortion);
     iSnapshotSetEnabled(snapshot);
 
+    // Pushed for the same reason, one library further out: zAssetTypes.cpp
+    // calls the patcher from the game code, and game code must not learn what
+    // config.ini is.
+    S32 wording = iConfigGetBool("text.platform_wording", TRUE);
+    iTextPatchSetEnabled(wording);
+
     // Said out loud, and always, because these change what the game looks and
     // sounds like. Someone reporting that the port looks wrong should not have
     // to be asked whether they have a config.ini -- the log already says.
@@ -377,6 +384,7 @@ static void ApplyConfig()
            path != NULL ? path : "no config.ini, defaults", WindowModeName(sWindowMode),
            drawDistance ? "unlimited" : "console", glow ? "on" : "off",
            distortion ? "on" : "off", snapshot ? "on" : "off", reverb ? "on" : "off");
+    printf("bfbb: text rewritten for a PC: %s\n", wording ? "on" : "off");
 }
 
 void iSystemInit(U32 options)

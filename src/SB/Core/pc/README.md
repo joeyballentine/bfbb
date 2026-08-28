@@ -70,6 +70,16 @@ at load rather than ignored.
     snapshot            the loading screen standing on the last frame drawn
     reverb              cave reverb, in the Mermalair and the caves
 
+    [text]              The game's own words, which are the Xbox release's.
+
+    platform_wording    On by default. Rewrites the console out of the game's
+                        text as it loads: "your Xbox console" becomes "your
+                        computer", "Reboot to Xbox Dashboard" becomes "Quit to
+                        Desktop", and the save location stops being a memory
+                        card slot. The archives on disk are never touched, so
+                        off is exactly what the disc says. iTextPatch.h is the
+                        account of how it works and why it happens at load.
+
 `SB.INI` is a different file and stays retail's: `zMainReadINI` reads it for
 PATH and BOOT, through the game's own `xIni` parser, and that parser allocates
 through RenderWare -- so it cannot answer a question asked before the engine

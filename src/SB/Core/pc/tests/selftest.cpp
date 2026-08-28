@@ -30,6 +30,7 @@
 #include "iPadHost.h"
 #include "iScreen.h"
 #include "iSystem.h"
+#include "iTextPatch.h"
 #include "isavegame.h"
 #include "iTime.h"
 #include "xFile.h"
@@ -283,6 +284,8 @@ static void test_config()
         check(strstr(buf, "distortion = on") != NULL, "and distortion");
         check(strstr(buf, "snapshot = on") != NULL, "and snapshot");
         check(strstr(buf, "reverb = on") != NULL, "and reverb");
+        check(strstr(buf, "[text]") != NULL, "it has the [text] section header");
+        check(strstr(buf, "platform_wording = on") != NULL, "and the text rewrite at its default");
     }
 
     iHostRemoveFile(written);
@@ -385,6 +388,142 @@ static void test_drawdist()
     // than being left where a later test would find it surprising.
     iDrawDistSetUnlimited(FALSE);
     check(iDrawDistFarClip() == 400.0f, "and it can be set back");
+}
+
+// A TEXT asset, as the packer hands one to zAssetTypes.cpp: the string, in a
+// buffer the size of the asset's own bytes less its xTextAsset header. The
+// slack matters -- retail rounds every asset up, and that padding is what a
+// replacement is allowed to spill into.
+struct patched
+{
+    char buf[512];
+    U32 capacity;
+};
+
+static void patch_setup(patched* p, const char* text, U32 capacity)
+{
+    memset(p->buf, 0x7f, sizeof(p->buf));
+    strcpy(p->buf, text);
+    p->capacity = capacity;
+}
+
+static bool patch_run(patched* p, const char* name)
+{
+    return iTextPatchAsset(iTextPatchAssetID(name), p->buf, p->capacity) != FALSE;
+}
+
+static void test_textpatch()
+{
+    printf("iTextPatch\n");
+
+    // The hash is xStrHash copied into the platform layer, which sits below the
+    // game code in the link. These four ids were read out of the retail Xbox
+    // archives with the asset names beside them, so they pin the copy to the
+    // original: if the two ever disagree, every override silently stops
+    // matching and nothing else would say so.
+    check(iTextPatchAssetID("PS2_MEMCARD") == 0x7a338125u, "the id hash agrees with the archives");
+    check(iTextPatchAssetID("LD MC1 TXT") == 0x06dece17u, "for a name with spaces");
+    check(iTextPatchAssetID("text_menu_reboot") == 0xc54086e3u, "and a lower-case one");
+    check(iTextPatchAssetID("ps2_memcard") == iTextPatchAssetID("PS2_MEMCARD"),
+          "and it folds case, as the asset system does");
+
+    // Retail truncates a name past 31 characters in the archive's debug chunk
+    // but hashes it in full, so the table's long names have to be the full
+    // ones. This is the id of an asset whose listing shows only
+    // "MNU4 AUTO SAVE FAILED NOSPACE T".
+    check(iTextPatchAssetID("MNU4 AUTO SAVE FAILED NOSPACE TXT") == 0x3edb7748u,
+          "a name longer than a listing shows still hashes right");
+
+    check(iTextPatchRulesFit() != FALSE, "no substitution rule is longer than what it replaces");
+
+    patched p;
+
+    // Off is retail, exactly. Checked before anything is turned on, because the
+    // default this process starts with is what the game gets if ApplyConfig
+    // never runs.
+    iTextPatchSetEnabled(FALSE);
+    patch_setup(&p, "Please don't turn off your Xbox console.", 64);
+    check(!patch_run(&p, "MNU4 AUTO SAVE TXT"), "off, nothing is rewritten");
+    check(strcmp(p.buf, "Please don't turn off your Xbox console.") == 0, "and the text is retail's");
+
+    iTextPatchSetEnabled(TRUE);
+    check(iTextPatchEnabled() != FALSE, "the switch reads back");
+
+    // The word swap, on the string a player actually meets.
+    patch_setup(&p, "Please don't turn off your Xbox console.", 64);
+    check(patch_run(&p, "MNU4 AUTO SAVE TXT"), "on, the console's name goes");
+    check(strcmp(p.buf, "Please don't turn off your computer.") == 0, "'your Xbox console' becomes 'your computer'");
+
+    // The same rule at the start of a sentence. Matching folds case, so this
+    // hits the rule spelled in lower case, and the capital has to survive.
+    patch_setup(&p, "Your Xbox console doesn't have enough free blocks.", 64);
+    patch_run(&p, "SV NOSPACE TXT");
+    check(strcmp(p.buf, "Your computer doesn't have enough free blocks.") == 0,
+          "a capital at the start of a sentence is kept");
+
+    // ...but a shouted name is not a sentence, and must not hand its capital on.
+    patch_setup(&p, "Please insert a DUALSHOCK.", 64);
+    patch_run(&p, "some other asset");
+    check(strcmp(p.buf, "Please insert a gamepad.") == 0, "and an all-caps name does not");
+
+    // The bare name, and the PS2 text the Xbox release never finished
+    // stripping.
+    patch_setup(&p, "Your Xbox doesn't have enough free blocks.", 64);
+    patch_run(&p, "SV BADSAVE TXT");
+    check(strcmp(p.buf, "Your PC doesn't have enough free blocks.") == 0, "'Xbox' alone becomes 'PC'");
+
+    patch_setup(&p, "Memory card (8MB) (for PlayStation\xae\x32) is not inserted.", 96);
+    patch_run(&p, "some other asset");
+    check(strstr(p.buf, "PlayStation") == NULL, "and PlayStation goes with it");
+
+    // The whole point of stepping over markup: what is inside the braces is a
+    // lookup key. An asset called "xbox_button" that became "PC_button" would
+    // resolve to nothing, and the failure would show up as a missing glyph
+    // three menus away from this file.
+    patch_setup(&p, "{tex:xbox_button}Press it{i:PS2_MEMCARD}", 96);
+    patch_run(&p, "some other asset");
+    check(strcmp(p.buf, "{tex:xbox_button}Press it{i:PS2_MEMCARD}") == 0,
+          "a name inside {markup} is left alone");
+
+    // ...while text on both sides of a markup span still gets rewritten.
+    patch_setup(&p, "Xbox{n}Xbox", 32);
+    patch_run(&p, "some other asset");
+    check(strcmp(p.buf, "PC{n}PC") == 0, "text either side of it does not");
+
+    // An override replaces the whole string, by name.
+    patch_setup(&p, "{i:button_picture_03} Reboot to Xbox Dashboard", 48);
+    check(patch_run(&p, "text_menu_reboot"), "an override matches by name");
+    check(strcmp(p.buf, "{i:button_picture_03} Quit to Desktop") == 0, "and replaces the whole string");
+
+    // The save location under "Load saved game". Retail ships two different
+    // strings under this one name -- "MEMORY CARD slot 1" in the shared menu
+    // archive, "Xbox Hard Disk" in the level archives -- and the shorter of the
+    // two is what the replacement has to fit.
+    patch_setup(&p, "Xbox Hard Disk", 16);
+    check(patch_run(&p, "LD MC1 TXT"), "the save location is replaced");
+    check(strcmp(p.buf, "save folder") == 0, "in the smaller of the two assets retail ships");
+
+    // Capacity is the asset's, and an override that does not fit is refused
+    // rather than truncated. The word swap still runs, so the string is left
+    // better than retail rather than untouched.
+    patch_setup(&p, "Reboot to Xbox Dashboard", 25);
+    patch_run(&p, "text_menu_reboot");
+    check(strcmp(p.buf, "Reboot to Desktop") == 0, "an override too big for its asset is refused");
+
+    // Nothing is written past the capacity, whatever happens above.
+    patch_setup(&p, "Your Xbox console", 18);
+    patch_run(&p, "some other asset");
+    check(p.buf[18] == 0x7f, "and nothing is written past the asset's own bytes");
+
+    // A string with no terminator inside the asset is not a string. Walking it
+    // would read into whatever the packer put next.
+    memset(p.buf, 'X', sizeof(p.buf));
+    check(!iTextPatchAsset(iTextPatchAssetID("LD MC1 TXT"), p.buf, 16),
+          "an unterminated asset is left alone");
+    check(p.buf[0] == 'X', "and not written to");
+
+    // Global, and later tests do not expect it on.
+    iTextPatchSetEnabled(FALSE);
 }
 
 static void test_file()
@@ -2314,6 +2453,7 @@ int main()
     test_config();
     test_screen();
     test_drawdist();
+    test_textpatch();
 
     test_time();
     test_math();

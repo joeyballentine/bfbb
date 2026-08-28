@@ -53,6 +53,23 @@ what the GameCube release does.
   built on Microsoft's published I3DL2 design instead. The settings are the
   Xbox's, the implementation is not.
 
+## The text says PC
+
+The port runs on the Xbox release's assets, and its text talks about an Xbox.
+The pause menu offers to "Reboot to Xbox Dashboard", an autosave asks you not to
+turn off "your Xbox console", and the load screen names the save location as
+"MEMORY CARD slot 1" — which here is a folder. Some of it is older than that:
+the shared menu archives still carry PlayStation 2 wording the Xbox release
+never finished stripping, down to the DUALSHOCK.
+
+That text is rewritten as it loads, in memory. Your archives are never touched,
+so this is a real switch and not a one-way conversion — `platform_wording = off`
+in `config.ini` gives you exactly what the disc says. It covers 235 whole
+strings and 156 word swaps across the 63 archives, and it never rewrites
+anything inside `{markup}`, where the names are lookup keys rather than prose.
+
+`src/SB/Core/pc/iTextPatch.h` is the long version.
+
 One retail bug is fixed rather than reproduced:
 
 - **3D sound panned the wrong way.** A sound on your right came out of the left

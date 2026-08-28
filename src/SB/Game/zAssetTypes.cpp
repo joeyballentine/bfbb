@@ -13,7 +13,15 @@
 #include <rwcore.h>
 #include <rpworld.h>
 
+#ifdef PLATFORM_PC
+#include "iTextPatch.h"
+#include "xTextAsset.h"
+#endif
+
 static void* Curve_Read(void* param_1, U32 param_2, void* indata, U32 insize, U32* outsize);
+#ifdef PLATFORM_PC
+static void* TEXT_Read(void* param_1, U32 param_2, void* indata, U32 insize, U32* outsize);
+#endif
 static void* ATBL_Read(void* param_1, U32 param_2, void* indata, U32 insize, U32* outsize);
 static void ATBL_Init();
 static void* RWTX_Read(void* param_1, U32 param_2, void* indata, U32 insize, U32* outsize);
@@ -87,7 +95,16 @@ static st_PACKER_ASSETTYPE assetTypeHandlers[78] = {
     { 'VOLU' },
     { 'UI  ' },
     { 'UIFT' },
+#ifdef PLATFORM_PC
+    // PORT: the one place every TEXT asset in the game passes through, whatever
+    // archive it came from. The port runs on the Xbox assets and their text
+    // talks about an Xbox; TEXT_Read below rewrites that as the asset loads.
+    // Retail leaves this type with no handlers at all, which is what the
+    // GameCube build still compiles.
+    { 'TEXT', 0, 0, TEXT_Read, NULL, NULL, NULL, NULL, NULL, NULL },
+#else
     { 'TEXT' },
+#endif
     { 'COND' },
     { 'DPAT' },
     { 'PRJT' },
@@ -190,6 +207,38 @@ static void* Curve_Read(void* param_1, U32 param_2, void* indata, U32 insize, U3
 
     return __dest;
 }
+
+#ifdef PLATFORM_PC
+// PORT: rewrites the console out of a TEXT asset's string as it loads. See
+// src/SB/Core/pc/iTextPatch.h; off in config.ini this is a no-op and the asset
+// arrives exactly as the disc shipped it.
+//
+// The asset is transformed IN PLACE and handed straight back. Every other
+// readXForm here returns a new object, and the packer supports both -- but a
+// TEXT asset's payload is a string, the rewrite only ever shortens it, and
+// returning the same bytes means there is nothing to free and so no unload
+// handler to keep in step with this one.
+static void* TEXT_Read(void*, U32 assetID, void* indata, U32 insize, U32* outsize)
+{
+    *outsize = insize;
+
+    // The asset is an xTextAsset header and then the string. One that cannot
+    // hold both is not a text asset, and is left for the callers to find empty
+    // the same way retail would.
+    //
+    // Qualified, and spelled out rather than going through xTextAssetGetText:
+    // zTalkBox.h declares a second xTextAsset of its own inside an anonymous
+    // namespace, and it reaches this file through the include chain, so the
+    // bare name is ambiguous here and the macro's cast is too.
+    if (indata != NULL && insize > sizeof(::xTextAsset))
+    {
+        char* text = (char*)((::xTextAsset*)indata + 1);
+        iTextPatchAsset(assetID, text, insize - sizeof(::xTextAsset));
+    }
+
+    return indata;
+}
+#endif
 
 static void Model_Unload(void* userdata, U32)
 {

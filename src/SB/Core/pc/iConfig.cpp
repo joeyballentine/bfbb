@@ -99,6 +99,12 @@ namespace
           "The loading screen stands on a still of the level you just left,\n"
           "; rather than on the background texture the GameCube release uses." },
         { "xbox", "reverb", "on", "Cave reverb, in the Mermalair and the caves." },
+        { "text", "platform_wording", "on",
+          "The game's text is the Xbox release's, and it talks about an Xbox: the\n"
+          "; pause menu offers to reboot to the dashboard, an autosave asks you not to\n"
+          "; turn off your console, and the load screen names the save location as a\n"
+          "; memory card slot -- which here is a folder. On, that text is rewritten as\n"
+          "; it loads; the files on disk are never touched. Off is what the disc says." },
     };
 
     const size_t kSettingCount = sizeof(kSettings) / sizeof(kSettings[0]);
@@ -361,6 +367,11 @@ bool iConfigWriteDefaults(const char* path)
             {
                 fprintf(f, "; Things the Xbox release did that the GameCube release did not.\n");
                 fprintf(f, "; Turning one off leaves the GameCube behaviour in its place.\n");
+            }
+            else if (strcmp(section, "text") == 0)
+            {
+                fprintf(f, "; The game's own words, which are the console release's. Nothing here\n");
+                fprintf(f, "; edits the files on disk -- the text is rewritten as it loads.\n");
             }
         }
 
