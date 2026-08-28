@@ -11,6 +11,9 @@
   layer interface by interface, plus the `BFBB_*` switches.
 - [UNCAPPED.md](UNCAPPED.md) is why the simulation runs at a fixed step, and the
   audit of what would have to change to let the frame rate go free.
+- [RESOLUTION.md](RESOLUTION.md) is the same audit for rendering above 640x480:
+  what the virtual screen already gives you, and the camera rasters that have to
+  move together.
 
 ## Decomp
 
