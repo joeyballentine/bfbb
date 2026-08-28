@@ -2157,7 +2157,7 @@ void zSceneSetup()
                 // is NOT used here: the second cluster below still blocks this
                 // function from reaching 100.0, so the device would bank no
                 // bytes, and every volatile installed for this defect masks
-                // the compiler-side fix (see the census in DUPLOTRON.md).
+                // the compiler-side fix (see the census in docs/DUPLOTRON.md).
                 zEnvSetup(gCurEnv);
                 xClimateInitAsset(&gClimate, gCurEnv->easset);
 

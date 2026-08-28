@@ -3,16 +3,23 @@
 [![Discord Badge]][discord]
 [![Build Status]][actions]
 
-[![Perfect Match]][progress]
-[![Fuzzy Match]][progress]
-[![Functions]][progress]
+[![Game Code]][progress]
+[![Game Fuzzy]][progress]
+[![Game Functions]][progress]
 
-[progress]: https://bfbbdecomp.github.io/bfbb/
-[Fuzzy Match]: https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbfbbdecomp.github.io%2Fbfbb%2Fapi.json&query=fuzzy_match&label=Close%20Match&color=yellowgreen
-[Perfect Match]: https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbfbbdecomp.github.io%2Fbfbb%2Fapi.json&query=perfect_match&label=Matching&color=limegreen
-[Functions]: https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbfbbdecomp.github.io%2Fbfbb%2Fapi.json&query=functions_matched&label=Functions&color=lavender
-[Build Status]: https://github.com/bfbbdecomp/bfbb/actions/workflows/build.yml/badge.svg
-[actions]: https://github.com/bfbbdecomp/bfbb/actions/workflows/build.yml
+[![Overall]][progress]
+[![Overall Fuzzy]][progress]
+[![Overall Functions]][progress]
+
+[progress]: docs/DUPLOTRON.md
+[Game Code]: https://img.shields.io/badge/Game%20Code-80.70%25-limegreen
+[Game Fuzzy]: https://img.shields.io/badge/Game%20Close%20Match-99.22%25-yellowgreen
+[Game Functions]: https://img.shields.io/badge/Game%20Functions-7250%20%2F%207673-lavender
+[Overall]: https://img.shields.io/badge/Overall-64.64%25-darkgreen
+[Overall Fuzzy]: https://img.shields.io/badge/Overall%20Close%20Match-79.09%25-olive
+[Overall Functions]: https://img.shields.io/badge/Overall%20Functions-8420%20%2F%2010147-slateblue
+[Build Status]: https://github.com/joeyballentine/bfbb/actions/workflows/build.yml/badge.svg
+[actions]: https://github.com/joeyballentine/bfbb/actions/workflows/build.yml
 [Discord Badge]: https://img.shields.io/discord/829152115322257436?color=%237289DA&logo=discord&logoColor=%23FFFFFF
 [discord]: https://discord.gg/dVbGFdYU6A
 
@@ -27,6 +34,33 @@ This repository does **not** contain any game assets or assembly whatsoever. An 
 Supported versions:
 
 - `GQPE78`: (NTSC-U)
+
+## About this fork
+
+This is a fork of [bfbbdecomp/bfbb](https://github.com/bfbbdecomp/bfbb) where the
+decompilation is driven by an AI agent, as an experiment. Most commits on the
+`duplotron` branch were written by Claude: finding non-matching functions, working
+out why they don't match, fixing them, and checking the result against the
+original binary. The game is the test case.
+
+It builds with a scheduler-patched CodeWarrior (`GC/2.0p1a`, produced at
+configure time by `tools/patch_compiler.py`), which unblocks functions that
+differ only by instruction scheduling.
+
+The work has gone almost entirely into game code rather than the SDK and
+library code around it, and that is what made the PC port on `treedome`
+possible. The port compiles these same `src/SB` sources against a host platform
+layer, and for that what matters is that the game's code exists and is correct,
+not that it matches byte for byte.
+
+The game code badges are the ones that mean anything: that is the game itself,
+the part being decompiled. The overall figures include the Dolphin SDK, MSL,
+RenderWare and Bink, most of which nobody is working on.
+
+Both are updated by hand, since this fork has no progress site of its own.
+`python tools/gcgate.py` prints the current game code numbers.
+
+See [docs/DUPLOTRON.md](docs/DUPLOTRON.md) for what's been tried and ruled out.
 
 # Dependencies
 
@@ -71,7 +105,7 @@ sudo xattr -rd com.apple.quarantine '/Applications/Wine Crossover.app'
 - Clone the repository:
 
   ```sh
-  git clone https://github.com/bfbbdecomp/bfbb.git
+  git clone https://github.com/joeyballentine/bfbb.git
   ```
 
 - Using [Dolphin Emulator](https://dolphin-emu.org/), extract your game to `orig/GQPE78`.

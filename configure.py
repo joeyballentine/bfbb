@@ -331,7 +331,7 @@ cflags_bfbb = [
 # Guards source that must NOT be in a matching build but must be in a runnable
 # one. Retail contains reads of uninitialised stack that are harmless with its
 # exact frame contents, are not harmless with ours, and will not be harmless in
-# a PC port either -- see "Latent retail bugs" in PCPORT.md. The fix has to be
+# a PC port either -- see "Latent retail bugs" in docs/PCPORT.md. The fix has to be
 # absent from the matching build, because adding it changes codegen, and
 # present everywhere else.
 if config.non_matching:
