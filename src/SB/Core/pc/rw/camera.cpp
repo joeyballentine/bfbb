@@ -289,7 +289,7 @@ RwCamera* RwCameraShowRaster(RwCamera* camera, void* pDev, RwUInt32 flags)
     // It is here rather than at the scene change that wants it because by then
     // it is far too late: zGameExit has already taken the level down, and the
     // last frame of it exists nowhere but in the surface about to be presented.
-    // Off unless BFBB_LOADSNAP is set, and one blit when it is. See iSnapshot.h.
+    // One blit of the frame buffer per frame. See iSnapshot.h.
     iSnapshotCapture();
 
     // **The flip waits for the display, whatever the caller asked for.**

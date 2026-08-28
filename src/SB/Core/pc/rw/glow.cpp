@@ -21,7 +21,6 @@
 #include "iGlow.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 
 #if defined(RW_D3D9)
 
@@ -51,8 +50,6 @@ static const F32 kFarWeight = 1.0f / 6.0f;
 // And the tap distances, in texels of the texture being sampled.
 static const F32 kNearTap = 1.0f;
 static const F32 kFarTap = 3.0f;
-
-static const bool sEnabled = getenv("BFBB_GLOW") != NULL;
 
 struct GlowTarget
 {
@@ -243,7 +240,7 @@ static bool captureScreen()
 
 void iGlowRender(RwCamera* cam, F32 strength)
 {
-    if (!sEnabled || sFailed || cam == NULL || rw::d3d::d3ddevice == NULL)
+    if (sFailed || cam == NULL || rw::d3d::d3ddevice == NULL)
     {
         return;
     }

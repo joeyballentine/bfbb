@@ -34,11 +34,10 @@
 // loop that draws, xMemMgr is a bump allocator with no locking, and the device
 // is created single-threaded.
 
-// Off unless BFBB_LOADSNAP is set. Retail's static background is the default
-// because it is what the console shipped; this is the Xbox behaviour offered,
-// not substituted. Nothing outside the implementation asks: every function here
-// answers for the feature being off on its own, and the switch is read once so
-// that the per-frame test is a load.
+// On always, so the loading screen does what the Xbox release does. Nothing
+// outside the implementation asks whether a still exists: every function here
+// answers on its own, and the background texture asset the GameCube and PS2
+// releases draw is still the fallback whenever there is no frame to show.
 
 // Copy what is about to be presented into the snapshot. Called once a frame
 // from RwCameraShowRaster, which is the only place in the port that knows a

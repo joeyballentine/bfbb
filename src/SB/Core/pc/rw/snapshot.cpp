@@ -33,11 +33,6 @@
 #include "iSnapshot.h"
 
 #include <stdio.h>
-#include <stdlib.h>
-
-// Read once. Every frame asks whether the feature is on, and a getenv a frame
-// to answer it would cost more than the blit it guards.
-static const bool sEnabled = getenv("BFBB_LOADSNAP") != NULL;
 
 // The captured frame, and the texture handed out over it. Created on the first
 // capture rather than at startup, because until the engine is open there is no
@@ -94,7 +89,7 @@ static void snapshotFail(const char* what, long hr)
 
 void iSnapshotCapture()
 {
-    if (!sEnabled || sFailed || sLatched)
+    if (sFailed || sLatched)
     {
         return;
     }
@@ -190,7 +185,7 @@ void iSnapshotCapture()
 
 RwTexture* iSnapshotBackgroundTexture()
 {
-    if (!sEnabled || sFailed || !sLatched || !sHaveFrame || sTexture == NULL)
+    if (sFailed || !sLatched || !sHaveFrame || sTexture == NULL)
     {
         return NULL;
     }

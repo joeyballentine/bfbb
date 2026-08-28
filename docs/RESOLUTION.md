@@ -77,8 +77,7 @@ The last two are the ones to miss. They never draw a pixel -- they exist so
 the same rule as the ones that do draw.
 
 The size itself comes from `iSystem.cpp:157-158`, where the window is opened. An
-environment variable there matches the `BFBB_GLOW` / `BFBB_LOADSNAP` /
-`BFBB_ASSETS` idiom the port already uses, and `engine_start.cpp:360` picks it up
+environment variable there matches the `BFBB_ASSETS` idiom the port already uses, and `engine_start.cpp:360` picks it up
 for the virtual screen with no further change.
 
 The six game-code sites need the `#ifdef PLATFORM_PC` treatment the fixed-step

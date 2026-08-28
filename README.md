@@ -34,10 +34,11 @@ them for real, so they were recovered from that build rather than invented.
   which already ships in `plat.HIP`.
 - **Glow**, what people usually call the Xbox version's bloom. A bright pass,
   two blur passes, then composited back over the frame. Both shaders were
-  decoded from the Xbox build's pixel shader definitions. Set `BFBB_GLOW`.
+  decoded from the Xbox build's pixel shader definitions.
 - **The loading screen still.** `zGameTakeSnapShot` is empty on GameCube. On
-  Xbox it grabbed the frame that the loading screen bubbles rise over. Set
-  `BFBB_LOADSNAP`.
+  Xbox it grabbed the frame that the loading screen bubbles rise over. Falls
+  back to the background asset when there is no previous frame, as on the first
+  load of a run.
 - **Cave reverb** in the Mermalair and the caves, which only the Xbox release
   has. The game side was never missing: `zSceneInitEnvironmentalSoundEffect`
   already picks the cave effect for nine scenes and `xSnd` forwards it. What is

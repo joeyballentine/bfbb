@@ -38,9 +38,9 @@
 // is a bright, saturated cartoon, so most of the frame clears it. The same code
 // in a darker game would look like selective bloom.
 //
-// Off unless BFBB_GLOW is set. It changes how the whole game looks, which is a
-// larger divergence than anything else in this layer, so it is offered rather
-// than assumed.
+// On always. It changes how the whole game looks, which is a larger divergence
+// than anything else in this layer, but it is what the Xbox release does and the
+// port follows it.
 
 // Draw the glow over the frame. Called from xScrFxDistortionRender's neighbour
 // in xScrFxRender, with the camera being rendered; its update is ended and

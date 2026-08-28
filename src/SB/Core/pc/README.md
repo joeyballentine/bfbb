@@ -87,24 +87,6 @@ Everything below is off unless set, and each costs a load per frame when it is.
     BFBB_TEST_CRASH     fault immediately, to check the crash handler still
                         works.
 
-The one switch below is a feature rather than a diagnostic. It is off by
-default because what the console shipped is the default; this offers the Xbox
-behaviour, it does not substitute it.
-
-    BFBB_LOADSNAP       the Xbox loading screen: the bubbles rise over a still
-                        of the level you are leaving, instead of over the
-                        background texture asset the GameCube and PS2 releases
-                        draw. Everything else about that screen is already the
-                        same on all three -- the bubbles are live particles on
-                        every platform -- so this changes only which raster
-                        fills the background quad.
-
-                        Costs one blit of the frame buffer per frame while it
-                        is on. Falls back to the asset whenever there is no
-                        still to draw: the first load of a run has no previous
-                        frame, and a device reset empties the one that was
-                        taken. See `iSnapshot.h`.
-
 ## How the two builds stay apart
 
 Game code includes its platform headers unqualified — `#include "iTime.h"` —
@@ -182,7 +164,7 @@ and not the table. If you port something, edit the row.
   GameCube code, with a live call site -- can do on PC what it did on Xbox. The
   header carries the argument; the implementation is D3D9-only, because the one
   thing it needs is a way to copy the frame buffer into a texture and the shim
-  has one for that backend alone. Off unless `BFBB_LOADSNAP` is set.
+  has one for that backend alone.
 - **`iHost.h`**, **`iHostPosix.cpp`** and **`iHostWin32.cpp`** are the seam
   between this layer and the operating system: 21 functions covering the
   monotonic clock, frame pacing, local time, the low-address arena, and the
