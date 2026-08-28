@@ -9,6 +9,8 @@
   them record being wrong, which is deliberate.
 - [../src/SB/Core/pc/README.md](../src/SB/Core/pc/README.md) covers the platform
   layer interface by interface, plus the `BFBB_*` switches.
+- [UNCAPPED.md](UNCAPPED.md) is why the simulation runs at a fixed step, and the
+  audit of what would have to change to let the frame rate go free.
 
 ## Decomp
 
