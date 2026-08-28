@@ -535,3 +535,39 @@ void rwSetColorWriteMask(RwUInt32 mask)
 {
     rw::SetRenderState(rw::COLORWRITEMASK, (rw::uint32)mask);
 }
+
+// ---------------------------------------------------------------------------
+// Cutout transparency.
+//
+// Also NOT a RenderWare render state, and for a stronger reason than the mask
+// above: it is not a state the game ever sets, it is a decision about how to
+// DRAW one it does. RenderWare's D3D drivers infer transparency from the bound
+// texture -- a raster with an alpha channel switches blending on by itself,
+// without the application asking -- and that inference is what this changes.
+//
+// Why it is a setting rather than a fix. The two readings of a texture's alpha
+// are both defensible at 640x480 and stop being interchangeable above it. Where
+// a texture goes from transparent to opaque, filtering leaves a band a texel
+// wide, and blending that band draws whatever is behind the surface through it.
+// A texel is about a screen pixel at the size the art was drawn for, so the
+// band reads as a soft edge; at 4K it is six pixels of the level's own
+// background showing through a cave wall. Cutting instead -- keeping the band
+// opaque up to `ref` and dropping the rest -- makes the silhouette on screen
+// the silhouette in the artwork whatever the render size is, at the cost of
+// the softness, which is the right trade for a fence and the wrong one for a
+// pane of glass.
+//
+// So the reference is the caller's, 0 turns it off, and the narrowing that
+// keeps a pane of glass out of it lives in the driver: only geometry drawn
+// with no blend of its own and with depth writes on -- geometry the game is
+// treating as opaque -- is ever cut.
+void rwSetAlphaCutout(RwUInt32 ref)
+{
+#ifdef RW_D3D9
+    rw::d3d::setAlphaCutout((rw::int32)ref);
+#else
+    // No device, nothing to infer from, nothing to correct. The NULL platform
+    // build exists for the tests.
+    (void)ref;
+#endif
+}

@@ -102,6 +102,22 @@ namespace
           "; no reason to. Turning this off restores the consoles' distances\n"
           "; exactly. It does not touch fog, and it does not make anything think\n"
           "; further away than it used to -- only draw." },
+        { "video", "alpha_cutout", "on",
+          "Draw a texture's own transparency as a hard edge rather than a fade,\n"
+          "; on scenery the game draws as solid.\n"
+          ";\n"
+          "; Foliage, fences, grates and cave walls are a solid shape punched out of\n"
+          "; a texture. Magnifying one leaves a band of half-transparent pixels\n"
+          "; where the shape ends, and the consoles' way of drawing that band is to\n"
+          "; blend it -- which at 640x480 is a soft edge a pixel wide, and at 4K is\n"
+          "; six pixels of the sky showing through the level. On, the band is drawn\n"
+          "; solid up to the cut and dropped after it, so the silhouette is the one\n"
+          "; in the artwork at any resolution.\n"
+          ";\n"
+          "; off is what the consoles did. A number from 1 to 255 sets where the cut\n"
+          "; falls: lower keeps more of the band and stays softer, higher trims the\n"
+          "; shape. on is 128. Glass, water, particles and the interface are\n"
+          "; unaffected either way -- they ask to be blended, and are." },
         { "xbox", "glow", "on",
           "The full-screen glow -- what people call the Xbox version's bloom." },
         { "xbox", "distortion", "on", "The Cruise Bubble's screen warp." },

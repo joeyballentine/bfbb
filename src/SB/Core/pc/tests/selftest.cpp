@@ -269,7 +269,11 @@ static void test_config()
     check(r != NULL, "the written file can be read back");
     if (r != NULL)
     {
-        char buf[4096];
+        // Big enough for the whole file, which is mostly the settings' own
+        // documentation and grows every time one is added. A buffer that only
+        // fits most of it fails the LAST checks below and looks like the writer
+        // dropping settings rather than the reader stopping early.
+        char buf[16384];
         size_t n = fread(buf, 1, sizeof(buf) - 1, r);
         fclose(r);
         buf[n] = '\0';
@@ -279,6 +283,7 @@ static void test_config()
         check(strstr(buf, "width = 640") != NULL, "and the render width at its default");
         check(strstr(buf, "height = 480") != NULL, "and the height");
         check(strstr(buf, "draw_distance = on") != NULL, "and the draw distance");
+        check(strstr(buf, "alpha_cutout = on") != NULL, "and the alpha cutout");
         check(strstr(buf, "[xbox]") != NULL, "it has the [xbox] section header");
         check(strstr(buf, "glow = on") != NULL, "and glow at its default");
         check(strstr(buf, "distortion = on") != NULL, "and distortion");

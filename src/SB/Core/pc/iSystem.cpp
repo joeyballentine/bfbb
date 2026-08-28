@@ -330,6 +330,43 @@ static iWindowMode WindowModeFromConfig()
     return iWINDOW_FULLSCREEN;
 }
 
+// Where a texture's own transparency is cut, from config.ini's
+// video.alpha_cutout, or 0 for the blend the consoles drew. Held for the same
+// reason sWindowMode is, plus one of its own: the cutout is a render state on
+// a device that does not exist yet when this is read.
+static S32 sAlphaCutoutRef;
+
+static S32 AlphaCutoutFromConfig()
+{
+    const char* value = iConfigGetString("video.alpha_cutout", "on");
+
+    if (iHostStrCaseCmp(value, "off") == 0)
+    {
+        return 0;
+    }
+    if (iHostStrCaseCmp(value, "on") == 0)
+    {
+        return 128;
+    }
+
+    // Anything else is a reference, and is REJECTED rather than clamped outside
+    // 1 to 255. 0 already spells off and 256 does not mean anything, so a value
+    // out there was meant to do something this cannot do -- clamping it would
+    // silently do something else instead and look like the setting working.
+    char* end;
+    long ref = strtol(value, &end, 10);
+
+    if (end != value && *end == '\0' && ref >= 1 && ref <= 255)
+    {
+        return (S32)ref;
+    }
+
+    printf("bfbb: config: video.alpha_cutout is not on, off or 1-255, using the "
+           "default: %s\n",
+           value);
+    return 128;
+}
+
 static const char* WindowModeName(iWindowMode mode)
 {
     switch (mode)
@@ -346,6 +383,7 @@ static const char* WindowModeName(iWindowMode mode)
 static void ApplyConfig()
 {
     sWindowMode = WindowModeFromConfig();
+    sAlphaCutoutRef = AlphaCutoutFromConfig();
 
     // The render size, before RenderWareInit opens the window at it. Pushed the
     // same way the three render features are, and for a stronger reason: iScreen
@@ -395,11 +433,21 @@ static void ApplyConfig()
     // Said out loud, and always, because these change what the game looks and
     // sounds like. Someone reporting that the port looks wrong should not have
     // to be asked whether they have a config.ini -- the log already says.
+    char cutout[16];
+    if (sAlphaCutoutRef == 0)
+    {
+        strcpy(cutout, "off");
+    }
+    else
+    {
+        sprintf(cutout, "%d", (int)sAlphaCutoutRef);
+    }
+
     const char* path = iConfigPath();
-    printf("bfbb: %s -- %s; draw distance %s; Xbox features: glow %s, distortion %s, "
-           "snapshot %s, reverb %s\n",
+    printf("bfbb: %s -- %s; draw distance %s; alpha cutout %s; Xbox features: glow %s, "
+           "distortion %s, snapshot %s, reverb %s\n",
            path != NULL ? path : "no config.ini, defaults", WindowModeName(sWindowMode),
-           drawDistance ? "unlimited" : "console", glow ? "on" : "off",
+           drawDistance ? "unlimited" : "console", cutout, glow ? "on" : "off",
            distortion ? "on" : "off", snapshot ? "on" : "off", reverb ? "on" : "off");
     printf("bfbb: text rewritten for a PC: %s\n", wording ? "on" : "off");
 }
@@ -472,6 +520,18 @@ void iSystemInit(U32 options)
         // several hundred lines further on, with nothing to point at.
         printf("bfbb: FATAL -- RenderWare failed to start\n");
         exit(1);
+    }
+
+    // The cutout, only now: it is a render state, and until RenderWareInit
+    // returns there is no device to set one on. ApplyConfig decided the value
+    // several hundred lines above, where every other setting is decided and
+    // where a bad one gets reported with the rest.
+    //
+    // Declared here rather than in a header for the same reason
+    // rwSetColorWriteMask is at iDraw.cpp:80 -- one seam, one caller.
+    {
+        void rwSetAlphaCutout(U32 ref);
+        rwSetAlphaCutout((U32)sAlphaCutoutRef);
     }
 
     xMathInit();
