@@ -9,6 +9,10 @@
 #include "xModelBucket.h"
 #include "xScreen.h"
 
+#ifdef PLATFORM_PC
+#include "iFont.h"
+#endif
+
 #include "iSystem.h"
 #include "iTime.h"
 #include "zScene.h"
@@ -373,6 +377,125 @@ namespace
         return result;
     }
 
+#ifdef PLATFORM_PC
+    // Rebuild one font's glyph tables from a TrueType outline.
+    //
+    // The game's four tables are the whole interface to a font, and this fills
+    // all four from stb_truetype's metrics instead of from the atlas the HIP
+    // carries. Nothing above char_render changes, so line breaking, colour
+    // tags, justification and the inline model tags all still work.
+    //
+    // The mapping, since it is not obvious from either side:
+    //
+    //   tex_bounds  the glyph's rect in the atlas, in PIXELS -- get_tex_bounds
+    //               returns pixels and the caller scales by iwidth/iheight.
+    //   bounds      x/y offset and w = ADVANCE, in EM units of the line box.
+    //               char_render scales this by the character cell, so 1.0 of
+    //               height is one line and w is what the layout steps by.
+    //   dstfrac     the drawn size as a fraction of the advance, because
+    //               char_render multiplies dst.w by it AFTER scaling. A glyph's
+    //               ink is narrower than its advance, and this is where that
+    //               difference lives.
+    //
+    // 64 pixels a line. The atlas is drawn magnified at any render size above
+    // 640x480, and this is what decides how far it can be magnified before the
+    // outline stops being the point; four fonts at 64px is well under a
+    // megabyte.
+    void substitute_truetype_font(font_data& fd)
+    {
+        if (!iFontAvailable())
+        {
+            return;
+        }
+
+        const font_asset& a = *fd.asset;
+
+        S32 count = 0;
+        while (count < (S32)sizeof(a.char_set) && a.char_set[count] != '\0')
+        {
+            count++;
+        }
+
+        if (count <= 0 || count > 127)
+        {
+            return;
+        }
+
+        static iFontGlyph glyphs[127];
+        const U8* pixels = NULL;
+        S32 width = 0;
+        S32 height = 0;
+        F32 cellHeight = 0.0f;
+        F32 baselineRow = 0.0f;
+
+        // The asset's own baseline-in-cell ratio, so the substituted font fills
+        // the cell the way the atlas it replaces does.
+        const F32 baselineFraction = (a.dv > 0) ? ((F32)a.baseline / (F32)a.dv) : 0.0f;
+
+        if (!iFontRasterize((const char*)a.char_set, count, 64, baselineFraction, iFontScale(),
+                            &pixels, &width, &height, glyphs, &cellHeight, &baselineRow))
+        {
+            return;
+        }
+
+        RwTexture* texture = iFontMakeTexture(pixels, width, height);
+        if (texture == NULL)
+        {
+            return;
+        }
+
+        fd.texture = texture;
+        fd.raster = texture->raster;
+        fd.iwidth = 1.0f / width;
+        fd.iheight = 1.0f / height;
+
+        // The same four numbers the retail path produces, in the same shape.
+        // From the probe that settled this, for font 0 (du=18, dv=22, no
+        // spacing, baseline 19) and the letter A:
+        //
+        //     bounds  = (0, -19/22, 10/18, 1)      dstfrac = (1, 1)
+        //
+        // So: x is always zero and the ink is flush against the pen; y is minus
+        // the baseline as a fraction of the cell, which means the pen sits ON
+        // the baseline rather than at the top of the line; the width is the INK
+        // width over the cell width, and is also the advance; and the height is
+        // always the whole cell, because the atlas has one cell and one
+        // baseline for the font and only measures glyphs horizontally.
+        //
+        // Getting the second of those wrong is what put every line nearly a
+        // full line-height low and made them collide.
+        const F32 vunit = cellHeight;
+
+        // The horizontal unit is the cell WIDTH, which is du against dv -- the
+        // cell is 18 by 22 and not square, and the caller's font.width and
+        // font.height mirror that same ratio.
+        const F32 hunit = (a.dv > 0) ? (cellHeight * (F32)a.du / (F32)a.dv) : cellHeight;
+
+        for (S32 i = 0; i < count; i++)
+        {
+            const iFontGlyph& g = glyphs[i];
+
+            // NORMALIZED, not pixels: get_tex_bounds does its own scale by
+            // iwidth/iheight before returning, so this table already holds
+            // texture coordinates.
+            fd.tex_bounds[i].assign(g.u0, g.v0, g.u1 - g.u0, g.v1 - g.v0);
+
+            // A glyph the font does not have keeps the width the atlas gave it,
+            // rather than collapsing the layout to zero.
+            const F32 advance = g.inkWidth > 0.0f ? (g.inkWidth / hunit) : fd.bounds[i].w;
+
+            fd.bounds[i].assign(0.0f, -baselineRow / vunit, advance, 1.0f);
+            fd.dstfrac[i].x = 1.0f;
+            fd.dstfrac[i].y = 1.0f;
+        }
+
+        // The space and newline entries the retail path appended past the
+        // character set are deliberately left alone. Their widths are fractions
+        // of the cell rather than of the atlas -- 0.5 or 1.0 -- so they already
+        // mean the same thing against a substituted font.
+    }
+#endif
+
     bool init_font_data(font_data& fd)
     {
         font_asset& a = *fd.asset;
@@ -443,6 +566,15 @@ namespace
             fd.tex_bounds[tail_index].assign(0, 0, 0, 0);
             fd.bounds[tail_index].assign(0.0f, (F32)-a.baseline / a.dv, 0.0f, 1.0f);
         }
+
+#ifdef PLATFORM_PC
+        // Everything above built the glyph tables from the atlas in the HIP.
+        // If a TrueType file was configured, the same tables are rebuilt from
+        // outlines instead -- see iFont.h for why, and note that it is a LAST
+        // step rather than a branch: the retail path runs in full first, so a
+        // font that fails to load leaves exactly what the console would have.
+        substitute_truetype_font(fd);
+#endif
 
         return true;
     }

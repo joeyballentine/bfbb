@@ -2,6 +2,7 @@
 #include "iConfig.h"
 #include "iDrawDist.h"
 #include "iFile.h"
+#include "iFont.h"
 #include "iHost.h"
 #include "iPad.h"
 #include "iPadHost.h"
@@ -573,6 +574,13 @@ static void ApplyConfig()
 
     iLoadScreenSetMinTime(loadSeconds);
     iLoadTransitionSetFancy(fancyLoad);
+
+    // The TrueType font, before RenderWareInit -- xFont builds its glyph
+    // tables during startup and asks iFont once per font as it goes.
+    // Loading it is only reading the file; nothing is rasterised until the
+    // game says which characters it wants.
+    iFontSetScale(iConfigGetFloat("text.font_scale", 1.0f));
+    iFontLoad(iConfigGetString("text.font", ""));
 
     S32 glow = iConfigGetBool("xbox.glow", TRUE);
     S32 distortion = iConfigGetBool("xbox.distortion", TRUE);

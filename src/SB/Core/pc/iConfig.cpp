@@ -120,6 +120,25 @@ namespace
           "Folder of your own music to play instead of the game's; empty uses the\n"
           "; game's. Files are matched to tracks by asset name, or by a\n"
           "; soundtrack.txt beside them holding one 'asset name = file' per line." },
+        { "text", "font", "",
+          "A TrueType file to draw the game's text with, or empty for the game's\n"
+          "; own font.\n"
+          ";\n"
+          "; The game's fonts are texture atlases authored for 640x480, so above that\n"
+          "; they are magnified and text is the first thing to go soft. This draws\n"
+          "; the same letterforms from an outline at the size they are actually\n"
+          "; drawn at. Layout, spacing, colour and every tag stay the game's.\n"
+          ";\n"
+          "; No font ships with the port. The face the game itself used is\n"
+          "; SpongeBoyTT1; any .ttf works. tools/getfont.py fetches one and prints\n"
+          "; the line to paste here." },
+        { "text", "font_scale", "1.0",
+          "A nudge on the size of the font above, 1.0 for none. Smaller is smaller.\n"
+          ";\n"
+          "; The last few percent depend on which face you substitute -- a font's\n"
+          "; declared line box and a hand-authored atlas cell are different things by\n"
+          "; a few percent, and no rule gets every font right. 0.95 lines SpongeBoyTT1\n"
+          "; up with the game's own font. Ignored when no font is set." },
         { "text", "platform_wording", "on",
           "Rewrite the Xbox wording in the game's text -- dashboard, memory card\n"
           "; slots -- as it loads. The files on disk are never touched." },

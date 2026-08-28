@@ -98,6 +98,24 @@ at load rather than ignored.
                         off is exactly what the disc says. iTextPatch.h is the
                         account of how it works and why it happens at load.
 
+    [text]              Text.
+
+    font                a TrueType file to draw the game's text with, empty for
+                        the game's own. Its fonts are texture atlases authored
+                        for 640x480, so above that they are magnified and text
+                        is the first thing to go soft; this draws the same
+                        letterforms from an outline at the size they are really
+                        drawn. Layout, spacing, colour and every tag stay the
+                        game's, and a font that fails to load costs nothing but
+                        sharpness. No font ships with the port --
+                        tools/getfont.py fetches one. See iFont.h.
+
+    font_scale          a nudge on that font's size, 1.0 for none. The last few
+                        percent depend on which face you pick; 0.95 lines
+                        SpongeBoyTT1 up with the game's own.
+
+    platform_wording    the Xbox wording, rewritten for a PC.
+
 `SB.INI` is a different file and stays retail's: `zMainReadINI` reads it for
 PATH and BOOT, through the game's own `xIni` parser, and that parser allocates
 through RenderWare -- so it cannot answer a question asked before the engine

@@ -459,6 +459,7 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iConfig.cpp
   ${PC_DIR}/iDrawDist.cpp
   ${PC_DIR}/iFile.cpp
+  ${PC_DIR}/iFont.cpp
   ${PC_DIR}/iLoadScreen.cpp
   ${PC_DIR}/iLoadTransition.cpp
   ${PC_DIR}/intrin.cpp
@@ -633,6 +634,7 @@ endif()
 target_include_directories(bfbb_platform PUBLIC
   ${PC_DIR}/compat
   ${PC_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/include/rwsdk
   ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x
