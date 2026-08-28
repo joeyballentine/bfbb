@@ -434,6 +434,44 @@ static void test_screen()
     iScreenSetUIMode(iSCREENUI_NATIVE);
     iScreenSetAnchorRect(0.5f, 0.5f, 0.0f, 0.0f);
 
+    // --- full-bleed menu art ----------------------------------------------
+    //
+    // Identity at 4:3, for the same reason the anchor is: it is what everyone
+    // playing at the default gets.
+    iScreenSetSize(640, 480);
+    iScreenSetUIMode(iSCREENUI_NATIVE);
+    check(iScreenStretchX(0.0f) == 0.0f && iScreenStretchX(1.0f) == 640.0f,
+          "at 4:3 the stretch is the box");
+    check(iScreenStretchY(0.0f) == 0.0f && iScreenStretchY(1.0f) == 480.0f, "on both axes");
+
+    // 16:9: the art reaches all four edges, which is the whole point of it.
+    iScreenSetSize(1920, 1080);
+    check(iScreenStretchX(0.0f) == 0.0f && iScreenStretchX(1.0f) == 1920.0f,
+          "16:9 fills the width");
+    check(iScreenStretchY(0.0f) == 0.0f && iScreenStretchY(1.0f) == 1080.0f,
+          "and the height, with nothing cropped");
+
+    // It is a stretch and not a uniform scale, and that is the trade being
+    // made: the caustics get a third wider rather than losing their corners.
+    F32 artW = iScreenStretchX(1.0f) - iScreenStretchX(0.0f);
+    F32 artH = iScreenStretchY(1.0f) - iScreenStretchY(0.0f);
+    check(fabsf(artW / artH - 16.0f / 9.0f) < 0.0001f, "the art takes the screen's shape");
+
+    // Nothing is left over on either axis at any shape, including narrower
+    // than 4:3, where the box is short of the screen the other way about.
+    iScreenSetSize(1280, 1024);
+    check(iScreenStretchX(1.0f) == 1280.0f && iScreenStretchY(1.0f) == 1024.0f,
+          "5:4 fills it too");
+
+    // Pillarbox does not fill anything -- the art goes back in the box, black
+    // bars and all, because that is the mode that draws what the console drew.
+    iScreenSetSize(1920, 1080);
+    iScreenSetUIMode(iSCREENUI_PILLARBOX);
+    check(iScreenStretchX(0.0f) == iScreenUIOriginXF() &&
+              fabsf(iScreenStretchX(1.0f) - (iScreenUIOriginXF() + iScreenUIWidthF())) < 0.01f,
+          "pillarbox leaves full-bleed art in the box");
+    iScreenSetUIMode(iSCREENUI_NATIVE);
+
     // Nothing else in this process renders, but the value is global, so it goes
     // back to the default rather than being left where a later test would find
     // it surprising.

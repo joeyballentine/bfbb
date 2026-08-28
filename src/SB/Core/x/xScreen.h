@@ -55,6 +55,22 @@
 #define xScreenAnchorX(x) iScreenAnchorX(x)
 #define xScreenAnchorY(y) iScreenAnchorY(y)
 
+// Full-bleed menu art: a UI sprite authored to cover the whole 640x480.
+//
+// Nothing in the asset says a sprite is a background -- it is an ordinary UI
+// entity with a texture -- so the test is the only thing that distinguishes one:
+// it covers the authored screen. Measured against the real menus, that is true
+// of exactly the two backdrops and of nothing else; every other panel is inset
+// and keeps the box it has always had.
+//
+// PC only, and called from inside a PLATFORM_PC branch. The console has no
+// screen for art to be full-bleed against -- the box IS the screen there.
+#define xScreenUIRectFullBleed(x1, y1, x2, y2)                                                \
+    ((x1) <= 0.0f && (y1) <= 0.0f && (x2) >= 1.0f && (y2) >= 1.0f)
+
+#define xScreenStretchX(n) iScreenStretchX(n)
+#define xScreenStretchY(n) iScreenStretchY(n)
+
 // Is this normalized UI-space rect entirely off the screen?
 //
 // One macro rather than four bounds, so that the console compiles the exact

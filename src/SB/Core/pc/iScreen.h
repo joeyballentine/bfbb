@@ -149,6 +149,44 @@ F32 iScreenUIMarginYF();
 F32 iScreenAnchorMarginXF();
 F32 iScreenAnchorMarginYF();
 
+// Where a normalized coordinate lands when the thing holding it is meant to
+// fill the screen rather than sit in the box -- full-bleed menu art, authored
+// to cover the whole 640x480.
+//
+// The box mapping is wrong for those: it leaves the art in the middle with the
+// widened 3D menu scene showing beside it, which is the one place the pillar
+// bars are not black. This stretches instead: the authored screen is mapped
+// onto the real one, both axes independently.
+//
+// Stretching rather than scaling uniformly and cropping is deliberate, and it
+// is a judgement about what the art IS. The full-bleed layer in these menus is
+// the caustics -- a drifting pattern of underwater light with no subject, no
+// horizon and no edge that has to stay put. Widening it by a third is invisible
+// on a pattern like that, while cropping an eighth off the top and the bottom
+// would throw away light that is meant to reach the corners.
+//
+// Identity at 4:3, where the box already is the screen; and in PILLARBOX these
+// are the box mapping exactly, because that mode's whole promise is the frame
+// the console drew.
+F32 iScreenStretchX(F32 n);
+F32 iScreenStretchY(F32 n);
+
+// The next UI model is a full-screen overlay, not an object placed in the box.
+//
+// xModelRender2D shrinks the camera's view window to the 4:3 box so that a HUD
+// model lands beside the HUD text it belongs to. That is right for everything
+// placed IN the interface and wrong for the one thing drawn OVER it: the menu's
+// caustics, an additive quad whose job is to put moving light on the whole
+// picture. Shrunk to the box it lights the middle of a widescreen menu and
+// stops, with a visible edge where the water simply ends.
+//
+// Set around such a draw, so the model reaches the frustum's own edges. Note it
+// covers rather than stretches -- xModelRender2D takes one scale from the
+// rect's width and applies it to both axes -- which for a drifting pattern with
+// no subject is a difference nobody can see.
+void iScreenSetUICover(S32 on);
+S32 iScreenUICover();
+
 // Set by iSystem, from config.ini, before the window is opened -- and again
 // with what the window actually gave, because engine_start takes the virtual
 // screen from the window and the two must not disagree.

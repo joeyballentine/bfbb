@@ -308,6 +308,7 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/intrin.cpp
   ${PC_DIR}/iMath.cpp
   ${PC_DIR}/iMemMgr.cpp
+  ${PC_DIR}/iMenuFrame.cpp
   ${PC_DIR}/iPad.cpp
   ${PC_DIR}/iSystem.cpp
   ${PC_DIR}/iTextPatch.cpp

@@ -178,6 +178,41 @@ F32 iScreenAnchorMarginYF()
     return sUIMode == iSCREENUI_NATIVE ? sUIMarginY : 0.0f;
 }
 
+namespace
+{
+    S32 sUICover = 0;
+}
+
+void iScreenSetUICover(S32 on)
+{
+    sUICover = on;
+}
+
+S32 iScreenUICover()
+{
+    return sUICover;
+}
+
+F32 iScreenStretchX(F32 n)
+{
+    if (sUIMode != iSCREENUI_NATIVE)
+    {
+        return sUIOriginX + sUIWidth * n;
+    }
+
+    return (F32)sWidth * n;
+}
+
+F32 iScreenStretchY(F32 n)
+{
+    if (sUIMode != iSCREENUI_NATIVE)
+    {
+        return sUIOriginY + sUIHeight * n;
+    }
+
+    return (F32)sHeight * n;
+}
+
 void iScreenSetUIMode(iScreenUIMode mode)
 {
     sUIMode = mode;

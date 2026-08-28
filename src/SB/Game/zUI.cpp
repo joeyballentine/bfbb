@@ -1,6 +1,8 @@
 #include "zUI.h"
 
 #ifdef PLATFORM_PC
+#include "iMenuFrame.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #endif
@@ -846,10 +848,28 @@ void zUI_Render(xEnt* ent)
                 // The model branch below already normalises by 640/480 and
                 // reaches the UI box through xModelRender2D.
 #ifdef PLATFORM_PC
-                F32 x1 = xScreenUIx(ui->sasset->pos.x / w);
-                F32 y1 = xScreenUIy(ui->sasset->pos.y / h);
-                F32 x2 = xScreenUIx((ui->sasset->pos.x + ui->sasset->dim[0]) / w);
-                F32 y2 = xScreenUIy((ui->sasset->pos.y + ui->sasset->dim[1]) / h);
+                // Normalized first, because whether this is full-bleed art is a
+                // question about the rect and not about where it will land.
+                F32 nx1 = ui->sasset->pos.x / w;
+                F32 ny1 = ui->sasset->pos.y / h;
+                F32 nx2 = (ui->sasset->pos.x + ui->sasset->dim[0]) / w;
+                F32 ny2 = (ui->sasset->pos.y + ui->sasset->dim[1]) / h;
+
+                F32 x1, y1, x2, y2;
+                if (xScreenUIRectFullBleed(nx1, ny1, nx2, ny2))
+                {
+                    x1 = xScreenStretchX(nx1);
+                    y1 = xScreenStretchY(ny1);
+                    x2 = xScreenStretchX(nx2);
+                    y2 = xScreenStretchY(ny2);
+                }
+                else
+                {
+                    x1 = xScreenUIx(nx1);
+                    y1 = xScreenUIy(ny1);
+                    x2 = xScreenUIx(nx2);
+                    y2 = xScreenUIy(ny2);
+                }
 #else
                 F32 x1 = w * ui->sasset->pos.x / w;
                 F32 y1 = h * ui->sasset->pos.y / h;
@@ -940,7 +960,46 @@ void zUI_Render(xEnt* ent)
                 xEntSetupPipeline(ui->model);
 
                 ui->model->Scale.assign(1.0f, 1.0f, 1.0f);
+                #ifdef PLATFORM_PC
+                // The menu frame is a mesh of repeated bamboo segments, and on a screen
+                // wider than the one it was drawn for it wants more of them rather than
+                // longer ones. Asked on every draw and answered once.
+                iMenuFrameWiden(ui->model->Data, r.w);
+
+                // Is this the overlay that lights the whole menu, rather than something
+                // placed in it?
+                //
+                // Two questions, and the asset answers both itself. Its destination
+                // blend is ONE, so it ADDS to the picture rather than sitting on it --
+                // a light effect, not a plate. And its rect is centred, so what it
+                // lights is the whole picture and not a corner of it. The menu
+                // caustics are the only thing in these scenes that answers yes to
+                // both, which is why no asset id has to be written down here.
+                //
+                // Only where there is margin to reach into: 4:3 has none, and in
+                // pillarbox the sides are painted black on purpose.
+                S32 cover = 0;
+                if (iScreenAnchorMarginXF() > 0.0f &&
+                    XMODELINSTANCE_GET_DSTBLEND(ui->model) == rwBLENDONE)
+                {
+                    F32 offX = r.x * 2.0f + r.w - 1.0f;
+                    F32 offY = r.y * 2.0f + r.h - 1.0f;
+
+                    if (offX < 0.01f && offX > -0.01f && offY < 0.01f && offY > -0.01f)
+                    {
+                        cover = 1;
+                        iScreenSetUICover(1);
+                    }
+                }
+                #endif
+
                 xModelRender2D(*ui->model, r, from, to);
+                #ifdef PLATFORM_PC
+                if (cover)
+                {
+                    iScreenSetUICover(0);
+                }
+                #endif
                 xEntRestorePipeline(ui->model);
 
                 if ((ui->model->PipeFlags & 0b1100) == rwBLENDINVSRCCOLOR)

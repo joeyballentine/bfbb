@@ -465,8 +465,14 @@ void xModelRender2D(const xModelInstance& model, const basic_rect<F32>& r, const
     // box. The view window is shrunk to that box instead, which is what puts a
     // HUD model back beside the HUD text it belongs to. Both fractions are 1 on
     // a 4:3 screen, so this is the frustum itself at the default.
+    // ...unless this model IS the widescreen -- an additive overlay drawn over
+    // the whole picture rather than an object placed in the interface. See
+    // iScreenSetUICover.
     RwV2d uivw = { camvw->x * xScreenUIFracXF(), camvw->y * xScreenUIFracYF() };
-    camvw = &uivw;
+    if (!iScreenUICover())
+    {
+        camvw = &uivw;
+    }
 #endif
 
     F32 viewscale = camvw->x * r.w * 2.0f;
