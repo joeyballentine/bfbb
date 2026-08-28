@@ -1,5 +1,5 @@
 @echo off
-rem Regenerates distort_PS.h from distort_PS.hlsl.
+rem Regenerates the checked-in shader blobs from their .hlsl sources.
 rem
 rem Same arrangement as librw's own shaders (third_party/librw/src/d3d/shaders):
 rem the compiled blob is checked in, so the build needs no shader compiler and
@@ -12,3 +12,7 @@ rem blob it emits is called g_ps20_main, which is what distort.cpp expects.
 set FXC="%ProgramFiles(x86)%\Windows Kits\10\bin\10.0.26100.0\x64\fxc.exe"
 
 %FXC% /nologo /T ps_2_0 /Fh distort_PS.h distort_PS.hlsl
+
+%FXC% /nologo /T ps_2_0 /Fh glow_bright_PS.h glow_bright_PS.hlsl
+
+%FXC% /nologo /T ps_2_0 /Fh glow_blur_PS.h glow_blur_PS.hlsl

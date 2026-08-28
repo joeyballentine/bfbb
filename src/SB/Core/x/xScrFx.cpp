@@ -8,6 +8,7 @@
 
 #ifdef PLATFORM_PC
 #include "iDistort.h"
+#include "iGlow.h"
 #endif
 
 struct _xFadeData
@@ -83,6 +84,13 @@ void xScrFxRender(RwCamera* cam)
 {
     iScrFxBegin();
     xScrFxDistortionRender(RwCameraGetCurrentCamera());
+
+#ifdef PLATFORM_PC
+    // The Xbox's xScrFxRender calls its glow here, immediately after the
+    // distortion and before the safe-area debug draw (va 0x152a10). Same place,
+    // so the two composite in the order they did there.
+    iGlowRender(RwCameraGetCurrentCamera());
+#endif
 
     if (g_debugRenderSafeArea)
     {
