@@ -81,7 +81,7 @@ already exists and is already the boundary the game code respects.
 | rendering | `iModel` `iDraw` `iLight` `iEnv` `iFX` `iScrFX` `iMorph` `iParMgr` `iCutscene` | **the bulk of the work**, all of it via librw |
 | video | `iFMV` | FFmpeg (optional); the Xbox `.xmv` play directly |
 | cert | `iTRC` | Nintendo TRC compliance; almost entirely stubbable |
-| GC-only | `ngcrad3d` | GameCube radiosity; no PC counterpart, drop or reimplement |
+| GC-only | `ngcrad3d` | RAD Game Tools' 3D surface layer, not radiosity: the GameCube blitter for a decoded Bink frame. Nothing to reimplement -- the port plays the Xbox `.xmv` through FFmpeg and never produces a Bink frame |
 
 `src/dolphin/` (26 subsystems) is replaced rather than ported:
 
