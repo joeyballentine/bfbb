@@ -532,6 +532,12 @@ void iSystemInit(U32 options)
     {
         void rwSetAlphaCutout(U32 ref);
         rwSetAlphaCutout((U32)sAlphaCutoutRef);
+
+        // And the reference everything else is tested against, which librw
+        // leaves at 10 and the console leaves at 1. Same moment, same reason --
+        // there is no device before this. renderstate.cpp says why it matters.
+        void rwSetConsoleAlphaTest(void);
+        rwSetConsoleAlphaTest();
     }
 
     xMathInit();

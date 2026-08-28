@@ -571,3 +571,36 @@ void rwSetAlphaCutout(RwUInt32 ref)
     (void)ref;
 #endif
 }
+
+// The alpha test that stands when nothing has asked for one.
+//
+// D3D9 has no "no alpha test": librw switches D3DRS_ALPHATESTENABLE on out of
+// whether the bound texture has an alpha channel, so every textured draw in the
+// game is tested against D3DRS_ALPHAREF whether or not it wanted to be. What
+// that reference IS therefore matters to effects that never mention it, and
+// librw's initD3D leaves it at 10.
+//
+// 10 is wrong here. The console has the same always-on test -- GX's alpha
+// compare -- and the value the game leaves in it is 1: xModelBucket.cpp:535
+// sets `GX_GEQUAL, 1` for every bucket that does not ask for a cutout, and
+// :605 restores it to exactly that when the alpha list is done. 1 means
+// "discard only what is fully transparent", which is the same as no test at
+// all for anything that is not keyed.
+//
+// The difference is invisible on opaque art and decides the shape of a soft
+// one. An additive sprite is drawn at a low vertex alpha -- the glare behind an
+// explosion peaks around 50 of 255 -- and the test sees the PRODUCT of that and
+// the texture, so a reference of 10 rejects every texel below 51/255 of the
+// texture's own alpha. On a radial gradient that is a hard circular edge at
+// about 72% of the sprite, and the whole sprite vanishes in one frame once the
+// fade takes the vertex alpha under 10. At a reference of 1 the same sprite
+// keeps its falloff and fades out smoothly.
+//
+// Set once, after the device exists. The game still moves the reference for its
+// own cutout buckets and still puts it back where it found it; this is only the
+// value it finds.
+void rwSetConsoleAlphaTest(void)
+{
+    rw::SetRenderState(rw::ALPHATESTFUNC, rw::ALPHAGREATEREQUAL);
+    rw::SetRenderState(rw::ALPHATESTREF, 1);
+}
