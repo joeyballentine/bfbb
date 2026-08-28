@@ -115,18 +115,35 @@ RpAtomic* RpAtomicForAllIntersections(RpAtomic* atomic, RpIntersection* intersec
         return atomic;
     }
 
-    // World space to object space. RwMatrixInvert handles a scaled LTM; the
+    // World space to object space. RwMatrixInvert handles a scaled matrix; the
     // scale has to come out of a sphere's radius separately, which is exactly
     // what iCollide.cpp does when it builds its own object-space copy, so the
     // two agree on what the callback is testing against.
     // Zeroed before RwMatrixSetIdentity because that macro ORs into the flags
     // word rather than assigning it, so it has to start from something.
+    //
+    // **The frame's own matrix, not its LTM.** Every caller -- iSphereHitsModel3
+    // and the two ray tests in iCollide.cpp -- writes the model's WORLD matrix
+    // onto the frame with RwFrameTransform(rwCOMBINEREPLACE) immediately before
+    // calling here, then builds its object-space copy of the primitive from that
+    // same matrix. That copy is what the callbacks test against, so the frame's
+    // matrix is the object-to-world transform for collision and has to be read
+    // back the way it was written.
+    //
+    // RwFrameGetLTM would not do that. It resynchronises the hierarchy and
+    // returns parent x local, and models come from RpClumpStreamRead with the
+    // clump's frame hierarchy intact -- so an atomic whose clump root carries an
+    // offset gets that offset applied a second time, putting the primitive in a
+    // space the geometry is not in and missing every triangle.
+    //
+    // iModelRender takes the same view from the other side: it assigns
+    // frame->ltm = *mat outright rather than going through the hierarchy.
     RwMatrix inverse = {};
     float scale = 1.0f;
     RwFrame* frame = RpAtomicGetFrame(atomic);
     if (frame != NULL)
     {
-        RwMatrix* ltm = RwFrameGetLTM(frame);
+        RwMatrix* ltm = reinterpret_cast<RwMatrix*>(&reinterpret_cast<rw::Frame*>(frame)->matrix);
         RwMatrixInvert(&inverse, ltm);
         scale = RwV3dLength(&ltm->right);
         if (scale == 0.0f)
