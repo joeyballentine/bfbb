@@ -58,6 +58,28 @@ SAME_OFFSET(RwIm2DVertex, emissiveColor, rw::d3d::Im2DVertex, color);
 SAME_OFFSET(RwIm2DVertex, u, rw::d3d::Im2DVertex, u);
 SAME_OFFSET(RwIm2DVertex, v, rw::d3d::Im2DVertex, v);
 
+// The Im3D vertex, which had no assertion at all until a swapped melee streak
+// found the gap.
+//
+// librw packs the colour as one D3DCOLOR word; the port keeps four named bytes
+// so that RwIm3DVertexSetRGBA can write them by name. The two only agree if the
+// port's BLUE sits where librw's word starts, because D3DCOLOR is ARGB and this
+// host is little-endian. Get it wrong and red and blue trade places on every
+// Im3D primitive in the game -- which is invisible for the greyscale callers
+// and glaring on the coloured ones.
+SAME_SIZE(RwIm3DVertex, rw::d3d::Im3DVertex);
+SAME_OFFSET(RwIm3DVertex, x, rw::d3d::Im3DVertex, position.x);
+SAME_OFFSET(RwIm3DVertex, nx, rw::d3d::Im3DVertex, normal.x);
+SAME_OFFSET(RwIm3DVertex, b, rw::d3d::Im3DVertex, color);
+SAME_OFFSET(RwIm3DVertex, u, rw::d3d::Im3DVertex, u);
+SAME_OFFSET(RwIm3DVertex, v, rw::d3d::Im3DVertex, v);
+static_assert(offsetof(RwIm3DVertex, g) == offsetof(RwIm3DVertex, b) + 1,
+              "D3DCOLOR wants green above blue");
+static_assert(offsetof(RwIm3DVertex, r) == offsetof(RwIm3DVertex, b) + 2,
+              "D3DCOLOR wants red above green");
+static_assert(offsetof(RwIm3DVertex, a) == offsetof(RwIm3DVertex, b) + 3,
+              "D3DCOLOR wants alpha in the high byte");
+
 #elif defined(RW_GL3)
 
 static_assert(offsetof(RwIm2DVertexRGBA, red) == 0, "GL3 wants red in the low byte");

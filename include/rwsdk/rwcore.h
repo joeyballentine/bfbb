@@ -44,10 +44,33 @@ struct RxObjSpace3DVertex
     RwReal nx;
     RwReal ny;
     RwReal nz;
+    // The colour bytes are in the order the RENDERER reads them, which is not
+    // the same on both platforms.
+    //
+    // librw's d3d Im3DVertex has a packed `uint32 color` where these four bytes
+    // are, and it is a D3DCOLOR -- ARGB in a word, so on a little-endian host
+    // the lowest byte is BLUE. Declaring r first put red where D3D reads blue
+    // and swapped the two channels on every Im3D vertex the game drew.
+    //
+    // It hid because nearly every Im3D caller passes a greyscale colour, where
+    // r == b and the swap is invisible: xShadowSimple draws (0,0,0) and
+    // xLaserBolt (255,255,255). The coloured ones are the melee streaks, and
+    // SpongeBob's pale yellow (255,255,128) came out as (128,255,255).
+    //
+    // The field NAMES stay put, so every RwIm3DVertexSetRGBA call still means
+    // what it says; only the bytes move. The GameCube keeps RenderWare's own
+    // order, where GX reads the colour as RGBA.
+#ifdef PLATFORM_PC
+    RwUInt8 b;
+    RwUInt8 g;
+    RwUInt8 r;
+    RwUInt8 a;
+#else
     RwUInt8 r;
     RwUInt8 g;
     RwUInt8 b;
     RwUInt8 a;
+#endif
     RwReal u;
     RwReal v;
 };
