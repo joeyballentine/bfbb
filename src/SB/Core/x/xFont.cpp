@@ -491,7 +491,7 @@ namespace
 
         RwIm2DVertex* vert = &vert_buffer[vert_buffer_used];
 
-        r.scale(xScreenWidthF(), xScreenHeightF());
+        xScreenUIRect(r);
 
         set_vert(vert[0], r.x, r.y, rt.x, rt.y, color);
         set_vert(vert[1], r.x, r.y + r.h, rt.x, rt.y + rt.h, color);
@@ -3707,7 +3707,7 @@ void render_fill_rect(const basic_rect<F32>& bounds, iColor_tag color)
         RwIm2DVertex vert[4];
         basic_rect<F32> r = bounds;
 
-        r.scale(xScreenWidthF(), xScreenHeightF());
+        xScreenUIRect(r);
 
         set_rect_verts(vert, r.x, r.y, r.w, r.h, color, rcz, nsz);
         RwIm2DRenderPrimitive(rwPRIMTYPETRISTRIP, vert, 4);

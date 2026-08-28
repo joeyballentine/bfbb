@@ -177,10 +177,10 @@ static U32 xCMrender(F32 time, xCreditsData* data)
                     if (tex->texture != NULL)
                         RwRenderStateSet(rwRENDERSTATETEXTURERASTER, tex->texture->raster);
 
-                    F32 x0 = xScreenWidthF() * tex->x;
-                    F32 y0 = xScreenHeightF() * tex->y;
-                    F32 x1 = xScreenWidthF() * (tex->x + tex->w);
-                    F32 y1 = xScreenHeightF() * (tex->y + tex->h);
+                    F32 x0 = xScreenUIx(tex->x);
+                    F32 y0 = xScreenUIy(tex->y);
+                    F32 x1 = xScreenUIx(tex->x + tex->w);
+                    F32 y1 = xScreenUIy(tex->y + tex->h);
                     Im2DRenderQuad(x0, y0, x1, y1, 0.0f, 1000000.0f, 0.5f);
                     xprintf("tex %6.2f,%6.2f - %6.2f,%6.2f\n", x0, y0, x1, y1);
                     break;

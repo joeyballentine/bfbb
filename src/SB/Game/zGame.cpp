@@ -987,13 +987,15 @@ static void zGame_HackPostPortalAutoSaveDraw()
         }
 
         // The icon is placed and sized in 640x480 pixels, so it is measured in
-        // the same fractions of whatever the screen actually is. Both axes,
-        // because a 4:3 render size scales them equally and a square icon that
-        // used one factor for both would stop being square on one that is not.
-        F32 sx = xScreenWidthF() / 640.0f;
-        F32 sy = xScreenHeightF() / 480.0f;
+        // the same fractions of the UI box -- interface art, so it belongs
+        // where the rest of the interface is rather than spread to the screen.
+        // The smoke behind it is not: that is a background and fills whatever
+        // the screen is.
+        F32 sx = xScreenUIWidthF() / 640.0f;
+        F32 sy = xScreenUIHeightF() / 480.0f;
 
-        zGame_HackDrawCard(275.0f * sx, 350.0f * sy, 90.0f * sx, 90.0f * sy, rast);
+        zGame_HackDrawCard(xScreenUIOriginXF() + 275.0f * sx,
+                           xScreenUIOriginYF() + 350.0f * sy, 90.0f * sx, 90.0f * sy, rast);
 
         if (yextent > 0.0f)
         {

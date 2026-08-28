@@ -300,11 +300,44 @@ static void test_screen()
     iScreenSetSize(100000, 100000);
     check(iScreenWidth() == 1280 && iScreenHeight() == 960, "and a size no surface could be");
 
+    // --- the UI box -------------------------------------------------------
+    //
+    // A 4:3 render size is the whole screen, and the numbers a caller that has
+    // never heard of widescreen would produce. This is the case that has to
+    // stay exact: every 2D site in the game multiplies by these.
+    iScreenSetSize(1280, 960);
+    check(iScreenAspectF() == 0.75f, "4:3 gives retail's own 0.75 aspect");
+    check(iScreenUIWidthF() == 1280.0f && iScreenUIHeightF() == 960.0f,
+          "and a UI box that is the whole screen");
+    check(iScreenUIOriginXF() == 0.0f && iScreenUIOriginYF() == 0.0f, "at the origin");
+    check(iScreenUIFracXF() == 1.0f && iScreenUIFracYF() == 1.0f, "covering all of both axes");
+
+    // Wider than 4:3: the box is height-limited and pillarboxed. 1080 * 4/3 is
+    // 1440, so 240 either side of a 1920-wide screen.
+    iScreenSetSize(1920, 1080);
+    check(iScreenAspectF() == 1080.0f / 1920.0f, "16:9 reports its real aspect");
+    check(iScreenUIHeightF() == 1080.0f, "the UI box is as tall as the screen");
+    check(iScreenUIWidthF() == 1440.0f, "and 4:3 of that wide");
+    check(iScreenUIOriginXF() == 240.0f, "centred, so 240 either side");
+    check(iScreenUIOriginYF() == 0.0f, "and flush top and bottom");
+    check(iScreenUIFracYF() == 1.0f, "all of the vertical axis");
+    check(iScreenUIFracXF() == 1440.0f / 1920.0f, "and three quarters of the horizontal");
+
+    // Narrower than 4:3, which is the same fit the other way up: 1280 * 3/4 is
+    // 960, so 32 above and below a 1024-tall screen.
+    iScreenSetSize(1280, 1024);
+    check(iScreenUIWidthF() == 1280.0f, "5:4 gives a UI box as wide as the screen");
+    check(iScreenUIHeightF() == 960.0f, "4:3 of that tall");
+    check(iScreenUIOriginXF() == 0.0f && iScreenUIOriginYF() == 32.0f, "centred vertically");
+    check(iScreenUIFracXF() == 1.0f, "all of the horizontal axis");
+
     // Nothing else in this process renders, but the value is global, so it goes
     // back to the default rather than being left where a later test would find
     // it surprising.
     iScreenSetSize(640, 480);
     check(iScreenWidth() == 640 && iScreenHeight() == 480, "and it can be set back");
+    check(iScreenUIWidthF() == 640.0f && iScreenUIHeightF() == 480.0f,
+          "with the UI box back at 640x480");
 }
 
 static void test_file()

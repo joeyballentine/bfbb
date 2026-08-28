@@ -53,7 +53,7 @@ namespace
         xfont::set_render_state(e.bgtex);
 
         basic_rect<F32> r = e.tb.font.clip;
-        r.scale(xScreenWidthF(), xScreenHeightF());
+        xScreenUIRect(r);
 
         set_vert(vert[0], r.x, r.y, 0.0f, 0.0f, c, nsz, rcz);
         set_vert(vert[1], r.x, r.y + r.h, 0.0f, 1.0f, c, nsz, rcz);

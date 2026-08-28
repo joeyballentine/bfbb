@@ -65,9 +65,10 @@ namespace
           "; so anything larger magnifies the 2D art -- the 3D gets sharper, the\n"
           "; interface does not." },
         { "video", "height", "480",
-          "The height, in pixels. Keep the ratio at 4:3: the camera's frustum and\n"
-          "; every 2D layer work in a 4:3 space, so 1280x960 is the picture at twice\n"
-          "; the size and 1280x720 is the same picture stretched to fit." },
+          "The height, in pixels. A ratio other than 4:3 is widescreen and needs no\n"
+          "; switch of its own: the camera keeps its vertical view and widens, so\n"
+          "; 1280x720 shows more of the world to the left and right, and the\n"
+          "; interface keeps its shape in the middle rather than stretching." },
         { "xbox", "glow", "on",
           "The full-screen glow -- what people call the Xbox version's bloom." },
         { "xbox", "distortion", "on", "The Cruise Bubble's screen warp." },
@@ -329,6 +330,8 @@ bool iConfigWriteDefaults(const char* path)
                 fprintf(f, "; The size the game renders at. The window opens at this size too,\n");
                 fprintf(f, "; but the two are independent -- the picture is scaled to whatever\n");
                 fprintf(f, "; the window becomes.\n");
+                fprintf(f, ";\n");
+                fprintf(f, "; Any resolution works, and anything that is not 4:3 is widescreen.\n");
             }
             else if (strcmp(section, "xbox") == 0)
             {

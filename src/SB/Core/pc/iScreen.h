@@ -31,10 +31,22 @@
 // mean recreating every camera raster in the game at once, so nothing calls the
 // setter after startup and the getters answer the same thing all run.
 //
-// The 4:3 assumption is NOT lifted by any of this. iCamera.cpp builds a 4:3
-// frustum and every 2D layer works in a 4:3 normalized space, so a resolution
-// whose aspect is not 4:3 renders the same picture stretched to fit. See
-// docs/RESOLUTION.md.
+// **Widescreen follows from the size, with no switch of its own.** A render
+// size whose aspect is not 4:3 is a request for a wider (or taller) view, so:
+//
+//   - The 3D frustum keeps its VERTICAL field of view and widens horizontally
+//     -- more world to the left and right, not less above and below. iCamera
+//     builds it from iScreenAspectF.
+//   - The 2D layer keeps its 4:3 shape and is CENTRED. Everything the game
+//     draws in normalized 0..1 coordinates -- text, the HUD, menus, cutscene
+//     overlays -- lands in the UI box below rather than being stretched to the
+//     screen. The art is authored at 640x480 and stretching it is the one
+//     outcome that cannot be undone later.
+//   - Full-screen effects are still full screen: the fades, the letterbox bars
+//     and the safe-area frame take the screen size, not the UI box, because
+//     what they are for is covering everything.
+//
+// See docs/RESOLUTION.md.
 
 // The size the game renders at. 640x480 until something says otherwise, so a
 // target that never calls the setter -- rw_selftest does not -- behaves exactly
@@ -47,6 +59,28 @@ S32 iScreenHeight();
 // has to be able to hand the console a float literal.
 F32 iScreenWidthF();
 F32 iScreenHeightF();
+
+// The frustum's half-height over its half-width. 0.75 on a 4:3 screen, which is
+// the constant retail's iCameraSetFOV has written into it.
+F32 iScreenAspectF();
+
+// The UI box: the largest 4:3 rectangle that fits in the render size, centred.
+// On a 4:3 screen it IS the screen -- width and height are the render size and
+// both origins are zero -- so nothing moves at the default.
+F32 iScreenUIWidthF();
+F32 iScreenUIHeightF();
+F32 iScreenUIOriginXF();
+F32 iScreenUIOriginYF();
+
+// The same box as a fraction of the screen, per axis. Exactly one of the two is
+// 1.0, and both are on a 4:3 screen.
+//
+// This is the form xModelRender2D needs. It places a model by shearing against
+// the CAMERA's view window rather than in pixels, so what it has to be told is
+// how much of the frustum the UI box covers -- the pixel origin and size above
+// cannot answer that.
+F32 iScreenUIFracXF();
+F32 iScreenUIFracYF();
 
 // Set by iSystem, from config.ini, before the window is opened -- and again
 // with what the window actually gave, because engine_start takes the virtual

@@ -1,5 +1,6 @@
 #include "iCamera.h"
 
+#include "xScreen.h"
 #include "xShadow.h"
 
 #include "iScrFX.h"
@@ -227,6 +228,22 @@ void iCameraSetFOV(RwCamera* cam, F32 fov)
 
     // non-matching: frsp instruction is here for some reason
     vw.y = 0.75f * vw.x;
+
+#ifdef PLATFORM_PC
+    // Widescreen, and the only aspect-ratio assumption in the game.
+    //
+    // `fov` is the HORIZONTAL field of view -- vw.x is the frustum's half-width
+    // at unit distance -- and 0.75 is 480/640, so vw.y above is the vertical
+    // half-angle a 4:3 screen gives. That is the one to keep: the levels and
+    // the camera were designed around how much is visible ABOVE and below, so a
+    // wider screen should show more of the world to the left and right rather
+    // than crop the top and bottom off what the console showed.
+    //
+    // So vw.y stands and vw.x is rebuilt from the real aspect. At 4:3 this is
+    // vw.y / 0.75, which is the vw.x it already had, and the fov it was called
+    // with still means what it meant.
+    vw.x = vw.y / xScreenAspectF();
+#endif
 
     RwCameraSetViewWindow(cam, &vw);
 }

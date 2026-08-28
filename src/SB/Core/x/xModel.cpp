@@ -2,6 +2,7 @@
 #include "xModel.h"
 #include "xMemMgr.h"
 #include "xMorph.h"
+#include "xScreen.h"
 
 #include <types.h>
 #include <string.h>
@@ -457,6 +458,18 @@ void xModelRender2D(const xModelInstance& model, const basic_rect<F32>& r, const
     objmat.flags = 0;
 
     const RwV2d* camvw = RwCameraGetViewWindow(camera);
+
+#ifdef PLATFORM_PC
+    // `r` is normalized 0..1 of the SCREEN, and the shear below maps it through
+    // the frustum -- so on a widescreen frustum r would spread to the screen's
+    // own edges while the text and sprites beside it stay in the centred 4:3
+    // box. The view window is shrunk to that box instead, which is what puts a
+    // HUD model back beside the HUD text it belongs to. Both fractions are 1 on
+    // a 4:3 screen, so this is the frustum itself at the default.
+    RwV2d uivw = { camvw->x * xScreenUIFracXF(), camvw->y * xScreenUIFracYF() };
+    camvw = &uivw;
+#endif
+
     F32 viewscale = camvw->x * r.w * 2.0f;
     F32 shearX = camvw->x * -(r.x * 2.0f + r.w - 1.0f);
     F32 shearY = camvw->y * -(r.y * 2.0f + r.h - 1.0f);
