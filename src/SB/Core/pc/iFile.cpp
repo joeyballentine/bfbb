@@ -200,6 +200,42 @@ static bool iResolveCaseInsensitive(char* path, size_t pathsize)
     return found;
 }
 
+// Whether the asset root actually holds the game.
+//
+// Asked once, at startup, so that a wrong BFBB_ASSETS is an error the player
+// sees rather than the hang described below. By the time the game reaches
+// zMainLoadFontHIP it is too late to say anything: the loop there has no exit
+// and no caller to return a failure to, and both are retail's.
+//
+// FONT.HIP first, because it is the one the game blocks on and so the one whose
+// absence has already cost people an afternoon. boot.HIP second, because a
+// directory holding only the font is a half-extracted disc rather than the
+// wrong directory, and saying which file is missing separates those.
+//
+// Case-insensitive, like every other lookup here: a real Xbox extraction has
+// `font.HIP` on disk and the game asks for `FONT.HIP`.
+//
+// Returns the full path of the first one that is not there -- the path is the
+// useful half, since the whole failure is that it is not where it was looked
+// for -- or NULL when both are present.
+const char* iFileMissingAssetPath()
+{
+    static const char* const kRequired[] = { "FONT.HIP", "boot.HIP" };
+    static char sTried[512];
+
+    for (size_t i = 0; i < sizeof(kRequired) / sizeof(kRequired[0]); i++)
+    {
+        snprintf(sTried, sizeof(sTried), "%s%s", sBasePath, kRequired[i]);
+
+        if (!iResolveCaseInsensitive(sTried, sizeof(sTried)))
+        {
+            return sTried;
+        }
+    }
+
+    return NULL;
+}
+
 // A file that is not there, said out loud.
 //
 // The game does not check, and cannot be made to: zMainLoadFontHIP ends in

@@ -94,10 +94,11 @@ generated file is written from, so the three cannot disagree.
     BFBB_ASSETS=<dir>   where the retail assets are. Required, and it must be
                         the directory that DIRECTLY contains boot.HIP, FONT.HIP
                         and fmv/ -- not a folder above it, and not a disc image.
-                        The game does not check: zMainLoadFontHIP spins forever
-                        on a font that never loads, so a wrong path is a hang on
-                        a blank window. iFile.cpp says so once, naming the first
-                        file it could not open, which is the whole diagnosis.
+                        Checked at startup, before the window opens: a root
+                        with no font.HIP or boot.HIP under it stops the game with
+                        a message rather than letting it reach zMainLoadFontHIP,
+                        which spins forever on a font that never loads and used
+                        to look like a hang on a blank window.
 
     BFBB_CONFIG=<path>  use this file as config.ini, and write the defaults
                         there if it does not exist.

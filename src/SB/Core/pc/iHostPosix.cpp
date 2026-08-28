@@ -278,6 +278,14 @@ const char* iHostName()
     return "posix";
 }
 
+// Nothing portable to show one with. X11, Wayland, macOS and a headless
+// server disagree completely, and none of it belongs in the host seam for
+// the sake of one message the caller has already printed. Deliberately
+// empty rather than absent, so the interface is the same on both hosts.
+void iHostErrorBox(const char*, const char*)
+{
+}
+
 // No symboliser is assumed on a POSIX host: backtrace()/backtrace_symbols are
 // glibc extensions and give mangled names without line numbers even there.
 // Saying nothing is better than saying something misleading, and this is a

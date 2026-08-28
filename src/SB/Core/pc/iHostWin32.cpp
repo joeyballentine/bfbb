@@ -379,6 +379,42 @@ const char* iHostName()
     return "win32";
 }
 
+// Only when the message would otherwise be lost.
+//
+// A dialog blocks until someone clicks it. Someone who started the game from a
+// prompt has already read the same text there, so putting one in front of them
+// turns an immediate exit into a process waiting on a click -- and does the
+// same to a script, which will never make one.
+//
+// The test is NOT whether a console exists. This executable is console
+// subsystem, so double-clicking it gets one either way; what differs is who
+// else is attached to it. GetConsoleProcessList counting one means the console
+// was created for this process alone and closes the moment it exits, taking
+// every line printed with it -- a flash of text and then nothing, which is the
+// case the box exists for. More than one means a shell is there too and the
+// text stays on the screen after the game is gone.
+void iHostErrorBox(const char* title, const char* message)
+{
+    DWORD pids[2];
+    DWORD attached = GetConsoleProcessList(pids, 2);
+
+    if (attached > 1)
+    {
+        return;
+    }
+
+    // MB_SETFOREGROUND because the failure this exists for happens while the
+    // game window is coming up or already covering the screen, and a dialog
+    // behind it is a dialog nobody sees. MB_TOPMOST for the exclusive
+    // fullscreen case, where there is a display the game owns to get out from
+    // under.
+    //
+    // A null owner rather than the game window: this is called when there may
+    // not be one, and one that exists is about to be torn down anyway.
+    MessageBoxA(NULL, message != NULL ? message : "", title != NULL ? title : "bfbb",
+                MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
+}
+
 // Symbolised caller stack, for diagnostics. See iHost.h.
 //
 // CaptureStackBackTrace rather than StackWalk64: this is called from ordinary

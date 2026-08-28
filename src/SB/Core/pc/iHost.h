@@ -161,4 +161,18 @@ S32 iHostStrCaseCmp(const char* a, const char* b);
 // Names the backend that was linked in, for the startup log.
 const char* iHostName();
 
+// A fatal message somewhere the player will actually see it.
+//
+// stdout is not that place any more. The port defaults to fullscreen and is
+// started from a shortcut as often as from a prompt, so a startup failure
+// printed to a console nobody is looking at is a game that appears to do
+// nothing at all. This is for the handful of errors that stop the game before
+// it can draw its own -- and only those, because a dialog box in a frame loop
+// would be worse than useless.
+//
+// Blocks until dismissed. Returns having done nothing on a host with no way to
+// show one, so a caller must still print the same text and must not rely on
+// this to have reached anyone.
+void iHostErrorBox(const char* title, const char* message);
+
 #endif

@@ -41,6 +41,12 @@ void iFileInit();
 void iFileExit();
 U32* iFileLoad(char* name, U32* buffer, U32* size);
 U32 iFileOpen(const char* name, S32 flags, tag_xFile* file);
+
+// PC-only. The full path of the first file the game cannot run without that
+// is not under BFBB_ASSETS, or NULL when they are all there. Asked once by
+// iSystemInit, because the alternative is a hang: zMainLoadFontHIP spins on
+// `while (xSTLoadStep('FONT') < 1.0f)` with no exit and no caller to fail to.
+const char* iFileMissingAssetPath();
 S32 iFileSeek(tag_xFile* file, S32 offset, S32 whence);
 U32 iFileRead(tag_xFile* file, void* buf, U32 size);
 S32 iFileReadAsync(tag_xFile* file, void* buf, U32 aSize, void (*callback)(tag_xFile*),
