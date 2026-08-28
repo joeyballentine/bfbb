@@ -28,6 +28,10 @@ The GameCube version shipped with a few things stubbed out. The functions are
 empty in the decomp but still have live call sites, and the Xbox release did
 them for real, so they were recovered from that build rather than invented.
 
+All four are on by default and each can be turned off in `config.ini`, which
+the game writes with the defaults the first time it runs. Off, what is left is
+what the GameCube release does.
+
 - **Cruise Bubble distortion.** `xScrFxDistortionRender` and `distort_screen`
   are both empty on GameCube. On Xbox they swirl the picture while you fly the
   Cruise Bubble. The offset map is a genuine Xbox asset, `BXCruiseBubbleDistort`,
@@ -93,7 +97,11 @@ set BFBB_ASSETS=D:\path\to\extracted\xbox\game
 build-pc\bfbb.exe
 ```
 
-`src/SB/Core/pc/README.md` lists the `BFBB_*` switches.
+It writes a `config.ini` beside the executable on the first run, with every
+setting at its default and a comment on each. That is where the Xbox features
+above are turned on and off.
+
+`src/SB/Core/pc/README.md` describes it, and lists the `BFBB_*` diagnostics.
 
 ### Movies (optional)
 

@@ -6,12 +6,51 @@ The GameCube implementation of the game's platform interfaces lives in
 Everything here is phase 2 of `docs/PCPORT.md`. To pick the work up, start with
 `docs/PCPORT-HANDOFF.md` at the repository root.
 
+## Settings: config.ini
+
+`config.ini` holds the things someone playing the game might want to change.
+It is written with the defaults on the first run -- beside the executable, or
+wherever `BFBB_CONFIG` points -- so there is a file to edit without anyone
+having to be told the format. Every value in a generated one is the default, so
+deleting it changes nothing.
+
+It is looked for as `$BFBB_CONFIG`, then `config.ini` in the working directory,
+then `config.ini` beside the executable. Booleans take on/off, true/false,
+yes/no or 1/0, and a key that is not one of the ones below is reported by name
+at load rather than ignored.
+
+    [xbox]              Things the Xbox release did that the GameCube release
+                        did not, all on by default. Turning one off leaves the
+                        GameCube behaviour in its place, which is what the
+                        decomp compiles -- so each of these is also the way to
+                        tell whether something that looks wrong is the port's
+                        addition or the game's own code.
+
+    glow                the full-screen glow, what people call its bloom
+    distortion          the Cruise Bubble's screen warp
+    snapshot            the loading screen standing on the last frame drawn
+    reverb              cave reverb, in the Mermalair and the caves
+
+`SB.INI` is a different file and stays retail's: `zMainReadINI` reads it for
+PATH and BOOT, through the game's own `xIni` parser, and that parser allocates
+through RenderWare -- so it cannot answer a question asked before the engine
+exists, which is most of these. `iConfig.h` has the long version.
+
+Adding a setting means one entry in `iConfig.cpp`'s settings table. That table
+is the default, the list of names a typo is checked against, and what the
+generated file is written from, so the three cannot disagree.
+
 ## Running it, and the switches
 
     BFBB_ASSETS=<dir>   where the retail assets are. Required; without it the
                         game looks beside the executable and finds nothing.
 
-Everything below is off unless set, and each costs a load per frame when it is.
+    BFBB_CONFIG=<path>  use this file as config.ini, and write the defaults
+                        there if it does not exist.
+
+Everything below is a DIAGNOSTIC rather than a setting -- what belongs in
+config.ini is what someone playing would change, and none of these are that.
+Each is off unless set, and each costs a load per frame when it is.
 
     BFBB_FPS            what the port is actually presenting, once a second.
                         The frame rate is not cosmetic: zGame.cpp:559

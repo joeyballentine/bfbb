@@ -22,6 +22,12 @@
 
 #include <stdio.h>
 
+// config.ini's xbox.glow, pushed down by iSystem.cpp. On unless something says
+// otherwise, so that a target which never calls the setter -- the shim's own
+// test does not -- still gets the Xbox behaviour. Outside the backend arms
+// because the setter is.
+static S32 sEnabled = TRUE;
+
 #if defined(RW_D3D9)
 
 // fxc names every blob g_ps20_main, so each gets its own namespace.
@@ -240,7 +246,7 @@ static bool captureScreen()
 
 void iGlowRender(RwCamera* cam, F32 strength)
 {
-    if (sFailed || cam == NULL || rw::d3d::d3ddevice == NULL)
+    if (!sEnabled || sFailed || cam == NULL || rw::d3d::d3ddevice == NULL)
     {
         return;
     }
@@ -339,3 +345,11 @@ void iGlowRender(RwCamera*, F32)
 }
 
 #endif
+
+// Outside the backend arms: the setting exists whichever backend is linked, and
+// a build where the glow cannot run should still answer the same way about
+// whether it was asked for.
+void iGlowSetEnabled(S32 enabled)
+{
+    sEnabled = enabled ? TRUE : FALSE;
+}

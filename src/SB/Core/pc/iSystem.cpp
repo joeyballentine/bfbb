@@ -1,9 +1,11 @@
 #include "iSystem.h"
+#include "iConfig.h"
 #include "iFile.h"
 #include "iHost.h"
 #include "iPad.h"
 #include "iPadHost.h"
 #include "iTRC.h"
+#include "iSnapshot.h"
 #include "iTime.h"
 
 #include <types.h>
@@ -31,6 +33,11 @@
 
 #include "xShadow.h"
 #include "xFX.h"
+
+// After the RenderWare headers: both name RwCamera in their signatures and
+// neither includes rwcore.h itself, matching every other i* header here.
+#include "iDistort.h"
+#include "iGlow.h"
 
 #include <windows.h>
 
@@ -247,8 +254,43 @@ static RwTexture* TextureRead(const RwChar* name, const RwChar* maskName)
     return asset;
 }
 
+// The settings that have to be decided before anything can use them.
+//
+// The three render features are PUSHED here rather than read where they are
+// used: glow.cpp, distort.cpp and snapshot.cpp compile into bfbb_rw, which does
+// not link the platform layer -- rw_selftest links bfbb_rw alone, and that is
+// worth keeping true. So the RenderWare shim never learns what a setting is,
+// and this is the one place that knows which switch drives which feature.
+//
+// The cave reverb is not here: iSnd.cpp is in this library and asks iConfig
+// directly.
+static void ApplyConfig()
+{
+    S32 glow = iConfigGetBool("xbox.glow", TRUE);
+    S32 distortion = iConfigGetBool("xbox.distortion", TRUE);
+    S32 snapshot = iConfigGetBool("xbox.snapshot", TRUE);
+    S32 reverb = iConfigGetBool("xbox.reverb", TRUE);
+
+    iGlowSetEnabled(glow);
+    iDistortSetEnabled(distortion);
+    iSnapshotSetEnabled(snapshot);
+
+    // Said out loud, and always, because these change what the game looks and
+    // sounds like. Someone reporting that the port looks wrong should not have
+    // to be asked whether they have a config.ini -- the log already says.
+    const char* path = iConfigPath();
+    printf("bfbb: %s -- Xbox features: glow %s, distortion %s, snapshot %s, reverb %s\n",
+           path != NULL ? path : "no config.ini, defaults", glow ? "on" : "off",
+           distortion ? "on" : "off", snapshot ? "on" : "off", reverb ? "on" : "off");
+}
+
 void iSystemInit(U32 options)
 {
+    // First, before iFileInit reads where the assets are and long before
+    // RenderWareInit opens a window: everything below may want a setting.
+    iConfigLoad();
+    ApplyConfig();
+
     xDebugInit();
     xMemInit();
     iFileInit();

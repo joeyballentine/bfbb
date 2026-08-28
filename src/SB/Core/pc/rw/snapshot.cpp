@@ -53,6 +53,12 @@ static S32 sLatched;
 // message a frame is not a diagnostic.
 static S32 sFailed;
 
+// config.ini's xbox.snapshot, pushed down by iSystem.cpp. See glow.cpp for why
+// it is pushed rather than read. Off, every call here answers the way the
+// non-D3D9 arm below does, and zGame falls back to the background texture
+// asset -- which is the GameCube and PS2 loading screen exactly.
+static S32 sEnabled = TRUE;
+
 #if defined(RW_D3D9)
 
 // The D3D texture behind a raster at the moment it was written to.
@@ -89,7 +95,7 @@ static void snapshotFail(const char* what, long hr)
 
 void iSnapshotCapture()
 {
-    if (sFailed || sLatched)
+    if (!sEnabled || sFailed || sLatched)
     {
         return;
     }
@@ -185,7 +191,7 @@ void iSnapshotCapture()
 
 RwTexture* iSnapshotBackgroundTexture()
 {
-    if (sFailed || !sLatched || !sHaveFrame || sTexture == NULL)
+    if (!sEnabled || sFailed || !sLatched || !sHaveFrame || sTexture == NULL)
     {
         return NULL;
     }
@@ -229,4 +235,9 @@ void iSnapshotLatch()
 void iSnapshotRelease()
 {
     sLatched = 0;
+}
+
+void iSnapshotSetEnabled(S32 enabled)
+{
+    sEnabled = enabled ? TRUE : FALSE;
 }

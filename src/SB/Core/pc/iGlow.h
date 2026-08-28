@@ -38,9 +38,10 @@
 // is a bright, saturated cartoon, so most of the frame clears it. The same code
 // in a darker game would look like selective bloom.
 //
-// On always. It changes how the whole game looks, which is a larger divergence
-// than anything else in this layer, but it is what the Xbox release does and the
-// port follows it.
+// On by default. It changes how the whole game looks, which is a larger
+// divergence than anything else in this layer, but it is what the Xbox release
+// does and the port follows it. `xbox.glow` in config.ini turns it off, which
+// leaves the frame exactly as the GameCube release draws it.
 
 // Draw the glow over the frame. Called from xScrFxDistortionRender's neighbour
 // in xScrFxRender, with the camera being rendered; its update is ended and
@@ -51,5 +52,13 @@
 // 0x172148, against a SRCALPHA blend. At zero nothing is drawn at all, which
 // is not an optimisation: five scenes ask for exactly that.
 void iGlowRender(RwCamera* cam, F32 strength);
+
+// Whether iGlowRender does anything. Pushed down from iSystem.cpp once, at
+// startup, rather than read here from iConfig: this file compiles into
+// bfbb_rw, which does not link the platform layer and must not start -- the
+// RenderWare shim's own test links bfbb_rw alone, and keeping that possible is
+// what stops the shim growing a dependency on the game's settings. The default
+// is on, so a caller that never sets it gets the Xbox behaviour.
+void iGlowSetEnabled(S32 enabled);
 
 #endif

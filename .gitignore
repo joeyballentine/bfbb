@@ -48,6 +48,13 @@ classify.json
 # PC port build (CMake); see CMakeLists.txt
 build-pc/
 
+# The port's settings file. It writes one with the defaults when it does not
+# find one, and normally that lands beside the executable in build-pc/ -- but
+# the working directory is searched first, so running from the repository root
+# with one there leaves it here. It is per-user and never wanted in the tree;
+# the defaults live in iConfig.cpp's settings table.
+/config.ini
+
 # The headless configuration, -DBFBB_RENDER_BACKEND=NULL. Worth keeping around:
 # it is the only way to run rw_selftest without a GPU, and two checks once
 # passed on D3D9 while failing there because they read state back out of the

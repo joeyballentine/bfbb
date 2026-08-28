@@ -225,6 +225,45 @@ bool iHostTempDir(char* out, size_t outsize)
     return true;
 }
 
+bool iHostExeDir(char* out, size_t outsize)
+{
+    char buf[MAX_PATH + 1];
+
+    // Cleared first: GetModuleFileName reports truncation only through
+    // GetLastError, and leaves it alone when it succeeds -- so without this the
+    // test below would read whatever the last unrelated Win32 call left there.
+    SetLastError(ERROR_SUCCESS);
+
+    DWORD n = GetModuleFileNameA(NULL, buf, MAX_PATH + 1);
+
+    // It truncates rather than failing when the buffer is too small. A
+    // truncated path names a different file, so it is a failure here.
+    if (n == 0 || n > MAX_PATH || GetLastError() == ERROR_INSUFFICIENT_BUFFER)
+    {
+        return false;
+    }
+
+    buf[n] = 0;
+
+    for (DWORD i = 0; i < n; i++)
+    {
+        if (buf[i] == BS_CHAR)
+        {
+            buf[i] = '/';
+        }
+    }
+
+    char* slash = strrchr(buf, '/');
+    if (slash == NULL)
+    {
+        return false;
+    }
+    *slash = 0;
+
+    snprintf(out, outsize, "%s", buf);
+    return true;
+}
+
 bool iHostSetEnv(const char* name, const char* value)
 {
     // _putenv_s with an empty value is how Windows spells unsetenv.

@@ -25,6 +25,9 @@
 #include <stdio.h>
 #include <time.h>
 
+// config.ini's xbox.distortion, pushed down by iSystem.cpp. See glow.cpp.
+static S32 sEnabled = TRUE;
+
 #if defined(RW_D3D9)
 
 namespace
@@ -157,7 +160,7 @@ void iDistortRender(RwCamera* cam, RwTexture* map, F32 amount, F32 width, F32 he
 {
     // The Xbox tests the strength against zero first and returns, before it
     // looks at anything else (va 0x170a00). Same here: off costs a compare.
-    if (sFailed || cam == NULL || amount <= 0.0f)
+    if (!sEnabled || sFailed || cam == NULL || amount <= 0.0f)
     {
         return;
     }
@@ -287,3 +290,9 @@ void iDistortRender(RwCamera*, RwTexture*, F32, F32, F32)
 }
 
 #endif
+
+// Outside the backend arms, for the reason glow.cpp gives.
+void iDistortSetEnabled(S32 enabled)
+{
+    sEnabled = enabled ? TRUE : FALSE;
+}

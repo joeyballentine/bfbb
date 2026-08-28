@@ -137,6 +137,39 @@ bool iHostTempDir(char* out, size_t outsize)
     return true;
 }
 
+bool iHostExeDir(char* out, size_t outsize)
+{
+    // /proc/self/exe is Linux's. There is no portable POSIX spelling of this
+    // question -- macOS has _NSGetExecutablePath, the BSDs have a sysctl -- and
+    // the port does not build on those yet, so this returns false there rather
+    // than guessing. The caller has a fallback; see iConfig.cpp.
+    char buf[1024];
+    ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (n <= 0)
+    {
+        return false;
+    }
+    buf[n] = '\0';
+
+    char* slash = strrchr(buf, '/');
+    if (slash == NULL)
+    {
+        return false;
+    }
+
+    // "/bfbb" -- the executable is in the root directory. Trimming to nothing
+    // would produce a relative path from an absolute one.
+    if (slash == buf)
+    {
+        snprintf(out, outsize, "/");
+        return true;
+    }
+
+    *slash = '\0';
+    snprintf(out, outsize, "%s", buf);
+    return true;
+}
+
 bool iHostSetEnv(const char* name, const char* value)
 {
     if (value == NULL)

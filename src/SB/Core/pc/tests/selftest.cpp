@@ -14,6 +14,7 @@
 
 #include <types.h>
 
+#include "iConfig.h"
 #include "iFile.h"
 #include "iHost.h"
 #include "iSnd.h"
@@ -150,6 +151,116 @@ static bool scratch_dir(const char* tag, char* out, size_t outsize)
     snprintf(out, outsize, "%s/bfbb_pc_%s_%llu", tmp, tag,
              (unsigned long long)(iHostMonotonicNs() % 1000000000ULL));
     return iHostMakeDir(out);
+}
+
+// iConfig parses ONCE per process, so this is the only place in the harness
+// that may touch it and it has to run first -- hence its position in main().
+// BFBB_CONFIG is set before any query, so the load reads this file rather than
+// a config.ini someone happens to have beside the test binary, and so that the
+// write-when-missing path cannot leave one there either.
+static void test_config()
+{
+    printf("iConfig\n");
+
+    char dir[512];
+    if (!scratch_dir("config", dir, sizeof(dir)))
+    {
+        check(false, "could not make a temp directory");
+        return;
+    }
+
+    char path[512];
+    snprintf(path, sizeof(path), "%s/config.ini", dir);
+
+    // Deliberately awkward: mixed case in the section and the key, both comment
+    // spellings, ragged whitespace, a blank line, three spellings of true, and
+    // one key that does not exist.
+    static const char kFile[] = "; the port's settings\n"
+                                "[XBOX]\n"
+                                "  Glow   =   OFF   \n"
+                                "distortion=yes\n"
+                                "\n"
+                                "snapshot = 1   # trailing comment\n"
+                                "reverb=TRUE\n"
+                                "glwo = off\n";
+
+    FILE* f = fopen(path, "wb");
+    if (f == NULL)
+    {
+        check(false, "could not write a config.ini");
+        return;
+    }
+    fwrite(kFile, 1, sizeof(kFile) - 1, f);
+    fclose(f);
+
+    check(iHostSetEnv("BFBB_CONFIG", path), "BFBB_CONFIG can be set");
+
+    iConfigLoad();
+
+    check(iConfigPath() != NULL && strcmp(iConfigPath(), path) == 0,
+          "iConfigPath is the file BFBB_CONFIG named");
+
+    // Each read against a default that is the OPPOSITE of the file's value, so
+    // a key that failed to parse cannot pass by agreeing with its fallback.
+    check(iConfigGetBool("xbox.glow", TRUE) == FALSE, "'OFF' is false, and the key is folded");
+    check(iConfigGetBool("xbox.distortion", FALSE) == TRUE, "'yes' is true");
+    check(iConfigGetBool("xbox.snapshot", FALSE) == TRUE, "'1' is true, past a # comment");
+    check(iConfigGetBool("xbox.reverb", FALSE) == TRUE, "'TRUE' is true");
+
+    // An unknown key is rejected at load, so it cannot be read back even under
+    // its own name. That is what makes the report at load a guarantee rather
+    // than a courtesy.
+    check(iConfigGetBool("xbox.glwo", TRUE) == TRUE, "an unknown key is dropped, not stored");
+
+    // A key the table has and the file does not: answered from the table, not
+    // from the caller's fallback. Passing FALSE here would pass either way if
+    // the table were consulted wrongly, so the fallback is the wrong answer on
+    // purpose.
+    check(iConfigGetBool("xbox.glow", TRUE) == FALSE, "a second read gives the same answer");
+
+    // A key in neither: the caller's fallback is all there is.
+    check(iConfigGetBool("xbox.nothing", TRUE) == TRUE, "an unknown key falls back");
+    check(iConfigGetInt("xbox.nothing", 7) == 7, "an unknown int falls back");
+    check(iConfigGetFloat("xbox.nothing", 0.5f) == 0.5f, "an unknown float falls back");
+    check(strcmp(iConfigGetString("xbox.nothing", "d"), "d") == 0,
+          "an unknown string falls back");
+
+    iHostRemoveFile(path);
+
+    // The writer, which the load reaches only when there is no file -- and
+    // there has already been a load this process, so it is called directly.
+    char written[512];
+    snprintf(written, sizeof(written), "%s/written.ini", dir);
+
+    check(iConfigWriteDefaults(written), "iConfigWriteDefaults writes a file");
+    check(iHostPathExists(written), "and the file is there afterwards");
+
+    // Exclusive. A second call must not overwrite what the first produced --
+    // this is the property that stops a launch from erasing someone's edits.
+    check(!iConfigWriteDefaults(written), "a second write refuses rather than overwriting");
+
+    // What it wrote has to be a file this parser accepts and has to carry the
+    // defaults it claims. Checking the text is what makes the round trip real:
+    // a writer that emitted a key the parser then rejects would otherwise pass
+    // every check above.
+    FILE* r = fopen(written, "rb");
+    check(r != NULL, "the written file can be read back");
+    if (r != NULL)
+    {
+        char buf[4096];
+        size_t n = fread(buf, 1, sizeof(buf) - 1, r);
+        fclose(r);
+        buf[n] = '\0';
+
+        check(strstr(buf, "[xbox]") != NULL, "it has the [xbox] section header");
+        check(strstr(buf, "glow = on") != NULL, "and glow at its default");
+        check(strstr(buf, "distortion = on") != NULL, "and distortion");
+        check(strstr(buf, "snapshot = on") != NULL, "and snapshot");
+        check(strstr(buf, "reverb = on") != NULL, "and reverb");
+    }
+
+    iHostRemoveFile(written);
+    iHostRemoveDir(dir);
 }
 
 static void test_file()
@@ -2073,6 +2184,10 @@ int main()
 {
     setvbuf(stdout, NULL, _IONBF, 0);
     printf("bfbb PC platform layer selftest\n\n");
+
+    // First: iConfig parses once per process, and this is what decides which
+    // file that one parse reads.
+    test_config();
 
     test_time();
     test_math();

@@ -131,6 +131,15 @@ bool iHostUserDataDir(char* out, size_t outsize);
 // depends on it.
 bool iHostTempDir(char* out, size_t outsize);
 
+// The directory the running executable is in, with no trailing separator.
+//
+// NOT the working directory, and the difference is the point: the port is run
+// as `build-pc/bfbb.exe` from wherever, so the two are usually not the same
+// place, and a file that ships beside the binary can only be found by asking.
+// config.ini is the caller. False if the host cannot say, in which case the
+// caller falls back to a relative path.
+bool iHostExeDir(char* out, size_t outsize);
+
 // Sets an environment variable for this process, overwriting any existing
 // value; a NULL value removes it. POSIX spells these setenv/unsetenv and
 // Windows spells both _putenv_s.

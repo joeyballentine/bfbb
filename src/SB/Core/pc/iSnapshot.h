@@ -34,10 +34,11 @@
 // loop that draws, xMemMgr is a bump allocator with no locking, and the device
 // is created single-threaded.
 
-// On always, so the loading screen does what the Xbox release does. Nothing
-// outside the implementation asks whether a still exists: every function here
-// answers on its own, and the background texture asset the GameCube and PS2
-// releases draw is still the fallback whenever there is no frame to show.
+// On by default, so the loading screen does what the Xbox release does.
+// Nothing outside the implementation asks whether a still exists: every
+// function here answers on its own, and the background texture asset the
+// GameCube and PS2 releases draw is still the fallback whenever there is no
+// frame to show -- which is also what turning it off leaves behind.
 
 // Copy what is about to be presented into the snapshot. Called once a frame
 // from RwCameraShowRaster, which is the only place in the port that knows a
@@ -62,5 +63,10 @@ void iSnapshotRelease();
 // result it then takes the raster from, and returning a texture leaves that
 // expression exactly as the GameCube build compiles it.
 struct RwTexture* iSnapshotBackgroundTexture();
+
+// Whether any of the above does anything; config.ini's xbox.snapshot. Pushed
+// down from iSystem.cpp rather than read here, for the reason iGlow.h gives.
+// The default is on.
+void iSnapshotSetEnabled(S32 enabled);
 
 #endif

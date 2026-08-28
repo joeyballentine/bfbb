@@ -2,6 +2,7 @@
 #include "iSndData.h"
 #include "iSndHost.h"
 
+#include "iConfig.h"
 #include "iHost.h"
 
 #include "xSnd.h"
@@ -342,6 +343,17 @@ void iSndSetEnvironmentalEffect(isound_effect effectType)
     // console versions have none of this and the Xbox does. Everything above
     // here is shipping code and already correct: zSceneInitEnvironmentalSoundEffect
     // picks the same nine scenes the Xbox does.
+    //
+    // config.ini's xbox.reverb. Read here rather than pushed down like the
+    // three render features, because this file is in the platform layer and can
+    // simply ask -- and read on the call rather than cached, because the call
+    // happens nine times a run at scene load, not per frame.
+    if (!iConfigGetBool("xbox.reverb", TRUE))
+    {
+        iSndHostSetReverb(NULL);
+        return;
+    }
+
     switch (effectType)
     {
     case iSND_EFFECT_CAVE:

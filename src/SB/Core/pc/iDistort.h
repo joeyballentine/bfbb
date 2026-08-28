@@ -67,4 +67,10 @@
 //           Xbox passes them into its own wobble for the same reason.
 void iDistortRender(RwCamera* cam, RwTexture* map, F32 amount, F32 width, F32 height);
 
+// Whether iDistortRender does anything; config.ini's xbox.distortion. Pushed
+// down from iSystem.cpp rather than read here, for the reason iGlow.h gives.
+// The default is on. Off leaves xScrFxDistortionRender doing what it does on
+// the GameCube, which is nothing.
+void iDistortSetEnabled(S32 enabled);
+
 #endif

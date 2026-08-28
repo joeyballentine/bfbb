@@ -76,9 +76,11 @@ The last two are the ones to miss. They never draw a pixel -- they exist so
 `RwCameraBeginUpdate`, so they still bind a depth surface, and they are subject to
 the same rule as the ones that do draw.
 
-The size itself comes from `iSystem.cpp:157-158`, where the window is opened. An
-environment variable there matches the `BFBB_ASSETS` idiom the port already uses, and `engine_start.cpp:360` picks it up
-for the virtual screen with no further change.
+The size itself comes from `iSystem.cpp:157-158`, where the window is opened.
+`config.ini` is already read before that point and already has an integer
+accessor -- a `[video]` section with `width` and `height` is two entries in
+`iConfig.cpp`'s settings table -- and `engine_start.cpp:360` picks the window's
+size up for the virtual screen with no further change.
 
 The six game-code sites need the `#ifdef PLATFORM_PC` treatment the fixed-step
 loop used in `zGame.cpp`, so the GameCube build still compiles the literals it
