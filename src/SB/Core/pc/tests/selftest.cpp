@@ -179,6 +179,7 @@ static void test_config()
     // one key that does not exist.
     static const char kFile[] = "; the port's settings\n"
                                 "[Video]\n"
+                                "mode = Borderless\n"
                                 "width = 1280\n"
                                 "height  =  960\n"
                                 "Draw_Distance = no\n"
@@ -217,6 +218,13 @@ static void test_config()
     // file's value nor the table's default, so neither can pass by accident.
     check(iConfigGetInt("video.width", 1) == 1280, "the render width comes off the file");
     check(iConfigGetInt("video.height", 1) == 960, "and the height, past ragged spacing");
+
+    // A string setting, and the one whose value is neither a number nor a
+    // boolean. iSystem maps it onto iWindowMode case-insensitively, so the
+    // file's mixed case has to survive the parse rather than be folded the way
+    // the key is.
+    check(strcmp(iConfigGetString("video.mode", "fullscreen"), "Borderless") == 0,
+          "the window mode comes off the file with its case intact");
     check(iConfigGetBool("video.draw_distance", TRUE) == FALSE,
           "'no' is false, in a key that has an underscore in it");
 
@@ -266,6 +274,7 @@ static void test_config()
         buf[n] = '\0';
 
         check(strstr(buf, "[video]") != NULL, "it has the [video] section header");
+        check(strstr(buf, "mode = fullscreen") != NULL, "and the window mode at its default");
         check(strstr(buf, "width = 640") != NULL, "and the render width at its default");
         check(strstr(buf, "height = 480") != NULL, "and the height");
         check(strstr(buf, "draw_distance = on") != NULL, "and the draw distance");

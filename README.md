@@ -99,18 +99,26 @@ build-pc\bfbb.exe
 
 It writes a `config.ini` beside the executable on the first run, with every
 setting at its default and a comment on each. That is where the Xbox features
-above are turned on and off, and where the resolution is set:
+above are turned on and off, and where the display is set up:
 
 ```ini
 [video]
+mode = fullscreen
 width = 1280
 height = 960
 ```
 
-The default is the consoles' 640x480. Keep the ratio at 4:3 — the camera and
-every 2D layer work in a 4:3 space, so 1280x720 is the same picture stretched
-rather than a wider view. `docs/RESOLUTION.md` has the details, including what
-raising it does not fix.
+`mode` is `fullscreen` (D3D9 exclusive, at the resolution the desktop is
+already using), `borderless` (a window with no border covering one monitor) or
+`windowed`. It is independent of the size: the picture is scaled onto whatever
+it lands on, so the game can render at 640x480 and fill a 4K display, or render
+above it and be sampled back down.
+
+The size defaults to the consoles' 640x480. Anything that is not 4:3 is
+widescreen — the camera keeps its vertical view and widens, so 1280x720 shows
+more of the world to the left and right, and the interface keeps its shape in
+the middle rather than stretching. `docs/RESOLUTION.md` has the details,
+including what raising it does not fix.
 
 The same section holds the draw distance, which is on:
 

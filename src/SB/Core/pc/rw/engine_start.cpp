@@ -39,6 +39,7 @@
 
 #include "rw.h"
 
+#include "iScreen.h"
 #include "iWindow.h"
 
 #include <stdarg.h>
@@ -347,23 +348,20 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     // window around it. A virtual screen makes the picture the thing that
     // scales.
     //
-    // The size comes from the window rather than from a constant repeated here,
-    // because iSystem opens the window at the size it intends the game to render
-    // at and then pushes back whatever the window actually gave, so what
-    // iWindowGetSize answers here is the same number iScreen hands the camera
-    // rasters. They have to agree: a camera raster that does not match the
-    // virtual screen fails to bind a depth surface and draws nothing. Read now,
-    // before anything can resize it -- this is the size the port booted with,
-    // and it is deliberately NOT updated afterwards.
-    {
-        RwInt32 screenWidth = 0;
-        RwInt32 screenHeight = 0;
-        iWindowGetSize(&screenWidth, &screenHeight);
-        if (screenWidth > 0 && screenHeight > 0)
-        {
-            rw::d3d::setVirtualScreen(screenWidth, screenHeight);
-        }
-    }
+    // The size comes from iScreen, which is the same thing every camera raster
+    // in the game is built from. They have to agree: a camera raster that does
+    // not match the virtual screen fails to bind a depth surface and draws
+    // nothing at all.
+    //
+    // NOT from the window. The two are equal in windowed mode and are not in the
+    // other two -- borderless and exclusive fullscreen both cover a monitor,
+    // and the whole point of the virtual screen is that what the game renders at
+    // is not what the display is doing. Taking the window's size here would make
+    // `mode = fullscreen` silently override the resolution setting.
+    //
+    // Read now, before anything can resize the window: this is the size the port
+    // booted with, and it is deliberately NOT updated afterwards.
+    rw::d3d::setVirtualScreen(iScreenWidth(), iScreenHeight());
     if (!rw::Engine::open(&params))
     {
         printf("bfbb: librw refused to open the D3D9 device on this window\n");
@@ -396,12 +394,89 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     return TRUE;
 }
 
+#ifdef RW_D3D9
+
+// Pick the display mode for exclusive fullscreen, if that is what was asked for.
+//
+// Between RwEngineOpen and RwEngineStart is the only moment this can be done:
+// makeVideoModeList runs inside Engine::open, and startD3D reads the choice
+// inside Engine::start. A D3D9 device is created windowed or not, and cannot
+// change its mind without a reset.
+//
+// librw's list is the desktop's current mode as index 0 with no flags -- that
+// is the WINDOWED entry -- followed by every exclusive mode the adapter
+// enumerates. So leaving it alone is windowed, which is what borderless wants
+// too: borderless is a WS_POPUP the size of the monitor and the renderer has no
+// reason to know it is one.
+//
+// The mode chosen is the one matching the DESKTOP's resolution, so entering the
+// game does not change what the monitor is doing. The render size is a separate
+// setting and stays separate: the picture is scaled onto whatever the display
+// is, so there is nothing to gain by making the monitor match it and a mode set
+// on every launch to lose.
+static void SelectFullscreenVideoMode()
+{
+    if (iWindowGetMode() != iWINDOW_FULLSCREEN)
+    {
+        return;
+    }
+
+    // Index 0, read before anything changes the current mode, is the desktop's
+    // own. rw::Engine::getVideoModeInfo rather than RwEngineGetVideoModeInfo
+    // below, which answers for the CURRENT mode with the virtual screen's size
+    // -- true for the game and wrong for choosing a display mode.
+    rw::VideoMode desktop;
+    if (rw::Engine::getVideoModeInfo(&desktop, 0) == NULL)
+    {
+        printf("bfbb: the adapter would not report its desktop mode; staying windowed\n");
+        fflush(stdout);
+        return;
+    }
+
+    rw::int32 count = rw::Engine::getNumVideoModes();
+    for (rw::int32 i = 1; i < count; i++)
+    {
+        rw::VideoMode mode;
+        if (rw::Engine::getVideoModeInfo(&mode, i) == NULL)
+        {
+            continue;
+        }
+
+        if ((mode.flags & rw::VIDEOMODEEXCLUSIVE) == 0)
+        {
+            continue;
+        }
+
+        if (mode.width == desktop.width && mode.height == desktop.height &&
+            mode.depth == desktop.depth)
+        {
+            rw::Engine::setVideoMode(i);
+            printf("bfbb: exclusive fullscreen at %dx%d\n", (int)mode.width, (int)mode.height);
+            fflush(stdout);
+            return;
+        }
+    }
+
+    // Not fatal, and not silent. A borderless window at the same size is what
+    // is left, which looks identical and differs only in who owns the display.
+    printf("bfbb: no exclusive mode matches the desktop's %dx%d; running borderless "
+           "instead\n",
+           (int)desktop.width, (int)desktop.height);
+    fflush(stdout);
+}
+
+#endif
+
 RwBool RwEngineStart(void)
 {
     if (RwEngineInstance == NULL)
     {
         return FALSE;
     }
+
+#ifdef RW_D3D9
+    SelectFullscreenVideoMode();
+#endif
 
     if (!rw::Engine::start())
     {

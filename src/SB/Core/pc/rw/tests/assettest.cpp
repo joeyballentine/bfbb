@@ -135,7 +135,7 @@ int main(int argc, char** argv)
     windowParams.title = "bfbb assettest";
     windowParams.width = 640;
     windowParams.height = 480;
-    windowParams.fullscreen = false;
+    windowParams.mode = iWINDOW_WINDOWED;
     if (!iWindowOpen(&windowParams))
     {
         printf("could not open a window; the render backend cannot start" );

@@ -120,6 +120,14 @@ static void TRCInit()
 
 static RwVideoMode sVideoMode;
 
+// How the window presents itself, from config.ini's video.mode.
+//
+// Held here rather than read in RenderWareInit so that an unrecognised value is
+// reported once, alongside the other settings, rather than at the moment the
+// window opens. Everything else in this file is decided before anything can use
+// it, and this is no different.
+static iWindowMode sWindowMode = iWINDOW_FULLSCREEN;
+
 static RwTexture* TextureRead(const RwChar* name, const RwChar* maskName);
 
 static U32 RWAttachPlugins()
@@ -168,18 +176,25 @@ static S32 RenderWareInit()
     windowParams.title = "SpongeBob SquarePants: Battle for Bikini Bottom";
     windowParams.width = iScreenWidth();
     windowParams.height = iScreenHeight();
-    windowParams.fullscreen = false;
+    windowParams.mode = sWindowMode;
     if (!iWindowOpen(&windowParams))
     {
         printf("bfbb:   the window could not be opened\n");
         return TRUE;
     }
 
-    // What the window ACTUALLY gave, which is what rw/engine_start.cpp takes the
-    // virtual screen from a few lines further on. The two must not disagree:
-    // every full-screen camera raster in the game is built at iScreenWidth by
-    // iScreenHeight, and a camera raster that does not match the virtual screen
-    // fails to bind a depth surface and draws nothing at all. See iScreen.h.
+    // WINDOWED ONLY: render at what the window actually gave.
+    //
+    // A windowed window is opened at the render size, so if Windows hands back
+    // something else -- a size it would not make, a DPI it disagreed about --
+    // then following it is better than scaling to it, and costs nothing.
+    //
+    // Borderless and exclusive fullscreen cover a monitor, and their client
+    // size has nothing to do with what the game should render at. Reconciling
+    // there would make `mode = fullscreen` quietly override the resolution
+    // setting with the desktop's, which is the opposite of what the virtual
+    // screen exists for.
+    if (sWindowMode == iWINDOW_WINDOWED)
     {
         S32 clientWidth = 0;
         S32 clientHeight = 0;
@@ -291,8 +306,46 @@ static RwTexture* TextureRead(const RwChar* name, const RwChar* maskName)
 //
 // The cave reverb is not here: iSnd.cpp is in this library and asks iConfig
 // directly.
+static iWindowMode WindowModeFromConfig()
+{
+    const char* name = iConfigGetString("video.mode", "fullscreen");
+
+    if (iHostStrCaseCmp(name, "fullscreen") == 0)
+    {
+        return iWINDOW_FULLSCREEN;
+    }
+    if (iHostStrCaseCmp(name, "borderless") == 0)
+    {
+        return iWINDOW_BORDERLESS;
+    }
+    if (iHostStrCaseCmp(name, "windowed") == 0)
+    {
+        return iWINDOW_WINDOWED;
+    }
+
+    printf("bfbb: config: video.mode is not fullscreen, borderless or windowed, using "
+           "the default: %s\n",
+           name);
+    return iWINDOW_FULLSCREEN;
+}
+
+static const char* WindowModeName(iWindowMode mode)
+{
+    switch (mode)
+    {
+    case iWINDOW_FULLSCREEN:
+        return "fullscreen";
+    case iWINDOW_BORDERLESS:
+        return "borderless";
+    default:
+        return "windowed";
+    }
+}
+
 static void ApplyConfig()
 {
+    sWindowMode = WindowModeFromConfig();
+
     // The render size, before RenderWareInit opens the window at it. Pushed the
     // same way the three render features are, and for a stronger reason: iScreen
     // is read by game code, which must not learn what config.ini is.
@@ -319,9 +372,9 @@ static void ApplyConfig()
     // sounds like. Someone reporting that the port looks wrong should not have
     // to be asked whether they have a config.ini -- the log already says.
     const char* path = iConfigPath();
-    printf("bfbb: %s -- draw distance %s; Xbox features: glow %s, distortion %s, "
+    printf("bfbb: %s -- %s; draw distance %s; Xbox features: glow %s, distortion %s, "
            "snapshot %s, reverb %s\n",
-           path != NULL ? path : "no config.ini, defaults",
+           path != NULL ? path : "no config.ini, defaults", WindowModeName(sWindowMode),
            drawDistance ? "unlimited" : "console", glow ? "on" : "off",
            distortion ? "on" : "off", snapshot ? "on" : "off", reverb ? "on" : "off");
 }

@@ -19,10 +19,24 @@ then `config.ini` beside the executable. Booleans take on/off, true/false,
 yes/no or 1/0, and a key that is not one of the ones below is reported by name
 at load rather than ignored.
 
-    [video]             The size the game renders at. The window opens at it,
-                        but the two are independent from there: the picture is
-                        scaled into the back buffer at present time, so resizing
-                        the window never resizes the picture.
+    [video]             The size the game renders at, and how it is presented.
+                        The two are independent: the picture is scaled onto
+                        whatever surface it lands on at present time, so the
+                        game can render at 640x480 and fill a 4K display, or
+                        render above it and be sampled back down.
+
+    mode                fullscreen by default. Also borderless and windowed.
+                        `fullscreen` is D3D9 exclusive, at whatever resolution
+                        the desktop is already using, so entering the game does
+                        not change what the monitor is doing; `borderless` is a
+                        window with no border covering one monitor, which alt-
+                        tabs instantly and disturbs nothing else; `windowed` is
+                        an ordinary resizable window opened at the size below.
+                        Only exclusive fullscreen is visible to the renderer --
+                        a D3D9 device is created windowed or not -- so it is
+                        chosen in rw/engine_start.cpp between RwEngineOpen and
+                        RwEngineStart, the one moment the answer can be acted
+                        on.
 
     width               640 by default, the consoles' framebuffer
     height              480

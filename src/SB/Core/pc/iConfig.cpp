@@ -59,6 +59,22 @@ namespace
     };
 
     const Setting kSettings[] = {
+        { "video", "mode", "fullscreen",
+          "fullscreen, borderless or windowed.\n"
+          ";\n"
+          "; None of the three changes the size below -- the picture is scaled onto\n"
+          "; whatever it lands on, so the game can render at 640x480 and fill a 4K\n"
+          "; display, or render above it and be sampled back down.\n"
+          ";\n"
+          "; The SHAPE comes from the size, not from the display: a 4:3 size on a\n"
+          "; 16:9 monitor is centred with black either side. Set a 16:9 size to fill\n"
+          "; a 16:9 screen.\n"
+          ";\n"
+          ";   fullscreen  the display belongs to the game, at the resolution the\n"
+          ";               desktop is already using. The flip is a real page flip.\n"
+          ";   borderless  a window with no border, covering one monitor. Nothing\n"
+          ";               else on the desktop is disturbed and alt-tab is instant.\n"
+          ";   windowed    an ordinary window, opened at the size below." },
         { "video", "width", "640",
           "The width the game renders at, in pixels. 640x480 is what the consoles\n"
           "; drew, and is what every texture, font and HUD element was authored for,\n"
@@ -334,9 +350,10 @@ bool iConfigWriteDefaults(const char* path)
             // where the section is introduced.
             if (strcmp(section, "video") == 0)
             {
-                fprintf(f, "; The size the game renders at. The window opens at this size too,\n");
-                fprintf(f, "; but the two are independent -- the picture is scaled to whatever\n");
-                fprintf(f, "; the window becomes.\n");
+                fprintf(f, "; The size the game renders at, and how that picture is presented.\n");
+                fprintf(f, "; The two are independent: whatever the game renders at is scaled\n");
+                fprintf(f, "; onto whatever it lands on, be that a window, a borderless one\n");
+                fprintf(f, "; covering a monitor, or the display itself.\n");
                 fprintf(f, ";\n");
                 fprintf(f, "; Any resolution works, and anything that is not 4:3 is widescreen.\n");
             }

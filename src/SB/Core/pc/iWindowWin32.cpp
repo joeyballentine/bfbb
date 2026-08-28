@@ -16,6 +16,7 @@ static HINSTANCE sInstance;
 static S32 sShouldClose;
 static S32 sWidth;
 static S32 sHeight;
+static iWindowMode sMode = iWINDOW_WINDOWED;
 
 static const char* const kClassName = "BFBBWindow";
 
@@ -203,28 +204,86 @@ S32 iWindowOpen(const iWindowParams* params)
         return FALSE;
     }
 
-    DWORD style = params->fullscreen ? WS_POPUP : WS_OVERLAPPEDWINDOW;
+    sMode = params->mode;
 
-    // The size asked for is the size of the DRAWABLE area, not of the window.
-    // Getting this wrong gives a back buffer a few pixels larger than the
-    // client rect and a picture that is subtly stretched -- the kind of thing
-    // that reads as a bad aspect ratio rather than as a bug here.
-    RECT rect = { 0, 0, params->width, params->height };
-    if (!params->fullscreen)
+    // Windowed opens at the render size, wherever Windows puts it. The other
+    // two cover a monitor, so they need that monitor's rectangle -- and the
+    // primary one is the only sensible choice with nothing else to go on, since
+    // there is no window yet to ask which display it is nearest.
+    //
+    // GetMonitorInfo rather than SM_CXSCREEN: the metric answers for the
+    // primary monitor only, and the rectangle is wanted as much as the size --
+    // a monitor left of the primary has a negative origin, which is exactly the
+    // machine this was written on.
+    DWORD style = (sMode == iWINDOW_WINDOWED) ? WS_OVERLAPPEDWINDOW : WS_POPUP;
+
+    int x = CW_USEDEFAULT;
+    int y = CW_USEDEFAULT;
+    int w;
+    int h;
+
+    if (sMode == iWINDOW_WINDOWED)
     {
+        // The size asked for is the size of the DRAWABLE area, not of the
+        // window. Getting this wrong gives a back buffer a few pixels larger
+        // than the client rect and a picture that is subtly stretched -- the
+        // kind of thing that reads as a bad aspect ratio rather than as a bug
+        // here.
+        RECT rect = { 0, 0, params->width, params->height };
         AdjustWindowRect(&rect, style, FALSE);
+        w = rect.right - rect.left;
+        h = rect.bottom - rect.top;
+    }
+    else
+    {
+        POINT origin = { 0, 0 };
+        HMONITOR monitor = MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
+
+        MONITORINFO info;
+        info.cbSize = sizeof(info);
+
+        if (monitor != NULL && GetMonitorInfo(monitor, &info))
+        {
+            x = info.rcMonitor.left;
+            y = info.rcMonitor.top;
+            w = info.rcMonitor.right - info.rcMonitor.left;
+            h = info.rcMonitor.bottom - info.rcMonitor.top;
+        }
+        else
+        {
+            x = 0;
+            y = 0;
+            w = GetSystemMetrics(SM_CXSCREEN);
+            h = GetSystemMetrics(SM_CYSCREEN);
+        }
+
+        // A popup has no border, so the window rectangle IS the client
+        // rectangle and there is nothing to adjust for.
     }
 
-    sWindow = CreateWindowExA(0, kClassName, params->title ? params->title : "BFBB", style,
-                              CW_USEDEFAULT, CW_USEDEFAULT, rect.right - rect.left,
-                              rect.bottom - rect.top, NULL, NULL, sInstance, NULL);
+    sWindow = CreateWindowExA(0, kClassName, params->title ? params->title : "BFBB", style, x, y,
+                              w, h, NULL, NULL, sInstance, NULL);
     if (sWindow == NULL)
     {
         return FALSE;
     }
 
-    sWidth = params->width;
-    sHeight = params->height;
+    // What the window actually got, which for a popup covering a monitor is the
+    // monitor and for a windowed one is what AdjustWindowRect worked back to.
+    // Read rather than assumed: WM_SIZE has already been through the proc by
+    // now, and this is the number every other part of the port pairs with.
+    RECT client;
+    if (GetClientRect(sWindow, &client) && client.right > 0 && client.bottom > 0)
+    {
+        sWidth = client.right;
+        sHeight = client.bottom;
+    }
+    else
+    {
+        sWidth = params->width;
+        sHeight = params->height;
+    }
+
     sShouldClose = 0;
 
     ShowWindow(sWindow, SW_SHOW);
@@ -327,6 +386,11 @@ void iWindowPaceFrame()
 S32 iWindowShouldClose()
 {
     return sShouldClose;
+}
+
+iWindowMode iWindowGetMode()
+{
+    return sMode;
 }
 
 void iWindowGetSize(S32* width, S32* height)

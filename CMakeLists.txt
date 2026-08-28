@@ -280,7 +280,10 @@ endif()
 # reimplementation of RenderWare, not an implementation of its C API, and the
 # game calls the C API at sites the GameCube build matches against.
 file(GLOB RW_SHIM_SOURCES ${PC_DIR}/rw/*.cpp)
-add_library(bfbb_rw STATIC ${RW_SHIM_SOURCES} ${WINDOW_SOURCES})
+# iScreen is in here rather than in the platform layer because
+# rw/engine_start.cpp sets the virtual screen from it, and bfbb_rw does not
+# link bfbb_platform. It holds one size and depends on nothing.
+add_library(bfbb_rw STATIC ${RW_SHIM_SOURCES} ${WINDOW_SOURCES} ${PC_DIR}/iScreen.cpp)
 
 target_include_directories(bfbb_rw PUBLIC
   ${PC_DIR}/compat
@@ -306,7 +309,6 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iMath.cpp
   ${PC_DIR}/iMemMgr.cpp
   ${PC_DIR}/iPad.cpp
-  ${PC_DIR}/iScreen.cpp
   ${PC_DIR}/iSystem.cpp
   ${PC_DIR}/iTRC.cpp
   ${PC_DIR}/iTime.cpp

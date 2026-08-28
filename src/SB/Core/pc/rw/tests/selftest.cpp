@@ -164,7 +164,7 @@ static void test_engine_startup()
     windowParams.title = "bfbb rw_selftest";
     windowParams.width = 640;
     windowParams.height = 480;
-    windowParams.fullscreen = false;
+    windowParams.mode = iWINDOW_WINDOWED;
     check(iWindowOpen(&windowParams) != FALSE, "iWindowOpen for the render backend");
     printf("  (window backend: %s)\n", iWindowBackendName());
 #endif

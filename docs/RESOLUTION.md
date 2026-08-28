@@ -146,19 +146,64 @@ has not been made.
 gets magnified, with linear filtering (`xFont.cpp:665`). Text and HUD go soft.
 Nothing in the code fixes that; it needs assets.
 
-## Widescreen is still a separate job
+## Widescreen
 
-Keep the ratio at 4:3. `iCamera.cpp:229` is the only aspect-ratio assumption in
+A render size whose aspect is not 4:3 is widescreen, with no switch of its own.
+
+**The camera widens.** `iCameraSetFOV` was the only aspect-ratio assumption in
 the game:
 
     vw.y = 0.75f * vw.x;
 
-Changing it to the real height over width gives a genuine widescreen frustum, one
-line. But every 2D thing in the section above lives in a 4:3 normalized space, so
-the UI would need its own aspect correction, and the safe-area and letterbox
-maths in `xScrFx` would have to be reread against a non-4:3 screen. Until that is
-done, 1280x720 is the same picture as 1280x960 stretched to fit rather than a
-wider view of the world.
+`fov` is the HORIZONTAL field of view -- `vw.x` is the frustum's half-width at
+unit distance -- and 0.75 is 480/640, so that line is the vertical half-angle a
+4:3 screen gives. It is the one to keep: the levels and the camera were designed
+around how much is visible above and below. So `vw.y` stands and `vw.x` is
+rebuilt from `xScreenAspectF()`, and a wider screen shows more of the world to
+the left and right rather than cropping the top and bottom off what the console
+showed. At 4:3 it comes to `vw.y / 0.75`, the `vw.x` it already had.
+
+**The interface keeps its shape.** Everything laid out in normalized 0..1 draws
+into the largest 4:3 rectangle that fits, centred -- the UI box, `iScreen`'s
+`xScreenUIRect`, `xScreenUIx` and `xScreenUIy`. The art is authored at 640x480
+and stretching it is the one outcome that cannot be undone later.
+
+`xModelRender2D` needs the box in a different form. It places a HUD model by
+shearing against the CAMERA's view window rather than in pixels, so on a
+widescreen frustum a model would spread to the screen's own edges while the text
+beside it stayed centred; it is given the box as a fraction of the frustum
+instead.
+
+**Full-screen effects are still full screen** -- the fades, the letterbox bars,
+the safe-area frame, the out-of-bounds fade, the glare, the loading background
+and the autosave smoke all take the screen size rather than the UI box. That
+split is what makes this widescreen rather than a stretch, and it is the rule
+for anything added later.
+
+What is NOT done is anchoring the HUD to the true screen edges. At 16:9 the
+interface sits inside the centred 4:3 box, about 12% in from each side. Pushing
+the in-game HUD out to the corners would look more native and needs a per-widget
+decision in `zHud` about which edge each thing belongs to, which is a design
+change rather than a correction.
+
+## Windowed, borderless and fullscreen
+
+`[video] mode` is `fullscreen` (D3D9 exclusive, at whatever the desktop is
+already using), `borderless` or `windowed`, and it is independent of the render
+size -- the picture is scaled onto whatever surface it lands on.
+
+Only exclusive fullscreen is visible to the RENDERER, because a D3D9 device is
+created windowed or not and cannot change its mind without a reset. It is chosen
+in `rw/engine_start.cpp` between `RwEngineOpen` and `RwEngineStart`: librw's mode
+list is built inside `Engine::open` and read inside `Engine::start`, so that is
+the one moment the answer can still be acted on. Borderless needs nothing from
+the renderer at all -- it is a `WS_POPUP` the size of a monitor, and a window is
+a window.
+
+The process is per-monitor-DPI aware (`iWindowWin32.cpp`). Without that Windows
+resizes the window itself when it crosses to a monitor at a different scaling,
+which reads as a user resize, resets the device, and grows the window by the
+ratio of the two scalings each time.
 
 ## What is not done
 
