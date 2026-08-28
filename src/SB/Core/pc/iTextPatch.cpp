@@ -80,10 +80,13 @@ namespace
     // substitution can make them true. Saves here are a directory, and that is
     // what they are rewritten to say.
     //
-    // "blocks", as a unit of free space, is deliberately NOT in here. It is
-    // imprecise rather than wrong, and rewriting the three messages that use it
-    // would mean inventing prose for paths this port cannot reach: isavegame.cpp
-    // answers every "is there room" with yes.
+    // "blocks" is in here too, and it is the one case where the text was not
+    // merely dated but actively wrong. A block is 8 KB of a memory card, and the
+    // figures the game drops into these sentences are plain byte counts on a
+    // host -- "2147483647 block(s)" free. The numbers themselves are fixed where
+    // they are produced, by iSGFormatSize, which supplies a unit with each one;
+    // these entries are the other half of that, taking the now-duplicated
+    // "block(s)" back out of the sentence around it.
     //
     // The name is the asset's own, and iTextPatchAssetID hashes it to the id the
     // packer passes in. Names longer than 31 characters are truncated in the
@@ -107,8 +110,12 @@ namespace
         // is {var:MCName} in zVar.cpp, and it is the one the player sees every
         // time they load. Retail says "MEMORY CARD slot 1" in the shared menu
         // archive and "Xbox Hard Disk" in the level archives.
+        //
+        // Both are real: isavegame.cpp exposes two targets, so the second button
+        // on the save and load screens is a second folder with its own three
+        // game slots rather than the dead entry it used to be.
         { "LD MC1 TXT", "save folder" },
-        { "LD MC2 TXT", "save folder" },
+        { "LD MC2 TXT", "second save folder" },
 
         // The Xbox's own save browser.
         { "LD ACCESS HARD DISK? TXT", "Press {i:button_picture_01} to access saved games" },
@@ -177,6 +184,38 @@ namespace
         { "text_no_controller_pal",
           "No controller is detected.{n}Please connect a controller, and press the {i:ui_accept} "
           "button to continue" },
+
+        // Free space, in blocks of a card that is not there. The number in each
+        // of these now arrives with its own unit on it, so the "block(s)" that
+        // followed it goes.
+        { "MNU3 FREE DISK TEXT", "Available Free Space: {var:SpaceAvailableString}" },
+        { "MNU4 FREE DISK TEXT", "Available Free Space: {var:SpaceAvailableString}" },
+        { "SV NOSPACE TXT",
+          "There is not enough free space to create new save games. Press {i:ui_accept} to "
+          "continue." },
+        { "SV BADSAVE TXT",
+          "{c=ffff0000}Save failed!{~:c} There is not enough free space to create new save games. "
+          "Press {i:ui_accept} to continue." },
+        { "MNU4 AUTO SAVE FAILED TXT",
+          "{i:keyword}Warning: Autosave failed! {~:c}{n}There is not enough free space to create a "
+          "new save game. The {i:autosave}{i:blacktext} feature has been {i:keyword}disabled{~:c}. "
+          "{i:blacktext}To re-enable {i:autosave}{i:blacktext}, go to the "
+          "{red=0}{blue=0}{green=0.2}Options{~:c}{i:blacktext} in the "
+          "{red=0}{blue=0}{green=0.2}Pause Menu{~:c}{i:blacktext} and save to a game save." },
+        { "text_mem_card_no_space",
+          "There is not enough free space to save games. You need to free more space to save a new "
+          "{i:game_name} game.{n}{n}{n}Press {i:ui_accept} to continue or {i:ui_cancel} to free "
+          "more space." },
+        { "text_mem_card_no_space_no_save",
+          "There is not enough free space to save games. You need "
+          "{c=ff00d244}{var:BadCardNeeded}{~:c} more to save a new {i:game_name} "
+          "game.{n}{n}{n}Press {i:ui_accept} to continue without saving or {i:ui_cancel} to free "
+          "more space." },
+        { "text_mem_card_no_space_overwrite",
+          "There is not enough free space to save games. You need "
+          "{c=ff00d244}{var:BadCardNeeded}{~:c} more to save a new {i:game_name} game.{n}Existing "
+          "game saves may be loaded and overwritten.{n}{n}{n}Press {i:ui_accept} to continue or "
+          "{i:ui_cancel} to free more space." },
 
         // Retail drops {i:ps2_save_size} in here, which quotes the KB three PS2
         // saves need. There is nothing to put in its place.

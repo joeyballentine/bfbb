@@ -10,6 +10,9 @@
 #endif
 
 #include "iTime.h"
+#ifdef PLATFORM_PC
+#include "isavegame.h"
+#endif
 
 #include "xFont.h"
 #include "xString.h"
@@ -133,18 +136,37 @@ namespace
         return buffer;
     }
 
+    // PORT: the four space figures below are a number of the memory card's 8 KB
+    // blocks on the console, and a number of BYTES here -- iSG_have_room answers
+    // xSGTgtHaveRoom's bytesNeeded and availOnDisk from the host filesystem, and
+    // nothing converts them. Printed as a bare "%d" that reads as blocks, a disk
+    // with room to spare came out as "2147483647 block(s)".
+    //
+    // iSGFormatSize supplies the unit as well as the number, so the "block(s)"
+    // the surrounding TEXT assets append is removed by iTextPatch rather than
+    // left to contradict this.
     char* var_text_BadCardAvailable()
     {
+#ifdef PLATFORM_PC
+        static char buffer[0x20];
+        iSGFormatSize(bad_card_available, buffer, sizeof(buffer));
+#else
         static char buffer[0x0C];
         sprintf(buffer, "%d", bad_card_available);
+#endif
         return buffer;
     }
 
     // var_text_BadCardNeeded__18_esc__2_unnamed_esc__2_zVar_cpp_esc__2_Fv
     char* var_text_BadCardNeeded()
     {
+#ifdef PLATFORM_PC
+        static char buffer[0x20];
+        iSGFormatSize(bad_card_needed, buffer, sizeof(buffer));
+#else
         static char buffer[0x0C];
         sprintf(buffer, "%d", bad_card_needed);
+#endif
         return buffer;
     }
 
@@ -448,8 +470,13 @@ namespace
 
     char* var_text_SpaceAvailable()
     {
+#ifdef PLATFORM_PC
+        static char buffer[0x20];
+        iSGFormatSize(zSaveLoad_getMCavailable(), buffer, sizeof(buffer));
+#else
         static char buffer[0x0C];
         sprintf(buffer, "%d", zSaveLoad_getMCavailable());
+#endif
         return buffer;
     }
 
@@ -457,19 +484,31 @@ namespace
     {
         // What a wierd dance... they could have just used buffer directly.
         static char buffer[0x40];
+#ifdef PLATFORM_PC
+        // The save screen's free-space line, and the only one of these that is
+        // a whole disk rather than a save. iSGFormatFreeSpace asks the host
+        // instead of wording the 2 GB-clamped figure the game is holding.
+        iSGFormatFreeSpace(buffer, sizeof(buffer));
+#else
         char tmp[0x20];
         S32 available = zSaveLoad_getMCavailable();
         memset(tmp, 0, 0x20);
         memset(buffer, 0, 0x40);
         sprintf(tmp, "%d", available);
         sprintf(buffer, "%s", tmp);
+#endif
         return buffer;
     }
 
     char* var_text_SpaceNeeded()
     {
+#ifdef PLATFORM_PC
+        static char buffer[0x20];
+        iSGFormatSize(zSaveLoad_getMCneeded(), buffer, sizeof(buffer));
+#else
         static char buffer[0x0C];
         sprintf(buffer, "%d", zSaveLoad_getMCneeded());
+#endif
         return buffer;
     }
 

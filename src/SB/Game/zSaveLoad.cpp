@@ -5,6 +5,9 @@
 #include <stdio.h>
 
 #include "iSystem.h"
+#ifdef PLATFORM_PC
+#include "isavegame.h"
+#endif
 
 #include "zUI.h"
 #include "zGlobals.h"
@@ -1422,6 +1425,15 @@ void BuildIt(char* build_txt, S32 i)
         date2[31] = NULL;
 
         memset(displaySizeUnit, 0, sizeof(displaySizeUnit));
+#ifdef PLATFORM_PC
+        // PORT: .size is bytes here rather than the card's 8 KB blocks -- see
+        // where it is filled in below -- so the unit comes from iSGFormatSize
+        // with the number, and the "%d %s" pair collapses into one "%s".
+        iSGFormatSize(zSaveLoadGameTable[i].size, displaySizeUnit, sizeof(displaySizeUnit));
+
+        sprintf(biggerbuf, "%d%%  %s    (%s)\n%s", zSaveLoadGameTable[i].progress, date2,
+                displaySizeUnit, zSaveLoadGameTable[i].label);
+#else
         if (zSaveLoadGameTable[i].size == 1)
         {
             strcpy(displaySizeUnit, "block");
@@ -1433,6 +1445,7 @@ void BuildIt(char* build_txt, S32 i)
 
         sprintf(biggerbuf, "%d%%  %s    (%d %s)\n%s", zSaveLoadGameTable[i].progress, date2,
                 zSaveLoadGameTable[i].size, displaySizeUnit, zSaveLoadGameTable[i].label);
+#endif
         strncpy(build_txt, biggerbuf, 0x80);
         date1[31] = NULL;
     }
@@ -1518,9 +1531,15 @@ S32 zSaveLoad_GameSelect(S32 mode)
                 strcpy(zSaveLoadGameTable[i].date, xSGGameModDate(svinst, i));
                 zSaveLoadGameTable[i].progress = xSGGameProgress(svinst, i);
                 zSaveLoadGameTable[i].size = xSGGameSize(svinst, i);
+#ifndef PLATFORM_PC
+                // The file's size in the card's 8 KB blocks: round up to a whole
+                // block, divide, then add the three the banner and icon occupy.
+                // A host file is its bytes and has no banner, so the port keeps
+                // the byte count and BuildIt words it.
                 zSaveLoadGameTable[i].size = zSaveLoadGameTable[i].size + 0x1fff & 0xffffe000;
                 zSaveLoadGameTable[i].size >>= 0xd;
                 zSaveLoadGameTable[i].size += 3;
+#endif
 
                 zSendEventToThumbIcon(3);
                 zSaveLoadGameTable[i].thumbIconIndex = xSGGameThumbIndex(svinst, i);

@@ -908,17 +908,41 @@ static void test_savegame()
     check(isg->slot == -1, "a fresh session has no target selected");
 
     S32 max = 0;
-    check(iSGTgtCount(isg, &max) >= 1, "at least one target is present");
+    // Two, and it has to be two: the save and load screens are UI assets with
+    // two buttons baked into them, and reporting one target did not hide the
+    // second -- it made choosing it an error. Both are real folders now.
+    check(iSGTgtCount(isg, &max) == 2, "both save targets are present");
     check(max == ISG_NUM_SLOTS, "the maximum is the console's slot count");
 
     check(iSGTgtState(isg, 0, NULL) == 0xF, "target 0 is present and formatted");
+    check(iSGTgtState(isg, 1, NULL) == 0xF, "and so is target 1");
     check(iSGTgtState(isg, 99, NULL) == 0x1000000, "an out-of-range target reports no card");
     check(iSGCheckMemoryCard(isg, 0) == 1, "iSGCheckMemoryCard sees target 0");
+    check(iSGCheckMemoryCard(isg, 1) == 1, "and target 1");
+    check(iSGCheckMemoryCard(isg, 2) == 0, "and nothing past the last one");
     check(iSGTgtPhysSlotIdx(isg, 0) == 0, "target 0 maps to physical slot 0");
+    check(iSGTgtPhysSlotIdx(isg, 1) == 1, "and target 1 to slot 1");
     check(iSGCheckForWrongDevice() == -1, "no wrong-region device on a host");
 
     check(iSGTgtSetActive(isg, 0) == 1, "iSGTgtSetActive selects target 0");
     check(isg->slot == 0, "the session records the active slot");
+
+    // Target 0 is the save directory ITSELF, not a subdirectory of it. That is
+    // what keeps saves written while this build exposed a single target where
+    // the game can still find them; only the second needed somewhere new.
+    check(strcmp(isg->mcdata[0].root, dir) == 0, "target 0 is the save directory itself");
+
+    check(iSGTgtSetActive(isg, 1) == 1, "iSGTgtSetActive selects target 1");
+    char second[600];
+    snprintf(second, sizeof(second), "%s/second", dir);
+    check(strcmp(isg->mcdata[1].root, second) == 0, "target 1 is a subdirectory of it");
+    check(iHostPathExists(second), "which iSGStartup created");
+
+    // The two must not share a file namespace, or the second folder's three
+    // game slots would be the first folder's three under another name.
+    check(strcmp(isg->mcdata[0].root, isg->mcdata[1].root) != 0, "and the two are different places");
+
+    check(iSGTgtSetActive(isg, 0) == 1, "back to target 0 for the rest of this");
 
     // Nothing saved yet.
     check(iSGSelectGameDir(isg, "") == 0, "no game files yet");
@@ -1006,6 +1030,53 @@ static void test_savegame()
 
     iSGSessionEnd(isg);
     check(iSGShutdown() == 1, "iSGShutdown succeeds");
+
+    // The unit the save UI displays in. The figures reaching it are bytes, and
+    // it was written to word them as a memory card's 8 KB blocks.
+    char sz[16];
+
+    iSGFormatSize(0, sz, sizeof(sz));
+    check(strcmp(sz, "0 KB") == 0, "nothing is 0 KB, not an empty string");
+
+    // Rounded UP. A save needing one byte past a kilobyte needs the next one,
+    // and a figure that reported less would be the wrong way to be wrong.
+    iSGFormatSize(1, sz, sizeof(sz));
+    check(strcmp(sz, "1 KB") == 0, "one byte rounds up to a whole KB");
+    iSGFormatSize(1024, sz, sizeof(sz));
+    check(strcmp(sz, "1 KB") == 0, "and exactly one KB stays one");
+    iSGFormatSize(1025, sz, sizeof(sz));
+    check(strcmp(sz, "2 KB") == 0, "and one past it is two");
+
+    // A real save file, which is what the slot list shows.
+    iSGFormatSize(356000, sz, sizeof(sz));
+    check(strcmp(sz, "348 KB") == 0, "a save file's size reads in KB");
+
+    // The tenth is truncated where the whole number is rounded up, so a
+    // figure never reads as more room than there is.
+    iSGFormatSize(1024 * 1024, sz, sizeof(sz));
+    check(strcmp(sz, "1.0 MB") == 0, "a megabyte crosses into MB");
+    iSGFormatSize(1024 * 1024 * 3 / 2, sz, sizeof(sz));
+    check(strcmp(sz, "1.5 MB") == 0, "and carries one decimal");
+
+    // The largest figure the layer can produce: iSG_free_bytes clamps a disk's
+    // free space to what fits in the S32 the game compares it against.
+    iSGFormatSize(0x7FFFFFFF, sz, sizeof(sz));
+    check(strcmp(sz, "2.0 GB") == 0, "the free-space clamp reads as 2.0 GB");
+
+    // A negative can only come of an overflow upstream; it is not free space.
+    iSGFormatSize(-1, sz, sizeof(sz));
+    check(strcmp(sz, "0 KB") == 0, "a negative is nothing, not a negative size");
+
+    // Free space is the one figure that does NOT come off the game's clamped
+    // S32, so it must be able to say something larger than that clamp. Any disk
+    // this test runs on has more than 2 GB free, which is what makes "not 2.0
+    // GB" the assertion worth making here.
+    char freesz[16];
+    iSGFormatFreeSpace(freesz, sizeof(freesz));
+    check(freesz[0] != '\0', "iSGFormatFreeSpace reports something");
+    check(strstr(freesz, "GB") != NULL || strstr(freesz, "TB") != NULL,
+          "and it is the whole disk, past the 2 GB the game's own figure stops at");
+    printf("    (free where saves go: %s)\n", freesz);
 
     char cmd[600];
     snprintf(cmd, sizeof(cmd), "rm -rf %s", dir);

@@ -95,8 +95,9 @@ struct st_ISG_MEMCARD_DATA
     S32 chan;
     S32 sectorSize;
 
-    // Where this device's saves live. Slot 0 is the player's save directory;
-    // a second exists so the "copy to the other card" UI has a target.
+    // Where this device's saves live. Slot 0 is the save directory itself and
+    // slot 1 a "second" subdirectory of it, each holding its own three game
+    // slots -- the two the save and load screens have always offered.
     char root[512];
 
     // Filled in by iSGTgtState, read by the save UI.
@@ -174,5 +175,31 @@ void iSGAutoSave_Disconnect(st_ISGSESSION* isg);
 S32 iSGAutoSave_Monitor(st_ISGSESSION* isg, S32 idx_target);
 S32 iSGCheckForWrongDevice();
 S32 iSGCheckForCorruptFiles(st_ISGSESSION*, char files[][64]);
+
+// PC-only, and not part of the interface the GameCube implements.
+//
+// A number of bytes, written the way a person reads one: "348 KB", "1.9 GB".
+// The save UI was designed against a memory card and counts everything in the
+// card's 8 KB blocks -- the size of a save file, the room left on the card, the
+// room a save still needs. A host has no blocks, and the figures reaching that
+// UI here are plain byte counts, so "348 blocks" was both the wrong unit and
+// the wrong number. Every one of them comes through this instead; see
+// zSaveLoad.cpp's BuildIt and the space variables in zVar.cpp.
+//
+// KB is the smallest unit it will name. A save file is tens of kilobytes and a
+// disk with bytes rather than kilobytes free is not a state worth wording.
+// Rounds up, so nothing is ever reported as needing less room than it does.
+//
+// `outsize` of 16 is always enough for either of these.
+void iSGFormatSize(S32 bytes, char* out, U32 outsize);
+
+// The room left where saves go, worded the same way.
+//
+// Separate from iSGFormatSize because it does NOT come off the figure the game
+// is carrying: iSG_have_room clamps that to 2 GB so it fits the signed 32-bit
+// int the game compares a save size against, which is right for the comparison
+// and would make the save screen's free-space line read "2.0 GB" on every disk
+// ever made. This asks the host.
+void iSGFormatFreeSpace(char* out, U32 outsize);
 
 #endif

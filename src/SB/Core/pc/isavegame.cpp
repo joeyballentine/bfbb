@@ -32,11 +32,27 @@ static S32 g_isginit;
 // The directory holding the save targets. Chosen once, at iSGStartup.
 static char g_saveroot[512];
 
-// One target per memory card slot the console had. Reporting one is the host
-// equivalent of a single card inserted, which is what stops the game asking
-// which card to save to on every write. Raising it to ISG_NUM_SLOTS gives the
-// two-target UI back, and mcdata is already sized for it.
-#define ISG_HOST_TARGETS 1
+// One target per memory card slot the console had, and the port exposes both.
+//
+// Reporting a single target did NOT remove the second one from the interface,
+// which is what it was supposed to do: the save and load screens are UI assets
+// with two buttons baked into them -- MNU3 LD MC1 and MC2, SV MC1 and MC2 --
+// and the chooser is drawn whatever this number says. All reporting one did was
+// make the second button dead, so choosing it fell into the single-target arm of
+// zSaveLoad_CardCheckFormatted, found the physical slot did not match, and came
+// back as an error.
+//
+// Two makes it a folder like the first, with its own three game slots. That is
+// six saves rather than three, and it costs no screen the player was not
+// already being shown.
+//
+// ISG_NUM_SLOTS is the ceiling: mcdata is sized by it, and iSG_mcidx2slot maps a
+// target index straight onto a slot index.
+#define ISG_HOST_TARGETS 2
+
+#if ISG_HOST_TARGETS > 2
+#error "iSG_target_root has a name for two folders, not more"
+#endif
 
 static st_ISGSESSION g_isgdata_MAIN;
 
@@ -81,15 +97,19 @@ static void iSG_resolve_saveroot()
     snprintf(g_saveroot, sizeof(g_saveroot), "saves");
 }
 
+// The first target is the save root ITSELF rather than a subdirectory of it.
+// That is not symmetry for its own sake being thrown away -- it is what keeps
+// saves written while this build exposed one target where the game can still
+// find them. Only the second target needs somewhere new to live.
 static void iSG_target_root(S32 slot, char* out, size_t outsize)
 {
-    if (ISG_HOST_TARGETS <= 1)
+    if (slot <= 0)
     {
         snprintf(out, outsize, "%s", g_saveroot);
     }
     else
     {
-        snprintf(out, outsize, "%s/slot%d", g_saveroot, slot);
+        snprintf(out, outsize, "%s/second", g_saveroot);
     }
 }
 
@@ -404,6 +424,73 @@ static S32 iSG_have_room(st_ISGSESSION* isgdata, S32 fsize, const char* fname, S
     }
 
     return needed <= avail;
+}
+
+// The unit the save UI displays in. See isavegame.h for why it is not blocks.
+//
+// U64 internally because iSGFormatFreeSpace has a whole disk to word, which the
+// S32 the rest of this interface passes around cannot hold.
+static void iSG_format_bytes(U64 bytes, char* out, U32 outsize)
+{
+    if (out == NULL || outsize == 0)
+    {
+        return;
+    }
+
+    // Rounded up: a save that needs one byte past a kilobyte needs the next one.
+    U64 units = (bytes + 1023u) / 1024u;
+    const char* name[] = { "KB", "MB", "GB", "TB" };
+    S32 i = 0;
+
+    // The remainder of the last division is the tenth, so it has to be kept as
+    // the loop climbs rather than recovered from `units` afterwards.
+    U64 rem = 0;
+    while (units >= 1024 && i < 3)
+    {
+        rem = units % 1024;
+        units /= 1024;
+        i++;
+    }
+
+    if (i == 0)
+    {
+        snprintf(out, outsize, "%u KB", (unsigned)units);
+        return;
+    }
+
+    // One decimal, in integers rather than through a float, and TRUNCATED where
+    // the whole number is rounded up: 1.99 GB reading as "2.0 GB" would be a
+    // lie in the one direction that matters when the question is whether
+    // something fits.
+    snprintf(out, outsize, "%u.%u %s", (unsigned)units, (unsigned)(rem * 10 / 1024), name[i]);
+}
+
+void iSGFormatSize(S32 bytes, char* out, U32 outsize)
+{
+    // A negative can only come of an overflow upstream. It is not free space.
+    iSG_format_bytes(bytes > 0 ? (U64)bytes : 0, out, outsize);
+}
+
+// Free space, asked of the host directly rather than taken from the S32 the
+// game carries it in.
+//
+// That S32 is iSG_have_room's answer, and it is clamped to 2 GB because the game
+// compares it against a save size in a signed 32-bit int -- see iSG_free_bytes.
+// The clamp is right for the comparison and useless for the display: every disk
+// this will ever run on would read "2.0 GB". The save screen's free-space line
+// asks a different question and gets a different number.
+//
+// The save root's volume, not the active target's: the second target lives
+// inside the first, so there is only ever one volume to report on.
+void iSGFormatFreeSpace(char* out, U32 outsize)
+{
+    U64 avail = 0;
+    if (!iHostFreeBytes(g_saveroot, &avail))
+    {
+        avail = 0;
+    }
+
+    iSG_format_bytes(avail, out, outsize);
 }
 
 S32 iSGTgtHaveRoom(st_ISGSESSION* isgdata, S32 tidx, S32 fsize, const char* dpath,
