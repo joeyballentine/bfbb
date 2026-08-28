@@ -41,6 +41,14 @@ extern S32 sFullScreenGlareEnabled;
 extern U32 sFullScreenGlareTextureID;
 extern RwTexture* sFullScreenGlareTexturePtr;
 
+#ifdef PLATFORM_PC
+// How hard the cruise bubble is warping the screen: 0 for not at all, 1 for
+// full. The Xbox keeps this as a global too (va 0x381b90) with the same five
+// writers our zEntCruiseBubble.cpp has calls to distort_screen, and reads it in
+// xScrFxDistortionRender, which is where this is read. See iDistort.h.
+extern F32 xScrFxDistortAmount;
+#endif
+
 struct xCamera;
 
 void xScrFxInit();

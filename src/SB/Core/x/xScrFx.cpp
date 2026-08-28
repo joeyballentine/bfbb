@@ -6,6 +6,10 @@
 #include "zGlobals.h"
 #include "xstransvc.h"
 
+#ifdef PLATFORM_PC
+#include "iDistort.h"
+#endif
+
 struct _xFadeData
 {
     S32 active;
@@ -41,6 +45,14 @@ RwRGBA sFullScreenGlareColor = { 255, 255, 255, 64 };
 S32 sFullScreenGlareEnabled = 0;
 U32 sFullScreenGlareTextureID = xStrHash("fx_streak2");
 RwTexture* sFullScreenGlareTexturePtr = NULL;
+
+#ifdef PLATFORM_PC
+// Declared in xScrFx.h. Written only by zEntCruiseBubble.cpp's distort_screen,
+// read only by xScrFxDistortionRender below -- the same arrangement the Xbox
+// has around va 0x381b90. Inside the guard because on the console this would be
+// a new zero in .sbss and the DOL has to stay byte-identical.
+F32 xScrFxDistortAmount;
+#endif
 
 static void xScrFxDistortionUpdate(F32 dt);
 static void xScrFxDistortionRender(RwCamera*);
@@ -326,8 +338,44 @@ static void xScrFxDistortionUpdate(F32 dt)
     }
 }
 
-static void xScrFxDistortionRender(RwCamera*)
+// Empty in the shipped GameCube code, and called anyway -- from xScrFxRender,
+// which is exactly where the Xbox calls its own. On that platform this is the
+// cruise bubble's screen warp: the frame re-read through a swirl-shaped offset
+// field. The argument is the camera being rendered, and the Xbox passes the
+// same one.
+//
+// The particle pool above it is NOT what this draws, on either platform.
+// gNumDistortionParticles is never incremented anywhere in the Xbox build
+// either -- its xScrFxDistortionUpdate ends at the ageing loop, with no
+// xScrFxDistortionAdd call and no reference to ddir at all -- so that half
+// shipped dead everywhere and the two empty bodies above are faithful.
+static void xScrFxDistortionRender(RwCamera* cam)
 {
+#ifdef PLATFORM_PC
+    if (xScrFxDistortAmount <= 0.0f)
+    {
+        return;
+    }
+
+    // Resolved here rather than in the platform layer, which has no business
+    // reaching into the asset store -- and cached, because the Xbox caches it
+    // too (va 0x37053c). It lives in plat.HIP, which is preloaded at boot, so
+    // once it is found it stays found.
+    static RwTexture* map;
+    if (map == NULL)
+    {
+        map = (RwTexture*)xSTFindAsset(xStrHash("BXCruiseBubbleDistort"), NULL);
+        if (map == NULL)
+        {
+            return;
+        }
+    }
+
+    RwVideoMode mode;
+    RwEngineGetVideoModeInfo(&mode, RwEngineGetCurrentVideoMode());
+
+    iDistortRender(cam, map, xScrFxDistortAmount, mode.width, mode.height);
+#endif
 }
 
 void xScrFXGlareInit()

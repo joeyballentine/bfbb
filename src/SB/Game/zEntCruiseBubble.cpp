@@ -23,6 +23,11 @@
 #include "zRenderState.h"
 #include "zTalkBox.h"
 
+#ifdef PLATFORM_PC
+// distort_screen stores the strength there; xScrFxDistortionRender draws it.
+#include "xScrFx.h"
+#endif
+
 #include "iMath.h"
 
 #include "xColor.h"
@@ -687,9 +692,20 @@ namespace cruise_bubble
             exit_triggers(*globals.sceneCur);
         }
 
-        void distort_screen(F32)
+        // Empty on the console, and called from five places -- the same five
+        // the Xbox writes its distortion strength from (va 0x381b90). It only
+        // ever stored the number; xScrFxDistortionRender is what draws.
+        //
+        // The five are worth reading together, because between them they are
+        // the whole of when the effect is on: state_camera_seize::update ramps
+        // it in through xSCurve as the camera is taken over,
+        // state_camera_attach::start pins it at 1 while you fly, and stop and
+        // the two teardown paths put it back to 0.
+        void distort_screen(F32 amount)
         {
-            // empty
+#ifdef PLATFORM_PC
+            xScrFxDistortAmount = amount;
+#endif
         }
 
         void state_type::abort()
