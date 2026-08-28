@@ -103,9 +103,9 @@ still matches.
 Working: rendering, world, characters, animation, collision, audio, input, saves,
 HUD, movies, loading screen.
 
-Not done: `iDraw`'s framebuffer write mask has no librw equivalent and is a no-op,
-GL3 has no window backend, and plenty of smaller things. Individual files have
-their own notes about what's wrong and why, which are more useful than a list here.
+Not done: GL3 has no window backend, so this is Windows only. Beyond that it's
+lots of smaller things. Individual files carry their own notes about what's
+wrong and why, which are more useful than a list here.
 
 ## Docs
 

@@ -164,7 +164,7 @@ platform directory. Two needed one hunk each (`iModel`, `iScrFX`), one was
 rewritten against the librw fork rather than copied (`iFX`), and one was written
 from scratch rather than ported at all (`iFMV`): its `gc` counterpart decodes
 Bink, and the port's assets are the Xbox release's `.xmv`, so there was nothing
-to carry across. `iDraw` is implemented but lossy.
+to carry across.
 
 **This table has been wrong before.** It said "header only" for nine interfaces
 that were already implemented, because four rounds of porting updated the code

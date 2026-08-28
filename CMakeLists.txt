@@ -401,13 +401,13 @@ add_library(bfbb_platform STATIC
 
   ${PC_DIR}/iScrFX.cpp
 
-  # Ported, and the first module in the port that LOSES a rendering behaviour
-  # rather than relocating one. gc/iDraw.cpp is three functions: two empty ones
-  # and iDrawSetFBMSK, which is a frame-buffer colour/alpha write mask and has
-  # no spelling in RenderWare's portable render state or in librw's. It is a
-  # documented no-op; the comment in the file names the six call sites and says
-  # what each one will look like wrong. Fixing it means adding a colour write
-  # mask to librw, not editing this file.
+  # Ported. gc/iDraw.cpp is three functions: two empty ones and iDrawSetFBMSK,
+  # a frame-buffer colour/alpha write mask that had no spelling in RenderWare's
+  # portable render state or in librw's. It was a no-op for a while, which made
+  # the depth-priming first pass at four call sites paint an opaque copy of
+  # itself. Closed by adding a COLORWRITEMASK render state to the librw fork;
+  # this file forwards to it, inverting per channel because the GS convention is
+  # the opposite of librw's.
   ${PC_DIR}/iDraw.cpp
 
   # The STUBS block that used to sit here is GONE, and that is the milestone:
