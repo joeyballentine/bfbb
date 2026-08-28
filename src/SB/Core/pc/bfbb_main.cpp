@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <string.h>
 
 #include <windows.h>
 #include <dbghelp.h>
@@ -55,6 +56,38 @@ namespace
     // on, so a STACK OVERFLOW skips it entirely. A vectored handler is called
     // first-chance, before unwinding, while the guard page is still doing its
     // job -- so it gets to say what happened when the filter cannot.
+
+    // Which binary an address is in, and where in it. dbghelp answers the first
+    // through the module base it already tracks for the stack walk, so this
+    // costs nothing beyond a GetModuleFileName -- and it is the part of a
+    // backtrace that never degrades, symbols or no symbols.
+    const char* ModuleName(HANDLE process, DWORD64 address)
+    {
+        static char name[MAX_PATH];
+
+        DWORD64 base = SymGetModuleBase64(process, address);
+        if (base == 0)
+        {
+            return "?";
+        }
+
+        if (GetModuleFileNameA((HMODULE)(uintptr_t)base, name, sizeof(name)) == 0)
+        {
+            return "?";
+        }
+
+        // The leaf, because the directory is the same for all of them and the
+        // line is long enough already.
+        const char* slash = strrchr(name, '\\');
+        return slash != NULL ? slash + 1 : name;
+    }
+
+    DWORD64 ModuleOffset(HANDLE process, DWORD64 address)
+    {
+        DWORD64 base = SymGetModuleBase64(process, address);
+        return base != 0 ? address - base : 0;
+    }
+
     // Walks one thread's stack and prints it, symbolised. Shared by the crash
     // handler and the watchdog: a crash and a hang want the same answer --
     // "where is it" -- and differ only in how they come by a CONTEXT.
@@ -111,8 +144,18 @@ namespace
             }
             else
             {
-                printf("bfbb:   #%-2d %s + 0x%llx\n", depth, name,
-                       (unsigned long long)displacement);
+                // The module, and the address inside it, alongside the symbol.
+                //
+                // Without this a frame in a DLL that ships no symbols reads as
+                // the nearest preceding EXPORT plus a five-digit offset --
+                // `SetDependencyInfo + 0x262590` -- which names a function the
+                // code has nothing to do with and hides the one thing that is
+                // always knowable: which binary it was in. A crash on a worker
+                // thread is mostly diagnosed by that alone.
+                printf("bfbb:   #%-2d %s + 0x%llx   [%s+0x%llx]\n", depth, name,
+                       (unsigned long long)displacement,
+                       ModuleName(process, frame.AddrPC.Offset),
+                       (unsigned long long)ModuleOffset(process, frame.AddrPC.Offset));
             }
         }
 
@@ -120,6 +163,11 @@ namespace
     }
 
     HANDLE sMainThread;
+
+    // Recorded unconditionally, unlike sMainThread, which only the
+    // watchdog needs and only sets when it is asked for. The crash handler
+    // runs on whichever thread faulted and wants to say which that was.
+    DWORD sMainThreadId;
 
     // The watchdog, for HANGS.
     //
@@ -221,8 +269,20 @@ namespace
     {
         const DWORD code = info->ExceptionRecord->ExceptionCode;
 
-        printf("\nbfbb: CRASH -- exception 0x%08lx at %p\n",
-               (unsigned long)code, info->ExceptionRecord->ExceptionAddress);
+        HANDLE process = GetCurrentProcess();
+        SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
+        SymInitialize(process, NULL, TRUE);
+
+        const DWORD64 pc = (DWORD64)(uintptr_t)info->ExceptionRecord->ExceptionAddress;
+        printf("\nbfbb: CRASH -- exception 0x%08lx at %p  [%s+0x%llx]\n", (unsigned long)code,
+               info->ExceptionRecord->ExceptionAddress, ModuleName(process, pc),
+               (unsigned long long)ModuleOffset(process, pc));
+
+        // Which thread. A crash on a worker thread and one on the game's own
+        // are different bugs, and the stack alone does not always say which
+        // this was -- the main thread's is the one that ends in main().
+        printf("bfbb:   thread %lu%s\n", (unsigned long)GetCurrentThreadId(),
+               GetCurrentThreadId() == sMainThreadId ? " (the main thread)" : " (a worker)");
 
         if (code == EXCEPTION_ACCESS_VIOLATION)
         {
@@ -247,6 +307,8 @@ namespace
     {
         StartupBanner()
         {
+            sMainThreadId = GetCurrentThreadId();
+
             AddVectoredExceptionHandler(1, FirstChanceHandler);
             signal(SIGABRT, AbortHandler);
 
