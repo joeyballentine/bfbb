@@ -12,6 +12,7 @@
 
 #include "rw.h"
 #include "iWindow.h"
+#include "iSnapshot.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -278,6 +279,18 @@ RwCamera* RwCameraShowRaster(RwCamera* camera, void* pDev, RwUInt32 flags)
         fflush(stdout);
         exit(0);
     }
+
+    // Keep a copy of the frame, for the loading screen to stand on.
+    //
+    // Before the flip, because after it the back buffer's contents are the
+    // driver's business -- the swap effect is DISCARD -- and because this is the
+    // last moment the frame that was just drawn is still the frame buffer.
+    //
+    // It is here rather than at the scene change that wants it because by then
+    // it is far too late: zGameExit has already taken the level down, and the
+    // last frame of it exists nowhere but in the surface about to be presented.
+    // Off unless BFBB_LOADSNAP is set, and one blit when it is. See iSnapshot.h.
+    iSnapshotCapture();
 
     // **The flip waits for the display, whatever the caller asked for.**
     //

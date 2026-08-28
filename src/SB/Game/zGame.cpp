@@ -18,6 +18,10 @@
 
 #ifdef PLATFORM_PC
 #include <stdlib.h>
+
+// zGameTakeSnapShot is an empty function on the console with a live call site.
+// This is what fills it in. See iSnapshot.h.
+#include "iSnapshot.h"
 #endif
 
 #include "iDraw.h"
@@ -1212,8 +1216,22 @@ static void zGameUpdateMode()
     }
 }
 
+// Empty in the shipped GameCube code, and called anyway -- from
+// zGameScreenTransitionBegin, under an eGameWhereAmI marker of its own. The
+// Xbox release drew its loading screen over a still of the level being left
+// behind and this is where it took it; the console builds draw a texture asset
+// there instead, so the function had nothing left to do.
+//
+// The port can do what the Xbox did, so on PC it does. Latching is the whole of
+// the work: the frame has already been captured, at the last present before
+// zGameExit took the level down, and all that is needed now is to stop the
+// loading screen's own frames overwriting it. zGameScreenTransitionEnd lets it
+// go again.
 void zGameTakeSnapShot(RwCamera*)
 {
+#ifdef PLATFORM_PC
+    iSnapshotLatch();
+#endif
 }
 
 // The arms used to be the other way round, which fed 0.5s to the particle
@@ -1302,6 +1320,36 @@ F32 bgu1;
 F32 bgv1;
 eGameWhereAmI gGameWhereAmI;
 
+#ifdef PLATFORM_PC
+// What bgu2 has to be for each of the two backgrounds the port can draw.
+//
+// The console's asset is sampled from 0 to 1.333 across, which is the value
+// bgu2 is defined with above; nothing here changes that or claims to know why
+// the asset wants it. A captured frame is a texture of exactly the quad's
+// shape, so it wants the whole of it.
+//
+// Both are needed rather than just the second, because the two alternate within
+// a single run: a load with no frame behind it -- the first one, or any load
+// after a device reset emptied the surface -- still draws the asset.
+static const F32 kBgu2Asset = 1.333f;
+static const F32 kBgu2Snapshot = 1.0f;
+
+// And what the quad's vertex colour has to be for each.
+//
+// The colour modulates the texture, so the 0x60 the console uses darkens the
+// background asset to 37.5%. That is right for the asset -- it is a backdrop,
+// authored to be sat behind something -- and wrong for a still, which IS the
+// picture. The Xbox drew its undimmed, so the snapshot goes up at full
+// brightness and the asset keeps the tint it was authored for.
+//
+// The alpha comes along for consistency and changes nothing on its own: this
+// quad is drawn SRC ONE / DEST ZERO, a straight overwrite.
+static const U8 kBgTintAsset = 0x60;
+static const U8 kBgAlphaAsset = 0x80;
+static const U8 kBgTintSnapshot = 0xff;
+static const U8 kBgAlphaSnapshot = 0xff;
+#endif
+
 // 93.654%.  Everything outside the background-quad fill matches; inside it the
 // target stores vx[0..3] in strictly ascending offset order and never fills a
 // load-use gap, while our compiler interleaves the next vertex's stores between
@@ -1348,6 +1396,22 @@ void zGameScreenTransitionUpdate(F32 percentComplete, char* msg, U8* rgba)
         RwCameraBeginUpdate(sGameScreenTransCam);
 
         gGameWhereAmI = eGameWhere_TransitionRenderBackground;
+#ifdef PLATFORM_PC
+        // The level being left behind, if there is a still of it and the port
+        // was asked for one. NULL for every reason there is not: the feature is
+        // off, this is the first load and nothing has been drawn yet, or a
+        // device reset emptied the surface -- and then the asset below is drawn,
+        // exactly as the console draws it.
+        //
+        // Written so that the GameCube build preprocesses to the two lines it
+        // has always had: everything the port adds is inside the guard, and the
+        // asset lookup is left as the else of a test that is not compiled there.
+        tex = iSnapshotBackgroundTexture();
+        bgu2 = (tex != NULL) ? kBgu2Snapshot : kBgu2Asset;
+        bgr = bgg = bgb = (tex != NULL) ? kBgTintSnapshot : kBgTintAsset;
+        bga = (tex != NULL) ? kBgAlphaSnapshot : kBgAlphaAsset;
+        if (tex == NULL)
+#endif
         tex = (RwTexture*)xSTFindAsset(bgID, NULL);
         if ((tex != NULL) && (ras = (RwRaster*)tex->raster, ras != NULL))
         {
@@ -1462,6 +1526,12 @@ void zGameScreenTransitionEnd()
 {
     RwFrame* frame;
     gGameWhereAmI = eGameWhere_TransitionEnd;
+#ifdef PLATFORM_PC
+    // The other half of zGameTakeSnapShot's latch. The loading screen is done
+    // with the still, so let the next presented frames replace it -- the first
+    // of which is the level that has just finished loading.
+    iSnapshotRelease();
+#endif
     _rwFrameSyncDirty();
     if (DirectionalLight != NULL)
     {
