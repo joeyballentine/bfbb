@@ -80,6 +80,72 @@ void xScrFxUpdate(RwCamera* cam, F32 dt)
     xScrFxDistortionUpdate(dt);
 }
 
+#ifdef PLATFORM_PC
+// How strong the glow is, per scene.
+//
+// The Xbox does not run this effect at one strength: a function keyed on the
+// scene id (va 0x104380) writes a float that scales the composite, and the
+// draw turns it into the quad's vertex alpha -- `(int)(strength * 255)` at va
+// 0x172148, blended SRCALPHA. So the strength lives in the vertex colour, not
+// in a shader constant.
+//
+// Recovered by walking that function's branch tree for every id it compares
+// against. Most of the game is well below full: Bikini Bottom is a half, the
+// Poseidome and two of the Sand Mountain slides switch it off outright, and
+// only the default and one scene ask for all of it.
+struct zGlowScene
+{
+    U32 sceneID;
+    F32 strength;
+};
+
+static const zGlowScene sGlowScenes[] = {
+    { 'SM02', 0.00f },  { 'SM03', 0.00f },  { 'PG01', 0.00f },  { 'PG10', 0.00f },
+    { 'PG55', 0.00f },
+
+    { 'B201', 0.15f },  { 'BC01', 0.15f },  { 'BC02', 0.15f },  { 'BC04', 0.15f },
+    { 'BC05', 0.15f },  { 'HB00', 0.15f },  { 'PG12', 0.15f },  { 'SM01', 0.15f },
+    { 'SM04', 0.15f },
+
+    { 'B302', 0.30f },  { 'BB01', 0.30f },  { 'BB02', 0.30f },  { 'BB04', 0.30f },
+    { 'GL01', 0.30f },  { 'GL03', 0.30f },  { 'JF01', 0.30f },  { 'JF03', 0.30f },
+    { 'RB02', 0.30f },
+
+    { 'B101', 0.50f },  { 'DB01', 0.50f },  { 'DB04', 0.50f },  { 'GL02', 0.50f },
+    { 'HB01', 0.50f },  { 'HB08', 0.50f },  { 'JF04', 0.50f },  { 'MNU3', 0.50f },
+    { 'RB03', 0.50f },
+
+    { 'B301', 0.70f },  { 'B303', 0.70f },  { 'BC03', 0.70f },  { 'GY01', 0.70f },
+    { 'GY04', 0.70f },  { 'HB09', 0.70f },  { 'RB01', 0.70f },
+
+    { 'KF01', 0.80f },  { 'KF02', 0.80f },  { 'KF04', 0.80f },  { 'KF05', 0.80f },
+
+    { 'DB06', 1.00f },
+};
+
+// One for anything not in the table, which is what the Xbox's switch falls
+// through to.
+static F32 xScrFxGlowStrength()
+{
+    if (globals.sceneCur == NULL)
+    {
+        return 1.0f;
+    }
+
+    U32 id = globals.sceneCur->sceneID;
+
+    for (U32 i = 0; i < sizeof(sGlowScenes) / sizeof(sGlowScenes[0]); i++)
+    {
+        if (sGlowScenes[i].sceneID == id)
+        {
+            return sGlowScenes[i].strength;
+        }
+    }
+
+    return 1.0f;
+}
+#endif
+
 void xScrFxRender(RwCamera* cam)
 {
     iScrFxBegin();
@@ -89,7 +155,7 @@ void xScrFxRender(RwCamera* cam)
     // The Xbox's xScrFxRender calls its glow here, immediately after the
     // distortion and before the safe-area debug draw (va 0x152a10). Same place,
     // so the two composite in the order they did there.
-    iGlowRender(RwCameraGetCurrentCamera());
+    iGlowRender(RwCameraGetCurrentCamera(), xScrFxGlowStrength());
 #endif
 
     if (g_debugRenderSafeArea)

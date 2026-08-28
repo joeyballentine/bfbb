@@ -117,7 +117,7 @@ static bool makeTarget(GlowTarget* t, RwInt32 w, RwInt32 h)
 // `shader`. Every pass in the chain is this; only the target, the source and
 // the constants differ.
 static void drawPass(RwRaster* src, void* shader, F32 w, F32 h, RwBlendFunction srcBlend,
-                     RwBlendFunction dstBlend)
+                     RwBlendFunction dstBlend, U8 alpha = 0xff)
 {
     RwRenderStateSet(rwRENDERSTATETEXTURERASTER, src);
     RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
@@ -139,15 +139,24 @@ static void drawPass(RwRaster* src, void* shader, F32 w, F32 h, RwBlendFunction 
         F32 u = (i & 2) ? 1.0f : 0.0f;
         F32 v = (i & 1) ? 1.0f : 0.0f;
 
-        vx[i].x = u * w;
-        vx[i].y = v * h;
+        // Half a pixel left and up. D3D9 aligns a vertex at screen x with the
+        // CENTRE of pixel x, not its corner, so a screen-aligned quad drawn at
+        // 0..w samples half a texel off -- and it compounds down a chain like
+        // this one: measured at +0.5 texels per pass, which is half a screen
+        // pixel at the first and two at the composite, four or five all told.
+        //
+        // The Xbox does this too, at the head of its blur helper (va 0x171336
+        // pushes -0.5 twice). librw's im2d transform carries no half-pixel term
+        // of its own, so it has to be here.
+        vx[i].x = u * w - 0.5f;
+        vx[i].y = v * h - 0.5f;
         vx[i].z = z;
         vx[i].u = u;
         vx[i].v = v;
         vx[i].emissiveColor.red = 0xff;
         vx[i].emissiveColor.green = 0xff;
         vx[i].emissiveColor.blue = 0xff;
-        vx[i].emissiveColor.alpha = 0xff;
+        vx[i].emissiveColor.alpha = alpha;
     }
 
     rw::d3d::im2dOverridePS = shader;
@@ -232,11 +241,23 @@ static bool captureScreen()
     return true;
 }
 
-void iGlowRender(RwCamera* cam)
+void iGlowRender(RwCamera* cam, F32 strength)
 {
     if (!sEnabled || sFailed || cam == NULL || rw::d3d::d3ddevice == NULL)
     {
         return;
+    }
+
+    // Five scenes set this to zero, so an early return here is the effect
+    // behaving, not a shortcut.
+    if (strength <= 0.0f)
+    {
+        return;
+    }
+
+    if (strength > 1.0f)
+    {
+        strength = 1.0f;
     }
 
     if (sBrightShader == NULL)
@@ -298,7 +319,10 @@ void iGlowRender(RwCamera* cam)
     F32 w = frame != NULL ? (F32)frame->width : 640.0f;
     F32 h = frame != NULL ? (F32)frame->height : 480.0f;
 
-    drawPass(sQuarter.raster, NULL, w, h, rwBLENDSRCALPHA, rwBLENDONE);
+    // The strength rides in on the vertex alpha, which is where the Xbox puts
+    // it: the composite blends SRCALPHA, so this scales the whole glow.
+    drawPass(sQuarter.raster, NULL, w, h, rwBLENDSRCALPHA, rwBLENDONE,
+             (U8)(strength * 255.0f));
 
     // Put back what the rest of the frame expects; iScrFxEnd sets some of this
     // again but not the cull mode or the texture.
@@ -313,7 +337,7 @@ void iGlowRender(RwCamera* cam)
 #else
 
 // Every other backend, for the reason distort.cpp gives.
-void iGlowRender(RwCamera*)
+void iGlowRender(RwCamera*, F32)
 {
 }
 

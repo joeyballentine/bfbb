@@ -45,6 +45,11 @@
 // Draw the glow over the frame. Called from xScrFxDistortionRender's neighbour
 // in xScrFxRender, with the camera being rendered; its update is ended and
 // begun again inside, because the passes render into their own cameras.
-void iGlowRender(RwCamera* cam);
+//
+// `strength` is the scene's, 0 to 1. It becomes the composite quad's vertex
+// alpha, which is where the Xbox puts it -- `(int)(strength * 255)` at va
+// 0x172148, against a SRCALPHA blend. At zero nothing is drawn at all, which
+// is not an optimisation: five scenes ask for exactly that.
+void iGlowRender(RwCamera* cam, F32 strength);
 
 #endif

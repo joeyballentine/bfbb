@@ -242,8 +242,14 @@ void iDistortRender(RwCamera* cam, RwTexture* map, F32 amount, F32 width, F32 he
         F32 u = (i & 2) ? 1.0f : 0.0f;
         F32 v = (i & 1) ? 1.0f : 0.0f;
 
-        vx[i].x = u * width;
-        vx[i].y = v * height;
+        // Half a pixel left and up, the D3D9 rule: a vertex at screen x lines
+        // up with the CENTRE of pixel x, so without this the re-read samples
+        // half a texel off and softens the picture it is supposed to be
+        // passing through untouched. Measured in the glow, which runs four of
+        // these in a row and shows it plainly; this pass is 1:1 so it costs
+        // sharpness rather than position, but it is the same mistake.
+        vx[i].x = u * width - 0.5f;
+        vx[i].y = v * height - 0.5f;
         vx[i].z = z;
         vx[i].u = u;
         vx[i].v = v;
