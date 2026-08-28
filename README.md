@@ -1,13 +1,13 @@
 # Battle for Bikini Bottom, PC port (WIP)
 
 A native PC build of SpongeBob SquarePants: Battle for Bikini Bottom, compiled
-from decompiled game code. Not emulated, not a patch.
+from decompiled game code. This is not an emulator or wrapper.
 
-**It's unfinished.** It boots and plays, but there are still visible bugs and
-unfinished corners. There are no downloads. You build it yourself from your own
-copy of the game.
+**It's unfinished.** It boots and plays, but there are still bugs and unfinished parts. There are no downloads or releases. You build it yourself from your own copy of the game.
 
-This branch (`treedome`) is the port. It sits on `duplotron`, which is the
+That being said, I believe now it is in a state where it can be fully played through without any game breaking issues, but I'm not entirely sure.
+
+This branch (`treedome`) is the PC port. It sits on `duplotron`, which is the
 decompilation it compiles. Both are AI-driven experiments built on
 [bfbbdecomp/bfbb](https://github.com/bfbbdecomp/bfbb).
 
@@ -107,14 +107,11 @@ Not done: GL3 has no window backend, so this is Windows only. Beyond that it's
 lots of smaller things. Individual files carry their own notes about what's
 wrong and why, which are more useful than a list here.
 
-## Docs
-
-See [docs/](docs/). Start with `docs/PCPORT-HANDOFF.md` if you're picking up the
-port, or `docs/DUPLOTRON.md` for the decomp side.
-
 ## Credit
 
 The decompilation is the work of the
 [bfbbdecomp](https://github.com/bfbbdecomp/bfbb) project and its contributors.
 The renderer is [librw](https://github.com/aap/librw) by aap, through a
 [fork](https://github.com/joeyballentine/librw) with the changes this port needed.
+
+This would not be possible without their prior efforts.
