@@ -2,6 +2,8 @@
 
 #include "iFont.h"
 
+#include "iScreen.h"
+
 #include <rwcore.h>
 
 #include <stdio.h>
@@ -25,7 +27,8 @@ namespace
 
     stbtt_fontinfo sFont;
     S32 sLoaded;
-    F32 sScale = 1.0f;
+    S32 sUpscale;   // 0 is automatic; see iFontUpscale
+    F32 sPadding = 0.5f;
     S32 sFailed;
 
     // The atlas. One allocation, reused: the game builds four fonts at startup
@@ -39,6 +42,9 @@ namespace
     // cannot pull a neighbour's ink into the edge of a character. One pixel is
     // enough at 1:1 and this is drawn magnified, so it is two.
     const S32 kPadding = 2;
+
+    // The framebuffer the game's font atlases were authored against.
+    const S32 kRetailHeight = 480;
 
     void fontFail(const char* what, const char* detail)
     {
@@ -113,7 +119,12 @@ S32 iFontLoad(const char* path)
     }
 
     sLoaded = 1;
-    printf("bfbb: text rendered from %s\n", path);
+    // The settings as well as the path. A setting that is read but never
+    // reaches the pixels looks exactly like one that works, and this port has
+    // already shipped one of those -- text.font_spacing was missing from the
+    // settings table, so every value anyone tried was silently the default.
+    printf("bfbb: text rendered from %s (upscale %d, padding %.3f, inset %d px)\n", path,
+           (int)iFontUpscale(), (double)sPadding, (int)((F32)iFontUpscale() * sPadding + 0.5f));
     fflush(stdout);
     return TRUE;
 }
@@ -123,188 +134,108 @@ S32 iFontAvailable()
     return sLoaded;
 }
 
-void iFontSetScale(F32 scale)
+void iFontSetUpscale(S32 upscale)
 {
-    // A scale of zero or less would divide the cell to nothing. Refused
-    // rather than clamped, so a typo is reported instead of silently
-    // producing text nobody can read.
-    if (scale > 0.0f)
+    // Zero and below mean automatic. Above, clamped rather than refused: this
+    // cannot make the text WRONG, only blurrier or larger in memory, so a silly
+    // number is worth quietly correcting instead of stopping for.
+    if (upscale > 16)
     {
-        sScale = scale;
+        upscale = 16;
     }
-    else
+    if (upscale < 0)
     {
-        printf("bfbb: config: text.font_scale must be greater than zero; keeping %.3f\n",
-               (double)sScale);
-        fflush(stdout);
+        upscale = 0;
     }
+
+    sUpscale = upscale;
 }
 
-F32 iFontScale()
+S32 iFontUpscale()
 {
-    return sScale;
+    if (sUpscale > 0)
+    {
+        return sUpscale;
+    }
+
+    // **Automatic: as sharp as the screen, and no sharper.**
+    //
+    // The atlas is authored against a 480-line framebuffer and drawn magnified
+    // by however much taller the render size is, so that ratio IS the right
+    // multiplier -- it rasterises a glyph at roughly one atlas pixel per screen
+    // pixel. Below it the text is blurrier than the display can show; above it
+    // the extra pixels are thrown away by the filter and the letters read as
+    // crisper than everything around them, which is its own kind of wrong on a
+    // game whose art is a photograph of a sponge.
+    //
+    // At 640x480 this is 1, which is the console's own resolution and so exactly
+    // the softness the game shipped with.
+    //
+    // Read here rather than when the setting is stored, because that happens
+    // before the window is open and the render size is not final until it is.
+    S32 height = iScreenHeight();
+    if (height <= 0)
+    {
+        return 1;
+    }
+
+    S32 automatic = (height + kRetailHeight / 2) / kRetailHeight;
+
+    if (automatic < 1)
+    {
+        automatic = 1;
+    }
+    if (automatic > 16)
+    {
+        automatic = 16;
+    }
+
+    return automatic;
 }
 
-S32 iFontRasterize(const char* charset, S32 count, S32 pixelHeight, char refChar,
-                   F32 inkFraction, F32 baselineFraction, F32 scale, const U8** pixels,
-                   S32* width, S32* height, iFontGlyph* glyphs, F32* cellHeight,
-                   F32* baselineRow)
+void iFontSetPadding(F32 padding)
 {
-    if (!sLoaded || charset == NULL || glyphs == NULL || count <= 0 || pixelHeight <= 0)
+    // Negative would grow the glyph past the box the artwork had it in,
+    // which is a legitimate thing to want and cannot break anything: the
+    // metrics are still the game's, so only the ink moves.
+    sPadding = padding;
+}
+
+F32 iFontPadding()
+{
+    return sPadding;
+}
+
+S32 iFontRasterize(const char* charset, S32 count, S32 cellW, S32 cellH, const iFontCell* cells,
+                   S32 upscale, F32 padding, const U8** pixels, S32* width, S32* height,
+                   S32* slotStride, S32* perRow)
+{
+    if (!sLoaded || charset == NULL || cells == NULL || count <= 0 || cellW <= 0 || cellH <= 0)
     {
         return FALSE;
     }
 
-    const F32 pxscale = stbtt_ScaleForPixelHeight(&sFont, (float)pixelHeight);
-
-    int ascentI, descentI, lineGapI;
-    stbtt_GetFontVMetrics(&sFont, &ascentI, &descentI, &lineGapI);
-    const F32 ascent = ascentI * pxscale;
-    const F32 descent = descentI * pxscale; // negative, below the baseline
-
-    // **One cell and one baseline for the whole font, measured from the ink.**
-    //
-    // Not from the font's declared ascent and descent. Those describe a line
-    // box with room above and below the letters, and the game's atlas has no
-    // such room -- reset_font_spacing measures its cell from the artwork, so a
-    // capital fills the cell top to bottom. Measured the same way here, a
-    // substituted font sits at the size the game expects rather than inset
-    // inside a box the game knows nothing about.
-    S32 inkTop = 0;
-    S32 inkBottom = 0;
-    S32 haveInk = 0;
-
-    for (S32 i = 0; i < count; i++)
+    if (upscale < 1)
     {
-        int x0, y0, x1, y1;
-        stbtt_GetCodepointBitmapBox(&sFont, (S32)(U8)charset[i], pxscale, pxscale, &x0, &y0, &x1, &y1);
-
-        if (x1 <= x0 || y1 <= y0)
-        {
-            continue;
-        }
-
-        // stb measures y downward from the baseline, so y0 is negative above.
-        if (!haveInk || y0 < inkTop)
-        {
-            inkTop = y0;
-        }
-        if (!haveInk || y1 > inkBottom)
-        {
-            inkBottom = y1;
-        }
-        haveInk = 1;
+        upscale = 1;
     }
 
-    if (!haveInk)
+    // The cell, magnified. Nothing about the game's metrics changes -- this is
+    // the same 18x22 cell it always was, with more pixels in it.
+    const S32 slotW = cellW * upscale;
+    const S32 slotH = cellH * upscale;
+
+    S32 columns = 1;
+    while (columns * columns < count)
     {
-        fontFail("the font has none of the characters the game asks for", NULL);
-        return FALSE;
+        columns++;
     }
 
-    // **The cell comes from the atlas being replaced, when it can be measured.**
-    //
-    // What decides the apparent size is how much of the cell the ink fills: the
-    // drawn quad is always the whole cell, so ink over cell IS how big the text
-    // looks. Two rules were tried and both were wrong, because neither has
-    // anything to do with the white space an artist left around the capitals --
-    // the font's ink box made text a third too large, and its declared line box
-    // a few percent too large.
-    //
-    // So the caller measures its own atlas and passes the ratio, and the cell
-    // is padded until this font fills it the same way. The baseline is placed
-    // by the same measurement.
-    // The reference glyph, measured the same way the caller measured it in the
-    // atlas. inkTop/inkBottom above are the whole character set and are used
-    // only to keep anything from being clipped.
-    int refX0 = 0, refY0 = 0, refX1 = 0, refY1 = 0;
-    stbtt_GetCodepointBitmapBox(&sFont, (S32)(U8)refChar, pxscale, pxscale, &refX0, &refY0, &refX1,
-                                &refY1);
+    const S32 rows = (count + columns - 1) / columns;
 
-    const S32 refInk = refY1 - refY0;
-
-    S32 baseline = -inkTop;
-    S32 cell = inkBottom - inkTop;
-
-    if (inkFraction > 0.0f && inkFraction <= 1.0f && refInk > 0)
-    {
-        // The reference glyph must end up filling the same share of the cell it
-        // fills in the atlas, and sitting at the same height in it.
-        cell = (S32)((F32)refInk / inkFraction + 0.5f);
-
-        if (baselineFraction > 0.0f && baselineFraction <= 1.0f)
-        {
-            // Where the glyph's ink BOTTOM should land, minus how far that is
-            // below the baseline -- which for a capital is nothing.
-            baseline = (S32)((F32)cell * baselineFraction + 0.5f) - refY1;
-        }
-        else
-        {
-            baseline = -refY0;
-        }
-    }
-    else
-    {
-        // Nothing measured: the font's own declared line box, which is the
-        // right shape of thing even when it is not the right size.
-        baseline = (S32)(ascent + 0.5f);
-        if (-inkTop > baseline)
-        {
-            baseline = -inkTop;
-        }
-
-        S32 below = (S32)(-descent + 0.5f);
-        if (inkBottom > below)
-        {
-            below = inkBottom;
-        }
-        cell = baseline + below;
-    }
-
-    // Never clip: the ink has to fit above and below wherever the baseline
-    // ended up.
-    if (baseline < -inkTop)
-    {
-        baseline = -inkTop;
-    }
-    if (cell < baseline + inkBottom)
-    {
-        cell = baseline + inkBottom;
-    }
-
-    // The caller's nudge, for taste. Padding the cell shrinks the ink's share
-    // of it, and the baseline moves with it so the text does not drift.
-    if (scale > 0.0f && scale != 1.0f)
-    {
-        cell = (S32)((F32)cell / scale + 0.5f);
-        baseline = (S32)((F32)baseline / scale + 0.5f);
-    }
-
-    // Widest ink, so the slots are all the same and the layout is a grid.
-    S32 widest = 1;
-    for (S32 i = 0; i < count; i++)
-    {
-        int x0, y0, x1, y1;
-        stbtt_GetCodepointBitmapBox(&sFont, (S32)(U8)charset[i], pxscale, pxscale, &x0, &y0, &x1, &y1);
-        if (x1 - x0 > widest)
-        {
-            widest = x1 - x0;
-        }
-    }
-
-    const S32 slotW = widest + kPadding * 2;
-    const S32 slotH = cell + kPadding * 2;
-
-    S32 perRow = 1;
-    while (perRow * perRow < count)
-    {
-        perRow++;
-    }
-
-    const S32 rows = (count + perRow - 1) / perRow;
-
+    // Powers of two, which every backend is happiest with.
     S32 w = 1;
-    while (w < perRow * slotW)
+    while (w < columns * slotW)
     {
         w *= 2;
     }
@@ -329,52 +260,88 @@ S32 iFontRasterize(const char* charset, S32 count, S32 pixelHeight, char refChar
     }
 
     memset(sAtlas, 0, (size_t)needed);
-    sAtlasWidth = w;
-    sAtlasHeight = h;
 
-    const F32 iw = 1.0f / (F32)w;
-    const F32 ih = 1.0f / (F32)h;
+    S32 drawn = 0;
 
     for (S32 i = 0; i < count; i++)
     {
-        const S32 slotX = (i % perRow) * slotW + kPadding;
-        const S32 slotY = (i / perRow) * slotH + kPadding;
+        const iFontCell& cell = cells[i];
+
+        if (cell.w <= 0 || cell.h <= 0)
+        {
+            // No ink in the atlas either -- a space. Nothing to draw, and the
+            // game's own metrics already say so.
+            continue;
+        }
 
         // Latin-1: the game's tables are indexed by byte and carry accented
         // characters at 0xC0 and up, which is what those code points mean in
         // Unicode too.
         const S32 codepoint = (S32)(U8)charset[i];
 
-        int x0, y0, x1, y1;
-        stbtt_GetCodepointBitmapBox(&sFont, codepoint, pxscale, pxscale, &x0, &y0, &x1, &y1);
+        // The outline's own ink box at unit scale, so it can be stretched to
+        // exactly the box the atlas glyph occupied.
+        int ux0, uy0, ux1, uy1;
+        stbtt_GetCodepointBitmapBox(&sFont, codepoint, 1.0f, 1.0f, &ux0, &uy0, &ux1, &uy1);
 
-        const S32 gw = x1 - x0;
-        const S32 gh = y1 - y0;
-
-        if (gw > 0 && gh > 0)
+        if (ux1 <= ux0 || uy1 <= uy0)
         {
-            // Flush left in its slot, and on the shared baseline. Flush left
-            // because the game's advance IS the ink width -- it carries no side
-            // bearing, and adds letter spacing of its own instead.
-            const S32 dstY = slotY + baseline + y0;
-            stbtt_MakeCodepointBitmap(&sFont, sAtlas + dstY * w + slotX, gw, gh, w, pxscale, pxscale,
-                                      codepoint);
+            // The font has no such glyph. The cell stays empty, which draws
+            // nothing -- better than a wrong letter, and the layout is
+            // unaffected because the metrics are still the atlas's.
+            continue;
         }
 
-        // The full cell height, and the ink's width. Every glyph's rect is the
-        // same height for the same reason the game's is.
-        glyphs[i].u0 = (F32)slotX * iw;
-        glyphs[i].v0 = (F32)slotY * ih;
-        glyphs[i].u1 = (F32)(slotX + (gw > 0 ? gw : 0)) * iw;
-        glyphs[i].v1 = (F32)(slotY + cell) * ih;
-        glyphs[i].inkWidth = (F32)(gw > 0 ? gw : 0);
+        // Inset by the fringe find_bounds counted as ink. See iFont.h.
+        const S32 pad = (S32)(padding * (F32)upscale + 0.5f);
+
+        S32 targetW = cell.w * upscale - pad * 2;
+        S32 targetH = cell.h * upscale - pad * 2;
+
+        if (targetW < 1)
+        {
+            targetW = 1;
+        }
+        if (targetH < 1)
+        {
+            targetH = 1;
+        }
+
+        // Per glyph, and separately per axis: this is what makes a letter land
+        // in the same box the artwork had it in, whatever the outline's own
+        // proportions are. A face whose M is relatively wider than the atlas's
+        // is squeezed by that difference rather than pushing everything after
+        // it along the line.
+        const F32 scaleX = (F32)targetW / (F32)(ux1 - ux0);
+        const F32 scaleY = (F32)targetH / (F32)(uy1 - uy0);
+
+        const S32 slotX = (i % columns) * slotW;
+        const S32 slotY = (i / columns) * slotH;
+
+        const S32 dstX = slotX + cell.x * upscale + pad;
+        const S32 dstY = slotY + cell.y * upscale + pad;
+
+        if (dstX < 0 || dstY < 0 || dstX + targetW > w || dstY + targetH > h)
+        {
+            continue;
+        }
+
+        stbtt_MakeCodepointBitmap(&sFont, sAtlas + (size_t)dstY * w + dstX, targetW, targetH, w,
+                                  scaleX, scaleY, codepoint);
+        drawn++;
+    }
+
+    if (drawn == 0)
+    {
+        fontFail("the font has none of the characters the game asks for", NULL);
+        return FALSE;
     }
 
     *pixels = sAtlas;
     *width = w;
     *height = h;
-    *cellHeight = (F32)cell;
-    *baselineRow = (F32)baseline;
+    *slotStride = slotW;
+    *perRow = columns;
     return TRUE;
 }
 

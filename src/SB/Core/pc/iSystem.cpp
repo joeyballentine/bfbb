@@ -579,7 +579,8 @@ static void ApplyConfig()
     // tables during startup and asks iFont once per font as it goes.
     // Loading it is only reading the file; nothing is rasterised until the
     // game says which characters it wants.
-    iFontSetScale(iConfigGetFloat("text.font_scale", 1.0f));
+    iFontSetUpscale(iConfigGetInt("text.font_upscale", 0));
+    iFontSetPadding(iConfigGetFloat("text.font_padding", 0.5f));
     iFontLoad(iConfigGetString("text.font", ""));
 
     S32 glow = iConfigGetBool("xbox.glow", TRUE);

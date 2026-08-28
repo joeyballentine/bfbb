@@ -132,13 +132,27 @@ namespace
           "; No font ships with the port. The face the game itself used is\n"
           "; SpongeBoyTT1; any .ttf works. tools/getfont.py fetches one and prints\n"
           "; the line to paste here." },
-        { "text", "font_scale", "1.0",
-          "A nudge on the size of the font above, 1.0 for none. Smaller is smaller.\n"
+        { "text", "font_upscale", "0",
+          "How many times the game's own cell resolution to draw that font at,\n"
+          "; or 0 to match the render size.\n"
           ";\n"
-          "; The last few percent depend on which face you substitute -- a font's\n"
-          "; declared line box and a hand-authored atlas cell are different things by\n"
-          "; a few percent, and no rule gets every font right. 0.95 lines SpongeBoyTT1\n"
-          "; up with the game's own font. Ignored when no font is set." },
+          "; The atlas was authored against a 480-line framebuffer and is drawn\n"
+          "; magnified by however much taller the render size is, so 0 uses that\n"
+          "; ratio -- one atlas pixel per screen pixel, which at 640x480 is 1 and\n"
+          "; so exactly the softness the game shipped with. Below it the text is\n"
+          "; blurrier than the display can show; above it the letters read as\n"
+          "; crisper than the art around them.\n"
+          ";\n"
+          "; A sharpness setting, not a taste one: a glyph lands in exactly the box\n"
+          "; the artwork had it in whatever this is, so it cannot move anything." },
+        { "text", "font_padding", "0.5",
+          "How far to inset a glyph inside that box, in the game's own atlas\n"
+          "; pixels.\n"
+          ";\n"
+          "; The box is measured by testing for any non-zero alpha, so it includes\n"
+          "; the whole anti-aliased fringe and the original letter's solid body stops\n"
+          "; short of it. An outline drawn to fill the box exactly reads as too\n"
+          "; heavy. Larger is smaller letters; negative grows them past the box." },
         { "text", "platform_wording", "on",
           "Rewrite the Xbox wording in the game's text -- dashboard, memory card\n"
           "; slots -- as it loads. The files on disk are never touched." },
