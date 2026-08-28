@@ -36,3 +36,32 @@ RwBool RwRasterDestroy(RwRaster* raster)
     asRaster(raster)->destroy();
     return TRUE;
 }
+
+// Lock and unlock, which nothing in the game needed until a movie did.
+//
+// RenderWare hands back a pointer to the raster's pixels and takes it away
+// again on unlock, and librw's Raster does the same thing behind the same two
+// calls. The lock MODE constants are the part worth checking rather than
+// assuming, and layout_stream.cpp asserts them: rwRASTERLOCKWRITE is
+// Raster::LOCKWRITE, and so on, so the flags pass straight through.
+//
+// The level argument is the mipmap level. RenderWare takes a RwUInt8 and librw
+// an int32; every caller passes 0.
+RwUInt8* RwRasterLock(RwRaster* raster, RwUInt8 level, RwInt32 lockMode)
+{
+    if (raster == NULL)
+    {
+        return NULL;
+    }
+    return asRaster(raster)->lock((rw::int32)level, (rw::int32)lockMode);
+}
+
+RwRaster* RwRasterUnlock(RwRaster* raster)
+{
+    if (raster == NULL)
+    {
+        return NULL;
+    }
+    asRaster(raster)->unlock(0);
+    return raster;
+}

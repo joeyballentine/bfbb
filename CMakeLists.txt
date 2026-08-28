@@ -119,6 +119,51 @@ else()
 endif()
 set_property(CACHE BFBB_AUDIO_BACKEND PROPERTY STRINGS win32 null)
 
+# --- movie playback ----------------------------------------------------------
+#
+# Two backends again, for the same reason as audio and input: what decodes a
+# movie is a host question. The port's movies are the Xbox release's .xmv --
+# WMV2 video in an XMV container -- and the only sane way to decode WMV2 is to
+# hand it to something that already does.
+#
+# FFmpeg is OPTIONAL. Not finding it is a supported configuration rather than a
+# failure: the null decoder is built instead and movies are reported to the game
+# as having run to the end, which is what the port did before any of this.
+find_path(FFMPEG_INCLUDE_DIR libavcodec/avcodec.h)
+find_library(FFMPEG_AVCODEC_LIBRARY avcodec)
+find_library(FFMPEG_AVFORMAT_LIBRARY avformat)
+find_library(FFMPEG_AVUTIL_LIBRARY avutil)
+find_library(FFMPEG_SWSCALE_LIBRARY swscale)
+find_library(FFMPEG_SWRESAMPLE_LIBRARY swresample)
+
+if(FFMPEG_INCLUDE_DIR AND FFMPEG_AVCODEC_LIBRARY AND FFMPEG_AVFORMAT_LIBRARY
+   AND FFMPEG_AVUTIL_LIBRARY AND FFMPEG_SWSCALE_LIBRARY AND FFMPEG_SWRESAMPLE_LIBRARY)
+  set(FMV_SOURCES ${PC_DIR}/iFMVDecoderFFmpeg.cpp)
+  set(FMV_LIBRARIES
+    ${FFMPEG_AVFORMAT_LIBRARY}
+    ${FFMPEG_AVCODEC_LIBRARY}
+    ${FFMPEG_SWSCALE_LIBRARY}
+    ${FFMPEG_SWRESAMPLE_LIBRARY}
+    ${FFMPEG_AVUTIL_LIBRARY}
+  )
+  set(FMV_INCLUDES ${FFMPEG_INCLUDE_DIR})
+  message(STATUS "FMV decoder: ffmpeg (${FFMPEG_INCLUDE_DIR})")
+else()
+  set(FMV_SOURCES ${PC_DIR}/iFMVDecoderNull.cpp)
+  set(FMV_LIBRARIES)
+  set(FMV_INCLUDES)
+  message(STATUS "FMV decoder: none (FFmpeg not found; movies will be skipped)")
+endif()
+
+# The movie's own audio output, which is deliberately not the game's mixer --
+# see iFMVAudio.h. waveOut needs winmm.
+if(WIN32)
+  list(APPEND FMV_SOURCES ${PC_DIR}/iFMVAudioWin32.cpp)
+  list(APPEND FMV_LIBRARIES winmm)
+else()
+  list(APPEND FMV_SOURCES ${PC_DIR}/iFMVAudioNull.cpp)
+endif()
+
 set(AUDIO_DEFINES)
 if(BFBB_AUDIO_BACKEND STREQUAL "null")
   set(AUDIO_SOURCES ${PC_DIR}/iSndHostNull.cpp)
@@ -378,6 +423,7 @@ add_library(bfbb_platform STATIC
   ${INPUT_SOURCES}
   ${AUDIO_SOURCES}
   ${HOST_SOURCES}
+  ${FMV_SOURCES}
 )
 
 # NOT just for the include path: this is what gives bfbb_platform the backend
@@ -392,6 +438,13 @@ add_library(bfbb_platform STATIC
 # everywhere that touches it. Same size, so nothing failed to link and nothing
 # asserted -- it would have surfaced as wrong colours, or worse.
 target_link_libraries(bfbb_platform PUBLIC bfbb_rw)
+
+# The movie decoder and its audio device. PRIVATE: nothing above bfbb_platform
+# includes an FFmpeg header, and iFMV.cpp is the only caller of either seam.
+target_link_libraries(bfbb_platform PRIVATE ${FMV_LIBRARIES})
+if(FMV_INCLUDES)
+  target_include_directories(bfbb_platform PRIVATE ${FMV_INCLUDES})
+endif()
 
 # compat/ shadows <math.h>, <string.h> and <cmath> to add the CodeWarrior
 # extensions the game's sources use, chaining to the system headers with
@@ -472,6 +525,22 @@ endif()
 
 add_executable(bfbb ${BFBB_EXE_SOURCES})
 target_link_libraries(bfbb PRIVATE bfbb_game bfbb_platform bfbb_rw)
+
+# The movie decoder's DLLs, beside the executable.
+#
+# Copied rather than left to the PATH because the port is run from its build
+# directory far more often than it is installed, and a missing DLL does not fail
+# at build time -- it fails when someone starts the game, with a dialog that
+# names a file rather than a reason.
+if(WIN32 AND FMV_INCLUDES)
+  file(GLOB FMV_RUNTIME_DLLS "${FFMPEG_INCLUDE_DIR}/../bin/*.dll")
+  if(FMV_RUNTIME_DLLS)
+    add_custom_command(TARGET bfbb POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${FMV_RUNTIME_DLLS} $<TARGET_FILE_DIR:bfbb>
+      COMMENT "Staging the movie decoder's DLLs"
+    )
+  endif()
+endif()
 target_compile_options(bfbb PRIVATE -Wno-everything)
 
 if(WIN32)

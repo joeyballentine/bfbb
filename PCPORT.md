@@ -79,7 +79,7 @@ already exists and is already the boundary the game code respects.
 | audio | `iSnd` | SDL_audio / OpenAL / miniaudio |
 | files | `iFile` `isavegame` | host filesystem; saves become files on disk |
 | rendering | `iModel` `iDraw` `iLight` `iEnv` `iFX` `iScrFX` `iMorph` `iParMgr` `iCutscene` | **the bulk of the work**, all of it via librw |
-| video | `iFMV` | re-encoded FMVs, or stub |
+| video | `iFMV` | FFmpeg (optional); the Xbox `.xmv` play directly |
 | cert | `iTRC` | Nintendo TRC compliance; almost entirely stubbable |
 | GC-only | `ngcrad3d` | GameCube radiosity; no PC counterpart, drop or reimplement |
 

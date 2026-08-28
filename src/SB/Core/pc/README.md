@@ -154,16 +154,17 @@ up on a D3D9 device. See LINKING.md.
 | `iCutscene`, `iAnimSKB` | **done** | ported, not copied; see the notes in CMakeLists.txt |
 | `iDraw` | **done** | `iDrawSetFBMSK` forwards to a `COLORWRITEMASK` render state added to the librw fork (`D3DRS_COLORWRITEENABLE` on D3D9). It had been a no-op, which made the depth-priming first pass at four call sites paint an opaque copy of itself; iDraw.cpp keeps that reasoning, because it is what the implementation had to satisfy |
 | `iFX` (1 fn) | **done** | `iFXanimUVCreatePipe` returns the texture-coordinate-transform pipeline added to the librw fork, with its own render in front of librw's to read the four `xFXanimUV*` globals into the matrix at draw time — the same shape as `RxGameCubeAllInOneSetRenderCallBack` on the console. D3D9 applies it in a vertex shader variant; GL3 has no shader for it yet and answers NULL, which xFX.cpp:883 handles by leaving the surface unanimated |
-| `iFMV` (1 fn) | **refusal, and will not be ported** | Bink is proprietary. Movies return "ran to the end" immediately so the game advances past them. The plan of record is ffmpeg ahead of time plus a different player; the file lists what that needs |
+| `iFMV` (1 fn) | **ported, not from `gc/`** | `gc/iFMV.cpp` decodes Bink and never will here -- but the port's assets are the Xbox release's `.xmv`, so there is no Bink file to decode. WMV2 video and IMA ADPCM audio, through FFmpeg behind `iFMVDecoder.h`, with the movie's own audio device behind `iFMVAudio.h`. Both optional: without a decoder movies are reported as having run to the end, exactly as before |
 | `ngcrad3d` | not ported | GameCube radiosity; no host counterpart |
 
 **All eleven are done.** Seven were byte-identical copies of their `gc` counterparts,
 which is the finding PORTING.md is built around: most of this layer is not
 GameCube code, it is RenderWare calls and game logic that happen to live in the
 platform directory. Two needed one hunk each (`iModel`, `iScrFX`), one was
-rewritten against the librw fork rather than copied (`iFX`), and one is a
-deliberate refusal whose file says what is lost and what closing it costs
-(`iFMV`). `iDraw` is implemented but lossy.
+rewritten against the librw fork rather than copied (`iFX`), and one was written
+from scratch rather than ported at all (`iFMV`): its `gc` counterpart decodes
+Bink, and the port's assets are the Xbox release's `.xmv`, so there was nothing
+to carry across. `iDraw` is implemented but lossy.
 
 **This table has been wrong before.** It said "header only" for nine interfaces
 that were already implemented, because four rounds of porting updated the code

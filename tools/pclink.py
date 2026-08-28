@@ -107,8 +107,29 @@ def demangled_name(sym):
     return sym.lstrip("_?")
 
 
+# Symbols that belong to a library the port links against rather than to the
+# port. This tool link-checks the port's OWN objects, so an external import is
+# unresolved here and resolved in the real build -- counting it as missing game
+# code would be wrong twice over: the symbol is not the game's and it is not
+# missing.
+#
+# FFmpeg is the movie decoder (optional -- see iFMVDecoder.h), and winmm is what
+# the movie's own audio device is written against.
+EXTERNAL_PREFIXES = (
+    "av_",
+    "avcodec_",
+    "avformat_",
+    "avio_",
+    "swr_",
+    "sws_",
+    "waveOut",
+)
+
+
 def classify(sym):
     name = demangled_name(sym)
+    if name.startswith(EXTERNAL_PREFIXES):
+        return ("external", name)
     for mod in UNPORTED_MODULES:
         if name.startswith(mod) or mod in sym:
             return ("platform", MODULE_ALIASES.get(mod, mod))
@@ -183,25 +204,33 @@ def main():
             print(f"  {d}")
         print()
 
-    groups = {"platform": {}, "renderware": [], "game": []}
+    groups = {"platform": {}, "renderware": [], "game": [], "external": []}
     for sym in undefined:
         kind, key = classify(sym)
         if kind == "platform":
             groups["platform"].setdefault(key, []).append(sym)
         elif kind == "renderware":
             groups["renderware"].append(sym)
+        elif kind == "external":
+            groups["external"].append(sym)
         else:
             groups["game"].append(sym)
 
     platform_total = sum(len(v) for v in groups["platform"].values())
 
-    print(f"unresolved symbols: {len(undefined)}")
+    # The headline is what the PORT still owes, which is not the same as what
+    # this link left undefined: symbols belonging to a linked library resolve in
+    # the real build and are reported separately below. Counting them here would
+    # make the gate red for a dependency working correctly.
+    owed = len(undefined) - len(groups["external"])
+    print(f"unresolved symbols: {owed}")
     print()
     print(f"  platform modules not yet ported   {platform_total:3d}")
     for mod in sorted(groups["platform"], key=lambda m: -len(groups["platform"][m])):
         print(f"      {mod:<12} {len(groups['platform'][mod]):3d}")
     print(f"  RenderWare the shim lacks         {len(groups['renderware']):3d}")
     print(f"  game code                         {len(groups['game']):3d}")
+    print(f"  external libraries (linked)       {len(groups['external']):3d}")
 
     if args.list:
         for title, items in (

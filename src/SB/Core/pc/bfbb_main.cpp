@@ -29,6 +29,11 @@
 #include <windows.h>
 #include <dbghelp.h>
 
+// Named in the startup banner, so that a build says which movie decoder it
+// actually has rather than the reader guessing.
+#include "iFMVAudio.h"
+#include "iFMVDecoder.h"
+
 namespace
 {
     // A crash handler, because the port is going to crash for a while yet and
@@ -256,12 +261,14 @@ namespace
             SetUnhandledExceptionFilter(CrashHandler);
             setvbuf(stdout, NULL, _IONBF, 0);
             setvbuf(stderr, NULL, _IONBF, 0);
-            // iFX stopped being a refusal when the animated-UV pipeline went in;
-            // iFMV is still one and is meant to stay one. A banner that names a
-            // gap which has since been filled is worse than no banner, because
-            // it is the first thing anyone reads when a texture does not move.
-            printf("bfbb: PC port, D3D9. iFMV is a refusal rather than a port --\n");
-            printf("bfbb: movies are skipped. See src/SB/Core/pc/README.md.\n");
+            // A banner that names a gap which has since been filled is worse
+            // than no banner, because it is the first thing anyone reads when
+            // something does not work. iFX stopped being a refusal when the
+            // animated-UV pipeline went in, and iFMV stopped being one when the
+            // movie decoder did -- so this says which decoder is actually
+            // linked rather than asserting there is none.
+            printf("bfbb: PC port, D3D9. Movie decoder: %s, movie audio: %s.\n",
+                   iFMVDecoderName(), iFMVAudioName());
             if (getenv("BFBB_TEST_CRASH")) { *(volatile int*)0 = 1; }
         }
     };
