@@ -153,13 +153,20 @@ void iPadHostWin32ConvertStick(S16 rawX, S16 rawY, S32 deadzone, F32* outX, F32*
 //     GameCube Y -> XPAD_BUTTON_SQUARE
 //
 // The shoulders are where the two controllers genuinely differ. The GameCube
-// has three -- L, R and Z -- and the game wants four, so iPad.cpp there uses Z
-// as a modifier: L alone is L1, Z+L is L2. An Xbox pad has four already, so it
-// needs no modifier and nothing here synthesises XPAD_BUTTON_Z. Nothing in the
-// game reads that bit; it exists only as the modifier's own echo.
+// has three -- L, R and Z -- and the game wants four, so gc/iPad.cpp uses Z as
+// a modifier: L alone is L1, Z+L is L2. Holding Z also sets XPAD_BUTTON_Z in
+// its own right, and that bit is not merely the modifier's echo -- zHud.cpp
+// shows the HUD on it and zCamera.cpp toggles the near camera with it. A
+// mapping that never sets it leaves both of those dead.
 //
-//     LT -> L1    LB -> L2
-//     RT -> R1    RB -> R2
+// So the triggers stand in for the GameCube's analog L and R, and RB is Z:
+//
+//     LT -> L1        RB + LT -> L2
+//     RT -> R1        RB + RT -> R2
+//     RB -> Z
+//
+// LB goes unused. The GameCube has no fourth shoulder and every bit the game
+// reads is reachable without one.
 
 // Named rather than static, for the same reason as the stick conversion.
 U32 iPadHostWin32ConvertButtons(const XINPUT_GAMEPAD& gp)
@@ -179,14 +186,23 @@ U32 iPadHostWin32ConvertButtons(const XINPUT_GAMEPAD& gp)
     if (gp.wButtons & XINPUT_GAMEPAD_X) on |= XPAD_BUTTON_O;
     if (gp.wButtons & XINPUT_GAMEPAD_Y) on |= XPAD_BUTTON_SQUARE;
 
-    if (gp.wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER) on |= XPAD_BUTTON_L2;
-    if (gp.wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER) on |= XPAD_BUTTON_R2;
-
     // The triggers are analog and the game's buttons are not, so they click at
     // a threshold the way the GameCube's do -- gc/iPad.cpp uses 0x18 out of the
     // same 0..255 range for exactly this.
-    if (gp.bLeftTrigger >= XINPUT_GAMEPAD_TRIGGER_THRESHOLD) on |= XPAD_BUTTON_L1;
-    if (gp.bRightTrigger >= XINPUT_GAMEPAD_TRIGGER_THRESHOLD) on |= XPAD_BUTTON_R1;
+    bool left = gp.bLeftTrigger >= XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
+    bool right = gp.bRightTrigger >= XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
+
+    if (gp.wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER)
+    {
+        on |= XPAD_BUTTON_Z;
+        if (left) on |= XPAD_BUTTON_L2;
+        if (right) on |= XPAD_BUTTON_R2;
+    }
+    else
+    {
+        if (left) on |= XPAD_BUTTON_L1;
+        if (right) on |= XPAD_BUTTON_R1;
+    }
 
     return on;
 }
@@ -202,7 +218,7 @@ U32 iPadHostWin32ConvertButtons(const XINPUT_GAMEPAD& gp)
 //     Space         GameCube A        LCtrl       GameCube B
 //     E             GameCube X        Q           GameCube Y
 //     Z / X         L1 / L2           C / V       R1 / R2
-//     Backspace     select
+//     F             GameCube Z        Backspace   select
 //
 // GetActiveWindow rather than a window handle: it reports the active window of
 // the CALLING THREAD's queue, so it is non-null exactly when one of our own
@@ -266,6 +282,7 @@ static void PollKeyboard(iPadHostState* s)
     if (KeyDown('X')) on |= XPAD_BUTTON_L2;
     if (KeyDown('C')) on |= XPAD_BUTTON_R1;
     if (KeyDown('V')) on |= XPAD_BUTTON_R2;
+    if (KeyDown('F')) on |= XPAD_BUTTON_Z;
 
     s->buttons = on;
 

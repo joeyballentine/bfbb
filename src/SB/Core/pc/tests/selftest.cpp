@@ -352,12 +352,8 @@ static void test_pad_win32_buttons()
     check(iPadHostWin32ConvertButtons(gp) == (TEST_PAD_UP | TEST_PAD_LEFT),
           "two d-pad directions come through together");
 
-    // Shoulders: the bumpers are the second pair, the triggers the first, and
-    // the triggers only click past the threshold.
-    gp.wButtons = XINPUT_GAMEPAD_LEFT_SHOULDER | XINPUT_GAMEPAD_RIGHT_SHOULDER;
-    check(iPadHostWin32ConvertButtons(gp) == (TEST_PAD_L2 | TEST_PAD_R2),
-          "the bumpers are L2 and R2");
-
+    // Shoulders: the triggers stand in for the GameCube's analog L and R, and
+    // click at the same threshold those do.
     gp.wButtons = 0;
     gp.bLeftTrigger = XINPUT_GAMEPAD_TRIGGER_THRESHOLD - 1;
     gp.bRightTrigger = XINPUT_GAMEPAD_TRIGGER_THRESHOLD - 1;
@@ -368,13 +364,32 @@ static void test_pad_win32_buttons()
     check(iPadHostWin32ConvertButtons(gp) == (TEST_PAD_L1 | TEST_PAD_R1),
           "the triggers are L1 and R1 once past it");
 
-    // Nothing synthesises the GameCube's Z. It exists on that console only to
-    // reach L2 and R2, and an Xbox pad reaches them directly.
-    gp.wButtons = 0xFFFF;
+    // RB is the GameCube's Z. zHud.cpp shows the HUD on that bit and zCamera.cpp
+    // toggles the near camera with it, so pressing it alone has to produce it
+    // alone -- anything else riding along would fire an action with the HUD.
+    gp.wButtons = XINPUT_GAMEPAD_RIGHT_SHOULDER;
+    gp.bLeftTrigger = 0;
+    gp.bRightTrigger = 0;
+    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_Z, "RB alone is the GameCube's Z");
+
+    // Held, it promotes the triggers the way Z does on the GameCube, and goes on
+    // reporting itself while it does.
     gp.bLeftTrigger = 255;
     gp.bRightTrigger = 255;
-    check((iPadHostWin32ConvertButtons(gp) & TEST_PAD_Z) == 0,
-          "no combination produces the GameCube's Z modifier");
+    U32 modified = iPadHostWin32ConvertButtons(gp);
+    check(modified == (TEST_PAD_Z | TEST_PAD_L2 | TEST_PAD_R2),
+          "Z held turns the triggers into L2 and R2");
+
+    // The promotion has to replace L1 and R1, not add to them: on the GameCube
+    // one button reads as one or the other, and menu code in zUI.cpp tests for
+    // each separately, so reporting both would give it a button nobody pressed.
+    check((modified & (TEST_PAD_L1 | TEST_PAD_R1)) == 0, "and stops reporting L1 and R1");
+
+    // LB is unused. The GameCube has no fourth shoulder.
+    gp.wButtons = XINPUT_GAMEPAD_LEFT_SHOULDER;
+    gp.bLeftTrigger = 0;
+    gp.bRightTrigger = 0;
+    check(iPadHostWin32ConvertButtons(gp) == 0, "LB maps to nothing");
 }
 #endif
 
