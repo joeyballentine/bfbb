@@ -38,6 +38,15 @@ them for real, so they were recovered from that build rather than invented.
 - **The loading screen still.** `zGameTakeSnapShot` is empty on GameCube. On
   Xbox it grabbed the frame that the loading screen bubbles rise over. Set
   `BFBB_LOADSNAP`.
+- **Cave reverb** in the Mermalair and the caves, which only the Xbox release
+  has. The game side was never missing: `zSceneInitEnvironmentalSoundEffect`
+  already picks the cave effect for nine scenes and `xSnd` forwards it. What is
+  empty, on GameCube as well, is `iSndSetEnvironmentalEffect`, which is why
+  neither console has any of it. The Xbox's reverb itself is DSP microcode that
+  isn't on the disc and has never been disassembled, so it can't be copied. Its
+  twelve I3DL2 parameters were read out of the Xbox binary and fed to a reverb
+  built on Microsoft's published I3DL2 design instead. The settings are the
+  Xbox's, the implementation is not.
 
 One retail bug is fixed rather than reproduced:
 
