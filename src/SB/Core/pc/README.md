@@ -27,11 +27,6 @@ Everything below is off unless set, and each costs a load per frame when it is.
                         backend produced the bit or the game ignored it. Those
                         need different fixes.
 
-    BFBB_TALK           why R1 next to a villager did or did not start a
-                        conversation: the three conditions of the gate in
-                        zNPCGoalVillager.cpp, and whether the talk goal was
-                        pushed. Silent until the player presses R1.
-
     BFBB_SND=<n>        the first n sounds that reach the mixer: asset id,
                         rate, channels, sample count and whether the bytes were
                         found. An inaudible sound has failed at one of four
@@ -83,16 +78,6 @@ Everything below is off unless set, and each costs a load per frame when it is.
                         texture that arrives on screen as a flat colour and one
                         that was never bound look identical, and asking what is
                         in the surface separates them.
-
-    BFBB_UI             what the UI is doing, in three parts: every UI entity as
-                        the scene builds it with the links it carries, the
-                        show/hide events as they arrive, and twice a second the
-                        entities that are visible IN DRAW ORDER with their
-                        texture, rectangle and z. The draw-order list is the one
-                        that matters -- 2D UI has no depth, so what is on top is
-                        decided by the sort in zUIRenderAll, and an element that
-                        is missing is usually an element something later painted
-                        over.
 
     BFBB_WATCHDOG=<n>   every n seconds, print the main thread's stack. For
                         HANGS -- a crash announces itself and a hang does not.
