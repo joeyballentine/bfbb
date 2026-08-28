@@ -2,14 +2,14 @@
 
 ## Where things stand
 
-The port simulates at a fixed 1/60 s step (`zGame.cpp`, the accumulator around
-the update block) and presents whenever the display is ready. That is not an end
-state, it is a way of staying correct while the list below is open. This
-document is that list.
+The port runs at 60 fps: `iWindowPaceFrame` in `iWindowWin32.cpp` sleeps to a
+sixtieth-of-a-second deadline after each present, and the flip waits on the
+display as well. `dt` is the real frame time, so at 60 it is the sixtieth of a
+second everything below assumes. That is not an end state, it is a way of
+staying correct while the list below is open. This document is that list.
 
-Uncapping was tried and rolled back. With `dt` set to the real frame time,
-gameplay ran at 1700-3200 fps (median 1732, over 64 seconds), putting `dt` near
-0.3 ms. Anything assuming a sixtieth of a second is then wrong by a factor of
+Lifting the cap was tried and rolled back. Uncapped, gameplay ran at 1700-3200
+fps (median 1732, over 64 seconds), putting `dt` near 0.3 ms. Anything assuming a sixtieth of a second is then wrong by a factor of
 fifty, not the factor of four a 240 Hz display suggests. Three systems were
 visibly broken: the camera, pickups, and particles. All three are explained
 below.
@@ -177,9 +177,9 @@ What separates 1 from 2 is whether the value survives the frame. If it is reset
 at the top of the function, or consumed and discarded, it is integrating nothing
 and `dt` does not belong in it.
 
-## One thing the fixed step is not buying
+## One thing the cap is not for
 
-`zGame.cpp:579` substitutes 1/60 for any frame measured under ten microseconds.
+`zGame.cpp` substitutes 1/60 for any frame measured under ten microseconds.
 That is above 100,000 fps and was never reached in testing, so it is not the
 cause of anything observed. Earlier notes in this repo blamed the spinning
 pickups on it. That was wrong. The real cause is in the pickups section above.

@@ -9,8 +9,8 @@
   them record being wrong, which is deliberate.
 - [../src/SB/Core/pc/README.md](../src/SB/Core/pc/README.md) covers the platform
   layer interface by interface, plus the `BFBB_*` switches.
-- [UNCAPPED.md](UNCAPPED.md) is why the simulation runs at a fixed step, and the
-  audit of what would have to change to let the frame rate go free.
+- [UNCAPPED.md](UNCAPPED.md) is why the frame rate is capped at 60, and the
+  audit of what would have to change to let it go free.
 - [RESOLUTION.md](RESOLUTION.md) is the same audit for rendering above 640x480:
   what the virtual screen already gives you, and the camera rasters that have to
   move together.
