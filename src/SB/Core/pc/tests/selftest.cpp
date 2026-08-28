@@ -21,6 +21,7 @@
 #include "xpkrsvc.h"
 #include "xhipio.h"
 #include "iSndHost.h"
+#include "iSndReverb.h"
 #include "xSnd.h"
 #include "iMath.h"
 #include "iMemMgr.h"
@@ -1090,6 +1091,300 @@ static void test_snd_mixer()
 }
 #endif
 
+// The Xbox release's cave reverb, as iSndSetEnvironmentalEffect holds it. The
+// numbers themselves are checked against the disassembly they came from, not
+// here; what is under test below is that the reverb driven by them does what
+// they describe.
+static iSndHostReverb reverb_cave()
+{
+    iSndHostReverb p;
+
+    p.room = -1000;
+    p.room_hf = 0;
+    p.room_rolloff_factor = 0.0f;
+    p.decay_time = 1.65f;
+    p.decay_hf_ratio = 1.5f;
+    p.reflections = -1363;
+    p.reflections_delay = 0.008f;
+    p.reverb = -1153;
+    p.reverb_delay = 0.012f;
+    p.diffusion = 100.0f;
+    p.density = 100.0f;
+    p.hf_reference = 5000.0f;
+
+    return p;
+}
+
+static U32 reverb_seed;
+
+static float reverb_noise()
+{
+    reverb_seed = reverb_seed * 1664525u + 1013904223u;
+    return (float)((reverb_seed >> 9) & 0x7FFFFF) / 4194304.0f - 1.0f;
+}
+
+// Drives an impulse through the reverb and returns the time, in seconds, by
+// which its envelope has fallen 60 dB below its peak -- which is the definition
+// of RT60, and so the thing decay_time is supposed to set. Resolved to the
+// 50 ms block the envelope is measured over.
+static float reverb_rt60(const iSndHostReverb* p, U32 rate)
+{
+    const U32 kFrames = 2400;
+    const U32 kBlocks = 120;
+    static float b[2 * 2400];
+    static float rms[120];
+
+    iSndReverbExit();
+    iSndReverbInit(rate);
+    iSndReverbSet(p);
+
+    // The fade-in advances on processed frames, so silence is what moves it.
+    // Measuring the tail through a ramp would stretch the answer.
+    memset(b, 0, sizeof(b));
+    for (U32 i = 0; i < 3; i++)
+    {
+        iSndReverbProcess(b, kFrames);
+    }
+
+    for (U32 blk = 0; blk < kBlocks; blk++)
+    {
+        memset(b, 0, sizeof(b));
+        if (blk == 0)
+        {
+            b[0] = 1.0f;
+            b[1] = 1.0f;
+        }
+
+        iSndReverbProcess(b, kFrames);
+
+        double sum = 0.0;
+        for (U32 n = 0; n < kFrames; n++)
+        {
+            // Frame zero is the impulse itself, which is dry and would swamp
+            // the tail it is supposed to be measured against.
+            if (blk == 0 && n == 0)
+            {
+                continue;
+            }
+            sum += (double)b[n * 2] * (double)b[n * 2];
+        }
+
+        rms[blk] = (float)sqrt(sum / (double)kFrames);
+    }
+
+    // The peak is in the build-up, which is over well inside 200 ms.
+    float peak = 0.0f;
+    for (U32 blk = 0; blk < 4; blk++)
+    {
+        if (rms[blk] > peak)
+        {
+            peak = rms[blk];
+        }
+    }
+
+    if (peak <= 0.0f)
+    {
+        return -1.0f;
+    }
+
+    for (U32 blk = 4; blk < kBlocks; blk++)
+    {
+        if (rms[blk] < peak * 0.001f)
+        {
+            return (float)(blk * kFrames) / (float)rate;
+        }
+    }
+
+    return -1.0f;
+}
+
+static void test_snd_reverb()
+{
+    printf("iSndReverb\n");
+
+    const U32 rate = 48000;
+    const U32 kFrames = 2400; // 50 ms
+    static float blk[2 * 2400];
+    static float dry[2 * 2400];
+
+    iSndHostReverb cave = reverb_cave();
+
+    iSndReverbInit(rate);
+    check(iSndReverbIdle(), "a reverb with no parameters set is idle");
+
+    // --- the early reflections ----------------------------------------------
+    // With the late path silenced, the only thing left is the tap line, so the
+    // first thing out of it is the first reflection and its arrival can be
+    // read off directly.
+    iSndHostReverb early = cave;
+    early.reverb = -10000;
+    iSndReverbSet(&early);
+
+    memset(blk, 0, sizeof(blk));
+    for (U32 i = 0; i < 3; i++)
+    {
+        iSndReverbProcess(blk, kFrames);
+    }
+    check(!iSndReverbIdle(), "and is not idle once a set of parameters arrives");
+
+    memset(blk, 0, sizeof(blk));
+    blk[0] = 1.0f;
+    blk[1] = 1.0f;
+    iSndReverbProcess(blk, kFrames);
+
+    // Nothing wet can have arrived yet, so this frame is the dry one exactly.
+    // The whole design rests on the dry path being the game's own mix.
+    check(blk[0] == 1.0f && blk[1] == 1.0f, "the dry signal passes through untouched");
+
+    U32 first = 0;
+    for (U32 n = 1; n < kFrames; n++)
+    {
+        if (blk[n * 2] != 0.0f)
+        {
+            first = n;
+            break;
+        }
+    }
+    check(first == (U32)(0.008f * (float)rate),
+          "the first reflection lands at reflections_delay");
+
+    // --- the decay ----------------------------------------------------------
+    // The headline claim: decay_time is an RT60 and the comb feedback is
+    // derived from it, so an impulse must be 60 dB down after that long. The
+    // HF ratio is put back to one for this, so that the whole spectrum decays
+    // together and the answer is a single number.
+    iSndHostReverb flat = cave;
+    flat.reflections = -10000;
+    flat.decay_hf_ratio = 1.0f;
+    flat.decay_time = 1.0f;
+
+    float rt1 = reverb_rt60(&flat, rate);
+    check(rt1 > 0.8f && rt1 < 1.5f, "a one-second decay_time decays by 60 dB in about a second");
+
+    flat.decay_time = 2.5f;
+    float rt2 = reverb_rt60(&flat, rate);
+    check(rt2 > 2.0f && rt2 < 3.5f, "and a two-and-a-half-second one takes that much longer");
+
+    // decay_hf_ratio above one is the unusual half of these parameters: it
+    // makes high frequencies ring LONGER, which the lowpass in a textbook comb
+    // cannot do. So the shelf's direction is worth a measurement of its own.
+    flat.decay_time = 1.0f;
+    flat.decay_hf_ratio = 1.6f;
+    float rtbright = reverb_rt60(&flat, rate);
+    check(rtbright > rt1, "a decay_hf_ratio above one makes the tail last longer, not shorter");
+
+    // --- the level ----------------------------------------------------------
+    // room and reverb are absolute attenuations of the late path, so the wet
+    // signal has to come out at that level relative to the dry one. This is
+    // what the network's normalisation is for: eight combs summed raw would be
+    // some twenty times too loud and the parameter would mean nothing.
+    iSndReverbExit();
+    iSndReverbInit(rate);
+
+    iSndHostReverb late = cave;
+    late.reflections = -10000;
+    iSndReverbSet(&late);
+
+    reverb_seed = 12345;
+    double wet_sum = 0.0;
+    double dry_sum = 0.0;
+
+    for (U32 b = 0; b < 60; b++)
+    {
+        for (U32 n = 0; n < kFrames; n++)
+        {
+            float v = reverb_noise();
+            dry[n * 2 + 0] = v;
+            dry[n * 2 + 1] = v;
+            blk[n * 2 + 0] = v;
+            blk[n * 2 + 1] = v;
+        }
+
+        iSndReverbProcess(blk, kFrames);
+
+        // Only once the network has filled, which takes a few decay times.
+        if (b >= 40)
+        {
+            for (U32 n = 0; n < kFrames; n++)
+            {
+                double w = (double)blk[n * 2] - (double)dry[n * 2];
+                wet_sum += w * w;
+                dry_sum += (double)dry[n * 2] * (double)dry[n * 2];
+            }
+        }
+    }
+
+    float measured = (float)sqrt(wet_sum / dry_sum);
+    float wanted = powf(10.0f, (float)(cave.room + cave.reverb) / 2000.0f);
+
+    // Within a factor of two, and no tighter: the normalisation estimates what
+    // eight combs do to a broadband signal from their loop gains rather than
+    // measuring it, so it is meant to put the level in the right place and not
+    // to be exact.
+    check(measured > wanted * 0.5f && measured < wanted * 2.0f,
+          "the late level comes out where room + reverb puts it");
+
+    // --- stability ----------------------------------------------------------
+    // Feedback loops that are a little too hot do not sound wrong, they grow.
+    // Full-scale noise for three seconds is what would find it.
+    iSndReverbExit();
+    iSndReverbInit(rate);
+    iSndReverbSet(&cave);
+
+    reverb_seed = 999;
+    bool sane = true;
+
+    for (U32 b = 0; b < 60; b++)
+    {
+        for (U32 n = 0; n < kFrames; n++)
+        {
+            float v = reverb_noise();
+            blk[n * 2 + 0] = v;
+            blk[n * 2 + 1] = v;
+        }
+
+        iSndReverbProcess(blk, kFrames);
+
+        for (U32 n = 0; n < 2 * kFrames; n++)
+        {
+            if (!(blk[n] > -4.0f && blk[n] < 4.0f))
+            {
+                sane = false;
+            }
+        }
+    }
+
+    check(sane, "three seconds of full-scale noise neither diverges nor goes non-finite");
+
+    // --- switching it off ---------------------------------------------------
+    // The scene the game leaves a cave for asks for no effect at all, and the
+    // dry mix it gets back has to be the one it handed over.
+    iSndReverbSet(NULL);
+
+    memset(blk, 0, sizeof(blk));
+    for (U32 i = 0; i < 3; i++)
+    {
+        iSndReverbProcess(blk, kFrames);
+    }
+    check(iSndReverbIdle(), "removing the effect settles to idle");
+
+    reverb_seed = 4242;
+    for (U32 n = 0; n < kFrames; n++)
+    {
+        float v = reverb_noise();
+        dry[n * 2 + 0] = v;
+        dry[n * 2 + 1] = v;
+        blk[n * 2 + 0] = v;
+        blk[n * 2 + 1] = v;
+    }
+
+    iSndReverbProcess(blk, kFrames);
+    check(memcmp(blk, dry, sizeof(float) * 2 * kFrames) == 0,
+          "after which the mix is passed through bit for bit");
+
+    iSndReverbExit();
+}
+
 static void test_snd()
 {
     printf("iSnd\n");
@@ -1749,6 +2044,7 @@ int main()
     test_snd_mixer();
 #endif
     test_snd();
+    test_snd_reverb();
     test_hip();
     test_flykey();
     test_npc_ordering();

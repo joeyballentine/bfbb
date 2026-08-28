@@ -45,6 +45,41 @@ struct iSndHostSample
     U32 loop_start;
 };
 
+// The environmental reverb, as I3DL2 gives it. A backend that has no reverb
+// ignores this; one that has must not change what the dry path does, because
+// the game mixes and pans every voice itself and expects to hear that mix.
+//
+// The four level fields are in millibels -- hundredths of a decibel -- and two
+// of them are relative to `room`, which is how I3DL2 defines them: the early
+// level is room + reflections, the late level is room + reverb. Kept in the
+// interface's own units rather than converted here, so that a set of
+// parameters in this port can be read straight against the ones a console
+// build pushes onto its stack.
+//
+// This is the seam's one deliberate exception to knowing nothing about the
+// game's model, and it is the smallest one available: the alternative is an
+// effect id, which would put a reverb design into every backend, or a GameCube
+// DSP preset index, which would mean nothing to any of them.
+struct iSndHostReverb
+{
+    S32 room;              // mB, the room effect's level
+    S32 room_hf;           // mB, its extra attenuation at high frequency
+    F32 room_rolloff_factor;
+
+    F32 decay_time;        // seconds, RT60
+    F32 decay_hf_ratio;    // >1 means high frequencies ring longer
+
+    S32 reflections;       // mB, relative to room
+    F32 reflections_delay; // seconds, from the direct sound
+
+    S32 reverb;            // mB, relative to room
+    F32 reverb_delay;      // seconds, from the first reflection
+
+    F32 diffusion;         // per cent
+    F32 density;           // per cent
+    F32 hf_reference;      // Hz, where the HF fields start to apply
+};
+
 void iSndHostInit();
 void iSndHostExit();
 
@@ -71,6 +106,11 @@ bool iSndHostIsPlaying(S32 voice);
 // Once per frame, from iSndUpdate. A backend that finishes voices on its own
 // clock retires them here.
 void iSndHostUpdate();
+
+// Applies an environmental reverb to the whole mix, or removes it when
+// `params` is NULL. Called from the game thread when a scene loads, which is
+// the only time the game changes it.
+void iSndHostSetReverb(const iSndHostReverb* params);
 
 // Names the backend that was linked in, for the startup log.
 const char* iSndHostName();

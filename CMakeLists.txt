@@ -177,6 +177,12 @@ else()
   message(FATAL_ERROR "unknown BFBB_AUDIO_BACKEND '${BFBB_AUDIO_BACKEND}'")
 endif()
 
+# The environmental reverb, in both backends rather than only the one that can
+# be heard. It is pure DSP with no OS in it, so building and testing it does not
+# depend on which backend was picked, and a change that breaks it should break
+# every configuration rather than only the audible one.
+list(APPEND AUDIO_SOURCES ${PC_DIR}/iSndReverb.cpp)
+
 # --- host backend ---------------------------------------------------------
 # The OS half of the platform layer, behind src/SB/Core/pc/iHost.h. The layer
 # above it -- iTime, iMemMgr, iFile, iSystem, isavegame -- holds the mapping

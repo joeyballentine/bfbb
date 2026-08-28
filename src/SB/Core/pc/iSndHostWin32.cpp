@@ -1,5 +1,6 @@
 #include "iSndHost.h"
 #include "iHost.h"
+#include "iSndReverb.h"
 
 #define WIN32_LEAN_AND_MEAN
 #define COBJMACROS
@@ -149,6 +150,13 @@ static U64 sLastSilentNs;
 // shared-mode WASAPI reports once at initialisation.
 static float* sMixBuffer;
 static U32 sMixBufferFrames;
+
+// The environmental reverb the game last asked for. Kept here as well as in
+// iSndReverb because the reverb's delay lengths depend on the output rate,
+// which is not known until a device opens and changes if one is swapped: the
+// game sets this once when a scene loads and must not have to set it again.
+static iSndHostReverb sReverb;
+static bool sReverbWanted;
 
 // ---------------------------------------------------------------------------
 // Mixing
@@ -326,6 +334,16 @@ static void iMixLocked(U32 frames)
             v->curR = gR;
         }
     }
+
+    // The environmental reverb, over the finished mix. Here rather than in the
+    // render thread so that it is inside the same lock the parameters are set
+    // under, and so that the test hook exercises it too.
+    //
+    // Post-mix is also the only place it can go. It is a send off the whole
+    // mix, and the voices above have already been panned and summed; per-voice
+    // sends would need a wet level per emitter, which nothing in the game
+    // computes and nothing in this seam carries.
+    iSndReverbProcess(sMixBuffer, frames);
 }
 
 // Write the mixed block into the endpoint buffer, in whatever format the device
@@ -541,6 +559,11 @@ static void iTeardownDevice()
     sMixBuffer = NULL;
     sMixBufferFrames = 0;
 
+    // After the render thread has joined, which is the only other user of it.
+    // sReverbWanted deliberately survives: a device coming back should come
+    // back with the effect the current scene asked for.
+    iSndReverbExit();
+
     sDeviceUp = false;
 }
 
@@ -710,6 +733,16 @@ static bool iBringUpDevice()
     {
         printf("iSndHost: could not allocate the mix buffer; no audio\n");
         return false;
+    }
+
+    // The reverb's delay lengths are in samples, so it can only be built once
+    // the endpoint has said what rate it runs at. If the game already asked for
+    // an effect -- it sets one when a scene loads, which can be before a device
+    // is available -- it is applied now rather than lost.
+    iSndReverbInit(sOutRate);
+    if (sReverbWanted)
+    {
+        iSndReverbSet(&sReverb);
     }
 
     hr = sClient->Start();
@@ -1019,6 +1052,27 @@ void iSndHostUpdate()
         {
             v->playing = false;
         }
+    }
+
+    LeaveCriticalSection(&sLock);
+}
+
+void iSndHostSetReverb(const iSndHostReverb* params)
+{
+    iEnsureLock();
+
+    EnterCriticalSection(&sLock);
+
+    if (params != NULL)
+    {
+        sReverb = *params;
+        sReverbWanted = true;
+        iSndReverbSet(&sReverb);
+    }
+    else
+    {
+        sReverbWanted = false;
+        iSndReverbSet(NULL);
     }
 
     LeaveCriticalSection(&sLock);

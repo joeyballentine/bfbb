@@ -296,12 +296,61 @@ void iSndExit()
     sinfo_array_max = 0;
 }
 
-void iSndSetEnvironmentalEffect(isound_effect)
+// The reverb the Xbox release puts on Mermalair and the caves, in its own
+// units, so that it can be read straight against the code it came from.
+//
+// **This is recovered, not invented.** The Xbox builds this listener on the
+// stack and hands it to SetI3DL2Listener (the call at va 0x2023ac); the twelve
+// stores are at va 0x1054a9-0x105508, and the offsets below are what they work
+// out to once the two pushes between them are accounted for. The non-cave path
+// at va 0x1056e0 fills the same struct with silence -- every level at -10000 mB
+// and a decay of 1.0 -- and then jumps into the cave path's last two stores, so
+// the two paths share a tail. That shared tail is the cross-check: those two
+// offsets have to mean the same field on both routes, and under this mapping
+// they do.
+//
+// It is a tuned version of the standard I3DL2 CAVE preset, which is a second
+// check on the mapping. Six fields are the preset's untouched -- room, room_hf,
+// the rolloff, both percentages and the reference -- and the rest are pulled in
+// from it: the decay from 2.91 s to 1.65, the ratio from 1.30 up to 1.50, and
+// both levels down by roughly 8 dB. A quieter, shorter, brighter cave.
+//
+// The empty body this replaces was right about one thing and wrong about the
+// other. It was right that the seam should carry parameters rather than a
+// preset index, which is what iSndHostReverb now does. It was wrong that there
+// was nothing to apply without hardware: what a backend cannot do is configure
+// a reverb it does not have, and what it can do is have one.
+static const iSndHostReverb kCaveReverb = {
+    -1000,   // room, mB
+    0,       // room_hf, mB
+    0.0f,    // room_rolloff_factor
+    1.65f,   // decay_time, seconds
+    1.5f,    // decay_hf_ratio
+    -1363,   // reflections, mB relative to room
+    0.008f,  // reflections_delay, seconds
+    -1153,   // reverb, mB relative to room
+    0.012f,  // reverb_delay, seconds
+    100.0f,  // diffusion, per cent
+    100.0f,  // density, per cent
+    5000.0f, // hf_reference, Hz
+};
+
+void iSndSetEnvironmentalEffect(isound_effect effectType)
 {
-    // The GameCube applies this as a DSP reverb preset through AX. Nothing to
-    // apply without a device, and the seam deliberately does not carry it: a
-    // backend that has reverb should be given the game's parameters, not a
-    // GameCube preset index. Left for whoever adds one.
+    // The GameCube applies this as a DSP reverb preset through AX -- or rather
+    // it would, because its body is empty in retail too, which is why the
+    // console versions have none of this and the Xbox does. Everything above
+    // here is shipping code and already correct: zSceneInitEnvironmentalSoundEffect
+    // picks the same nine scenes the Xbox does.
+    switch (effectType)
+    {
+    case iSND_EFFECT_CAVE:
+        iSndHostSetReverb(&kCaveReverb);
+        break;
+    default:
+        iSndHostSetReverb(NULL);
+        break;
+    }
 }
 
 void iSndInitSceneLoaded()

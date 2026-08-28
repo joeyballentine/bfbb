@@ -221,6 +221,13 @@ void iSndHostUpdate()
     }
 }
 
+void iSndHostSetReverb(const iSndHostReverb*)
+{
+    // Nothing to add reverb to. This backend produces no samples at all -- it
+    // only times voices out -- so the effect is not stubbed here so much as
+    // absent along with everything else it would apply to.
+}
+
 const char* iSndHostName()
 {
     return "null (silent, but keeps time)";
