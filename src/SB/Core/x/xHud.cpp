@@ -1,4 +1,5 @@
 #include "xHud.h"
+#include "xScreen.h"
 #include "xDebug.h"
 #include "xEvent.h"
 #include "xMath.h"
@@ -633,8 +634,8 @@ namespace xhud
     void render_model(xModelInstance& m, const xhud::render_context& rc)
     {
         basic_rect<F32> r = { 0 };
-        r.x = rc.loc.x;
-        r.y = rc.loc.y;
+        r.x = xScreenAnchorX(rc.loc.x);
+        r.y = xScreenAnchorY(rc.loc.y);
         r.w = rc.size.x;
         r.h = rc.size.y;
 

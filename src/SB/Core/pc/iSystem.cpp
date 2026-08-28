@@ -352,6 +352,23 @@ static void ApplyConfig()
     // is read by game code, which must not learn what config.ini is.
     iScreenSetSize(iConfigGetInt("video.width", 640), iConfigGetInt("video.height", 480));
 
+    // How the interface sits on a screen that is not 4:3. Nothing to report
+    // when it cannot matter, which is every 4:3 render size.
+    const char* uiMode = iConfigGetString("video.ui", "native");
+    if (iHostStrCaseCmp(uiMode, "pillarbox") == 0)
+    {
+        iScreenSetUIMode(iSCREENUI_PILLARBOX);
+    }
+    else
+    {
+        if (iHostStrCaseCmp(uiMode, "native") != 0)
+        {
+            printf("bfbb: config: video.ui is not native or pillarbox, using the default: %s\n",
+                   uiMode);
+        }
+        iScreenSetUIMode(iSCREENUI_NATIVE);
+    }
+
     // The draw distance, before iCameraCreate builds the first frustum. Pushed
     // into iCamera as well as into iDrawDist because the far clip is a value the
     // camera holds rather than one it asks for each frame; the wrapped distances

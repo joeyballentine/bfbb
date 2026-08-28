@@ -82,6 +82,45 @@ F32 iScreenUIOriginYF();
 F32 iScreenUIFracXF();
 F32 iScreenUIFracYF();
 
+// How the interface is placed on a screen that is not 4:3.
+//
+//   PILLARBOX  everything in the centred 4:3 box. Nothing moves relative to
+//              anything else; the interface simply sits in the middle with
+//              black either side of it.
+//   NATIVE     the HUD is anchored: its POSITIONS are read as fractions of the
+//              real screen while its SIZES stay uniform, so a counter authored
+//              near the left edge ends up near the real left edge at the size
+//              it would have had. Menus, textboxes and cutscene overlays stay
+//              in the 4:3 box -- they are full-screen art, and there is nothing
+//              in them to anchor to an edge.
+//
+// The two are IDENTICAL on a 4:3 render size, where the box is the screen and
+// the anchor is the identity, so this only ever means anything in widescreen.
+enum iScreenUIMode
+{
+    iSCREENUI_PILLARBOX,
+    iSCREENUI_NATIVE
+};
+
+void iScreenSetUIMode(iScreenUIMode mode);
+
+// A normalized UI-space coordinate, moved to where the mode wants it -- still
+// in UI space, so the pillarbox mapping that follows lands it on the screen.
+//
+// The whole of the anchor is `x / frac - margin`: dividing by the box's share of
+// the screen turns a fraction of the box into a fraction of the screen, and the
+// margin takes off the offset the box's own centring will add back. It is the
+// identity at 4:3, it fixes 0.5 wherever the box is, and it needs no widths,
+// no thresholds and no per-widget knowledge of which edge is nearest.
+F32 iScreenAnchorX(F32 x);
+F32 iScreenAnchorY(F32 y);
+
+// How far outside the 0..1 box the screen reaches, in UI units. Zero when the
+// box is the screen. What this is for is culling: xModelRender2D throws away a
+// rect outside 0..1, which is the screen only while nothing is anchored.
+F32 iScreenUIMarginXF();
+F32 iScreenUIMarginYF();
+
 // Set by iSystem, from config.ini, before the window is opened -- and again
 // with what the window actually gave, because engine_start takes the virtual
 // screen from the window and the two must not disagree.

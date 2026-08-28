@@ -1,4 +1,5 @@
 #include "xHudText.h"
+#include "xScreen.h"
 #include "xstransvc.h"
 #include "xTextAsset.h"
 #include "zScene.h"
@@ -97,8 +98,8 @@ void xhud::text_widget::update(F32 dt)
     updater(dt);
 
     tb.set_text(text);
-    tb.bounds.x = rc.loc.x;
-    tb.bounds.y = rc.loc.y;
+    tb.bounds.x = xScreenAnchorX(rc.loc.x);
+    tb.bounds.y = xScreenAnchorY(rc.loc.y);
     tb.bounds.w = rc.size.x;
     tb.bounds.h = rc.size.y;
     tb.font.clip = tb.bounds;

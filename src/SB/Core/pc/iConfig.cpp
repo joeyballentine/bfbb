@@ -85,6 +85,16 @@ namespace
           "; switch of its own: the camera keeps its vertical view and widens, so\n"
           "; 1280x720 shows more of the world to the left and right, and the\n"
           "; interface keeps its shape in the middle rather than stretching." },
+        { "video", "ui", "native",
+          "How the interface is placed on a screen that is not 4:3.\n"
+          ";\n"
+          ";   native     the HUD is anchored, so a counter authored near an edge\n"
+          ";              ends up near the real edge at the size it would have had.\n"
+          ";   pillarbox  the whole interface stays in a centred 4:3 box.\n"
+          ";\n"
+          "; Menus, textboxes and cutscene overlays keep the 4:3 box either way --\n"
+          "; they are full-screen art, with nothing in them to anchor. The two are\n"
+          "; identical at 4:3, where the box already IS the screen." },
         { "video", "draw_distance", "on",
           "Draw everything, however far away it is. The consoles stop drawing an\n"
           "; object past a distance the level author set, swap distant ones for\n"

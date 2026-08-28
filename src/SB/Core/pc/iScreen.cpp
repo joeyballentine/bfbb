@@ -33,6 +33,10 @@ namespace
     F32 sUIOriginY = 0.0f;
     F32 sUIFracX = 1.0f;
     F32 sUIFracY = 1.0f;
+    F32 sUIMarginX;
+    F32 sUIMarginY;
+
+    iScreenUIMode sUIMode = iSCREENUI_NATIVE;
 
     // The largest 4:3 rectangle that fits, centred. The same fit iFMV.cpp puts
     // a 4:3 movie through, and for the same reason: what is left over stays
@@ -57,6 +61,11 @@ namespace
 
         sUIFracX = sUIWidth / w;
         sUIFracY = sUIHeight / h;
+
+        // How far outside the box the screen reaches, in UI units. Zero
+        // when the box IS the screen, which is every 4:3 render size.
+        sUIMarginX = (1.0f - sUIFracX) / (2.0f * sUIFracX);
+        sUIMarginY = (1.0f - sUIFracY) / (2.0f * sUIFracY);
     }
 }
 
@@ -113,6 +122,31 @@ F32 iScreenUIFracXF()
 F32 iScreenUIFracYF()
 {
     return sUIFracY;
+}
+
+F32 iScreenUIMarginXF()
+{
+    return sUIMarginX;
+}
+
+F32 iScreenUIMarginYF()
+{
+    return sUIMarginY;
+}
+
+void iScreenSetUIMode(iScreenUIMode mode)
+{
+    sUIMode = mode;
+}
+
+F32 iScreenAnchorX(F32 x)
+{
+    return sUIMode == iSCREENUI_NATIVE ? x / sUIFracX - sUIMarginX : x;
+}
+
+F32 iScreenAnchorY(F32 y)
+{
+    return sUIMode == iSCREENUI_NATIVE ? y / sUIFracY - sUIMarginY : y;
 }
 
 void iScreenSetSize(S32 width, S32 height)

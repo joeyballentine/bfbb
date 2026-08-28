@@ -439,8 +439,7 @@ void xModelRender(xModelInstance* model)
 void xModelRender2D(const xModelInstance& model, const basic_rect<F32>& r, const xVec3& from,
                     const xVec3& to)
 {
-    if (r.w <= 0.0f || r.h <= 0.0f || r.x + r.w < 0.0f || r.x > 1.0f || r.y + r.h < 0.0f ||
-        r.y > 1.0f)
+    if (r.w <= 0.0f || r.h <= 0.0f || xScreenUIRectOffscreen(r))
     {
         return;
     }

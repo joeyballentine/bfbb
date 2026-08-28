@@ -348,6 +348,38 @@ static void test_screen()
     check(iScreenUIOriginXF() == 0.0f && iScreenUIOriginYF() == 32.0f, "centred vertically");
     check(iScreenUIFracXF() == 1.0f, "all of the horizontal axis");
 
+    // --- the HUD anchor ---------------------------------------------------
+    //
+    // At 4:3 it has to be the identity, exactly. This is the case that runs for
+    // anyone playing at the default, and every HUD position goes through it.
+    iScreenSetSize(640, 480);
+    iScreenSetUIMode(iSCREENUI_NATIVE);
+    check(iScreenAnchorX(0.0f) == 0.0f && iScreenAnchorX(0.25f) == 0.25f &&
+              iScreenAnchorX(1.0f) == 1.0f,
+          "at 4:3 the anchor is the identity");
+    check(iScreenUIMarginXF() == 0.0f && iScreenUIMarginYF() == 0.0f, "and there is no margin");
+
+    // 16:9. The box is three quarters of the width, so the screen reaches
+    // (1 - 0.75) / (2 * 0.75) = 1/6 of a box-width past each side.
+    iScreenSetSize(1920, 1080);
+    const F32 margin = 1.0f / 6.0f;
+    check(fabsf(iScreenUIMarginXF() - margin) < 0.0001f, "16:9 puts the screen 1/6 past the box");
+    check(iScreenUIMarginYF() == 0.0f, "and nothing past it vertically");
+
+    // The three that matter: the centre is fixed, and the two edges map to the
+    // screen's own edges rather than the box's.
+    check(fabsf(iScreenAnchorX(0.5f) - 0.5f) < 0.0001f, "the centre does not move");
+    check(fabsf(iScreenAnchorX(0.0f) - -margin) < 0.0001f, "the left edge reaches the screen");
+    check(fabsf(iScreenAnchorX(1.0f) - (1.0f + margin)) < 0.0001f, "and so does the right");
+    check(iScreenAnchorY(0.3f) == 0.3f, "the vertical axis is untouched on a wide screen");
+
+    // Pillarbox is the identity whatever the shape, which is what makes it the
+    // way back to exactly what the console drew.
+    iScreenSetUIMode(iSCREENUI_PILLARBOX);
+    check(iScreenAnchorX(0.0f) == 0.0f && iScreenAnchorX(1.0f) == 1.0f,
+          "pillarbox leaves every position alone");
+    iScreenSetUIMode(iSCREENUI_NATIVE);
+
     // Nothing else in this process renders, but the value is global, so it goes
     // back to the default rather than being left where a later test would find
     // it surprising.

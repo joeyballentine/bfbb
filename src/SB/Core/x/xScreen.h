@@ -50,6 +50,20 @@
     ((r).scale(iScreenUIWidthF(), iScreenUIHeightF())                                         \
          .move(iScreenUIOriginXF(), iScreenUIOriginYF()))
 
+// The HUD's anchor. Applied where a widget's normalized position becomes a
+// draw, and nowhere else -- see iScreen.h for why menus are left alone.
+#define xScreenAnchorX(x) iScreenAnchorX(x)
+#define xScreenAnchorY(y) iScreenAnchorY(y)
+
+// Is this normalized UI-space rect entirely off the screen?
+//
+// One macro rather than four bounds, so that the console compiles the exact
+// comparison it always did. The bounds are 0..1 only while nothing is anchored;
+// once the HUD reaches past the box, the screen does too.
+#define xScreenUIRectOffscreen(r)                                                             \
+    ((r).x + (r).w < -iScreenUIMarginXF() || (r).x > 1.0f + iScreenUIMarginXF() ||             \
+     (r).y + (r).h < -iScreenUIMarginYF() || (r).y > 1.0f + iScreenUIMarginYF())
+
 #else
 
 #define xScreenWidth() 640
@@ -69,6 +83,12 @@
 #define xScreenUIy(n) (480.0f * (n))
 
 #define xScreenUIRect(r) ((r).scale(640.0f, 480.0f))
+
+#define xScreenAnchorX(x) (x)
+#define xScreenAnchorY(y) (y)
+
+#define xScreenUIRectOffscreen(r)                                                             \
+    ((r).x + (r).w < 0.0f || (r).x > 1.0f || (r).y + (r).h < 0.0f || (r).y > 1.0f)
 
 #endif
 
