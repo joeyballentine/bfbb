@@ -833,7 +833,16 @@ static void iApplyVoiceMix(S32 i)
         if (dist2 > 1e-8f)
         {
             xVec3Normalize(&to, &to);
-            F32 pan = xVec3Dot(&to, &gSnd.right);
+
+            // The negation is retail's GameCube stereo-swap bug, deliberately
+            // not reproduced. iSndCalcVol3d builds the index as 64 * dot +
+            // 0x40, which puts a sound on the listener's right above centre --
+            // and on the console it comes out of the LEFT speaker. Only the
+            // GameCube release is affected, and flipping the sign of the pan is
+            // the whole fix: the Action Replay code the community ships for it,
+            // 043ce1a0 c2800000, overwrites that 64.0f in .sdata2 with -64.0f,
+            // and nothing else in the DOL reads that pool entry.
+            F32 pan = -xVec3Dot(&to, &gSnd.right);
 
             S32 ipan = (S32)(64.0f * pan) + 0x40;
             if (ipan < 0)
