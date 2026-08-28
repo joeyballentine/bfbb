@@ -768,7 +768,7 @@ the same job as the world reader -- see "What the world path does NOT do yet".
 **Neither is on the Xbox asset path.** The Xbox packs carry 0 BSP and 110 JSP
 across all 121 files, and `iEnv.cpp:61` gives a JSP level an empty
 `RpWorldCreate(&tmpbbox)` and takes its collision from
-`xClumpColl_InstancePointers` instead. See PCPORT.md. So these block the
+`xClumpColl_InstancePointers` instead. See docs/PCPORT.md. So these block the
 GameCube assets and not the ones the port is being built against.
 
 The per-group tally that used to live here has been removed: every group in it

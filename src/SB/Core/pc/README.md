@@ -3,8 +3,8 @@
 The GameCube implementation of the game's platform interfaces lives in
 `src/SB/Core/gc`. This is the same set of interfaces, for a host.
 
-Everything here is phase 2 of `PCPORT.md`. To pick the work up, start with
-`PCPORT-HANDOFF.md` at the repository root.
+Everything here is phase 2 of `docs/PCPORT.md`. To pick the work up, start with
+`docs/PCPORT-HANDOFF.md` at the repository root.
 
 ## Running it, and the switches
 

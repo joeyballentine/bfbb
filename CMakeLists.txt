@@ -30,7 +30,7 @@ set(PC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/pc)
 # Not a style preference. The source is full of *(U32*)&someFloat, written that
 # way because it made CodeWarrior emit the right instruction; GCC and Clang at
 # -O2 are entitled to miscompile it. See "Other things that will bite" in
-# PCPORT.md.
+# docs/PCPORT.md.
 add_compile_options(-fno-strict-aliasing)
 
 # Selects the port's own struct layouts in include/rwsdk -- the ones that mirror
@@ -57,7 +57,7 @@ add_compile_definitions(_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH)
 # a U32 and xMemInitHeap does pointer arithmetic on it as an integer; every
 # asset-overlaid struct addresses memory in 32 bits; and sizeof(xSndVoiceInfo)
 # is 100, which iSndPlay divides a byte offset by. On LP64 all of that is
-# wrong. See PCPORT-HANDOFF.md 5(a): 162/198 units compile 64-bit against these
+# wrong. See docs/PCPORT-HANDOFF.md 5(a): 162/198 units compile 64-bit against these
 # headers and 195/198 under -m32.
 #
 # tools/pcprogress.py measures with the same flag. If you change it here, change

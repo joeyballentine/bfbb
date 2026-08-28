@@ -582,7 +582,7 @@ void ZNPC_Common_Shutdown();
 //
 // Terminating the lists is a deviation from retail, so it is confined to builds
 // that have to actually run. Both anim table functions are 100% matching and
-// must stay that way. See "Latent retail bugs" in PCPORT.md.
+// must stay that way. See "Latent retail bugs" in docs/PCPORT.md.
 #ifdef NON_MATCHING
 #define NPCC_ANIM_LIST_END , 0
 #else

@@ -8,7 +8,7 @@
 // The GameCube build plays its full-motion video with Bink, decoding into a
 // GX framebuffer through RAD's rad3d. Bink is proprietary middleware and
 // cannot be redistributed, so the port does not decode Bink at all -- see
-// "Distribution" in PCPORT.md. That removes iFMV::InitGX/InitVI/Suspend/
+// "Distribution" in docs/PCPORT.md. That removes iFMV::InitGX/InitVI/Suspend/
 // Resume, Decompress_frame, iFMVmalloc and iFMVfree, none of which anything
 // outside src/SB/Core/gc calls.
 //

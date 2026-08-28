@@ -393,7 +393,7 @@ RpWorld* RpWorldStreamRead(RwStream* stream)
 // very wrong, we really want world sectors" -- so everything that would have
 // come out of the tree is missing.
 //
-// For BFBB that is less bad than it sounds, and the reason is in PCPORT.md: the
+// For BFBB that is less bad than it sounds, and the reason is in docs/PCPORT.md: the
 // Xbox assets carry no BSP at all. A JSP level's RpWorld is the empty one
 // iEnv.cpp:61 creates with RpWorldCreate(&tmpbbox), and the level's geometry
 // lives in atomics that xJSP renders itself. So the sectors this cannot walk

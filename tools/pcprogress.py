@@ -39,7 +39,7 @@ INCLUDES = [
 
 # -fno-strict-aliasing is not a style choice here: the source is full of
 # *(U32*)&someFloat, which exists because it made CodeWarrior emit the right
-# instruction. See "Other things that will bite" in PCPORT.md.
+# instruction. See "Other things that will bite" in docs/PCPORT.md.
 CXXFLAGS = [
     "-std=c++17",
     "-fsyntax-only",
@@ -110,7 +110,7 @@ def compile_one(path, cc=None, extra=()):
 # Casting a pointer to U32/S32. On the GameCube a pointer is 32 bits and this
 # is exact; on an LP64 host it truncates, and the game does it constantly --
 # every asset-overlaid struct addresses memory with U32. This is the open
-# question in PCPORT.md's "Asset caveats", not a defect to fix unit by unit, so
+# question in docs/PCPORT.md's "Asset caveats", not a defect to fix unit by unit, so
 # it gets its own line rather than being mixed in with real porting work.
 # g++:   cast from 'void*' to 'U32' loses precision
 # clang: cast to smaller integer type 'unsigned int' from 'void *'
@@ -238,7 +238,7 @@ def main():
                     help="host compiler (default: g++, else clang++)")
     ap.add_argument("--m32", action="store_true",
                     help="compile 32-bit; tests whether the pointer-width "
-                         "class is really one decision (PCPORT.md, Asset caveats)")
+                         "class is really one decision (docs/PCPORT.md, Asset caveats)")
     args = ap.parse_args()
 
     if args.host:
@@ -291,7 +291,7 @@ def main():
 
     print(f"compiles           {len(good):4d} / {total} units   {100.0 * len(good) / total:.2f}%")
     print(f"pointer width only {len(ptr):4d} / {total} units   "
-          f"{100.0 * len(ptr) / total:.2f}%   (see PCPORT.md, Asset caveats)")
+          f"{100.0 * len(ptr) / total:.2f}%   (see docs/PCPORT.md, Asset caveats)")
     print(f"needs other work   {other:4d} / {total} units")
 
 

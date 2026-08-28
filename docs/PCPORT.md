@@ -1,7 +1,7 @@
 # PC port — follow-up plan
 
 Phase 2 started. **If you are picking this work up, read
-`PCPORT-HANDOFF.md` first** -- it is the operating manual: how to recover the
+`docs/PCPORT-HANDOFF.md` first** -- it is the operating manual: how to recover the
 environment, how to verify a change without fooling yourself, and what is open.
 This file is the design record and the argument; `src/SB/Core/pc/README.md`
 documents the layer itself. The rest of this is the design record, written
@@ -31,7 +31,7 @@ since we replace one and delete the other.
 
 **Priority consequence:** finishing rwsdk matching would be ~1039 functions of
 effort a port discards. Every `src/SB/**` function is dual-purpose. This is an
-independent argument for the game-code-first rule already in DUPLOTRON.md,
+independent argument for the game-code-first rule already in docs/DUPLOTRON.md,
 and against ever treating rwsdk as the biggest lever just because its function
 count is large.
 

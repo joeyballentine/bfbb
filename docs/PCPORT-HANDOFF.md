@@ -1,6 +1,6 @@
 # PC port — hand-off
 
-For whoever picks this up next. `PCPORT.md` is the design record and the
+For whoever picks this up next. `docs/PCPORT.md` is the design record and the
 argument; this is the operating manual. Read this first, then
 `src/SB/Core/pc/README.md` for the layer itself.
 
@@ -428,11 +428,11 @@ which: it computes where a cutscene starts inside its HIP as
 `(ainfo.sector - File.ps.fileInfo.startAddr) << 5` -- a **disc sector** delta,
 from `DVDFileInfo`, which the host `tag_iFile` has no equivalent of and should
 not grow one. What it needs is the asset's byte offset within the HIP, which is
-an asset-pipeline question (PCPORT.md, phase 4), not a librw one. `iSnd`'s
+an asset-pipeline question (docs/PCPORT.md, phase 4), not a librw one. `iSnd`'s
 loader wants the same number for the same reason. Answer it once, for both.
 
 **Do not start until the asset question is answered.** The plan is Xbox assets
-(see PCPORT.md), and librw's GameCube format support is its weakest -- which is
+(see docs/PCPORT.md), and librw's GameCube format support is its weakest -- which is
 *why* that decision was made. Linking librw against GameCube-native big-endian
 assets buys a renderer that cannot read anything.
 
@@ -507,7 +507,7 @@ Separately from those, two functions LINK and return NULL --
 `RpWorldStreamRead` and `RpCollisionWorldForAllIntersections`. They are one job
 rather than two:
 **librw has no world sectors at all.** That is the largest thing between here
-and a playable port and it is written up in PCPORT.md -- read it before planning
+and a playable port and it is written up in docs/PCPORT.md -- read it before planning
 phase 4, because the way out is a project-level decision, not a function to
 write.
 
@@ -570,10 +570,10 @@ bite, but it is not a compile.
 
 ## 6. Conventions that are not negotiable
 
-From `DUPLOTRON.md` and the `bfbb-decomp` skill, and they apply here too:
+From `docs/DUPLOTRON.md` and the `bfbb-decomp` skill, and they apply here too:
 
 - **Never fabricate.** No stub that returns a constant to make something pass,
-  no dead code, no `#if 0`. `PCPORT.md` names a live example of the hazard:
+  no dead code, no `#if 0`. `docs/PCPORT.md` names a live example of the hazard:
   `zNPCFXCutscenePickTable` returns `NULL` to satisfy the diff, and in a port
   that means cutscene effects silently never play.
 - **Never state a percentage you did not personally measure this session.**

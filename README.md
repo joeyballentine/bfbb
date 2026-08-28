@@ -1,107 +1,120 @@
-# SpongeBob SquarePants: Battle for Bikini Bottom
+# Battle for Bikini Bottom, PC port (WIP)
 
-[![Discord Badge]][discord]
-[![Build Status]][actions]
+A native PC build of SpongeBob SquarePants: Battle for Bikini Bottom, compiled
+from decompiled game code. Not emulated, not a patch.
 
-[![Perfect Match]][progress]
-[![Fuzzy Match]][progress]
-[![Functions]][progress]
+**It's unfinished.** It boots and plays, but there are still visible bugs and
+unfinished corners. There are no downloads. You build it yourself from your own
+copy of the game.
 
-[progress]: https://bfbbdecomp.github.io/bfbb/
-[Fuzzy Match]: https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbfbbdecomp.github.io%2Fbfbb%2Fapi.json&query=fuzzy_match&label=Close%20Match&color=yellowgreen
-[Perfect Match]: https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbfbbdecomp.github.io%2Fbfbb%2Fapi.json&query=perfect_match&label=Matching&color=limegreen
-[Functions]: https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fbfbbdecomp.github.io%2Fbfbb%2Fapi.json&query=functions_matched&label=Functions&color=lavender
-[Build Status]: https://github.com/bfbbdecomp/bfbb/actions/workflows/build.yml/badge.svg
-[actions]: https://github.com/bfbbdecomp/bfbb/actions/workflows/build.yml
-[Discord Badge]: https://img.shields.io/discord/829152115322257436?color=%237289DA&logo=discord&logoColor=%23FFFFFF
-[discord]: https://discord.gg/dVbGFdYU6A
+This branch (`treedome`) is the port. It sits on `duplotron`, which is the
+decompilation it compiles. Both are AI-driven experiments built on
+[bfbbdecomp/bfbb](https://github.com/bfbbdecomp/bfbb).
 
-A work-in-progress decompilation of SpongeBob SquarePants: Battle for Bikini Bottom.
+## How it works
 
-It builds the following DOL:
+The GameCube game's platform code sits behind 25 `i*` interfaces. The port
+reimplements those for a PC: Win32 windowing, D3D9 via
+[librw](https://github.com/aap/librw) instead of RenderWare, XInput and keyboard
+instead of the GameCube pad, WASAPI instead of AX/MIX, FFmpeg instead of Bink.
 
-main.dol: `sha1: 306526d90b48e99894c3138f5fc8f2716d9fecf6`
+Everything above that seam (`src/SB/Core/x` and `src/SB/Game`) is the same code
+the GameCube build uses. It isn't a rewrite, so changes there have to keep the
+GameCube build byte identical. That's checked on every commit.
 
-This repository does **not** contain any game assets or assembly whatsoever. An existing copy of the game is required.
+## You need your own copy
 
-Supported versions:
+No assets are included. The port reads the **Xbox** release's files, which you
+extract yourself. Point `BFBB_ASSETS` at the folder with `boot.HIP`, `fmv/`,
+`hb/` and so on.
 
-- `GQPE78`: (NTSC-U)
+GameCube assets won't work. The movies are Bink there and `.xmv` on Xbox, and
+only `.xmv` can be played here.
 
-# Dependencies
+## Building
 
-## Windows
+Windows only right now. The renderer is D3D9 and there's no GL3 window backend
+yet, so other platforms stop at `RwEngineOpen`.
 
-On Windows, it's **highly recommended** to use native tooling. WSL or msys2 are **not** required.  
-When running under WSL, [objdiff](#diffing) is unable to get filesystem notifications for automatic rebuilds.
+You need:
 
-- Install [Python](https://www.python.org/downloads/) and add it to `%PATH%`.
-  - Also available from the [Windows Store](https://apps.microsoft.com/store/detail/python-311/9NRWMJP3717K).
-- Download [ninja](https://github.com/ninja-build/ninja/releases) and add it to `%PATH%`.
-  - Quick install via pip: `pip install ninja`
+- clang targeting `i386-pc-windows-msvc`, plus the MSVC toolchain and Windows SDK
+  it links against. The port is 32-bit and that isn't negotiable (see the comment
+  above `add_compile_options(-m32)` in `CMakeLists.txt`).
+- CMake 3.16+ and Ninja.
+- The librw submodule: `git submodule update --init --recursive`
 
-## macOS
-
-- Install [ninja](https://github.com/ninja-build/ninja/wiki/Pre-built-Ninja-packages):
-
-  ```sh
-  brew install ninja
-  ```
-
-- Install [wine-crossover](https://github.com/Gcenx/homebrew-wine):
-
-  ```sh
-  brew install --cask --no-quarantine gcenx/wine/wine-crossover
-  ```
-
-After OS upgrades, if macOS complains about `Wine Crossover.app` being unverified, you can unquarantine it using:
+Then:
 
 ```sh
-sudo xattr -rd com.apple.quarantine '/Applications/Wine Crossover.app'
+cmake -S . -B build-pc -G Ninja -DCMAKE_CXX_COMPILER=clang++
+cmake --build build-pc
 ```
 
-## Linux
+Run it:
 
-- Install [ninja](https://github.com/ninja-build/ninja/wiki/Pre-built-Ninja-packages).
-- For non-x86(\_64) platforms: Install wine from your package manager.
-  - For x86(\_64), [wibo](https://github.com/decompals/wibo), a minimal 32-bit Windows binary wrapper, will be automatically downloaded and used.
+```sh
+set BFBB_ASSETS=D:\path\to\extracted\xbox\game
+build-pc\bfbb.exe
+```
 
-# Building
+`src/SB/Core/pc/README.md` lists the `BFBB_*` switches.
 
-- Clone the repository:
+### Movies (optional)
 
-  ```sh
-  git clone https://github.com/bfbbdecomp/bfbb.git
-  ```
+FMV needs FFmpeg, and it has to be a 32-bit build with headers and import libs.
+That's the annoying part: most prebuilt Windows FFmpeg is x64 only these days.
+[vcpkg](https://github.com/microsoft/vcpkg) will build one:
 
-- Using [Dolphin Emulator](https://dolphin-emu.org/), extract your game to `orig/GQPE78`.
-  ![](assets/dolphin-extract.png)
-  - To save space, the only necessary files are the following. Any others can be deleted.
-    - `sys/main.dol`
-- Configure:
+```sh
+vcpkg install "ffmpeg[core,avcodec,avformat,swresample,swscale]:x86-windows"
+```
 
-  ```sh
-  python configure.py
-  ```
+Then add `-DCMAKE_PREFIX_PATH=<vcpkg>/installed/x86-windows` to the cmake line.
+The DLLs get copied next to the exe automatically.
 
-  To use a version other than `GQPE78` (NTSC-U), specify it with `--version`.
+Skip it if you don't care. CMake prints `FMV decoder: none` and the game just
+advances past movies as if they'd played.
 
-- Build:
+## Checking a change
 
-  ```sh
-  ninja
-  ```
+The port shares source with the GameCube build, so first question is always
+whether you broke the decomp:
 
-# Visual Studio Code
+```sh
+python tools/gcgate.py     # DOL sha1 and matched function count, both must PASS
+```
 
-If desired, use the recommended Visual Studio Code settings by renaming the `.vscode.example` directory to `.vscode`.
+Then the port's own checks:
 
-# Diffing
+```sh
+build-pc\pc_selftest.exe
+build-pc\rw_selftest.exe
+python tools/pclink.py
+python tools/pcprogress.py --drift --m32 --cc clang++
+```
 
-Once the initial build succeeds, an `objdiff.json` should exist in the project root.
+Edits to shared code go inside `#ifdef PLATFORM_PC` with the original expression
+kept in the `#else`, unless you've actually measured that the unguarded version
+still matches.
 
-Download the latest release from [encounter/objdiff](https://github.com/encounter/objdiff). Under project settings, set `Project directory`. The configuration should be loaded automatically.
+## State of things
 
-Select an object from the left sidebar to begin diffing. Changes to the project will rebuild automatically: changes to source files, headers, `configure.py`, `splits.txt` or `symbols.txt`.
+Working: rendering, world, characters, animation, collision, audio, input, saves,
+HUD, movies, loading screen.
 
-![](assets/objdiff.png)
+Not done: `iDraw`'s framebuffer write mask has no librw equivalent and is a no-op,
+GL3 has no window backend, and plenty of smaller things. Individual files have
+their own notes about what's wrong and why, which are more useful than a list here.
+
+## Docs
+
+See [docs/](docs/). Start with `docs/PCPORT-HANDOFF.md` if you're picking up the
+port, or `docs/DUPLOTRON.md` for the decomp side.
+
+## Credit
+
+The decompilation is the work of the
+[bfbbdecomp](https://github.com/bfbbdecomp/bfbb) project and its contributors.
+The renderer is [librw](https://github.com/aap/librw) by aap, through a
+[fork](https://github.com/joeyballentine/librw) with the changes this port needed.

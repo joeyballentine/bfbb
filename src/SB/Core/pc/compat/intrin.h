@@ -56,7 +56,7 @@ float __fabsf(float);
 // PowerPC's reciprocal-square-root estimate is specified to roughly 12 bits of
 // mantissa. The exact value is more accurate, not less -- but it is a different
 // value, so anything tuned against the estimate's error drifts slightly. See
-// "Floating point divergence" in PCPORT.md.
+// "Floating point divergence" in docs/PCPORT.md.
 //
 // The square root is taken with an SSE intrinsic rather than __builtin_sqrt or
 // a call to sqrt, and that is deliberate. At -O0 clang lowers __builtin_sqrt to

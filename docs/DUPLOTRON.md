@@ -77,7 +77,7 @@ Do not read the remaining 9% as 9% of remaining work.
 
 Merged `bfbbdecomp/main` (d226f0ae..24d388c4) at `297ce59f`.
 
-See **PCPORT.md** for the PC-port follow-up plan, and specifically for why the
+See **docs/PCPORT.md** for the PC-port follow-up plan, and specifically for why the
 port's gate is "all of `src/SB/**` written and correct" rather than this table.
 
 **`report.json` credits near-misses, so it understates stub work.** The xFX

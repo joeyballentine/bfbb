@@ -366,7 +366,7 @@ unrelated functions look broken at once.
 - **`.sbss2` holds anonymous 4-byte zero objects**, including ones created at
   *parse* time by an aggregate initialiser inside an `inline` function. That
   mechanism, and the one case in this tree where it misled everyone, is written
-  up under "Settled" in `DUPLOTRON.md` — read it before concluding a pool
+  up under "Settled" in `docs/DUPLOTRON.md` — read it before concluding a pool
   ordering is unreachable.
 - **`scope:weak` in `config/GQPE78/symbols.txt` means the source said
   `inline`**, and dtk extracts the single surviving copy into whichever object

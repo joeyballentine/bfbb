@@ -27,7 +27,7 @@
 //
 // Asset data is read through the same direct casts the GameCube code uses.
 // That is only correct because the port's assets are little-endian (see
-// PCPORT.md, "Asset caveats"); against GameCube-native assets every field read
+// docs/PCPORT.md, "Asset caveats"); against GameCube-native assets every field read
 // in this file would be byte-swapped.
 
 // ---------------------------------------------------------------------------

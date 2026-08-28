@@ -20,7 +20,7 @@ typedef unsigned long long U64;
 typedef float F32;
 typedef double F64;
 #elif !defined(__MWERKS__)
-// Host builds (see PCPORT.md). The GameCube widths above are what the game
+// Host builds (see docs/PCPORT.md). The GameCube widths above are what the game
 // code assumes everywhere; on a modern host only <stdint.h> guarantees them,
 // because `long` is 64-bit on LP64 and `int` is not guaranteed 32.
 #include <stdint.h>
