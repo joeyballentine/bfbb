@@ -617,12 +617,31 @@ RpAtomic* RpPTankAtomicCreate(RwInt32 maxParticleNum, RwUInt32 dataFlags, RwUInt
     ext->platFlags = platFlags;
     ext->publicData.format.dataFlags = dataFlags;
 
-    // rpPTANKDFLAGSTRUCTURE is structure-of-arrays: each cluster is its own
-    // contiguous block and strides by one particle's worth of that cluster
-    // alone. Anything else -- rpPTANKDFLAGARRAY, or neither, which the game
-    // never passes -- interleaves every cluster into one record per particle,
-    // so every cluster strides by the whole record.
-    ext->isAStructure = (dataFlags & rpPTANKDFLAGSTRUCTURE) ? TRUE : FALSE;
+    // The two layout flags name what one *element* of the data is, not how the
+    // clusters sit in memory, and they are the opposite way round to how they
+    // read:
+    //
+    //   rpPTANKDFLAGSTRUCTURE -- each particle is a structure. The clusters are
+    //       interleaved into one record per particle, so every cluster strides
+    //       by the whole record and they all share that stride.
+    //   rpPTANKDFLAGARRAY -- each cluster is an array. Every cluster is its own
+    //       contiguous block striding by one particle's worth of that cluster
+    //       alone, which is the structure-of-arrays form isAStructure names.
+    //
+    // Both callers prove it. xPtankPool.cpp asks for rpPTANKDFLAGSTRUCTURE and
+    // then reads ONE stride out of the position lock and advances position,
+    // colour, size and UV by it (xPtankPool.h, lock_block/next) -- only correct
+    // if every cluster strides identically, i.e. interleaved. zParPTank.cpp
+    // asks for rpPTANKDFLAGARRAY and multiplies each lock's own stride by the
+    // particle index, which is right either way.
+    //
+    // Reading these backwards laid the ptank pool out as structure-of-arrays,
+    // so the pool's single 12-byte position stride walked the size, colour and
+    // UV writes straight through each other. It cost the Tubelet its fire: the
+    // bottom-right texture coordinate of every particle was clobbered, the UV
+    // rect collapsed to zero height, and 57 sprites a frame sampled the
+    // transparent top row of fx_tubelet_flame and blended to nothing.
+    ext->isAStructure = (dataFlags & rpPTANKDFLAGARRAY) ? TRUE : FALSE;
 
     RwUInt32 active = dataFlags & kPerParticleFlags;
 

@@ -2130,8 +2130,11 @@ static void test_ptank()
 {
     printf("RpPTank\n");
 
-    // Structure of arrays, which is what xPtankPool.cpp asks for: each cluster
-    // is its own contiguous block and strides by its own size alone.
+    // Array of structures, which is what xPtankPool.cpp asks for: every cluster
+    // interleaved into one record per particle, so all of them share the
+    // record's stride. That shared stride is the whole point -- xPtankPool.h's
+    // lock_block reads the stride out of the position lock alone and then
+    // advances position, colour, size and UV by it.
     RwUInt32 flags = rpPTANKDFLAGPOSITION | rpPTANKDFLAGCOLOR | rpPTANKDFLAGVTX2TEXCOORDS |
                      rpPTANKDFLAGSTRUCTURE;
     RpAtomic* ptank = RpPTankAtomicCreate(64, flags, 0);
@@ -2144,7 +2147,7 @@ static void test_ptank()
     RpPTankAtomicExtPrv* ext = RPATOMICPTANKPLUGINDATA(ptank);
     check(ext != NULL, "the tank is reachable through RPATOMICPTANKPLUGINDATA");
     check(ext->maxPCount == 64 && ext->actPCount == 0, "with the particle count it was given");
-    check(ext->isAStructure != FALSE, "and in structure-of-arrays form");
+    check(ext->isAStructure == FALSE, "and in array-of-structures form");
     check(ext->publicData.format.numClusters == 3, "three clusters were asked for");
 
     // xPtankPool.cpp and zParPTank.cpp both read this, and a ptank with no
@@ -2163,14 +2166,17 @@ static void test_ptank()
 
     check(RpPTankAtomicLock(ptank, &pos, rpPTANKDFLAGPOSITION, rpPTANKLOCKWRITE) != FALSE,
           "RpPTankAtomicLock, positions");
-    check(pos.data != NULL && pos.stride == (RwInt32)sizeof(RwV3d),
-          "a structure-of-arrays position cluster strides one RwV3d");
+    check(pos.data != NULL &&
+              pos.stride >=
+                  (RwInt32)(sizeof(RwV3d) + sizeof(RwRGBA) + 2 * sizeof(RwTexCoords)),
+          "an array-of-structures position cluster strides one whole record");
 
     check(RpPTankAtomicLock(ptank, &uv, rpPTANKDFLAGVTX2TEXCOORDS, rpPTANKLOCKWRITE) != FALSE,
           "RpPTankAtomicLock, texture coordinates");
-    check(uv.data != NULL && uv.stride == (RwInt32)(2 * sizeof(RwTexCoords)),
-          "and the UV cluster strides two RwTexCoords");
-    check(uv.data != pos.data, "the two clusters are different blocks");
+    check(uv.data != NULL && uv.stride == pos.stride,
+          "and every other cluster strides by exactly the same record");
+    check(uv.data > pos.data && uv.data < pos.data + pos.stride,
+          "because they are interleaved inside one record per particle");
 
     // A cluster this ptank was not created with, and a multi-cluster lock,
     // are both refused rather than answered with something plausible.
@@ -2201,8 +2207,10 @@ static void test_ptank()
 
     RpPTankAtomicDestroy(ptank);
 
-    // Array form -- zParPTank.cpp's -- interleaves every cluster into one
-    // record per particle, so both clusters stride by the whole record.
+    // Array form -- zParPTank.cpp's -- is the structure-of-arrays layout: each
+    // cluster its own contiguous block, striding by its own size alone. That
+    // caller multiplies each lock's own stride by the particle index, so it is
+    // correct under either layout; this pins which one it actually gets.
     RpAtomic* aos = RpPTankAtomicCreate(
         16, rpPTANKDFLAGPOSITION | rpPTANKDFLAGVTX2TEXCOORDS | rpPTANKDFLAGARRAY, 0);
     check(aos != NULL, "RpPTankAtomicCreate, array form");
@@ -2215,11 +2223,12 @@ static void test_ptank()
     RpPTankLockStruct aosUv;
     RpPTankAtomicLock(aos, &aosPos, rpPTANKDFLAGPOSITION, rpPTANKLOCKWRITE);
     RpPTankAtomicLock(aos, &aosUv, rpPTANKDFLAGVTX2TEXCOORDS, rpPTANKLOCKWRITE);
-    check(aosPos.stride == aosUv.stride, "an array-form ptank strides both clusters the same");
-    check(aosPos.stride >= (RwInt32)(sizeof(RwV3d) + 2 * sizeof(RwTexCoords)),
-          "by at least one whole record");
-    check(aosUv.data > aosPos.data && aosUv.data < aosPos.data + aosPos.stride,
-          "and interleaves them inside it");
+    check(aosPos.stride == (RwInt32)sizeof(RwV3d),
+          "an array-form position cluster strides one RwV3d");
+    check(aosUv.stride == (RwInt32)(2 * sizeof(RwTexCoords)),
+          "and its UV cluster strides two RwTexCoords");
+    check(aosUv.data >= aosPos.data + 16 * aosPos.stride,
+          "because each cluster is a separate contiguous block");
     RpPTankAtomicUnlock(aos);
 
     RpPTankAtomicDestroy(aos);
