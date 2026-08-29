@@ -247,12 +247,8 @@ namespace
     // camera, so the vertices depend on which camera is rendering, and the
     // same ptank can be drawn by more than one.
     //
-    // The camera comes from rw::engine->currentCamera, which is set for the
-    // duration of a RwCameraBeginUpdate/EndUpdate pair (camera.cpp). An
-    // earlier revision of this file gave that pointer being permanently null
-    // as the reason there was no instancing at all; that stopped being true
-    // when camera.cpp started publishing it, and this is the work that was
-    // waiting on it.
+    // The camera comes from rw::engine->currentCamera, which camera.cpp sets
+    // for the duration of a RwCameraBeginUpdate/EndUpdate pair.
     //
     // Corners are wound to match the index buffer createPTankGeometry built:
     // 0,1,2 and 0,2,3, round the quad rather than across it.

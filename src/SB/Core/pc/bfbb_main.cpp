@@ -323,12 +323,9 @@ namespace
             SetUnhandledExceptionFilter(CrashHandler);
             setvbuf(stdout, NULL, _IONBF, 0);
             setvbuf(stderr, NULL, _IONBF, 0);
-            // A banner that names a gap which has since been filled is worse
-            // than no banner, because it is the first thing anyone reads when
-            // something does not work. iFX stopped being a refusal when the
-            // animated-UV pipeline went in, and iFMV stopped being one when the
-            // movie decoder did -- so this says which decoder is actually
-            // linked rather than asserting there is none.
+            // Names the decoder that is actually linked. A banner claiming a
+            // gap that has since been filled is worse than no banner: it is
+            // the first thing anyone reads when something does not work.
             printf("bfbb: PC port, D3D9. Movie decoder: %s, movie audio: %s.\n",
                    iFMVDecoderName(), iFMVAudioName());
             if (getenv("BFBB_TEST_CRASH")) { *(volatile int*)0 = 1; }
