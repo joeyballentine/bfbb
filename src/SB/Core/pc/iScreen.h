@@ -8,43 +8,40 @@
 // reaches this through src/SB/Core/x/xScreen.h, which preprocesses to the
 // literals on the console.
 //
-// **This is the render size, not the window size.** The port does not draw into
-// the back buffer; it draws into a virtual screen that blitVirtualScreen
-// (third_party/librw/src/d3d/d3ddevice.cpp) stretches into the back buffer at
-// present time, keeping its aspect. The two are already independent -- a render
-// size above the window supersamples, below it scales up -- and iSystem happens
-// to open the window at the render size because that is the least surprising
-// thing to do, not because anything requires it.
+// This is the render size, not the window size. The port draws into a virtual
+// screen that blitVirtualScreen (third_party/librw/src/d3d/d3ddevice.cpp)
+// stretches into the back buffer at present time, keeping its aspect. The two
+// are independent: a render size above the window supersamples, below it scales
+// up. iSystem opens the window at the render size because that is the least
+// surprising thing to do, not because anything requires it.
 //
-// **Why one number for the whole game.** A Raster::CAMERA has no surface of its
-// own: setRenderSurfaces binds the DEFAULT render target for it, and
+// One number serves the whole game because a Raster::CAMERA has no surface of
+// its own. setRenderSurfaces binds the default render target for it, and
 // rasterCreateZbuffer shares the engine's depth surface only when the Z
 // raster's size equals the screen extent, allocating a private one otherwise. A
 // depth surface smaller than the render target is invalid in D3D9, so a camera
 // raster that does not match the virtual screen does not draw small -- it fails
-// to bind depth and draws NOTHING. Every full-screen camera in the game has to
-// be built at this size, including the two instancing cameras in iEnv.cpp and
-// iModel.cpp that never draw a pixel but still call RwCameraBeginUpdate.
+// to bind depth and draws nothing. Every full-screen camera has to be built at
+// this size, including the two instancing cameras in iEnv.cpp and iModel.cpp
+// that never draw a pixel but still call RwCameraBeginUpdate.
 //
-// **Fixed at boot, deliberately.** The virtual screen is set once, inside
-// RwEngineOpen, and never updated. Changing this while the game is live would
-// mean recreating every camera raster in the game at once, so nothing calls the
-// setter after startup and the getters answer the same thing all run.
+// It is fixed at boot. The virtual screen is set once, inside RwEngineOpen, and
+// changing it while the game is live would mean recreating every camera raster
+// at once, so nothing calls the setter after startup.
 //
-// **Widescreen follows from the size, with no switch of its own.** A render
-// size whose aspect is not 4:3 is a request for a wider (or taller) view, so:
+// Widescreen follows from the size, with no switch of its own. A render size
+// whose aspect is not 4:3 is a request for a wider or taller view:
 //
-//   - The 3D frustum keeps its VERTICAL field of view and widens horizontally
+//   - The 3D frustum keeps its vertical field of view and widens horizontally
 //     -- more world to the left and right, not less above and below. iCamera
 //     builds it from iScreenAspectF.
-//   - The 2D layer keeps its 4:3 shape and is CENTRED. Everything the game
-//     draws in normalized 0..1 coordinates -- text, the HUD, menus, cutscene
-//     overlays -- lands in the UI box below rather than being stretched to the
-//     screen. The art is authored at 640x480 and stretching it is the one
-//     outcome that cannot be undone later.
+//   - The 2D layer keeps its 4:3 shape and is centred. Everything drawn in
+//     normalized 0..1 coordinates -- text, the HUD, menus, cutscene overlays --
+//     lands in the UI box below rather than being stretched. The art is
+//     authored at 640x480, and stretching it is the one outcome that cannot be
+//     undone later.
 //   - Full-screen effects are still full screen: the fades, the letterbox bars
-//     and the safe-area frame take the screen size, not the UI box, because
-//     what they are for is covering everything.
+//     and the safe-area frame take the screen size, not the UI box.
 //
 // See docs/RESOLUTION.md.
 
