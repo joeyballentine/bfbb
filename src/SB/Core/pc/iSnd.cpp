@@ -1,6 +1,7 @@
 #include "iSnd.h"
 #include "iSndData.h"
 #include "iSndHost.h"
+#include "iSoundtrack.h"
 
 #include "iConfig.h"
 #include "iHost.h"
@@ -282,6 +283,16 @@ void iSndInit()
     }
 
     printf("iSnd: audio backend is %s\n", iSndHostName());
+
+    // Only when there is one. A line saying no soundtrack folder is set would
+    // be printed for every player who does not use the feature.
+    if (iSoundtrackFolder() != NULL)
+    {
+        U32 tracks = iSoundtrackCount();
+        printf("iSnd: soundtrack folder is %s (%s), %u track%s\n", iSoundtrackFolder(),
+               iSoundtrackDecoderName(), tracks, tracks == 1 ? "" : "s");
+    }
+
     fflush(stdout);
 }
 
@@ -1050,11 +1061,15 @@ static S32 iStartVoice(xSndVoiceInfo* vp)
     fmt.block_align = e != NULL ? e->block_align : 2;
 
     U32 bytes = 0;
-    sample.data = iSndDataAcquire(vp->assetID, &fmt, &bytes);
+    iSndDataPcm pcm;
+    sample.data = iSndDataAcquire(vp->assetID, &fmt, &bytes, &pcm);
     sample.bytes = bytes;
     sVoices[i].holds_data = (sample.data != NULL);
 
-    sample.channels = fmt.channels;
+    // What came back, not what the table asked for. The two differ only for a
+    // soundtrack override, which is a different recording of the same music and
+    // may be stereo where the disc's asset is mono.
+    sample.channels = pcm.channels;
 
     // Always 16, whatever the table says: iSndDataAcquire decodes on the way
     // in, so a 4-bit ADPCM asset reaches the backend as PCM. Passing the
@@ -1069,6 +1084,11 @@ static S32 iStartVoice(xSndVoiceInfo* vp)
                              ? vp->sample_rate
                              : (e != NULL ? e->samples_per_sec : snd.hdr.sample_rate);
 
+    if (pcm.overridden && pcm.sample_rate != 0)
+    {
+        sample.sample_rate = pcm.sample_rate;
+    }
+
     // The Xbox table carries no loop points -- its entries are a WAVEFORMATEX
     // and a size, and nothing else. The GameCube reads loop_flag out of the
     // DSPADPCM header OR takes the caller's 0x8000 (src/SB/Core/gc/iSnd.cpp:
@@ -1078,9 +1098,31 @@ static S32 iStartVoice(xSndVoiceInfo* vp)
     // the beginning, because there is no other point to restart at.
     sample.looping = (vp->flags & 0x8000) != 0;
     sample.loop_start = 0;
+    sample.loop_end = 0;
 
     U32 frame_bytes = sample.channels * (sample.bits / 8);
     sample.num_samples = frame_bytes != 0 ? bytes / frame_bytes : 0;
+
+    // An override loops where the DISC's asset ended, not where the file does.
+    // A soundtrack release is the same performance with an ending put back on
+    // it, and the game loops its music forever, so looping the file whole would
+    // drag that ending round every time. The retail length is in the table, in
+    // the table's own rate, so it is carried across to the file's.
+    if (pcm.overridden && e != NULL && sample.looping)
+    {
+        U32 retail_frames = entry_frames(*e);
+        U32 retail_rate = e->samples_per_sec;
+
+        if (retail_frames != 0 && retail_rate != 0 && sample.sample_rate != 0)
+        {
+            U64 scaled = ((U64)retail_frames * sample.sample_rate) / retail_rate;
+
+            if (scaled != 0 && scaled < sample.num_samples)
+            {
+                sample.loop_end = (U32)scaled;
+            }
+        }
+    }
 
     if (sample.num_samples == 0)
     {

@@ -1,6 +1,7 @@
 #include "iSndData.h"
 
 #include "iFile.h"
+#include "iSoundtrack.h"
 
 #include "xFile.h"
 #include "xString.h"
@@ -52,6 +53,13 @@ struct snd_entry
     void* data;
     S32 refs;
     U64 stamp;
+
+    // What the block actually is, which for an override is not what the sound
+    // table says. Cached with the bytes so that the second play of a track
+    // answers the same as the first without re-deciding anything.
+    U32 channels;
+    U32 sample_rate;
+    bool overridden;
 };
 
 static snd_entry sEntries[ISNDDATA_MAX_ENTRIES];
@@ -402,11 +410,18 @@ static void* iDecodeToPcm(void* raw, U32 rawBytes, const iSndDataFormat* fmt, U3
     return NULL;
 }
 
-const void* iSndDataAcquire(U32 assetID, const iSndDataFormat* fmt, U32* bytes)
+const void* iSndDataAcquire(U32 assetID, const iSndDataFormat* fmt, U32* bytes, iSndDataPcm* pcm)
 {
     if (bytes != NULL)
     {
         *bytes = 0;
+    }
+
+    if (pcm != NULL)
+    {
+        pcm->channels = (fmt != NULL && fmt->channels != 0) ? fmt->channels : 1;
+        pcm->sample_rate = 0;
+        pcm->overridden = false;
     }
 
     if (assetID == 0)
@@ -429,11 +444,52 @@ const void* iSndDataAcquire(U32 assetID, const iSndDataFormat* fmt, U32* bytes)
         }
 
         U32 got = 0;
-        void* mem = iReadAsset(assetID, &got);
+        U32 channels = (fmt != NULL && fmt->channels != 0) ? fmt->channels : 1;
+        U32 rate = 0;
+        bool overridden = false;
 
-        if (mem != NULL)
+        // A soundtrack override first, and the archives only if there is none
+        // or it will not decode. A folder with one unreadable file in it should
+        // cost that track and no more, so a failure here falls through rather
+        // than returning: the disc's own music is a working answer.
+        void* mem = NULL;
+        const char* file = iSoundtrackFind(assetID);
+
+        if (file != NULL)
         {
-            mem = iDecodeToPcm(mem, got, fmt, &got);
+            mem = iSoundtrackDecode(file, &channels, &rate, &got);
+
+            if (mem != NULL)
+            {
+                overridden = true;
+
+                // Once per track, because a decode happens once per cache
+                // entry. Worth saying: a soundtrack folder is a thing someone
+                // set up by hand, and "did it actually take" is otherwise only
+                // answerable by ear -- which is the one instrument that cannot
+                // tell a working override from a missing one when the track it
+                // replaced sounded fine already.
+                printf("iSndData: %08x plays from %s (%u ch, %u Hz)\n", assetID, file, channels,
+                       rate);
+                fflush(stdout);
+            }
+            else
+            {
+                printf("iSndData: '%s' would not decode; the game's own asset is used\n", file);
+                fflush(stdout);
+                channels = (fmt != NULL && fmt->channels != 0) ? fmt->channels : 1;
+                rate = 0;
+            }
+        }
+
+        if (mem == NULL)
+        {
+            mem = iReadAsset(assetID, &got);
+
+            if (mem != NULL)
+            {
+                mem = iDecodeToPcm(mem, got, fmt, &got);
+            }
         }
 
         if (mem == NULL)
@@ -457,6 +513,9 @@ const void* iSndDataAcquire(U32 assetID, const iSndDataFormat* fmt, U32* bytes)
         e->bytes = got;
         e->data = mem;
         e->refs = 0;
+        e->channels = channels;
+        e->sample_rate = rate;
+        e->overridden = overridden;
         sTotalBytes += got;
     }
 
@@ -466,6 +525,13 @@ const void* iSndDataAcquire(U32 assetID, const iSndDataFormat* fmt, U32* bytes)
     if (bytes != NULL)
     {
         *bytes = e->bytes;
+    }
+
+    if (pcm != NULL)
+    {
+        pcm->channels = e->channels;
+        pcm->sample_rate = e->sample_rate;
+        pcm->overridden = e->overridden;
     }
 
     return e->data;

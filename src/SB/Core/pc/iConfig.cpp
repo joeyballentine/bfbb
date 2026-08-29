@@ -129,6 +129,24 @@ namespace
           "The loading screen stands on a still of the level you just left,\n"
           "; rather than on the background texture the GameCube release uses." },
         { "xbox", "reverb", "on", "Cave reverb, in the Mermalair and the caves." },
+        { "audio", "soundtrack", "",
+          "A folder of your own recordings to play instead of the game's music.\n"
+          "; Empty is the default and is exactly the disc.\n"
+          ";\n"
+          "; The disc's music is mono -- every sound in the game is -- so this is\n"
+          "; mainly how a stereo soundtrack gets in. Whatever a file's rate and\n"
+          "; channel count are, they are used; the mixer resamples as it already\n"
+          "; does. WAVE always works, and a build made with FFmpeg reads anything\n"
+          "; else FFmpeg can.\n"
+          ";\n"
+          "; A file is matched to a track by its name: music_00_hb_44.flac needs\n"
+          "; nothing else. Files named after the music instead -- as a soundtrack\n"
+          "; release is -- need a soundtrack.txt beside them saying which is which,\n"
+          "; one 'asset name = file' per line.\n"
+          ";\n"
+          "; A looping track turns round where the disc's version ended, not where\n"
+          "; the file does, so a release with a proper ending on it loops the way\n"
+          "; the console did rather than dragging that ending round each time." },
         { "text", "platform_wording", "on",
           "The game's text is the Xbox release's, and it talks about an Xbox: the\n"
           "; pause menu offers to reboot to the dashboard, an autosave asks you not to\n"

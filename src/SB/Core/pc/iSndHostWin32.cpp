@@ -101,6 +101,7 @@ struct hvoice
     U32 bits;
     U32 rate;
     U32 loop_start;
+    U32 loop_end;
 
     // Read position in source frames. Fractional because the source rate and
     // the device rate are unrelated.
@@ -225,18 +226,26 @@ static inline float iSampleAt(const hvoice* v, double pos, U32 ch)
 // false when the voice has finished.
 static bool iWrap(hvoice* v)
 {
-    if (v->pos < (double)v->frames)
+    // A looping voice may turn round before the data runs out, which is what a
+    // soundtrack override does. Everything else ends where the samples do.
+    U32 end = v->frames;
+    if (v->looping && v->loop_end != 0 && v->loop_end <= v->frames)
+    {
+        end = v->loop_end;
+    }
+
+    if (v->pos < (double)end)
     {
         return true;
     }
 
-    if (!v->looping || v->frames == 0)
+    if (!v->looping || end == 0)
     {
         return false;
     }
 
-    U32 start = v->loop_start < v->frames ? v->loop_start : 0;
-    double span = (double)(v->frames - start);
+    U32 start = v->loop_start < end ? v->loop_start : 0;
+    double span = (double)(end - start);
 
     if (span <= 0.0)
     {
@@ -246,7 +255,7 @@ static bool iWrap(hvoice* v)
 
     // A loop shorter than one output step would spin here, so this subtracts
     // repeatedly rather than once.
-    while (v->pos >= (double)v->frames)
+    while (v->pos >= (double)end)
     {
         v->pos -= span;
     }
@@ -906,6 +915,7 @@ void iSndHostStart(S32 voice, const iSndHostSample* sample)
         v->rate = sample->sample_rate != 0 ? sample->sample_rate : 22050;
         v->looping = sample->looping;
         v->loop_start = sample->loop_start;
+        v->loop_end = sample->loop_end;
         v->pos = 0.0;
         v->playing = frames > 0;
         v->paused = false;

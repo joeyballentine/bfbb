@@ -30,9 +30,10 @@ struct iSndHostSample
     const void* data;
     U32 bytes;
 
-    // 1 or 2, and 8 or 16. Every asset the port has met is 16-bit mono, but the
-    // table says so per entry rather than by convention, so the backend is told
-    // rather than assuming.
+    // 1 or 2, and 8 or 16. Every asset the disc ships is 16-bit mono, but the
+    // table says so per entry rather than by convention, and a soundtrack
+    // override is routinely stereo -- so the backend is told rather than
+    // assuming, and must read both channels when there are two.
     U32 channels;
     U32 bits;
 
@@ -43,6 +44,13 @@ struct iSndHostSample
     // the length of one pass, which is what a silent backend paces on.
     bool looping;
     U32 loop_start;
+
+    // Where a loop turns round, when that is not the end of the data. Zero
+    // means the end, which is every sound the disc ships. A soundtrack override
+    // sets it: the file is the same music with a proper ending on it, and the
+    // game wants the console's seam rather than that ending. Ignored when the
+    // voice is not looping, and ignored if it is past num_samples.
+    U32 loop_end;
 };
 
 // The environmental reverb, as I3DL2 gives it. A backend that has no reverb

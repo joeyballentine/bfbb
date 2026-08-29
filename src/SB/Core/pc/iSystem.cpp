@@ -8,6 +8,7 @@
 #include "iScreen.h"
 #include "iTRC.h"
 #include "iSnapshot.h"
+#include "iSoundtrack.h"
 #include "iTextPatch.h"
 #include "iTime.h"
 
@@ -414,6 +415,12 @@ static void ApplyConfig()
     S32 drawDistance = iConfigGetBool("video.draw_distance", TRUE);
     iDrawDistSetUnlimited(drawDistance);
     iCameraSetNearFarClip(0.0f, iDrawDistFarClip());
+
+    // Where the music may be replaced from. Pushed rather than read, like the
+    // text patch: nothing under here knows what config.ini is. The folder is
+    // not scanned until the first sound asks for its bytes, so naming one costs
+    // nothing at startup.
+    iSoundtrackSetFolder(iConfigGetString("audio.soundtrack", ""));
 
     S32 glow = iConfigGetBool("xbox.glow", TRUE);
     S32 distortion = iConfigGetBool("xbox.distortion", TRUE);

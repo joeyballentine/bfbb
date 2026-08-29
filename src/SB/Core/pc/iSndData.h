@@ -21,6 +21,21 @@ struct iSndDataFormat
     U32 block_align;
 };
 
+// What actually came back, which is not always what the table asked for. The
+// caller passes the sound table's idea of the asset in `fmt` and reads the
+// truth out of this: a soundtrack override (iSoundtrack.h) is a different
+// recording of the same music and is free to be stereo, or 48 kHz, or both.
+//
+// `channels` and `sample_rate` describe the block returned. `overridden` says
+// the bytes did not come from the game's own archives, which is the one thing
+// a caller cannot work out for itself and which decides where the loop goes.
+struct iSndDataPcm
+{
+    U32 channels;
+    U32 sample_rate;
+    bool overridden;
+};
+
 // Hand back the PCM for one SND or SNDS asset, reading it if this is the first
 // time. Returns NULL if the asset cannot be found or read, which a caller is
 // expected to treat as "play this voice silently" rather than as a failure --
@@ -31,10 +46,14 @@ struct iSndDataFormat
 // `bytes` is the decoded length, not the asset's, and the caller should read
 // the sample count from it rather than from the table's data_size.
 //
+// `pcm` may be NULL for a caller that only wants the bytes; one that is going
+// to play them should pass it and believe it over `fmt`.
+//
 // The returned memory stays valid until the matching iSndDataRelease. Every
 // successful Acquire must be paired with exactly one Release, including when
 // the voice is stopped early.
-const void* iSndDataAcquire(U32 assetID, const iSndDataFormat* fmt, U32* bytes);
+const void* iSndDataAcquire(U32 assetID, const iSndDataFormat* fmt, U32* bytes,
+                            iSndDataPcm* pcm);
 void iSndDataRelease(U32 assetID);
 
 // Drop everything, including entries still held. Only for iSndInit/iSndExit,

@@ -147,11 +147,15 @@ if(FFMPEG_INCLUDE_DIR AND FFMPEG_AVCODEC_LIBRARY AND FFMPEG_AVFORMAT_LIBRARY
     ${FFMPEG_AVUTIL_LIBRARY}
   )
   set(FMV_INCLUDES ${FFMPEG_INCLUDE_DIR})
+  # Also read by iSoundtrack.cpp, which decodes a replacement music track
+  # through the same libraries. A build without them still plays WAVE.
+  set(FMV_DEFINES BFBB_HAVE_FFMPEG)
   message(STATUS "FMV decoder: ffmpeg (${FFMPEG_INCLUDE_DIR})")
 else()
   set(FMV_SOURCES ${PC_DIR}/iFMVDecoderNull.cpp)
   set(FMV_LIBRARIES)
   set(FMV_INCLUDES)
+  set(FMV_DEFINES)
   message(STATUS "FMV decoder: none (FFmpeg not found; movies will be skipped)")
 endif()
 
@@ -317,6 +321,7 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/isavegame.cpp
   ${PC_DIR}/iSnd.cpp
   ${PC_DIR}/iSndData.cpp
+  ${PC_DIR}/iSoundtrack.cpp
 
   # Copied unchanged from gc/ -- pure geometry and collision, nothing
   # GameCube-specific in them. See VERBATIM.txt; --drift reports divergence.
@@ -458,6 +463,9 @@ target_link_libraries(bfbb_platform PRIVATE ${FMV_LIBRARIES})
 if(FMV_INCLUDES)
   target_include_directories(bfbb_platform PRIVATE ${FMV_INCLUDES})
 endif()
+if(FMV_DEFINES)
+  target_compile_definitions(bfbb_platform PRIVATE ${FMV_DEFINES})
+endif()
 
 # compat/ shadows <math.h>, <string.h> and <cmath> to add the CodeWarrior
 # extensions the game's sources use, chaining to the system headers with
@@ -591,6 +599,12 @@ add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   # is what makes its eviction and pinning rules testable at all; the real
   # xstransvc closure is far too large for this target.
   ${PC_DIR}/iSndData.cpp
+
+  # The soundtrack override, which iSndData asks before it reads an archive.
+  # Deliberately built here WITHOUT BFBB_HAVE_FFMPEG: the WAVE reader is the
+  # arm that has to work in every configuration, and testing it needs no
+  # external codec and produces the same bytes on every machine.
+  ${PC_DIR}/iSoundtrack.cpp
 
   # xordarray is the NPC list's container. It is linked rather than doubled
   # because the ordering test's whole point is that XOrdSort and XOrdLookup

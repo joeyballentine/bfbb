@@ -20,6 +20,7 @@
 #include "iHost.h"
 #include "iSnd.h"
 #include "iSndData.h"
+#include "iSoundtrack.h"
 #include "xpkrsvc.h"
 #include "xhipio.h"
 #include "iSndHost.h"
@@ -1416,7 +1417,7 @@ static void test_snd_data()
     pcm.block_align = 2;
 
     U32 bytes = 0;
-    const U8* p = (const U8*)iSndDataAcquire(sFakePkgAsset, &pcm, &bytes);
+    const U8* p = (const U8*)iSndDataAcquire(sFakePkgAsset, &pcm, &bytes, NULL);
 
     check(p != NULL, "a known asset reads");
     check(bytes == kSize, "with the size the table gave");
@@ -1437,12 +1438,12 @@ static void test_snd_data()
         check(exact, "and the bytes at the sector-plus-offset the TOC describes");
     }
 
-    check(iSndDataAcquire(0x99999999, &pcm, &bytes) == NULL, "an unknown asset reads nothing");
+    check(iSndDataAcquire(0x99999999, &pcm, &bytes, NULL) == NULL, "an unknown asset reads nothing");
     check(bytes == 0, "and reports no size");
 
     // Cached: the same pointer, without going back to the file.
     U32 again = 0;
-    const void* second = iSndDataAcquire(sFakePkgAsset, &pcm, &again);
+    const void* second = iSndDataAcquire(sFakePkgAsset, &pcm, &again, NULL);
     check(second == p, "a second acquire returns the cached block");
     check(again == kSize, "with the same size");
 
@@ -1516,7 +1517,7 @@ static void test_snd_data()
     adpcm.block_align = kBlock;
 
     U32 abytes = 0;
-    const S16* a = (const S16*)iSndDataAcquire(sFakePkgAsset, &adpcm, &abytes);
+    const S16* a = (const S16*)iSndDataAcquire(sFakePkgAsset, &adpcm, &abytes, NULL);
 
     check(a != NULL, "an ADPCM asset decodes");
     check(abytes == 64 * sizeof(S16),
@@ -1544,6 +1545,159 @@ static void test_snd_data()
 
     iSndDataRelease(sFakePkgAsset);
     iSndDataReset();
+}
+
+// ---------------------------------------------------------------------------
+// The soundtrack override
+//
+// Built here WITHOUT BFBB_HAVE_FFMPEG, so what runs is the WAVE reader and the
+// folder scan -- the two parts that have to work in every configuration. What
+// FFmpeg decodes is FFmpeg's business; what this has to get right is which
+// file answers for which asset, and that a stereo file arrives as stereo.
+
+// A minimal RIFF/WAVE: 16-bit PCM, `ch` channels at `hz`, `frames` frames of a
+// counting pattern that makes a channel swap visible.
+static void write_wav(const char* path, U32 ch, U32 hz, U32 frames)
+{
+    FILE* f = fopen(path, "wb");
+    if (f == NULL)
+    {
+        return;
+    }
+
+    U32 dataBytes = frames * ch * 2;
+    U32 riffSize = 36 + dataBytes;
+    U32 byteRate = hz * ch * 2;
+
+    fwrite("RIFF", 1, 4, f);
+    fwrite(&riffSize, 4, 1, f);
+    fwrite("WAVEfmt ", 1, 8, f);
+    U32 fmtLen = 16;
+    fwrite(&fmtLen, 4, 1, f);
+    U16 tag = 1;
+    U16 channels16 = (U16)ch;
+    U16 align = (U16)(ch * 2);
+    U16 bits = 16;
+    fwrite(&tag, 2, 1, f);
+    fwrite(&channels16, 2, 1, f);
+    fwrite(&hz, 4, 1, f);
+    fwrite(&byteRate, 4, 1, f);
+    fwrite(&align, 2, 1, f);
+    fwrite(&bits, 2, 1, f);
+    fwrite("data", 1, 4, f);
+    fwrite(&dataBytes, 4, 1, f);
+
+    for (U32 i = 0; i < frames; i++)
+    {
+        for (U32 c = 0; c < ch; c++)
+        {
+            // Left counts up from 100, right down from -100, so a decoder that
+            // drops or swaps a channel cannot pass.
+            S16 v = (S16)(c == 0 ? (100 + (S32)i) : -(100 + (S32)i));
+            fwrite(&v, 2, 1, f);
+        }
+    }
+
+    fclose(f);
+}
+
+static void test_soundtrack()
+{
+    printf("iSoundtrack\n");
+
+    char dir[512];
+    if (!scratch_dir("soundtrack", dir, sizeof(dir)))
+    {
+        check(false, "could not make a temp directory");
+        return;
+    }
+
+    // No folder is the default, and must answer nothing for everything rather
+    // than scanning the working directory.
+    iSoundtrackSetFolder("");
+    check(iSoundtrackFolder() == NULL, "no folder set reads as no folder");
+    check(iSoundtrackFind(0xABCD1234) == NULL, "and overrides nothing");
+
+    // Rule one: the file is named after the asset, so its name IS the key.
+    char named[512];
+    snprintf(named, sizeof(named), "%s/music_00_hb_44.wav", dir);
+    write_wav(named, 2, 44100, 64);
+
+    // Rule two: a file named after the music, which cannot be matched by name.
+    char album[512];
+    snprintf(album, sizeof(album), "%s/01. Bikini Bottom.wav", dir);
+    write_wav(album, 1, 22050, 32);
+
+    iSoundtrackSetFolder(dir);
+
+    U32 aidNamed = iTextPatchAssetID("music_00_hb_44");
+    U32 aidAlbum = iTextPatchAssetID("music_10_gy_44");
+
+    check(iSoundtrackFind(aidNamed) != NULL, "a file named after its asset is found by name");
+    check(iSoundtrackFind(aidAlbum) == NULL, "and one named after the music is not, on its own");
+    check(iSoundtrackFind(0x12345678) == NULL, "an asset with no file is not overridden");
+
+    // The mapping file supplies what the name cannot.
+    char mapping[512];
+    snprintf(mapping, sizeof(mapping), "%s/soundtrack.txt", dir);
+    FILE* mf = fopen(mapping, "w");
+    check(mf != NULL, "the mapping file could be written");
+    if (mf != NULL)
+    {
+        fprintf(mf, "; a comment, and a blank line\n\n");
+        fprintf(mf, "music_10_gy_44 = 01. Bikini Bottom.wav\n");
+        fprintf(mf, "music_01_jf_44 = not_here.wav\n");
+        fclose(mf);
+    }
+
+    iSoundtrackSetFolder(dir);
+
+    check(iSoundtrackFind(aidAlbum) != NULL, "the mapping file names a file the scan cannot");
+    check(iSoundtrackFind(iTextPatchAssetID("music_01_jf_44")) == NULL,
+          "a mapping to a file that is not there is dropped, not stored");
+    check(iSoundtrackFind(aidNamed) != NULL, "and the by-name match still stands beside it");
+
+    // The decode itself. Stereo has to survive: this is the whole point.
+    U32 ch = 0;
+    U32 hz = 0;
+    U32 bytes = 0;
+    void* pcm = iSoundtrackDecode(named, &ch, &hz, &bytes);
+
+    check(pcm != NULL, "a WAVE file decodes");
+    check(ch == 2, "a stereo file comes back stereo");
+    check(hz == 44100, "at its own sample rate");
+    check(bytes == 64 * 2 * sizeof(S16), "with every frame of it");
+
+    if (pcm != NULL)
+    {
+        const S16* s = (const S16*)pcm;
+        check(s[0] == 100 && s[1] == -100, "left and right land in that order");
+        check(s[2] == 101 && s[3] == -101, "and stay interleaved");
+        free(pcm);
+    }
+
+    pcm = iSoundtrackDecode(album, &ch, &hz, &bytes);
+    check(pcm != NULL && ch == 1 && hz == 22050,
+          "a mono file at another rate is reported as what it is");
+    free(pcm);
+
+    // A file that is not audio at all is a NULL, not a crash: iSndData falls
+    // back to the disc on exactly this.
+    char junk[512];
+    snprintf(junk, sizeof(junk), "%s/junk.wav", dir);
+    FILE* jf = fopen(junk, "wb");
+    if (jf != NULL)
+    {
+        fwrite("this is not a wave file at all, not even close", 1, 46, jf);
+        fclose(jf);
+    }
+
+    ch = 99;
+    check(iSoundtrackDecode(junk, &ch, &hz, &bytes) == NULL, "a file that is not audio decodes to nothing");
+    check(ch == 0, "and says so rather than leaving the caller's channel count alone");
+
+    iSoundtrackSetFolder("");
+    check(iSoundtrackCount() == 0, "clearing the folder drops the scan");
 }
 
 // ---------------------------------------------------------------------------
@@ -2658,6 +2812,7 @@ int main()
     test_pad();
     test_savegame();
     test_snd_data();
+    test_soundtrack();
 #ifdef BFBB_AUDIO_BACKEND_WIN32
     test_snd_mixer();
 #endif
