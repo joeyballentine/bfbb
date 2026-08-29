@@ -20,6 +20,10 @@
 // state gives. xPad.cpp derives pressed/released from consecutive frames
 // itself.
 
+#include "iConfig.h"
+#include "iHost.h"
+#include "iPadBind.h"
+
 #include <windows.h>
 #include <xinput.h>
 #include <math.h>
@@ -36,8 +40,19 @@ static HMODULE sXInput;
 static XInputGetStateFn sXInputGetState;
 static XInputSetStateFn sXInputSetState;
 
+// What each XInput slot is reporting, before any of it is assigned to a game
+// port. The two are separated because config.ini can choose which slot the
+// game plays on: sSlot is indexed the way Windows counts controllers, sState
+// the way the game counts ports, and sPortSlot is the map between them.
+static iPadHostState sSlot[IPAD_MAX_CONTROLLERS];
+static S32 sPortSlot[IPAD_MAX_CONTROLLERS];
+
 static iPadHostState sState[IPAD_MAX_CONTROLLERS];
 static bool sKeyboardOnPort0;
+
+// input.controller: the XInput slot pinned to port 0, or -1 for "the first one
+// that answers". See ChooseController.
+static S32 sPinnedSlot = -1;
 
 // Read once, so the per-frame cost is a load.
 static const bool sReportPad = getenv("BFBB_PAD") != NULL;
@@ -166,42 +181,100 @@ void iPadHostWin32ConvertStick(S16 rawX, S16 rawY, S32 deadzone, F32* outX, F32*
 //     RB -> Z
 //
 // LB goes unused. The GameCube has no fourth shoulder and every bit the game
-// reads is reachable without one.
+// reads is reachable without one -- which makes LB, and the two stick clicks,
+// the obvious places for someone remapping to put something.
+//
+// All of the above is now the DEFAULT rather than the mapping: config.ini's
+// [pad] section says which input presses which button, and iPadBind.cpp holds
+// the defaults and the grammar. The exclusivity above is why that grammar has
+// a '!' -- `l1 = lt+!rb` is what keeps Z+L from being L1 and L2 at once.
+
+// The inputs an XInput pad has, numbered for the binder. Its ids are opaque to
+// it, so this file is free to use a dense range and test them as a bitmask.
+enum
+{
+    PADIN_A,
+    PADIN_B,
+    PADIN_X,
+    PADIN_Y,
+    PADIN_LB,
+    PADIN_RB,
+    PADIN_LT,
+    PADIN_RT,
+    PADIN_LS,
+    PADIN_RS,
+    PADIN_BACK,
+    PADIN_START,
+    PADIN_DPUP,
+    PADIN_DPDOWN,
+    PADIN_DPLEFT,
+    PADIN_DPRIGHT,
+    PADIN_COUNT
+};
+
+static const iPadBindToken kPadTokens[] = {
+    { "a", PADIN_A },           { "b", PADIN_B },
+    { "x", PADIN_X },           { "y", PADIN_Y },
+    { "lb", PADIN_LB },         { "rb", PADIN_RB },
+    { "lt", PADIN_LT },         { "rt", PADIN_RT },
+    { "ls", PADIN_LS },         { "rs", PADIN_RS },
+    { "back", PADIN_BACK },     { "start", PADIN_START },
+    { "dpup", PADIN_DPUP },     { "dpdown", PADIN_DPDOWN },
+    { "dpleft", PADIN_DPLEFT }, { "dpright", PADIN_DPRIGHT },
+};
+
+static const S32 kPadTokenCount = (S32)(sizeof(kPadTokens) / sizeof(kPadTokens[0]));
+
+static iPadBind sPadBind[IPAD_BIND_MAX_BUTTONS];
+static iPadBind sKeyBind[IPAD_BIND_MAX_BUTTONS];
+
+// The pad currently being converted, as one bit per PADIN_*. A binding is
+// evaluated through a callback that takes an id and nothing else, so the
+// device state has to be somewhere it can reach; a mask built once per
+// conversion is cheaper than handing the gamepad down and re-testing it.
+static U32 sPadHeld;
+
+static bool PadInputHeld(S16 id)
+{
+    return (sPadHeld & (1u << id)) != 0;
+}
 
 // Named rather than static, for the same reason as the stick conversion.
 U32 iPadHostWin32ConvertButtons(const XINPUT_GAMEPAD& gp)
 {
-    U32 on = 0;
+    sPadHeld = 0;
 
-    if (gp.wButtons & XINPUT_GAMEPAD_START) on |= XPAD_BUTTON_START;
-    if (gp.wButtons & XINPUT_GAMEPAD_BACK) on |= XPAD_BUTTON_SELECT;
+    if (gp.wButtons & XINPUT_GAMEPAD_A) sPadHeld |= 1u << PADIN_A;
+    if (gp.wButtons & XINPUT_GAMEPAD_B) sPadHeld |= 1u << PADIN_B;
+    if (gp.wButtons & XINPUT_GAMEPAD_X) sPadHeld |= 1u << PADIN_X;
+    if (gp.wButtons & XINPUT_GAMEPAD_Y) sPadHeld |= 1u << PADIN_Y;
 
-    if (gp.wButtons & XINPUT_GAMEPAD_DPAD_UP) on |= XPAD_BUTTON_UP;
-    if (gp.wButtons & XINPUT_GAMEPAD_DPAD_DOWN) on |= XPAD_BUTTON_DOWN;
-    if (gp.wButtons & XINPUT_GAMEPAD_DPAD_LEFT) on |= XPAD_BUTTON_LEFT;
-    if (gp.wButtons & XINPUT_GAMEPAD_DPAD_RIGHT) on |= XPAD_BUTTON_RIGHT;
+    if (gp.wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER) sPadHeld |= 1u << PADIN_LB;
+    if (gp.wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER) sPadHeld |= 1u << PADIN_RB;
+    if (gp.wButtons & XINPUT_GAMEPAD_LEFT_THUMB) sPadHeld |= 1u << PADIN_LS;
+    if (gp.wButtons & XINPUT_GAMEPAD_RIGHT_THUMB) sPadHeld |= 1u << PADIN_RS;
 
-    if (gp.wButtons & XINPUT_GAMEPAD_A) on |= XPAD_BUTTON_X;
-    if (gp.wButtons & XINPUT_GAMEPAD_B) on |= XPAD_BUTTON_TRIANGLE;
-    if (gp.wButtons & XINPUT_GAMEPAD_X) on |= XPAD_BUTTON_O;
-    if (gp.wButtons & XINPUT_GAMEPAD_Y) on |= XPAD_BUTTON_SQUARE;
+    if (gp.wButtons & XINPUT_GAMEPAD_BACK) sPadHeld |= 1u << PADIN_BACK;
+    if (gp.wButtons & XINPUT_GAMEPAD_START) sPadHeld |= 1u << PADIN_START;
+
+    if (gp.wButtons & XINPUT_GAMEPAD_DPAD_UP) sPadHeld |= 1u << PADIN_DPUP;
+    if (gp.wButtons & XINPUT_GAMEPAD_DPAD_DOWN) sPadHeld |= 1u << PADIN_DPDOWN;
+    if (gp.wButtons & XINPUT_GAMEPAD_DPAD_LEFT) sPadHeld |= 1u << PADIN_DPLEFT;
+    if (gp.wButtons & XINPUT_GAMEPAD_DPAD_RIGHT) sPadHeld |= 1u << PADIN_DPRIGHT;
 
     // The triggers are analog and the game's buttons are not, so they click at
     // a threshold the way the GameCube's do -- gc/iPad.cpp uses 0x18 out of the
     // same 0..255 range for exactly this.
-    bool left = gp.bLeftTrigger >= XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
-    bool right = gp.bRightTrigger >= XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
+    if (gp.bLeftTrigger >= XINPUT_GAMEPAD_TRIGGER_THRESHOLD) sPadHeld |= 1u << PADIN_LT;
+    if (gp.bRightTrigger >= XINPUT_GAMEPAD_TRIGGER_THRESHOLD) sPadHeld |= 1u << PADIN_RT;
 
-    if (gp.wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER)
+    U32 on = 0;
+    for (S32 i = 0; i < kPadBindButtonCount; i++)
     {
-        on |= XPAD_BUTTON_Z;
-        if (left) on |= XPAD_BUTTON_L2;
-        if (right) on |= XPAD_BUTTON_R2;
-    }
-    else
-    {
-        if (left) on |= XPAD_BUTTON_L1;
-        if (right) on |= XPAD_BUTTON_R1;
+        if (iPadBindHeld(sPadBind[i], PadInputHeld))
+        {
+            on |= kPadBindButtons[i].mask;
+        }
     }
 
     return on;
@@ -213,12 +286,11 @@ U32 iPadHostWin32ConvertButtons(const XINPUT_GAMEPAD& gp)
 // Only ever port 0, and only when no controller is on it. A keyboard is not a
 // second player; it is what makes the port playable on a machine with no pad.
 //
-//     WASD          left stick        arrows      d-pad
-//     IJKL          c-stick           Enter       start
-//     Space         GameCube A        LCtrl       GameCube B
-//     E             GameCube X        Q           GameCube Y
-//     Z / X         L1 / L2           C / V       R1 / R2
-//     F             GameCube Z        Backspace   select
+//     WASD          left stick        IJKL        c-stick
+//
+// The two sticks are the part config.ini cannot move. Everything else is in
+// its [keyboard] section, defaulted in iPadBind.cpp to the layout this file
+// used to hard-code.
 //
 // GetActiveWindow rather than a window handle: it reports the active window of
 // the CALLING THREAD's queue, so it is non-null exactly when one of our own
@@ -229,6 +301,117 @@ U32 iPadHostWin32ConvertButtons(const XINPUT_GAMEPAD& gp)
 static bool KeyDown(S32 vk)
 {
     return (GetAsyncKeyState(vk) & 0x8000) != 0;
+}
+
+// Key names, for the right-hand side of a [keyboard] binding. Virtual-key
+// codes are the ids, so the binder's lookup is the whole translation.
+//
+// Letters and digits are not listed: their VK codes ARE their ASCII values, so
+// KeyTokenId answers a one-character name directly rather than carrying
+// thirty-six rows that say so. What is listed is everything whose name is not
+// its character.
+//
+// Both sides of a modifier are named, and the bare name means either -- VK_
+// SHIFT and friends are the "either" codes Windows already provides.
+static const iPadBindToken kKeyTokens[] = {
+    { "space", VK_SPACE },
+    { "enter", VK_RETURN },
+    { "tab", VK_TAB },
+    { "escape", VK_ESCAPE },
+    { "backspace", VK_BACK },
+    { "shift", VK_SHIFT },
+    { "lshift", VK_LSHIFT },
+    { "rshift", VK_RSHIFT },
+    { "ctrl", VK_CONTROL },
+    { "lctrl", VK_LCONTROL },
+    { "rctrl", VK_RCONTROL },
+    { "alt", VK_MENU },
+    { "lalt", VK_LMENU },
+    { "ralt", VK_RMENU },
+    { "up", VK_UP },
+    { "down", VK_DOWN },
+    { "left", VK_LEFT },
+    { "right", VK_RIGHT },
+    { "insert", VK_INSERT },
+    { "delete", VK_DELETE },
+    { "home", VK_HOME },
+    { "end", VK_END },
+    { "pageup", VK_PRIOR },
+    { "pagedown", VK_NEXT },
+    { "capslock", VK_CAPITAL },
+    { "comma", VK_OEM_COMMA },
+    { "period", VK_OEM_PERIOD },
+    { "minus", VK_OEM_MINUS },
+    { "equals", VK_OEM_PLUS },
+    { "semicolon", VK_OEM_1 },
+    { "slash", VK_OEM_2 },
+    { "tilde", VK_OEM_3 },
+    { "lbracket", VK_OEM_4 },
+    { "backslash", VK_OEM_5 },
+    { "rbracket", VK_OEM_6 },
+    { "quote", VK_OEM_7 },
+    { "f1", VK_F1 },
+    { "f2", VK_F2 },
+    { "f3", VK_F3 },
+    { "f4", VK_F4 },
+    { "f5", VK_F5 },
+    { "f6", VK_F6 },
+    { "f7", VK_F7 },
+    { "f8", VK_F8 },
+    { "f9", VK_F9 },
+    { "f10", VK_F10 },
+    { "f11", VK_F11 },
+    { "f12", VK_F12 },
+    { "numpad0", VK_NUMPAD0 },
+    { "numpad1", VK_NUMPAD1 },
+    { "numpad2", VK_NUMPAD2 },
+    { "numpad3", VK_NUMPAD3 },
+    { "numpad4", VK_NUMPAD4 },
+    { "numpad5", VK_NUMPAD5 },
+    { "numpad6", VK_NUMPAD6 },
+    { "numpad7", VK_NUMPAD7 },
+    { "numpad8", VK_NUMPAD8 },
+    { "numpad9", VK_NUMPAD9 },
+    { "numpadplus", VK_ADD },
+    { "numpadminus", VK_SUBTRACT },
+    { "numpadstar", VK_MULTIPLY },
+    { "numpadslash", VK_DIVIDE },
+    { "numpaddot", VK_DECIMAL },
+};
+
+static const S32 kKeyTokenCount = (S32)(sizeof(kKeyTokens) / sizeof(kKeyTokens[0]));
+
+// Letters and digits, folded to their virtual-key code, which is the upper-case
+// character. Built once so the binder sees one flat table.
+static iPadBindToken sKeyTokenTable[kKeyTokenCount + 36];
+static S32 sKeyTokenTableCount;
+static char sKeyTokenNames[36][2];
+
+static void BuildKeyTokens()
+{
+    sKeyTokenTableCount = 0;
+
+    for (S32 i = 0; i < kKeyTokenCount; i++)
+    {
+        sKeyTokenTable[sKeyTokenTableCount++] = kKeyTokens[i];
+    }
+
+    for (S32 i = 0; i < 36; i++)
+    {
+        char c = (i < 26) ? (char)('a' + i) : (char)('0' + (i - 26));
+        sKeyTokenNames[i][0] = c;
+        sKeyTokenNames[i][1] = '\0';
+
+        sKeyTokenTable[sKeyTokenTableCount].name = sKeyTokenNames[i];
+        sKeyTokenTable[sKeyTokenTableCount].id =
+            (S16)((i < 26) ? ('A' + i) : ('0' + (i - 26)));
+        sKeyTokenTableCount++;
+    }
+}
+
+static bool KeyInputHeld(S16 vk)
+{
+    return KeyDown(vk);
 }
 
 static F32 KeyAxis(S32 negative, S32 positive)
@@ -264,25 +447,13 @@ static void PollKeyboard(iPadHostState* s)
     }
 
     U32 on = 0;
-
-    if (KeyDown(VK_RETURN)) on |= XPAD_BUTTON_START;
-    if (KeyDown(VK_BACK)) on |= XPAD_BUTTON_SELECT;
-
-    if (KeyDown(VK_UP)) on |= XPAD_BUTTON_UP;
-    if (KeyDown(VK_DOWN)) on |= XPAD_BUTTON_DOWN;
-    if (KeyDown(VK_LEFT)) on |= XPAD_BUTTON_LEFT;
-    if (KeyDown(VK_RIGHT)) on |= XPAD_BUTTON_RIGHT;
-
-    if (KeyDown(VK_SPACE)) on |= XPAD_BUTTON_X;
-    if (KeyDown(VK_LCONTROL)) on |= XPAD_BUTTON_TRIANGLE;
-    if (KeyDown('E')) on |= XPAD_BUTTON_O;
-    if (KeyDown('Q')) on |= XPAD_BUTTON_SQUARE;
-
-    if (KeyDown('Z')) on |= XPAD_BUTTON_L1;
-    if (KeyDown('X')) on |= XPAD_BUTTON_L2;
-    if (KeyDown('C')) on |= XPAD_BUTTON_R1;
-    if (KeyDown('V')) on |= XPAD_BUTTON_R2;
-    if (KeyDown('F')) on |= XPAD_BUTTON_Z;
+    for (S32 i = 0; i < kPadBindButtonCount; i++)
+    {
+        if (iPadBindHeld(sKeyBind[i], KeyInputHeld))
+        {
+            on |= kPadBindButtons[i].mask;
+        }
+    }
 
     s->buttons = on;
 
@@ -295,27 +466,91 @@ static void PollKeyboard(iPadHostState* s)
 }
 
 // ---------------------------------------------------------------------------
+// config.ini
+
+static void ClearState(iPadHostState* s)
+{
+    s->connected = false;
+    s->buttons = 0;
+    s->stick_x = 0.0f;
+    s->stick_y = 0.0f;
+    s->substick_x = 0.0f;
+    s->substick_y = 0.0f;
+}
+
+// input.controller. "auto", or a slot counted from 1 the way a person counts
+// controllers rather than the way XInput numbers them.
+static void ChooseController()
+{
+    const char* v = iConfigGetString("input.controller", "auto");
+
+    if (v == NULL || v[0] == '\0' || iHostStrCaseCmp(v, "auto") == 0)
+    {
+        sPinnedSlot = -1;
+        return;
+    }
+
+    S32 n = atoi(v);
+    if (n >= 1 && n <= IPAD_MAX_CONTROLLERS)
+    {
+        sPinnedSlot = n - 1;
+        return;
+    }
+
+    printf("bfbb: input.controller is '%s', which is neither auto nor 1 to %d; using auto\n", v,
+           (int)IPAD_MAX_CONTROLLERS);
+    fflush(stdout);
+    sPinnedSlot = -1;
+}
+
+static void LoadBindings()
+{
+    BuildKeyTokens();
+
+    for (S32 i = 0; i < kPadBindButtonCount && i < IPAD_BIND_MAX_BUTTONS; i++)
+    {
+        const iPadBindButton* b = &kPadBindButtons[i];
+        char key[64];
+
+        snprintf(key, sizeof(key), "pad.%s", b->name);
+        iPadBindParse(iConfigGetString(key, b->pad), kPadTokens, kPadTokenCount, key, &sPadBind[i]);
+
+        snprintf(key, sizeof(key), "keyboard.%s", b->name);
+        iPadBindParse(iConfigGetString(key, b->key), sKeyTokenTable, sKeyTokenTableCount, key,
+                      &sKeyBind[i]);
+    }
+
+    // The array is sized by a macro and filled from a table whose length the
+    // compiler will not hand over, so this is where the two are compared. A
+    // button past the end would silently never be pressable.
+    if (kPadBindButtonCount > IPAD_BIND_MAX_BUTTONS)
+    {
+        printf("bfbb: %d buttons to bind but room for %d; the last %d are unbound\n",
+               (int)kPadBindButtonCount, (int)IPAD_BIND_MAX_BUTTONS,
+               (int)(kPadBindButtonCount - IPAD_BIND_MAX_BUTTONS));
+        fflush(stdout);
+    }
+}
+
+// ---------------------------------------------------------------------------
 
 void iPadHostInit()
 {
     for (S32 i = 0; i < IPAD_MAX_CONTROLLERS; i++)
     {
-        sState[i].connected = false;
-        sState[i].buttons = 0;
-        sState[i].stick_x = 0.0f;
-        sState[i].stick_y = 0.0f;
-        sState[i].substick_x = 0.0f;
-        sState[i].substick_y = 0.0f;
+        ClearState(&sState[i]);
+        ClearState(&sSlot[i]);
+        sPortSlot[i] = -1;
+
+        // Every slot gets one immediate probe; the timer only starts once a
+        // slot has actually answered that it is empty.
+        sNextProbe[i] = 0;
     }
 
     sKeyboardOnPort0 = false;
 
-    for (S32 i = 0; i < IPAD_MAX_CONTROLLERS; i++)
-    {
-        // Every port gets one immediate probe; the timer only starts once a
-        // port has actually answered that it is empty.
-        sNextProbe[i] = 0;
-    }
+    ChooseController();
+    LoadBindings();
 
     LoadXInput();
 }
@@ -343,16 +578,71 @@ void iPadHostExit()
     }
 }
 
+// Which XInput slot each game port reads, from what is plugged in and what
+// input.controller asked for.
+//
+// The two settings want different rules, and each is right for its case:
+//
+//   auto     the connected slots are packed onto the ports in order, so the
+//            only controller on the machine is port 0 whichever slot it landed
+//            in. That is the case this setting exists for -- a wireless
+//            receiver or a wheel can sit in slot 1 with nothing in it.
+//   a number that slot IS port 0, plugged in or not. Falling through to
+//            another controller when the chosen one is off would defeat the
+//            point of choosing, and would do it silently.
+static void MapPortsToSlots()
+{
+    S32 previous = sPortSlot[0];
+
+    for (S32 p = 0; p < IPAD_MAX_CONTROLLERS; p++)
+    {
+        sPortSlot[p] = -1;
+    }
+
+    if (sPinnedSlot >= 0)
+    {
+        sPortSlot[0] = sPinnedSlot;
+
+        S32 port = 1;
+        for (S32 slot = 0; slot < IPAD_MAX_CONTROLLERS; slot++)
+        {
+            if (slot != sPinnedSlot)
+            {
+                sPortSlot[port++] = slot;
+            }
+        }
+    }
+    else
+    {
+        S32 port = 0;
+        for (S32 slot = 0; slot < IPAD_MAX_CONTROLLERS; slot++)
+        {
+            if (sSlot[slot].connected)
+            {
+                sPortSlot[port++] = slot;
+            }
+        }
+    }
+
+    // Worth one line when it changes: which controller the game is listening to
+    // is otherwise invisible, and with this setting it is now a question that
+    // has more than one answer.
+    if (sPortSlot[0] != previous && sPortSlot[0] >= 0)
+    {
+        printf("bfbb: playing on controller %d\n", (int)(sPortSlot[0] + 1));
+        fflush(stdout);
+    }
+}
+
 void iPadHostPoll()
 {
-    bool pad0 = false;
     const ULONGLONG now = GetTickCount64();
 
     for (S32 i = 0; i < IPAD_MAX_CONTROLLERS; i++)
     {
-        iPadHostState* s = &sState[i];
+        iPadHostState* s = &sSlot[i];
 
-        // A port that was empty last time is left alone until its deadline, so
+        // A slot that was empty last time is left alone until its deadline, so
         // that hot-plugging is still noticed within a couple of seconds without
         // paying the enumeration cost every frame.
         if (!s->connected && now < sNextProbe[i])
@@ -363,14 +653,9 @@ void iPadHostPoll()
         XINPUT_STATE xs;
         if (sXInputGetState == NULL || sXInputGetState((DWORD)i, &xs) != ERROR_SUCCESS)
         {
-            s->connected = false;
-            s->buttons = 0;
-            s->stick_x = 0.0f;
-            s->stick_y = 0.0f;
-            s->substick_x = 0.0f;
-            s->substick_y = 0.0f;
+            ClearState(s);
 
-            // Stagger the ports so their re-checks do not land on one frame and
+            // Stagger the slots so their re-checks do not land on one frame and
             // reproduce the stall in a burst once every two seconds.
             sNextProbe[i] = now + IPAD_EMPTY_PORT_RECHECK_MS + (ULONGLONG)(i * 137);
             continue;
@@ -384,17 +669,26 @@ void iPadHostPoll()
         iPadHostWin32ConvertStick(xs.Gamepad.sThumbRX, xs.Gamepad.sThumbRY,
                                   XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE, &s->substick_x,
                                   &s->substick_y);
+    }
 
-        if (i == 0)
+    MapPortsToSlots();
+
+    for (S32 p = 0; p < IPAD_MAX_CONTROLLERS; p++)
+    {
+        if (sPortSlot[p] >= 0)
         {
-            pad0 = true;
+            sState[p] = sSlot[sPortSlot[p]];
+        }
+        else
+        {
+            ClearState(&sState[p]);
         }
     }
 
     // The keyboard only fills a gap. A controller appearing on port 0 mid-run
     // takes it back on the next frame, which is what a player who has just
     // plugged one in expects.
-    sKeyboardOnPort0 = !pad0;
+    sKeyboardOnPort0 = !sState[0].connected;
     if (sKeyboardOnPort0)
     {
         PollKeyboard(&sState[0]);
@@ -457,6 +751,14 @@ void iPadHostRumble(S32 port, S32 on)
         return;
     }
 
+    // The game rumbles a port; XInput vibrates a slot. Before input.controller
+    // those were the same number.
+    S32 slot = sPortSlot[port];
+    if (slot < 0)
+    {
+        return;
+    }
+
     // Both motors together. The GameCube's motor has one setting and
     // PADControlMotor is all retail calls, so there is no envelope to apply --
     // see iPadRumbleFx, which is empty on the console too.
@@ -464,7 +766,7 @@ void iPadHostRumble(S32 port, S32 on)
     v.wLeftMotorSpeed = on ? 65535 : 0;
     v.wRightMotorSpeed = on ? 65535 : 0;
 
-    sXInputSetState((DWORD)port, &v);
+    sXInputSetState((DWORD)slot, &v);
 }
 
 const char* iPadHostName()

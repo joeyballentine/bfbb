@@ -3,6 +3,7 @@
 #include "iConfig.h"
 
 #include "iHost.h"
+#include "iPadBind.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,7 +15,10 @@ namespace
     // RenderWare has an allocator -- that is the whole point of the file. A
     // settings file is a few dozen lines; a file that exceeds these is
     // truncated with a message rather than silently losing its tail.
-    const S32 kMaxEntries = 64;
+    // 64 was enough when every setting was a feature switch. The two binding
+    // sections are one line per game button each, so a file that spells out
+    // every binding is already 45 lines before anyone adds a comment.
+    const S32 kMaxEntries = 128;
     const S32 kMaxKey = 64;
     const S32 kMaxValue = 512;
     const S32 kMaxLine = 512;
@@ -150,6 +154,16 @@ namespace
           "Use a still of the level you just left as the loading screen\n"
           "; background, instead of the GameCube release's background texture." },
         { "xbox", "reverb", "on", "Cave reverb, in the Mermalair and the caves." },
+        { "input", "controller", "auto",
+          "Which controller to play with, when more than one is plugged in.\n"
+          ";\n"
+          "; auto uses the first one Windows lists that is actually there, so a\n"
+          "; single controller works whichever slot it landed in. A number from 1\n"
+          "; to 4 pins the game to that slot and ignores the rest -- which is what\n"
+          "; to set when a wheel, a flight stick or a dormant wireless receiver is\n"
+          "; holding slot 1 and the pad you want is behind it.\n"
+          ";\n"
+          "; The keyboard covers this controller whenever nothing is on it." },
         { "audio", "soundtrack", "",
           "Folder of your own music files to play instead of the game's. Empty\n"
           "; uses the game's music.\n"
@@ -225,6 +239,103 @@ namespace
         return NULL;
     }
 
+    // The two binding sections are not in kSettings, because their contents
+    // are one row per game button and that list already exists in
+    // iPadBind.cpp. Splitting it in two so the table could stay a literal
+    // would be the one thing the table exists to prevent.
+    //
+    // Everything the table does for a normal setting, these two functions do
+    // for a binding: name a key as known, and answer it with the default the
+    // generated file was written with.
+    const char* kPadSection = "pad";
+    const char* kKeyboardSection = "keyboard";
+
+    // "pad.a" -> the row for "a", when `key` is in `section`. NULL otherwise.
+    const iPadBindButton* findBinding(const char* key, const char* section)
+    {
+        size_t n = strlen(section);
+        if (strncmp(key, section, n) != 0 || key[n] != '.')
+        {
+            return NULL;
+        }
+        return iPadBindFind(key + n + 1);
+    }
+
+    // The default binding for "pad.a" or "keyboard.a", or NULL for a key that
+    // is neither.
+    const char* bindingDefault(const char* key)
+    {
+        const iPadBindButton* b = findBinding(key, kPadSection);
+        if (b != NULL)
+        {
+            return b->pad;
+        }
+
+        b = findBinding(key, kKeyboardSection);
+        return b != NULL ? b->key : NULL;
+    }
+
+    // [pad] and [keyboard]. One line per game button, and the grammar spelled
+    // out once at the top of each -- a comment per binding would be thirty
+    // paragraphs all saying the same thing.
+    void writeBindingSection(FILE* f, const char* section, const char* inputs, const char* extra)
+    {
+        fprintf(f, "\n[%s]\n", section);
+        fprintf(f, "; What presses each button the game reads. Left of the '=' is the\n");
+        fprintf(f, "; button, named as the console named it, and the trailing comment\n");
+        fprintf(f, "; says what it does. Right of it is what presses it:\n");
+        fprintf(f, ";\n");
+        fprintf(f, ";   %s\n", inputs);
+        fprintf(f, ";\n");
+        fprintf(f, "; ',' between two of them means either one on its own. '+' means\n");
+        fprintf(f, "; both at once, and '!' means NOT held. Nothing after the '=' leaves\n");
+        fprintf(f, "; the button unpressable, which is how to turn one off.\n");
+        fprintf(f, ";\n");
+        fprintf(f, "%s", extra);
+
+        for (S32 i = 0; i < kPadBindButtonCount; i++)
+        {
+            const iPadBindButton* b = &kPadBindButtons[i];
+            const char* value = (section == kPadSection) ? b->pad : b->key;
+
+            if (b->does != NULL)
+            {
+                fprintf(f, "%-6s = %-9s ; %s\n", b->name, value, b->does);
+            }
+            else
+            {
+                fprintf(f, "%-6s = %s\n", b->name, value);
+            }
+        }
+    }
+
+    void writeBindings(FILE* f)
+    {
+        writeBindingSection(
+            f, kPadSection,
+            "a b x y lb rb lt rt ls rs back start dpup dpdown dpleft dpright",
+            "; The '!' is why l1 and l2 can share one trigger below: the GameCube\n"
+            "; had three shoulders where the game wants four, so it read Z as a\n"
+            "; modifier, and rb stands in for Z here.\n"
+            ";\n"
+            "; lb, ls and rs start out bound to nothing -- the GameCube has no\n"
+            "; fourth shoulder and no stick clicks, so they are free.\n"
+            ";\n"
+            "; The sticks are not remappable: the left one moves and the right one\n"
+            "; turns the camera, as they did on the console.\n"
+            ";\n");
+
+        writeBindingSection(
+            f, kKeyboardSection,
+            "any key by name -- letters, digits, space, enter, tab, escape,\n"
+            ";   backspace, shift, ctrl, alt, up, down, left, right, f1 to f12,\n"
+            ";   and the numeric keypad as numpad0 to numpad9",
+            "; The keyboard is only read while nothing is on the controller chosen\n"
+            "; above. WASD moves and IJKL turns the camera; those are not\n"
+            "; remappable, for the same reason the sticks are not.\n"
+            ";\n");
+    }
+
     const Entry* findEntry(const char* key)
     {
         for (S32 i = 0; i < sCount; i++)
@@ -249,7 +360,12 @@ namespace
         }
 
         const Setting* s = findSetting(key);
-        return s != NULL ? s->value : NULL;
+        if (s != NULL)
+        {
+            return s->value;
+        }
+
+        return bindingDefault(key);
     }
 
     // One line of the file. `section` is updated by a [header] and is what a
@@ -325,7 +441,7 @@ namespace
         lowerInPlace(e->key);
         snprintf(e->value, sizeof(e->value), "%s", value);
 
-        if (findSetting(e->key) == NULL)
+        if (findSetting(e->key) == NULL && bindingDefault(e->key) == NULL)
         {
             printf("bfbb: %s:%d: unknown setting '%s', ignored\n", path, (int)lineNo, e->key);
             return;
@@ -441,6 +557,11 @@ bool iConfigWriteDefaults(const char* path)
                 fprintf(f, "; Things the Xbox release did that the GameCube release did not.\n");
                 fprintf(f, "; Turning one off gives the GameCube behaviour instead.\n");
             }
+            else if (strcmp(section, "input") == 0)
+            {
+                fprintf(f, "; Which controller the game reads. What each of its buttons does\n");
+                fprintf(f, "; is further down, in [pad] and [keyboard].\n");
+            }
             else if (strcmp(section, "text") == 0)
             {
                 fprintf(f, "; The game's own text, which is the console release's. Nothing here\n");
@@ -451,6 +572,8 @@ bool iConfigWriteDefaults(const char* path)
         fprintf(f, "\n; %s\n", kSettings[i].comment);
         fprintf(f, "%s = %s\n", kSettings[i].name, kSettings[i].value);
     }
+
+    writeBindings(f);
 
     fclose(f);
     return true;

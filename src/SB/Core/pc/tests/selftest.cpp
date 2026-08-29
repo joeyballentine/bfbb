@@ -28,6 +28,7 @@
 #include "xSnd.h"
 #include "iMath.h"
 #include "iMemMgr.h"
+#include "iPadBind.h"
 #include "iPadHost.h"
 #include "iScreen.h"
 #include "iSystem.h"
@@ -193,7 +194,14 @@ static void test_config()
                                 "\n"
                                 "snapshot = 1   # trailing comment\n"
                                 "reverb=TRUE\n"
-                                "glwo = off\n";
+                                "glwo = off\n"
+                                "[input]\n"
+                                "controller = 3\n"
+                                "[pad]\n"
+                                "select = ls\n"
+                                "nonsense = a\n"
+                                "[keyboard]\n"
+                                "start = f1\n";
 
     FILE* f = fopen(path, "wb");
     if (f == NULL)
@@ -256,6 +264,25 @@ static void test_config()
     check(iConfigGetFloat("xbox.nothing", 0.5f) == 0.5f, "an unknown float falls back");
     check(strcmp(iConfigGetString("xbox.nothing", "d"), "d") == 0,
           "an unknown string falls back");
+
+    // The two binding sections are not in the settings table -- their contents
+    // are one row per game button, and that list lives in iPadBind.cpp. They
+    // still have to behave like every other key: known, defaulted from the same
+    // place the generated file is written from, and reported when misspelled.
+    check(strcmp(iConfigGetString("pad.select", "!"), "ls") == 0,
+          "a [pad] binding comes off the file");
+    check(strcmp(iConfigGetString("keyboard.start", "!"), "f1") == 0, "and a [keyboard] one");
+
+    const iPadBindButton* b = iPadBindFind("b");
+    check(b != NULL && strcmp(iConfigGetString("pad.b", "!"), b->pad) == 0,
+          "a binding the file omits is answered from the button table, not the fallback");
+    check(b != NULL && strcmp(iConfigGetString("keyboard.b", "!"), b->key) == 0,
+          "on both devices");
+
+    check(strcmp(iConfigGetString("pad.nonsense", "!"), "!") == 0,
+          "a binding for a button that does not exist is dropped, like any unknown key");
+
+    check(iConfigGetInt("input.controller", 0) == 3, "input.controller comes off the file");
 
     iHostRemoveFile(path);
 
@@ -824,6 +851,128 @@ static F32 test_stick_mag(F32 inX, F32 inY)
     return test_dampen_mag(iPadConvStick(x), iPadConvStick(y));
 }
 
+// ---------------------------------------------------------------------------
+// The binding grammar, checked against a made-up device so that what is being
+// tested is the parser and not one backend's token names.
+
+enum
+{
+    FAKE_ONE,
+    FAKE_TWO,
+    FAKE_THREE,
+    FAKE_COUNT
+};
+
+static const iPadBindToken kFakeTokens[] = {
+    { "one", FAKE_ONE },
+    { "two", FAKE_TWO },
+    { "three", FAKE_THREE },
+};
+
+static const S32 kFakeTokenCount = 3;
+
+static U32 sFakeHeld;
+
+static bool fake_held(S16 id)
+{
+    return (sFakeHeld & (1u << id)) != 0;
+}
+
+static bool bind_says(const char* text, U32 held)
+{
+    iPadBind b;
+    iPadBindParse(text, kFakeTokens, kFakeTokenCount, "test", &b);
+    sFakeHeld = held;
+    return iPadBindHeld(b, fake_held);
+}
+
+#define FAKE(x) (1u << FAKE_##x)
+
+static void test_pad_bindings()
+{
+    iPadBind b;
+
+    check(iPadBindParse("one", kFakeTokens, kFakeTokenCount, "test", &b), "one input parses");
+    check(b.alts == 1 && b.length[0] == 1, "as one alternative of one input");
+
+    check(bind_says("one", FAKE(ONE)), "and is on when that input is held");
+    check(!bind_says("one", FAKE(TWO)), "and off when a different one is");
+    check(!bind_says("one", 0), "and off when nothing is");
+
+    // ','
+    check(bind_says("one, two", FAKE(ONE)), "either alternative on its own is enough");
+    check(bind_says("one, two", FAKE(TWO)), "including the second");
+    check(bind_says("one, two", FAKE(ONE) | FAKE(TWO)), "and both at once is still on");
+    check(!bind_says("one, two", FAKE(THREE)), "and neither is off");
+
+    // '+'
+    check(bind_says("one+two", FAKE(ONE) | FAKE(TWO)), "a chord needs both");
+    check(!bind_says("one+two", FAKE(ONE)), "half a chord is not enough");
+    check(!bind_says("one+two", FAKE(TWO)), "in either direction");
+
+    // '!' -- the reason the grammar has one. gc/iPad.cpp reads Z+L as L2 and
+    // NOT also as L1, and the port's default bindings have to be able to say
+    // so; without this, holding the modifier would press both.
+    check(bind_says("one+!two", FAKE(ONE)), "a negated term is satisfied while it is idle");
+    check(!bind_says("one+!two", FAKE(ONE) | FAKE(TWO)), "and blocks the binding once held");
+    check(!bind_says("one+!two", FAKE(TWO)), "and does not stand in for the positive term");
+
+    // Exactly the l1/l2 pair, which is what the default pad mapping relies on.
+    check(bind_says("one+!two", FAKE(ONE)) && !bind_says("one+two", FAKE(ONE)),
+          "l1 alone: the trigger without the modifier");
+    check(!bind_says("one+!two", FAKE(ONE) | FAKE(TWO)) &&
+              bind_says("one+two", FAKE(ONE) | FAKE(TWO)),
+          "l2 alone: the trigger with it -- never both at once");
+
+    // Empty is a button turned off, not an error.
+    check(iPadBindParse("", kFakeTokens, kFakeTokenCount, "test", &b), "an empty binding parses");
+    check(b.alts == 0, "as nothing");
+    sFakeHeld = FAKE(ONE) | FAKE(TWO) | FAKE(THREE);
+    check(!iPadBindHeld(b, fake_held), "and nothing can press it");
+
+    // Whitespace is not significant anywhere.
+    check(bind_says("  one  +  ! two  ,  three  ", FAKE(THREE)), "spaces around the operators");
+
+    // Bad input costs the whole binding, not the readable part of it. A typo
+    // that left a button half-bound would be harder to spot than one that left
+    // it dead.
+    check(!iPadBindParse("one, nonsense", kFakeTokens, kFakeTokenCount, "test", &b),
+          "an unknown input is rejected");
+    check(b.alts == 0, "and takes the rest of the line with it");
+
+    check(!iPadBindParse("!one", kFakeTokens, kFakeTokenCount, "test", &b),
+          "an all-negated alternative is rejected");
+    check(b.alts == 0, "because nothing would ever press it");
+
+    check(!iPadBindParse("one+", kFakeTokens, kFakeTokenCount, "test", &b),
+          "a trailing '+' is rejected");
+    check(!iPadBindParse("one,", kFakeTokens, kFakeTokenCount, "test", &b),
+          "and so is a trailing ','");
+    check(!iPadBindParse("+one", kFakeTokens, kFakeTokenCount, "test", &b),
+          "and a leading one");
+
+    check(!iPadBindParse("one, two, three, one, two", kFakeTokens, kFakeTokenCount, "test", &b),
+          "more alternatives than there is room for is rejected");
+
+    // The table every backend and the config writer share.
+    check(kPadBindButtonCount <= IPAD_BIND_MAX_BUTTONS,
+          "the button table fits the array the backends size from it");
+    check(iPadBindFind("a") != NULL && iPadBindFind("START") != NULL,
+          "a button is found by name, case-insensitively");
+    check(iPadBindFind("nonsense") == NULL, "and an invented one is not");
+
+    for (S32 i = 0; i < kPadBindButtonCount; i++)
+    {
+        if (kPadBindButtons[i].mask == 0 || kPadBindButtons[i].pad == NULL ||
+            kPadBindButtons[i].key == NULL)
+        {
+            check(false, "every button has a mask and a default for each device");
+            return;
+        }
+    }
+    check(true, "every button has a mask and a default for each device");
+}
+
 static void test_pad_stick_shape()
 {
     F32 x, y;
@@ -1018,11 +1167,23 @@ static void test_pad_win32_buttons()
     // each separately, so reporting both would give it a button nobody pressed.
     check((modified & (TEST_PAD_L1 | TEST_PAD_R1)) == 0, "and stops reporting L1 and R1");
 
-    // LB is unused. The GameCube has no fourth shoulder.
+    // LB is unbound by default. The GameCube has no fourth shoulder.
     gp.wButtons = XINPUT_GAMEPAD_LEFT_SHOULDER;
     gp.bLeftTrigger = 0;
     gp.bRightTrigger = 0;
     check(iPadHostWin32ConvertButtons(gp) == 0, "LB maps to nothing");
+
+    // Everything above is the DEFAULT mapping. The harness config.ini rebinds
+    // one button -- `select = ls` -- and this is the whole path from that line
+    // to the bits the game reads: parsed at iPadHostInit, evaluated here.
+    // Without it the binding layer could be inert and every check above would
+    // still pass on the defaults compiled into iPadBind.cpp.
+    gp.wButtons = XINPUT_GAMEPAD_LEFT_THUMB;
+    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_SELECT,
+          "a rebound button answers to what config.ini gave it");
+
+    gp.wButtons = XINPUT_GAMEPAD_BACK;
+    check(iPadHostWin32ConvertButtons(gp) == 0, "and stops answering to what it had");
 }
 #endif
 
@@ -1129,6 +1290,7 @@ static void test_pad()
     check(s != NULL && !s->connected, "the null backend reports no controller");
 #endif
 
+    test_pad_bindings();
     test_pad_stick_shape();
 
     iPadHostExit();

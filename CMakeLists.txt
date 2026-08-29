@@ -314,6 +314,7 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iMemMgr.cpp
   ${PC_DIR}/iMenuFrame.cpp
   ${PC_DIR}/iPad.cpp
+  ${PC_DIR}/iPadBind.cpp
   ${PC_DIR}/iSystem.cpp
   ${PC_DIR}/iTextPatch.cpp
   ${PC_DIR}/iTRC.cpp
@@ -646,6 +647,7 @@ add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   # unresolved symbols are gTrcPad and xTRCPad; selftest.cpp defines both rather
   # than linking xTRC.cpp, which drags in the whole TRC screen stack.
   ${PC_DIR}/iPad.cpp
+  ${PC_DIR}/iPadBind.cpp
 
   ${INPUT_SOURCES}
   ${AUDIO_SOURCES}

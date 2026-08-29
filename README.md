@@ -269,6 +269,44 @@ game's own music, and the rest of the folder still plays.
 WAVE files work in any build. Other formats need a build with FFmpeg, the same
 dependency the movies use.
 
+### Controls
+
+```ini
+[input]
+controller = auto
+```
+
+`auto` plays on the first controller Windows actually has, so a single pad works
+whichever slot it landed in. A number from 1 to 4 pins the game to that slot and
+ignores the rest — set that when a wheel, a flight stick or a dormant wireless
+receiver is holding slot 1 and the pad you want is behind it. The keyboard covers
+whichever controller you chose whenever nothing is on it.
+
+`[pad]` and `[keyboard]` say what presses each button. The left of the `=` is the
+button the game reads, named as the console named it; the right is what presses
+it on your device.
+
+```ini
+[pad]
+a      = a          ; jump, confirm
+z      = rb         ; near camera
+l1     = lt+!rb     ; camera left
+l2     = lt+rb
+select =            ; nothing presses it
+```
+
+`,` between two inputs means either one on its own. `+` means both at once, and
+`!` means not held. That last one is not decoration: the GameCube had three
+shoulder buttons where the game wants four, so it read Z as a modifier and `l1 =
+lt+!rb` is how the defaults say that L alone is L1 and Z+L is L2 — never both.
+
+Nothing after the `=` leaves a button unpressable, which is how to turn one off.
+`lb`, `ls` and `rs` start out bound to nothing, since the GameCube has no fourth
+shoulder and no stick clicks.
+
+The sticks are not remappable. The left one moves, the right one turns the
+camera, and on the keyboard that is WASD and IJKL.
+
 ### The rest
 
 `[xbox]` has a switch for each of the four Xbox features described at the top of
