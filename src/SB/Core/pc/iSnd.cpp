@@ -444,11 +444,12 @@ bool iSndIsPlayingByHandle(U32 handle)
 // How many sample frames an entry's asset holds.
 //
 // For PCM that is bytes over the frame size, which is what block_align means
-// there. For ADPCM block_align is the size of a compressed BLOCK instead, each
-// holding one predictor sample and two more per payload byte -- so the same
-// division gives a block count, about 65 times too small. Nothing in the game
-// reads this, but the play path uses it to time a voice whose samples could not
-// be read, and being 65 times short would cut the menu music off instantly.
+// there. For ADPCM block_align is the size of a compressed BLOCK instead,
+// holding two samples per payload byte and none for its four-byte header -- so
+// the same division gives a block count, 64 times too small. Nothing in the
+// game reads this, but the play path uses it to time a voice whose samples
+// could not be read, and being 64 times short would cut the music off
+// instantly.
 static U32 entry_frames(const xbox_sndhdr& e)
 {
     if (e.block_align == 0)
@@ -459,7 +460,7 @@ static U32 entry_frames(const xbox_sndhdr& e)
     if (e.format_tag == 0x69 && e.block_align >= 5)
     {
         U32 blocks = e.data_size / e.block_align;
-        return blocks * ((e.block_align - 4) * 2 + 1);
+        return blocks * ((e.block_align - 4) * 2);
     }
 
     return e.data_size / e.block_align;

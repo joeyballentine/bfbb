@@ -1475,9 +1475,9 @@ static void test_snd_data()
     // --- Xbox ADPCM ---------------------------------------------------------
     // The 21 menu music tracks are format tag 0x69 in 36-byte mono blocks, and
     // they reach the mixer decoded. Two things have to be right: the sample
-    // count, which is 65 per block and not the 64 the assets' own header field
-    // implies; and the decode itself, checked here against values worked out by
-    // hand from the IMA step table.
+    // count, which is the 64 per block the assets' own avgBytesPerSec implies
+    // and not the 65 an IMA-in-WAV decoder would give; and the decode itself,
+    // checked here against values worked out by hand from the IMA step table.
     const U32 kBlock = 36;
 
     snprintf(path, sizeof(path), "%s/adpcm.HOP", dir);
@@ -1489,10 +1489,11 @@ static void test_snd_data()
     }
 
     // One block: predictor 1000, step index 0 (step 7), then 32 payload bytes.
-    // The first two nibbles are 0 and 8 -- +step/8 and -step/8 -- so the first
-    // three samples are 1000, 1000, 1000. Every later byte is 0x00, which is
-    // nibble 0 twice: a rise of step>>3 each, with the index walking down and
-    // staying at 0.
+    // The header is state, not output, so the first sample comes from the first
+    // nibble. The first two nibbles are 0 and 8 -- +step/8 and -step/8, both 0
+    // at step 7 -- so the first two samples are 1000, 1000. Every later byte is
+    // 0x00, which is nibble 0 twice: a rise of step>>3 each, with the index
+    // walking down and staying at 0.
     fputc(1000 & 0xff, f);
     fputc((1000 >> 8) & 0xff, f);
     fputc(0, f); // step index
@@ -1518,20 +1519,19 @@ static void test_snd_data()
     const S16* a = (const S16*)iSndDataAcquire(sFakePkgAsset, &adpcm, &abytes);
 
     check(a != NULL, "an ADPCM asset decodes");
-    check(abytes == 65 * sizeof(S16),
-          "a 36-byte block is 65 samples, not the 64 its own header implies");
+    check(abytes == 64 * sizeof(S16),
+          "a 36-byte block is 64 samples; the header is state, not a sample");
 
     if (a != NULL)
     {
-        check(a[0] == 1000, "the block's stored predictor is its first sample");
-        check(a[1] == 1000, "nibble 0 raises it by step/8, which is 0 at step 7");
-        check(a[2] == 1000, "and nibble 8 lowers it by the same");
+        check(a[0] == 1000, "nibble 0 raises the predictor by step/8, 0 at step 7");
+        check(a[1] == 1000, "and nibble 8 lowers it by the same");
 
         // Index walks 0 -> 0 (kImaIndex[0] is -1, clamped at 0), so step stays
         // 7 and every remaining nibble adds 7>>3 == 0. A decoder that got the
         // table or the clamp wrong drifts away from this immediately.
         bool flat = true;
-        for (U32 i = 3; i < 65; i++)
+        for (U32 i = 2; i < 64; i++)
         {
             if (a[i] != 1000)
             {

@@ -157,14 +157,16 @@ static bool iMakeRoom(U64 wanted)
 // the ordinary IMA decoder -- the step table, the four-bit index table, and a
 // per-block reseed from a stored predictor and step index.
 //
-// **Sixty-five samples per block, not sixty-four.** The block's stored
-// predictor is the block's first output sample, as it is in IMA ADPCM
-// generally; the 32 payload bytes then give 64 more. The assets' own
-// avgBytesPerSec says 64, and it is wrong -- measured across the block
-// boundaries of a real track, emitting the predictor leaves the average
-// sample-to-sample step at the boundary within 2% of the step inside a block,
-// while dropping it puts a systematic 21% jump at every boundary, 689 times a
-// second. That jump is what the format sounds like when this is got wrong.
+// **Sixty-four samples per block.** This is where Xbox ADPCM parts company
+// with IMA ADPCM in a WAV, which would give sixty-five: the block's four-byte
+// header is decoder state only -- a predictor and a step index to start from --
+// and is not itself an output sample. Only the 32 payload bytes produce audio,
+// two samples per byte. Each entry's own avgBytesPerSec agrees and is the
+// easiest place to read it off: 44100 * 36 / 24806 is 64 exactly.
+//
+// Emitting the header's predictor as well stretches every track by 65/64. At
+// 44.1 kHz that is playback at an effective 43421 Hz -- 1.6% slow, 27 cents
+// flat -- with a spurious sample wedged in 689 times a second.
 //
 // Decoding happens once, on the way into the cache, so the mixer only ever
 // sees 16-bit PCM. It costs about four times the asset's size in memory, which
@@ -207,7 +209,7 @@ static void* iDecodeAdpcm(const U8* src, U32 srcBytes, U32 blockAlign, U32* outB
     }
 
     U32 blocks = (srcBytes + blockAlign - 1) / blockAlign;
-    U32 maxSamples = blocks * ((blockAlign - 4) * 2 + 1);
+    U32 maxSamples = blocks * ((blockAlign - 4) * 2);
 
     S16* out = (S16*)malloc((size_t)maxSamples * sizeof(S16));
     if (out == NULL)
@@ -240,8 +242,6 @@ static void* iDecodeAdpcm(const U8* src, U32 srcBytes, U32 blockAlign, U32* outB
         {
             index = 88;
         }
-
-        out[written++] = (S16)pred;
 
         for (U32 i = 4; i < avail; i++)
         {
