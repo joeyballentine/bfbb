@@ -65,7 +65,7 @@ RpAtomic* RpAtomicSetGeometry(RpAtomic* atomic, RpGeometry* geometry, RwUInt32 f
 // librw has no counterpart, so this is written out. Two things about it are
 // worth knowing before reading the maths.
 //
-// FIRST, the spaces. RenderWare takes the intersection primitive in WORLD
+// The spaces. RenderWare takes the intersection primitive in WORLD
 // space and hands the callback triangles in the atomic's OBJECT space. That is
 // not a detail this port is free to choose: iCollide.cpp's callbacks ignore
 // the RpIntersection they are passed and test against `cbisx_local`, an
@@ -73,10 +73,10 @@ RpAtomic* RpAtomicSetGeometry(RpAtomic* atomic, RpGeometry* geometry, RwUInt32 f
 // is transformed down here by the inverse of the frame's LTM, and the vertices
 // handed back are the morph target's own, untransformed.
 //
-// SECOND, RenderWare does not walk every triangle. A model built with the
-// collision plugin carries a BSP tree, and RpAtomicForAllIntersections
-// descends it. The port has no tree -- RpCollisionPluginAttach is not written
-// and librw would have nowhere to keep one -- so this is a linear scan. It
+// The walk. RenderWare does not visit every triangle: a model built with the
+// collision plugin carries a BSP tree and RpAtomicForAllIntersections descends
+// it. Here there is no tree -- RpCollisionPluginAttach registers the plugin
+// slot but nothing reads a tree into it -- so this is a linear scan. It
 // reports the same set of triangles, in geometry order rather than tree order,
 // and it costs O(triangles) per query where retail costs O(log triangles).
 // iCollide.cpp already times these calls (collide_rwtime), which is where the

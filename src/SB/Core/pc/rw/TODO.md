@@ -10,35 +10,24 @@ Regenerate this list with:
     llvm-nm $SHIM/*.o | awk '$2!="U" && $2!="a" && NF>=3 {print $3}'       | sed 's/^_//' | sort -u > have.txt
     comm -23 need.txt have.txt | comm -23 - gamedef.txt
 
-**That command has been wrong twice, and each time it hid real work.**
+Three things keep that command honest, each of which produced a false negative
+once:
 
-The first version ended `s/^_*//' | grep -E '^(Rw|Rp|Rt|Rx)'`, and the strip and
-the anchor together dropped every symbol RenderWare spells with a leading
-underscore -- `_rwObjectHasFrameSetFrame` came out of the strip as a lowercase
-`rw` that `^(Rw|Rp|Rt|Rx)` did not match. Four functions went missing that way.
-The leading underscore is part of the name here; these are PowerPC objects, so
-nothing prefixes a `_` of its own.
-
-The second version fixed that but still only *listed* undefined symbols, with
-no `have.txt` to subtract. Whoever read it ticked functions off by hand, and
-three that nothing had ever written -- `RpAtomicDestroy`, `RpAtomicStreamRead`
-and `RpAtomicStreamWrite` -- sat under a heading that said `**RpAtomic** (0)`
-for four commits. Comparing against a real list of what the shim DEFINES is
-what makes this list a measurement instead of a memory.
-
-Two details that version also got wrong, both of which cost a false negative:
-
+  - **Leading underscores are part of the name.** RenderWare spells some
+    symbols `_rwObjectHasFrameSetFrame`; stripping the underscore before
+    anchoring on `^(Rw|Rp|Rt|Rx)` drops them. These are PowerPC objects, so
+    nothing prefixes an underscore of its own.
   - **Data symbols count.** `awk '$2=="T"'` misses `RwEngineInstance` and
     `_rpPTankAtomicDataOffset`, which are `B` and `D`. Filter on *not* `U`.
+  - **Subtract what the shim defines.** Listing undefined symbols alone leaves
+    the reader ticking functions off by hand, which is how `RpAtomicDestroy`,
+    `RpAtomicStreamRead` and `RpAtomicStreamWrite` sat under a heading reading
+    `**RpAtomic** (0)` for four commits.
   - **COFF prefixes one underscore of its own**, so the shim's side needs
     `sed 's/^_//'` and the game's side does not.
 
-As measured: **124 RenderWare symbols referenced by the PC build, 1 defined by
-the game itself, 119 defined here, 4 left** -- and the four are listed under
-"Do this next", where three of them turn out not to be this directory's job.
-
-The list is no longer "112 functions"; that number came from the first,
-broken command and was never right.
+As measured: 124 RenderWare symbols referenced by the PC build, 1 defined by the
+game itself, and the rest defined here. `tools/pclink.py` reports 0 unresolved.
 
 ## Done
 `value.cpp` -- value types only, so no object layout is involved and the
@@ -704,55 +693,6 @@ shaders. Where they differ they do not simply skip: under `NULL` the animated-UV
 test asserts the OPPOSITE, that `iFXanimUVCreatePipe` answers NULL, because "no
 shader, so draw the surface unanimated" is a supported outcome and the point of
 checking it is that it stays a quiet one.
-
-## Do this next
-
-Four symbols the PC build references and this directory did not define. Only one
-of them is still open, and saying which is which is the point of this section --
-the previous version of this file listed all four kinds of gap together and they
-need different people.
-
-**`_rpCollisionGeometryDataOffset` -- the shim's job, and a subsystem.** The
-plugin offset behind `RpCollisionGeometryGetData`, which xCollide.cpp:2062/2093
-and xShadow.cpp:1250/1454 use unguarded in portable `Core/x` code. It is the
-same missing piece as `RpAtomicForAllIntersections` being a linear scan and
-`RpCollisionPluginAttach` being unwritten: RenderWare hangs a collision BSP tree
-off a geometry as a plugin, and librw has no collision code at all. Writing it
-means the plugin, its stream reader, and the tree walk -- at which point
-`RpAtomicForAllIntersections` stops being O(triangles) as well.
-
-**`RwGameCubeSetAlphaCompare` -- WRITTEN, and no longer a gap.** Both it and
-`_rwDlRenderStateSetZCompLoc` are GameCube driver entry points called UNGUARDED
-from portable code (xModelBucket.cpp:524/530/600 and 526/531/601), and this
-section used to argue they were not the shim's job because there was nothing on
-a host to forward to. Defining them in engine.cpp is what let all 198 units
-compile at the width the port builds at -- `python tools/pcprogress.py --m32
---cc clang++`.
-
-The z-compare one is CORRECT as a no-op, for the reason engine.cpp gives on it.
-The alpha compare was NOT -- it is cutout transparency, foliage and fences and
-grates and chain link -- and it now forwards to librw's `ALPHATESTFUNC` and
-`ALPHATESTREF`, which the D3D9 backend carries through to `D3DRS_ALPHAFUNC` and
-`D3DRS_ALPHAREF`. The fork needed no change for it. GX's two-comparison form
-reduces exactly for both of the states xModelBucket produces, because ALWAYS is
-the identity for AND; seven checks in `test_renderstate` pin the reduction down,
-including the two the game actually asks for.
-
-What was missing turned out to be narrower than "the alpha was ignored"
-suggested, and it is worth knowing before anyone judges the visual change:
-D3D9 turns `D3DRS_ALPHATESTENABLE` on by itself out of whether the texture or
-material has alpha, and `initD3D` leaves the function at GREATEREQUAL **10**. So
-alpha-keyed geometry was already being cut out, at a fixed 10 rather than at the
-threshold in the model. A bucket asking for 128 got 10, which keeps the
-half-transparent texels the console dropped -- soft haloes round leaves rather
-than solid quads.
-
-**`_rpAtomicResyncInterpolatedSphere` -- already handled, and listed here only
-so the next person does not chase it.** It appears in the regenerated list
-because the objects being scanned are GameCube builds; rpworld.h:360 guards the
-macro that calls it behind `#ifndef PLATFORM_PC`, and the PC spelling of
-`RpAtomicGetBoundingSphereMacro` does not need it. librw does not interpolate
-morph targets, so the sphere is never stale.
 
 ## Still unwritten, though the symbol exists
 
