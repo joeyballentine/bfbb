@@ -1,36 +1,38 @@
-# Battle for Bikini Bottom, PC port (WIP)
+# Battle for Bikini Bottom: Unofficial PC port (WIP)
 
 A native PC build of SpongeBob SquarePants: Battle for Bikini Bottom, compiled
-from decompiled game code. This is not an emulator or wrapper.
+from decompiled game code and librw. This is not an emulator or wrapper.
 
-**It's unfinished.** It boots and plays, but there are still bugs and unfinished parts. There are no downloads or releases. You build it yourself from your own copy of the game.
+**This is still a work in progress.** I believe now it is in a state where it can be fully played through without any game breaking issues for casual play, but there are still many bugs that need to be fixed and it is definitely not ready for speedrunning yet (though many of the same tricks/glitches still work).
 
-That being said, I believe now it is in a state where it can be fully played through without any game breaking issues, but I'm not entirely sure.
+There are no downloads or releases. You have to build the game yourself and get the game assets from the xbox version.
 
-This branch (`treedome`) is the PC port. It sits on `duplotron`, which is the
-decompilation it compiles. Both are AI-driven experiments built on
+The xbox assets are live-patched to change xbox wording to pc terminology for a better experience. There is currently no support for GameCube or PS2 assets (which are lower quality anyway, so this is the better PC-like experience anyway).
+
+This branch (`treedome`) is the PC port. For the full decomp it is based on, see the `duplotron` branch.
+
+This project is LLM-driven. I am trying to make it as good of an experience as possible, but I am not a C++ expert nor am I that knowledgeable on renderware semantics. An official hand-made PC port made by people that know what they are doing will surely come at some point, but for now this is the best we have.
+
+For the original/official decomp repo, see
 [bfbbdecomp/bfbb](https://github.com/bfbbdecomp/bfbb).
+
+Note that the goal is not a period-accurate port (though it can definitely be run that way), but rather a modern implementation with many extra features. Since this is a personal project, I will be implementing things as I personally see fit. The official PC port, whenever that comes, will surely be more conservative in what it adds. 
 
 ## How it works
 
-The GameCube game's platform code sits behind 25 `i*` interfaces. The port
-reimplements those for a PC: Win32 windowing, D3D9 via
-[librw](https://github.com/aap/librw) instead of RenderWare, XInput and keyboard
-instead of the GameCube pad, WASAPI instead of AX/MIX, FFmpeg instead of Bink.
+The original game as programmed by Heavy Iron was designed with multi-platform compiling in mind. 
+The platform-specific game code is segmented into `i*` interfaces, separate from the rest of the game code. The port
+reimplements those (as well as implementing new ones) for PC.
 
-Everything above that seam (`src/SB/Core/x` and `src/SB/Game`) is the same code
-the GameCube build uses. It isn't a rewrite, so changes there have to keep the
-GameCube build byte identical. That's checked on every commit.
+Everything outside of that (`src/SB/Core/x` and `src/SB/Game`) is the same code
+the GameCube build uses. Changes there have to keep the GameCube build byte identical using build flags.
 
-## What it adds over the GameCube release
+## Added features
 
-The GameCube version shipped with a few things stubbed out. The functions are
-empty in the decomp but still have live call sites, and the Xbox release did
-them for real, so they were recovered from that build rather than invented.
-
-All four are on by default and each can be turned off in `config.ini`, which
-the game writes with the defaults the first time it runs. Off, what is left is
-what the GameCube release does.
+The GameCube version has a few things stubbed out. The functions are
+empty in the decomp but still have live call sites, which the Xbox version actually implements, 
+so they were recovered from the .xbe's bytecode. They are on by default and each can be turned off in `config.ini`, which
+the game writes with the defaults the first time it runs. 
 
 - **Cruise Bubble distortion.** `xScrFxDistortionRender` and `distort_screen`
   are both empty on GameCube. On Xbox they swirl the picture while you fly the
@@ -50,36 +52,14 @@ what the GameCube release does.
   neither console has any of it. The Xbox's reverb itself is DSP microcode that
   isn't on the disc and has never been disassembled, so it can't be copied. Its
   twelve I3DL2 parameters were read out of the Xbox binary and fed to a reverb
-  built on Microsoft's published I3DL2 design instead. The settings are the
-  Xbox's, the implementation is not.
+  built on Microsoft's published I3DL2 design instead.
 
-## The text says PC
-
-The port runs on the Xbox release's assets, and its text talks about an Xbox.
-The pause menu offers to "Reboot to Xbox Dashboard", an autosave asks you not to
-turn off "your Xbox console", and the load screen names the save location as
-"MEMORY CARD slot 1", which here is a folder. Some of it is older than that:
-the shared menu archives still carry PlayStation 2 wording the Xbox release
-never finished stripping, down to the DUALSHOCK.
-
-That text is rewritten as it loads, in memory. Your archives are never touched,
-so this is a real switch and not a one-way conversion. `platform_wording = off`
-in `config.ini` gives you exactly what the disc says. It covers 235 whole
-strings and 156 word swaps across the 63 archives, and it never rewrites
-anything inside `{markup}`, where the names are lookup keys rather than prose.
-
-`src/SB/Core/pc/iTextPatch.h` is the long version.
-
-## Retail bugs it fixes
+## Fixed bugs
 
 Two bugs in the original game that the port fixes instead of copying:
 
-- **3D sound panned the wrong way.** A sound on your right came out of the left
-  speaker. Only the GameCube release has this bug, and the port started out with
-  it because `iSndCalcVol3d` was decompiled accurately. The community's Action
-  Replay fix for the disc negates one constant, and this does the same. It is
-  fixed only in the PC build, because the GameCube code has to stay byte
-  identical.
+- **3D sound panned the wrong way.** L and R were flipped on GameCube. The community's 
+  Action Replay fix for the disc was ported here.
 - **The pause menu's bamboo frame is missing the rope at its corners.** The rope
   is painted on the ends of the horizontal poles, but the vertical poles are
   closer to the camera and are drawn afterwards, so they cover it up. The port
@@ -101,14 +81,11 @@ The game writes that file with the defaults the first time it runs, so start it
 once, fill the path in, and start it again. Backslashes or forward slashes both
 work, and a path with spaces in it needs no quotes.
 
-GameCube assets won't work. The movies are Bink there and `.xmv` on Xbox, and
-only `.xmv` can be played here.
+GameCube and PS2 assets do not work.
 
 If the folder is wrong or only partly extracted, the game prints an error and
 exits before the window opens. It tells you the path it looked in and whether
-`FONT.HIP` or `boot.HIP` was the file it could not find. Previously it got as far
-as loading the font, where the original code waits in a loop for a file that
-never arrives, so it looked like a hang.
+`FONT.HIP` or `boot.HIP` was the file it could not find.
 
 ## Building
 
@@ -240,7 +217,7 @@ any resolution. `off` gives you the console behaviour. A number from 1 to 255
 sets the cutoff, and `on` means 128. Glass, water, particles and the interface
 are not affected, because they ask to be blended.
 
-### Your own soundtrack
+### Soundtrack replacement
 
 ```ini
 [audio]
