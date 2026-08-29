@@ -1036,7 +1036,23 @@ void zSceneInit(U32 theSceneID, S32 reloadInProgress)
     xModelBucket_PreCountReset();
     PipeForAllSceneModels(xModelBucket_PreCountBucket);
 
+    // How many alpha-blended models one frame can hold. xModelBucket_Add drops
+    // everything past this without drawing it, so the number has to cover the
+    // worst frame in the level rather than the average one.
+    //
+    // 256 is what the console needed. Two PC-only things put more models in
+    // frustum at once than it allows: an unlimited draw distance, and a
+    // widescreen camera, which keeps its vertical view and widens. Jellyfish
+    // Fields asks for 334 with the draw distance lifted, and grass and
+    // jellyfish are what the console budget cut. Neither of those is the
+    // setting's fault to fix, so the PC raises the ceiling unconditionally --
+    // 8192 entries is 160 KB, and the per-frame cost is the models actually
+    // used, not the ones reserved.
+#ifdef PLATFORM_PC
+    xModelBucket_PreCountAlloc(8192);
+#else
     xModelBucket_PreCountAlloc(256);
+#endif
     PipeForAllSceneModels(xModelBucket_InsertBucket);
 
     xModelBucket_Init();
