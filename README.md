@@ -38,29 +38,30 @@ Supported versions:
 ## About this fork
 
 This is a fork of [bfbbdecomp/bfbb](https://github.com/bfbbdecomp/bfbb) where the
-decompilation is driven by an AI agent, as an experiment. Most commits on the
-`duplotron` branch were written by Claude: finding non-matching functions, working
-out why they don't match, fixing them, and checking the result against the
-original binary. The game is the test case.
+decompilation is driven by an LLM, as an experiment. All of the decomp work on the
+`duplotron` branch was written by Claude. Claude used the existing tooling in the decomp repo as well as its own tooling. 
+Most of the work was done completely autonomously, with minimal guidance to make sure it wasn't creating fakematches 
+(at least, to the best of my ability). From what I can tell, the quality of the code it output is generally pretty good, 
+and the process it used was basically looking at the asm/ghidra output, testing out various permutations of 
+the c++ code in a scratchpad, and then applying the most-matching version to the repo. 
 
-It builds with a scheduler-patched CodeWarrior (`GC/2.0p1a`, produced at
+This was an experiment/proof of concept I did with my extra claude usage I wasn't going to use for anything else, so it didn't cost me any extra money.
+Though much of the generated code seems pretty good, I would consider this mostly "slop", and  
+will need to be carefully verified before merging to main. This was a "move-fast-break-things" approach to get something working, 
+which worked for my personal purposes, but long-term we want the official decomp to be high quality.
+
+This also uses a scheduler-patched CodeWarrior (`GC/2.0p1a`, produced at
 configure time by `tools/patch_compiler.py`), which unblocks functions that
-differ only by instruction scheduling.
+differ only by instruction scheduling. The patches were found by multiple Fable instances, 
+and compared against a mwcc decomp to validate.
 
 The work has gone almost entirely into game code rather than the SDK and
-library code around it, and that is what made the PC port on `treedome`
-possible. The port compiles these same `src/SB` sources against a host platform
-layer, and for that what matters is that the game's code exists and is correct,
-not that it matches byte for byte.
+library code around it (the existing decomp project's goal), and that is what made the PC port on `treedome`
+possible, since none of the non-game code was required to port to PC.
 
-The game code badges are the ones that mean anything: that is the game itself,
-the part being decompiled. The overall figures include the Dolphin SDK, MSL,
-RenderWare and Bink, most of which nobody is working on.
+Slop warning: See [docs/DUPLOTRON.md](docs/DUPLOTRON.md) for what's been tried and ruled out. 
 
-Both are updated by hand, since this fork has no progress site of its own.
-`python tools/gcgate.py` prints the current game code numbers.
-
-See [docs/DUPLOTRON.md](docs/DUPLOTRON.md) for what's been tried and ruled out.
+This fork still contains the matching gate that the original uses to build a matching .dol file. Though, it is also completely linkable to a working non-matching .dol file that can be played (with some bugs).
 
 # Dependencies
 
