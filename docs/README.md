@@ -14,6 +14,9 @@
 - [RESOLUTION.md](RESOLUTION.md) is the same audit for rendering above 640x480:
   what the virtual screen already gives you, and the camera rasters that have to
   move together.
+- [RENDERING.md](RENDERING.md) is what could be added to the renderer, in both
+  directions: modern effects as optional settings, and a fixed-function mode for
+  hardware older than Shader Model 2.0. Nothing in it is implemented.
 
 ## Decomp
 
