@@ -46,7 +46,7 @@ and the process it used was basically looking at the asm/ghidra output, testing 
 the c++ code in a scratchpad, and then applying the most-matching version to the repo. 
 
 This was an experiment/proof of concept I did with my extra claude usage I wasn't going to use for anything else, so it didn't cost me any extra money.
-Though much of the generated code seems pretty good, I would consider this mostly "slop", and  
+Though much of the generated code seems pretty good, I would consider this mostly "slop", and 
 will need to be carefully verified before merging to main. This was a "move-fast-break-things" approach to get something working, 
 which worked for my personal purposes, but long-term we want the official decomp to be high quality.
 
