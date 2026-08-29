@@ -5,52 +5,48 @@
 
 // PC-only: playing your own recordings of the music in place of the game's.
 //
-// The disc's music is mono. Every sound asset in the retail tree is -- all
-// 3537 of them -- and the music is the only one where that is a loss rather
-// than a detail, because it is the only one the player hears at full length
-// with nothing else going on. Stereo masters of this soundtrack exist, and
-// nothing about the port's mixer stops them being played: iSampleAt has taken
-// a channel index and strided by the source's channel count since it was
-// written, and a 2D voice like music sits centred, so a stereo source arrives
-// with its image intact. What was missing was any way to get one in.
+// The disc's music is mono -- every one of the 3537 sound assets in the retail
+// tree is -- and the music is the only one where that is a loss rather than a
+// detail, because it is the only one heard at full length with nothing else
+// going on. Nothing about the mixer stopped a stereo master being played:
+// iSampleAt has taken a channel index and strided by the source's channel count
+// since it was written, and a 2D voice like music sits centred. What was
+// missing was any way to get one in.
 //
-// **The asset is replaced, not the mixing.** An override goes in at
-// iSndDataAcquire, which is the one place a sound's bytes are fetched, so
-// everything downstream is unchanged: the voice is acquired, panned, faded,
-// paused, stopped and timed out exactly as the disc's own asset would have
-// been. zMusic never learns that anything happened. That is also why this is
-// not restricted to music -- any asset id can be overridden, and the music is
-// simply the only one worth it.
+// The asset is replaced, not the mixing. An override goes in at
+// iSndDataAcquire, the one place a sound's bytes are fetched, so the voice is
+// acquired, panned, faded, paused, stopped and timed out exactly as the disc's
+// own asset would have been, and zMusic never learns anything happened. That is
+// also why this is not restricted to music: any asset id can be overridden, and
+// the music is simply the only one worth it.
 //
-// **Where the files are named.** Two rules, tried in order, because two kinds
-// of folder exist. A folder someone assembled for this port has files named
-// after the assets, and the name IS the key: the packer's asset id is
-// xStrHash of the asset's name, so `music_00_hb_44.flac` needs no mapping at
-// all. A soundtrack rip has files named after the music -- "01. Bikini
-// Bottom.flac" -- and cannot be matched by name, so a `soundtrack.txt` in the
+// Files are found by two rules, tried in order, because two kinds of folder
+// exist. A folder assembled for this port has files named after the assets, and
+// the name is the key -- the packer's asset id is xStrHash of the asset's name,
+// so music_00_hb_44.flac needs no mapping. A soundtrack rip has files named
+// after the music, which cannot be matched by name, so a soundtrack.txt in the
 // folder may say what is what:
 //
 //     ; asset name = file, relative to this folder
 //     music_00_hb_44 = 01. Bikini Bottom.flac
 //     music_10_gy_44 = 12. Flying Dutchman's Graveyard.flac
 //
-// An entry in the file wins over a name that happens to hash, so a mapping can
+// An entry there wins over a name that happens to hash, so a mapping can
 // correct a coincidence rather than being fought by one.
 //
-// **Whatever the file's rate and channel count are, they are used.** Not the
-// sound table's: the table describes the asset on the disc, and an override is
-// a different recording. iSndDataAcquire reports what it actually decoded and
-// iStartVoice believes it, so a 48 kHz stereo FLAC standing in for a 44.1 kHz
-// mono asset plays as a 48 kHz stereo voice.
+// The file's own rate and channel count are used, not the sound table's: the
+// table describes the asset on the disc and an override is a different
+// recording. iSndDataAcquire reports what it decoded and iStartVoice believes
+// it, so a 48 kHz stereo FLAC standing in for a 44.1 kHz mono asset plays as a
+// 48 kHz stereo voice.
 //
-// **Looping is at the disc's length, not the file's.** A soundtrack release is
-// usually the same performance with a proper ending on it -- measured against
-// the game's own tracks, every one of them starts at the same instant and runs
-// between 0.9 and 7.2 seconds longer. The game loops its music forever, so
-// looping the file whole would drag that ending back round every time. The
-// retail asset's own length is therefore carried through as the loop end,
-// which puts the seam exactly where the console put it and leaves the tail for
-// a track that is allowed to finish.
+// Looping is at the disc's length, not the file's. A soundtrack release is
+// usually the same performance with a proper ending on it: measured against the
+// game's own tracks, every one starts at the same instant and runs 0.9 to 7.2
+// seconds longer. The game loops its music forever, so looping the file whole
+// would drag that ending round every time. The retail asset's length is carried
+// through as the loop end, which puts the seam where the console put it and
+// leaves the tail for a track that is allowed to finish.
 
 // The folder to look in, or NULL/"" for none, which is the default and is
 // exactly retail. Pushed from iSystem.cpp's ApplyConfig, the way the text

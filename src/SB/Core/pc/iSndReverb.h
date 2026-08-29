@@ -8,42 +8,26 @@
 // PC-only: the environmental reverb the Xbox release has in Mermalair and the
 // caves, as an actual reverb rather than a parameter block handed to hardware.
 //
-// **Why this exists at all.** zScene.cpp's zSceneInitEnvironmentalSoundEffect
-// already picks SND_EFFECT_CAVE for the right nine scenes, and xSnd already
-// forwards it -- that chain is shipping code and it is complete. What is empty
-// is the platform end: iSndSetEnvironmentalEffect has no body in GameCube
-// retail, which is exactly why the console versions have no reverb and the
-// Xbox does. The Xbox end is one DirectSound call, because the console has a
-// reverb in its audio DSP. This port's backend is a software mixer feeding one
-// WASAPI stream, so there is nothing to configure and the reverb has to be
-// written.
+// The game side is complete shipping code: zSceneInitEnvironmentalSoundEffect
+// picks SND_EFFECT_CAVE for the right nine scenes and xSnd forwards it. What is
+// empty is iSndSetEnvironmentalEffect, which has no body in GameCube retail --
+// that is why the console versions have no reverb and the Xbox does. The Xbox
+// end is one DirectSound call into a reverb in its audio DSP. This backend is a
+// software mixer feeding one WASAPI stream, so the reverb has to be written.
 //
-// **What is faithful and what is not.** The parameters are exact: they are
-// the twelve fields the Xbox build stores on its stack before calling
-// SetI3DL2Listener, recovered from that code and reproduced in iSnd.cpp.
+// The parameters are exact: the twelve fields the Xbox build stores before
+// calling SetI3DL2Listener, recovered from that code and reproduced in
+// iSnd.cpp.
 //
-// The algorithm is a reconstruction, and here is exactly how good a one. The
-// Xbox runs its reverb as microcode in the APU's global-processor DSP, loaded
-// from the effects image the XDK calls dsstdfx -- DirectSound Standard Effects.
-// That image is not on the game disc and not in the XBE, no disassembly of it
-// has been published, and the emulators that run Xbox audio correctly do so by
-// emulating the DSP and executing the microcode rather than by describing what
-// it computes. So the Xbox's own topology is not available to copy, and nothing
-// here samples-matches it.
+// The algorithm is a reconstruction. The Xbox's reverb is microcode in the
+// APU's DSP, loaded from the XDK's dsstdfx image, which is not on the disc and
+// has never been disassembled -- so nothing here samples-matches it. This
+// follows the same company's PC I3DL2 reverb, a DirectSound Media Object taking
+// a parameter struct of the same name, as reverse engineered by OpenMPT. That
+// the two are the same design is an inference from the shared name, API and
+// struct, not a verified fact.
 //
-// What IS available is the same company's I3DL2 reverb for the PC, shipped as
-// a DirectSound Media Object in the same years, taking a parameter struct of
-// the same name -- and that one has been reverse engineered, by OpenMPT, whose
-// implementation this design is taken from. The two are siblings rather than
-// the same thing, and the weak link in the chain is exactly there: the Xbox's
-// standard effects are a DSP port of the PC's standard effects suite, but that
-// is an inference from the shared name, API and parameter struct, not a
-// verified fact.
-//
-// It is still a far better bet than a textbook reverb, which is what the first
-// version of this file was.
-//
-// **The structure**, per output channel:
+// The structure, per output channel:
 //
 //   1. a one-pole room filter, set by room_hf
 //   2. a delay line the early reflections are tapped from -- five taps spread
@@ -56,13 +40,13 @@
 //      a decay gain in its path, plus one more delay in the middle of the chain
 //   6. the chain's output summed from per-stage taps and fed back to step 4
 //
-// It is a recirculating loop, not a bank of parallel combs: the last stage's
-// output is what closes it. Diffusion is the allpass coefficient, density
-// scales the delays, and the level and decay come out of the parameters.
+// It recirculates rather than running parallel combs: the last stage's output
+// closes the loop. Diffusion is the allpass coefficient, density scales the
+// delays, and the level and decay come out of the parameters.
 //
-// **Threading.** Nothing here is synchronised. iSndReverbProcess runs on the
-// backend's render thread and iSndReverbSet on the game thread, so the caller
-// owns the exclusion; iSndHostWin32 already holds its mixer lock across both.
+// Nothing here is synchronised. iSndReverbProcess runs on the backend's render
+// thread and iSndReverbSet on the game thread, so the caller owns the
+// exclusion; iSndHostWin32 holds its mixer lock across both.
 
 // `rate` is the output rate the process step will be called at. Re-initialising
 // at a new rate is allowed and throws away the tail.
