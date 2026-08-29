@@ -8,6 +8,7 @@
 #include "xQuickCull.h"
 #include "xScene.h"
 #include "xScreen.h"
+#include "xShadowRes.h"
 #include "zGrid.h"
 #include "iCollide.h"
 #include "iCamera.h"
@@ -121,7 +122,7 @@ void xShadowSetLight(xVec3* target_pos, xVec3* in_vec, F32 dst_cast)
 
 static S32 SetupShadow()
 {
-    S32 res = 256;
+    S32 res = xShadowResolution(256);
 
     // Continuously halve res until it is less than or
     // equal to either display width or height.

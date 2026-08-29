@@ -27,6 +27,23 @@ void iVSync();
 void iSystemInit(U32 options);
 void iSystemExit();
 
+// PC-only: the size of the square raster character shadows are rendered into,
+// from config.ini's video.shadow_resolution. There is no GameCube counterpart
+// -- 256 was sized against a 640x480 framebuffer -- so shared code reaches it
+// through src/SB/Core/x/xShadowRes.h.
+//
+// Default is auto, which is half the render height rounded up to a power of
+// two: the ratio the console drew at, held at any render size. A power of two
+// from 64 to 4096 in the file pins it instead.
+//
+// Pulled rather than pushed, unlike the other render settings, for two reasons:
+// xShadowInit builds the shadow camera from game code at a moment iSystem does
+// not control, and auto has to see the size the window actually opened at
+// rather than the one config.ini asked for. `SetupShadow` still holds the
+// result to no more than the render size, so this is a ceiling and not
+// necessarily the number that ends up being used.
+S32 iShadowResolution();
+
 void null_func();
 
 #endif

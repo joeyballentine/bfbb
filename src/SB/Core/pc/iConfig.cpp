@@ -125,6 +125,24 @@ namespace
           "; lower keeps more of the band and stays softer, higher trims the shape.\n"
           "; on means 128. Glass, water, particles and the interface are unaffected\n"
           "; -- they ask to be blended, and are." },
+        { "video", "shadow_resolution", "auto",
+          "How sharp the shadows under characters are.\n"
+          ";\n"
+          "; A character's shadow is drawn by rendering the character into a\n"
+          "; square texture and projecting that onto the ground. The consoles made\n"
+          "; that texture 256 pixels across against a 480-pixel picture, so it was\n"
+          "; never magnified much. A PC draws the same shadow across far more\n"
+          "; pixels, and the edge goes blocky.\n"
+          ";\n"
+          "; auto keeps the consoles' ratio -- half the render height, rounded up\n"
+          "; to a power of two -- so the shadow stays as sharp relative to the\n"
+          "; picture as it was on a television, at whatever size is set above:\n"
+          ";\n"
+          ";   480 -> 256    720 -> 512    1080 -> 1024    2160 -> 2048\n"
+          ";\n"
+          "; A power of two from 64 to 4096 pins it instead. Larger costs video\n"
+          "; memory and a little time per shadow; 256 is what the consoles used.\n"
+          "; The texture is never made larger than the render size either way." },
         { "xbox", "glow", "on",
           "The full-screen glow, usually called the Xbox version's bloom." },
         { "xbox", "distortion", "on", "The Cruise Bubble's screen warp." },

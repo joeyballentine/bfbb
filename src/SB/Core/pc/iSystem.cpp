@@ -368,6 +368,79 @@ static S32 AlphaCutoutFromConfig()
     return 128;
 }
 
+// The size of the shadow raster, from config.ini's video.shadow_resolution.
+// 0 means auto: derive it from the render size instead of pinning a number.
+// Read back through iShadowResolution rather than pushed, because xShadowInit
+// builds the shadow camera from game code long after this runs -- which also
+// means auto sees the size the window actually opened at, not the one that was
+// asked for.
+static S32 sShadowResPinned = 0;
+
+// The console rendered a 256-pixel shadow into a 480-pixel picture. Auto keeps
+// that ratio: half the render height, rounded UP to a power of two, so the
+// shadow is never coarser than the console's relative to the picture it is
+// drawn in. 480 lands back on exactly 256, which is the number retail used.
+//
+//   480 -> 256    720 -> 512    1080 -> 1024    1440 -> 1024    2160 -> 2048
+//
+// SetupShadow then holds the result to no more than the render size, so a tall
+// narrow window cannot ask for a raster wider than the framebuffer.
+static S32 ShadowResolutionAuto()
+{
+    S32 height = iScreenHeight();
+
+    // Before iScreenSetSize there is no picture to scale against. Retail's
+    // number is the honest answer, not a guess at one.
+    if (height <= 0)
+    {
+        return 256;
+    }
+
+    S32 want = height / 2;
+    S32 res = 64;
+
+    while (res < want && res < 4096)
+    {
+        res <<= 1;
+    }
+
+    return res;
+}
+
+static S32 ShadowResolutionFromConfig()
+{
+    const char* value = iConfigGetString("video.shadow_resolution", "auto");
+
+    if (iHostStrCaseCmp(value, "auto") == 0)
+    {
+        return 0;
+    }
+
+    // Anything else is a power of two, 64 to 4096, and is REJECTED rather than
+    // clamped or rounded, for the reason the alpha cutout is: D3D9 refuses a
+    // non-power-of-two render target on hardware without that capability, and
+    // the refusal arrives as a shadow camera that failed to build -- no
+    // character shadows at all, and nothing anywhere naming the setting that
+    // caused it.
+    char* end;
+    long res = strtol(value, &end, 10);
+
+    if (end != value && *end == '\0' && res >= 64 && res <= 4096 && (res & (res - 1)) == 0)
+    {
+        return (S32)res;
+    }
+
+    printf("bfbb: config: video.shadow_resolution is not auto or a power of two from 64 to "
+           "4096, using the default: %s\n",
+           value);
+    return 0;
+}
+
+S32 iShadowResolution()
+{
+    return sShadowResPinned != 0 ? sShadowResPinned : ShadowResolutionAuto();
+}
+
 static const char* WindowModeName(iWindowMode mode)
 {
     switch (mode)
@@ -385,6 +458,7 @@ static void ApplyConfig()
 {
     sWindowMode = WindowModeFromConfig();
     sAlphaCutoutRef = AlphaCutoutFromConfig();
+    sShadowResPinned = ShadowResolutionFromConfig();
 
     // The render size, before RenderWareInit opens the window at it. Pushed the
     // same way the three render features are, and for a stronger reason: iScreen
@@ -451,10 +525,16 @@ static void ApplyConfig()
     }
 
     const char* path = iConfigPath();
-    printf("bfbb: %s -- %s; draw distance %s; alpha cutout %s; Xbox features: glow %s, "
-           "distortion %s, snapshot %s, reverb %s\n",
+    // The shadow size is said with where it came from, because auto and a
+    // pinned number that happen to agree are worth telling apart when someone
+    // asks why their shadows changed after they resized the window.
+    char shadows[24];
+    sprintf(shadows, "%d%s", (int)iShadowResolution(), sShadowResPinned != 0 ? "" : " (auto)");
+
+    printf("bfbb: %s -- %s; draw distance %s; alpha cutout %s; shadows %s; Xbox features: "
+           "glow %s, distortion %s, snapshot %s, reverb %s\n",
            path != NULL ? path : "no config.ini, defaults", WindowModeName(sWindowMode),
-           drawDistance ? "unlimited" : "console", cutout, glow ? "on" : "off",
+           drawDistance ? "unlimited" : "console", cutout, shadows, glow ? "on" : "off",
            distortion ? "on" : "off", snapshot ? "on" : "off", reverb ? "on" : "off");
     printf("bfbb: text rewritten for a PC: %s\n", wording ? "on" : "off");
 }
