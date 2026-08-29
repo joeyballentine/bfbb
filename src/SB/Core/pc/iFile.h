@@ -42,8 +42,13 @@ void iFileExit();
 U32* iFileLoad(char* name, U32* buffer, U32* size);
 U32 iFileOpen(const char* name, S32 flags, tag_xFile* file);
 
+// PC-only. Where the game's own files are: `[assets] path` from config.ini,
+// or BFBB_ASSETS when that is set. "" when neither says, which means the
+// working directory. Separators are slashes whichever was typed.
+const char* iFileAssetRoot();
+
 // PC-only. The full path of the first file the game cannot run without that
-// is not under BFBB_ASSETS, or NULL when they are all there. Asked once by
+// is not under the asset root, or NULL when they are all there. Asked once by
 // iSystemInit, because the alternative is a hang: zMainLoadFontHIP spins on
 // `while (xSTLoadStep('FONT') < 1.0f)` with no exit and no caller to fail to.
 const char* iFileMissingAssetPath();

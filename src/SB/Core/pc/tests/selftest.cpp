@@ -180,6 +180,8 @@ static void test_config()
     // spellings, ragged whitespace, a blank line, three spellings of true, and
     // one key that does not exist.
     static const char kFile[] = "; the port's settings\n"
+                                "[assets]\n"
+                                "path = D:\\my games\\bfbb xbox\n"
                                 "[Video]\n"
                                 "mode = Borderless\n"
                                 "width = 1280\n"
@@ -230,6 +232,13 @@ static void test_config()
     check(iConfigGetBool("video.draw_distance", TRUE) == FALSE,
           "'no' is false, in a key that has an underscore in it");
 
+    // The asset root. A Windows path with spaces and backslashes in it, which
+    // is what someone actually pastes in here: nothing may be quoted, escaped
+    // or split at the space, and the value has to be longer than a word --
+    // this is the setting that decides how much room an entry gets.
+    check(strcmp(iConfigGetString("assets.path", ""), "D:\\my games\\bfbb xbox") == 0,
+          "the asset path survives spaces and backslashes");
+
     // An unknown key is rejected at load, so it cannot be read back even under
     // its own name. That is what makes the report at load a guarantee rather
     // than a courtesy.
@@ -279,6 +288,8 @@ static void test_config()
         fclose(r);
         buf[n] = '\0';
 
+        check(strstr(buf, "[assets]") != NULL, "it has the [assets] section header");
+        check(strstr(buf, "path =") != NULL, "and the asset path, empty as it has to be");
         check(strstr(buf, "[video]") != NULL, "it has the [video] section header");
         check(strstr(buf, "mode = fullscreen") != NULL, "and the window mode at its default");
         check(strstr(buf, "width = 640") != NULL, "and the render width at its default");

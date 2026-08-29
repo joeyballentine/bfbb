@@ -16,7 +16,7 @@ namespace
     // truncated with a message rather than silently losing its tail.
     const S32 kMaxEntries = 64;
     const S32 kMaxKey = 64;
-    const S32 kMaxValue = 192;
+    const S32 kMaxValue = 512;
     const S32 kMaxLine = 512;
     const S32 kMaxPath = 512;
 
@@ -59,6 +59,18 @@ namespace
     };
 
     const Setting kSettings[] = {
+        { "assets", "path", "",
+          "The folder holding your copy of the game's files -- the one that\n"
+          "; DIRECTLY contains boot.HIP, FONT.HIP and fmv/, not a folder above it\n"
+          "; and not a disc image. No assets ship with the port, so nothing runs\n"
+          "; until this names them.\n"
+          ";\n"
+          "; Either slash works, and a path with spaces in it needs no quotes:\n"
+          "; everything after the '=' is the path.\n"
+          ";\n"
+          "; Empty means the folder the game is started from, which is right only\n"
+          "; if the files are sitting there. BFBB_ASSETS overrides this when it is\n"
+          "; set, so a second install can be run without editing anything." },
         { "video", "mode", "fullscreen",
           "fullscreen, borderless or windowed.\n"
           ";\n"
@@ -402,7 +414,12 @@ bool iConfigWriteDefaults(const char* path)
 
             // The one thing the per-setting comments cannot say, said once
             // where the section is introduced.
-            if (strcmp(section, "video") == 0)
+            if (strcmp(section, "assets") == 0)
+            {
+                fprintf(f, "; Where your copy of the game's files is. This is the one setting\n");
+                fprintf(f, "; the port cannot guess and cannot do without.\n");
+            }
+            else if (strcmp(section, "video") == 0)
             {
                 fprintf(f, "; The size the game renders at, and how that picture is presented.\n");
                 fprintf(f, "; The two are independent: whatever the game renders at is scaled\n");

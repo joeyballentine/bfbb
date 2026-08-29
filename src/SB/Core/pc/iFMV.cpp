@@ -1,5 +1,6 @@
 #include "iFMV.h"
 
+#include "iFile.h"
 #include "iFMVAudio.h"
 #include "iFMVDecoder.h"
 #include "iPadHost.h"
@@ -249,9 +250,9 @@ U32 iFMVPlay(char* filename, U32 buttons, F32 time, bool skippable, bool lockCon
         return 1;
     }
 
-    const char* root = getenv("BFBB_ASSETS");
+    const char* root = iFileAssetRoot();
     char rootbuf[512];
-    if (root == NULL || root[0] == 0)
+    if (root[0] == 0)
     {
         rootbuf[0] = 0;
     }

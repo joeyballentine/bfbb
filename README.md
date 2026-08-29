@@ -89,8 +89,17 @@ Two bugs in the original game that the port fixes instead of copying:
 ## You need your own copy
 
 No assets are included. The port reads the **Xbox** release's files, which you
-extract yourself. Point `BFBB_ASSETS` at the folder with `boot.HIP`, `fmv/`,
-`hb/` and so on.
+extract yourself. Put the folder with `boot.HIP`, `fmv/`, `hb/` and so on in
+`config.ini`:
+
+```ini
+[assets]
+path = D:\path\to\extracted\xbox\game
+```
+
+The game writes that file with the defaults the first time it runs, so start it
+once, fill the path in, and start it again. Backslashes or forward slashes both
+work, and a path with spaces in it needs no quotes.
 
 GameCube assets won't work. The movies are Bink there and `.xmv` on Xbox, and
 only `.xmv` can be played here.
@@ -124,12 +133,15 @@ cmake --build build-pc
 Run it:
 
 ```sh
-set BFBB_ASSETS=D:\path\to\extracted\xbox\game
 build-pc\bfbb.exe
 ```
 
-It writes a `config.ini` beside the executable on the first run. See
-**Settings** below.
+The first run writes a `config.ini` beside the executable and stops, because
+there is nowhere to read the game's files from yet. Put your asset folder in it
+as shown above, then run it again. See **Settings** below for the rest.
+
+`BFBB_ASSETS` overrides `[assets] path` when it is set, which is how to run a
+build against a second extraction without editing anything.
 
 ### Movies (optional)
 
@@ -150,9 +162,9 @@ advances past movies as if they'd played.
 ## Settings
 
 The game writes `config.ini` next to the executable the first time it runs. Every
-setting is at its default, with a comment explaining it. You do not need to edit
-anything to play, and anything that differs from the console behaviour can be
-turned back off.
+setting is at its default, with a comment explaining it. Only `[assets] path`
+has to be filled in — see **You need your own copy** above — and anything that
+differs from the console behaviour can be turned back off.
 
 ### Display
 

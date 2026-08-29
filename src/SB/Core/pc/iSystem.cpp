@@ -475,7 +475,7 @@ void iSystemInit(U32 options)
     // Before anything asks, because the first thing that does is
     // zMainLoadFontHIP, and it ends in `do { } while (xSTLoadStep('FONT') <
     // 1.0f);` -- retail's loop, with no exit and nobody to return a failure to.
-    // A wrong BFBB_ASSETS used to reach that loop and sit there, so the game
+    // A wrong asset path used to reach that loop and sit there, so the game
     // looked like it had hung on a blank window when what it had actually done
     // was fail to find a single file.
     //
@@ -484,25 +484,47 @@ void iSystemInit(U32 options)
         const char* missing = iFileMissingAssetPath();
         if (missing != NULL)
         {
-            const char* root = getenv("BFBB_ASSETS");
+            const char* root = iFileAssetRoot();
+            const char* env = getenv("BFBB_ASSETS");
+            const char* config = iConfigPath();
 
-            char message[1024];
+            // Which of the two to go and edit. Someone who has never set
+            // BFBB_ASSETS should be sent to their config.ini by name rather
+            // than to an environment variable they have never heard of, and
+            // someone who HAS set one should be told that it is what is in
+            // force -- otherwise they edit the file and nothing changes.
+            char where[768];
+            if (env != NULL && env[0] != '\0')
+            {
+                snprintf(where, sizeof(where),
+                         "BFBB_ASSETS is set to \"%s\", and overrides the settings file.",
+                         root);
+            }
+            else if (root[0] != '\0')
+            {
+                snprintf(where, sizeof(where), "[assets] path in %s is \"%s\".",
+                         config != NULL ? config : "config.ini", root);
+            }
+            else
+            {
+                snprintf(where, sizeof(where), "[assets] path in %s is empty; set it there.",
+                         config != NULL ? config : "config.ini");
+            }
+
+            char message[1536];
             snprintf(message, sizeof(message),
                      "The game's files were not found.\n\n"
                      "Looked for:\n%s\n\n"
-                     "BFBB_ASSETS is %s%s%s\n\n"
+                     "%s\n\n"
                      "It has to name the folder that DIRECTLY contains boot.HIP, "
                      "font.HIP and fmv\\ -- not a folder above that one, and not a "
                      "disc image. No assets ship with the port; they come from your "
                      "own copy of the Xbox release.",
-                     missing, root != NULL && root[0] != '\0' ? "\"" : "",
-                     root != NULL && root[0] != '\0' ? root : "not set",
-                     root != NULL && root[0] != '\0' ? "\"" : "");
+                     missing, where);
 
             printf("bfbb: FATAL -- the game's files were not found.\n");
             printf("bfbb:   looked for: %s\n", missing);
-            printf("bfbb:   BFBB_ASSETS: %s\n",
-                   root != NULL && root[0] != '\0' ? root : "not set");
+            printf("bfbb:   %s\n", where);
             printf("bfbb:   it must name the folder that DIRECTLY contains boot.HIP, "
                    "font.HIP and fmv/\n");
             fflush(stdout);

@@ -19,6 +19,21 @@ then `config.ini` beside the executable. Booleans take on/off, true/false,
 yes/no or 1/0, and a key that is not one of the ones below is reported by name
 at load rather than ignored.
 
+    [assets]            Where your copy of the game's files is. The one setting
+                        the port cannot guess and cannot do without.
+
+    path                Empty by default, which means the folder the game was
+                        started from. It has to name the directory that DIRECTLY
+                        contains boot.HIP, FONT.HIP and fmv/ -- not a folder
+                        above it, and not a disc image. Either slash works and
+                        a path with spaces needs no quotes. `BFBB_ASSETS`
+                        overrides it. Checked at startup, before the window
+                        opens: a root without font.HIP or boot.HIP under it
+                        stops the game with a message rather than letting it
+                        reach zMainLoadFontHIP, which spins forever on a font
+                        that never loads and used to look like a hang on a blank
+                        window. iFileAssetRoot is where the answer is resolved.
+
     [video]             The size the game renders at, and how it is presented.
                         The two are independent: the picture is scaled onto
                         whatever surface it lands on at present time, so the
@@ -91,14 +106,11 @@ generated file is written from, so the three cannot disagree.
 
 ## Running it, and the switches
 
-    BFBB_ASSETS=<dir>   where the retail assets are. Required, and it must be
-                        the directory that DIRECTLY contains boot.HIP, FONT.HIP
-                        and fmv/ -- not a folder above it, and not a disc image.
-                        Checked at startup, before the window opens: a root
-                        with no font.HIP or boot.HIP under it stops the game with
-                        a message rather than letting it reach zMainLoadFontHIP,
-                        which spins forever on a font that never loads and used
-                        to look like a hang on a blank window.
+    BFBB_ASSETS=<dir>   where the retail assets are, overriding `[assets] path`
+                        above. Not needed to play -- the setting is -- but it is
+                        how one build gets run against a second extraction, or a
+                        stripped-down set, without editing anyone's config.ini.
+                        Same rules and the same startup check as the setting.
 
     BFBB_CONFIG=<path>  use this file as config.ini, and write the defaults
                         there if it does not exist.

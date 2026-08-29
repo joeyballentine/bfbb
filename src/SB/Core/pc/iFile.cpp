@@ -1,4 +1,5 @@
 #include "iFile.h"
+#include "iConfig.h"
 #include "iHost.h"
 
 #include "xFile.h"
@@ -31,7 +32,7 @@ static char sBasePath[512];
 // wrong asset root from the asset system probing for a file it can do without.
 static S32 sOpenedAny;
 
-// The asset root, from BFBB_ASSETS, kept separately from sBasePath.
+// The asset root, from the settings, kept separately from sBasePath.
 //
 // It exists because the GAME overwrites sBasePath: zMain.cpp:890 reads a PATH
 // setting out of SB.INI and hands it to iFileSetPath. On the console that is
@@ -43,6 +44,56 @@ static S32 sOpenedAny;
 // So a RELATIVE path from the INI is resolved against the asset root, which is
 // what it means on the console, and an absolute one is honoured as given.
 static char sAssetRoot[512];
+
+// Where the game's files are. No trailing slash is added -- the callers that
+// print it want the folder someone named and not a decorated version of it,
+// and the ones that build paths with it fix the tail themselves.
+//
+// A SETTING, `[assets] path`, because it is the one thing the port cannot run
+// without and the one thing it cannot guess, and asking someone to set an
+// environment variable before they can play is asking them to be a developer.
+// config.ini writes itself on the first run, so the question is in front of
+// whoever starts the game rather than in a README.
+//
+// BFBB_ASSETS still wins when it is set, and is how a second copy of the
+// assets gets used without editing the file -- which is what a bisect over two
+// extractions, or a build run against a stripped-down set, actually needs.
+//
+// Resolved once and cached: iConfigGetString hands back a pointer into the
+// settings table, and this is read from several places at startup.
+//
+// Backslashes become slashes on the way through. A path typed into a settings
+// file on Windows is `D:\games\bfbb`, and everything downstream here splits
+// paths on '/' -- iResolveCaseInsensitive would take a backslash path for a
+// bare leaf name and look for it in the working directory.
+const char* iFileAssetRoot()
+{
+    static char sRoot[512];
+    static S32 sResolved;
+
+    if (!sResolved)
+    {
+        sResolved = 1;
+
+        const char* root = getenv("BFBB_ASSETS");
+        if (root == NULL || root[0] == '\0')
+        {
+            root = iConfigGetString("assets.path", "");
+        }
+
+        snprintf(sRoot, sizeof(sRoot), "%s", root);
+
+        for (char* c = sRoot; *c != '\0'; c++)
+        {
+            if (*c == '\\')
+            {
+                *c = '/';
+            }
+        }
+    }
+
+    return sRoot;
+}
 
 static bool iPathIsAbsolute(const char* path)
 {
@@ -74,13 +125,13 @@ void iFileInit()
     // no error, no message, just a process sitting there. That was the first
     // hang the port ever reached, and it took a watchdog to find.
     //
-    // An environment variable rather than a command-line argument, because
-    // main() is the game's own in zMain.cpp and its argv handling is retail's.
-    // Same arrangement as BFBB_WATCHDOG.
+    // A setting rather than a command-line argument, because main() is the
+    // game's own in zMain.cpp and its argv handling is retail's. See
+    // iFileAssetRoot for where the answer comes from.
     sAssetRoot[0] = 0;
 
-    const char* assets = getenv("BFBB_ASSETS");
-    if (assets != NULL && assets[0] != 0)
+    const char* assets = iFileAssetRoot();
+    if (assets[0] != 0)
     {
         snprintf(sAssetRoot, sizeof(sAssetRoot), "%s", assets);
 
@@ -202,7 +253,7 @@ static bool iResolveCaseInsensitive(char* path, size_t pathsize)
 
 // Whether the asset root actually holds the game.
 //
-// Asked once, at startup, so that a wrong BFBB_ASSETS is an error the player
+// Asked once, at startup, so that a wrong asset path is an error the player
 // sees rather than the hang described below. By the time the game reaches
 // zMainLoadFontHIP it is too late to say anything: the loop there has no exit
 // and no caller to return a failure to, and both are retail's.
@@ -245,7 +296,7 @@ const char* iFileMissingAssetPath()
 // which never leaves that loop if FONT.HIP never loads. On the console that
 // cannot happen -- the DVD root is the only place a name can mean, and the disc
 // IS the game -- so retail has no handling here to port. On a host, a wrong
-// BFBB_ASSETS produces a hang on a white window with a startup log that looks
+// asset path produces a hang on a white window with a startup log that looks
 // perfectly normal right up to the last line, and it is the single most common
 // way a first run fails. One line of output is the whole difference.
 //
@@ -291,10 +342,11 @@ static void reportMissingFile(const char* name, const char* path)
     if (sCount == 0)
     {
         printf("bfbb: no asset file has opened yet, and the game is asking for them.\n");
-        printf("bfbb:   BFBB_ASSETS must name the directory that DIRECTLY contains\n");
-        printf("bfbb:   boot.HIP, FONT.HIP and fmv/ -- not a folder above it, and not\n");
-        printf("bfbb:   a disc image. The game does not check, so the wrong path is a\n");
-        printf("bfbb:   hang on a blank window rather than an error.\n");
+        printf("bfbb:   [assets] path in config.ini -- or BFBB_ASSETS -- must name the\n");
+        printf("bfbb:   directory that DIRECTLY contains boot.HIP, FONT.HIP and fmv/ --\n");
+        printf("bfbb:   not a folder above it, and not a disc image. The game does not\n");
+        printf("bfbb:   check, so the wrong path is a hang on a blank window rather\n");
+        printf("bfbb:   than an error.\n");
     }
 
     printf("bfbb:   not found: %s\n", path);
