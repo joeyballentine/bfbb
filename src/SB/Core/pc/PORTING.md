@@ -92,51 +92,40 @@ Two things bite immediately, both reported by agents who hit them:
 report.json in place and the gate then passes on stale output.
 
 
-## Open: the level-exit prompt is never focused
+## Solved: doors did nothing, and the prompt was never the mechanism
 
-`BFBB_EVENT` and `BFBB_UI` traced this end to end. Recorded so the next person
-starts where it stopped rather than at the beginning.
+Kept because the hunt went a long way in the wrong direction and the reason it
+did is worth knowing.
 
-Read from the retail asset, not inferred. In `hb02.HIP`:
+The prompt at a level exit looked like a UI element: `hb02.HIP` holds
+`574d6e87 UIFT "WARP OUTSIDE UIF"` linked src 69 (`eEventPadPressR1`) to dst 16
+(`eEventTeleportPlayer`) on `fbdb3966 PORT "TOHB01"`, which is the portal out of
+SpongeBob's house. Everything about that reads correctly: the asset is 196
+bytes, `linkCount` is 1, the link sits at offset 164, and `sizeof(zUIFontAsset)`
+is exactly 164, so `zUIFont_Init`'s pointer arithmetic lands on it.
 
-    574d6e87 UIFT "WARP OUTSIDE UIF"   link src 69 -> dst 16 -> fbdb3966
-    fbdb3966 PORT "TOHB01"
+It is also vestigial. No link in the scene targets that id -- it occurs once in
+the whole file, in its own header -- and `zUI` captures a button only when
+`uiFlags` has `0x8` and either `0x2` or `0x1`, which nothing ever sets on it.
+Five sessions of instrumentation went into asking what focuses it. Nothing does.
 
-`src 69` is `eEventPadPressR1`, `dst 16` is `eEventTeleportPlayer`. That prompt
-is wired straight to the portal out of SpongeBob's house, and the four beside it
-are the room-to-room warps. **The data is right and so is the port's reading of
-it**: a UIFT asset is 196 bytes with `linkCount` 1, the link sits at offset 164,
-and `sizeof(zUIFontAsset)` computes to exactly 164 -- so `zUIFont_Init`'s pointer
-arithmetic lands on it.
+The live path is `ztalkbox::update_all`. Every door in the game is a talk box, a
+DYNA of type `game_object:talk_box`, and while one is up it turns the pad's
+pressed mask into `eEventPadPress*` events on itself. What stopped that on the
+port was `trigger_pads`, declared `bool trigger_pads : 8` and holding three
+values: 114 talk boxes carry TP_NEVER, 199 TP_TRAPPED and 217 TP_ACTIVE.
+CodeWarrior reads an eight-bit bool bitfield as a whole byte; clang is entitled
+to assume a bool holds 0 or 1 and masks with `andb $0x1`, so a stored 2 arrived
+as 0 and the TP_ACTIVE arm was unreachable. TP_TRAPPED survived by happening to
+be 1, which is why talking to a villager worked and every door did not.
 
-Everything up to the prompt works, and each step was measured rather than
-assumed:
+Two lessons, and the second is the expensive one:
 
-* XInput produces `XPAD_BUTTON_R1` (`BFBB_PAD`).
-* `zUI_PreUpdate` captures it and `zUIFont_Update` dispatches
-  `eEventPadPressR1` -- sixteen presses, sixteen dispatches.
-* Links forward and resolve, none dropped in a session.
-* Triggers detect the player; `entered` transitions.
-* The portal path runs end to end: entering the house reported `zSceneSwitch`
-  to `'HB02'` and the new scene's objects appeared.
-
-What stops it is the prompt's own state. `zUI` captures only when `uiFlags` has
-`0x8` **and** either `0x2` or `0x1`. The asset gives it `0x34`, which has
-neither. `0x8` comes from `eEventUIFocusOn`, `0x2` from `eEventUISelect`.
-
-**Nothing sends it either.** Its id occurs exactly ONCE in `hb02.HIP` -- its own
-asset header -- so no link in the scene targets it, and the only code that sends
-focus or select events is `zSaveLoad` and `zBusStop`, for their own UI.
-
-So the question is narrow: **what focuses `WARP OUTSIDE UIF` on the console?**
-It cannot be a link and it is not the code found so far.
-
-The shape of the answer is worth noting. `uiFlags 0x34` carries `0x10` and
-`0x20`, which mean *become visible when focused* and *invisible when
-unfocused* -- so a prompt that is VISIBLE has normally been focused. This one is
-visible on screen and was never focused in any log. Something else is making it
-visible, and whatever should have focused it is the missing piece. Start by
-finding what makes it visible.
+* A field declared `bool` that holds more than two values is a portability bug
+  wherever the console read it as a byte. Grep for `: 8` before trusting one.
+* Instrument the mechanism, not the thing on screen. Everything measured about
+  the UI prompt was true and none of it mattered, because the prompt was not
+  what the game reads.
 
 ## Things that have already bitten, so that they do not again
 
