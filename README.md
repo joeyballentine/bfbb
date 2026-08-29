@@ -59,7 +59,7 @@ The work has gone almost entirely into game code rather than the SDK and
 library code around it (the existing decomp project's goal), and that is what made the PC port on `treedome`
 possible, since none of the non-game code was required to port to PC.
 
-Slop warning: See [docs/DUPLOTRON.md](docs/DUPLOTRON.md) for what's been tried and ruled out. 
+Slop warning: See [docs/DUPLOTRON.md](docs/DUPLOTRON.md) for what's been tried and ruled out. This plus a bunch of other slop .md files here that are not intended to be read by actual humans but were helpful for claude to track things.
 
 This fork still contains the matching gate that the original uses to build a matching .dol file. Though, it is also completely linkable to a working non-matching .dol file that can be played (with some bugs).
 
