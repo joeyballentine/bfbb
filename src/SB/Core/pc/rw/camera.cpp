@@ -141,42 +141,37 @@ RwBool RwCameraDestroy(RwCamera* camera)
 // ---------------------------------------------------------------------------
 // Begin/end update
 //
-// This is the pair that has to write RwEngineInstance, and the reason is in
-// engine_start.cpp: RwGlobals and rw::Engine agree on curCamera/curWorld being
-// their first two fields and on nothing after, so the shim owns a SECOND
-// RwGlobals rather than an alias onto librw's engine. Game code reads the
-// fields directly --
+// This pair has to write RwEngineInstance. The reason is in engine_start.cpp:
+// RwGlobals and rw::Engine agree on curCamera/curWorld being their first two
+// fields and on nothing after, so the shim owns a second RwGlobals rather than
+// an alias onto librw's engine. Game code reads the fields directly --
 //
 //     xCutscene.cpp:716   ((RwCamera*)RwEngineInstance->curCamera)->object.object.parent
 //     xFX.cpp:3044        RwCamera* cam = (RwCamera*)RwEngineInstance->curCamera;
 //     iParMgr.cpp:236     RWSRCGLOBAL(curCamera)
 //
 // -- six files in all, plus eleven more through RwCameraGetCurrentCamera(),
-// which is a macro for exactly the same read: iCamera, iModel, xFont, xFX,
-// xModel, xScrFx, xSkyDome, zFX, zParPTank, zScene and zTextBox.
+// which is a macro for the same read. There is no call to hook, so both copies
+// get assigned here or those files read null and fault in a cutscene, an aura
+// or a shadow.
 //
-// So there is no call to hook and nothing would catch it: those files would
-// read null and fault in a cutscene, an aura or a shadow, long after this
-// commit. Both copies get assigned here or the port is broken.
+// The values are mirrored from rw::engine rather than assigned independently,
+// so the two cannot drift. librw's beginUpdate chain sets them: Camera::create
+// installs worldBeginUpdateCB, which sets engine->currentWorld from the
+// camera's world and calls defaultBeginUpdateCB, which sets
+// engine->currentCamera, syncs the dirty frame list and enters the device.
 //
-// The values are MIRRORED from rw::engine rather than assigned independently,
-// so that there is one source of truth and the two cannot drift. librw's
-// beginUpdate chain is what sets them: Camera::create installs
-// worldBeginUpdateCB, which sets engine->currentWorld from the camera's world
-// and then calls defaultBeginUpdateCB, which sets engine->currentCamera,
-// syncs the dirty frame list and enters the device.
-//
-// End nulls both, in both copies, because the game uses "is curCamera null" as
-// "is an update in progress":
+// End nulls both, in both copies, because the game reads "curCamera is null" as
+// "no update is in progress":
 //
 //     zGame.cpp:910          cam = RwEngineInstance->curCamera;
 //     zNPCTypePrawn.cpp:1718 if (cam != NULL) RwCameraEndUpdate(cam);
 //
 // Left non-null, both of those would end an update that had already ended.
-// Nulling librw's copy as well is safe: the only readers of
-// engine->currentCamera and engine->currentWorld inside librw are the immediate
-// mode and material-effect paths in the GL and D3D backends, and every one of
-// them runs between a begin and an end.
+// Nulling librw's copy is safe: the only readers of engine->currentCamera and
+// engine->currentWorld inside librw are the immediate mode and material-effect
+// paths in the GL and D3D backends, and every one runs between a begin and an
+// end.
 
 RwCamera* RwCameraBeginUpdate(RwCamera* camera)
 {

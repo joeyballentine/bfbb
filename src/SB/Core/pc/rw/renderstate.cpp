@@ -3,31 +3,29 @@
 // Unlike the rest of this directory these are not casts and calls, for two
 // reasons.
 //
-// FIRST: the game reads render state back. Not as a debugging aid -- as the
-// save/restore idiom that every overlay in the game is built on.
+// The game reads render state back -- not as a debugging aid, but as the
+// save/restore idiom every overlay in the game is built on:
 //
 //     xFont.cpp:620      nine RwRenderStateGet calls into a static `oldrs`
 //     xFont.cpp:644      the matching nine RwRenderStateSet calls to restore
 //     xShadowSimple:660  RxRenderStateVectorLoadDriverState, then five restores
 //
-// So a Get has to return what the last Set was given. Forwarding a Get to
-// librw would not do that: rw::GetRenderState asks the render device, and the
-// device under LIBRW_PLATFORM=NULL answers 0 to every question. xfont would
-// then "restore" every state to zero -- rwBLENDNABLEND, rwSHADEMODENASHADEMODE
-// -- and the first frame of text would take the rest of the frame with it.
-// That is why the shim keeps its own copy and answers out of it. RenderWare's
-// drivers cache render state exactly this way for exactly this reason.
+// So a Get has to return what the last Set was given, and forwarding it to
+// librw would not: rw::GetRenderState asks the render device, and the device
+// under LIBRW_PLATFORM=NULL answers 0 to everything. xFont would then "restore"
+// every state to zero -- rwBLENDNABLEND, rwSHADEMODENASHADEMODE -- and the
+// first frame of text would take the rest of the frame with it. So the shim
+// keeps its own copy and answers out of it, the way RenderWare's own drivers
+// cache render state.
 //
-// SECOND: librw models thirteen of RenderWare's twenty-three states. The ones
-// it has no counterpart for are listed under "Recorded but not rendered" below.
-// Those are RECORDED, so the save/restore idiom keeps working and a Get is
-// still truthful about what was Set -- but their Set returns FALSE, because the
-// value did not reach a renderer and saying otherwise would be a lie. They are
-// listed in TODO.md as well.
+// And librw models thirteen of RenderWare's twenty-three states. The rest are
+// listed under "Recorded but not rendered" below: recorded, so the save/restore
+// idiom keeps working and a Get stays truthful about what was Set, but their
+// Set returns FALSE, because the value did not reach a renderer.
 //
 // The copy is not a second source of truth for anything librw owns: every state
-// that librw does model is forwarded to it on the way in. Nothing else in the
-// port calls rw::SetRenderState.
+// librw does model is forwarded to it on the way in. Nothing else in the port
+// calls rw::SetRenderState.
 
 #include <rwcore.h>
 
@@ -142,47 +140,43 @@ static RwUInt32 packLibrwABGR(const RwRGBA* in)
 // ---------------------------------------------------------------------------
 // Blend factors the target hardware refuses
 //
-// **The GameCube driver does not accept every RwBlendFunction in every slot,
-// and the game relies on the ones it refuses being ignored.**
+// The GameCube driver does not accept every RwBlendFunction in every slot, and
+// the game relies on the ones it refuses being ignored.
 //
-// _rwDlSetRenderState (rwsdk/driver/gcn/dlrendst.c, disassembled at
-// 0x8024922C for SRCBLEND and 0x802492BC for DESTBLEND) validates the value
-// before it reaches GXSetBlendMode:
+// _rwDlSetRenderState (rwsdk/driver/gcn/dlrendst.c, disassembled at 0x8024922C
+// for SRCBLEND and 0x802492BC for DESTBLEND) validates the value before it
+// reaches GXSetBlendMode:
 //
-//     SRCBLEND   accepts 1..2 and 5..10; REFUSES 0, 3, 4, 11 and above
-//     DESTBLEND  accepts 1..8;           REFUSES 0 and 9 and above
+//     SRCBLEND   accepts 1..2 and 5..10; refuses 0, 3, 4, 11 and above
+//     DESTBLEND  accepts 1..8;           refuses 0 and 9 and above
 //
-// A refused value returns FALSE and changes NOTHING -- not the hardware, not
+// A refused value returns FALSE and changes nothing -- not the hardware, not
 // the driver's own cache -- so the previous factor stays in force. The gap is
 // the Flipper's: GX has one enum value for "the source colour" and "the
 // destination colour" (GX_BL_SRCCLR == GX_BL_DSTCLR), so the src slot cannot
-// name the source and the dst slot cannot name the destination. RenderWare
-// answers by refusing rwBLENDSRCCOLOR/rwBLENDINVSRCCOLOR as a source factor
-// and rwBLENDDESTCOLOR/rwBLENDINVDESTCOLOR as a destination one, and
-// rwBLENDSRCALPHASAT in either.
+// name the source and the dst slot cannot name the destination.
 //
-// D3D9 has no such gap and librw passes the value straight to
-// D3DRS_SRCBLEND, which is where the port and the console part company. It
-// matters, because fourteen of the game's particle systems ask for exactly
-// the refused combination -- src rwBLENDSRCCOLOR, dst rwBLENDINVSRCALPHA --
-// and every one of them is a smoke, steam, mist or dust effect:
+// D3D9 has no such gap and librw passes the value straight to D3DRS_SRCBLEND.
+// Fourteen of the game's particle systems ask for the refused combination --
+// src rwBLENDSRCCOLOR, dst rwBLENDINVSRCALPHA -- and every one is a smoke,
+// steam, mist or dust effect:
 //
 //     b201 STEAM/SMOKESTACK/FREEZE_BREATH, b301 SMOKE/MIST/STEAM,
 //     b302+b303 BIGDUP_SMOKE, bb01 SMOKE/FIRE/DUST_CLOUD, ...
 //
-// On the console the src factor stays at the rwBLENDSRCALPHA that
-// zRenderState() had just set, so those draw as ordinary alpha blends: soft
-// translucent puffs. Honoured literally on D3D9 the source is multiplied by
-// itself instead, and since Particle_cloud is a near-white bitmap whose shape
-// lives entirely in its alpha channel (mean RGB 224/219/197, alpha 0..190),
-// squaring it changes almost nothing and the alpha never gets a say. The
-// result is a flat white square, which is what Robo Patrick's steam drew.
+// On the console the src factor stays at the rwBLENDSRCALPHA zRenderState() had
+// just set, so those draw as ordinary alpha blends: soft translucent puffs.
+// Honoured literally on D3D9 the source is multiplied by itself, and since
+// Particle_cloud is a near-white bitmap whose shape lives in its alpha channel
+// (mean RGB 224/219/197, alpha 0..190), squaring it changes almost nothing and
+// the alpha never gets a say. That is the flat white square Robo Patrick's
+// steam drew.
 //
 // So the validation belongs here, in the shim that stands in for the GameCube
-// driver, rather than in librw -- it is this game's device behaviour, not a
-// bug in the library. The Get shadow is left alone on a refusal for the same
-// reason the driver leaves its cache alone: a Get must report the factor that
-// is actually in force.
+// driver, rather than in librw: it is this game's device behaviour, not a bug
+// in the library. The Get shadow is left alone on a refusal for the same reason
+// the driver leaves its cache alone -- a Get must report the factor that is
+// actually in force.
 static bool blendFactorAccepted(RwRenderState state, RwUInt32 value)
 {
     if (state == rwRENDERSTATESRCBLEND)
