@@ -58,25 +58,33 @@ what the GameCube release does.
 The port runs on the Xbox release's assets, and its text talks about an Xbox.
 The pause menu offers to "Reboot to Xbox Dashboard", an autosave asks you not to
 turn off "your Xbox console", and the load screen names the save location as
-"MEMORY CARD slot 1" — which here is a folder. Some of it is older than that:
+"MEMORY CARD slot 1", which here is a folder. Some of it is older than that:
 the shared menu archives still carry PlayStation 2 wording the Xbox release
 never finished stripping, down to the DUALSHOCK.
 
 That text is rewritten as it loads, in memory. Your archives are never touched,
-so this is a real switch and not a one-way conversion — `platform_wording = off`
+so this is a real switch and not a one-way conversion. `platform_wording = off`
 in `config.ini` gives you exactly what the disc says. It covers 235 whole
 strings and 156 word swaps across the 63 archives, and it never rewrites
 anything inside `{markup}`, where the names are lookup keys rather than prose.
 
 `src/SB/Core/pc/iTextPatch.h` is the long version.
 
-One retail bug is fixed rather than reproduced:
+## Retail bugs it fixes
+
+Two bugs in the original game that the port fixes instead of copying:
 
 - **3D sound panned the wrong way.** A sound on your right came out of the left
-  speaker. That's retail's bug and only the GameCube release has it, so the port
-  inherited it by reproducing `iSndCalcVol3d` faithfully. The community's Action
-  Replay fix for the disc negates one constant, and this does the same thing.
-  Fixed on the PC side only, since the GameCube code has to stay byte identical.
+  speaker. Only the GameCube release has this bug, and the port started out with
+  it because `iSndCalcVol3d` was decompiled accurately. The community's Action
+  Replay fix for the disc negates one constant, and this does the same. It is
+  fixed only in the PC build, because the GameCube code has to stay byte
+  identical.
+- **The pause menu's bamboo frame is missing the rope at its corners.** The rope
+  is painted on the ends of the horizontal poles, but the vertical poles are
+  closer to the camera and are drawn afterwards, so they cover it up. The port
+  swaps the two depths and draws the vertical poles first. This has nothing to do
+  with the render size. The rope was invisible at 640x480 as well.
 
 ## You need your own copy
 
@@ -86,6 +94,12 @@ extract yourself. Point `BFBB_ASSETS` at the folder with `boot.HIP`, `fmv/`,
 
 GameCube assets won't work. The movies are Bink there and `.xmv` on Xbox, and
 only `.xmv` can be played here.
+
+If the folder is wrong or only partly extracted, the game prints an error and
+exits before the window opens. It tells you the path it looked in and whether
+`FONT.HIP` or `boot.HIP` was the file it could not find. Previously it got as far
+as loading the font, where the original code waits in a loop for a file that
+never arrives, so it looked like a hang.
 
 ## Building
 
@@ -114,44 +128,8 @@ set BFBB_ASSETS=D:\path\to\extracted\xbox\game
 build-pc\bfbb.exe
 ```
 
-It writes a `config.ini` beside the executable on the first run, with every
-setting at its default and a comment on each. That is where the Xbox features
-above are turned on and off, and where the display is set up:
-
-```ini
-[video]
-mode = fullscreen
-width = 1280
-height = 960
-```
-
-`mode` is `fullscreen` (D3D9 exclusive, at the resolution the desktop is
-already using), `borderless` (a window with no border covering one monitor) or
-`windowed`. It is independent of the size: the picture is scaled onto whatever
-it lands on, so the game can render at 640x480 and fill a 4K display, or render
-above it and be sampled back down.
-
-The size defaults to the consoles' 640x480. Anything that is not 4:3 is
-widescreen — the camera keeps its vertical view and widens, so 1280x720 shows
-more of the world to the left and right, and the interface keeps its shape in
-the middle rather than stretching. `docs/RESOLUTION.md` has the details,
-including what raising it does not fix.
-
-The same section holds the draw distance, which is on:
-
-```ini
-[video]
-draw_distance = on
-```
-
-The consoles pop an object out of existence past a distance the level author
-set, swap distant ones for lower-detail models, and clip the world itself at
-400 units. None of that is a budget a PC has. Turning it off puts all three
-back exactly. It leaves fog alone — a fogged level's far plane is where the
-picture is already 100% fog, so there is nothing behind it to reveal — and it
-does not make anything *think* further away than it used to, only draw.
-
-`src/SB/Core/pc/README.md` describes it, and lists the `BFBB_*` diagnostics.
+It writes a `config.ini` beside the executable on the first run. See
+**Settings** below.
 
 ### Movies (optional)
 
@@ -168,6 +146,140 @@ The DLLs get copied next to the exe automatically.
 
 Skip it if you don't care. CMake prints `FMV decoder: none` and the game just
 advances past movies as if they'd played.
+
+## Settings
+
+The game writes `config.ini` next to the executable the first time it runs. Every
+setting is at its default, with a comment explaining it. You do not need to edit
+anything to play, and anything that differs from the console behaviour can be
+turned back off.
+
+### Display
+
+```ini
+[video]
+mode = fullscreen
+width = 1280
+height = 720
+ui = pillarbox
+```
+
+`mode` is `fullscreen` (exclusive D3D9, at the resolution the desktop is already
+using), `borderless` (a window with no border covering one monitor), or
+`windowed`.
+
+The window mode and the render size are separate settings. The game renders at
+`width` by `height`, and the result is scaled to fit whatever it is shown on. So
+you can render at 640x480 and fill a 4K display, or render above 4K and have it
+scaled back down.
+
+The default size is 640x480, which is what the consoles used. Any size that is
+not 4:3 gives you widescreen. The camera keeps the same vertical view and adds
+width, so at 1280x720 you see more of the level to the left and right. Nothing
+is stretched. `docs/RESOLUTION.md` covers this in detail, including what a
+higher resolution does not improve.
+
+`ui` controls where the interface is drawn when the render size is not 4:3. At
+4:3 the two options do the same thing.
+
+- `pillarbox` keeps the whole interface inside a centred 4:3 area, exactly as
+  the console drew it. On a 16:9 screen the HUD sits some way in from each side.
+- `native` moves the HUD out to the real screen edges. Each counter moves along
+  with its icon and stays the same size.
+
+Menus, textboxes and cutscene overlays stay in the 4:3 area under both options.
+They are full-screen images, so there is nothing in them to move separately.
+
+The menus themselves fill the screen either way. The backdrop is stretched to
+the real screen size, the underwater light pattern is drawn across the whole
+picture instead of the 4:3 area, and the bamboo frame is rebuilt with extra
+copies of the bamboo texture it already repeats, so it gets wider without the
+poles getting thicker.
+
+### Scenery
+
+```ini
+[video]
+draw_distance = on
+alpha_cutout = on
+```
+
+The consoles stop drawing an object past a distance the level designer set, swap
+distant objects for lower-detail versions, and clip the world itself at 400
+units. A PC does not need any of those limits. Turning `draw_distance` off
+restores all three exactly.
+
+It does not affect fog. In a fogged level the far clip plane sits where the
+picture is already fully fogged, so there is nothing behind it to reveal. It
+also does not change how far away the game thinks things are, only what it
+draws.
+
+`alpha_cutout` changes how transparent parts of a texture are drawn. Foliage,
+fences, grates and cave walls are solid shapes cut out of a texture.
+RenderWare's D3D drivers draw these by blending, which leaves a partly
+transparent border one texel wide around the edge of the shape. At the
+resolution the art was drawn for, that border is a soft edge about a pixel wide.
+At 4K it is about six pixels, and you can see the level's own sky through the
+edges of cave walls.
+
+With the setting on, that border is drawn fully solid up to a cutoff and
+discarded past it, so the shape on screen matches the shape in the texture at
+any resolution. `off` gives you the console behaviour. A number from 1 to 255
+sets the cutoff, and `on` means 128. Glass, water, particles and the interface
+are not affected, because they ask to be blended.
+
+### Your own soundtrack
+
+```ini
+[audio]
+soundtrack = D:\path\to\a\folder
+```
+
+Leave this empty, which is the default, to use the game's own music.
+
+The game's music is mono. So is every other sound in it, all 3537 of them, and
+this setting is mainly a way to play stereo versions instead. Whatever sample
+rate and channel count a file has are used as they are.
+
+Files are matched to tracks by name, so `music_00_hb_44.flac` needs no further
+setup. If your files are named after the songs instead, as a soundtrack release
+usually is, put a `soundtrack.txt` next to them listing `asset name = file`, one
+per line.
+
+Looping tracks loop at the point the game's version ended, not at the end of
+your file. A soundtrack release usually adds a proper ending to a track that
+loops in game, and without this you would hear that ending come round every
+time.
+
+If one file fails to decode, only that track is affected. It falls back to the
+game's own music, and the rest of the folder still plays.
+
+WAVE files work in any build. Other formats need a build with FFmpeg, the same
+dependency the movies use.
+
+### The rest
+
+`[xbox]` has a switch for each of the four Xbox features described at the top of
+this file. `[text]` has `platform_wording`. `src/SB/Core/pc/README.md` documents
+the platform layer interface by interface and lists the `BFBB_*` switches.
+
+## Saves
+
+The save screens were written for a GameCube memory card, which measures space in
+8 KB blocks. There is no memory card here, so every one of those figures was
+really a byte count with "block(s)" printed after it. That is where "Available
+Free Block(s): 2147483647 block(s)" came from.
+
+Sizes are now shown in bytes with a suitable unit, such as "348 KB" or "1.5 MB",
+and the "block(s)" that the surrounding text asset added is removed, so the
+number and the label agree.
+
+Both save slots on those screens now work. The save and load screens always drew
+two buttons, because the memory card had two slots, but the second one did
+nothing and choosing it gave an error. It is now a second folder with its own
+three save slots, so there are six saves in total instead of three. The first
+one is still the save directory itself, so saves made before this are still
+where the game looks for them.
 
 ## Checking a change
 
@@ -193,12 +305,14 @@ still matches.
 
 ## State of things
 
-Working: rendering, world, characters, animation, collision, audio, input, saves,
-HUD, movies, loading screen.
+Working: rendering, world, characters, animation, collision, audio, music,
+input, saves, HUD, menus, movies, loading screen. Widescreen works throughout,
+including the camera, the HUD and the menus.
 
-Not done: GL3 has no window backend, so this is Windows only. Beyond that it's
-lots of smaller things. Individual files carry their own notes about what's
-wrong and why, which are more useful than a list here.
+Not done: there is no GL3 window backend, so this is Windows only. The frame
+rate is capped at 60, and `docs/UNCAPPED.md` explains what breaks without the
+cap. The rest is a lot of smaller things. Individual source files have their own
+notes on what is wrong and why, which are more useful than a list here.
 
 ## Credit
 
