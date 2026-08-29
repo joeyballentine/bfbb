@@ -768,6 +768,128 @@ static void test_file()
     iHostRemoveDir(dir);
 }
 
+// The stick shaping in iPad.cpp, which sits above the backend and so is worth
+// checking whichever one is linked. Its two link-time dependencies are stubbed
+// here; see the note beside iPad.cpp in CMakeLists.txt.
+#include "xTRC.h"
+#include "iPad.h"
+
+_tagTRCPadInfo gTrcPad[4];
+_tagTRCState gTrcDisk[2];
+void xTRCPad(S32, _tagTRCState)
+{
+}
+
+// AnalogMin and AnalogMax as zMain.cpp defaults them. The game reads the stick
+// through these, so they are what the shaping has to land inside.
+#define TEST_ANALOG_MIN 0x20
+#define TEST_ANALOG_MAX 0x6e
+
+// DampenControls in zEntPlayer.cpp, restated. This is the consumer the shape
+// exists for: it measures the stick with max(|x|,|y|), not with its length, so
+// a stick that reports a circle reads short everywhere off-axis.
+static F32 test_dampen_mag(S32 padX, S32 padY)
+{
+    F32 x = (F32)padX;
+    F32 y = (F32)padY;
+    F32 mag;
+
+    if (x > -(F32)TEST_ANALOG_MIN && x < (F32)TEST_ANALOG_MIN)
+    {
+        x = 0.0f;
+    }
+    if (y > -(F32)TEST_ANALOG_MIN && y < (F32)TEST_ANALOG_MIN)
+    {
+        y = 0.0f;
+    }
+    if (x == 0.0f && y == 0.0f)
+    {
+        return 0.0f;
+    }
+
+    mag = (fabsf(x) > fabsf(y)) ? fabsf(x) : fabsf(y);
+    mag = (mag - TEST_ANALOG_MIN) / (F32)(TEST_ANALOG_MAX - TEST_ANALOG_MIN);
+    if (mag < 0.0f)
+    {
+        return 0.0f;
+    }
+    return (mag > 1.0f) ? 1.0f : mag;
+}
+
+// One host stick reading all the way through to what the game measures.
+static F32 test_stick_mag(F32 inX, F32 inY)
+{
+    F32 x, y;
+    iPadShapeStick(inX, inY, 72.0f, 40.0f, &x, &y);
+    return test_dampen_mag(iPadConvStick(x), iPadConvStick(y));
+}
+
+static void test_pad_stick_shape()
+{
+    F32 x, y;
+
+    iPadShapeStick(0.0f, 0.0f, 72.0f, 40.0f, &x, &y);
+    check(x == 0.0f && y == 0.0f, "a centred stick shapes to zero");
+
+    iPadShapeStick(1.0f, 0.0f, 72.0f, 40.0f, &x, &y);
+    check(fabsf(x - 72.0f) < 0.001f && fabsf(y) < 0.001f,
+          "full deflection along an axis reaches the octagon's 72");
+    check(iPadConvStick(x) == 127, "which iPadConvStick saturates at 127");
+
+    // The octagon's diagonal vertex. 40 is exactly where iPadConvStick clamps,
+    // so both axes saturate here as well -- that equality is the whole point of
+    // the shape, and it is what a circular stick does not have.
+    F32 h = 0.70710678f;
+    iPadShapeStick(h, h, 72.0f, 40.0f, &x, &y);
+    check(fabsf(x - 40.0f) < 0.01f && fabsf(y - 40.0f) < 0.01f,
+          "a full diagonal reaches the octagon's 40 on both axes");
+    check(iPadConvStick(x) == 127 && iPadConvStick(y) == 127, "so a diagonal saturates too");
+
+    // The regression this file exists for. Sweeping a stick held at full
+    // deflection right round must give the game full speed at every angle;
+    // scaling the host's circle instead dips to 0.71 of full near 45 degrees,
+    // which is the character dropping to a walk four times per revolution.
+    F32 worst = 1.0f;
+    for (S32 i = 0; i < 720; i++)
+    {
+        F32 a = (F32)i * (6.28318531f / 720.0f);
+        F32 mag = test_stick_mag(cosf(a), sinf(a));
+        if (mag < worst)
+        {
+            worst = mag;
+        }
+    }
+    check(worst > 0.999f, "full deflection reads as full speed at every angle");
+
+    // And the stick still has a usable middle: a half push is not full, and is
+    // not zero either.
+    F32 half = test_stick_mag(0.5f * h, 0.5f * h);
+    check(half > 0.0f && half < 1.0f, "a half diagonal is neither idle nor full");
+    check(test_stick_mag(0.0f, 0.0f) == 0.0f, "a centred stick reads as no speed");
+
+    // The C-stick's octagon is the smaller one, and its diagonal stops at 31
+    // rather than 40 -- so the camera really does turn slower on a diagonal.
+    // That is the console's, not an artefact of this mapping, and pinning it
+    // keeps the two sticks from being collapsed into one set of constants.
+    iPadShapeStick(h, h, 59.0f, 31.0f, &x, &y);
+    check(fabsf(x - 31.0f) < 0.01f && iPadConvStick(x) < 127,
+          "the C-stick's diagonal stops short of saturating, as on the console");
+    iPadShapeStick(1.0f, 0.0f, 59.0f, 31.0f, &x, &y);
+    check(iPadConvStick(x) == 127, "but its axis push still saturates");
+
+    // Sign is carried through untouched; the octagon is symmetric.
+    iPadShapeStick(-h, -h, 72.0f, 40.0f, &x, &y);
+    check(fabsf(x + 40.0f) < 0.01f && fabsf(y + 40.0f) < 0.01f,
+          "the octagon is symmetric about both axes");
+
+    // The keyboard reports 1 on each axis at once, which is off the circle
+    // entirely. The clamp has to bring it back to the boundary rather than let
+    // it through at sqrt(2).
+    iPadShapeStick(1.0f, 1.0f, 72.0f, 40.0f, &x, &y);
+    check(fabsf(x - 40.0f) < 0.01f && fabsf(y - 40.0f) < 0.01f,
+          "a keyboard's square diagonal lands on the boundary, not past it");
+}
+
 #ifdef BFBB_INPUT_BACKEND_WIN32
 // The two pure conversions inside iPadHostWin32.cpp, which are named rather
 // than static so this file can reach them. Declared here rather than pulled in
@@ -1006,6 +1128,8 @@ static void test_pad()
 #else
     check(s != NULL && !s->connected, "the null backend reports no controller");
 #endif
+
+    test_pad_stick_shape();
 
     iPadHostExit();
 }

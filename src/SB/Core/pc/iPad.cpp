@@ -58,8 +58,53 @@ S32 iPadConvStick(F32 value)
     return convertedValue;
 }
 
-// Host sticks report -1..1; iPadConvStick expects GameCube units.
-#define IPAD_STICK_FULL_SCALE 40.0f
+// PADClamp's ClampRegion, from src/dolphin/src/pad/Padclamp.c: the octagon the
+// GameCube path hands iPadConvStick. maxStick/maxSubstick is the reach along an
+// axis, xyStick/xySubstick the reach on a diagonal. minStick is deliberately
+// absent -- it is the raw deadzone, and a host backend takes its own out and
+// rescales before iPadHostState is filled in.
+#define IPAD_STICK_MAX 72.0f
+#define IPAD_STICK_XY 40.0f
+#define IPAD_SUBSTICK_MAX 59.0f
+#define IPAD_SUBSTICK_XY 31.0f
+
+// Maps a host stick, which reports a unit CIRCLE, onto that octagon.
+//
+// The shape matters because of what the game does downstream. iPadConvStick
+// clamps each axis at 40, and DampenControls in zEntPlayer.cpp measures the
+// stick as max(|x|,|y|). On the octagon a diagonal reads 40 on both axes -- the
+// same 40 an axis push saturates at -- so full deflection gives full speed in
+// every direction. Scaling the host circle by 40 instead leaves it a circle:
+// the diagonals only reach 28, the axis clamp never engages off-axis, and
+// max(|x|,|y|) drops to 0.71 of full. That is the stick pulsing between a run
+// and a walk four times per revolution, and sneaking near 45 degrees.
+//
+// Scaling by the axis reach and clamping puts full deflection on the octagon
+// boundary at every angle, which is where the console's gate puts it. The
+// arithmetic is ClampStick's, so the direction the clamp bends off-axis input
+// into is the console's too.
+//
+// Named rather than static so the self-test can reach it: this is the only
+// arithmetic in the file that a wrong answer would show up in as a handling
+// bug rather than as nothing happening at all.
+void iPadShapeStick(F32 inX, F32 inY, F32 max, F32 xy, F32* outX, F32* outY)
+{
+    F32 x = max * inX;
+    F32 y = max * inY;
+    F32 ax = (x < 0.0f) ? -x : x;
+    F32 ay = (y < 0.0f) ? -y : y;
+    F32 d = (ay <= ax) ? (xy * ax + (max - xy) * ay) : (xy * ay + (max - xy) * ax);
+
+    if (xy * max < d)
+    {
+        F32 scale = (xy * max) / d;
+        x *= scale;
+        y *= scale;
+    }
+
+    *outX = x;
+    *outY = y;
+}
 
 S32 iPadUpdate(_tagxPad* pad, U32* on)
 {
@@ -85,10 +130,16 @@ S32 iPadUpdate(_tagxPad* pad, U32* on)
     // wants four. A host controller has four, so nothing has to be shared.
     *on = host->buttons;
 
-    pad->analog1.x = iPadConvStick(host->stick_x * IPAD_STICK_FULL_SCALE);
-    pad->analog1.y = -iPadConvStick(host->stick_y * IPAD_STICK_FULL_SCALE);
-    pad->analog2.x = iPadConvStick(host->substick_x * IPAD_STICK_FULL_SCALE);
-    pad->analog2.y = -iPadConvStick(host->substick_y * IPAD_STICK_FULL_SCALE);
+    F32 x;
+    F32 y;
+
+    iPadShapeStick(host->stick_x, host->stick_y, IPAD_STICK_MAX, IPAD_STICK_XY, &x, &y);
+    pad->analog1.x = iPadConvStick(x);
+    pad->analog1.y = -iPadConvStick(y);
+
+    iPadShapeStick(host->substick_x, host->substick_y, IPAD_SUBSTICK_MAX, IPAD_SUBSTICK_XY, &x, &y);
+    pad->analog2.x = iPadConvStick(x);
+    pad->analog2.y = -iPadConvStick(y);
 
     if (gTrcPad[pad->port].state != TRC_PadInserted)
     {

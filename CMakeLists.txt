@@ -641,6 +641,12 @@ add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   # defines it instead.
   ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x/xutil.cpp
 
+  # iPad.cpp for the stick shaping, which is where the host's circular stick is
+  # turned into the octagon the game's own magnitude test assumes. Its only
+  # unresolved symbols are gTrcPad and xTRCPad; selftest.cpp defines both rather
+  # than linking xTRC.cpp, which drags in the whole TRC screen stack.
+  ${PC_DIR}/iPad.cpp
+
   ${INPUT_SOURCES}
   ${AUDIO_SOURCES}
   ${HOST_SOURCES}
