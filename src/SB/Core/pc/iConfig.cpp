@@ -60,111 +60,101 @@ namespace
 
     const Setting kSettings[] = {
         { "assets", "path", "",
-          "The folder holding your copy of the game's files -- the one that\n"
-          "; DIRECTLY contains boot.HIP, FONT.HIP and fmv/, not a folder above it\n"
-          "; and not a disc image. No assets ship with the port, so nothing runs\n"
-          "; until this names them.\n"
+          "Folder holding the game's files -- the one with boot.HIP, FONT.HIP and\n"
+          "; fmv/ directly inside it. Not a parent folder, not a disc image. No\n"
+          "; assets ship with the port, so nothing runs until this is set.\n"
           ";\n"
-          "; Either slash works, and a path with spaces in it needs no quotes:\n"
-          "; everything after the '=' is the path.\n"
+          "; Forward or back slashes both work. Spaces need no quotes: everything\n"
+          "; after the '=' is the path.\n"
           ";\n"
-          "; Empty means the folder the game is started from, which is right only\n"
-          "; if the files are sitting there. BFBB_ASSETS overrides this when it is\n"
-          "; set, so a second install can be run without editing anything." },
+          "; Empty means the folder the game was started from. BFBB_ASSETS\n"
+          "; overrides this when it is set." },
         { "video", "mode", "fullscreen",
           "fullscreen, borderless or windowed.\n"
           ";\n"
-          "; None of the three changes the size below -- the picture is scaled onto\n"
-          "; whatever it lands on, so the game can render at 640x480 and fill a 4K\n"
-          "; display, or render above it and be sampled back down.\n"
+          "; This does not change the render size below. The picture is scaled to\n"
+          "; fit, so the game can render at 640x480 and fill a 4K display, or\n"
+          "; render higher and be sampled back down.\n"
           ";\n"
-          "; The SHAPE comes from the size, not from the display: a 4:3 size on a\n"
-          "; 16:9 monitor is centred with black either side. Set a 16:9 size to fill\n"
-          "; a 16:9 screen.\n"
+          "; Aspect ratio comes from the render size, not the display. A 4:3 size\n"
+          "; on a 16:9 monitor gets black bars at the sides. Use a 16:9 size to\n"
+          "; fill a 16:9 screen.\n"
           ";\n"
-          ";   fullscreen  the display belongs to the game, at the resolution the\n"
-          ";               desktop is already using. The flip is a real page flip.\n"
-          ";   borderless  a window with no border, covering one monitor. Nothing\n"
-          ";               else on the desktop is disturbed and alt-tab is instant.\n"
-          ";   windowed    an ordinary window, opened at the size below." },
+          ";   fullscreen  exclusive fullscreen at the current desktop resolution.\n"
+          ";   borderless  a borderless window covering one monitor. Nothing else\n"
+          ";               on the desktop is disturbed and alt-tab is instant.\n"
+          ";   windowed    a normal window, opened at the size below." },
         { "video", "width", "640",
-          "The width the game renders at, in pixels. 640x480 is what the consoles\n"
-          "; drew, and is what every texture, font and HUD element was authored for,\n"
-          "; so anything larger magnifies the 2D art -- the 3D gets sharper, the\n"
-          "; interface does not." },
+          "Render width in pixels. The consoles drew 640x480, and every texture,\n"
+          "; font and HUD element was made for it, so larger sizes sharpen the 3D\n"
+          "; but only magnify the 2D art." },
         { "video", "height", "480",
-          "The height, in pixels. A ratio other than 4:3 is widescreen and needs no\n"
-          "; switch of its own: the camera keeps its vertical view and widens, so\n"
-          "; 1280x720 shows more of the world to the left and right, and the\n"
-          "; interface keeps its shape in the middle rather than stretching." },
+          "Render height in pixels. Any ratio other than 4:3 is widescreen; there\n"
+          "; is no separate switch. The camera keeps its vertical view and widens,\n"
+          "; so 1280x720 shows more to the left and right instead of stretching." },
         { "video", "ui", "pillarbox",
-          "How the interface is placed on a screen that is not 4:3.\n"
+          "Where the interface goes on a screen that is not 4:3.\n"
           ";\n"
-          ";   pillarbox  the whole interface stays in a centred 4:3 box, exactly\n"
-          ";              as the console drew it, with the HUD sitting in from\n"
-          ";              each side of a wider screen.\n"
-          ";   native     the HUD is carried out to the edges, so a counter\n"
-          ";              authored near an edge ends up near the real edge at the\n"
-          ";              size it would have had. Each counter moves with its own\n"
-          ";              icon, and what sits in the middle stays in the middle.\n"
+          ";   pillarbox  the whole interface stays in a centred 4:3 box, as the\n"
+          ";              console drew it, sitting in from each side.\n"
+          ";   native     the HUD moves out to the real screen edges at the size\n"
+          ";              it would have had. Each counter moves with its own icon,\n"
+          ";              and anything centred stays centred.\n"
           ";\n"
-          "; Menus, textboxes and cutscene overlays keep the 4:3 box either way --\n"
-          "; they are full-screen art, with nothing in them to anchor. The two are\n"
-          "; identical at 4:3, where the box already IS the screen." },
+          "; Menus, textboxes and cutscene overlays stay in the 4:3 box either way\n"
+          "; -- they are full-screen art with nothing to anchor. At 4:3 the two\n"
+          "; settings do the same thing." },
         { "video", "draw_distance", "on",
-          "Draw everything, however far away it is. The consoles stop drawing an\n"
-          "; object past a distance the level author set, swap distant ones for\n"
-          "; lower-detail models, and clip the world itself at 400 units; a PC has\n"
-          "; no reason to. Turning this off restores the consoles' distances\n"
-          "; exactly. It does not touch fog, and it does not make anything think\n"
-          "; further away than it used to -- only draw." },
+          "Draw everything, however far away. The consoles stopped drawing an\n"
+          "; object past a distance the level author set, swapped distant ones for\n"
+          "; lower-detail models, and clipped the world at 400 units. Off restores\n"
+          "; those limits exactly. Fog is unaffected, and nothing extra is\n"
+          "; simulated -- only drawn." },
         { "video", "alpha_cutout", "on",
-          "Draw a texture's own transparency as a hard edge rather than a fade,\n"
-          "; on scenery the game draws as solid.\n"
+          "Draw texture transparency as a hard edge instead of a fade, on scenery\n"
+          "; the game draws as solid.\n"
           ";\n"
-          "; Foliage, fences, grates and cave walls are a solid shape punched out of\n"
-          "; a texture. Magnifying one leaves a band of half-transparent pixels\n"
-          "; where the shape ends, and the consoles' way of drawing that band is to\n"
-          "; blend it -- which at 640x480 is a soft edge a pixel wide, and at 4K is\n"
-          "; six pixels of the sky showing through the level. On, the band is drawn\n"
-          "; solid up to the cut and dropped after it, so the silhouette is the one\n"
-          "; in the artwork at any resolution.\n"
+          "; Foliage, fences, grates and cave walls are shapes punched out of a\n"
+          "; texture. The consoles blended the half-transparent pixels at the edge\n"
+          "; of the shape, which is a one-pixel soft edge at 640x480 but six pixels\n"
+          "; of sky showing through the level at 4K. On, those pixels are drawn\n"
+          "; solid up to a cutoff and dropped after it, so the silhouette matches\n"
+          "; the artwork at any resolution.\n"
           ";\n"
-          "; off is what the consoles did. A number from 1 to 255 sets where the cut\n"
-          "; falls: lower keeps more of the band and stays softer, higher trims the\n"
-          "; shape. on is 128. Glass, water, particles and the interface are\n"
-          "; unaffected either way -- they ask to be blended, and are." },
+          "; off matches the consoles. A number from 1 to 255 sets the cutoff:\n"
+          "; lower keeps more of the band and stays softer, higher trims the shape.\n"
+          "; on means 128. Glass, water, particles and the interface are unaffected\n"
+          "; -- they ask to be blended, and are." },
         { "xbox", "glow", "on",
-          "The full-screen glow -- what people call the Xbox version's bloom." },
+          "The full-screen glow, usually called the Xbox version's bloom." },
         { "xbox", "distortion", "on", "The Cruise Bubble's screen warp." },
         { "xbox", "snapshot", "on",
-          "The loading screen stands on a still of the level you just left,\n"
-          "; rather than on the background texture the GameCube release uses." },
+          "Use a still of the level you just left as the loading screen\n"
+          "; background, instead of the GameCube release's background texture." },
         { "xbox", "reverb", "on", "Cave reverb, in the Mermalair and the caves." },
         { "audio", "soundtrack", "",
-          "A folder of your own recordings to play instead of the game's music.\n"
-          "; Empty is the default and is exactly the disc.\n"
+          "Folder of your own music files to play instead of the game's. Empty\n"
+          "; uses the game's music.\n"
           ";\n"
-          "; The disc's music is mono -- every sound in the game is -- so this is\n"
-          "; mainly how a stereo soundtrack gets in. Whatever a file's rate and\n"
-          "; channel count are, they are used; the mixer resamples as it already\n"
-          "; does. WAVE always works, and a build made with FFmpeg reads anything\n"
-          "; else FFmpeg can.\n"
+          "; The game's music is mono, as is every sound in it, so this is mainly\n"
+          "; how to get a stereo soundtrack in. Any sample rate and channel count\n"
+          "; works; the mixer resamples as it already does. WAVE always works, and\n"
+          "; a build made with FFmpeg reads anything else FFmpeg can.\n"
           ";\n"
-          "; A file is matched to a track by its name: music_00_hb_44.flac needs\n"
-          "; nothing else. Files named after the music instead -- as a soundtrack\n"
-          "; release is -- need a soundtrack.txt beside them saying which is which,\n"
-          "; one 'asset name = file' per line.\n"
+          "; Files are matched to tracks by name: music_00_hb_44.flac needs nothing\n"
+          "; else. Files named after the music instead -- as a soundtrack release\n"
+          "; is -- need a soundtrack.txt beside them, one 'asset name = file' per\n"
+          "; line.\n"
           ";\n"
-          "; A looping track turns round where the disc's version ended, not where\n"
-          "; the file does, so a release with a proper ending on it loops the way\n"
-          "; the console did rather than dragging that ending round each time." },
+          "; Looping tracks loop where the game's version ended, not where the file\n"
+          "; does, so a release with a full ending still loops like the console\n"
+          "; did." },
         { "text", "platform_wording", "on",
-          "The game's text is the Xbox release's, and it talks about an Xbox: the\n"
-          "; pause menu offers to reboot to the dashboard, an autosave asks you not to\n"
-          "; turn off your console, and the load screen names the save location as a\n"
-          "; memory card slot -- which here is a folder. On, that text is rewritten as\n"
-          "; it loads; the files on disk are never touched. Off is what the disc says." },
+          "The game's text comes from the Xbox release and mentions Xbox hardware:\n"
+          "; the pause menu offers to reboot to the dashboard, autosaves warn about\n"
+          "; turning off your console, and saves are called memory card slots --\n"
+          "; here they are a folder. On, that text is rewritten as it loads; the\n"
+          "; files on disk are never touched. Off leaves it as the disc has it." },
     };
 
     const size_t kSettingCount = sizeof(kSettings) / sizeof(kSettings[0]);
@@ -399,7 +389,7 @@ bool iConfigWriteDefaults(const char* path)
 
     fprintf(f, "; Battle for Bikini Bottom, PC port -- settings.\n");
     fprintf(f, ";\n");
-    fprintf(f, "; Written because there was no config.ini. Every value here is the\n");
+    fprintf(f, "; Written because there was no config.ini. Every value here is a\n");
     fprintf(f, "; default, so deleting this file changes nothing.\n");
     fprintf(f, ";\n");
     fprintf(f, "; Booleans take on/off, true/false, yes/no or 1/0.\n");
@@ -416,26 +406,26 @@ bool iConfigWriteDefaults(const char* path)
             // where the section is introduced.
             if (strcmp(section, "assets") == 0)
             {
-                fprintf(f, "; Where your copy of the game's files is. This is the one setting\n");
-                fprintf(f, "; the port cannot guess and cannot do without.\n");
+                fprintf(f, "; Where the game's files are. This is the one setting the port\n");
+                fprintf(f, "; cannot guess and cannot run without.\n");
             }
             else if (strcmp(section, "video") == 0)
             {
-                fprintf(f, "; The size the game renders at, and how that picture is presented.\n");
-                fprintf(f, "; The two are independent: whatever the game renders at is scaled\n");
-                fprintf(f, "; onto whatever it lands on, be that a window, a borderless one\n");
-                fprintf(f, "; covering a monitor, or the display itself.\n");
+                fprintf(f, "; The size the game renders at, and how that picture is shown.\n");
+                fprintf(f, "; The two are independent: the rendered picture is scaled onto\n");
+                fprintf(f, "; whatever it lands on -- a window, a borderless window covering\n");
+                fprintf(f, "; a monitor, or the display itself.\n");
                 fprintf(f, ";\n");
-                fprintf(f, "; Any resolution works, and anything that is not 4:3 is widescreen.\n");
+                fprintf(f, "; Any resolution works, and anything not 4:3 is widescreen.\n");
             }
             else if (strcmp(section, "xbox") == 0)
             {
                 fprintf(f, "; Things the Xbox release did that the GameCube release did not.\n");
-                fprintf(f, "; Turning one off leaves the GameCube behaviour in its place.\n");
+                fprintf(f, "; Turning one off gives the GameCube behaviour instead.\n");
             }
             else if (strcmp(section, "text") == 0)
             {
-                fprintf(f, "; The game's own words, which are the console release's. Nothing here\n");
+                fprintf(f, "; The game's own text, which is the console release's. Nothing here\n");
                 fprintf(f, "; edits the files on disk -- the text is rewritten as it loads.\n");
             }
         }
