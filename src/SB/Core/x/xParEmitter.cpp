@@ -431,6 +431,30 @@ xPar* xParEmitterEmitSetTexIdxs(xPar* p, const xParSys* ps)
 
 xPar* xParEmitterEmit(xParEmitter* pe, F32 emit_dt, F32 par_dt)
 {
+#ifdef PLATFORM_PC
+    // The two arguments do different jobs and only one of them is a window.
+    //
+    // emit_dt buys particles: the count is `rate * emit_dt` with the remainder
+    // carried. par_dt scales the BIRTH VELOCITY, because xPar::m_vel is a
+    // displacement per FRAME -- xParCmdVelocityApply_Update adds it straight to
+    // the position with no dt of its own.
+    //
+    // Every caller passes its window for both, which is right only while the
+    // window IS the frame. A one-shot burst asking for a console frame's worth
+    // of particles then also asks for a console frame's worth of step, and the
+    // debris leaves at (1/60)/dt times its intended speed -- four times too
+    // fast at 240 fps. A caller that subdivides its frame, like the Dutchman's
+    // beam, has the opposite problem.
+    //
+    // So the count keeps the caller's window and the step takes the frame's
+    // own. At a sixtieth of a second the two are the same number and nothing
+    // changes.
+    if (globals.update_dt > 0.0f)
+    {
+        par_dt = globals.update_dt;
+    }
+#endif
+
     xParEmitterAsset* pea;
     xParEmitterPropsAsset* prop;
     S32 rate_has_elapsed;
