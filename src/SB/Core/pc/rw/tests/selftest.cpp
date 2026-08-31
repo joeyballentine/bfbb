@@ -950,6 +950,88 @@ static void setAlphaCompare(RwInt32 comp0, RwUInt8 ref0, RwInt32 op, RwInt32 com
     RwGameCubeSetAlphaCompare(comp0, ref0, op, comp1, ref1);
 }
 
+// Every render state librw has, set and read back on whichever backend this was
+// linked against.
+//
+// This is the check that would have caught COLORWRITEMASK. A backend's
+// setRenderState is one switch over the whole enum, and a state it has no case
+// for used to be accepted and dropped on the floor -- so the state existed on
+// D3D9, did nothing on GL3, and every depth-priming pass painted. The switches
+// are exhaustive now and the build fails on a missing case, but that only
+// covers a case that is absent; this covers one that is present and wrong, and
+// it covers the Get side, which no compiler check reaches.
+//
+// Each state is saved, given a probe value deliberately unlike the one the
+// engine resets to, read back, and put straight back. Nothing here is left
+// changed for the tests that follow.
+static void checkRenderStateRoundTrip(rw::int32 state, rw::uint32 probe, const char* name)
+{
+    const rw::uint32 saved = rw::GetRenderState(state);
+
+    rw::SetRenderState(state, probe);
+    const rw::uint32 got = rw::GetRenderState(state);
+
+    rw::SetRenderState(state, saved);
+
+    char what[96];
+    snprintf(what, sizeof(what), "%s round-trips", name);
+    check(got == probe, what);
+}
+
+static void test_renderstate_roundtrip()
+{
+    printf("librw render states\n");
+
+#ifdef RW_NULL
+    // The null device keeps nothing: its getRenderState answers 0 to every
+    // question (third_party/librw/src/engine.cpp). There is no round trip to
+    // check, and asserting one would only assert that the stub is a stub.
+    printf("  (the null device records no render state; skipped)\n");
+#else
+    // A known baseline for the two axes, because TEXTUREADDRESS answers only
+    // when they agree -- RenderWare's own behaviour, and what the C-API test
+    // above checks. With them apart, its Get would report 0 and the save and
+    // restore below would write 0 back as if it were an addressing mode.
+    rw::SetRenderState(rw::TEXTUREADDRESSU, rw::Texture::WRAP);
+    rw::SetRenderState(rw::TEXTUREADDRESSV, rw::Texture::WRAP);
+
+    checkRenderStateRoundTrip(rw::TEXTUREADDRESS, rw::Texture::CLAMP, "TEXTUREADDRESS");
+    checkRenderStateRoundTrip(rw::TEXTUREADDRESSU, rw::Texture::MIRROR, "TEXTUREADDRESSU");
+    checkRenderStateRoundTrip(rw::TEXTUREADDRESSV, rw::Texture::MIRROR, "TEXTUREADDRESSV");
+    checkRenderStateRoundTrip(rw::TEXTUREFILTER, rw::Texture::NEAREST, "TEXTUREFILTER");
+    checkRenderStateRoundTrip(rw::VERTEXALPHA, TRUE, "VERTEXALPHA");
+    checkRenderStateRoundTrip(rw::SRCBLEND, rw::BLENDDESTALPHA, "SRCBLEND");
+    checkRenderStateRoundTrip(rw::DESTBLEND, rw::BLENDDESTALPHA, "DESTBLEND");
+    checkRenderStateRoundTrip(rw::ZTESTENABLE, FALSE, "ZTESTENABLE");
+    checkRenderStateRoundTrip(rw::ZWRITEENABLE, FALSE, "ZWRITEENABLE");
+    checkRenderStateRoundTrip(rw::FOGENABLE, TRUE, "FOGENABLE");
+    checkRenderStateRoundTrip(rw::FOGCOLOR, 0x11223344, "FOGCOLOR");
+    checkRenderStateRoundTrip(rw::CULLMODE, rw::CULLFRONT, "CULLMODE");
+    checkRenderStateRoundTrip(rw::STENCILENABLE, TRUE, "STENCILENABLE");
+    checkRenderStateRoundTrip(rw::STENCILFAIL, rw::STENCILINVERT, "STENCILFAIL");
+    checkRenderStateRoundTrip(rw::STENCILZFAIL, rw::STENCILINCSAT, "STENCILZFAIL");
+    checkRenderStateRoundTrip(rw::STENCILPASS, rw::STENCILREPLACE, "STENCILPASS");
+    checkRenderStateRoundTrip(rw::STENCILFUNCTION, rw::STENCILGREATER, "STENCILFUNCTION");
+    checkRenderStateRoundTrip(rw::STENCILFUNCTIONREF, 0x5A, "STENCILFUNCTIONREF");
+    checkRenderStateRoundTrip(rw::STENCILFUNCTIONMASK, 0x0F, "STENCILFUNCTIONMASK");
+    checkRenderStateRoundTrip(rw::STENCILFUNCTIONWRITEMASK, 0xF0, "STENCILFUNCTIONWRITEMASK");
+    checkRenderStateRoundTrip(rw::ALPHATESTFUNC, rw::ALPHALESS, "ALPHATESTFUNC");
+    checkRenderStateRoundTrip(rw::ALPHATESTREF, 0x5A, "ALPHATESTREF");
+    checkRenderStateRoundTrip(rw::GSALPHATEST, TRUE, "GSALPHATEST");
+    checkRenderStateRoundTrip(rw::GSALPHATESTREF, 0x5A, "GSALPHATESTREF");
+    checkRenderStateRoundTrip(rw::COLORWRITEMASK, rw::COLORWRITERED | rw::COLORWRITEBLUE,
+                              "COLORWRITEMASK");
+
+    // TEXTURERASTER is the one state that carries a pointer rather than a
+    // value, so it goes through the pointer pair. Nil rather than a made-up
+    // address: the backends bind whatever they are handed.
+    void* const savedRaster = rw::GetRenderStatePtr(rw::TEXTURERASTER);
+    rw::SetRenderStatePtr(rw::TEXTURERASTER, NULL);
+    check(rw::GetRenderStatePtr(rw::TEXTURERASTER) == NULL, "TEXTURERASTER round-trips");
+    rw::SetRenderStatePtr(rw::TEXTURERASTER, savedRaster);
+#endif
+}
+
 static void test_renderstate()
 {
     printf("RwRenderState\n");
@@ -3320,6 +3402,7 @@ int main()
     test_lights();
     test_worlds();
     test_renderstate();
+    test_renderstate_roundtrip();
     test_immediate();
     test_geometry();
     test_atomics();
