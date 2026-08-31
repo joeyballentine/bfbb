@@ -3,11 +3,12 @@
 // The Win32 window, which is what a D3D9 librw wants: its EngineOpenParams is
 // { HWND window; } and nothing else.
 //
-// Deliberately plain. There is no GLFW or SDL here because D3D9 does not need
-// one, and pulling in a windowing library to hand D3D a handle it could get
-// from CreateWindowEx would be a dependency the port does not have to have.
-// The GL3 build will want one -- iWindowGlfw.cpp, selected the way
-// BFBB_INPUT_BACKEND and BFBB_AUDIO_BACKEND select theirs.
+// Deliberately plain. There is no SDL here because D3D9 does not need one, and
+// pulling in a windowing library to hand D3D a handle it could get from
+// CreateWindowEx would be a dependency the port does not have to have. The GL3
+// build has one -- iWindowSDL.cpp, selected by BFBB_RENDER_BACKEND rather than
+// by the host OS, because which window a renderer wants is the renderer's
+// question.
 
 #include <windows.h>
 
@@ -409,6 +410,20 @@ void iWindowGetSize(S32* width, S32* height)
 void* iWindowNativeHandle()
 {
     return (void*)sWindow;
+}
+
+// Nothing to defer. D3D9 is handed a window that already exists, so by the time
+// RwEngineOpen runs there is an HWND and iWindowNativeHandle answers with it.
+// Both are here rather than left undefined so that every implementation of this
+// header implements all of it -- a linker error is a poor way to learn that a
+// window backend and a render backend were paired that do not go together.
+const iWindowDeferred* iWindowDeferredParams()
+{
+    return NULL;
+}
+
+void iWindowDeferredCreated()
+{
 }
 
 const char* iWindowBackendName()

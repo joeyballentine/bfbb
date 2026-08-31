@@ -371,12 +371,69 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
 
 #elif defined(RW_GL3)
 
-    // Not written, and not guessed at. GL3's EngineOpenParams differs again by
-    // which gfx library librw was built against -- SDL2, SDL3 and GLFW each
-    // give it a different shape -- so it needs an iWindowGlfw.cpp (or SDL) next
-    // to iWindowWin32.cpp and a matching arm here. The port is built for D3D9
-    // today; this arm is what the second backend costs, and it is small.
-#error "GL3 needs a GLFW or SDL iWindow implementation and the matching EngineOpenParams here."
+    // **librw makes the window here; the port only says what to make.**
+    //
+    // The opposite way round from D3D9 above, and the reason is in iWindow.h:
+    // a GL context and the window it draws into have to be created together,
+    // so EngineOpenParams carries an out-parameter for the window rather than
+    // a handle to one. iWindowSDL.cpp's iWindowOpen therefore recorded the
+    // request and created nothing; this is where the request is handed over.
+    //
+    // What actually creates it is RwEngineStart, not this call -- librw's
+    // openSDL3 only brings SDL's video subsystem up and enumerates the display
+    // modes, and startSDL3 does the rest. That is the same split D3D9 has,
+    // where DEVICEOPEN takes the window and DEVICEINIT makes the device, and it
+    // is what leaves SelectFullscreenVideoMode below a moment to run in.
+    const iWindowDeferred* deferred = iWindowDeferredParams();
+
+    if (deferred == NULL || deferred->handleSlot == NULL)
+    {
+        // The GL3 build was linked against a window backend that owns its own
+        // window -- iWindowWin32.cpp -- and there is nothing to hand librw.
+        printf("bfbb: the GL3 backend needs a deferred-window iWindow (iWindowSDL.cpp), "
+               "and iWindowOpen must have run first\n");
+        fflush(stdout);
+        return FALSE;
+    }
+
+    rw::EngineOpenParams params;
+    params.window = (SDL_Window**)deferred->handleSlot;
+    params.width = deferred->width;
+    params.height = deferred->height;
+    params.windowtitle = deferred->title;
+
+#if defined(LIBRW_SDL2) || defined(LIBRW_SDL3)
+    // Read by librw's SDL2 arm only. Its SDL3 arm ignores it and takes
+    // fullscreen from the selected video mode instead, which is the path
+    // SelectFullscreenVideoMode drives -- so this is FALSE rather than the
+    // port's mode, and the one backend that reads it still agrees with the
+    // other about what "windowed" means.
+    params.fullscreen = FALSE;
+#endif
+
+    // NO setVirtualScreen, and that is not an omission.
+    //
+    // D3D9 needs one because librw takes its viewport from the camera's raster
+    // and its back buffer from the window, so a fixed-size raster in a larger
+    // window leaves the picture in a corner. The GL3 device does not have that
+    // problem: a Raster::CAMERA is the DEFAULT framebuffer (gl3raster.cpp gives
+    // it fbo 0), gl3device.cpp's getFramebufferRect takes the viewport from the
+    // WINDOW for such a raster, and im2DSetXform still divides screen
+    // coordinates by cam->frameBuffer->width. So the world is drawn at the
+    // window's resolution, the 2D overlay is drawn in the game's own screen
+    // coordinates on top of it, and the scaling the virtual screen exists to
+    // provide is what the viewport already does.
+    //
+    // One consequence worth knowing: under GL3 the resolution setting sizes the
+    // game's coordinate space and NOT the pixels the world is rasterised at,
+    // which is why RwEngineGetVideoModeInfo below answers from iScreen rather
+    // than from anything the device reports.
+    if (!rw::Engine::open(&params))
+    {
+        printf("bfbb: librw refused to open an OpenGL device\n");
+        fflush(stdout);
+        return FALSE;
+    }
 
 #else
 
@@ -394,7 +451,7 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     return TRUE;
 }
 
-#ifdef RW_D3D9
+#if defined(RW_D3D9) || defined(RW_GL3)
 
 // Pick the display mode for exclusive fullscreen, if that is what was asked for.
 //
@@ -402,6 +459,13 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
 // makeVideoModeList runs inside Engine::open, and startD3D reads the choice
 // inside Engine::start. A D3D9 device is created windowed or not, and cannot
 // change its mind without a reset.
+//
+// The same arithmetic serves GL3, which is why this is not two functions.
+// librw's startSDL3 also reads the selected mode -- an entry carrying
+// VIDEOMODEEXCLUSIVE makes it create the window fullscreen at that mode, and
+// index 0 makes it create an ordinary one -- so under both backends the mode is
+// the only thing that can ask for exclusive fullscreen, and it must be asked
+// before the window or the device exists.
 //
 // librw's list is the desktop's current mode as index 0 with no flags -- that
 // is the WINDOWED entry -- followed by every exclusive mode the adapter
@@ -474,7 +538,7 @@ RwBool RwEngineStart(void)
         return FALSE;
     }
 
-#ifdef RW_D3D9
+#if defined(RW_D3D9) || defined(RW_GL3)
     SelectFullscreenVideoMode();
 #endif
 
@@ -482,6 +546,25 @@ RwBool RwEngineStart(void)
     {
         return FALSE;
     }
+
+#ifdef RW_GL3
+    // The window exists from here and not before, so this is the first moment
+    // its real size can be read or borderless applied. See iWindow.h.
+    iWindowDeferredCreated();
+
+    // Engine::start DISCARDS what the device said, exactly as it does for D3D9
+    // below -- so a startSDL3 that failed to create a window or a GL context
+    // still reports success and everything afterwards draws into nothing. The
+    // slot librw writes the window into is the port's own, so checking it needs
+    // no access to librw's internals.
+    if (iWindowNativeHandle() == NULL)
+    {
+        printf("bfbb: SDL opened a video device but no window or OpenGL context came up\n");
+        printf("bfbb:   (librw asks for GL 3.3, GL 2.1, GLES 3.1 and GLES 2.0 in that order)\n");
+        fflush(stdout);
+        return FALSE;
+    }
+#endif
 
 #ifdef RW_D3D9
     // Engine::start DISCARDS what the device said.
@@ -668,8 +751,18 @@ RwVideoMode* RwEngineGetVideoModeInfo(RwVideoMode* modeinfo, RwInt32 modeIndex)
         RwInt32 screenWidth = 0;
         RwInt32 screenHeight = 0;
 
-#ifdef RW_D3D9
+#if defined(RW_D3D9)
         rw::d3d::getVirtualScreen(&screenWidth, &screenHeight);
+#elif defined(RW_GL3)
+        // GL3 has no virtual screen and does not need one -- see the note in
+        // RwEngineOpen -- but the question being asked is the same either way:
+        // how big is the thing the game is drawing into, in the game's own
+        // coordinates. That is the camera raster's size, which is iScreen's,
+        // and it is emphatically NOT what the device would report. librw's SDL3
+        // arm enumerates the DISPLAY's modes, so the current one comes back as
+        // the desktop's resolution.
+        screenWidth = iScreenWidth();
+        screenHeight = iScreenHeight();
 #endif
 
         // The virtual screen, NOT the window. What the game asks this question
