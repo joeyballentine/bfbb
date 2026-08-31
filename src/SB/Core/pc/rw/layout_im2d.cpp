@@ -96,4 +96,22 @@ SAME_OFFSET(RwIm2DVertex, emissiveColor, rw::gl3::Im2DVertex, r);
 SAME_OFFSET(RwIm2DVertex, u, rw::gl3::Im2DVertex, u);
 SAME_OFFSET(RwIm2DVertex, v, rw::gl3::Im2DVertex, v);
 
+// The Im3D vertex, which the D3D9 arm above checks and this one did not.
+//
+// librw's gl3 Im3DVertex keeps four separate colour bytes in RGBA order rather
+// than D3D's packed ARGB word, so the port's declaration in rwcore.h follows the
+// backend -- and these are the assertions that say so. Without them a GL3 build
+// took the D3D byte order from an `#ifdef PLATFORM_PC` and crossed red and blue
+// on every Im3D primitive, which is invisible for the greyscale callers and
+// glaring on the melee streaks.
+SAME_SIZE(RwIm3DVertex, rw::gl3::Im3DVertex);
+SAME_OFFSET(RwIm3DVertex, x, rw::gl3::Im3DVertex, position.x);
+SAME_OFFSET(RwIm3DVertex, nx, rw::gl3::Im3DVertex, normal.x);
+SAME_OFFSET(RwIm3DVertex, r, rw::gl3::Im3DVertex, r);
+SAME_OFFSET(RwIm3DVertex, g, rw::gl3::Im3DVertex, g);
+SAME_OFFSET(RwIm3DVertex, b, rw::gl3::Im3DVertex, b);
+SAME_OFFSET(RwIm3DVertex, a, rw::gl3::Im3DVertex, a);
+SAME_OFFSET(RwIm3DVertex, u, rw::gl3::Im3DVertex, u);
+SAME_OFFSET(RwIm3DVertex, v, rw::gl3::Im3DVertex, v);
+
 #endif

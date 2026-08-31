@@ -45,7 +45,7 @@ struct RxObjSpace3DVertex
     RwReal ny;
     RwReal nz;
     // The colour bytes are in the order the RENDERER reads them, which is not
-    // the same on both platforms.
+    // the same on every backend.
     //
     // librw's d3d Im3DVertex has a packed `uint32 color` where these four bytes
     // are, and it is a D3DCOLOR -- ARGB in a word, so on a little-endian host
@@ -57,10 +57,19 @@ struct RxObjSpace3DVertex
     // xLaserBolt (255,255,255). The coloured ones are the melee streaks, and
     // SpongeBob's pale yellow (255,255,128) came out as (128,255,255).
     //
+    // Keyed on the BACKEND and not on PLATFORM_PC, which is what it used to
+    // say. librw's gl3 Im3DVertex holds four separate bytes in RGBA order and
+    // feeds them to glVertexAttribPointer as GL_UNSIGNED_BYTE x4, so a GL3
+    // build wants exactly the console's order and taking D3D's would put the
+    // same swap back -- in the build where the two channels were never crossed
+    // in the first place. The Im2D vertex in rwplcore.h has been keyed this way
+    // since it was written; this one was not, because there was only ever one
+    // PC backend to be wrong about.
+    //
     // The field NAMES stay put, so every RwIm3DVertexSetRGBA call still means
     // what it says; only the bytes move. The GameCube keeps RenderWare's own
     // order, where GX reads the colour as RGBA.
-#ifdef PLATFORM_PC
+#if defined(RW_D3D9) || defined(RW_D3D8)
     RwUInt8 b;
     RwUInt8 g;
     RwUInt8 r;
