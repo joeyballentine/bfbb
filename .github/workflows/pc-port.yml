@@ -1,0 +1,82 @@
+# The PC port, built once per render backend.
+#
+# The point is that all three backends compile from every commit. librw's device
+# backends are separate implementations of one interface with nothing shared
+# below it, so a change written against one of them can leave the others broken
+# -- or silently wrong -- and nothing local says so unless you happen to
+# configure that build. -Werror=switch on the librw target only reports a
+# missing render-state case in the configuration that compiles that file, which
+# is why this is a matrix rather than one build.
+#
+# No paths filter: bfbb.exe links the game code as well as the port, so a
+# change anywhere under src/ can break this and a filter would let it through.
+name: PC port
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Quoted: YAML reads a bare NULL as the null value, and the backend
+        # would reach cmake as an empty string.
+        backend: ["NULL", "D3D9", "GL3"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # librw is the renderer, and SDL reads the controllers and, under GL3,
+      # owns the window. Neither is vendored as source in the tree, and CMake's
+      # own message for a missing one is less obvious than this.
+      - name: Check the submodules came down
+        shell: bash
+        run: |
+          test -f third_party/librw/CMakeLists.txt || { echo "third_party/librw is empty"; exit 1; }
+          test -f third_party/SDL/CMakeLists.txt || { echo "third_party/SDL is empty"; exit 1; }
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      # clang is on the image; the MSVC toolchain and Windows SDK it links
+      # against have to be on PATH, and -m32 means the x86 ones.
+      - name: MSVC environment (x86)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+
+      - name: Configure
+        run: >
+          cmake -S . -B build-ci -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_COMPILER=clang++
+          -DBFBB_RENDER_BACKEND=${{ matrix.backend }}
+
+      - name: Build
+        run: cmake --build build-ci
+
+      # **NULL runs the tests; D3D9 and GL3 are build-only.**
+      #
+      # Both of those need a device the runner does not have: GitHub's Windows
+      # images have no GPU, and no OpenGL past 1.1. Running them would mean
+      # staging a software rasteriser next to the executable, which is a
+      # dependency this does not take on. Everything that does not need a device
+      # runs here, which is what the NULL backend is for -- and the two checks
+      # that do need one, the render-state round trip and the Im2D device
+      # constants, say so themselves and skip.
+      #
+      # FFmpeg and libusb are optional and are not installed, so the movie
+      # decoder and the controller-name lookup build as their stubs. That is a
+      # configuration the port supports; it is not what a player runs.
+      - name: Self-tests
+        if: matrix.backend == 'NULL'
+        run: |
+          build-ci\rw_selftest.exe
+          build-ci\pc_selftest.exe
