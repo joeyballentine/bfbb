@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Functions the compiler patch COSTS: exact under stock, not exact under ours.
+"""What the compiler patch buys and what it costs, function by function.
+
+Default lists the COST: exact under stock GC/2.0p1, not exact under GC/2.0p1a.
+`--gains` lists the other direction -- exact under the patch and not under
+stock, which is the clauses' actual yield by name rather than by a remembered
+total.
 
 The branch's GC/2.0p1a is a net win by a wide margin, but every clause has
 collateral, and a function the patch broke looks exactly like a function whose
@@ -9,7 +14,7 @@ variant: a function that is 100.000% under stock has nothing left to recover
 from source.
 
 Usage:
-  patchcost.py [unit-frag ...] [--stock GC/2.0p1]
+  patchcost.py [unit-frag ...] [--gains] [--stock GC/2.0p1]
 """
 
 import json
@@ -48,8 +53,15 @@ def bad(unit, mw=None):
     return out
 
 
+GAINS = "--gains" in sys.argv
+
+
 def do(unit):
     ours, stock = bad(unit), bad(unit, STOCK)
+    if GAINS:
+        # exact under the patch = absent from OUR non-matching list
+        return [(unit, sym, pct, size) for sym, (pct, size) in stock.items()
+                if sym not in ours]
     # exact under stock = absent from stock's non-matching list
     return [(unit, sym, pct, size) for sym, (pct, size) in ours.items()
             if sym not in stock]
@@ -60,9 +72,14 @@ with ThreadPoolExecutor(6) as ex:
     for r in ex.map(do, units):
         rows.extend(r)
 
-rows.sort(key=lambda r: -r[2])
-print("%-34s %-52s %8s %7s" % ("unit", "function", "ours", "bytes"))
+rows.sort(key=lambda r: -r[3])
+col = "stock" if GAINS else "ours"
+print("%-30s %-56s %8s %7s" % ("unit", "function", col, "bytes"))
 for unit, sym, pct, size in rows:
-    print("%-34s %-52s %7.3f%% %6d" % (unit.replace("main/SB/", ""), sym[:52], pct, size))
-print("\n%d function(s) exact under %s and not under the patched compiler"
-      % (len(rows), STOCK))
+    print("%-30s %-56s %7.3f%% %6d" % (unit.replace("main/SB/", ""), sym[:56], pct, size))
+if GAINS:
+    print("\n%d function(s), %d bytes, exact under the patch and not under %s"
+          % (len(rows), sum(r[3] for r in rows), STOCK))
+else:
+    print("\n%d function(s), %d bytes, exact under %s and not under the patch"
+          % (len(rows), sum(r[3] for r in rows), STOCK))
