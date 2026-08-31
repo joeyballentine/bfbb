@@ -111,3 +111,99 @@ once, so re-run after each build to refresh just the DOL.
 
 It refuses to patch anything but a verified GQPE78 image whose embedded DOL
 hashes to `306526d9…`, since assets and code have to come from the same build.
+
+### `solo.py --shadow` and `--mw` — two flags worth knowing
+
+```
+solo.py <unit-frag> --shadow <dir>       prepend a private include directory
+solo.py <unit-frag> --mw GC/2.0p1        compile with a different CodeWarrior
+```
+
+`--shadow` is how a shared-header change gets measured. Copy the header into a
+scratch directory, edit it there, and pass the directory: the real tree is never
+touched, so another agent compiling the same unit at the same moment does not
+silently get numbers from the wrong tree. That failure mode is invisible — the
+numbers look perfectly ordinary — which is why it is worth the extra step.
+
+`--mw` picks any compiler under `build/compilers`. `GC/2.0p1` is the stock
+compiler this branch's patched `GC/2.0p1a` is derived from, and it answers the
+cheapest question in the project: *is this function my problem or the patch's?*
+A function that is exact under stock is source-correct by construction and has
+nothing left to recover.
+
+### `patchcost.py` — what the compiler patch buys, and what it costs
+
+```
+patchcost.py [unit-frag ...]             functions the patch BREAKS
+patchcost.py [unit-frag ...] --gains     functions the patch FIXES
+```
+
+Compiles every unit twice, once with each compiler, and diffs the two
+non-matching sets. The default direction is the cost — exact under stock and not
+under ours — and tree-wide that is seven functions. `--gains` is the other
+direction, and together they are the only honest price for a change to
+`patch_compiler.py`: a narrowing that does not recover one of the seven is
+buying nothing, and one that drops a name from the `--gains` list is paying for
+it.
+
+### `rodatalayout.py` — the two `.rodata` object layouts, side by side
+
+```
+rodatalayout.py <unit-frag> [section]
+```
+
+Target address, size and symbol beside ours, with a `|` on every row whose sizes
+disagree. This is the tool for the `__deadstripped_<unit>` work: the sizes are
+easy and the ORDER is the whole job, because CodeWarrior interns anonymous
+templates in first-use order, so a never-called function's locals land at that
+function's position in the source. Six units were brought to a byte-identical
+`.rodata` with it in one pass.
+
+### `stridediff.py` — element strides ours emits and the target never does
+
+```
+stridediff.py [unit-frag ...]
+```
+
+For the "raw byte offset applied to a typed pointer" class, which scales twice
+and which objdiff cannot see. Compares the per-function multiset of `mulli`
+element strides and self-incrementing `addi` loop steps.
+
+**Read the `mulli` rows; ignore the `addi` rows.** The `addi` half produces ~770
+hits tree-wide, dominated by frame adjustments and pool bases. Even in the
+`mulli` half, most rows are the documented mis-attribution — one body under two
+names on the two sides — so check that both symbols disassemble to the same code
+before believing a row.
+
+### `promotable.py` — units at 100% that are still marked NonMatching
+
+```
+promotable.py
+```
+
+Cross-references `report.json` against `configure.py`. A unit only reaches
+`complete_units`, and only links from OUR object, when it is marked `Matching`;
+objdiff reaching 100% is necessary and not sufficient, because it pairs symbols
+by name and is blind to definition order. Run `symorder.py` on anything this
+lists to get the specific blocker, and remember that the DOL sha1 is the only
+thing that settles a promotion.
+
+### `unitrank.py` and `nmlist.py` — where the remaining work is
+
+```
+unitrank.py [N]                  units by non-matching count, with byte totals
+nmlist.py <unit-frag> ...        each unit's non-matching functions
+```
+
+`nmlist.py` prints the `classify.py` bucket beside each function, so `SIZE` and
+`OTHER` (a real source difference) can be told from `SCHED` and `REGS`
+(compiler-track) before any time is spent.
+
+### `metrics.py` — the headline figures out of report.json
+
+```
+metrics.py [path/to/report.json]
+```
+
+Per-category exact and fuzzy percentages with function and unit counts. The two
+have decoupled, so quote both.
