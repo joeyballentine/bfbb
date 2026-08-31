@@ -1806,16 +1806,14 @@ static void test_uvxform()
 
     rw::ObjPipeline* pipe = rw::GetUVTransformPipeline();
 
-#if defined(RW_NULL) || defined(RW_GL3)
-    // No shader, so nothing to animate with. Under RW_NULL there is no renderer
-    // at all; under GL3 there is one and the librw fork's UV-transform pipeline
-    // was only ever written for D3D9 -- see src/SB/Core/pc/README.md's iFX row.
+#ifdef RW_NULL
+    // No renderer at all, so nothing to animate with.
     //
-    // The contract is that this is SAFE rather than an error, and it is the
-    // same contract in both: xFX.cpp:883 leaves the atomic on its default
-    // pipeline and the surface draws with static texture coordinates. Checked
-    // rather than skipped, because "answers NULL" is the behaviour the game
-    // depends on and a pipeline that half exists would be worse than none.
+    // The contract is that this is SAFE rather than an error: xFX.cpp:883
+    // leaves the atomic on its default pipeline and the surface draws with
+    // static texture coordinates. Checked rather than skipped, because
+    // "answers NULL" is the behaviour the game depends on and a pipeline that
+    // half exists would be worse than none.
     check(pipe == NULL, "no shader for animated UVs on this backend, so no pipeline");
     check(iFXanimUVCreatePipe() == NULL,
           "and iFXanimUVCreatePipe says so rather than handing back one that cannot draw");
