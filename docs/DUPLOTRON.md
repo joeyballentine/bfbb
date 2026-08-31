@@ -5929,3 +5929,164 @@ re-tried:
 The function shares 51 of 106 instructions with the target. That is an
 allocation problem, and the source shapes that would fix the load counts cost
 more than they save.
+
+## The 2026-08-31 audit: what a whole-tree sweep of everything-but-functions found
+
+Run after a clean build at `cb195646` (DOL sha1 correct). Game code at that
+point: exact **80.706%**, fuzzy **99.223%**, 7251/7673 functions, 94/224 units,
+413 non-matching game functions in 315,636 bytes.
+
+Every non-function detector was run over the whole tree. These are now clean and
+should not be re-run without a reason:
+
+| sweep | result |
+|---|---|
+| `strdiff.py` | 0 functions reference different strings |
+| `argswap.py` | 0 transposed-argument sites over 224 units |
+| `cmpswap.py` | 0 swapped-operand sites over 224 units |
+| `stubs.py` | 0 stub functions |
+| `poolmulti.py` | 0 functions load a constant the other side never loads |
+| `calldiff.py` | 4 functions, all in `zEntPlayerBungeeState`, all the anonymous-class per-TU counter (`class$912` vs `class$145`). Not a defect. |
+
+### `datamulti.py` was reporting 40 units that are byte-identical
+
+`objdump -s` prints a section's last group short when the section size is not a
+multiple of four. `zSurface`'s `.rodata` ends `...4e450000` on the target and
+`...4e4500` in ours -- the same bytes, one side padded to alignment. The old
+parser required exactly 8 hex digits, so it dropped our short group and kept the
+target's padded word, then reported `4e450000` as target-only. Forty units
+showed exactly one such word each, which is what a systematic artifact looks
+like.
+
+Fixed by concatenating a section's groups and zero-padding to a word boundary
+before counting. **65 units -> 16.** Anyone reading an old datamulti ranking
+should discard every single-word `.rodata` row in it.
+
+### What the 16 surviving units actually are
+
+Explained and deliberate:
+
+- `zNPCTypePrawn` `0000000d` and `zNPCTypeDutchman` `00000007`, ours-only: the
+  `NPCC_ANIM_LIST_END` terminators added to fix retail's unterminated anim
+  lists. Correctness over match; leave them.
+- `3acccccd`/`3b088889` (1/640, 1/480) ours-only in `zGame`, `zMain`, `xTRC`,
+  `xCM`, `zUIFont`: our object emits weak out-of-line copies of `NSCREENX__Ff`
+  and `NSCREENY__Ff` along with their pool constants. Retail's objects did too --
+  the linker kept only xDebug's copy, so dtk's extraction shows the other five
+  as `*UND*`. Verified inside `zUIFont_Render`: both sides emit
+  `bl NSCREENX__Ff`. Expected extraction artifact, not a source difference.
+
+Real, and one is fixed:
+
+- `zNPCTypeDutchman` `.data` `be32b8c2` vs ours `be32b8c3` -- **fixed**, see the
+  DEG2RAD note below.
+- `zNPCFXCinematic`: the target carries `"fx_pickup_emphasis"` and an anonymous
+  12-byte `.rodata` object `@1756` = `{0.25f, 0.0f, 0.0f}` sitting between
+  `tym_anger$1601` and `vec_offset$1853`. Nothing references either. This is the
+  `__deadstripped_<unit>` case and the file already has one such function, but
+  the string pools *last* while the vector pools *mid-file*, so a single
+  never-called function cannot produce both orders. Still open.
+- `zEntPlayerOOBState` 4x, `zNPCSupport` 2x and `zNPCTypeRobot` 1x missing
+  `1.0f` in `.rodata`; `zNPCTypeAmbient` extra `2.0f`; `xModel` and `zUIFont`
+  extra `0.5f`; `zUIFont` extra `176.0f`; `zHud` target-only `64006875`.
+- Two one-ULP constants: `zNPCSupplement` retail `3cccccce` where `0.025f` is
+  `3ccccccd`, and `zEntPlayer` retail `3eaaaaa0` where `0.333333f` is
+  `3eaaaa9f`. Retail is one ULP *above* the correctly-rounded literal in both
+  cases, so the source decimal differs; no expression tried reproduces either.
+
+### DEG2RAD: the macro is multiply-first, two constants are not
+
+`DEG2RAD(x)` is `((PI) * (x) / (ONEEIGHTY))` with `PI = 3.1415927f`. Of every
+angle the tree passes it, only **10, 20 and 63** give a different float
+depending on whether you multiply or divide first.
+
+The macro itself is right. Retail's runtime call sites (`zPlatform`, `zSurface`,
+`zMain`, `zNPCTypeCommon`) pool `PI` (`40490fdb`) and `180.0f` (`43340000`)
+separately and never pool `PI/180` (`3c8efa35`), which is what a divide-first
+macro would have emitted. So the fix is site-local, like the `DEG2RAD(63.0)`
+double literal already in `zNPCGoalRobo` and the `0.052359881f` literal in
+`zNPCGoalVillager`. `zNPCTypeDutchman`'s `boss_cam` now writes `-0.17453292f`.
+
+### `tools/stridediff.py` -- read the mulli half, ignore the addi half
+
+New tool for the "raw byte offset on a typed pointer" class. It compares the
+per-function multiset of `mulli rD,rA,IMM` and self-incrementing
+`addi rX,rX,IMM`. The `addi` half produces 772 hits across the tree, dominated
+by frame adjustments and pool bases -- unusable as written. The `mulli` half is
+short enough to read by hand. Most of its rows are the documented
+mis-attribution: `LastTarget__11XSGAutoData` and `zUpdateThumbIcon` show the
+same `mulli 108` + `mulli 12` on opposite sides, which is one body under two
+names. The one row that was real is below.
+
+### `iBoxIsectSphere` tested the quotient where retail tests the remainder
+
+`xcode`, `ycode` and `zcode` are 0..5, so `code / 3 == 2` is never true and the
+early-out for a sphere lying wholly outside one slab never fired. The target
+computes `mulhwu` / `srwi` / `mulli 3` / `subf`, which is a remainder. Fixed to
+`% 3`, plus hoisting `center +- r` into locals where retail computes them:
+89.790 -> **98.473**. The residual is FP colouring -- retail overwrites the
+register holding `center` with `hi`, ours takes a fifth register -- and it did
+not move under four declaration-order permutations or three rewrite shapes.
+
+`iCameraSetFOV` was the other win. Reading `vw.x` back made CW round the `itan`
+result to single a second time; `vw.y = 0.75f * (vw.x = itan(...))` reproduces
+retail exactly. **95.208 -> 100.000, and `iCamera` is a complete unit.**
+
+### Two more residuals proven not source-reachable
+
+- `xTRCDisk` (75.909, 44 bytes): retail stores the parameter first, which frees
+  r3 for the address of `gTrcDisk[1]`; ours hoists the address materialisation
+  above the store and must use r4. Four source shapes tried, best 80.909.
+- `xSndAddDelayed` (92.000): retail keeps the `lfs 0.0f` inside the search loop,
+  ours hoists it out. Four shapes tried, none moved it. LICM, not source.
+- `zNPCSpawner::Owned` (87.145): retail's unroller bumps the base pointer by
+  0xc between the eight unrolled bodies; ours uses eight immediate
+  displacements and one `addi 0x60`. Three pointer-walk shapes tried, all worse.
+
+## The remaining SCHED list has no eighth clause in it (2026-08-31)
+
+All 72 SCHED-class game functions were diffed, their movers extracted
+mechanically, and the whole list re-compiled under stock `GC/2.0p1` as a
+control. Every one is a pure reorder -- the classification is clean. They do
+**not** share a defect:
+
+- **~22 functions: entry-4 subrange x subrange.** A frame store whose value came
+  from a latency-bearing load is sunk below the neighbouring store to a sibling
+  subrange of the same frame aggregate; retail leaves the stall. Canonical:
+  `xEntDriveMount`'s `xVec3NormalizeMacro` zero branch. Clause B's *tests* do
+  not reject these pairs -- the dispatch does, because B is installed on entries
+  0/1/3 and entry 4 is the one never redirected. Every redirection of entry 4 is
+  already measured: clause-B form **-199**, static-gated **-21**, unconditional
+  with VN e1 **+16/-560**. This is the dead end already named above as the
+  single largest confirmed one in the project; the new fact is that it is now
+  the *plurality* of what is left.
+- **~30 functions: alias-invisible pick order.** The movers are ALU, branch or
+  load-only -- address materialisation against a store, FP ALU against a store,
+  or the epilogue LR-slot load hoisted above the callee-saved restores. One side
+  has no memref, or both are loads, so no alias predicate is ever consulted.
+  This is the 2026-08-12 NO-GO's "78 crossing no memory op" population.
+- **~4 functions: retail is the aggressive one.** `set_object_state` (70.175,
+  the worst on the list, and byte-identical under stock), `turn_to_face`,
+  Prawn's `create`, `NCIN_SleepyDRay_AR`. Retail hoists an indexed load above a
+  store through a heap pointer. Reproducing it needs a **no-alias** answer where
+  stock says may-alias, justified by escape analysis the byte clause does not
+  have. That is a miscompile, not a mismatch. Do not.
+- **2 functions: entry-0 whole x whole.** `eval_joint` and
+  `iModelMaterialMulCB`, both patch-insensitive: an 8-byte `.sdata2` `lfd`
+  hoisted above a `stw` to a whole 4-byte frame local. The only legitimate
+  unmeasured candidate left is **E3n's predicate verbatim on scheduler entry 0**
+  (the entry-0 chain at cave `0x57ead8`, tested before falling into clause C+).
+  Ceiling on this list is ~2 functions / ~660 bytes. Price it with the frida A/B
+  method before writing bytes -- clause D's recorded 17x collateral and C+'s
+  entry-0 over-fire on `xFXRenderProximityFade` are what that ceiling competes
+  against.
+
+Control totals: 46 of 72 are byte-identical under stock `GC/2.0p1`; 22 are
+*better* under the patched compiler, where the clauses close most of the gap and
+leave only the entry-4 swap (`BoulderRollCB` 94.437 -> 99.946).
+
+**Two entries are misclassified and should be tagged E3N-COST, not SCHED.**
+`MoveNormal__14zNPCGoalPatrolFf` and `BasisBspline__FPA4_fPf` compile to exactly
+**100.000%** under stock. They are E3n over-fire cost, paid for by E3n's +82,
+and the narrowing that would rescue them is the conclusively failed 204-probe
+attempt. Nobody should hunt a scheduler defect in them.
