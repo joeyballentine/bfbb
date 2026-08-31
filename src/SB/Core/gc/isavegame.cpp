@@ -759,10 +759,10 @@ S32 iSGLoadFile(st_ISGSESSION* isgdata, const char* fname, char* databuf, S32 as
 static S32 iSG_mc_fread(st_ISG_MEMCARD_DATA* mcdata, char*, S32, S32);
 S32 iSGReadLeader(st_ISGSESSION* isgdata, const char* fname, char* databuf, S32 numbytes, S32 async)
 {
-    S32 bufsize;
-    S32 iconsize;
-    S32 allocsize;
     char* readbuf;
+    S32 iconsize;
+    S32 bufsize;
+    S32 allocsize;
 
     S32 readret = 0;
     st_ISG_MEMCARD_DATA* data;
@@ -787,7 +787,7 @@ S32 iSGReadLeader(st_ISGSESSION* isgdata, const char* fname, char* databuf, S32 
     iTRCDisk::CheckDVDAndResetState();
     iconsize = iSG_cubeicon_size(data->chan, data->sectorSize);
     S32 sectorsize200 = ALIGN_THING(data->sectorSize, 0x200);
-    if ((S32)databuf % 32 != 0 || numbytes - (numbytes / sectorsize200) * sectorsize200 != 0)
+    if ((S32)databuf % 32 != 0 || numbytes % sectorsize200 != 0)
     {
         S32 tmpsize = (numbytes + 0x1ff & ~0x1ff);
         allocsize = tmpsize + 0x1f;
@@ -1819,6 +1819,7 @@ static S32 iSG_mc_fdel(st_ISG_MEMCARD_DATA* mcdata, const char* fname)
         case CARD_RESULT_NOPERM:
         case CARD_RESULT_FATAL_ERROR:
         case CARD_RESULT_WRONGDEVICE:
+        case CARD_RESULT_NOFILE:
             break;
         }
     }

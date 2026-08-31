@@ -939,7 +939,15 @@ S32 NPCC_chk_hitEnt(xEnt* tgt, xBound* bnd, xCollis* collide)
     xCollis* colrec;
     xCollis lcl_collide = {};
 
-    colrec = collide ? collide : &lcl_collide;
+    if (collide)
+    {
+        colrec = collide;
+    }
+    else
+    {
+        colrec = &lcl_collide;
+    }
+
     colrec->optr = tgt;
     colrec->oid = tgt->id;
 
