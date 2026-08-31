@@ -604,8 +604,9 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
 {
     U32 animUserFlag;
     U32 blendUserFlag;
-    F32 angle = 0.0f;
     F32 mag = 1.0f;
+    F32 rot = 0.0f;
+    F32 angle = 0.0f;
     maxVelmag = 0.0f;
 
     if (gTrcPad[0].state != TRC_PadInserted)
@@ -637,8 +638,7 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
                         ent->model->Anim->Single->Blend->State->UserFlags | 0x80000000 :
                         0;
 
-    if (globals.player.KnockIntoAirTimer != 0.0f && (animUserFlag & 0x1e) == 0 &&
-        (animUserFlag & 0x1) == 0)
+    if (globals.player.KnockIntoAirTimer && (animUserFlag & 0x1e) == 0 && (animUserFlag & 0x1) == 0)
     {
         animUserFlag |= 0x8 | 0x2;
         animUserFlag &= ~0x80;
@@ -688,6 +688,7 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
                 {
                     globals.player.carry.grabTarget = 0;
                     globals.player.carry.throwTarget = NULL;
+                    goto no_carry;
                 }
                 else
                 {
@@ -772,6 +773,7 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
             }
             else
             {
+            no_carry:
                 if (strcmp(ent->model->Anim->Single->State->Name, "SpatulaGrab01") == 0)
                 {
                     ent->frame->mode &= ~0x2;
@@ -823,7 +825,6 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
                 }
                 else
                 {
-                    F32 rot = 0.0f;
                     // F32 m;
                     if (stackMag)
                     {
@@ -838,14 +839,13 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
                             stackAng += 2 * 3.1415927f;
                         }
 
-                        rot = angle;
                         if ((animUserFlag & (0x800 | 0x80)) == 0)
                         {
                             angle = stackAng - ent->frame->rot.angle;
                             CLAMP_ANGLE(angle);
 
                             rot = icos(angle);
-                            ent->frame->drot.angle = 7.0f * angle * dt;
+                            ent->frame->drot.angle = dt * (7.0f * angle);
                             ent->frame->mode |= 0x20;
                         }
 
@@ -853,7 +853,7 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
                         {
                             angle *= 0.1f;
                             rot = icos(angle);
-                            ent->frame->drot.angle = 7.0f * angle * dt;
+                            ent->frame->drot.angle = dt * (7.0f * angle);
                             xMat3x3 rotY;
                             xMat3x3RotY(&rotY, ent->frame->drot.angle);
                             xMat3x3RMulVec(&ent->frame->vel, &rotY, &ent->frame->vel);
@@ -866,20 +866,18 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
 
                         if (stackMag > globals.player.s->MoveSpeed[3])
                         {
+                            F32 scalemag = globals.player.SpeedMult;
                             if (stackMag < globals.player.s->MoveSpeed[4])
                             {
                                 globals.player.Speed = 1;
-                                maxVelmag =
-                                    globals.player.s->MoveSpeed[1] * globals.player.SpeedMult;
-                                mag = (globals.player.SpeedMult * stackMag *
-                                       globals.player.s->MoveSpeed[1]) /
+                                maxVelmag = globals.player.s->MoveSpeed[1] * scalemag;
+                                mag = (scalemag * (stackMag * globals.player.s->MoveSpeed[1])) /
                                       globals.player.s->MoveSpeed[4];
                             }
                             else
                             {
                                 globals.player.Speed = 2;
-                                maxVelmag =
-                                    globals.player.s->MoveSpeed[2] * globals.player.SpeedMult;
+                                maxVelmag = globals.player.s->MoveSpeed[2] * scalemag;
                                 F32 slideVelMag = (stackMag - globals.player.s->MoveSpeed[4]) /
                                                   (globals.player.s->MoveSpeed[5] -
                                                    globals.player.s->MoveSpeed[4]);
@@ -887,11 +885,9 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
                                 {
                                     slideVelMag = 1.0f;
                                 }
-                                F32 slideAccel =
-                                    globals.player.s->MoveSpeed[1] * globals.player.SpeedMult;
-                                mag = slideVelMag * (globals.player.s->MoveSpeed[2] *
-                                                         globals.player.SpeedMult -
-                                                     slideAccel) +
+                                F32 slideAccel = globals.player.s->MoveSpeed[1] * scalemag;
+                                mag = slideVelMag *
+                                          (globals.player.s->MoveSpeed[2] * scalemag - slideAccel) +
                                       slideAccel;
                             }
                         }
@@ -936,7 +932,7 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
                         F32 accelX =
                             (pg->SlideTrackVel.x * pg->SlideTrackDir.x +
                              pg->SlideTrackVel.z * pg->SlideTrackDir.z - pg->g.SlideAccelVelMin) /
-                            (pg->g.SlideAccelVelMax - pg->g.SlideAccelEnd);
+                            (pg->g.SlideAccelVelMax - pg->g.SlideAccelVelMin);
 
                         F32 accelZ;
                         if (accelX < 0.0f)
@@ -1167,8 +1163,8 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
                                     break;
                                 }
                                 stackMag = globals.player.DecelRunSpeed;
-                                globals.player.DecelRunSpeed -=
-                                    ((4.0f / 3.0f) * (globals.player.DecelRun * dt));
+                                globals.player.DecelRunSpeed =
+                                    stackMag - ((4.0f / 3.0f) * (globals.player.DecelRun * dt));
 
                                 if (globals.player.DecelRunSpeed < 0.0f)
                                 {
@@ -1195,8 +1191,8 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
                         case 0x8 | 0x4:
                             stackAng = ent->frame->rot.angle;
                             stackMag = globals.player.HeadbuttVel;
-                            globals.player.DecelRunSpeed = globals.player.HeadbuttVel;
-                            globals.player.DecelRun = globals.player.HeadbuttVel;
+                            globals.player.DecelRunSpeed = stackMag;
+                            globals.player.DecelRun = stackMag;
                             // fall through
                         finish:
                         default:
@@ -1235,8 +1231,8 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
                                     break;
                                 }
 
-                                F32 s = (4.0f / 3.0f) * surfSlipTimer * 20.0f * surfSlickRatio +
-                                        (1.0f - (4.0f / 3.0f) * surfSlipTimer) * surfSlickRatio;
+                                F32 s = (1.0f - (4.0f / 3.0f) * surfSlipTimer) * surfSlickRatio +
+                                        (4.0f / 3.0f) * surfSlipTimer * 20.0f * surfSlickRatio;
 
                                 if (moveFlag == 0x4 || moveFlag == 2)
                                 {
@@ -10467,17 +10463,19 @@ static F32 CalcJumpImpulse_Smooth(F32 g, F32 j, F32 h, F32 Tgc, F32 Tgs)
     F32 b0 = 0.0f;
     F32 b1 = 0.0f;
     F32 b2 = -j / 2.0f;
-    F32 c2 = -g / 2.0f;
+    F32 T1 = Tgc + Tgs;
+    F32 A3;
+    F32 B2;
     F32 A = (j - g) / (6.0f * Tgs);
     F32 B = (g * Tgc - j * Tgc - j * Tgs) / (2.0f * Tgs);
-    F32 T1 = Tgc + Tgs;
-    F32 A3 = 3.0f * A;
-    F32 B2 = 2.0f * B;
     F32 Tgc2 = Tgc * Tgc;
     F32 T12 = T1 * T1;
+    A3 = 3.0f * A;
+    B2 = 2.0f * B;
 
     F32 Kc = -(A3 * Tgc2 + j * Tgc + B2 * Tgc);
     F32 D = b2 * Tgc2 - A * (Tgc * Tgc2) - B * Tgc2 - Kc * Tgc;
+    F32 c2 = -g / 2.0f;
     F32 v1 = A3 * T12 + B2 * T1 + g * T1;
     F32 c0 = D + (A * (T1 * T12) + B * T12) - c2 * T12 - v1 * T1;
 
@@ -13196,7 +13194,7 @@ static void CalcCombinedDepen(F32& dx, F32& dz, F32 ax, F32 az, F32 bx, F32 bz, 
                 dz = 0.5f * (az + bz);
             }
 
-            dot2 = MAX(dot2, 0.25f);
+            dot2 = MAX(0.25f, dot2);
             dx = dx + (la * nby) / dot2;
             dz = dz + (la * ubx) / dot2;
             dx = dx * fudge + 0.5f * (ax + bx) * (1.0f - fudge);
@@ -15526,6 +15524,8 @@ static void PlayerLedgeInit(zLedgeGrabParams* ledge, xModelInstance* model)
 static void PlayerLedgeUpdate(xEnt* ent, xScene* sc, F32 dt)
 {
     zLedgeGrabParams* ledge = &globals.player.s->ledge;
+    F32 dx;
+    F32 dz;
 
     if (ledge->tmr > 0.0f)
     {
@@ -15577,8 +15577,8 @@ static void PlayerLedgeUpdate(xEnt* ent, xScene* sc, F32 dt)
                 frame = ent->model->Anim->Single->Time;
             }
 
-            F32 dz = ledge->epos.z - ledge->spos.z;
-            F32 dx = ledge->epos.x - ledge->spos.x;
+            dz = ledge->epos.z - ledge->spos.z;
+            dx = ledge->epos.x - ledge->spos.x;
             F32 len = xsqrt(dx * dx + dz * dz);
 
             dx /= len;
@@ -15700,8 +15700,8 @@ static void PlayerLedgeUpdate(xEnt* ent, xScene* sc, F32 dt)
                 return;
             }
 
-            F32 dz = nfp.nearpt.z - ent->frame->mat.pos.z;
             F32 dx = nfp.nearpt.x - ent->frame->mat.pos.x;
+            F32 dz = nfp.nearpt.z - ent->frame->mat.pos.z;
             F32 dist = xsqrt(dx * dx + dz * dz);
 
             if (dist > 1e-07f && dist < 0.8f &&
