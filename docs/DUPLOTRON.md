@@ -6474,3 +6474,29 @@ Note that `xEnt`, `xCollideFast`, `xordarray` and `xHudText` all still carry
 artifacts and have **zero** non-matching functions, which is the useful
 counter-example: a Ghidra name is a hint about how the body was written, not
 evidence that it is wrong.
+
+### Two `__deadstripped_*` functions place objects at two parse positions
+
+Recorded as an open limitation above, under `zNPCFXCinematic`: a single
+never-called function interns all its locals at one point in the source, so it
+cannot reproduce a target whose unreferenced templates sit in two different
+places. **Split it.** `zNPCFXCinematic` now carries three
+(`__deadstripped_`, `__deadstripped2_`, `__deadstripped3_`) and `zFX` two, and
+both units' `.rodata` is byte-identical to the target.
+
+`zFX` is the instructive one, because the fix **removed** a fabricated object
+rather than adding one. `get_triangle_area`'s entire residual was `.rodata`
+offsets shifted by 0x28: we emitted eight 0x28 templates where the target has
+seven, and the target's seventh, `@558`, is not deadstripped at all — it is
+`tweak_callback::create_change`'s `{ NULL x10 }` initialiser. Retail defines
+that function mid-file, among the functions the link later removed, so its
+template interns at 0xf8. Ours defined it after the named globals, so the
+template landed at 0x380 and pushed everything between them along.
+
+Moving the real definition between the two halves of the deadstripped block
+puts it back, and the hand-written `_558` is deleted. 99.852 -> 100.000.
+
+The general lesson: before fabricating a template, check whether a function you
+already have owns it and is merely defined in the wrong place. `rodatalayout.py`
+shows the count mismatch; the object being one of *ours* rather than the
+target's is what tells you to move code instead of adding it.
