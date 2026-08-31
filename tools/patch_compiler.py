@@ -3,527 +3,73 @@
 
 GC/2.0p1a
 ---------
-mwcceppc.exe GC/2.0p1 answers memory-disambiguation questions in two places,
-and this patch narrows both. Both live in Alias.c (the file names are still in
-the binary, in the CError_FATAL call sites, which is how the modules below
-were identified):
-
-  * the **instruction scheduler**'s may-alias predicate at 0x511fc0, which
-    dispatches through a 3x3 operand-kind table at VA 0x5bd0bc. Clauses A, B,
-    C, C+ and E3n below all hang off that table.
-  * the **code generator's redundant-load elimination** -- local value
-    numbering, ValueNumbering.c around 0x509010 -- whose store-kill routine is
-    0x511a30, dispatching through a *3*-entry table at VA 0x5bd068 keyed on the
-    stored memref's kind. Clause V hangs off that table.
-
-The scheduler's case 0 -- both references opaque -- answers "may alias" only
-when the two descriptors are literally the same object. That is more
-aggressive than the compiler that built the retail DOL: a float constant
+mwcceppc.exe GC/2.0p1 answers memory-disambiguation questions more
+aggressively than the compiler that built the retail DOL: a float constant
 loaded from the .sdata2 literal pool gets hoisted above a store it is assumed
-not to touch. This is the long-standing "float meme", e.g. in
-zEntCruiseBubble's hide_hud:
-
-    retail  lis li addi stw lwz lfs stfs blr
-    stock   lis li addi lfs stw lwz stfs blr
-
-Answering "may alias" unconditionally for case 0 recovers most of the retail
-schedules but costs eleven translation units, so the patch installs narrow
-predicates instead and points selected dispatch entries at them. Anything not
-matching a clause falls through to the stock test for that entry, which the
-injected code replicates exactly.
-
-WHAT THE CLAUSES ACTUALLY PATCH, from the compiler's own source
----------------------------------------------------------------
-
-Every clause below was derived by reverse engineering the binary. A
-decompilation of this compiler exists (a local, unpublished repo -- see the
-maintainer; it targets stock GC/2.0, which is this binary minus the three-byte
-community patch at 0x0dfd4e / 0x16fd86 / 0x16fd8c). Reading it resolves the
-magic numbers into named fields, and it is worth knowing before touching any of
-this:
-
-  * The clauses hook FOUR DIFFERENT FUNCTIONS, all in Alias.c, each with its
-    own copy of the same 3x3 operand-kind switch:
-
-        static Boolean may_alias_alias(Alias *a, Alias *b) {
-            switch ((a->type * 3) + b->type) {
-                case (AliasType0 * 3) + AliasType0:
-                    return a == b;
-                ...
-
-    An earlier revision of this comment claimed they were inlined copies of a
-    single may_alias_alias(). That was wrong. Established by identifying each
-    function from its CError_Internal("Alias.c") fingerprint and matching it
-    against a built Alias.obj:
-
-        0x5bd068   update_alias_value   (0x511a30) -- 3-entry store-kill
-                                        dispatch; the 0x511a53 path
-        0x5bd074   may_alias_object     (0x511cb0)
-        0x5bd098   uniquely_aliases     (0x511e10)
-        0x5bd0bc   may_alias_alias      (0x511fc0)
-        0x5bd0f8   is_address_load      (0x512ca0)
-
-    Alias.c spans 0x511A00-0x513490. Note 2.0 has no may_alias() or
-    may_alias_worst_case() -- those are 7.0-only.
-
-    UNRESOLVED, and worth settling before trusting clause H's rationale: the
-    clause-H work found 0x5bd074 reached only from CodeMotion.c's LICM and
-    measured the +6 accordingly, while the function-identification work found
-    may_alias_object called from computeusedeflists/precomputeusedefcounts in
-    UseDefChains.c. Both cannot be the whole story. The measurement stands
-    either way; only the explanation is in doubt.
-
-    Because these are separate functions rather than inlined copies, a
-    source-level fix does NOT automatically apply to all four -- but it can be
-    written once and called from each, which byte patches cannot.
-
-  * The operand descriptors are `struct Alias`:
-
-        +0x08 children      AliasMember*      (sub-ranges of this object)
-        +0x0c parents       AliasMember*      (ranges this one belongs to)
-        +0x10 object        Object*
-        +0x18 size
-        +0x1c valuenumber
-
-    So "compare +0x10 is equivalent to descriptor identity" holds because
-    entry 0 IS `a == b` and lookup_alias() makes (object, offset, size)
-    unique; and clause V/F's "records the value number into memref+0x1c" is
-    literally `Alias::valuenumber`.
-
-    CORRECTION to clause B's note below: +0x08 and +0x0c are NOT an "object
-    link" and an "indirection expression". They are the children and parents
-    AliasMember lists. Clause B's predicate therefore means "a whole-object
-    alias that has been subdivided, and is not itself a sub-range". The
-    measured behaviour stands; only the explanation was wrong.
-
-  * The "word 5" / "word 0x00010005" discriminant is `Object`'s first four
-    bytes, packed because the compiler is built with `-enum min`:
-
-        +0x00 otype     ObjectType   OT_OBJECT = 5
-        +0x01 access    AccessType
-        +0x02 datatype  DataType     DDATA = 0, DLOCAL = 1
-        +0x03 section   Section
-
-    so word 5 is "an object in static data" and word 0x00010005 is "an object
-    in a stack frame". Not magic numbers -- type tags.
-
-  * Clause H's site is a read-invariance test (see the UNRESOLVED note above
-    for which caller). `isloopinvariant()` in CodeMotion.c is the shape: for a
-    read it
-    walks only the defs OF THE SAME OBJECT:
-
-        for (list = findobjectusedef(pcode->alias->object)->defs; ...)
-            if (may_alias(pcode, Defs[list->id].pcode) && ...) return 0;
-
-    A .sdata2 literal has no defs, so nothing blocks hoisting and the load
-    leaves the loop before value numbering ever runs. That is why clause H had
-    to hook may_alias rather than the VN path.
-
-  * The float meme's root is `make_alias()`:
-
-        switch (object->datatype) {
-            case DLOCAL: case DNONLAZYPTR: break;
-            default:
-                if (!is_safe_const(object))
-                    add_alias_member(worst_case, make_alias(object, 0, 0));
-        }
-
-    An object that is_safe_const() never joins worst_case, so it cannot alias
-    anything, so nothing stops it being hoisted or forwarded. is_safe_const()
-    reduces to is_const_object() -> CParser_IsConst(obj->type, obj->qual).
-    This is what the GC/2.0p1 three-byte patch reaches: it changes what the
-    float-literal-pool symbol constructor writes, and hence the literal's
-    const-ness.
-
-  * `uniquely_aliases()` is a stricter sibling of may_alias(): same test, plus
-    both aliases non-AliasType2 and each alias->size exactly equal to
-    nbytes_loaded_or_stored_by(). Unexamined here; the place to look if a
-    residual involves partial-width access.
-
-Clause A -- differing opcodes, entry 0 only:
-
-    sizeof(A) <= 4 and sizeof(B) <= 4
-    and opcode(A) != opcode(B)
-    and both instructions are plain loads/stores (flags & ~0x6 == 0)
-
-Clause B -- identical opcodes, store/store; entries 0, 1 and 3:
-
-    sizeof(A) <= 4 and sizeof(B) <= 4        (entry 0 only; 1 and 3 omit it)
-    and opcode(A) == opcode(B)
-    and both instructions are plain stores (flags == 4)
-    and both memrefs carry an object link (memref+0x08 != 0)
-    and neither is a computed-address access (memref+0x0c == 0)
-
-Clause B exists because the scheduler emits no WAW edge between two stores to
-distinct named globals: for a block [stw A][li][stw B], tiebreak level 2
-(successors with one remaining predecessor) then hoists the li between them.
-That the missing edge is specifically store-store is derived from a trace of
-the dependency builder and the pick loop on a live compile. Entries 1 and 3
-carry the same clause because the same shape occurs when one side is a whole
-object and the other a subrange of one -- zGameExtras_NewGameReset stores an
-SDA static and five members of a large global, and lands on entry 1.
-
-Clause C -- clause A for static storage; reached on entry 1, and on entry 3
-when clause E3n declines. Entry 0 runs clause C+ instead. Checked first:
-
-    both memrefs carry a base expression whose first word is exactly 5
-        (an object node with no storage flags: globals, SDA scalars and
-        literal-pool entries qualify; frame/stack objects carry 0x00010005
-        and are excluded)
-    and sizeof(A) <= 4 and sizeof(B) <= 4
-    and opcode(A) != opcode(B)
-    and both instructions are plain loads/stores (flags & ~0x86 == 0)
-
-The 0x80 bit in that mask is volatility: a volatile access sets it, so the
-plain-load/store test of clauses A and B rejects every volatile reference.
-That is why zMenu, whose timers are `static volatile F32`, kept hoisting a
-literal load across a store to a different small static even with clause C
-installed -- the instructions never reached the clause. Tolerating the bit is
-only safe behind the static-storage gate; widening entry 0's clause A the same
-way pins volatile frame locals and measures -4.
-
-Clause C is what fixes zThrown_Setup and its family: retail keeps a load of a
-small global or float literal on its source-order side of a store to a
-different small global (stock entries 1/3 only test for the same base object,
-so the load hoists). The static-storage gate is what makes it safe: without
-it, the same predicate also pins integer-conversion stack traffic
-(stw-to-frame-slot vs lfd-of-magic-double) and costs 50 currently-exact
-functions; with it the whole tree shows +41 exact functions and no losses.
-The frame-object encoding of the gate (base-expr word 0x00010005 vs
-0x00000005) was read out of a live compile with the query logger.
-
-Clause C+ -- clause C with the indirect-access bit tolerated, entry 0 only:
-
-    as clause C, except that flags bit 0x20 is permitted (mask ~0xa6) and
-    the size test applies only to the operand that is not the store
-
-Instruction flags bit 0x20 appears on an access made *through* a base object
-rather than at a fixed offset in one -- `stw r0, 0x4(r31)`, r31 loaded from a
-static pointer, sets it -- and such a memref reports the size of the whole
-pointee rather than the width of the access. That reading is inferred from
-the measurement, not read out of the compiler: of the four bits clause C
-excludes (0x08, 0x10, 0x20, 0x40) only 0x20 unlocks anything, and every site
-it unlocks is an indirect store. Clause C's "flags & ~0x86 == 0" and
-"sizeof <= 4" each independently reject those pairs (measured: adding either
-one back to clause C+ costs all 19 functions), which is why retail's refusal
-to hoist a small static load across such a store was not reproduced.
-Tolerating 0x20 and capping only the load's size recovers 19 functions
-(xFXShineUpdate, xFXRingUpdate, xFXAuraAdd, xFXStreakUpdate, xPadUpdate,
-xSndPlayInternal, HAZ_Acquire, zLOD_UseCustomTable, ...) with no function
-dropping from 100.0 anywhere in the tree, and no object of any complete unit
-changing at all.
-
-It is entry 0 only because the same relaxation on entries 1 and 3 measures
-+0/-3: it drops zPickupTableInit, iSndPrepStream and zEntPlayer_SNDStop, all
-three by *sinking* a `lwz` of a pointer field out of a global -- retail
-scheduled that load earlier, and the extra edge loses it a tiebreak. The
-split was measured by installing the relaxed clause on one entry at a time:
-every one of the 19 gains is on entry 0 and every one of the 3 losses is on
-entries 1/3.
-
-Clause E3n -- entry 3 only, replacing clause C there:
-
-    the first instruction is a plain store and the second a plain load
-    and sizeof(A) <= 4 and sizeof(B) <= 8
-    and A's base expression is a declared frame object (word 0x00010005)
-        with a non-zero field at +0x18
-    and B's base expression is a plain static object (word 5)
-
-A directional rule: an stfs to a declared frame local may not be crossed by a
-*later* small static load. Installed on entry 3; worth +82 exact functions
-net against the same build with entry 3 back on clause C (measured 2026-08-21:
-removing it is +6/-88), so despite the earlier warning about refitting this
-shape it stays.
-
-The load-side size bound is 8, not 4, and the difference is load-bearing.
-The unsigned-int-to-float conversion sequence loads the magic double
-0x4330000000000000 from .sdata2, which is an 8-byte object; at `<= 4` the
-clause declined on it and our scheduler hoisted that `lfd` above a run of
-stores to declared frame locals, where retail leaves it at its first use.
-Widening only B's test (the load side) to 8 measures, tree-wide against the
-otherwise identical build: **+3 exact functions, -0 exact functions**, DOL
-still 306526d9..., game exact 76.523 -> 76.639, game fuzzy 98.9078 ->
-98.9106 (measured 2026-08-21). The three gains are `xFX::DrawRing`,
-`zNPCTypeKingJelly::load_param<iColor_tag,int>` and
-`zNPCBalloonBoy::PlatAnimSet` (the last from 48.419). Three functions get
-*fuzzier*-worse without crossing 100 -- `xFont::get_bounds` 61.827 ->
-49.423, `cruise_bubble::add_trail_sample` 97.661 -> 91.516 and `zUI_Render`
-91.348 -> 90.159 -- which costs no matched_code and is why the net is +3/-0.
-
-Do NOT widen A's test (the store side) the same way: that direction is the
-symmetric rule the clause-C notes warn about. Only the load side was
-changed.
-
-Clause V -- the redundant-load path, value-numbering store kill, entry 0 of
-the table at 0x5bd068 only:
-
-    the stored memref's base expression is a plain static object (word 5)
-        OR a declared frame object (word 0x00010005)
-    ->  bump the value number of *every* object in the value-numbering
-        object list (head at 0x5e1fd8) that is <= 4 bytes and whose base
-        expression is likewise a plain static object
-
-The scheduler patch cannot reach this: a load hoisted by the *scheduler* is a
-reordering, but the defect here is that consecutive statements share one
-literal load. A 20-line repro (`extern F32 a1..a3;` + `a1 = DEG2RAD(a1); a2 =
-...`) shows it: retail emits `lfs f2,@PI / lfs f1,val / lfs f0,@180 / fmuls /
-fdivs / stfs` per statement, stock loads @PI and @180 once for the whole
-block. mwcc's local value numbering caches each object's value number in
-memref+0x1c; a store bumps its own object's number (and its precomputed alias
-sets) through 0x511a30, so the constant pool entry survives the store and the
-second statement reuses the register. Retail's compiler kills it. Clause V
-makes a store to a small static do so, and only then.
-
-The store-side gate was widened from "plain static" to "plain static OR
-declared frame object" on 2026-08-21. The witness is
-`xCollide::xSweptSphereToTriangle`: retail reloads the `0.000001f` literal
-for its second test because f0 was reused for `1.0f`, and the store that
-should kill the value number is `stfs f1, 0x8(r1)` into an address-taken
-frame local, not into a static, so the original static-only gate never fired.
-
-Implemented as a jump to a two-value discriminant in the cave's spare bytes
-(cave grew 413 -> 428 of 436 available), NOT as a byte-compare on the low
-byte. Both spellings were measured and are IDENTICAL in effect, which is
-itself the finding: the function this change costs, `update_trail` in
-zEntCruiseBubble, has a store base of the same kind 0x00010005, so the two
-sites cannot be told apart by base kind and the trade is inherent to the
-predicate rather than a defect in it. The exact form is kept because it says
-what it means.
-
-Measured tree-wide, DOL still 306526d9...:
-
-    GAME exact  76.982 -> 77.077   (+0.095, net +1556 bytes)
-    GAME fuzzy  98.922 -> 98.876   (-0.046)
-    exact functions +1 / -1
-
-    gained: xSweptSphereToTriangle (2092 b)
-    lost:   update_trail  (536 b, 100.0 -> 99.142)
-
-**The cost was repaid the same day and this is now a clean +2092 / -0.**
-`update_trail` was recovered to 100.0 in source: the widened clause kills the
-value number that let the member re-read forward from its store, so hoisting
-the stored expression into a named local removes the memory round-trip
-entirely and the value stays in a register across the branch. That is the
-general remedy whenever this widening costs a function -- look for a member
-written and then re-read in the same function, and bind it to a local.
-`xSweptSphereToBox` also improved 98.587 -> 99.158 without crossing.
-
-Collateral worth knowing before extending this further: four functions get
-substantially fuzzier without ever having been matched --
-`xScrFXGlareRender` 93.287 -> 40.465, `xFXStreakRender` 93.415 -> 65.481,
-`xFXShineRender` 98.219 -> 90.425, `NCIN_SleepyLamp_AR` 98.280 -> 87.567.
-They cost no matched_code, but they are further from closable than they were.
-
-Both halves of clause V are needed and both are narrow:
-
-  * gating the *store* on a static base is what admits the interesting
-    population. Gating it on "size <= 4" instead measures +11 rather than
-    +25; adding "size <= 4 or the store is indirect" on top of the static
-    gate changes nothing (measured identical), so it is not shipped.
-  * filtering the *killed* objects to small statics is what makes it free.
-    Killing the whole list (i.e. calling the stock kill-everything routine at
-    0x511a00) measures +26/-24; killing every static regardless of size is
-    +10/-0 -- it spares the constants, which are what the gains need;
-    filtering on size alone without the static test is +25/-5, losing
-    iSphereHitsEnv x3, xPadUpdate and xtextbox::read_tag, all of which cache a
-    load through a pointer across a store to a small static, which retail also
-    keeps. Filtering on the object's kind byte (+0x2c == 0) instead of its
-    base expression is +25/-1 (xPadUpdate).
-
-Entry 0 (a whole object) only. Entry 1 -- a subrange of a larger object, i.e.
-`globals.player.g.slideAngle = DEG2RAD(...)` -- measures +1/-30, which is the
-compiler agreeing with the observation that made this clause findable: retail
-shares the two literals across three consecutive stores into a large named
-object and reloads them for stores into small statics. Entry 2 is inert
-(measured: no object in the tree changes).
-
-Clause V is worth +25 exact functions and -0 (measured 2026-08-21 over all
-451 units): zMainParseINIGlobals, zEntPlayerReset, zEntPlayerDriveUpdate,
-LCopterCB, BubbleBounceCB, zEntPlayer_SNDPlayDelayed, zCameraReset,
-xScrFxLetterBoxInit, xScrFxLetterboxReset, xScrFxDistortionUpdate,
-xSndDelayedUpdate, xSndPlay3DFade, xSndStopFade, xCameraFXAlloc,
-xCutscene_Init, xDecal's register_emitter, xFX's activate_ribbon,
-xFXStreakStart, xShadowSimple_Init, zEntPickup_UpdateFlyToInterface,
-AddToLODList, zNPCBPatrick::Reset, zNPCFodBzzt::Init,
-zParCmdFindClipVolumes and zFruit_Update. 27 of 451 objects change and none
-belongs to a complete unit.
-
-Clause F -- no store-to-load forwarding for statics; rides clause V's entry-0
-hook (2026-08-25):
-
-    if the stored memref's base expression is a plain static object (word 5),
-    the store's own object gets a FRESH value number instead of recording the
-    stored value's number -- so a later load of that object reloads from
-    memory, the way retail does, instead of reusing the register.
-
-Mechanically: the stock entry-0 store-kill at 0x511a53 does
-`push esi; push ebx; call 0x50a2c0` where esi is the stored value operand;
-0x50a2c0(memref, value) with value != 0 sets memref+0x1c to the value's
-number (enabling forwarding) and with value == 0 assigns a fresh number from
-the counter at 0x5e9b44 (killing it). Clause V's discriminant already
-separates the static (word 5) and frame (word 0x00010005) store paths, so
-clause F is four bytes: `xor esi, esi` on the static path only, before
-falling into 0x511a53. Frame-object stores still forward -- widening to them
-is untested and everything currently matching leans on it.
-
-This is the long-hypothesised "reload-after-store / store-to-load forwarding
-defect (2b)" that seven hand-installed `volatile` matching devices were
-approximating (zAnimList, zCombo, iModel, isavegame, xutil, xMath's rndseed,
-zScene's scobj_idbps + oldOffset pair, xFFX's three pool casts, zEntPlayer's
-player_hitlist_anim/mount_tmr). All of those devices were removed when this
-clause landed and every one of their functions still matches byte-exactly,
-which is the strongest evidence that the rule is retail's own behaviour and
-not a fit. Two devices SURVIVE the clause and are still required:
-
-  * xPar's `volatile xPar gParPool[...]` -- the re-read of gParDead per pool
-    iteration is clause F, but the pool volatile also pins two NULL stores
-    AHEAD of the gParDead store, which is scheduler ordering, not VN.
-    Removing it (or keeping only `xPar* volatile gParDead`) measures 91.864
-    on xParMemInit.
-  * zMovePoint_GetMemPool's volatile return -- `return g_mvpt_list;`
-    immediately after storing it forwards ANYWAY under clause F (measured
-    92.000 without the device). That forward happens upstream of value
-    numbering, so retail's reload there is evidence the retail compiler's
-    change sits earlier in the pipe than this reconstruction of it.
-
-Clause F alone measures +16 gained / 15 LOST with the DOL sha broken: under
-stock forwarding, a source re-read of a just-stored static and a use of the
-stored expression's value compile identically, so the tree had accumulated 15
-functions spelled with a re-read where retail's source used the expression
-value or a local. All 15 were respelled the same day (`if (--cnt == 0)` for
-`cnt--; if (cnt == 0)` in six shutdown/counter sites, a bound local for
-chained or repeated assignments in iMemMgr/iSnd/zMenu/zEntPlayer), after
-which the tree measures **+17 exact / -0**, zero sub-100 regressions, DOL
-sha1 unchanged (2026-08-25: matched_functions 8386 -> 8403, GAME exact
-79.830 -> 80.226, GAME fuzzy 99.1068 -> 99.1477). The 17th gain is
-zAnimListInit, whose "no source form reaches 100%" verdict dissolved with
-its volatile device.
-
-Do not relax clause C's static-storage gate on the store side. "Skip the
-base-expression test for whichever operand is the store, keep it for the
-load" is the obvious reading of the retail behaviour above, and it measures
--80 (+29/-109) across the tree. The reason is that it cannot reach the
-motion it was aimed at: the indirect stores in question never satisfy clause
-C's size and flags tests in the first place (see clause C+), and a store that
-does reach clause C with a non-static base is always a declared frame object
-(measured: allowing every non-frame store changes nothing at all, allowing a
-store with no base expression changes nothing at all). All the relaxation
-admits is stack traffic, which is the population the gate exists to exclude.
-
-The object-link and computed-address conditions are fitted: they separate named
-objects from spill slots and computed-address locals, which is a coherent
-reading, but it was not derived from the retail compiler. The differing-opcode
-condition in clause A is likewise fitted, and clause C is clause A plus a
-fitted storage-class gate. Extending clause B to entries 1 and 3
-adds no new condition -- it is the same predicate on two more dispatch cases.
-
-The predicate is assembled into the run of zero padding at the tail of .text:
-the section declares VirtualSize 0x17da4c but occupies 0x17dc00 bytes on disk,
-leaving file 0x17de4c..0x17e000 (VA 0x57ea4c, 436 bytes) mapped executable,
-zeroed and unreachable. Writing there leaves the file size, the section table
-and every existing address untouched.
-
-The injected code is position-independent, and has to be: sjiswrap loads the
-image at 0x110000 rather than its preferred 0x400000, so an absolute address
-written into the cave is not relocated and faults. It inlines the stock tests
-rather than re-entering them, reaches the epilogue through rel32 jumps, and
-clause V reads the object-list head through a `call/pop` PC-relative
-displacement. The only absolute values written are the dispatch table entries
-themselves, and every entry in both tables already carries a HIGHLOW
-relocation, so the new ones are fixed up exactly as their neighbours are.
-
-Padding is the binding constraint -- 436 bytes for everything, 413 in use --
-so nothing is duplicated. Clause B's six tests are one body reached by CALL
-from the entry-0 and entry-1/3 handlers, clause C's strict conditions are one
-body shared by the two stubs, and the two stock answers share one
-`sete bl / and ebx,1 / jmp` tail. A clause answers "may alias" by discarding
-its return address and jumping to the caller's epilogue, and declines with
-`ret`. The predicates run with esp inside the may-alias frame, which has no
-locals live at the dispatch, so the pushed return address is harmless.
-
-That compaction was validated before clause V was added: rebuilt from
-GC/2.0p1 with the new layout and the same three scheduler entries, all 451
-units compile to objects with **identical SHA-1s** and not one symbol's match
-percentage moves.
-
-Clause H -- loop-invariant motion's alias query; a THIRD query site, hooked
-pre-dispatch (2026-08-25):
-
-    on 0x511cb0(store instr, hoist-candidate expr) -- CodeMotion.c's "may
-    this loop store alias this candidate memref" -- answer MAY-ALIAS when
-        the store's memref base expression is a plain static (word 5)
-        and the candidate's base expression is a plain static (word 5)
-        and the candidate is <= 4 bytes
-    for every operand-kind pair; anything else falls into the stock 3x3
-    dispatch at 0x5bd074, which no earlier clause had ever touched.
-
-This is the site the "gFrameCount hoisting is a THIRD site, reachable from
-neither table" note predicted. Alias.c holds FOUR dispatch tables in a row at
-0x5bd068 (VN store-kill, 3 entries), 0x5bd074 (0x511cb0, only CodeMotion.c
-calls it), 0x5bd098 (0x511e10, a must-alias/full-overlap test, also
-CodeMotion.c), and 0x5bd0bc (0x511fc0, scheduler + CodeMotion). The original
-float-meme work found only the last. Stock entry 0 of the 0x5bd074 table is
-reference identity, so a `lfs` of a .sdata2 literal was "invariant" in any
-loop that stores to a static array, and LICM hoisted it to the preheader; the
-retail compiler answers may-alias and leaves the load inside the loop. That
-one answer is upstream of everything the SNDInit residual shows: the reload
-inside the loop body, the reload inside the tail/remainder loops the unroller
-emits, and the unroll factor itself (the kept load doubles the body size:
-0.65f-fill goes 56-wide straight-line under stock, 16-wide loop in retail;
-0.77f x48 goes full-unroll under stock, 2x21 loop in retail).
-
-The mechanism was pinned with a live instrumented compile (frida): on a
-20-line repro of `for (i<59) sStreamVol[i]=0.65f;` CodeMotion asks 0x511cb0
-(whole-static-array store, size 236, word 5) x (4-byte literal, word 5) and
-stock answers no-alias. Forcing may-alias for exactly the clause-H predicate
-in the running compiler reproduced retail's loop shape on the repro and moved
-the real zEntPlayer unit before any byte was patched; the byte implementation
-then produced bit-identical objects to the instrumented run.
-
-Measured tree-wide (full ninja, 2026-08-25), DOL sha1 306526d9... intact:
-matched_functions **8403 -> 8409 (+6 / -0)**, GAME exact 80.226 -> 80.349,
-GAME fuzzy 99.1546 -> 99.2130, five more functions up without crossing, ZERO
-functions down anywhere, 6 units' matched-count up, none down. Gains:
-xScrFXGlareUpdate (90.476), xSndDelayedInit (59.459!), cruise_bubble's
-update_hud (97.311), PlayerTeeterCheck (78.649), zFXGooEventMelt (93.233),
-NPCS_SndTimersReset (56.984). Sub-100 movers, all up: xFXAuraUpdate 86.015
--> 95.426, zEntPickup_SceneUpdate 96.341 -> 99.480, zEntPlayer_SNDInit
-94.126 -> 99.188 (the 10,160-byte fn this clause was aimed at; the residue
-is register roles and one store/load tiebreak, not reloads),
-zEntPlayer_Update 96.634 -> 96.776, NPCS_SndTimersUpdate 86.800 -> 98.400.
-
-Ruled out while fitting (each measured as a frida A/B over the byte-patched
-baseline, i.e. the delta of ONLY the widening):
-  * candidate size <= 8 instead of <= 4: zero objects change on zEntPlayer,
-    zNPCSndTable, xFX, xSnd -- the magic-double population that clause E3n
-    needed does not arise here.
-  * dropping the store-side static gate (any store kills small-static
-    candidates): zero change on zEntPlayer, xFX, zNPCSndTable,
-    zNPCTypeBossSandy, zEntPickup -- inert, so the narrow form is kept.
-  * admitting declared-frame candidates (word 0x00010005): zero change on
-    zEntPlayer, xFX, zNPCSndTable.
-Forcing entries 2/6, 1/3, or all nine of the SCHEDULER table (0x5bd0bc) to
-may-alias moves none of this -- measured before the site was found; LICM
-never consults that table for these loops.
-
-Clause H's space is a SECOND cave: the original 436-byte tail is full
-(432 used), so the patch grows .text's SizeOfRawData 0x17dc00 -> 0x17e000,
-inserting one page of zeros before .rdata's raw data and bumping
-PointerToRawData of every later section. No VA, RVA, VirtualSize or data
-directory changes (the image has no file-offset-based directories and a zero
-checksum); the loader maps the new page executable exactly as it maps the
-existing cave, which already sits past VirtualSize. The growth alone -- no
-clause -- compiles repro TUs to byte-identical objects. The hook rewrites
-0x511cb0's 7-byte table-dispatch `jmp [ebx*4+0x5bd074]` into a rel32 jump to
-the new cave; the HIGHLOW relocation that covered the old operand (RVA
-0x111ce8) is retyped to ABSOLUTE (the documented padding no-op) so a rebase
-under sjiswrap cannot scribble on the new code. The handler is
-position-independent: it re-enters the stock dispatch by rebuilding the
-table address with the call/pop trick, and answers may-alias by jumping to
-0x511cb0's own answer tail with ebx=1.
+not to touch (the long-standing "float meme"), a store to a small static does
+not kill a cached literal load, and a loop-invariant literal load is hoisted
+out of a loop that stores to a static array. This patch narrows those answers
+back toward retail's.
+
+The narrowing is expressed as C, not as hand-assembled bytes. It lives in the
+CodeWarrior decompilation repo:
+
+    src/compiler_and_linker/BackEnd/PowerPC/GlobalOptimizer/AliasPatch.c
+
+That file holds ONLY the clause predicates -- the part that is the patch. The
+compiler's own stock answers (the 3x3 may_alias_alias switch, and the
+whole-object kill walks in update_alias_value) are left as its own bytes and
+reached by fall-through. Nothing stock is reimplemented, so nothing stock can
+diverge: a query the patch does not claim is answered by the identical original
+code. This is what the older eight-clause byte cave (A, B, C, C+, E3n, V, F, H)
+could not do -- it carried four hand-derived copies of the same switch, one per
+inlined call site, because a byte patch cannot call a shared function.
+
+HOW IT IS INJECTED
+------------------
+Three sites are hooked, each dispatched by an operand-kind table in Alias.c:
+
+    0x5bd068  update_alias_value (0x511a30)  entry 0 -> clauses V and F
+    0x5bd074  may_alias_object   (0x511cb0)  pre-dispatch -> clause H
+    0x5bd0bc  may_alias          (0x511fc0)  entries 0,1,3 -> A/B/C/C+/E3n
+
+`may_alias` and `may_alias_object` keep the original PCode arguments in esi/ebp
+at the dispatch point, so the predicates read opcode and flags directly; eax and
+edx hold the two memrefs.
+
+The injected image is one page grown onto the tail of .text (SizeOfRawData
+0x17dc00 -> 0x17e000 -> 0x17f000; no VirtualSize, VA or RVA changes, exactly as
+the loader already maps the padding past VirtualSize). It holds:
+
+  * five register-marshalling stubs (tools/aliaspatch_asm.py) that hand each
+    query to the right C predicate in cdecl form and act on the answer -- jump
+    to the compiler's own "may alias" answer tail on a hit, fall into the
+    compiler's own stock test on a miss;
+  * the C blob. Its linked bytes are checked in as tools/aliaspatch_blob.py,
+    so a bare bfbb checkout derives the compiler with no external repo. When
+    the mwcc-gc repo is present (MWCC_GC env var, or its default location),
+    tools/aliaspatch_link.py recompiles AliasPatch.c with that repo's own
+    Metrowerks mwcc.exe and refuses to build if the fresh link differs from
+    the artefact -- the C stays the source of truth, and a stale artefact is
+    a loud failure, not a silent divergence. `aliaspatch_link.py --refresh`
+    regenerates the artefact after an intended C change.
+
+The blob is position-independent: every relocation is a REL32 (inter-function
+calls and the one call to killmemory), which survives the sjiswrap rebase
+because caller and callee move together. The alias-list head is loaded PC-
+relatively by the VN stub and passed in, so the blob carries no absolute word
+and needs no base relocations of its own. The three redirected dispatch entries
+and the CodeMotion hook are the only absolute edits; the dispatch entries
+already carry HIGHLOW relocations that rebase their new in-image targets, and
+the hook is a rel32 jump with the displaced table-operand relocation retyped to
+a padding no-op.
+
+The original 436-byte .text tail cave (VA 0x57ea4c) is left pristine.
 
 All writes are guarded by the SHA-1 of the input and by the expected bytes at
 each offset, so an unexpected build fails loudly instead of being corrupted.
+The whole clause set now reads as C; changing AliasPatch.c changes the derived
+compiler's SHA-1, so re-measure with tools/patchcost.py after any change.
 """
 
 import hashlib
@@ -533,127 +79,170 @@ import struct
 import sys
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import aliaspatch_link
+import aliaspatch_asm
+
 BASE_VERSION = "GC/2.0p1"
 PATCHED_VERSION = "GC/2.0p1a"
 
 BASE_SHA1 = "74bc177b10d1bbe8a60a21a6c0aa86d2dd9c0668"
-PATCHED_SHA1 = "5c6862b641adb8845f0fc09a6569902df068a83f"
+# The C-sourced GC/2.0p1a. This is a NEW hash: the old byte-cave p1a was
+# 5c6862b641adb8845f0fc09a6569902df068a83f. The derived-compiler bytes differ;
+# the OBJECTS it produces do not (verified byte-identical on 450 SB units).
+PATCHED_SHA1 = "e71f58023db2a11619a99ebd3ee411bd0ac72bc6"
 
-# Everything the patch injects, assembled as one position-independent block at
-# VA 0x57ea4c -- the whole of the .text tail padding. 432 bytes of 436. The
-# layout, in order:
+# ---- where the injected code goes ---------------------------------------
+# The executable tail of .text is the run from VirtualSize's end to the next
+# page boundary, which the loader maps executable (the section's raw data stops
+# earlier). It spans VA 0x57ea4c..0x57f000 -- 1460 bytes -- and .rdata begins
+# at 0x57f000, so nothing may reach that address.
 #
-#   0x57ea4c  entry-0 handler: clause A inline, clause B by CALL, then the
-#             stock reference-identity test
-#   0x57ea85  the shared `sete bl / and ebx,1 / jmp 0x51210b` answer tail
-#   0x57ea90  the shared "may alias" answer (mov ebx,1)
-#   0x57ea9a  entry-1/3 handler: clause B by CALL, then the stock same-base
-#             test
-#   0x57eaa7  clause B, shared; answers by discarding the return address
-#   0x57ead1  entry-1/3 stub: CALL clause C's strict conditions, else fall
-#             through to the entry-1/3 handler
-#   0x57ead8  entry-0 stub: CALL clause C+, else fall through to the entry-0
-#             handler
-#   0x57eae2  clause C's conditions that clause C+ drops (neither instruction
-#             indirect, both memrefs <= 4 bytes); falls into clause C+
-#   0x57eb03  clause C+: differing opcodes, plain load/store with the indirect
-#             bit tolerated, load-side size <= 4, static base on both sides
-#   0x57eb5e  clause E3n (entry 3); declines into the entry-1/3 stub
-#   0x57eba5  clause V: the value-numbering store kill, which falls through to
-#             the stock whole-object kill at 0x511a53 either way; its
-#             discriminant tail carries clause F's `xor esi, esi` on the
-#             static-store path (the stock kill then records value 0, i.e. a
-#             fresh number, so the store's own object is not forwardable)
-CAVE_OFFSET = 0x17DE4C
-CAVE_BYTES = bytes.fromhex(
-    "8b481883f904772f8b4a1883f9047727668b4e20663b4d2074188b4e14f7c1f9"
-    "ffffff75128b4d14f7c1f9ffffff7507eb12e82400000039d00f94c383e301e9"
-    "7b36f9ffbb01000000e97136f9ffe8080000008b58103b5a10ebde837e140475"
-    "23837d1404751d837808007417837a0800741183780c00750b837a0c00750583"
-    "c404ebc0c3e80c000000ebc2e826000000e96affffff8b4e14f6c12075188b4d"
-    "14f6c12075108b481883f90477088b4a1883f9047601c3668b4e20663b4d2074"
-    "508b4e14f7c159ffffff7545f6c10475088b481883f90477388b481085c97431"
-    "833905752c8b4d14f7c159ffffff7521f6c10475088b4a1883f90477148b4a10"
-    "85c9740d833905750883c404e92435f9ffc3837e1404753c837d140275368b48"
-    "1883f904772e8b4a1883f90877268b481085c9741f8139050001007517837918"
-    "0074118b4a1085c9740a8339057505e9e134f9ffe92cffffff8b4b1085c97438"
-    "e93800000055e8000000005d8bad2134060085ed7421837d180477168b4d1085"
-    "c9740f833905750a6a0055e8e4b6f8ff59598b6d00ebdb5de96a2ef9ff833905"
-    "750431f6ebbf81390500010075eaebb5"
-)
+#   0x57ea4c  CAVE1  the original 436-byte tail cave, holds the five stubs
+#   0x57ec00  the grown page, holds the C blob
+#
+# CAVE1's file bytes are already inside .text's raw data; the blob's are added
+# by growing SizeOfRawData one page (as clause H did), which does not change
+# any VA -- the blob must simply fit below EXEC_LIMIT.
+CAVE1_VA = 0x0057EA4C
+CAVE1_FILE = 0x17DE4C
+CAVE1_LEN = 0x1B4                   # 436 bytes to the grown page
+PAGE_VA = 0x0057EC00               # VA of the grown page
+TEXT_SECTION_GROW = 0x400          # raw bytes added for the blob
+TEXT_RAW_INSERT_AT = 0x17E000      # first byte past the original raw .text
+EXEC_LIMIT = 0x0057F000            # .rdata starts here; injected code must end below
+ALIAS_LIST_HEAD_VA = 0x005E1FD8    # global holding the Alias list head
 
-# Entries of the scheduler's may-alias dispatch table at VA 0x5bd0bc that get
-# redirected, as (index, expected stock handler, replacement). Entry 0 is
-# whole-object vs whole-object; entries 1 and 3 are whole-object vs subrange,
-# in both operand orders. Cases 2 and 4-8 are left alone (extending clause B
-# to entry 4 was measured at -199 exact functions; even gated to static
-# storage it loses 21).
-DISPATCH_OFFSET = 0x1BA6BC
-DISPATCH = (
-    (0, 0x00511FF2, 0x0057EAD8),  # stock: cmp eax,edx; sete bl  (ref identity)
-    (1, 0x00511FFF, 0x0057EAD1),  # stock: same base object
-    (3, 0x00511FFF, 0x0057EB5E),  # clause E3n instead of clause C
-)
+# ---- scheduler may-alias dispatch table (0x5bd0bc) ----------------------
+# Entries 0/1/3 are redirected to the three sched stubs; 2 and 4-8 stay stock
+# (extending to entry 4 measures -199 exact functions).
+SCHED_DISPATCH_OFFSET = 0x1BA6BC
+SCHED_STOCK = {0: 0x00511FF2, 1: 0x00511FFF, 3: 0x00511FFF}
 
-# Entries of the value-numbering store-kill dispatch table at VA 0x5bd068,
-# consulted by 0x511a30 on the kind byte of the stored memref. Entry 0 is a
-# whole object; entry 1 (a subrange) measures +1/-30 and entry 2 is inert, so
-# both are left alone.
+# ---- value-numbering store-kill table (0x5bd068) ------------------------
+# Entry 0 (whole object) only; entry 1 measures +1/-30 and entry 2 is inert.
 VN_DISPATCH_OFFSET = 0x1BA668
-VN_DISPATCH = (
-    (0, 0x00511A53, 0x0057EBA5),  # stock: kill this object and its alias sets
-)
+VN_STOCK_E0 = 0x00511A53
 
-# ---- clause H: CodeMotion's loop-invariance alias query -------------------
-#
-# Alias.c contains TWO more 3x3 dispatch tables that no earlier patch
-# touched, sitting between the VN table and the scheduler table:
-#   0x5bd074 -- used only by 0x511cb0(instr, expr), whose only callers are
-#               six sites in CodeMotion.c: "may this loop store alias this
-#               hoist candidate's memref"
-#   0x5bd098 -- used only by 0x511e10 (a must-alias/full-overlap test)
-# Clause H hooks the FIRST one, pre-dispatch, covering all nine entries:
-# if the store's base expression is a plain static (word 5) AND the
-# candidate's base expression is a plain static AND the candidate is <= 4
-# bytes, answer may-alias; otherwise fall into the stock dispatch.
-#
-# The hook is the 7-byte `jmp [ebx*4+0x5bd074]` at VA 0x511ce5 rewritten to
-# `jmp 0x57ec00; nop; nop`, with the HIGHLOW relocation that covered the old
-# instruction's table operand (RVA 0x111ce8) retyped to ABSOLUTE (a no-op
-# padding entry) so a rebase does not scribble on the new code. The handler
-# itself is position-independent: it re-enters the stock dispatch through a
-# call/pop-computed table address.
-#
-# The handler lives in a NEW cave: the original .text tail padding is full
-# (432/436), so the patch grows .text's SizeOfRawData by one page
-# (0x17dc00 -> 0x17e000), inserting 0x400 zero bytes before .rdata's raw
-# data and bumping PointerToRawData of every later section. No VirtualSize,
-# no VA and no RVA changes anywhere; the loader maps the new page executable
-# exactly as it does the existing cave (which already sits past VirtualSize).
-# A null test of the growth alone produced byte-identical objects.
-TEXT_SECTION_GROW = 0x400          # inserted at file 0x17e000
-TEXT_RAW_INSERT_AT = 0x17E000
-CAVE2_VA = 0x57EC00                # file 0x17e000 after the insertion
-CAVE2_BYTES = bytes.fromhex(
-    "8b4a1085c97421833905751c"     # store base expr: null/word!=5 -> disp
-    "8b481085c974158339057510"     # candidate base expr: null/word!=5 -> disp
-    "83781804770a"                 # candidate size > 4 -> disp
-    "bb01000000"                   # ebx = may-alias
-    "e9dd31f9ff"                   # jmp 0x511e05 (0x511cb0's answer tail)
-    "e80000000059"                 # call $+5; pop ecx    (PIC)
-    "81c147e40300"                 # add ecx, 0x5bd074 - next_va
-    "ff2499"                       # jmp [ecx+ebx*4]      (stock dispatch)
-)
-CM_DISPATCH_JMP_OFFSET = 0x1110E5  # VA 0x511ce5
-CM_DISPATCH_JMP_OLD = bytes.fromhex("ff249d74d05b00")
-CM_DISPATCH_JMP_NEW = bytes.fromhex("e916cf06009090")  # jmp 0x57ec00; nop; nop
-CM_RELOC_OFFSET = 0x1E6A98         # pre-insertion file offset of the u16
-CM_RELOC_OLD = 0x3CE8              # HIGHLOW @ RVA 0x111ce8
-CM_RELOC_NEW = 0x0CE8              # ABSOLUTE (padding no-op), offset kept
+# ---- CodeMotion loop-invariance hook (0x511ce5) -------------------------
+# Rewrite the 7-byte `jmp [ebx*4+0x5bd074]` into a rel32 jump to the licm stub
+# and retype the displaced table-operand HIGHLOW relocation to a no-op.
+CM_HOOK_OFFSET = 0x1110E5           # VA 0x511ce5
+CM_HOOK_OLD = bytes.fromhex("ff249d74d05b00")
+CM_RELOC_OFFSET = 0x1E6A98          # pre-insert file offset of the reloc u16
+CM_RELOC_OLD = 0x3CE8               # HIGHLOW @ RVA 0x111ce8
+CM_RELOC_NEW = 0x0CE8               # ABSOLUTE (padding no-op), offset kept
+
+
+def sha1_bytes(b: bytes) -> str:
+    return hashlib.sha1(b).hexdigest()
 
 
 def sha1(path: Path) -> str:
     return hashlib.sha1(path.read_bytes()).hexdigest()
+
+
+def build_injection():
+    """Lay out the C blob and the five stubs in the .text tail.
+
+    The blob comes from aliaspatch_link.blob_for: the checked-in artefact,
+    verified against a fresh compile of AliasPatch.c whenever the mwcc-gc repo
+    is present. It is placed at PAGE_VA and the stubs, which call into it, at
+    CAVE1. Both must end below EXEC_LIMIT (.rdata). Returns (cave1_bytes,
+    page_bytes, stub_vas)."""
+    A = aliaspatch_asm
+
+    blob, exp = aliaspatch_link.blob_for(PAGE_VA)
+    if PAGE_VA + len(blob) > EXEC_LIMIT:
+        sys.exit(f"C blob ends at {PAGE_VA + len(blob):#x}, past the executable "
+                 f"limit {EXEC_LIMIT:#x}; reduce its size")
+    sched = exp["_sb_sched_clause"]
+    licm = exp["_sb_licm_clause"]
+    vn = exp["_sb_vn_store_kill"]
+
+    at = CAVE1_VA
+    parts = []
+    vas = {}
+
+    def emit(name, bts):
+        nonlocal at
+        vas[name] = at
+        parts.append(bts)
+        at += len(bts)
+
+    emit("s0", A.sched_stub(at, sched, 0, A.STOCK_E0))
+    emit("s1", A.sched_stub(at, sched, 1, A.STOCK_E1_E3))
+    emit("s3", A.sched_stub(at, sched, 3, A.STOCK_E1_E3))
+    emit("licm", A.licm_stub(at, licm))
+    emit("vn", A.vn_stub(at, vn, ALIAS_LIST_HEAD_VA))
+
+    stub_len = at - CAVE1_VA
+    if stub_len > CAVE1_LEN:
+        sys.exit(f"stubs are {stub_len} bytes, cave1 holds {CAVE1_LEN}")
+
+    cave1 = b"".join(parts)
+    page = bytearray(TEXT_SECTION_GROW)
+    page[0:len(blob)] = blob
+    return cave1, bytes(page), vas
+
+
+def _apply(data: bytearray) -> bytes:
+    cave1, page, vas = build_injection()
+
+    # 0. write the stubs into the pristine cave1 padding
+    if any(data[CAVE1_FILE:CAVE1_FILE + len(cave1)]):
+        sys.exit(f"cave1 padding at {CAVE1_FILE:#x} is not zero, refusing to overwrite")
+    data[CAVE1_FILE:CAVE1_FILE + len(cave1)] = cave1
+
+    # 1. redirect the scheduler dispatch entries (0,1,3)
+    for index, stock in SCHED_STOCK.items():
+        o = SCHED_DISPATCH_OFFSET + 4 * index
+        found = struct.unpack_from("<I", data, o)[0]
+        if found != stock:
+            sys.exit(f"sched dispatch entry {index} at {o:#x} is {found:#x}, "
+                     f"expected {stock:#x}")
+        struct.pack_into("<I", data, o, vas[{0: "s0", 1: "s1", 3: "s3"}[index]])
+
+    # 2. redirect the VN store-kill entry 0
+    o = VN_DISPATCH_OFFSET
+    found = struct.unpack_from("<I", data, o)[0]
+    if found != VN_STOCK_E0:
+        sys.exit(f"vn dispatch entry 0 at {o:#x} is {found:#x}, "
+                 f"expected {VN_STOCK_E0:#x}")
+    struct.pack_into("<I", data, o, vas["vn"])
+
+    # 3. hook the CodeMotion alias dispatch -> licm stub, retype its reloc
+    if data[CM_HOOK_OFFSET:CM_HOOK_OFFSET + 7] != CM_HOOK_OLD:
+        sys.exit(f"CM hook bytes at {CM_HOOK_OFFSET:#x} are "
+                 f"{data[CM_HOOK_OFFSET:CM_HOOK_OFFSET + 7].hex()}, expected "
+                 f"{CM_HOOK_OLD.hex()}")
+    rel = vas["licm"] - (0x00511CE5 + 5)
+    data[CM_HOOK_OFFSET:CM_HOOK_OFFSET + 7] = b"\xE9" + struct.pack("<i", rel) + b"\x90\x90"
+    found = struct.unpack_from("<H", data, CM_RELOC_OFFSET)[0]
+    if found != CM_RELOC_OLD:
+        sys.exit(f"reloc word at {CM_RELOC_OFFSET:#x} is {found:#x}, "
+                 f"expected {CM_RELOC_OLD:#x}")
+    struct.pack_into("<H", data, CM_RELOC_OFFSET, CM_RELOC_NEW)
+
+    # 4. grow .text's raw data by one page and bump later sections' raw
+    #    pointers, then insert the page image (done LAST so every offset above
+    #    was written at its pristine location)
+    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    nsec = struct.unpack_from("<H", data, pe + 6)[0]
+    optsz = struct.unpack_from("<H", data, pe + 20)[0]
+    sec0 = pe + 24 + optsz
+    for i in range(nsec):
+        so = sec0 + 40 * i
+        name = bytes(data[so:so + 8]).rstrip(b"\0").decode()
+        rsz, rptr = struct.unpack_from("<II", data, so + 16)
+        if name == ".text":
+            if rsz != 0x17DC00:
+                sys.exit(f".text raw size is {rsz:#x}, expected 0x17dc00")
+            struct.pack_into("<I", data, so + 16, rsz + TEXT_SECTION_GROW)
+        elif rptr >= TEXT_RAW_INSERT_AT and rptr != 0:
+            struct.pack_into("<I", data, so + 20, rptr + TEXT_SECTION_GROW)
+    data[TEXT_RAW_INSERT_AT:TEXT_RAW_INSERT_AT] = page
+    return bytes(data)
 
 
 def patch_compiler(compilers: Path) -> bool:
@@ -673,78 +262,39 @@ def patch_compiler(compilers: Path) -> bool:
             f"  expected {BASE_SHA1}; refusing to patch an unknown build"
         )
 
-    if dst.exists() and sha1(dst) == PATCHED_SHA1:
+    if PATCHED_SHA1 and dst.exists() and sha1(dst) == PATCHED_SHA1:
         return True
 
+    dst_dir.mkdir(parents=True, exist_ok=True)
     # The whole directory is needed: mwcceppc.exe will not start without
     # lmgr326b.dll sitting next to it.
-    dst_dir.mkdir(parents=True, exist_ok=True)
     for f in src_dir.iterdir():
         if f.is_file():
             shutil.copy2(f, dst_dir / f.name)
 
+    # That copy just put the STOCK exe at the PATCHED name. Remove it before
+    # doing any work: everything below can sys.exit -- a drifted AliasPatch.c,
+    # a moved dispatch entry, a blob past EXEC_LIMIT -- and leaving it behind
+    # would strand an unpatched compiler wearing the patched version number.
+    # solo.py takes the compiler path from build.ninja without checking its
+    # sha1, so that file would quietly hand back stock-compiler numbers. The
+    # real write below is atomic, so nothing else recreates it on failure.
+    if dst.exists():
+        dst.unlink()
+
     data = bytearray(src.read_bytes())
+    out = _apply(data)
 
-    off, blob = CAVE_OFFSET, CAVE_BYTES
-    if any(data[off:off + len(blob)]):
-        sys.exit(f"{src}: padding at {off:#x} is not zero, refusing to overwrite")
-    data[off:off + len(blob)] = blob
-
-    for table, entries in ((DISPATCH_OFFSET, DISPATCH),
-                           (VN_DISPATCH_OFFSET, VN_DISPATCH)):
-        for index, stock, replacement in entries:
-            offset = table + 4 * index
-            found = struct.unpack_from("<I", data, offset)[0]
-            if found != stock:
-                sys.exit(
-                    f"{src}: dispatch entry {index} at {offset:#x} is "
-                    f"{found:#x}, expected {stock:#x}"
-                )
-            struct.pack_into("<I", data, offset, replacement)
-
-    # ---- clause H (see the constants above for the mechanism) ----
-    # 1. hook the CodeMotion alias dispatch at VA 0x511ce5
-    off = CM_DISPATCH_JMP_OFFSET
-    if data[off:off + 7] != CM_DISPATCH_JMP_OLD:
-        sys.exit(f"{src}: bytes at {off:#x} are {data[off:off+7].hex()}, "
-                 f"expected {CM_DISPATCH_JMP_OLD.hex()}")
-    data[off:off + 7] = CM_DISPATCH_JMP_NEW
-    # 2. retype the displaced HIGHLOW relocation to a padding no-op
-    found = struct.unpack_from("<H", data, CM_RELOC_OFFSET)[0]
-    if found != CM_RELOC_OLD:
-        sys.exit(f"{src}: reloc word at {CM_RELOC_OFFSET:#x} is {found:#x}, "
-                 f"expected {CM_RELOC_OLD:#x}")
-    struct.pack_into("<H", data, CM_RELOC_OFFSET, CM_RELOC_NEW)
-    # 3. grow .text's raw data by one page and bump later sections' raw
-    #    pointers (all file offsets already written above are below the
-    #    insertion point in .text or belong to sections whose contents do
-    #    not move relative to their own start; the insertion happens LAST)
-    pe = struct.unpack_from("<I", data, 0x3C)[0]
-    nsec = struct.unpack_from("<H", data, pe + 6)[0]
-    optsz = struct.unpack_from("<H", data, pe + 20)[0]
-    sec0 = pe + 24 + optsz
-    for i in range(nsec):
-        o = sec0 + 40 * i
-        name = bytes(data[o:o + 8]).rstrip(b"\0").decode()
-        rsz, rptr = struct.unpack_from("<II", data, o + 16)
-        if name == ".text":
-            if rsz != 0x17DC00:
-                sys.exit(f"{src}: .text raw size is {rsz:#x}, expected 0x17dc00")
-            struct.pack_into("<I", data, o + 16, rsz + TEXT_SECTION_GROW)
-        elif rptr >= TEXT_RAW_INSERT_AT and rptr != 0:
-            struct.pack_into("<I", data, o + 20, rptr + TEXT_SECTION_GROW)
-    data[TEXT_RAW_INSERT_AT:TEXT_RAW_INSERT_AT] = bytes(TEXT_SECTION_GROW)
-    # 4. the clause H handler, into the newly created zero page
-    data[TEXT_RAW_INSERT_AT:TEXT_RAW_INSERT_AT + len(CAVE2_BYTES)] = CAVE2_BYTES
+    result = sha1_bytes(out)
+    if PATCHED_SHA1 is None:
+        print(f"NOTE: PATCHED_SHA1 unset; this build is {result}")
+    elif result != PATCHED_SHA1:
+        sys.exit(f"patched compiler has SHA-1 {result}, expected {PATCHED_SHA1}")
 
     tmp = dst.with_suffix(".exe.tmp")
-    tmp.write_bytes(bytes(data))
-    result = sha1(tmp)
-    if result != PATCHED_SHA1:
-        tmp.unlink()
-        sys.exit(f"patched compiler has SHA-1 {result}, expected {PATCHED_SHA1}")
+    tmp.write_bytes(out)
     os.replace(tmp, dst)
-    print(f"Patched compiler written to {dst}")
+    print(f"Patched compiler written to {dst}  (sha1 {result})")
     return True
 
 
