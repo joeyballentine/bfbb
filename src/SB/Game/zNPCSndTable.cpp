@@ -31,16 +31,14 @@ void NPCS_Shutdown()
 
 void NPCS_SndTimersUpdate(F32 dt)
 {
-    // non-matching: only producing one lfs instruction for -1.0f
     for (S32 i = 0; i < SND_COUNT; i++)
     {
-        g_tmrz_sndplay[i] = MAX(g_tmrz_sndplay[i] - dt, -1.0f);
+        g_tmrz_sndplay[i] = MAX(-1.0f, g_tmrz_sndplay[i] - dt);
     }
 }
 
 void NPCS_SndTimersReset()
 {
-    // non-matching: missing lfs for -1.0f
     for (S32 i = 0; i < SND_COUNT; i++)
     {
         g_tmrz_sndplay[i] = -1.0f;
