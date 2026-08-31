@@ -361,6 +361,9 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     //
     // Read now, before anything can resize the window: this is the size the port
     // booted with, and it is deliberately NOT updated afterwards.
+    // Samples first: the surfaces are made when the size is set, and how many
+    // samples they carry has to be decided before they exist.
+    rw::d3d::setVirtualScreenSamples(iScreenMultiSample());
     rw::d3d::setVirtualScreen(iScreenWidth(), iScreenHeight());
     if (!rw::Engine::open(&params))
     {
@@ -593,6 +596,20 @@ RwBool RwEngineStart(void)
         printf("bfbb:   (a display that is asleep or switched off does this)\n");
         fflush(stdout);
         return FALSE;
+    }
+
+    // Said out loud because both can be refused by the card rather than by the
+    // setting, and because alpha to coverage is what decides whether the blurred
+    // edge of a cutout mixes into the scene behind it or into whatever was drawn
+    // there first. Only now: the surfaces are made when the device comes up, and
+    // until then there is nothing to have granted anything.
+    {
+        S32 granted = (S32)rw::d3d::getVirtualScreenSamples();
+        S32 asked = iScreenMultiSample();
+        printf("bfbb: %dx MSAA%s; alpha to coverage %s\n", (int)granted,
+               granted >= asked ? "" : " (asked for more; the card refused)",
+               rw::d3d::getAlphaToCoverage() ? "on" : "off");
+        fflush(stdout);
     }
 #endif
 

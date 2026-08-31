@@ -123,7 +123,16 @@ void iSnapshotCapture()
         return;
     }
 
-    IDirect3DSurface9* src = rw::d3d::d3d9Globals.defaultRenderTarget;
+    // The RESOLVED frame, not defaultRenderTarget: with multisampling on, the
+    // surface the scene is drawn into holds several samples per pixel and
+    // nothing can sample or stretch from it. resolveVirtualScreen collapses it
+    // and hands back the single-sampled copy; it answers null only when there
+    // is no virtual screen at all, and then the back buffer is what was drawn.
+    IDirect3DSurface9* src = rw::d3d::resolveVirtualScreen();
+    if (src == NULL)
+    {
+        src = rw::d3d::d3d9Globals.defaultRenderTarget;
+    }
     if (src == NULL)
     {
         return;

@@ -246,6 +246,32 @@ F32 iScreenAnchorY(F32 y)
     return y + sAnchorOffsetY;
 }
 
+// Samples per pixel, from config.ini's video.msaa. Held here for the reason the
+// render size is: RenderWareInit reads it when it makes the render surfaces,
+// and the code that does must not learn what config.ini is.
+static S32 sMultiSample = 1;
+
+S32 iScreenMultiSample()
+{
+    return sMultiSample;
+}
+
+void iScreenSetMultiSample(S32 samples)
+{
+    // 1 is off. D3D9 names its levels after the sample count, so the number is
+    // the setting, and anything that is not a level the device grants falls
+    // back to none when the surfaces are made.
+    if (samples < 1 || samples > 16)
+    {
+        printf("bfbb: %d is not a sample count this can render at; staying at %d\n",
+               (int)samples, (int)sMultiSample);
+        fflush(stdout);
+        return;
+    }
+
+    sMultiSample = samples;
+}
+
 void iScreenSetSize(S32 width, S32 height)
 {
     if (width <= 0 || height <= 0 || width > kMaxDimension || height > kMaxDimension)

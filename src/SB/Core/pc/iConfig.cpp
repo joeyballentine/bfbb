@@ -114,6 +114,23 @@ namespace
           "; lower-detail models, and clipped the world at 400 units. Off restores\n"
           "; those limits exactly. Fog is unaffected, and nothing extra is\n"
           "; simulated -- only drawn." },
+        { "video", "msaa", "4",
+          "How many samples each pixel is drawn with.\n"
+          ";\n"
+          "; Antialiasing. The consoles drew one sample per pixel, and their\n"
+          "; edges were a quarter the size on screen that yours are; at a PC\n"
+          "; resolution the same edges are visibly stepped. More samples means\n"
+          "; smoother edges on everything the game draws.\n"
+          ";\n"
+          "; It also decides how transparent parts of a texture are drawn.\n"
+          "; Foliage, fences, grates and cave walls are shapes punched out of a\n"
+          "; texture, and their edges blur when magnified. With samples to\n"
+          "; spread them across, that blur mixes into whatever is really behind\n"
+          "; the surface. With one sample it mixes into whatever was drawn there\n"
+          "; first, which is what makes the sky show through a cave wall.\n"
+          ";\n"
+          "; 1 is off. 2, 4 and 8 are the counts most cards offer, and 4 is the\n"
+          "; default. A count the card will not grant falls back to off." },
         { "video", "shadow_resolution", "auto",
           "How sharp the shadows under characters are.\n"
           ";\n"

@@ -192,4 +192,8 @@ S32 iScreenUICover();
 // surface of, is reported and refused; the size already in force stands.
 void iScreenSetSize(S32 width, S32 height);
 
+// Samples per pixel the frame is rendered with. 1 is off.
+S32 iScreenMultiSample();
+void iScreenSetMultiSample(S32 samples);
+
 #endif
