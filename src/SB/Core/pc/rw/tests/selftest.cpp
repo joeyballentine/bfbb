@@ -531,11 +531,11 @@ static void test_alpha_kind()
     const RwUInt8 dxt1Keyed[8] = { 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00 };
     const RwUInt8 dxt1NoHole[8] = { 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00 };
 
-    check(rw::d3d::classifyDXTAlpha(1, dxt1Opaque, 4, 4) == rw::d3d::ALPHAOPAQUE,
+    check(rw::classifyDXTAlpha(1, dxt1Opaque, 4, 4) == rw::ALPHAOPAQUE,
           "a four-colour DXT1 block is opaque");
-    check(rw::d3d::classifyDXTAlpha(1, dxt1Keyed, 4, 4) == rw::d3d::ALPHAKEYED,
+    check(rw::classifyDXTAlpha(1, dxt1Keyed, 4, 4) == rw::ALPHAKEYED,
           "a three-colour DXT1 block using its hole is keyed");
-    check(rw::d3d::classifyDXTAlpha(1, dxt1NoHole, 4, 4) == rw::d3d::ALPHAOPAQUE,
+    check(rw::classifyDXTAlpha(1, dxt1NoHole, 4, 4) == rw::ALPHAOPAQUE,
           "and is opaque when it never indexes the hole -- the mode alone is not "
           "transparency");
 
@@ -544,15 +544,15 @@ static void test_alpha_kind()
     RwUInt8 dxt3[16];
     memset(dxt3, 0, sizeof(dxt3));
     memset(dxt3, 0xFF, 8);
-    check(rw::d3d::classifyDXTAlpha(3, dxt3, 4, 4) == rw::d3d::ALPHAOPAQUE,
+    check(rw::classifyDXTAlpha(3, dxt3, 4, 4) == rw::ALPHAOPAQUE,
           "every DXT3 nibble at 15 is opaque");
 
     dxt3[0] = 0x0F; // texel 0 opaque, texel 1 clear
-    check(rw::d3d::classifyDXTAlpha(3, dxt3, 4, 4) == rw::d3d::ALPHAKEYED,
+    check(rw::classifyDXTAlpha(3, dxt3, 4, 4) == rw::ALPHAKEYED,
           "a DXT3 nibble at 0 among opaque ones is keyed");
 
     dxt3[0] = 0x8F; // texel 1 lands in between
-    check(rw::d3d::classifyDXTAlpha(3, dxt3, 4, 4) == rw::d3d::ALPHAGRADED,
+    check(rw::classifyDXTAlpha(3, dxt3, 4, 4) == rw::ALPHAGRADED,
           "and one nibble anywhere in between makes the whole surface graded");
 
     // DXT5: alpha0 above alpha1 is the eight-value ramp, and every index in
@@ -561,15 +561,15 @@ static void test_alpha_kind()
     memset(dxt5, 0, sizeof(dxt5));
     dxt5[0] = 0xFF;
     dxt5[1] = 0x00;
-    check(rw::d3d::classifyDXTAlpha(5, dxt5, 4, 4) == rw::d3d::ALPHAOPAQUE,
+    check(rw::classifyDXTAlpha(5, dxt5, 4, 4) == rw::ALPHAOPAQUE,
           "a DXT5 block indexing only its high endpoint is opaque");
 
     dxt5[2] = 0x09; // texels 0 and 1 take index 1, the low endpoint
-    check(rw::d3d::classifyDXTAlpha(5, dxt5, 4, 4) == rw::d3d::ALPHAKEYED,
+    check(rw::classifyDXTAlpha(5, dxt5, 4, 4) == rw::ALPHAKEYED,
           "one indexing both endpoints, 255 and 0, is keyed");
 
     dxt5[2] = 0x02; // texel 0 takes index 2, six sevenths of the way up
-    check(rw::d3d::classifyDXTAlpha(5, dxt5, 4, 4) == rw::d3d::ALPHAGRADED,
+    check(rw::classifyDXTAlpha(5, dxt5, 4, 4) == rw::ALPHAGRADED,
           "and one reaching an interpolated step is graded");
 
     // A surface smaller than the 4x4 block grid is padded out to it, and what
@@ -579,12 +579,12 @@ static void test_alpha_kind()
     dxt3[0] = 0xFF; // texels 0 and 1 -- the top row of a 2x2
     dxt3[1] = 0x08; // texel 2, outside a 2-wide surface, in between
     dxt3[2] = 0xFF; // texels 4 and 5 -- the bottom row
-    check(rw::d3d::classifyDXTAlpha(3, dxt3, 4, 4) == rw::d3d::ALPHAGRADED,
+    check(rw::classifyDXTAlpha(3, dxt3, 4, 4) == rw::ALPHAGRADED,
           "the padding of a 2x2 surface is graded when read as a whole block");
-    check(rw::d3d::classifyDXTAlpha(3, dxt3, 2, 2) == rw::d3d::ALPHAOPAQUE,
+    check(rw::classifyDXTAlpha(3, dxt3, 2, 2) == rw::ALPHAOPAQUE,
           "and is not read at all at the surface's real size");
 
-    check(rw::d3d::classifyDXTAlpha(2, dxt3, 4, 4) == rw::d3d::ALPHAGRADED,
+    check(rw::classifyDXTAlpha(2, dxt3, 4, 4) == rw::ALPHAGRADED,
           "a format that is not DXT1, 3 or 5 is graded -- the safe answer, and "
           "the one every raster had before this existed");
 }

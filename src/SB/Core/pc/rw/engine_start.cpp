@@ -435,6 +435,12 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     // in windowed mode and are not in either fullscreen mode, and taking the
     // window's size would make `mode = fullscreen` silently override the
     // resolution setting.
+    //
+    // The samples and the coverage setting go in first, for the reason the D3D9
+    // arm gives: both are properties of the surface, and the surface is built
+    // the first time a camera raster asks for it.
+    rw::gl3::setVirtualScreenSamples(iScreenMultiSample());
+    rw::gl3::setAlphaToCoverageEnabled(iScreenAlphaToCoverage());
     rw::gl3::setVirtualScreen(iScreenWidth(), iScreenHeight());
     if (!rw::Engine::open(&params))
     {
@@ -572,6 +578,12 @@ RwBool RwEngineStart(void)
         fflush(stdout);
         return FALSE;
     }
+
+    // Build the virtual screen now rather than leaving it to whichever camera
+    // raster is created first. There is a context to build it in from here, the
+    // sample count it is granted is what the report below prints, and D3D9 makes
+    // its surfaces at this same point -- when the device comes up.
+    rw::gl3::virtualScreenFramebuffer();
 #endif
 
 #ifdef RW_D3D9
@@ -599,17 +611,26 @@ RwBool RwEngineStart(void)
         return FALSE;
     }
 
+#endif
+
+#if defined(RW_D3D9) || defined(RW_GL3)
     // Said out loud because both can be refused by the card rather than by the
     // setting, and because alpha to coverage is what decides whether the blurred
     // edge of a cutout mixes into the scene behind it or into whatever was drawn
     // there first. Only now: the surfaces are made when the device comes up, and
     // until then there is nothing to have granted anything.
     {
+#ifdef RW_D3D9
         S32 granted = (S32)rw::d3d::getVirtualScreenSamples();
+        S32 coverage = rw::d3d::getAlphaToCoverage();
+#else
+        S32 granted = (S32)rw::gl3::getVirtualScreenSamples();
+        S32 coverage = rw::gl3::getAlphaToCoverage();
+#endif
         S32 asked = iScreenMultiSample();
         printf("bfbb: %dx MSAA%s; alpha to coverage %s\n", (int)granted,
                granted >= asked ? "" : " (asked for more; the card refused)",
-               rw::d3d::getAlphaToCoverage() ? "on" : "off");
+               coverage ? "on" : "off");
         fflush(stdout);
     }
 #endif
