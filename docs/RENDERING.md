@@ -2,15 +2,20 @@
 
 ## Where things stand
 
-Nothing in this document is implemented. It is an audit of two questions asked
-in the same sitting -- what modern graphical effects the port could realistically
-gain as optional settings, and whether it could also gain a fixed-function mode
-for old hardware -- and it records what reading the pipeline turned up for each.
-The file:line references are to the tree as of the `treedome` branch.
+This began as an audit of two questions asked in the same sitting -- what modern
+graphical effects the port could realistically gain as optional settings, and
+whether it could also gain a fixed-function mode for old hardware -- and it
+records what reading the pipeline turned up for each. The file:line references
+are to the tree as of the `treedome` branch.
 
 The two halves pull in opposite directions on purpose. One raises the ceiling,
 the other lowers the floor, and the last section of part two is about what it
 costs to want both.
+
+Shipped from part one since: MSAA and alpha-to-coverage as `video.msaa` and
+`video.alpha_to_coverage`, supersampling named as such in `video.width` /
+`video.height`, and per-pixel lighting as `video.per_pixel_lighting`.
+Anisotropic filtering is still unexposed and still the best ratio on the list.
 
 ## What the pipeline already is
 
@@ -38,6 +43,49 @@ render resolution is already the shape the engine is in. See
 
 The current hardware floor is Shader Model 2.0: everything compiles to `vs_2_0`
 and `ps_2_0` (`shaders/make_default.cmd`, `rw/shaders/make_shaders.cmd`).
+
+## What the assets are
+
+Measured across all 55 level `.HOP` files, bounded to each asset's extent from
+the file's own `AHDR` dictionary. Four numbers decide what any lighting work can
+do, and two of them are the ones this document previously listed as unverified.
+
+**The world is baked vertex colour, all of it.** 1,313,413 world vertices across
+two `JSP ` assets per level, 100% carrying prelit colour. Clearing it leaves the
+world flat-shaded, which is a known-good mod.
+
+**Only 36.4% of world vertices carry normals, and it is all-or-nothing per
+level: 34 of 55 levels have none.** This, not the bake, is what stops the world
+being lit at run time. Levels with normals include b301-b303, hb01-hb06, hb08-hb10,
+rb01-rb03, gy01, gy03, jf02, sm01, bb02 and bc03; jf01, gl01-gl03, kf01, kf02,
+kf04, kf05, hb00, hb07, db01-db06 and the rest have none. Generating them at load is tractable --
+hash positions across the whole JSP clump, area-weight the face normals, split on
+a smoothing angle, set the flag before `iEnv.cpp:68`'s `RpAtomicInstance` runs --
+and the 21 levels that ship normals are a free correctness test for the generator.
+
+**Every light kit in the game is directional-only.** 34 distinct `LKIT` assets,
+each 4 to 8 directionals plus at most one ambient. No point light and no spot
+light ships in any of them; the only point light the game ever makes is
+`zDiscoFloor.cpp`'s, at run time. Anything that needs a per-light budget can be
+sized for directionals and fall back for the rest.
+
+**No placed dynamic lights ship at all.** Zero `LITE` assets in the whole game,
+so `zLight.cpp`'s subsystem -- flicker, strobe, dim, cauldron -- has no data to
+run on.
+
+One loose end worth an experiment: 17 of the 55 levels ship a non-zero
+`bspLightKit` in their ENV asset, an authored light rig for the world.
+`zScene.cpp:2406` reads it into `env->lightKit` and nothing anywhere reads that
+field back -- `xEnv.cpp:19` nulls it and that is the only other mention. Enabling
+it during `zEnvRender` is a one-line change and would show whether it is still
+good data or a leftover from an earlier lighting model.
+
+A warning for anyone repeating the measurement: scan the asset extents, not from
+the `JSP\0` marker. A HOP holds ~167 `MODL` assets alongside its two JSPs, and
+the JSP's clump comes *before* its `JSP\0` header, which follows the `0xBEEF01`
+collision block. Scanning marker-to-EOF measures the models instead and reports
+the world as mostly unlit. `AHDR` fields are big-endian: `assetID, type(4cc),
+offset, size, plus, flags`, then an `ADBG` sub-chunk with the name.
 
 ---
 
@@ -97,14 +145,23 @@ with it. World sectors are large polygons, so the factor is subtly wrong across
 them. Computing it in the pixel shader from interpolated `w` is a few lines, and
 opens the door to exponential and height fog as options.
 
-### Per-pixel lighting
+### Per-pixel lighting -- shipped as `video.per_pixel_lighting`
 
-librw lights per vertex -- ambient, directional, point and spot, all summed in
+librw lit per vertex -- ambient, directional, point and spot, all summed in
 `default_VS.hlsl` and `skin_VS.hlsl`. The characters are low-poly, so the
-shading is visibly faceted on curved surfaces. Moving the lighting into the
-pixel shader is contained (interpolate normal and world position, add PS
-variants) and would visibly improve every character in the game without
-touching any art. Good ratio, and it composes with everything below.
+shading was visibly faceted on curved surfaces.
+
+The setting moves ambient and directional lighting into the pixel shader for the
+default and skin pipelines. Directional only, because every light kit in the game
+is (see above); an atomic reached by a point or spot light falls back to the
+per-vertex path for that draw, which in practice is only the disco floor. matfx
+and skinmatfx stay per-vertex -- doubling their permutations to reach the two
+env-mapped surfaces in the game is not worth it.
+
+It stays inside `ps_2_0`, so the hardware floor does not move: eight unrolled
+directionals plus ambient is about forty instructions of the sixty-four
+available. Unused light slots are uploaded zeroed rather than skipped, which is
+what makes one shader cover every light count.
 
 ### Better bloom
 
@@ -132,11 +189,12 @@ following is started.
 ### SSAO
 
 Realistic once depth exists, with one important caveat. **The world's lighting
-is baked vertex colour**, which already contains authored ambient occlusion.
-Naive SSAO will darken every corner a second time and look muddy. It has to land
-as a multiply on the ambient term only, tuned tight and small-radius, catching
-the creases the bake missed. Reconstruct normals from depth rather than trusting
-geometry normals -- whether world sectors carry them is unverified.
+is baked vertex colour** -- measured, 100% of it -- and it already contains
+authored ambient occlusion. Naive SSAO will darken every corner a second time and
+look muddy. It has to land as a multiply on the ambient term only, tuned tight
+and small-radius, catching the creases the bake missed. Reconstruct normals from
+depth rather than trusting geometry normals: two thirds of the levels have none
+to trust.
 
 ### Depth of field
 
@@ -147,10 +205,19 @@ fights the player's ability to judge a jump.
 
 `x/xShadow.cpp` projects a raster blob; `xShadowSimple.cpp` is the cheaper one.
 Real shadows for the player and NPCs would be the largest single visual upgrade
-available, and also the largest job: a per-level light direction (the
-directional lights are in `zLight.cpp`), a shadow target, a caster pass, and
-receiver sampling in the world pixel shader. Multi-week. The cheaper middle
-ground is to keep the projected shadow and make it soft and correctly fitted.
+available, and also the largest job.
+
+Less of it is missing than it looks. `xShadow.cpp` already creates an offscreen
+perspective camera and its raster (`SetupShadow:123`, `ShadowCameraCreatePersp`),
+renders the caster into it, and projects the result onto receivers, with a light
+direction plumbed in through `xShadowSetLight`. What has to be added is a depth
+format for that target, a light-space projection instead of the fitted
+perspective one, and receiver sampling in the default and skin pixel shaders --
+which the per-pixel lighting setting has now given a place to live.
+
+Still multi-week, and world receivers need the normals problem solved first.
+The cheaper middle ground remains: keep the projected shadow and make it soft
+and correctly fitted.
 
 ## Ruled out
 
@@ -166,11 +233,13 @@ parameters. It would not look better, it would look wrong.
 
 ## If only one thing gets done
 
-Anisotropic filtering and alpha-to-coverage. Together they are a couple of days
-and they fix the two things that actually make the game read as low-resolution
-at high render sizes. SSAO is genuinely reachable but it is the depth-source
-decision plus a careful fight with the baked lighting, so it is a project rather
-than a setting.
+Anisotropic filtering. Alpha-to-coverage was the other half of this
+recommendation and has shipped; aniso is the remaining one that fixes what makes
+the game read as low-resolution at high render sizes, and it is still a day's
+work behind a `maxAniso` that is already plumbed to the sampler.
+
+SSAO is genuinely reachable but it is the depth-source decision plus a careful
+fight with the baked lighting, so it is a project rather than a setting.
 
 ---
 
@@ -277,10 +346,15 @@ Stated plainly so nobody builds on it by accident:
 
 - **Whether the assets ship mipmaps.** Anisotropic and trilinear filtering both
   depend on it and neither does anything without it.
-- **Whether world sector geometry carries normals.** It affects SSAO's normal
-  source and any per-pixel lighting on the world.
-- **That the vertex prelight contains baked AO.** It is the expectation from how
-  the world is lit, not something measured. It decides how SSAO has to be
-  applied, so measure it before tuning anything.
+- **That the vertex prelight contains baked AO.** The prelight itself is measured
+  and universal; that what it contains is occlusion rather than only colour is
+  still the expectation from how the world looks, not something measured. It
+  decides how SSAO has to be applied, so measure it before tuning anything.
+- **Whether the 17 unused `bspLightKit`s are still good data.** They parse and
+  they name real light kits. Nobody has enabled one and looked.
 - **`MaxVertexBlendMatrixIndex` on any specific target.** Four is the typical
   hardware value, not a number read off a device here.
+
+Answered since this list was written: world geometry normals (36.4% of world
+vertices, none at all in 34 of 55 levels) and the world prelight (100%). Both are
+in [What the assets are](#what-the-assets-are).
