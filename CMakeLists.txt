@@ -76,6 +76,35 @@ if(BFBB_BUILD_32BIT)
   add_link_options(-m32)
 endif()
 
+# --- render backend ----------------------------------------------------------
+# Which of librw's three the port is built against.
+#
+#   NULL   no renderer. Headless, and what the shim's selftest runs against --
+#          keeping this working is what lets the RenderWare layer be tested on
+#          a machine with no display at all.
+#   D3D9   Direct3D 9, on a Win32 window the port creates itself.
+#   GL3    OpenGL 3.3 (falling back through 2.1, GLES 3.1 and GLES 2.0), on an
+#          SDL3 window librw creates. Portable, and the only backend that can
+#          ever run off Windows.
+#
+# It is read by three sections below -- the window backend, SDL, and librw
+# itself -- so it is declared HERE rather than beside the add_subdirectory that
+# consumes it. That is not tidying: the window backend's GL3 arm used to sit
+# ahead of this declaration and so tested an empty variable, which meant a fresh
+# configure with -DBFBB_RENDER_BACKEND=GL3 silently took the D3D9 arm.
+#
+# Two things follow the choice and must not be set independently of it:
+# rwplcore.h declares RwIm2DVertex per backend, and rw/layout_im2d.cpp asserts
+# it against the backend's own struct -- which is what stops a mismatched vertex
+# reaching a vertex declaration built from offsetof.
+set(BFBB_RENDER_BACKEND "D3D9" CACHE STRING "Render backend: D3D9, GL3 or NULL")
+set_property(CACHE BFBB_RENDER_BACKEND PROPERTY STRINGS D3D9 GL3 NULL)
+
+# Set by any section that needs SDL built. Both the input backend and the GL3
+# window backend can ask for it, independently, and add_subdirectory may only
+# happen once -- so they raise this and the SDL section below acts on it.
+set(BFBB_NEEDS_SDL OFF)
+
 # --- input backend -----------------------------------------------------------
 # "sdl" is the default and reaches every controller SDL knows: DualSense,
 # Switch Pro, arcade sticks and generic USB pads as well as the Xbox ones,
@@ -124,59 +153,10 @@ elseif(BFBB_INPUT_BACKEND STREQUAL "sdl")
   set(INPUT_SOURCES ${PC_DIR}/iPadHostSDL.cpp ${PC_DIR}/iPadKeyboardWin32.cpp)
   set(INPUT_DEFINES BFBB_INPUT_BACKEND_SDL BFBB_INPUT_HAVE_KEYBOARD)
 
-  if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL/CMakeLists.txt)
-    message(FATAL_ERROR
-      "third_party/SDL is empty -- run: git submodule update --init --recursive\n"
-      "  (or configure with -DBFBB_INPUT_BACKEND=win32 for XInput only)")
-  endif()
+  # Built by the SDL section below rather than here: the GL3 render backend
+  # wants the same library and add_subdirectory may only run once.
+  set(BFBB_NEEDS_SDL ON)
 
-  # Only the gamepad half of SDL is wanted. Video stays ON despite no SDL window
-  # ever being created: SDL gates its DirectInput joystick driver on the video
-  # target, so turning video off silently drops support for exactly the older
-  # pads this backend exists to reach. Compiled in and never initialised costs
-  # a larger static library and nothing at run time.
-  set(SDL_SHARED OFF CACHE BOOL "" FORCE)
-  set(SDL_STATIC ON CACHE BOOL "" FORCE)
-  set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
-  set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
-  set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
-  set(SDL_AUDIO OFF CACHE BOOL "" FORCE)
-  set(SDL_CAMERA OFF CACHE BOOL "" FORCE)
-  set(SDL_RENDER OFF CACHE BOOL "" FORCE)
-  set(SDL_GPU OFF CACHE BOOL "" FORCE)
-  set(SDL_DIALOG OFF CACHE BOOL "" FORCE)
-  set(SDL_POWER OFF CACHE BOOL "" FORCE)
-
-  # libusb is not an optimisation. SDL routes five devices EXCLUSIVELY through
-  # it -- the Switch 2 Pro controller, both Switch 2 Joy-Cons, the Switch 2
-  # GameCube controller and the original GameCube adapter -- because they look
-  # like HID devices but are read over raw USB bulk endpoints, so SDL's Windows
-  # HID backend is told to skip them. Without libusb they enumerate as nameless
-  # joysticks with no layout and cannot be played on at all.
-  #
-  # It needs nothing installed on the player's machine. Those controllers are
-  # composite devices whose bulk interface already carries Microsoft OS
-  # descriptors, so Windows binds it to WinUSB by itself; the HID interface is
-  # separate and stays where it is, which is why the pad goes on working
-  # everywhere else at the same time.
-  #
-  # Linked rather than opened by name. SDL's SHARED mode reads the DLL's name
-  # out of the import library with dlltool or dumpbin, and this toolchain is
-  # clang with neither: the detection falls back to writing the IMPORT LIBRARY's
-  # name into SDL_LIBUSB_DYNAMIC, which SDL_LoadObject can never open. That
-  # fails at run time and silently, which is the worst of both. Linking makes
-  # the DLL a load-time dependency instead -- the same deal the movie decoder's
-  # DLLs are already on, and staged beside the executable the same way.
-  set(SDL_HIDAPI_LIBUSB ON CACHE BOOL "" FORCE)
-  set(SDL_HIDAPI_LIBUSB_SHARED OFF CACHE BOOL "" FORCE)
-
-  add_subdirectory(third_party/SDL EXCLUDE_FROM_ALL)
-
-  # SDL is not warning-clean under this compiler and it is not this project's
-  # code to fix. Same treatment librw gets.
-  target_compile_options(SDL3-static PRIVATE -Wno-everything)
-
-  set(INPUT_LIBS SDL3::SDL3-static)
 else()
   message(FATAL_ERROR "unknown BFBB_INPUT_BACKEND '${BFBB_INPUT_BACKEND}'")
 endif()
@@ -283,19 +263,105 @@ endif()
 # --- window backend ---------------------------------------------------------
 # The one host seam whose implementation is chosen by the RENDER backend rather
 # than by the operating system: librw's EngineOpenParams is per backend, so
-# D3D9 wants a raw HWND and GL3 wants whatever GLFW or SDL hands back. See
-# src/SB/Core/pc/iWindow.h.
+# D3D9 wants a raw HWND and GL3 wants an SDL_Window it creates itself. See
+# src/SB/Core/pc/iWindow.h, which describes that inversion -- under GL3 the
+# window belongs to librw and iWindowSDL.cpp only holds the request until
+# RwEngineStart asks for it.
+#
+# GL3 gets the SDL window on every host, Windows included. It is not the OS that
+# picks this one.
 if(BFBB_RENDER_BACKEND STREQUAL "GL3")
-  message(FATAL_ERROR
-    "BFBB_RENDER_BACKEND=GL3 needs a GLFW or SDL iWindow implementation that does "
-    "not exist yet -- see the GL3 arm of RwEngineOpen in "
-    "src/SB/Core/pc/rw/engine_start.cpp. Use D3D9 or NULL.")
+  set(WINDOW_SOURCES ${PC_DIR}/iWindowSDL.cpp)
+  set(BFBB_NEEDS_SDL ON)
 elseif(WIN32)
   set(WINDOW_SOURCES ${PC_DIR}/iWindowWin32.cpp)
 else()
   # NULL builds headless, so no window is needed and none is provided; a D3D9
   # build off Windows is not a thing.
   set(WINDOW_SOURCES)
+endif()
+
+# --- SDL ---------------------------------------------------------------------
+# One build of SDL for however many things asked for it. Both the input backend
+# and the GL3 window backend can, and CMake permits add_subdirectory once.
+if(BFBB_NEEDS_SDL)
+  if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL/CMakeLists.txt)
+    message(FATAL_ERROR
+      "third_party/SDL is empty -- run: git submodule update --init --recursive\n"
+      "  (or configure with -DBFBB_INPUT_BACKEND=win32 -DBFBB_RENDER_BACKEND=D3D9)")
+  endif()
+
+  # Video stays ON even for an input-only build, where no SDL window is ever
+  # created: SDL gates its DirectInput joystick driver on the video target, so
+  # turning video off silently drops support for exactly the older pads the SDL
+  # input backend exists to reach. Compiled in and never initialised costs a
+  # larger static library and nothing at run time. Under GL3 it is the window.
+  #
+  # SDL_RENDER stays off with it. That is SDL's own 2D drawing API, which
+  # neither the game nor librw uses -- librw talks to OpenGL directly and only
+  # wants SDL for the window, the context and the swap.
+  set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+  set(SDL_STATIC ON CACHE BOOL "" FORCE)
+  set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
+  set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
+  set(SDL_AUDIO OFF CACHE BOOL "" FORCE)
+  set(SDL_CAMERA OFF CACHE BOOL "" FORCE)
+  set(SDL_RENDER OFF CACHE BOOL "" FORCE)
+  set(SDL_GPU OFF CACHE BOOL "" FORCE)
+  set(SDL_DIALOG OFF CACHE BOOL "" FORCE)
+  set(SDL_POWER OFF CACHE BOOL "" FORCE)
+
+  # libusb is not an optimisation. SDL routes five devices EXCLUSIVELY through
+  # it -- the Switch 2 Pro controller, both Switch 2 Joy-Cons, the Switch 2
+  # GameCube controller and the original GameCube adapter -- because they look
+  # like HID devices but are read over raw USB bulk endpoints, so SDL's Windows
+  # HID backend is told to skip them. Without libusb they enumerate as nameless
+  # joysticks with no layout and cannot be played on at all.
+  #
+  # It needs nothing installed on the player's machine. Those controllers are
+  # composite devices whose bulk interface already carries Microsoft OS
+  # descriptors, so Windows binds it to WinUSB by itself; the HID interface is
+  # separate and stays where it is, which is why the pad goes on working
+  # everywhere else at the same time.
+  #
+  # Linked rather than opened by name. SDL's SHARED mode reads the DLL's name
+  # out of the import library with dlltool or dumpbin, and this toolchain is
+  # clang with neither: the detection falls back to writing the IMPORT LIBRARY's
+  # name into SDL_LIBUSB_DYNAMIC, which SDL_LoadObject can never open. That
+  # fails at run time and silently, which is the worst of both. Linking makes
+  # the DLL a load-time dependency instead -- the same deal the movie decoder's
+  # DLLs are already on, and staged beside the executable the same way.
+  set(SDL_HIDAPI_LIBUSB ON CACHE BOOL "" FORCE)
+  set(SDL_HIDAPI_LIBUSB_SHARED OFF CACHE BOOL "" FORCE)
+
+  add_subdirectory(third_party/SDL EXCLUDE_FROM_ALL)
+
+  # SDL is not warning-clean under this compiler and it is not this project's
+  # code to fix. Same treatment librw gets.
+  target_compile_options(SDL3-static PRIVATE -Wno-everything)
+
+  # **Make librw's find_package(SDL3) find the SDL that is already here.**
+  #
+  # librw's GL3/SDL3 arm calls find_package(SDL3 CONFIG REQUIRED) with no
+  # `if(NOT TARGET SDL3::SDL3)` guard around it -- unlike its SDL2 arm, which
+  # has one -- so it goes looking for an INSTALLED SDL and fails on a machine
+  # that has none, even though SDL3::SDL3 is a live target by this line.
+  #
+  # An empty config file on SDL3_DIR satisfies the search and defines nothing,
+  # leaving the target above as the one everything links. This is the same
+  # redirect FetchContent writes for the same reason, and it is done here rather
+  # than by patching the submodule: the librw fork is shared with the GameCube
+  # side of this repository and should not carry a workaround for this build's
+  # directory layout.
+  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/sdl3-redirect/SDL3Config.cmake
+       "# SDL3 is already a target in this build; see the SDL section of the\n"
+       "# top-level CMakeLists.txt. Written by CMake -- do not edit.\n")
+  set(SDL3_DIR ${CMAKE_CURRENT_BINARY_DIR}/sdl3-redirect CACHE PATH "" FORCE)
+endif()
+
+if(BFBB_INPUT_BACKEND STREQUAL "sdl")
+  set(INPUT_LIBS SDL3::SDL3-static)
 endif()
 
 # --- librw -------------------------------------------------------------------
@@ -307,25 +373,14 @@ endif()
 #
 #     git submodule update --init --recursive
 #
-# The render backend. Three of librw's are reachable from here:
-#
-#   NULL   no renderer. Headless, and what the shim's selftest runs against --
-#          keeping this working is what lets the RenderWare layer be tested on
-#          a machine with no display at all.
-#   D3D9   what the port targets today.
-#   GL3    reachable in principle, and NOT yet: it needs an iWindowGlfw.cpp (or
-#          SDL) beside iWindowWin32.cpp and the matching EngineOpenParams arm in
-#          rw/engine_start.cpp, which #errors rather than guessing. GL3's params
-#          differ by which gfx library librw was built against, so there is
-#          nothing sensible to write until that choice is made.
-#
-# RwIm2DVertex follows this: rwplcore.h declares it per backend and
-# rw/layout_im2d.cpp asserts it against the backend's own struct, which is what
-# stops a mismatched vertex reaching a vertex declaration built from offsetof.
-set(BFBB_RENDER_BACKEND "D3D9" CACHE STRING "Render backend: D3D9, GL3 or NULL")
-set_property(CACHE BFBB_RENDER_BACKEND PROPERTY STRINGS D3D9 GL3 NULL)
-
 set(LIBRW_PLATFORM "${BFBB_RENDER_BACKEND}" CACHE STRING "librw render backend" FORCE)
+
+# GL3 only, and it decides the SHAPE of rw::EngineOpenParams -- GLFW's carries a
+# GLFWwindow**, SDL's an SDL_Window** and a fullscreen flag -- so the arm in
+# rw/engine_start.cpp is written against this value and not against GL3 alone.
+# SDL3 rather than GLFW because the port already vendors SDL for controllers.
+set(LIBRW_GL3_GFXLIB "SDL3" CACHE STRING "librw's GL3 windowing library" FORCE)
+
 set(LIBRW_TOOLS OFF CACHE BOOL "" FORCE)
 set(LIBRW_INSTALL OFF CACHE BOOL "" FORCE)
 
