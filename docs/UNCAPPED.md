@@ -634,6 +634,15 @@ Nothing rumbles on that screen.
 
 ## Corrections found by re-auditing this branch
 
+The golden spatula was cleared twice as "rate-correct" and was not. Both looks
+checked `PI * dt` in
+
+    xMat3x3MulRotC(Mat, Mat, 0, 1, 0, PI * dt + sSpatulaGrabbedSpinMult);
+
+found it to be a proper rate, and stopped. The term beside it ramps at a tenth
+per SECOND and is added raw to an angle whose unit is radians per FRAME. Reading
+one operand of an expression is not reading the expression.
+
 The work above was reviewed adversarially after the first play test. What that
 turned up, recorded because each one was a plausible-looking mistake:
 
@@ -781,9 +790,65 @@ list below is how to tell which.
 
 Both are `ctest` cases in `build-pc`.
 
+## The third sweep
+
+After the second, two shapes were still unswept, and both turned out to be
+populated.
+
+### A bounded history pushed once per frame
+
+`missle_record` is a `fixed_queue<missle_record_data, 127>` holding the cruise
+bubble's flight path, one sample a frame. 127 slots is 2.1 seconds on console
+and a quarter of that at 240 fps. The consumer is the explosion cinematic: when
+a missile detonates more than ten units away the camera drifts from six to
+eight world units BACK ALONG the missile's own path, and `eval_missle_path`
+does not clamp its lerp. Past about 190 fps the record is shorter than eight
+units and the camera is extrapolated off the oldest pair of samples, through
+whatever the missile flew past. The roll is worse: `t` reaches a thousand
+uncapped, so one frame's roll becomes a couple of radians.
+
+`zGame`'s frame-time boxcar averages the last two FRAMES. That is a thirtieth
+of a second on console and an eighth of that at 240 fps -- the one filter
+between an uneven frame and every system's `dt`, and it stops filtering exactly
+where jitter starts to matter most, since a millisecond hitch is a sixteenth of
+a console frame and a quarter of a 240 fps one.
+
+Every other bounded container in the tree is event-driven, seconds-gated or
+distance-gated. `containers.h` holds the only ring primitives, and all nine
+instantiations were enumerated. The frame-amortised work queues -- `zLOD`'s
+round-robin, the shadow caches -- are the INVERSE of this shape: a higher frame
+rate refreshes them sooner, which is the safe direction.
+
+### A quantity whose unit is a frame
+
+Shape 9, above. What it caught:
+
+    zEntPickup.cpp:1266     the grabbed golden spatula. See the correction below
+    zNPCTypeBossSandy.cpp   the limb springs' node velocity, +-0.05 of a limb
+                            per frame, added on the RENDER path
+    zEntHangable.cpp:341    the candle test compares a per-frame displacement
+                            against a fixed band, so above 60 fps the band never
+                            opens and the candles stay lit
+    zEntPlayer.cpp:7889     the downhill stick-down takes the square root of a
+                            per-frame distance, so the pull per second grows
+                            with the square root of the frame rate
+    xEnt.cpp:1695           step-up is gated on a per-frame displacement against
+                            0.001, which is 3.2 units a second at 3200 fps
+    zEntPlayer.cpp:359      the wand bubbles inherit the wand's displacement
+                            since the last spawn as a velocity in units a second
+
+### A regression this branch introduced
+
+`fizzicalSlack` consumes a rope-length delta that `zLasso_Render` stamps every
+RENDERED frame, but the update it runs from is now gated to 60 Hz for the FIR
+filters beside it. At 240 fps three of every four deltas were overwritten before
+it saw them, so the sum telescoped to a quarter of the real length change while
+the drain still took the whole window, and the rope read taut. Gating an update
+does not gate what writes into it.
+
 ## Telling a real site from a false one
 
-Eight things wear the same clothes, in rough order of how often they turn up:
+Nine things wear the same clothes, in rough order of how often they turn up:
 
 1. A RATE. Multiplied by a timestep, ACCUMULATES into persistent state. Needs
    `dt`. Example: the hazard spin rates.
@@ -809,6 +874,14 @@ Eight things wear the same clothes, in rough order of how often they turn up:
    the filter less smooth as the frame rate rises. No coefficient can be
    rebased to fix this; the samples have to arrive at a fixed rate. Examples:
    `xFXStreakUpdate`, `zLasso_Update`, the cruise bubble wake.
+9. A QUANTITY WHOSE UNIT IS A FRAME. Not a rate against a wrong constant --
+   a value that IS "per frame", so every use of it is wrong anywhere but 60
+   fps. Two spellings: a delta between this frame and last used as a velocity
+   or compared against a threshold (`d = pos - old_pos`, then `if (d > 20)`),
+   and a per-frame increment written in one function and added in another
+   (`vel1 = 0.05f` at goal entry, `node1 += vel1` in the renderer). The write
+   and the read are usually in different functions, which is what hides it.
+   Examples: the chandelier's candle test, Sandy's limb springs.
 8. AN ACCUMULATOR NEVER TAKEN BACK. `x += dt; if (x < period) return;` with no
    `x -= period` anywhere. It reads as a rate limiter and is one exactly once,
    after which the gate stays open and the body runs every frame. Example:
