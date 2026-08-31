@@ -74,6 +74,12 @@ build-pc-d3d9/
 build-ci/
 #   build-pc-rel/   a Release configuration, which is a different cache again.
 build-pc-rel/
+#   build-debug/ and build-release/ are what build-debug.bat and
+#   build-release.bat configure, and bin/ is where they put the exe, the DLLs
+#   it needs and your config.ini.
+build-debug/
+build-release/
+/bin/
 
 # Out-of-tree librw builds. Configuring a backend on its own is the quickest
 # way to find out whether it compiles at all before the shim is ready for it --
