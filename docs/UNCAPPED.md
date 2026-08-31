@@ -273,11 +273,25 @@ step, so its debris leaves at `(1/60)/dt` times the intended speed — four time
 too fast at 240 fps. A caller that subdivides its frame, like the Dutchman's
 beam, has the opposite problem.
 
-Fixed once, in `xParEmitterEmit`: the count keeps the caller's window, the step
-takes `globals.update_dt`. At a sixtieth of a second the two are the same number
-and nothing changes. This is what makes every "left alone as a count" entry
-below correct rather than merely correct in count, and it is why the firework
-burst can pass `1/60` safely.
+Fixed in `xParEmitterEmitCustom`: the count keeps the caller's window, the step
+takes the frame's own share of it. This is what makes every "left alone as a
+count" entry below correct rather than merely correct in count, and it is why
+the firework burst can pass `1/60` safely.
+
+The first version of this fix put the override in `xParEmitterEmit` itself and
+set `par_dt = globals.update_dt` for everyone, on the reasoning that at a
+sixtieth of a second the two are the same number. They are not. Four callers
+pass a THIRTIETH -- `zEntHangable.cpp:154` and `:253`, `zGust.cpp:331`, and the
+`eEventEmit` handler in `xParEmitter.cpp` -- and their particles came out at
+half their console speed at 60 fps as well as above it. Only the caller knows
+how many console frames its window stands for, so `xParEmitterEmitCustom` takes
+that count as `par_frames` and the four pass `2.0f`. Everything else means the
+one console frame that is the default.
+
+Still divergent, and left: the Dutchman's beam subdivides its frame and passes
+`ddt`, so on console its plasma and sparks got SLOWER the faster the beam swept.
+They no longer do. That only shows while the beam covers more than one and a
+half segment widths in a frame.
 
 ## A rate constant that is not a rate
 
