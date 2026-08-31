@@ -2097,6 +2097,40 @@ void zNPCBSandy::Process(xScene* xscn, F32 dt)
     this->curveNode[1].color.g = (U8)(255.0f * this->curveNodeG);
     this->curveNode[1].color.b = (U8)(255.0f * this->curveNodeB);
 
+    // One laser beam a frame is a rate per frame. Each pass inserts two ribbon
+    // joints -- a base on the arena and a tip overhead -- and they live
+    // cfg.life_time, so four times the frames means four times as many beams
+    // alive and four times the flicker. The joint queue is bounded as well, so
+    // the extra beams evict the older ones before they have faded.
+#ifdef PLATFORM_PC
+    if (xFrameEmitCount(1.0f, dt) != 0)
+    {
+        this->laserShow.set_curve(&this->curveNode[0], 2);
+
+        whichPoint = (S32)(15.5f * xurand());
+
+        xVec3Copy(&point, &this->laserPoint[whichPoint]);
+
+        normal.x = -point.z;
+        normal.y = 0.0f;
+        normal.z = point.x;
+
+        xVec3Normalize(&normal, &normal);
+
+        this->laserShow.insert(point, normal, 1.0f, 1.0f, 0);
+
+        spread = 2.0f * (xurand() - 0.5f);
+        spread = spread * (1.5f - (0.5f * spread) * spread);
+        point.x = 20.0f * spread;
+
+        spread = 2.0f * (xurand() - 0.5f);
+        spread = spread * (1.5f - (0.5f * spread) * spread);
+        point.z = 20.0f * spread;
+        point.y = 40.0f;
+
+        this->laserShow.insert(point, normal, 1.0f, 1.0f, 0);
+    }
+#else
     this->laserShow.set_curve(&this->curveNode[0], 2);
 
     whichPoint = (S32)(15.5f * xurand());
@@ -2121,6 +2155,7 @@ void zNPCBSandy::Process(xScene* xscn, F32 dt)
     point.y = 40.0f;
 
     this->laserShow.insert(point, normal, 1.0f, 1.0f, 0);
+#endif
 
     if (this->bossFlags & 0x800)
     {
