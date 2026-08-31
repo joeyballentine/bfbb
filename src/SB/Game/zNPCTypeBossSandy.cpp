@@ -3083,9 +3083,22 @@ S32 zNPCGoalBossSandyIdle::Process(en_trantype* trantype, F32 dt, void* updCtxt,
     newAt.y = 0.0f;
 
     xVec3Normalize(&newAt, &newAt);
+#ifdef PLATFORM_PC
+    // A one-pole filter on the boss's facing: model->Mat->at is last
+    // frame's value, xEntEndUpdate copies frame->mat.at back over it, so
+    // the two weights close a fraction of the remaining angle every
+    // frame. At 240 fps she turns to face the player four times as fast
+    // and the lead-in before a charge disappears.
+    F32 turn = xFrameApproach(0.02f, dt);
+
+    xVec3SMul((xVec3*)&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 1.0f - turn);
+
+    xVec3AddScaled((xVec3*)&sandy->frame->mat.at, &newAt, turn);
+#else
     xVec3SMul((xVec3*)&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 0.98f);
 
     xVec3AddScaled((xVec3*)&sandy->frame->mat.at, &newAt, 0.02f);
+#endif
 
     sandy->frame->mat.at.y = 0.0f;
     xVec3Normalize(&sandy->frame->mat.at, &sandy->frame->mat.at);
@@ -3135,9 +3148,18 @@ S32 zNPCGoalBossSandyTaunt::Process(en_trantype* trantype, F32 dt, void* updCtxt
     newAt.y = 0.0f;
 
     xVec3Normalize(&newAt, &newAt);
+#ifdef PLATFORM_PC
+    // The same facing filter as in NPCGoalTaunt; see the note there.
+    F32 turn = xFrameApproach(0.1f, dt);
+
+    xVec3SMul((xVec3*)&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 1.0f - turn);
+
+    xVec3AddScaled((xVec3*)&sandy->frame->mat.at, &newAt, turn);
+#else
     xVec3SMul((xVec3*)&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 0.9f);
 
     xVec3AddScaled((xVec3*)&sandy->frame->mat.at, &newAt, 0.1f);
+#endif
 
     sandy->frame->mat.at.y = 0.0f;
     xVec3Normalize(&sandy->frame->mat.at, &sandy->frame->mat.at);
@@ -3174,9 +3196,18 @@ S32 zNPCGoalBossSandyChase::Process(en_trantype* trantype, F32 dt, void* updCtxt
     newAt.y = 0.0f;
 
     xVec3Normalize(&newAt, &newAt);
+#ifdef PLATFORM_PC
+    // The same facing filter as in NPCGoalTaunt; see the note there.
+    F32 turn = xFrameApproach(0.1f, dt);
+
+    xVec3SMul((xVec3*)&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 1.0f - turn);
+
+    xVec3AddScaled((xVec3*)&sandy->frame->mat.at, &newAt, turn);
+#else
     xVec3SMul((xVec3*)&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 0.9f);
 
     xVec3AddScaled((xVec3*)&sandy->frame->mat.at, &newAt, 0.1f);
+#endif
 
     sandy->frame->mat.at.y = 0.0f;
     xVec3Normalize(&sandy->frame->mat.at, &sandy->frame->mat.at);
@@ -3249,9 +3280,18 @@ S32 zNPCGoalBossSandyMelee::Process(en_trantype* trantype, F32 dt, void* updCtxt
 
         newAt.y = 0.0f;
         xVec3Normalize(&newAt, &newAt);
+#ifdef PLATFORM_PC
+        // The same facing filter as in NPCGoalTaunt; see the note there.
+        F32 turn = xFrameApproach(0.1f, dt);
+
+        xVec3SMul((xVec3*)&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 1.0f - turn);
+
+        xVec3AddScaled((xVec3*)&sandy->frame->mat.at, &newAt, turn);
+#else
         xVec3SMul((xVec3*)&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 0.9f);
 
         xVec3AddScaled((xVec3*)&sandy->frame->mat.at, &newAt, 0.1f);
+#endif
 
         sandy->frame->mat.at.y = 0.0f;
         xVec3Normalize(&sandy->frame->mat.at, &sandy->frame->mat.at);
@@ -3428,8 +3468,17 @@ S32 zNPCGoalBossSandyNoHead::Process(en_trantype* trantype, F32 dt, void* updCtx
                 newAt.y = 0.0f;
 
                 xVec3Normalize(&newAt, &newAt);
+#ifdef PLATFORM_PC
+                // The same facing filter as in NPCGoalTaunt; see the note there.
+                F32 turn = xFrameApproach(0.1f, dt);
+
+                xVec3SMul((xVec3*)&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 1.0f - turn);
+
+                xVec3AddScaled((xVec3*)&sandy->frame->mat.at, &newAt, turn);
+#else
                 xVec3SMul((xVec3*)&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 0.9f);
                 xVec3AddScaled((xVec3*)&sandy->frame->mat.at, &newAt, 0.1f);
+#endif
 
                 sandy->frame->mat.at.y = 0.0f;
                 xVec3Normalize(&sandy->frame->mat.at, &sandy->frame->mat.at);
@@ -3621,8 +3670,17 @@ S32 zNPCGoalBossSandyElbowDrop::Process(en_trantype* trantype, F32 dt, void* upd
         newAt.y = 0.0f;
 
         xVec3Normalize(&newAt, &newAt);
+#ifdef PLATFORM_PC
+        // The same facing filter as in NPCGoalTaunt; see the note there.
+        F32 turn = xFrameApproach(0.1f, dt);
+
+        xVec3SMul((xVec3*)&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 1.0f - turn);
+
+        xVec3AddScaled((xVec3*)&sandy->frame->mat.at, &newAt, turn);
+#else
         xVec3SMul((xVec3*)&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 0.9f);
         xVec3AddScaled((xVec3*)&sandy->frame->mat.at, &newAt, 0.1f);
+#endif
 
         sandy->frame->mat.at.y = 0.0f;
         xVec3Normalize(&sandy->frame->mat.at, &sandy->frame->mat.at);
@@ -4239,8 +4297,17 @@ S32 zNPCGoalBossSandyRunToRope::Process(en_trantype* trantype, F32 dt, void* upd
     newAt.y = 0.0f;
     xVec3Normalize(&newAt, &newAt);
 
+#ifdef PLATFORM_PC
+    // The same facing filter as in NPCGoalTaunt; see the note there.
+    F32 turn = xFrameApproach(0.1f, dt);
+
+    xVec3SMul(&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 1.0f - turn);
+
+    xVec3AddScaled(&sandy->frame->mat.at, &newAt, turn);
+#else
     xVec3SMul(&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 0.9f);
     xVec3AddScaled(&sandy->frame->mat.at, &newAt, 0.1f);
+#endif
 
     sandy->frame->mat.at.y = 0.0f;
     xVec3Normalize(&sandy->frame->mat.at, &sandy->frame->mat.at);
@@ -4438,8 +4505,17 @@ S32 zNPCGoalBossSandyClothesline::Process(en_trantype* trantype, F32 dt, void* u
             newAt.y = 0.0f;
             xVec3Normalize(&newAt, &newAt);
 
+#ifdef PLATFORM_PC
+            // The same facing filter as in NPCGoalTaunt; see the note there.
+            F32 turn = xFrameApproach(0.1f, dt);
+
+            xVec3SMul(&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 1.0f - turn);
+
+            xVec3AddScaled(&sandy->frame->mat.at, &newAt, turn);
+#else
             xVec3SMul(&sandy->frame->mat.at, (xVec3*)&sandy->model->Mat->at, 0.9f);
             xVec3AddScaled(&sandy->frame->mat.at, &newAt, 0.1f);
+#endif
 
             sandy->frame->mat.at.y = 0.0f;
             xVec3Normalize(&sandy->frame->mat.at, &sandy->frame->mat.at);

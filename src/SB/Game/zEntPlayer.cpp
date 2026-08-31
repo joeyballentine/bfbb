@@ -14356,7 +14356,15 @@ static void PlayerSwingUpdate(xEnt* ent, F32 mag, F32 angle, F32 dt)
 
     if (hangDist > 3.96f)
     {
+#ifdef PLATFORM_PC
+        // 0.95 * d + 0.2 is d + 0.05 * (4 - d): the rope closes a twentieth of
+        // the way to its four-unit length every frame, and the length carries
+        // from frame to frame in the player's position. Four times the frames
+        // makes the rope a rigid rod with no give at the bottom of the arc.
+        hangDist += xFrameApproach(0.05f, dt) * (4.0f - hangDist);
+#else
         hangDist = 0.95f * hangDist + 0.2f;
+#endif
     }
 
     globals.player.RootUpTarget = unitHang;

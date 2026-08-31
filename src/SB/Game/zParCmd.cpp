@@ -351,7 +351,14 @@ void xParCmdCustom_Update(xParCmd* c, xParGroup* ps, float dt)
         for (; p != NULL; p = p->m_next)
         {
             xVec3Length2(&p->m_vel); // ?? Why did they do this
+            // Per-frame damping on the particle's own velocity, which is a
+            // displacement per frame. Both halves scale with the frame rate, so
+            // these particles stop dead in a quarter of the distance at 240 fps.
+#ifdef PLATFORM_PC
+            xVec3SMulBy(&p->m_vel, xpow(0.98f, 60.0f * dt));
+#else
             xVec3SMulBy(&p->m_vel, 0.98f);
+#endif
         }
         break;
     }

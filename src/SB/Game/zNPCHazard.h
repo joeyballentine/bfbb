@@ -259,6 +259,10 @@ struct NPCHazard
     // Seconds until the next trail particle. cnt_nextemit above is the same
     // thing counted in frames, which emits at the frame rate.
     F32 tmr_nextemit;
+
+    // Seconds until the next collision test. custdata.collide.cnt_skipcol is
+    // the same gap counted in frames, which tests at the frame rate.
+    F32 tmr_skipcol;
 #endif
 
     S32 ConfigHelper(en_npchaz haztype);

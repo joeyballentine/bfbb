@@ -608,8 +608,21 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
             xVec3Cross(&someVec, &depen, &ent->vel);
         }
         xVec3Normalize(&someVec, &someVec);
+#ifdef PLATFORM_PC
+        // stickiness is the fraction of the way the spin axis and rate close on
+        // the contact-derived values each frame, on state that lives in the
+        // entity. Four times the frames snaps the axis over in one visual
+        // instant and the boulder loses the skid it has on console. It comes
+        // out of the asset unclamped, which is why this goes through the
+        // helper.
+        F32 stick = xFrameApproach(ent->basset->stickiness, dt);
+
+        xVec3SMulBy(&ent->rotVec, 1.0f - stick);
+        xVec3AddScaled(&ent->rotVec, &someVec, stick);
+#else
         xVec3SMulBy(&ent->rotVec, 1.0f - ent->basset->stickiness);
         xVec3AddScaled(&ent->rotVec, &someVec, ent->basset->stickiness);
+#endif
         if (xVec3Normalize(&ent->rotVec, &ent->rotVec) < 1e-5f)
         {
             ent->angVel = 0.0f;
@@ -617,8 +630,12 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
         else
         {
             F32 div = xVec3Length(&ent->vel) / ent->bound.sph.r;
+#ifdef PLATFORM_PC
+            ent->angVel = ((1.0f - stick) * ent->angVel) + (stick * div);
+#else
             ent->angVel =
                 ((1.0f - ent->basset->stickiness) * ent->angVel) + (ent->basset->stickiness * div);
+#endif
         }
     }
 

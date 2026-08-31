@@ -172,6 +172,9 @@ void zNPCGoalDuploLive::SDS_BigRedButton()
     {
         livestat = LIVESTAT_COUNTDOWN;
         cnt_destruct = 120; // 2 seconds
+#ifdef PLATFORM_PC
+        tmr_destruct = 0.0f;
+#endif
 
         DoAutoAnim(NPC_GSPOT_ALTB, 0);
 
@@ -183,6 +186,23 @@ S32 zNPCGoalDuploLive::SDS_Countdown(F32 dt)
 {
     zNPCDuplotron* npc = (zNPCDuplotron*)psyche->clt_owner;
     S32 done;
+
+#ifdef PLATFORM_PC
+    // cnt_destruct is a frame count -- 120 of them is the two seconds retail
+    // meant -- and the warning bangs fire on exact counts, so the count has to
+    // be visited once each and sixty times a second. The strobe in
+    // VFXCycleLights and the smoke throttle in VFXOverheat are per-frame for
+    // the same reason, and both ride on this gate.
+    tmr_destruct += dt;
+
+    if (tmr_destruct < 1.0f / 60.0f)
+    {
+        return 0;
+    }
+
+    dt = tmr_destruct;
+    tmr_destruct = 0.0f;
+#endif
 
     switch (cnt_destruct)
     {

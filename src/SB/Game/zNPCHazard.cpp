@@ -531,6 +531,7 @@ void NPCHazard::WipeIt()
 #ifdef PLATFORM_PC
     xVec3Copy(&this->ang_spinRate, &g_O3);
     this->tmr_nextemit = 0.0f;
+    this->tmr_skipcol = 0.0f;
 #endif
 }
 
@@ -1982,12 +1983,27 @@ S32 NPCHazard::StaggeredCollide()
 {
     HAZCollide* hazcol = &this->custdata.collide;
 
+    // cnt_skipcol staggers the collision test five or six frames apart to
+    // spread the load. Counted in frames it tests four times as often at 240
+    // fps, so a hazard gets four times the chances to connect; hold the same
+    // gap in seconds instead.
+#ifdef PLATFORM_PC
+    this->tmr_skipcol -= globals.update_dt;
+
+    if (this->tmr_skipcol > 0.0f)
+    {
+        return 0;
+    }
+
+    this->tmr_skipcol = (F32)(((xrand() >> 23) & 1) + 5) * (1.0f / 60.0f);
+#else
     if (--hazcol->cnt_skipcol > 0)
     {
         return 0;
     }
 
     hazcol->cnt_skipcol = ((xrand() >> 23) & 1) + 5;
+#endif
 
     static xCollis colrec;
     memset(&colrec, 0, sizeof(colrec));

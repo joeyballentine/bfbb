@@ -491,7 +491,17 @@ void zNPCJelly::Process(xScene* xscn, F32 dt)
 
         if (xEntIsVisible(this))
         {
+            // A twentieth chance of a flash every frame is a rate per frame.
+            // Each flash adds two bolts that live a tenth of a second, out of a
+            // 48-bolt pool shared with every other lightning effect in the
+            // scene, so four times the frames is four times the crackle and a
+            // pool a jellyfish shoal can empty on its own.
+#ifdef PLATFORM_PC
+            if (xUtil_yesno(xFrameEmitChance(0.05f, dt)) &&
+                psy->GIDOfActive() != NPC_GOAL_DEAD)
+#else
             if (xUtil_yesno(0.05f) && psy->GIDOfActive() != NPC_GOAL_DEAD)
+#endif
             {
                 this->PlayWithLightnin();
             }

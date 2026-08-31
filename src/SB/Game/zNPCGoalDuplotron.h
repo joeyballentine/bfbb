@@ -14,6 +14,9 @@ struct zNPCGoalDuploLive : zNPCGoalCommon
     F32 tmr_chkPlyrDist;
     S32 cnt_destruct;
     en_dupolive livestat;
+#ifdef PLATFORM_PC
+    F32 tmr_destruct;
+#endif
 
     zNPCGoalDuploLive(S32 goalID) : zNPCGoalCommon(goalID)
     {
