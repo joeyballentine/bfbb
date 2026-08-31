@@ -26,10 +26,17 @@ from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOLO = os.path.join(ROOT, "tools", "solo.py")
-FRAGS = [a for a in sys.argv[1:] if not a.startswith("-")]
 STOCK = "GC/2.0p1"
-if "--stock" in sys.argv:
-    STOCK = sys.argv[sys.argv.index("--stock") + 1]
+argv = sys.argv[1:]
+if "--stock" in argv:
+    i = argv.index("--stock")
+    STOCK = argv[i + 1]
+    # Drop the VALUE as well as the flag. It does not start with "-", so
+    # leaving it in makes "--stock GC/2.0p1a-sz8" also mean "only units whose
+    # name contains GC/2.0p1a-sz8" -- no units, and a silent 0-function sweep
+    # that looks exactly like a clean result.
+    del argv[i:i + 2]
+FRAGS = [a for a in argv if not a.startswith("-")]
 
 rep = json.load(open(os.path.join(ROOT, "build/GQPE78/report.json")))
 units = [u["name"] for u in rep["units"] if u["name"].startswith("main/SB/")]

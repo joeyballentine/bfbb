@@ -1981,6 +1981,56 @@ Both populations are real: stock `GC/2.0p1` keeps **0 of 11** zEntPlayer winners
 while giving AnimTable 100.000. One rule must split them and **nothing in the
 state clause E3n is given does**.
 
+#### Re-measured 2026-08-31 on the C-sourced patch, with the load-size gate
+
+Two things settled, now that `tools/variant.py` makes an ablated compiler a
+40-second edit rather than a hand-assembly job.
+
+**E3n's exact ledger is +115 / -5, not +82 / -5.** Ablating E3n alone
+(`tools/variant.py`, then `tools/patchcost.py --stock GC/<variant>` both ways)
+gives 115 functions / 80,696 bytes that E3n earns and 5 it costs. The five are
+`xBoxFromCircle`, `BasisBspline`, `MoveNormal__14zNPCGoalPatrol`,
+`Process__18zNPCGoalJellyBirth` and `zEntPlayer_AnimTable`. The sixth function
+in the patch's -6 is `Setup__11zNPCFodBzzt`, which E3n ablation does not move
+and which is entry-0/clause-C+ over-fire.
+
+**The load-size gate is the last untried field, and it fails hardest of all.**
+E3n's operand gates are asymmetric -- store `> 4`, load `> 8` -- which reads
+like it was meant for 8-byte double loads. All five victims load 4 bytes, so
+`AL_SIZE(B) != 8` recovers every one of them. It also costs **115 functions /
+80,696 bytes**: E3n's entire yield is the 4-byte case, and `-sz8` is
+indistinguishable from `-noE3n` on an 11-function panel. Do not re-try a size
+gate on the load operand.
+
+**The victims' source is not the problem, and this is provable rather than
+argued.** All five are 100.000% under stock `GC/2.0p1` with the source
+untouched. A function that reproduces retail byte-for-byte under the stock
+compiler cannot be a source-shape error, so "our source is written differently
+from retail's" is ruled out for these five specifically -- no source edit is
+available or wanted. Reading the diffs agrees: every one is the same single
+decision, an `@NNNN@sda21` load that retail hoists above a run of frame-local
+stores and E3n pins below them. `zGooCollsBegin` is the mirror image, retail
+keeping the load below the store with E3n correctly preventing the hoist, and
+it is structurally identical at the query site. Same operands, opposite correct
+answers.
+
+**Per-unit compiler selection would buy +2, and is a fit rather than a
+finding.** E3n's winners and victims are not evenly spread: `xMath3` and
+`xSpline` contain a victim and no winner, so compiling just those two units
+with an E3n-ablated compiler is +2 functions. `zNPCGoalStd` and
+`zNPCGoalAmbient` are 1-for-1 washes; `zEntPlayer` is +1/-13 and must keep
+E3n. This is recorded as available, not recommended: retail was built with one
+compiler, per-unit *flags* have a real counterpart in the original build but
+per-unit *compiler binaries* do not, and adopting it makes "what does E3n
+cost" globally incoherent. Worth doing only if someone decides the branch's
+number matters more than the patch staying interpretable.
+
+**Tooling note.** `tools/patchcost.py` had a bug that made every explicit
+`--stock X` sweep silently measure zero units: `X` does not start with `-`, so
+it was also read as a unit-name filter. Any pre-2026-08-31 result of the form
+"variant Y costs nothing" that came from `patchcost.py --stock` is void and
+needs re-running. Per-function `solo.py --mw` results are unaffected.
+
 **So any real fix must change WHAT THE PREDICATE IS GIVEN, not what it tests.**
 Two openings, neither attempted: put the gate in the dependency-graph builder
 at `0x508100`/`0x508350`, which unlike `0x511fc0` can see the pending
