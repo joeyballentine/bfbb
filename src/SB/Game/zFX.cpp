@@ -34,9 +34,9 @@ void xModelSetScale(xModelInstance* model, const xVec3& scale);
 void xSCurve(F32& p, F32& v, F32& a, F32 t);
 
 // These structs were used in deadstripped functions.
-// This function is here to force the symbols to be linked.
-// @558 is tweak_callback::create_change's template, which the real definition
-// below still emits, so it is not repeated here.
+// These functions are here to force the symbols to be linked. The template
+// between them, @558, is tweak_callback::create_change's own, so the definition
+// sits where the target's .rodata order puts it.
 void __deadstripped_zFX()
 {
     const char _446[0x0C] = {};
@@ -49,7 +49,19 @@ void __deadstripped_zFX()
     const char _555[0x28] = {};
     const char _556[0x28] = {};
     const char _557[0x28] = {};
-    const char _558[0x28] = {};
+}
+
+tweak_callback tweak_callback::create_change(void (*on_change)(const tweak_info&))
+{
+    tweak_callback cb = { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
+
+    cb.on_change = (void (*)(tweak_info&))on_change;
+
+    return cb;
+}
+
+void __deadstripped_zFX2()
+{
     const char _559[0x28] = {};
 
     const F32 _screen_bounds[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
@@ -170,15 +182,6 @@ void xModelSetScale(xModelInstance* model, const xVec3& scale)
     {
         model->Scale = scale;
     }
-}
-
-tweak_callback tweak_callback::create_change(void (*on_change)(const tweak_info&))
-{
-    tweak_callback cb = { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
-
-    cb.on_change = (void (*)(tweak_info&))on_change;
-
-    return cb;
 }
 
 static void init_poppers();
@@ -1585,7 +1588,7 @@ namespace
             {
                 hi = mid;
             }
-            if (!(w <= weight[mid]))
+            else
             {
                 lo = mid + 1;
             }
