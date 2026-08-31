@@ -27,39 +27,47 @@ reimplements those (as well as implementing new ones) for PC.
 Everything outside of that (`src/SB/Core/x` and `src/SB/Game`) is the same code
 the GameCube build uses. Changes there have to keep the GameCube build byte identical using build flags.
 
-## Added features
+## What the port adds
 
-The GameCube version has a few things stubbed out. The functions are
-empty in the decomp but still have live call sites, which the Xbox version actually implements, 
-so they were recovered from the .xbe's bytecode. They are on by default and each can be turned off in `config.ini`, which
-the game writes with the defaults the first time it runs. 
+Everything here is on by default and has a switch in `config.ini`. See
+**Settings** below.
 
-- **Cruise Bubble distortion.** `xScrFxDistortionRender` and `distort_screen`
-  are both empty on GameCube. On Xbox they swirl the picture while you fly the
-  Cruise Bubble. The offset map is a genuine Xbox asset, `BXCruiseBubbleDistort`,
-  which already ships in `plat.HIP`.
-- **Glow**, what people usually call the Xbox version's bloom. A bright pass,
-  two blur passes, then composited back over the frame. Both shaders were
-  decoded from the Xbox build's pixel shader definitions.
-- **The loading screen still.** `zGameTakeSnapShot` is empty on GameCube. On
-  Xbox it grabbed the frame that the loading screen bubbles rise over. Falls
-  back to the background asset when there is no previous frame, as on the first
-  load of a run.
-- **Cave reverb** in the Mermalair and the caves, which only the Xbox release
-  has. The game side was never missing: `zSceneInitEnvironmentalSoundEffect`
-  already picks the cave effect for nine scenes and `xSnd` forwards it. What is
-  empty, on GameCube as well, is `iSndSetEnvironmentalEffect`, which is why
-  neither console has any of it. The Xbox's reverb itself is DSP microcode that
-  isn't on the disc and has never been disassembled, so it can't be copied. Its
-  twelve I3DL2 parameters were read out of the Xbox binary and fed to a reverb
-  built on Microsoft's published I3DL2 design instead.
+### Xbox parity
 
-## Fixed bugs
+The GameCube release has these stubbed out: the functions are empty in the
+decomp but still have live call sites, and the Xbox version implements them. They
+were recovered from the `.xbe`.
+
+| Feature | Setting | What it is |
+| --- | --- | --- |
+| Glow | `[xbox] glow` | The full-screen bloom. A bright pass, two blurs, composited back over the frame. Both shaders decoded from the Xbox build's pixel shader definitions. |
+| Cruise Bubble distortion | `[xbox] distortion` | Swirls the picture while you fly the Cruise Bubble. The offset map is a genuine Xbox asset, `BXCruiseBubbleDistort`, already shipping in `plat.HIP`. |
+| Loading screen still | `[xbox] snapshot` | The frame you just left, behind the rising loading bubbles, instead of the GameCube backdrop. Falls back to the backdrop on the first load of a run. |
+| Cave reverb | `[xbox] reverb` | In the Mermalair and the caves. The game side already worked on both consoles; `iSndSetEnvironmentalEffect` was the empty part. The Xbox's reverb is DSP microcode that is not on the disc, so its twelve I3DL2 parameters were read out of the binary and fed to a reverb built on Microsoft's published I3DL2 design. |
+
+### New on PC
+
+| Feature | Setting | What it does |
+| --- | --- | --- |
+| Resolution | `[video] width`, `height` | Renders at any size and scales the result to the display. Any size that is not 4:3 gives widescreen: the camera keeps the same vertical view and adds width, so nothing is stretched. `docs/RESOLUTION.md`. |
+| Window mode | `[video] mode` | Exclusive fullscreen, borderless, or windowed. Separate from the render size. |
+| UI anchoring | `[video] ui` | The HUD either stays in a centred 4:3 box as the console drew it, or moves out to the real screen edges. |
+| Frame rate and vsync | `[video] framerate`, `vsync` | Any rate, the monitor's refresh rate, or uncapped. The port runs one simulation step per frame, so this is the speed of the game as well as the picture. `docs/UNCAPPED.md` lists what was converted off a per-frame rate and what has not been swept yet. |
+| Antialiasing | `[video] msaa`, `alpha_to_coverage` | MSAA, plus alpha-to-coverage for the alpha-tested edges MSAA cannot touch: foliage, fences, grates, cave walls. D3D9 only. |
+| Shadow resolution | `[video] shadow_resolution` | Character shadows scale with the render size instead of staying at the consoles' 256 pixels. |
+| Draw distance | `[video] draw_distance` | Drops the per-object cull distance, the low-detail swap and the 400-unit world clip. Affects what is drawn, not what is simulated, and not fog. |
+| Soundtrack replacement | `[audio] soundtrack` | Play your own files instead of the game's music. The game's music is mono, as are all 3537 of its sounds, so this is mainly how to get a stereo soundtrack in. Looping tracks loop where the game's version ended, not where your file does. |
+| Controllers | `[input] controller`, `[pad]`, `[keyboard]` | Controllers go through SDL, so any modern pad works and one `[pad]` section fits them all. Every button is remappable. |
+| Six save slots | none | The save and load screens always drew two buttons, because the memory card had two slots, but the second did nothing. It is now a second folder with its own three slots. The first is still the save directory itself, so existing saves are where the game looks for them. |
+| Save sizes in bytes | none | Those screens measured a memory card in 8 KB blocks. There is no card here, so the figures were byte counts with "block(s)" printed after them, which is where "Available Free Block(s): 2147483647 block(s)" came from. Now shown as "348 KB" or "1.5 MB", with the stray label removed. |
+| PC wording | `[text] platform_wording` | The Xbox text is rewritten as it loads, so nothing offers to reboot to the dashboard or calls a save folder a memory card. The files on disc are never touched. |
+
+### Fixed bugs
 
 Two bugs in the original game that the port fixes instead of copying:
 
-- **3D sound panned the wrong way.** L and R were flipped on GameCube. The community's 
-  Action Replay fix for the disc was ported here.
+- **3D sound panned the wrong way.** L and R were flipped on GameCube. The
+  community's Action Replay fix for the disc was ported here.
 - **The pause menu's bamboo frame is missing the rope at its corners.** The rope
   is painted on the ends of the horizontal poles, but the vertical poles are
   closer to the camera and are drawn afterwards, so they cover it up. The port
@@ -152,220 +160,39 @@ vcpkg install libusb:x86-windows
 ```
 
 Same `-DCMAKE_PREFIX_PATH` as above, and `libusb-1.0.dll` is copied next to the
-exe automatically. Nothing is installed on the player's machine — those pads
-are composite devices whose USB interface already carries Microsoft OS
-descriptors, so Windows binds it itself and their HID interface is left alone.
+exe automatically. Nothing is installed on the player's machine. Those pads are
+composite devices whose USB interface already carries Microsoft OS descriptors,
+so Windows binds it itself and their HID interface is left alone.
 
 Skip it and every other controller still works. Those five report themselves as
 devices with no layout, which the game says at startup.
 
 ## Settings
 
-The game writes `config.ini` next to the executable the first time it runs. Every
-setting is at its default, with a comment explaining it. Only `[assets] path`
-has to be filled in — see **You need your own copy** above — and anything that
-differs from the console behaviour can be turned back off.
+`config.ini` is written next to the executable on first run, with every setting
+at its default and a comment saying what it does. Read that file for what the
+values mean. Only `[assets] path` has to be filled in, and `BFBB_ASSETS`
+overrides it when set.
 
-### Display
+A newer build appends settings an older `config.ini` predates rather than
+rewriting it, so your edits survive an update.
 
-```ini
-[video]
-mode = fullscreen
-width = 1280
-height = 720
-ui = pillarbox
-```
+Three things `config.ini` cannot tell you:
 
-`mode` is `fullscreen` (exclusive D3D9, at the resolution the desktop is already
-using), `borderless` (a window with no border covering one monitor), or
-`windowed`.
+- The sticks are not remappable. The left one moves, the right one turns the
+  camera, and on the keyboard that is WASD and IJKL.
+- A Switch 2 controller is shared with Steam, and only one program can hold one
+  at a time. Steam takes it whenever its Nintendo configuration support is on,
+  and the port then reports it as a device it cannot use. Turn that off in
+  Steam's controller settings, or add `bfbb.exe` to Steam as a non-Steam game
+  and let Steam Input hand it over as a standard pad.
+- A controller SDL does not recognise says so at startup, with its USB ids, and
+  cannot be played on until it has a layout. Put a `gamecontrollerdb.txt` beside
+  `bfbb.exe` to give it one. Use the community file of that name, or a single
+  line from SDL's own gamepad mapping tool.
 
-The window mode and the render size are separate settings. The game renders at
-`width` by `height`, and the result is scaled to fit whatever it is shown on. So
-you can render at 640x480 and fill a 4K display, or render above 4K and have it
-scaled back down.
-
-The default size is 640x480, which is what the consoles used. Any size that is
-not 4:3 gives you widescreen. The camera keeps the same vertical view and adds
-width, so at 1280x720 you see more of the level to the left and right. Nothing
-is stretched. `docs/RESOLUTION.md` covers this in detail, including what a
-higher resolution does not improve.
-
-`ui` controls where the interface is drawn when the render size is not 4:3. At
-4:3 the two options do the same thing.
-
-- `pillarbox` keeps the whole interface inside a centred 4:3 area, exactly as
-  the console drew it. On a 16:9 screen the HUD sits some way in from each side.
-- `native` moves the HUD out to the real screen edges. Each counter moves along
-  with its icon and stays the same size.
-
-Menus, textboxes and cutscene overlays stay in the 4:3 area under both options.
-They are full-screen images, so there is nothing in them to move separately.
-
-The menus themselves fill the screen either way. The backdrop is stretched to
-the real screen size, the underwater light pattern is drawn across the whole
-picture instead of the 4:3 area, and the bamboo frame is rebuilt with extra
-copies of the bamboo texture it already repeats, so it gets wider without the
-poles getting thicker.
-
-### Frame rate
-
-```ini
-[video]
-framerate = 60
-vsync = on
-```
-
-`framerate` is how many frames a second the game runs at. The port runs one
-simulation step per frame, as the consoles did, so this is the speed of the game
-as well as the picture. `60` is the console's rate. `display` follows the refresh
-rate of the monitor the game is on. `0` or `off` removes the cap. Any other
-number is that many frames a second.
-
-`vsync` decides whether a finished frame waits for the display before it is
-shown. On, nothing tears and the frame rate cannot exceed the monitor's refresh
-rate whatever `framerate` says. Off, frames are shown as soon as they are
-finished, which is what `framerate` needs to be free of the display.
-
-The two are separate. On a 144 Hz monitor, `vsync = on` with `framerate = 60`
-gives sixty whole frames a second.
-
-Above 60 the game is running somewhere it never ran on hardware. The rates that
-the original code wrote per frame rather than per second have been converted --
-the camera, the pickups, particle emission, NPC spin and damping, the surface UV
-animation. `docs/UNCAPPED.md` lists what was changed, what was deliberately left
-alone, and what has not been swept yet.
-
-### Scenery
-
-```ini
-[video]
-draw_distance = on
-```
-
-The consoles stop drawing an object past a distance the level designer set, swap
-distant objects for lower-detail versions, and clip the world itself at 400
-units. A PC does not need any of those limits. Turning `draw_distance` off
-restores all three exactly.
-
-It does not affect fog. In a fogged level the far clip plane sits where the
-picture is already fully fogged, so there is nothing behind it to reveal. It
-also does not change how far away the game thinks things are, only what it
-draws.
-
-### Soundtrack replacement
-
-```ini
-[audio]
-soundtrack = D:\path\to\a\folder
-```
-
-Leave this empty, which is the default, to use the game's own music.
-
-The game's music is mono. So is every other sound in it, all 3537 of them, and
-this setting is mainly a way to play stereo versions instead. Whatever sample
-rate and channel count a file has are used as they are.
-
-Files are matched to tracks by name, so `music_00_hb_44.flac` needs no further
-setup. If your files are named after the songs instead, as a soundtrack release
-usually is, put a `soundtrack.txt` next to them listing `asset name = file`, one
-per line.
-
-Looping tracks loop at the point the game's version ended, not at the end of
-your file. A soundtrack release usually adds a proper ending to a track that
-loops in game, and without this you would hear that ending come round every
-time.
-
-If one file fails to decode, only that track is affected. It falls back to the
-game's own music, and the rest of the folder still plays.
-
-WAVE files work in any build. Other formats need a build with FFmpeg, the same
-dependency the movies use.
-
-### Controls
-
-Controllers go through SDL, so a DualSense, a Switch Pro controller, an arcade
-stick and the generic USB pads work as well as the Xbox ones. SDL maps every
-device it knows onto one layout, so a button name below means the same physical
-button whichever pad is plugged in, and a `[pad]` section written for one
-controller works on another unchanged.
-
-```ini
-[input]
-controller = auto
-```
-
-`auto` plays on the first controller the machine actually has, so a single pad
-works whichever slot it landed in. A number from 1 to 4 pins the game to that
-slot and ignores the rest — set that when two pads are plugged in and the game
-keeps picking the wrong one. The keyboard covers whichever controller you chose
-whenever nothing is on it.
-
-Slots are the order the controllers turned up in, not a number printed on
-anything, and that order can differ between runs — so a pinned number is worth
-setting when a second pad is a nuisance, not as a permanent address. The
-startup line `playing on controller N` says which one the game settled on.
-
-`[pad]` and `[keyboard]` say what presses each button. The left of the `=` is the
-button the game reads, named as the console named it; the right is what presses
-it on your device.
-
-```ini
-[pad]
-a      = a          ; jump, confirm
-z      = rb         ; near camera
-l1     = lt+!rb     ; camera left
-l2     = lt+rb
-select =            ; nothing presses it
-```
-
-`,` between two inputs means either one on its own. `+` means both at once, and
-`!` means not held. That last one is not decoration: the GameCube had three
-shoulder buttons where the game wants four, so it read Z as a modifier and `l1 =
-lt+!rb` is how the defaults say that L alone is L1 and Z+L is L2 — never both.
-
-Nothing after the `=` leaves a button unpressable, which is how to turn one off.
-`lb`, `ls` and `rs` start out bound to nothing, since the GameCube has no fourth
-shoulder and no stick clicks.
-
-The sticks are not remappable. The left one moves, the right one turns the
-camera, and on the keyboard that is WASD and IJKL.
-
-A Switch 2 controller is shared with Steam, and only one program can hold one
-at a time — Steam takes it whenever its Nintendo configuration support is on,
-and the port then reports it as a device it cannot use. Turn that off in Steam's
-controller settings to play on it here, or add `bfbb.exe` to Steam as a
-non-Steam game and let Steam Input hand it over as a standard pad.
-
-A controller SDL does not recognise says so at startup, with its USB ids, and
-cannot be played on until it has a layout. Put a `gamecontrollerdb.txt` beside
-`bfbb.exe` to give it one — the community file of that name, or a single line
-from SDL's own gamepad mapping tool. A device it covers is then a controller
-like any other.
-
-### The rest
-
-`[xbox]` has a switch for each of the four Xbox features described at the top of
-this file. `[text]` has `platform_wording`. `src/SB/Core/pc/README.md` documents
-the platform layer interface by interface and lists the `BFBB_*` switches.
-
-## Saves
-
-The save screens were written for a GameCube memory card, which measures space in
-8 KB blocks. There is no memory card here, so every one of those figures was
-really a byte count with "block(s)" printed after it. That is where "Available
-Free Block(s): 2147483647 block(s)" came from.
-
-Sizes are now shown in bytes with a suitable unit, such as "348 KB" or "1.5 MB",
-and the "block(s)" that the surrounding text asset added is removed, so the
-number and the label agree.
-
-Both save slots on those screens now work. The save and load screens always drew
-two buttons, because the memory card had two slots, but the second one did
-nothing and choosing it gave an error. It is now a second folder with its own
-three save slots, so there are six saves in total instead of three. The first
-one is still the save directory itself, so saves made before this are still
-where the game looks for them.
+`src/SB/Core/pc/README.md` documents the platform layer interface by interface
+and lists the `BFBB_*` build switches.
 
 ## Checking a change
 
@@ -379,11 +206,16 @@ python tools/gcgate.py     # DOL sha1 and matched function count, both must PASS
 Then the port's own checks:
 
 ```sh
-build-pc\pc_selftest.exe
-build-pc\rw_selftest.exe
+ctest --test-dir build-pc --output-on-failure
 python tools/pclink.py
 python tools/pcprogress.py --drift --m32 --cc clang++
 ```
+
+`ctest` runs four: `pc_selftest` over the platform layer, `rw_selftest` against
+a live librw engine, `fps_selftest` over the rate helpers, and `fpsdep`, a
+static sweep for code that measures time in frames. That last one fails on
+anything not in `tools/fpsdep.json`, so a new per-frame rate in shared code has
+to be read and either fixed or recorded.
 
 Edits to shared code go inside `#ifdef PLATFORM_PC` with the original expression
 kept in the `#else`, unless you've actually measured that the unguarded version
@@ -396,11 +228,12 @@ input, saves, HUD, menus, movies, loading screen. Widescreen works throughout,
 including the camera, the HUD and the menus.
 
 Not done: this is still Windows only -- the OpenGL renderer builds and runs,
-but the input, audio, movie and host layers underneath it are Win32. Three
-effects are D3D9-only and go quiet under GL3: the Xbox glow, the cruise-bubble
-screen warp and the loading-screen snapshot, all for want of a way to sample the
-frame buffer. The frame rate is capped at 60, and `docs/UNCAPPED.md` explains
-what breaks without the cap. The rest is a lot of smaller things. Individual source files have their own
+but the input, audio, movie and host layers underneath it are Win32. Two effects
+are D3D9-only and go quiet under GL3: the Xbox glow and the cruise-bubble screen
+warp, both for want of a way to sample the frame buffer. MSAA and
+alpha-to-coverage are D3D9-only as well. The frame rate is a setting rather than
+a cap now, but the sweep behind it is not finished -- `docs/UNCAPPED.md` says
+what is still keyed to a frame count. The rest is a lot of smaller things. Individual source files have their own
 notes on what is wrong and why, which are more useful than a list here.
 
 ## Credit
