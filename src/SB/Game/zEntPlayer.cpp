@@ -239,6 +239,9 @@ static U32 player_dead_anim = 1;
 
 static xVec3 last_center;
 static U32 last_frame;
+#ifdef PLATFORM_PC
+static F64 last_time;
+#endif
 
 static F32 sBubbleBowlLastWindupTime = -1.0f;
 static F32 sBubbleBowlMultiplier = 1.0f;
@@ -336,7 +339,16 @@ static void zEntPlayer_PredictionUpdate(xEnt* ent, F32 dt);
 
 static void zEntPlayer_SpawnWandBubbles(xVec3* center, U32 count)
 {
+    // Five FRAMES of no wand bubbles means the effect stopped and the trail
+    // should start fresh rather than lerp from a stale centre. As a frame count
+    // that is a twelfth of a second on console and a fiftieth at 240 fps, so a
+    // brief break restarts the trail on a host where it would not have on a
+    // console.
+#ifdef PLATFORM_PC
+    if (gGameSeconds - last_time > 5.0 / 60.0)
+#else
     if (gFrameCount - last_frame > 5)
+#endif
     {
         xVec3 wand;
         xVec3ScaleC(&wand, (xVec3*)&globals.player.model_wand->Mat->at, 0.25f, 0.25f, 0.25f);
@@ -363,6 +375,7 @@ static void zEntPlayer_SpawnWandBubbles(xVec3* center, U32 count)
     if (num == 0)
     {
         last_frame = gFrameCount;
+        last_time = gGameSeconds;
         return;
     }
 #endif
@@ -395,6 +408,9 @@ static void zEntPlayer_SpawnWandBubbles(xVec3* center, U32 count)
 
     last_center = *center;
     last_frame = gFrameCount;
+#ifdef PLATFORM_PC
+    last_time = gGameSeconds;
+#endif
 }
 
 static void zEntPlayerKillCarry()
