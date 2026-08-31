@@ -53,6 +53,14 @@ add_compile_definitions(PLATFORM_PC)
 # it here, change it there.
 add_compile_definitions(_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH)
 
+# The CRT marks fopen, getenv, strcpy, strncpy and strcat deprecated in favour
+# of its own _s variants. The game calls all five and will keep calling them --
+# they are what the console's MSL had -- so the deprecation is 71 warnings the
+# port cannot act on. It was invisible until include/types.h stopped stubbing
+# __declspec out on this build, which is also what made __declspec(deprecated)
+# start meaning something.
+add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+
 # 32-bit is a project-wide constraint, not a preference. gMemInfo.DRAM.addr is
 # a U32 and xMemInitHeap does pointer arithmetic on it as an integer; every
 # asset-overlaid struct addresses memory in 32 bits; and sizeof(xSndVoiceInfo)

@@ -57,7 +57,20 @@ typedef double F64;
 // Stub __declspec out for compilers that cannot parse it. CodeWarrior is the
 // one compiler where it is meaningful -- it carries `weak` and the `section`
 // placements for .init/.ctors/.dtors -- so it must NOT be stubbed there.
-#ifndef __MWERKS__
+//
+// Nor on the PC build, where it is not merely useless but wrong. Windows uses
+// __declspec for things a host header needs to mean what it says: the CRT's
+// <wchar.h> defines `__declspec(selectany) int _Avx2WmemEnabledWeakValue = 0;`
+// at file scope, and with the stub in place that is an ordinary definition in
+// every translation unit that reaches the header -- which the linker then
+// rejects as a duplicate against any library built without our headers. SDL is
+// how this was found. There is nothing to stub anyway: the four __declspec
+// sites left in src/SB are all inside `#ifdef __MWERKS__` or `#ifdef GAMECUBE`,
+// and DECL_SECTION/DECL_WEAK in macros.h already have host spellings.
+//
+// The stub stays for a compiler with neither define -- clangd parsing src/gc,
+// src/dolphin and src/bink, which do write __declspec(section) unguarded.
+#if !defined(__MWERKS__) && !defined(PLATFORM_PC)
 #define __declspec(x)
 // #define asm
 #endif
