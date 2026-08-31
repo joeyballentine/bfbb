@@ -743,9 +743,9 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
 
                     if (lerp < globals.player.carry.grabLerpMax &&
                         atime > globals.player.carry.grabLerpMin &&
-                        globals.player.carry.grabLerpMin > globals.player.carry.grabLerpMax)
+                        globals.player.carry.grabLerpMax > globals.player.carry.grabLerpMin)
                     {
-                        if (globals.player.carry.grabLerpMax > lerp)
+                        if (globals.player.carry.grabLerpMin > lerp)
                         {
                             lerp = globals.player.carry.grabLerpMin;
                         }
@@ -753,7 +753,7 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
                         F32 t;
                         if (globals.player.carry.grabLerpMax < atime)
                         {
-                            t = globals.player.carry.grabLerpMin;
+                            t = globals.player.carry.grabLerpMax;
                         }
                         else
                         {
