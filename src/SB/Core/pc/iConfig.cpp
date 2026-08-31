@@ -108,6 +108,35 @@ namespace
           "; Menus, textboxes and cutscene overlays stay in the 4:3 box either way\n"
           "; -- they are full-screen art with nothing to anchor. At 4:3 the two\n"
           "; settings do the same thing." },
+        { "video", "framerate", "60",
+          "How many frames a second the game runs at.\n"
+          ";\n"
+          "; This is the simulation rate as well as the picture rate -- the port runs\n"
+          "; one update per frame, as the consoles did -- so it is not purely\n"
+          "; cosmetic. 60 is what the GameCube video interface gave the game, and\n"
+          "; what every number in its source was tuned against.\n"
+          ";\n"
+          ";   60          the console rate.\n"
+          ";   display     the refresh rate of the monitor the game is on.\n"
+          ";   0 or off    no cap. As fast as the machine will go, or as fast as\n"
+          ";               the display allows when vsync is on below.\n"
+          ";   any number  that many frames a second.\n"
+          ";\n"
+          "; Above 60 the game is in territory it was never run in. The rates that\n"
+          "; were written per frame rather than per second have been converted --\n"
+          "; see docs/UNCAPPED.md for which, and why -- but anything still keyed to\n"
+          "; a frame count rather than to elapsed time runs faster than it should." },
+        { "video", "vsync", "on",
+          "Wait for the display before showing a finished frame.\n"
+          ";\n"
+          "; On, a frame is never torn in half, and the frame rate cannot exceed the\n"
+          "; refresh rate of the monitor whatever framerate says above. Off, frames\n"
+          "; are shown the moment they are finished, which is what framerate needs\n"
+          "; to be free of the display -- and what tears.\n"
+          ";\n"
+          "; This is separate from framerate on purpose. Vsync decides whether a\n"
+          "; frame is whole; framerate decides how fast the game runs. On a 144 Hz\n"
+          "; monitor, vsync on with framerate 60 gives sixty whole frames a second." },
         { "video", "draw_distance", "on",
           "Draw everything, however far away. The consoles stopped drawing an\n"
           "; object past a distance the level author set, swapped distant ones for\n"

@@ -287,49 +287,45 @@ RwCamera* RwCameraShowRaster(RwCamera* camera, void* pDev, RwUInt32 flags)
     // One blit of the frame buffer per frame. See iSnapshot.h.
     iSnapshotCapture();
 
-    // **The flip waits for the display, whatever the caller asked for.**
+    // **The flip waits for the display when video.vsync says so.**
     //
     // iCamera.cpp:124 passes rwRASTERFLIPDONTWAIT, and librw honours it as
-    // D3DPRESENT_INTERVAL_IMMEDIATE, so the game ran as fast as the GPU would
-    // let it. On the console that flag costs nothing -- the GameCube's video
-    // interface paces the frame whether RenderWare waits on it or not, and a
-    // frame there is never shorter than a field.
+    // D3DPRESENT_INTERVAL_IMMEDIATE, so on the flag alone the game runs as fast
+    // as the GPU will let it. On the console that flag costs nothing -- the
+    // GameCube's video interface paces the frame whether RenderWare waits on it
+    // or not, and a frame there is never shorter than a field. On a host it is
+    // the difference between a torn picture and a whole one, so it is a setting
+    // rather than retail's constant.
     //
-    // On a host it is not free, because of one line in retail's own loop.
-    // zGame.cpp:559 treats a frame shorter than 10 microseconds as impossible
-    // and substitutes a sixtieth of a second for it. Unlocked, this game
-    // produces such frames constantly, and every one of them advances the
-    // simulation by 1/60 s instead of by the time that actually passed -- at a
-    // couple of thousand frames a second that is tens of seconds of game time
-    // per real second. Pickups spinning like drills is what it looks like;
-    // xEntPickup turns PI * dt per frame and means half a revolution a second.
-    //
-    // Waiting on the display is what the console does and what the game's
-    // timing was written against. It also self-limits on any monitor: at 144 Hz
-    // the frame is 7 ms, which is three orders of magnitude clear of that
-    // threshold, so the game runs fast and correct rather than fast and wrong.
-    asCamera(camera)->showRaster(flags | rwRASTERFLIPWAITVSYNC);
+    // librw resets the D3D9 device when the interval changes and not otherwise
+    // (d3ddevice.cpp:1633), so passing the same answer every frame costs one
+    // reset at startup and nothing after it.
+    U32 flipFlags = flags;
+    if (iWindowGetVSync())
+    {
+        flipFlags |= rwRASTERFLIPWAITVSYNC;
+    }
+    else
+    {
+        flipFlags &= ~rwRASTERFLIPWAITVSYNC;
+    }
+    asCamera(camera)->showRaster(flipFlags);
 
-    // **And cap the rate, because waiting on the display is not the same as
-    // running at the console's speed.**
+    // **And pace the rate, because waiting on the display is not the same as
+    // running at a chosen speed.**
     //
-    // Waiting stopped the game running at thousands of frames a second, but it
-    // paces to the MONITOR, and a 240 Hz monitor gives 240 frames a second --
-    // four times what a GameCube title was built for. That is not free even
-    // with a correct dt: every part of this game that counts frames rather
-    // than seconds runs four times too fast, and the parts that do use dt
-    // accumulate four times as much floating-point error per second.
+    // Vsync paces to the MONITOR: a 240 Hz panel gives 240 frames a second,
+    // four times what a GameCube title was built for, and a variable-refresh
+    // display gives whatever the machine produces. video.framerate is the
+    // separate answer to how fast the GAME runs. iVSync does the same deadline
+    // arithmetic for the loops that have no renderer -- see iSystem.cpp --
+    // advancing a deadline by one period and sleeping to it, dropping missed
+    // deadlines rather than trying to catch up, so one slow frame does not
+    // become a burst of fast ones.
     //
-    // So the frame is also paced to 60 Hz, which is what the console's video
-    // interface gave it. iVSync does exactly this for the loops that have no
-    // renderer -- see iSystem.cpp -- and this is the same deadline arithmetic
-    // for the loop that does: advance a deadline by one period and sleep to
-    // it, dropping missed deadlines rather than trying to catch up, so one
-    // slow frame does not become a burst of fast ones.
-    //
-    // Vsync is kept as well as the cap rather than instead of it. The cap sets
-    // the rate; waiting on the display is what stops a frame being torn in
-    // half, and on a 60 Hz monitor the two agree anyway.
+    // Uncapped (video.framerate = 0) this returns immediately. What makes that
+    // safe is not here: it is every rate in the game being a rate per second
+    // rather than per frame. See docs/UNCAPPED.md.
     iWindowPaceFrame();
 
     // BFBB_FPS: how fast the port is ACTUALLY presenting.

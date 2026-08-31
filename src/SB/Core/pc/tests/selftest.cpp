@@ -316,6 +316,19 @@ static void test_config()
 
     check(iConfigGetInt("input.controller", 0) == 3, "input.controller comes off the file");
 
+    // The frame rate. The file does not mention it, so this is the table's
+    // default reaching a caller whose fallback is the wrong answer -- and it is
+    // the one setting where the wrong answer is not visible on screen but in
+    // how fast the game runs.
+    check(iConfigGetInt("video.framerate", 1) == 60, "video.framerate defaults to the console's rate");
+    check(iConfigGetBool("video.vsync", FALSE) == TRUE, "and vsync defaults on");
+
+    // `display` and `off` are words iConfigGetInt cannot parse; iSystem reads
+    // the key as a string first and only falls through to the int for a number.
+    // So the string accessor has to hand back exactly what the file says.
+    check(strcmp(iConfigGetString("video.framerate", "!"), "60") == 0,
+          "and reads back as a string, which is how `display` and `off` get through");
+
     // The load appends the settings this build has and the file did not.
     //
     // A config.ini written by an older build is missing every setting added
@@ -403,6 +416,8 @@ static void test_config()
         check(strstr(buf, "mode = fullscreen") != NULL, "and the window mode at its default");
         check(strstr(buf, "width = 640") != NULL, "and the render width at its default");
         check(strstr(buf, "height = 480") != NULL, "and the height");
+        check(strstr(buf, "framerate = 60") != NULL, "and the frame rate at the console's");
+        check(strstr(buf, "vsync = on") != NULL, "and vsync");
         check(strstr(buf, "draw_distance = on") != NULL, "and the draw distance");
         check(strstr(buf, "msaa = 4") != NULL, "and the sample count");
         // Written as its own setting, not folded into the one above. Coverage

@@ -167,6 +167,66 @@ static U32 RWAttachPlugins()
     return FALSE;
 }
 
+// How fast the game runs and whether the present waits for the display, from
+// config.ini's video.framerate and video.vsync.
+//
+// Pushed into iWindow rather than read there for the reason above: the window
+// compiles into bfbb_rw, which does not link the platform layer and so cannot
+// ask iConfig anything.
+//
+// Called after the window is open, because `display` means the refresh rate of
+// the monitor the game landed on, and before it opens there is no such monitor.
+static void ApplyDisplayRateConfig()
+{
+    iWindowSetVSync(iConfigGetBool("video.vsync", TRUE));
+
+    const char* rate = iConfigGetString("video.framerate", "60");
+    S32 fps;
+
+    if (iHostStrCaseCmp(rate, "display") == 0)
+    {
+        fps = iWindowGetDisplayRefreshRate();
+        if (fps <= 0)
+        {
+            // No cap rather than 60: vsync is the pacer the setting was asking
+            // for, and it is still doing its job. Capping to a number the
+            // display did not give would be inventing one.
+            printf("bfbb: config: video.framerate = display, but the monitor's "
+                   "refresh rate could not be read; not capping\n");
+            fps = 0;
+        }
+    }
+    else if (iHostStrCaseCmp(rate, "off") == 0 || iHostStrCaseCmp(rate, "unlimited") == 0 ||
+             iHostStrCaseCmp(rate, "none") == 0)
+    {
+        fps = 0;
+    }
+    else
+    {
+        // A value that is neither a number nor one of the words above is
+        // reported by iConfigGetInt and answered with 60.
+        fps = iConfigGetInt("video.framerate", 60);
+        if (fps < 0)
+        {
+            printf("bfbb: config: video.framerate cannot be negative, using the "
+                   "default: %s\n",
+                   rate);
+            fps = 60;
+        }
+    }
+
+    iWindowSetFrameRate(fps);
+
+    if (fps > 0)
+    {
+        printf("bfbb: %d fps cap, vsync %s\n", (int)fps, iWindowGetVSync() ? "on" : "off");
+    }
+    else
+    {
+        printf("bfbb: no fps cap, vsync %s\n", iWindowGetVSync() ? "on" : "off");
+    }
+}
+
 static S32 RenderWareInit()
 {
     // The window, where VIInit was. It opens at the render size because that is
@@ -211,6 +271,8 @@ static S32 RenderWareInit()
             iScreenSetSize(clientWidth, clientHeight);
         }
     }
+
+    ApplyDisplayRateConfig();
 
     printf("bfbb: rendering at %dx%d\n", (int)iScreenWidth(), (int)iScreenHeight());
 

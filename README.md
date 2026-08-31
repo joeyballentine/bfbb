@@ -208,6 +208,34 @@ picture instead of the 4:3 area, and the bamboo frame is rebuilt with extra
 copies of the bamboo texture it already repeats, so it gets wider without the
 poles getting thicker.
 
+### Frame rate
+
+```ini
+[video]
+framerate = 60
+vsync = on
+```
+
+`framerate` is how many frames a second the game runs at. The port runs one
+simulation step per frame, as the consoles did, so this is the speed of the game
+as well as the picture. `60` is the console's rate. `display` follows the refresh
+rate of the monitor the game is on. `0` or `off` removes the cap. Any other
+number is that many frames a second.
+
+`vsync` decides whether a finished frame waits for the display before it is
+shown. On, nothing tears and the frame rate cannot exceed the monitor's refresh
+rate whatever `framerate` says. Off, frames are shown as soon as they are
+finished, which is what `framerate` needs to be free of the display.
+
+The two are separate. On a 144 Hz monitor, `vsync = on` with `framerate = 60`
+gives sixty whole frames a second.
+
+Above 60 the game is running somewhere it never ran on hardware. The rates that
+the original code wrote per frame rather than per second have been converted --
+the camera, the pickups, particle emission, NPC spin and damping, the surface UV
+animation. `docs/UNCAPPED.md` lists what was changed, what was deliberately left
+alone, and what has not been swept yet.
+
 ### Scenery
 
 ```ini

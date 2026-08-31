@@ -96,6 +96,35 @@ void iWindowPump();
 // that could not produce one.
 void iWindowPaceFrame();
 
+// The cap iWindowPaceFrame paces to, in frames per second. 0 is no cap: the
+// pacer returns immediately and the frame rate is whatever the machine and
+// iWindowSetVSync allow.
+//
+// Set from config.ini's video.framerate before the window opens, and 60 until
+// it is, so a caller that never sets it -- the shim's own tests -- gets the
+// console's rate.
+//
+// The cap and vsync are separate because they answer separate questions. The
+// cap decides how fast the game RUNS; waiting on the display decides whether a
+// frame is torn. Capping below the display's rate still tears, and vsync alone
+// still runs at whatever the monitor gives, which on a 240 Hz panel is four
+// times the console's rate.
+void iWindowSetFrameRate(S32 fps);
+S32 iWindowGetFrameRate();
+
+// The monitor's refresh rate in Hz, or 0 if it cannot be determined. This is
+// what video.framerate = display resolves to.
+S32 iWindowGetDisplayRefreshRate();
+
+// Whether the present waits for vertical retrace. TRUE until set otherwise.
+//
+// Read in RwCameraShowRaster, which is the only place the port presents. Off,
+// the caller's own flip flags stand -- retail asks for rwRASTERFLIPDONTWAIT at
+// iCamera.cpp:124, because on the console the video interface paced the frame
+// whether RenderWare waited on it or not.
+void iWindowSetVSync(S32 on);
+S32 iWindowGetVSync();
+
 // TRUE once the user has asked to close the window.
 //
 // Read at the frame boundary, in RwCameraShowRaster, alongside iWindowPump --

@@ -317,14 +317,94 @@ void iWindowPump()
     }
 }
 
-// 60 Hz, which is what the GameCube's video interface gave the game.
-#define IWINDOW_FRAME_PERIOD_NS (1000000000ULL / 60)
+// 60 Hz, which is what the GameCube's video interface gave the game, and what
+// the port paces to until config.ini says otherwise.
+static S32 sFrameRate = 60;
+static S32 sVSync = TRUE;
+
+// Held at file scope rather than inside iWindowPaceFrame so that a rate change
+// can invalidate the deadline. See iWindowSetFrameRate.
+static bool sPacerStarted = false;
+static ULONGLONG sNextFrame = 0;
+
+void iWindowSetFrameRate(S32 fps)
+{
+    sFrameRate = fps > 0 ? fps : 0;
+
+    // The deadline the pacer is holding was measured against the old period.
+    // Leaving it be would make the first frame after a change sleep out the
+    // remains of a frame that is no longer the right length.
+    sPacerStarted = false;
+}
+
+S32 iWindowGetFrameRate()
+{
+    return sFrameRate;
+}
+
+void iWindowSetVSync(S32 on)
+{
+    sVSync = on ? TRUE : FALSE;
+}
+
+S32 iWindowGetVSync()
+{
+    return sVSync;
+}
+
+S32 iWindowGetDisplayRefreshRate()
+{
+    // The monitor the window is on, not the primary one -- on a two-monitor
+    // machine those differ, and the one that paces the game is the one it is
+    // being displayed on. Before the window exists there is no such monitor and
+    // the primary display is the only honest answer.
+    DEVMODEA mode;
+    ZeroMemory(&mode, sizeof(mode));
+    mode.dmSize = sizeof(mode);
+
+    const char* deviceName = NULL;
+    MONITORINFOEXA info;
+
+    if (sWindow != NULL)
+    {
+        HMONITOR monitor = MonitorFromWindow(sWindow, MONITOR_DEFAULTTOPRIMARY);
+        ZeroMemory(&info, sizeof(info));
+        info.cbSize = sizeof(info);
+        if (GetMonitorInfoA(monitor, &info))
+        {
+            deviceName = info.szDevice;
+        }
+    }
+
+    if (!EnumDisplaySettingsA(deviceName, ENUM_CURRENT_SETTINGS, &mode))
+    {
+        return 0;
+    }
+
+    // 0 and 1 both mean "the hardware's default rate" in a DEVMODE, which is
+    // not a number of hertz and must not be used as one -- a 1 fps cap is the
+    // game stopped.
+    if (mode.dmDisplayFrequency <= 1)
+    {
+        return 0;
+    }
+
+    return (S32)mode.dmDisplayFrequency;
+}
 
 void iWindowPaceFrame()
 {
     static LARGE_INTEGER frequency = { 0 };
-    static bool started = false;
-    static ULONGLONG nextFrame = 0;
+
+    // No cap. The frame rate is then whatever the machine produces, bounded by
+    // the display if vsync is on and by nothing at all if it is not.
+    if (sFrameRate <= 0)
+    {
+        sPacerStarted = false;
+        return;
+    }
+
+    const ULONGLONG framePeriodNs = 1000000000ULL / (ULONGLONG)sFrameRate;
 
     if (frequency.QuadPart == 0 && !QueryPerformanceFrequency(&frequency))
     {
@@ -340,26 +420,26 @@ void iWindowPaceFrame()
     ULONGLONG now =
         (ULONGLONG)((double)counter.QuadPart * 1e9 / (double)frequency.QuadPart);
 
-    if (!started)
+    if (!sPacerStarted)
     {
-        nextFrame = now;
-        started = true;
+        sNextFrame = now;
+        sPacerStarted = true;
     }
 
-    nextFrame += IWINDOW_FRAME_PERIOD_NS;
+    sNextFrame += framePeriodNs;
 
     // A frame that overran its budget must not be paid for by not sleeping for
     // the next several -- that turns one slow frame into a burst of fast ones.
     // Drop the missed deadlines and pace from now instead. Same arrangement as
     // iVSync in iSystem.cpp, which does this for the loops that have no
     // renderer to present from.
-    if (nextFrame <= now)
+    if (sNextFrame <= now)
     {
-        nextFrame = now;
+        sNextFrame = now;
         return;
     }
 
-    ULONGLONG remaining = nextFrame - now;
+    ULONGLONG remaining = sNextFrame - now;
 
     // Sleep for all but the last millisecond, then spin. Sleep's resolution is
     // the scheduler's tick and it routinely overshoots by more than a frame at
@@ -377,7 +457,7 @@ void iWindowPaceFrame()
         }
 
         now = (ULONGLONG)((double)counter.QuadPart * 1e9 / (double)frequency.QuadPart);
-        if (now >= nextFrame)
+        if (now >= sNextFrame)
         {
             return;
         }
