@@ -746,6 +746,41 @@ radius, which turns the rope into a rigid rod.
                                 Counted in frames it is four times as many
                                 chances to connect at 240 fps
 
+## What holds this in place
+
+Two things, because the work splits cleanly into what a test can reach and what
+it cannot.
+
+`fps_selftest` checks the rate helpers as PROPERTIES rather than values. The
+interesting claim is not that the arithmetic is right, it is that at a sixtieth
+of a second every helper gives back the constant it replaced -- so the default
+build is the console's -- and that a second of game time costs the same at 60
+fps as at 3000. It runs a second of damping, approach, emission and pop-chance
+at 60, 120, 144, 240, 1000 and 3000 fps and compares the totals, plus the
+bubble-pop loop driven through the real `xurand` rather than the closed form.
+31 checks, a sixth of a second. Breaking `60.0f * dt` in `xFrameApproach` trips
+seven of them.
+
+It is its own target rather than a case in `pc_selftest` because linking
+`xMath.cpp` needs `range_limit<F32>`, which CodeWarrior placed in
+`xCamera.cpp` -- the weak-inline problem that is also why `pc_selftest` links no
+game math at all.
+
+`tools/fpsdep.py` covers the rest. Sixty-odd rebased sites are in game code that
+wants a scene, a model and a player before it will run, so none of them are
+unit-testable. What is testable is that no NEW one appears: the four shapes are
+mechanically recognisable, every known site is recorded in `tools/fpsdep.json`,
+and anything not in that file fails. It scans the PC arm only, so a fixed site
+shows its guarded line and not the retail line beside it -- which is why the
+nine `damping` hits it reports are all known false positives and every real one
+is invisible.
+
+The baseline is a record of what has been READ and judged, not of what is
+correct. Roughly one in five of what the scan finds is worth changing, and the
+list below is how to tell which.
+
+Both are `ctest` cases in `build-pc`.
+
 ## Telling a real site from a false one
 
 Eight things wear the same clothes, in rough order of how often they turn up:

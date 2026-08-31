@@ -652,6 +652,45 @@ add_library(bfbb_game STATIC ${BFBB_GAME_SOURCES})
 target_link_libraries(bfbb_game PUBLIC bfbb_platform bfbb_rw)
 target_compile_options(bfbb_game PRIVATE -Wno-everything)
 
+# --- the frame-rate independence test ----------------------------------------
+# The rate helpers in xMath.cpp, checked as PROPERTIES rather than values: that
+# at a sixtieth of a second each one gives back the constant it replaced, so the
+# default 60 fps build is unchanged, and that a second of game time costs the
+# same at 60 fps as at 3000.
+#
+# Its own target rather than a case in pc_selftest because linking xMath.cpp
+# needs range_limit<F32>, which CodeWarrior placed in xCamera.cpp -- the weak
+# inline problem described beside iMath3 above, and the reason pc_selftest links
+# no game math at all. Seven leaf functions from the other half of xMath.cpp's
+# object file are supplied by the harness instead, none of them reached by
+# anything under test except xpow.
+add_executable(fps_selftest ${PC_DIR}/tests/fpstest.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x/xMath.cpp
+
+  # __fabs, which xMathSolveCubic and xAccelMove call directly. The real one,
+  # not a harness double -- it is two lines and the game links the same file.
+  ${PC_DIR}/intrin.cpp
+)
+target_compile_definitions(fps_selftest PRIVATE PLATFORM_PC)
+target_include_directories(fps_selftest PRIVATE
+  ${PC_DIR}/compat
+  ${PC_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x
+)
+target_compile_options(fps_selftest PRIVATE -Wno-everything)
+add_test(NAME fps_selftest COMMAND fps_selftest)
+
+# The other half of the same guarantee. Almost none of the sixty-odd rebased
+# game sites can be reached from a unit test -- they want a scene, a model, a
+# player -- so what protects them is a scan for the four shapes plus a baseline
+# of every one that has been read and judged. A new one fails here.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_FOUND)
+  add_test(NAME fpsdep
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/fpsdep.py)
+endif()
+
 # --- the RenderWare shim's own test ------------------------------------------
 # 451 checks against a live librw engine. Separate from pc_selftest because it
 # needs librw and pc_selftest deliberately does not -- the platform layer is
