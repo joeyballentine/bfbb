@@ -6174,3 +6174,117 @@ worth the blast radius.
   above the cross products in `nearestFloorCB` put the pool load ahead of the
   pdx/pdz stores, where retail has it: 95.581 -> 100.000. Same device as
   `nearestTrackCB`.
+
+## The complete patch-cost list is seven functions (2026-08-31)
+
+`tools/patchcost.py` compiles every game unit twice — once with `GC/2.0p1a`,
+once with stock `GC/2.0p1` — and reports the functions that are exact under
+stock and not under ours. Tree-wide, that is **seven**:
+
+| unit | function | ours | bytes |
+|---|---|---|---|
+| `zNPCGoalStd` | `MoveNormal__14zNPCGoalPatrolFf` | 97.430 | 716 |
+| `zEntPlayer` | `zEntPlayer_AnimTable__Fv` | 97.249 | 23,820 |
+| `xSpline` | `BasisBspline__FPA4_fPf` | 96.264 | 576 |
+| `zNPCTypeRobot` | `Setup__11zNPCFodBzztFv` | 95.347 | 288 |
+| `zNPCGoalAmbient` | `Process__18zNPCGoalJellyBirth…` | 92.954 | 348 |
+| `zNPCFXCinematic` | `NCIN_SleepyLamp_AR__…` | 87.567 | 628 |
+| `xMath3` | `xBoxFromCircle__FR4xBoxRC5xVec3RC5xVec3f` | 77.875 | 256 |
+
+Against E3n's +82, clause C+'s +19 and clause V's +25 this is a rounding
+error, and the list settles two things.
+
+**Every one of these seven is source-correct by construction.** Reaching
+100.000% under stock means the source already says what retail's said, so
+there is nothing left to recover from source in any of them. Anybody who opens
+one looking for a wrong expression is wasting the session. Three of them were
+already recorded individually (`zEntPlayer_AnimTable`, `MoveNormal`,
+`BasisBspline`); the other four were not.
+
+**They are also the exact target set for narrowing a clause.** Any future
+narrowing should be priced against this table and nothing else — if a
+narrowing does not recover one of these seven it is buying nothing, and the
+frida A/B method is how to check before writing bytes.
+
+Note `xFXRenderProximityFade` and `refresh_bound` are *not* on this list.
+They are worse under the patch than under stock but not exact under either, so
+they are partial patch cost, not recoverable by reverting a clause.
+
+## `xVec3::create` is not the source of the `@405` template
+
+`create__5xVec3Ffff` and `create__5xVec3Ff` sit at **50.000%** (80 bytes each)
+in every unit that emits them, and the target's body opens by copying an
+anonymous 12-byte all-zero `.rodata` template into the local before assigning
+x, y and z. That looks exactly like `xVec3 v = { 0.0f, 0.0f, 0.0f };` and it is
+not. Four shapes measured through `solo.py --shadow` (which puts the header
+change in a private include directory so no other agent ever sees it):
+
+| shape | % |
+|---|---|
+| `xVec3 v;` (current) | 50.000 |
+| `xVec3 v = { 0.0f, 0.0f, 0.0f };` | 50.000 |
+| `xVec3 v = m_Null;` | 50.000 |
+| `const xVec3 zero = {…}; xVec3 v = zero;` | 50.000 |
+| `static const xVec3 zero = {…}; xVec3 v = zero;` | 50.000 |
+
+CodeWarrior eliminates the initialisation in every one of them, because all
+three members are overwritten immediately after. It also eliminates it under
+**stock `GC/2.0p1`**, so this is not patch collateral. Whatever keeps retail's
+copy alive is not an initialiser CW can see through, and guessing at brace
+inits is settled — stop.
+
+Do not read the anonymous head templates (`@405`, `@406`, `@410`, `@441`) as
+"these belong to xVec3.h inlines and would appear on their own if the source
+were right". They are reproduced deliberately by `__deadstripped_<unit>` in the
+units that need them, and that is currently the only thing that produces them.
+
+## `xsqrt` and two more residuals that are constant-load placement
+
+`xsqrt__Ff` in `xBound` (172 b, **67.512%**) is the clearest specimen of the
+rematerialise-vs-hold class. Retail's frame is 0x40 and saves f29/f30/f31: `x`
+in f29, and `half` and `three` **loaded before the `__fpclassifyf` call and
+held across it**. Ours is 0x20, saves only f31, and rematerialises both
+constants after the call. Measured and inert: `static const`, non-const, a
+named copy of `x`, and `double guess` in three spellings (all 58.814 — worse,
+because the `frsp` the source comment blames is not the residual).
+
+Two siblings found the same day, both compiler-track:
+
+- `xSndAddDelayed` (92.000, one-away unit `xSnd`): retail keeps the `lfs 0.0f`
+  **inside** the delayed-slot search loop; ours hoists it out. Four shapes
+  measured, none moved it. LICM, not source.
+- `zNPCSpawner::Owned` (87.145, one-away unit): retail's unroller bumps the
+  base pointer by 0xC between the eight unrolled bodies and reads a constant
+  displacement; ours uses eight immediate displacements and one `addi 0x60`.
+  Three pointer-walk shapes measured, all worse.
+
+And one that is neither: `xTRCDisk` (44 b, 75.909, one-away unit `xTRC`).
+Retail stores the parameter first, which frees r3 for the address of
+`gTrcDisk[1]`; ours hoists the address materialisation above the store and has
+to use r4. Four shapes measured, best 80.909.
+
+## Six units are at 100% and still cannot be marked Matching
+
+`tools/promotable.py` lists them from `report.json` and `configure.py`:
+`iCamera`, `xDebug`, `xHudMeter`, `xParEmitterType`, `zSurface`, plus
+`zAnimList` which is deliberately `Equivalent`. `iCamera` is new as of today
+(`iCameraSetFOV` reached 100.000).
+
+`symorder.py` gives the reason for each and it is the same reason every time:
+our object emits a weak out-of-line inline copy that the retail link
+deduplicated into another object, so the `.text` symbol order differs even
+though every function matches.
+
+- `iCamera` — `__as__6RwRGBAFRC6RwRGBA`, emitted between `iCameraUpdateFog` and
+  `iCameraSetFogRenderStates`.
+- `zSurface` — `__as__5xVec3FRC5xVec3` after `zSurfaceInit`, plus a
+  `.sdata2` SAME SET, WRONG ORDER on the last two slots.
+- `xHudMeter` — four `xhud::widget` virtuals plus a reordered
+  `sound_queue<4>` group.
+- `xParEmitterType` — `xVec3SMulBy`, `__as__5xVec3`, the `xVec2` operators and
+  `__deadstripped_xParEmitterType` itself.
+
+Defining a function the retail link deadstripped is not automatically fatal —
+`mem_funcs.c`, `FILE_POS.C`, `nubevent.c` and `float.c` all do and all link —
+so the order is what to check, not the extra symbol. The DOL sha1 is the only
+test that settles a promotion.
