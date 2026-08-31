@@ -63,10 +63,14 @@ tweak_callback tweak_callback::create_change(void (*on_change)(const tweak_info&
 void __deadstripped_zFX2()
 {
     const char _559[0x28] = {};
-
-    const F32 _screen_bounds[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
-    const F32 _default_adjust[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
 }
+
+// Retail carries these two file-scope statics in .rodata, both 16 bytes of
+// { 0.0f, 0.0f, 1.0f, 1.0f }, and nothing in this unit references them --
+// their only consumers were deadstripped. Same pair as xHud.cpp and
+// zEntPlayerBungeeState.cpp.
+const basic_rect<F32> screen_bounds = { 0.0f, 0.0f, 1.0f, 1.0f };
+const basic_rect<F32> default_adjust = { 0.0f, 0.0f, 1.0f, 1.0f };
 
 const xFXRing sPatrickStunRing[3] = { { 0x741b0566,
                                         1.0f,
