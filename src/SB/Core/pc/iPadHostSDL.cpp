@@ -116,14 +116,21 @@ static bool PadInputHeld(S16 id)
 }
 
 // The triggers are analog and the game's buttons are not, so they click at a
-// threshold the way the GameCube's do. gc/iPad.cpp uses 0x18 out of 255, which
-// is 9.4% of the travel; SDL reports a trigger from 0 to 32767, so the same
-// fraction is 3084.
+// threshold the way the GameCube's do. Working out where that is takes two
+// steps, and skipping the first is how this constant was wrong twice:
 //
-// Not 65535. SDL's STICK axes are signed and span 65535, and reusing that span
-// here put the click at 23.5% -- far enough down a real analog trigger to feel
-// like the button was missing its first half.
-#define IPAD_SDL_TRIGGER_THRESHOLD 3084
+//   iPad.cpp calls PADClamp before it looks at anything, and ClampTrigger
+//   (min 30, max 180) subtracts the dead 30 and saturates at 180, so what the
+//   `triggerLeft >= 0x18` test reads runs 0..150, not 0..255. 0x18 of that is
+//   raw 54, and 54 of a full pull of 180 is 30% of the travel.
+//
+//   SDL reports a trigger from 0 to 32767 across the whole pull with nothing
+//   taken off the bottom, so the same 30% is 9830.
+//
+// Comparing 0x18 against a range it was never in gave 3084; scaling that to
+// SDL's signed STICK span rather than its trigger span gave 7710. Both let the
+// trigger click far too early on a pad with real analog travel.
+#define IPAD_SDL_TRIGGER_THRESHOLD 9830
 
 static U32 ConvertButtons(SDL_Gamepad* pad)
 {
@@ -236,6 +243,15 @@ static void OpenGamepad(SDL_JoystickID id)
         SDL_Gamepad* pad = SDL_OpenGamepad(id);
         if (pad == NULL)
         {
+            // SDL knows this one and still could not have it -- almost always
+            // another process holding it open, which on Windows is exclusive.
+            // Worth as much noise as a device with no layout: both end with a
+            // controller that is plugged in and does nothing.
+            const char* name = SDL_GetGamepadNameForID(id);
+            printf("bfbb: %s is plugged in but could not be opened (%s). Another program "
+                   "probably has it.\n",
+                   name != NULL ? name : "a controller", SDL_GetError());
+            fflush(stdout);
             return;
         }
 
@@ -250,6 +266,25 @@ static void OpenGamepad(SDL_JoystickID id)
 
     // More controllers than the game has ports. Nothing is wrong; the game has
     // four and the machine may have more.
+}
+
+// Everything plugged in that is not already in a slot. Wanted when a slot frees
+// up: a controller passed over for want of a slot gets no second event, so
+// without this it stays invisible until it is physically replugged.
+static void OpenWaitingGamepads()
+{
+    S32 count = 0;
+    SDL_JoystickID* ids = SDL_GetGamepads(&count);
+    if (ids == NULL)
+    {
+        return;
+    }
+
+    for (S32 i = 0; i < count; i++)
+    {
+        OpenGamepad(ids[i]);
+    }
+    SDL_free(ids);
 }
 
 static void CloseGamepad(SDL_JoystickID id)
@@ -269,6 +304,8 @@ static void CloseGamepad(SDL_JoystickID id)
         sGamepad[i] = NULL;
         sInstance[i] = 0;
         ClearState(&sSlot[i]);
+
+        OpenWaitingGamepads();
         return;
     }
 }
@@ -290,10 +327,18 @@ static void LoadMappings()
     char path[600];
     snprintf(path, sizeof(path), "%s/gamecontrollerdb.txt", dir);
 
+    // -1 is a file that is there and could not be read. Distinct from 0, and
+    // from no file at all, which is the normal case and says nothing.
     S32 added = SDL_AddGamepadMappingsFromFile(path);
     if (added > 0)
     {
         printf("bfbb: %d controller layouts from gamecontrollerdb.txt\n", (int)added);
+        fflush(stdout);
+    }
+    else if (added < 0 && iHostPathExists(path))
+    {
+        printf("bfbb: gamecontrollerdb.txt could not be read (%s); no extra layouts\n",
+               SDL_GetError());
         fflush(stdout);
     }
 }
@@ -350,13 +395,18 @@ void iPadHostInit()
                "seen and the keyboard covers port 0\n",
                SDL_GetError());
         fflush(stdout);
+
+        // A failed SDL_Init can still have brought subsystems up before it gave
+        // up, and iPadHostExit will not do this for us -- it keys on sReady.
+        SDL_Quit();
         return;
     }
 
     sReady = true;
 
-    // Before anything is enumerated, so a device the file covers is already a
-    // gamepad by the time it is looked at.
+    // After SDL_Init, which has already enumerated and queued its events, so a
+    // device that only the file knows about is NOT among them. The sweep below
+    // is what picks that one up; it is not merely a shortcut past the queue.
     LoadMappings();
 
     // Whatever is already plugged in. Everything after this arrives as an event.
@@ -462,8 +512,8 @@ void iPadHostPoll()
                 // arrived and will do nothing.
                 //
                 // SDL posts this for devices that were already plugged in when
-                // it started, as well as for ones arriving later, so the first
-                // poll covers both and iPadHostInit does not enumerate.
+                // it started as well as for ones arriving later, so the first
+                // poll reports both and iPadHostInit does not have to.
                 ReportIfUnmapped(e.jdevice.which);
             }
         }
@@ -576,11 +626,15 @@ void iPadHostRumble(S32 port, S32 on)
     // PADControlMotor is all retail calls, so there is no envelope to apply --
     // see iPadRumbleFx, which is empty on the console too.
     //
-    // SDL wants a duration and treats 0 as "stop now", so an effect that is
-    // meant to run until the game says otherwise gets the longest one there is.
-    // A real duration would end a rumble the game still believes is running.
+    // Duration 0, both ways. SDL only arms an expiry when the magnitudes and
+    // the duration are BOTH non-zero, so 0 here means "until told otherwise" --
+    // which is what the game means, since it is the one that turns rumble off.
+    //
+    // Not SDL_MAX_UINT32: that is clamped to SDL_MAX_RUMBLE_DURATION_MS, so it
+    // would quietly stop a long rumble after 65 seconds. And zero magnitude is
+    // what stops a motor; a zero duration on its own never did.
     Uint16 strength = on ? 0xFFFF : 0;
-    SDL_RumbleGamepad(sGamepad[slot], strength, strength, on ? SDL_MAX_UINT32 : 0);
+    SDL_RumbleGamepad(sGamepad[slot], strength, strength, 0);
 }
 
 const char* iPadHostName()

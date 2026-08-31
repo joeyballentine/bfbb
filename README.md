@@ -266,10 +266,15 @@ controller = auto
 ```
 
 `auto` plays on the first controller the machine actually has, so a single pad
-works whichever slot it landed in. A number from 1 to 4 pins the game to that slot and
-ignores the rest — set that when a wheel, a flight stick or a dormant wireless
-receiver is holding slot 1 and the pad you want is behind it. The keyboard covers
-whichever controller you chose whenever nothing is on it.
+works whichever slot it landed in. A number from 1 to 4 pins the game to that
+slot and ignores the rest — set that when two pads are plugged in and the game
+keeps picking the wrong one. The keyboard covers whichever controller you chose
+whenever nothing is on it.
+
+Slots are the order the controllers turned up in, not a number printed on
+anything, and that order can differ between runs — so a pinned number is worth
+setting when a second pad is a nuisance, not as a permanent address. The
+startup line `playing on controller N` says which one the game settled on.
 
 `[pad]` and `[keyboard]` say what presses each button. The left of the `=` is the
 button the game reads, named as the console named it; the right is what presses
@@ -305,8 +310,8 @@ non-Steam game and let Steam Input hand it over as a standard pad.
 A controller SDL does not recognise says so at startup, with its USB ids, and
 cannot be played on until it has a layout. Put a `gamecontrollerdb.txt` beside
 `bfbb.exe` to give it one — the community file of that name, or a single line
-from SDL's own gamepad mapping tool. It is read before anything is enumerated,
-so a device it covers is a controller like any other.
+from SDL's own gamepad mapping tool. A device it covers is then a controller
+like any other.
 
 ### The rest
 

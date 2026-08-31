@@ -1264,17 +1264,21 @@ static U32 virtual_press(SDL_GamepadButton button)
     return virtual_buttons();
 }
 
-// Where the trigger has to click, worked out from the CONSOLE rather than from
-// the backend's constant: gc/iPad.cpp uses 0x18 of 255, so 9.4% of the travel.
-// Taking the number from the code under test instead is how the first version
-// of this check passed against a threshold that was two and a half times too
-// high.
+// Where the trigger has to click, worked out from the CONSOLE and from the
+// clamp it goes through: PADClamp's ClampTrigger takes 30 off and saturates at
+// 180, so gc/iPad.cpp's `>= 0x18` is raw 54 of a 180 pull -- 30% of the travel.
+//
+// Both halves matter. Reading 0x18 as a fraction of 255, or of the clamped 150,
+// gives a threshold less than half of that, and a bracket built on either
+// number passes against a backend that clicks far too early.
 //
 // A virtual trigger's raw axis runs the full signed range and the gamepad layer
-// rescales it to 0..32767, so gamepad = (raw + 32768) / 2. These two are 5% and
-// 15% of travel, which straddle 9.4% with room to spare either side.
-#define TEST_SDL_TRIGGER_OFF ((Sint16)(-29492)) // 5% of the travel
-#define TEST_SDL_TRIGGER_ON ((Sint16)(-22938)) // 15%
+// rescales it to 0..32767, so gamepad = (raw + 32768) / 2. These two are 27%
+// and 33% of travel: close enough to 30% either side that a threshold which is
+// merely in the right neighbourhood still fails, which a wider bracket does not
+// do -- 20% and 40% would have let the old 7710 through.
+#define TEST_SDL_TRIGGER_OFF ((Sint16)(-15074)) // 27% of the travel
+#define TEST_SDL_TRIGGER_ON ((Sint16)(-11142)) // 33%
 
 static void test_pad_sdl_virtual()
 {
@@ -1522,10 +1526,11 @@ static void test_pad()
     // either. This process has no window, so GetActiveWindow reports none and
     // the keyboard path takes its unfocused branch: present, holding nothing.
     //
-    // It assumes no controller is plugged into the machine running the test. A
-    // developer with a pad on their desk would see this fail, which is a worse
-    // trade than it looks -- the alternative is asserting nothing about the one
-    // path every keyboard-only player takes.
+    // The harness config.ini pins input.controller to 3, so port 0 reads slot
+    // 2 and a pad on the developer's desk lands in slot 0 without disturbing
+    // this. It takes THREE controllers to push one into slot 2 and fail the
+    // check -- which is the trade: asserting nothing here would leave the one
+    // path every keyboard-only player takes untested.
     check(s != NULL && s->connected,
           "the keyboard stands in for port 0 with no controller plugged in");
     check(s != NULL && s->buttons == 0, "and an unfocused keyboard holds nothing");
