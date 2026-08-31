@@ -272,8 +272,6 @@ static S32 RenderWareInit()
         }
     }
 
-    ApplyDisplayRateConfig();
-
     printf("bfbb: rendering at %dx%d\n", (int)iScreenWidth(), (int)iScreenHeight());
 
     // NULL rather than psGetMemoryFunctions(): that is the console's hook for
@@ -318,6 +316,13 @@ static S32 RenderWareInit()
     xFXInit();
     RwTextureSetMipmapping(TRUE);
     RwTextureSetAutoMipmapping(TRUE);
+
+    // After the engine, not beside the window request above: under GL3 the
+    // window belongs to librw and does not exist until RwEngineStart has run,
+    // so `framerate = display` asked before this point would read the primary
+    // monitor's rate rather than the one the game actually landed on. Under
+    // D3D9 the window exists either side of this and the answer is the same.
+    ApplyDisplayRateConfig();
 
     printf("bfbb: RenderWare up, %dx%d\n", (int)sVideoMode.width, (int)sVideoMode.height);
     return FALSE;

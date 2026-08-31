@@ -221,33 +221,101 @@ void iWindowPump()
     }
 }
 
-// 60 Hz, which is what the GameCube's video interface gave the game. Same
-// number and the same deadline arithmetic as iWindowWin32.cpp; see the long
-// comment at the iWindowPaceFrame call in rw/camera.cpp for why the port paces
-// at all when it is already waiting on the display.
-#define IWINDOW_FRAME_PERIOD_NS (1000000000ULL / 60)
+// 60 Hz, which is what the GameCube's video interface gave the game, and what
+// the framerate setting defaults to. Same numbers and the same deadline
+// arithmetic as iWindowWin32.cpp; see the long comment at the iWindowPaceFrame
+// call in rw/camera.cpp for why the port paces at all when it is already
+// waiting on the display.
+static S32 sFrameRate = 60;
+static S32 sVSync = 1;
+
+// Held at file scope rather than inside iWindowPaceFrame so that a rate change
+// can invalidate the deadline. See iWindowSetFrameRate.
+static bool sPacerStarted = false;
+static Uint64 sNextFrame = 0;
+
+void iWindowSetFrameRate(S32 fps)
+{
+    sFrameRate = fps > 0 ? fps : 0;
+
+    // The deadline the pacer is holding was measured against the old period.
+    // Leaving it be would make the first frame after a change sleep out the
+    // remainder of a period that no longer exists.
+    sPacerStarted = false;
+}
+
+S32 iWindowGetFrameRate()
+{
+    return sFrameRate;
+}
+
+void iWindowSetVSync(S32 on)
+{
+    sVSync = on ? 1 : 0;
+}
+
+S32 iWindowGetVSync()
+{
+    return sVSync;
+}
+
+S32 iWindowGetDisplayRefreshRate()
+{
+    // The display the window is on, not the primary one -- on a two-monitor
+    // machine those differ, and the one that paces the game is the one it is
+    // being displayed on. Before the window exists there is no such display and
+    // the primary one is the only honest answer.
+    SDL_DisplayID display = 0;
+
+    if (sWindow != NULL)
+    {
+        display = SDL_GetDisplayForWindow(sWindow);
+    }
+
+    if (display == 0)
+    {
+        display = SDL_GetPrimaryDisplay();
+    }
+
+    const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(display);
+
+    if (mode == NULL || mode->refresh_rate <= 1.0f)
+    {
+        // SDL reports 0 for a display whose rate it does not know, and a rate
+        // of one is not a number of hertz worth capping to -- that is the game
+        // stopped.
+        return 0;
+    }
+
+    return (S32)(mode->refresh_rate + 0.5f);
+}
 
 void iWindowPaceFrame()
 {
-    static bool started = false;
-    static Uint64 nextFrame = 0;
+    if (sFrameRate <= 0)
+    {
+        sPacerStarted = false;
+        return;
+    }
+
+    const Uint64 framePeriodNs = 1000000000ULL / (Uint64)sFrameRate;
 
     Uint64 now = SDL_GetTicksNS();
 
-    if (!started)
+    if (!sPacerStarted)
     {
-        nextFrame = now;
-        started = true;
+        sNextFrame = now;
+        sPacerStarted = true;
     }
 
-    nextFrame += IWINDOW_FRAME_PERIOD_NS;
+    sNextFrame += framePeriodNs;
 
     // A frame that overran its budget must not be paid for by not sleeping for
     // the next several -- that turns one slow frame into a burst of fast ones.
     // Drop the missed deadlines and pace from now instead.
-    if (nextFrame <= now)
+    if (sNextFrame <= now)
     {
-        nextFrame = now;
+        sNextFrame = now;
         return;
     }
 
@@ -256,7 +324,7 @@ void iWindowPaceFrame()
     // rate, which costs a frame every time rather than pacing one. The precise
     // one sleeps for all but the last fraction and spins out the rest, which is
     // what iWindowWin32.cpp writes by hand.
-    SDL_DelayPrecise(nextFrame - now);
+    SDL_DelayPrecise(sNextFrame - now);
 }
 
 S32 iWindowShouldClose()
