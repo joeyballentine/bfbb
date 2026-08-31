@@ -263,7 +263,7 @@ xFXRing* zFXMuscleArmWave(const xVec3* pos)
 }
 
 static ztextbox* goo_timer_textbox = NULL;
-static void* g_txtr_gooFrozen = NULL;
+static RwTexture* g_txtr_gooFrozen = NULL;
 // WIP
 void zFXGooEnable(RpAtomic* atomic, S32 freezeGroup)
 {
@@ -544,7 +544,7 @@ RpAtomic* zFXGooRenderAtomic(class RpAtomic* atomic)
 {
     if (g_txtr_gooFrozen == NULL)
     {
-        g_txtr_gooFrozen = xSTFindAsset(0x13401f, NULL);
+        g_txtr_gooFrozen = (RwTexture*)xSTFindAsset(0x13401f, NULL);
     }
 
     // The default atomic render must run unconditionally: this callback replaces
@@ -586,7 +586,7 @@ RpAtomic* zFXGooRenderAtomic(class RpAtomic* atomic)
         RwIm3DVertex* currentVertBuf;
         if (g_txtr_gooFrozen != NULL)
         {
-            RwRenderStateSet(rwRENDERSTATETEXTURERASTER, ((RwRaster*)g_txtr_gooFrozen)->parent);
+            RwRenderStateSet(rwRENDERSTATETEXTURERASTER, RwTextureGetRaster(g_txtr_gooFrozen));
         }
         else
         {
