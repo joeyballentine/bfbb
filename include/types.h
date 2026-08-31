@@ -100,6 +100,35 @@ typedef double F64;
 #define WEAK
 #endif
 
+// For a function DECLARED in a header and DEFINED `inline` in exactly one .cpp,
+// which other units then call. CodeWarrior emits an out-of-line copy from the
+// defining unit and everything else links against it -- retail's placement, and
+// several Matching units are built against it, so the console must keep the
+// bare `inline`.
+//
+// Clang does the same thing at -O0 and NOT at -O2. At -O2 it inlines the
+// defining unit's own call, emits no body at all, and every other unit's call
+// is undefined at link. That is why the port linked in Debug and not in
+// Release, in sixteen places at once: SMOOTH, LERP, xpow, xfmod, xBoxFromSphere,
+// xSndPlay3D, xVec2::length, xfont::render, xtextbox::yextent, xParEmitterEmit,
+// NPCHazard::SetNPCOwner/NotifyCBSet, range_limit<F32>.
+//
+// WEAK forces the body out; `inline` stays so the linkage is weak_odr rather
+// than a plain weak external. Both are emitted, but only weak_odr is allowed to
+// appear in several objects at once, and two of these definitions live in
+// headers (SMOOTH in xMathInlines.h, xSndPlay3D in zEnt.h) where every
+// including unit emits one. Dropping `inline` there is eight duplicate-symbol
+// errors, which is how this was found.
+//
+// Templates cannot use this -- a unit that cannot see the definition cannot
+// instantiate it either -- and take an explicit instantiation next to the
+// definition instead.
+#ifdef PLATFORM_PC
+#define SHARED_INLINE WEAK inline
+#else
+#define SHARED_INLINE inline
+#endif
+
 #if defined(GAMECUBE) || defined(__MWERKS__)
 typedef signed char s8;
 typedef signed short s16;

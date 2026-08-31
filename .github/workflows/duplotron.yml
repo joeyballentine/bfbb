@@ -34,11 +34,17 @@ name: Duplotron
 # themselves: `checks` still runs and the workflow is green rather than
 # red-for-no-reason.
 
+# treedome as well as duplotron. treedome is the PC port and shares every line
+# of game source with the decomp, so the GameCube gate is the check that says
+# whether a port-side edit changed the console build -- and a PLATFORM_PC guard
+# is exactly the kind of edit that is supposed to change nothing and has to be
+# measured rather than assumed. Upstream's Build workflow cannot do this on a
+# fork; see the note in .github/workflows/build.yml.
 on:
   push:
-    branches: [duplotron]
+    branches: [duplotron, treedome]
   pull_request:
-    branches: [duplotron]
+    branches: [duplotron, treedome]
   workflow_dispatch:
 
 # One run per ref. A push while a build is in flight cancels the stale one,
@@ -210,8 +216,11 @@ jobs:
         continue-on-error: true
         run: python tools/badges.py --check
 
+      # duplotron owns the published numbers. treedome's README is the port's
+      # front page and carries no badges, so writing there would only ever
+      # produce an empty commit.
       - name: Update badges and gate baseline
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref_name == 'duplotron'
         run: |
           python tools/badges.py --write
           python tools/gcgate.py --update

@@ -72,6 +72,8 @@ build-pc-null/
 build-pc-gl3/
 build-pc-d3d9/
 build-ci/
+#   build-pc-rel/   a Release configuration, which is a different cache again.
+build-pc-rel/
 
 # Out-of-tree librw builds. Configuring a backend on its own is the quickest
 # way to find out whether it compiles at all before the shim is ready for it --

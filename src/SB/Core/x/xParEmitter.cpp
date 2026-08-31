@@ -868,7 +868,7 @@ inline void xParInterp::order()
     }
 }
 
-inline xPar* xParEmitterEmit(xParEmitter* pe, F32 dt)
+SHARED_INLINE xPar* xParEmitterEmit(xParEmitter* pe, F32 dt)
 {
 #ifdef PLATFORM_PC
     return xParEmitterEmit(pe, dt, xParFrameStep(1.0f, dt));

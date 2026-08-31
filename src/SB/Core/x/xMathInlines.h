@@ -28,7 +28,7 @@ inline F32 EASE(F32 rhs)
     return rhs * ((rhs * 3.0f) - (rhs * 2.0f) * rhs);
 }
 
-inline F32 SMOOTH(F32 x, F32 y, F32 z)
+SHARED_INLINE F32 SMOOTH(F32 x, F32 y, F32 z)
 {
     return (z - y) * EASE(x) + y;
 }

@@ -423,7 +423,7 @@ void xPadAnalogIsDigital(S32 idx, S32 enable)
     }
 }
 
-inline F32 xVec2::length() const
+SHARED_INLINE F32 xVec2::length() const
 {
     return xsqrt(length2());
 }

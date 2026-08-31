@@ -69,7 +69,7 @@ WEAK void xModelAnimCollStop(xModelInstance& m);
 void xSndPlay3D(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, const xVec3* pos, F32 radius,
                 sound_category category, F32 delay);
 #else
-inline void xSndPlay3D(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, const xVec3* pos,
+SHARED_INLINE void xSndPlay3D(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, const xVec3* pos,
                        F32 radius, sound_category category, F32 delay)
 {
     xSndPlay3D(id, vol, pitch, priority, flags, pos, radius / 4.0f, radius, category, delay);

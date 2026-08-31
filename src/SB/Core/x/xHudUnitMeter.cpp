@@ -28,7 +28,7 @@ namespace std
 }
 #endif
 
-inline F32 xfmod(F32 a, F32 b)
+SHARED_INLINE F32 xfmod(F32 a, F32 b)
 {
     return std::fmodf(a, b);
 }

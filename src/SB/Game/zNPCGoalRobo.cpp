@@ -8769,12 +8769,12 @@ xVec3& xVec3::assign(float dt)
 
 // .text (18)
 
-inline void NPCHazard::SetNPCOwner(zNPCCommon* owner)
+SHARED_INLINE void NPCHazard::SetNPCOwner(zNPCCommon* owner)
 {
     this->npc_owner = owner;
 }
 
-inline void NPCHazard::NotifyCBSet(HAZNotify* noter)
+SHARED_INLINE void NPCHazard::NotifyCBSet(HAZNotify* noter)
 {
     this->cb_notify = noter;
 }

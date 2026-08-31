@@ -25,7 +25,7 @@ namespace std
 }
 #endif
 
-inline F32 xpow(F32 x, F32 y)
+SHARED_INLINE F32 xpow(F32 x, F32 y)
 {
     return std::powf(x, y);
 }
@@ -210,6 +210,12 @@ void sound_queue<N>::play(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, U
 
     push(assetID);
 }
+
+// zTalkBox.cpp calls this and cannot instantiate it from here. See the
+// SHARED_INLINE note in include/types.h.
+#ifdef PLATFORM_PC
+template void sound_queue<4>::play(U32, F32, F32, U32, U32, U32, sound_category);
+#endif
 
 template <S32 N> void sound_queue<N>::push(U32 id)
 {

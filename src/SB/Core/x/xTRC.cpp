@@ -144,7 +144,7 @@ void RenderText(const char* text, bool enabled)
 
 // NOTE: these belong in xFont.h. They are inline, so the compiler emits a weak
 // out-of-line copy into every translation unit that calls them.
-inline F32 xtextbox::yextent(bool cache) const
+SHARED_INLINE F32 xtextbox::yextent(bool cache) const
 {
     return yextent(temp_layout(cache), 0, -1);
 }
@@ -168,3 +168,11 @@ template <class T> basic_rect<T>& basic_rect<T>::expand(T s)
 {
     return expand(s, s, s, s);
 }
+
+// A unit that cannot see these definitions cannot instantiate them either, so
+// SHARED_INLINE is no use here -- name the instantiation the rest of the port
+// calls. See the SHARED_INLINE note in include/types.h.
+#ifdef PLATFORM_PC
+template basic_rect<F32>& basic_rect<F32>::contract(F32);
+template basic_rect<F32>& basic_rect<F32>::expand(F32);
+#endif

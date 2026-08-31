@@ -1,17 +1,26 @@
 name: Build
 
-# duplotron has its own workflow (.github/workflows/duplotron.yml). This one
-# exists to prove main links byte-identically and to feed bfbbdecomp's progress
-# website, so on a branch that is deliberately full of NonMatching units it
-# reports a failure that carries no information.
+# Upstream's. It exists to prove main links byte-identically and to feed
+# bfbbdecomp's progress website.
+#
+# It cannot run on a fork, and never could: the container below is private to
+# the bfbbdecomp organisation, and a fork's GITHUB_TOKEN has scope over its own
+# repository only, so the pull fails with a bare "denied" before anything is
+# compiled. Every run on this fork has been red for that reason alone, which is
+# noise rather than information.
+#
+# So it runs only in the repository it was written for. Forks get
+# .github/workflows/duplotron.yml, which needs no private container -- see the
+# note at the top of that file. Keeping upstream's triggers untouched and
+# gating the job keeps this file close to upstream and easy to merge.
 on:
   push:
-    branches-ignore: [duplotron]
   pull_request:
-    branches-ignore: [duplotron]
 
 jobs:
   build:
+    if: github.repository == 'bfbbdecomp/bfbb'
+
     # This is a *private* build container.
     # See docs/github_actions.md for more information.
     container: ghcr.io/bfbbdecomp/bfbb-build:main
