@@ -6391,3 +6391,36 @@ first specimen for anyone reworking the clause set.
   `var_r4 = var_r3;` where `var_r3` is provably 1. Rematerialise-vs-copy, the
   documented class. The source is already correct; the "Possible missing debug
   subroutine" comment above it is not evidence of anything.
+
+### `xSndIsPlayingByHandle`'s stray `clrlwi`: +1/-1 whichever end you change. NO-GO.
+
+`xSndIsPlayingByHandle__FUi` (32 bytes, `zEntPlayer`, **87.500%**) emits one
+instruction the target does not: `clrlwi r3, r3, 24`, the `bool` -> `U8`
+conversion on `return iSndIsPlayingByHandle(sndID);`. `xSnd.h` declares the
+wrapper `U8`; `iSnd.h` declares the callee `bool`. Both ends were tried and
+both are +1/-1.
+
+**Making the wrapper `bool`** takes `zEntPlayer` 25 -> 24 and costs
+`zNPCNewsFish::IsTalking` in `zNPCTypeVillager`, 100.000 -> 56.786. The
+instructions are identical either way; only the position of the `clrlwi` moves,
+from the call arm to the merged path. And that position is the proof that
+**`U8` is right for the wrapper**: `IsTalking` is
+`return (soundHandle) ? xSndIsPlayingByHandle(soundHandle) : false;`, so with a
+`U8` return the two ternary arms have different types, the `U8` arm gets its
+own zero-extension and `false` is a bare `li 0` — which is exactly what the
+target emits. A `bool` return makes both arms the same type and sinks the
+conversion below the merge.
+
+**Making `iSndIsPlayingByHandle` `U8`** takes `zEntPlayer` 25 -> 24 and costs
+that function itself, 100.000 -> 85.588: its two compound-boolean returns then
+need the conversion instead, and CW puts the value in r4 and truncates into r3
+at the end where the target has a bare `li r3, 0x1`. Two rewrites of the body
+were measured — integer literals for the `false` returns (85.588, no change)
+and fully decomposed early returns (**80.882**, worse). The target's shape
+(`li r3,0` up front, `beqlr`, `bnelr`, `li r3,1`) is what our current `bool`
+source already produces, so the body is not the lever.
+
+So both declarations are individually correct against their own call sites, and
+retail's compiler emitted the conversion in neither place. Whatever it did is
+not reachable by changing either return type. Do not re-open this on the
+`zEntPlayer` measurement alone — it looks like a clean +1 and it is not.
