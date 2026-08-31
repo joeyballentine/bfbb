@@ -6288,3 +6288,34 @@ Defining a function the retail link deadstripped is not automatically fatal —
 `mem_funcs.c`, `FILE_POS.C`, `nubevent.c` and `float.c` all do and all link —
 so the order is what to check, not the extra symbol. The DOL sha1 is the only
 test that settles a promotion.
+
+## The MISSING bucket in game code is eight functions, and four of those are noise
+
+Swept with `solo.py --missing` over all 224 game units on 2026-08-31. The whole
+result:
+
+| unit | function | bytes |
+|---|---|---|
+| `zEntPlayerBungeeState` | four `__as__…hook_asset…class$91N` | 12 / 28 / 52 / 84 |
+| `xCollide` | `__as__6RwBBoxFRC6RwBBox` | 52 |
+| `xCollide` | `__as__7xCollisFRC7xCollis` | 164 |
+| `xCamera` | `__as__6xBoundFRC6xBound` | 224 |
+| `zNPCGoalStd` | `Remove__17xListItem<5xGoal>Fv` | 56 |
+
+**The four `zEntPlayerBungeeState` rows are not missing.** They are the
+anonymous-class per-TU counter: retail's are `class$910`…`class$913`, ours are
+`class$143`…`class$146`, so `--missing` pairs nothing and `calldiff.py` reports
+the same four as a differing callee set. Same code, different ordinal.
+
+The other four are genuinely absent weak symbols the retail link kept from this
+object. Each needs both a definition and a real call site in the TU, and
+`__as__7xCollisFRC7xCollis` carries a question with it: it copies offset 0x10
+with `lfs`/`stfs` and everything else with `lwz`/`stw`, which is a **memberwise**
+`operator=`. That means retail's `xCollis` was not trivially copyable, which
+sits in tension with the recorded `xCollis::tri_data` fix. Somebody has to
+decide whether a member gets a user-declared `operator=` back before this one
+is worth writing.
+
+So "1483 functions have no implementation at all", recorded above under the open
+leads, is a whole-project figure dominated by Renderware and Bink. For `src/SB`
+the bucket is closed: the remaining work is all wrong bodies, not absent ones.
