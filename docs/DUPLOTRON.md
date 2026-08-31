@@ -6424,3 +6424,53 @@ So both declarations are individually correct against their own call sites, and
 retail's compiler emitted the conversion in neither place. Whatever it did is
 not reachable by changing either return type. Do not re-open this on the
 `zEntPlayer` measurement alone — it looks like a clean +1 and it is not.
+
+## The Ghidra-transcription seam: what is left of it
+
+The premise -- a body carrying `iVar1`, `dVar2`, `param_N`, `local_xx` or
+`uVar` identifiers is a literal transcription of decompiler output rather than a
+reconstruction, and so is likelier to differ structurally -- **paid repeatedly
+on 2026-08-31**. `Process__zNPCGoalWander` was missing a whole `xVec3` local
+that `dwarf/` named; `CalcNewDir`'s `player_pos`/`npc_pos` were artifacts dwarf
+does not list; `zSaveLoad_Tick` had seventeen hand-written `*(U32*)&` word
+copies standing in for one struct assignment, in an order that did not even
+follow the struct; `xSerial::prepare` assigned to a shadowing parameter and
+never set the member at all.
+
+Cross-referencing the artifact count against the remaining non-matching count
+gives the to-do list. Units where both are high are the seam; units with many
+artifacts and no non-matching functions are a pure fidelity job (the names are
+wrong, the code is right) and bank nothing.
+
+| artifacts | non-matching | unit |
+|---|---|---|
+| 74 | 2 | `Core/x/xScene` |
+| 62 | 1 | `Game/zEntPlayerBungeeState` |
+| 48 | 25 | `Game/zEntPlayer` |
+| 48 | 2 | `Core/gc/iSystem` |
+| 47 | 3 | `Game/zNPCSupplement` |
+| 38 | 6 | `Game/zNPCGoalRobo` |
+| 36 | 1 | `Game/zNPCTypeBossPatrick` |
+| 26 | 1 | `Core/x/xEntBoulder` |
+| 24 | 2 | `Game/zAssetTypes` |
+| 18 | 7 | `Game/zNPCSupport` |
+| 17 | 3 | `Core/x/xHud` |
+| 15 | 2 | `Game/zNPCGlyph` |
+| 15 | 1 | `Core/gc/iTRC` |
+| 14 | 12 | `Game/zNPCTypeRobot` |
+| 14 | 1 | `Game/zNPCGoalStd` |
+| 13 | 3 | `Game/zDiscoFloor` |
+| 12 | 4 | `Core/x/xCollide` |
+| 12 | 1 | `Game/zSaveLoad` |
+| 8 | 5 | `Core/gc/iModel` |
+| 7 | 7 | `Core/x/xString` |
+| 4 | 5 | `Game/zGame` |
+
+Reproduce with a grep for
+`\b[a-z]{1,2}Var[0-9]+\b|param_[0-9]|local_[0-9a-f]{2}|\buVar|\bauStack`
+against each unit's source, joined to `report.json`'s non-matching count.
+
+Note that `xEnt`, `xCollideFast`, `xordarray` and `xHudText` all still carry
+artifacts and have **zero** non-matching functions, which is the useful
+counter-example: a Ghidra name is a hint about how the body was written, not
+evidence that it is wrong.
