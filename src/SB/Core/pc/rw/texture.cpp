@@ -133,17 +133,43 @@ static rw::Texture* convertRasterToPlatform(rw::Texture* texture, void* data)
         }
     }
 
-    if (paddedRGB && texture->raster != NULL)
+    // Opaque, because that is what C888 meant.
+    //
+    // **Only if the raster that came back actually HAS an alpha byte, and only
+    // one row's worth at its own stride.** Both halves of that were assumed,
+    // and both are false on some backend:
+    //
+    //   * the format was forced to C8888 above, and the conversion does not
+    //     have to honour it. It goes through an Image, and librw drops to 24
+    //     bits when every alpha byte it saw was zero -- which is exactly what
+    //     a padded RGB texture looks like. D3D9 then stores that 24-bit raster
+    //     as X8R8G8B8, four bytes a pixel, so writing a fourth byte per pixel
+    //     stayed in bounds by luck. GL3 stores it as GL_RGB8, three bytes a
+    //     pixel, and the same loop ran a third of the way past the end of the
+    //     buffer -- an access violation inside the first texture dictionary,
+    //     before a frame was ever drawn.
+    //
+    //   * a locked raster is not necessarily packed. librw's D3D9 rasterLock
+    //     puts the surface's own pitch in raster->stride (d3d.cpp:622), and a
+    //     driver is free to pad a row.
+    if (paddedRGB && texture->raster != NULL && texture->raster->depth == 32)
     {
-        // Opaque, because that is what C888 meant.
         rw::uint8* pixels = texture->raster->lock(0, rw::Raster::LOCKWRITE);
 
         if (pixels != NULL)
         {
-            const rw::int32 count = texture->raster->width * texture->raster->height;
-            for (rw::int32 i = 0; i < count; i++)
+            const rw::int32 width = texture->raster->width;
+            const rw::int32 height = texture->raster->height;
+            const rw::int32 stride = texture->raster->stride;
+
+            for (rw::int32 y = 0; y < height; y++)
             {
-                pixels[i * 4 + 3] = 0xFF;
+                rw::uint8* row = pixels + y * stride;
+
+                for (rw::int32 x = 0; x < width; x++)
+                {
+                    row[x * 4 + 3] = 0xFF;
+                }
             }
 
             texture->raster->unlock(0);
