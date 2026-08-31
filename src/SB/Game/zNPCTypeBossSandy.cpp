@@ -1066,6 +1066,31 @@ static void SpringRender(SandyLimbSpring* spring)
     RwIm3DRenderPrimitive(rwPRIMTYPETRISTRIP);
     RwIm3DEnd();
 
+#ifdef PLATFORM_PC
+    // vel1 and vel2 are written once at goal entry as +-0.05 and added to
+    // node1/node2 here, once per RENDERED frame, so their unit is a fraction of
+    // the limb per FRAME: the bulge crosses the 0.1..0.9 band in sixteen frames
+    // however long a frame is, and Sandy's limbs buzz four times as fast at 240
+    // fps. SpringRender takes no dt, so the frame's own length comes from
+    // globals. The overshoot after a reflection is in the same unit.
+    F32 spring_step = 60.0f * globals.update_dt;
+
+    spring->node1 += spring->vel1 * spring_step;
+    if ((spring->node1 > 0.9f && spring->vel1 > 0.0f) ||
+        (spring->node1 < 0.1f && spring->vel1 < 0.0f))
+    {
+        spring->vel1 = -spring->vel1;
+        spring->node1 += 2.0f * spring->vel1 * spring_step;
+    }
+
+    spring->node2 += spring->vel2 * spring_step;
+    if ((spring->node2 > 0.9f && spring->vel2 > 0.0f) ||
+        (spring->node2 < 0.1f && spring->vel2 < 0.0f))
+    {
+        spring->vel2 = -spring->vel2;
+        spring->node2 += 2.0f * spring->vel2 * spring_step;
+    }
+#else
     spring->node1 += spring->vel1;
     if ((spring->node1 > 0.9f && spring->vel1 > 0.0f) ||
         (spring->node1 < 0.1f && spring->vel1 < 0.0f))
@@ -1081,6 +1106,7 @@ static void SpringRender(SandyLimbSpring* spring)
         spring->vel2 = -spring->vel2;
         spring->node2 += 2.0f * spring->vel2;
     }
+#endif
 }
 
 void zNPCBSandy_BossDamageEffect_Init()

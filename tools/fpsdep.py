@@ -60,7 +60,18 @@ TIMESTEP = re.compile(
     r"|59\.999996|119\.99999")
 
 # `x *= 0.97f`, but not `*= 1.0f`, `*= -1.0f` or a normalise.
-DAMPING = re.compile(r"\*=\s*-?0\.\d+f?\s*;")
+#
+# The coefficient is not always a literal and the multiply is not always `*=`.
+# A sweep that only matched `*= 0.97f` missed nine live sites: seven spellings
+# of `npdata->vel *= fac_keep` in zNPCSupplement.cpp, King Jelly's
+# `vel *= tweak.vel_decay`, and the chandelier's
+# `xVec3SMul(&ent->vel, &ent->vel, 0.97f)`.
+DAMPING = re.compile(
+    r"\*=\s*-?0\.\d+f?\s*;"
+    r"|\*=\s*[\w.>-]*(keep|decay|damp|drag|fric|falloff|slow)\w*\s*;"
+    r"|xVec3SMulBy\s*\([^;]*,\s*0\.\d+f?\s*\)"
+    r"|xVec3SMul\s*\([^;]*,\s*0\.\d+f?\s*\)",
+    re.IGNORECASE)
 
 # ++ or -- on something that survives the frame: a member, a this->, or a name
 # that looks like a file static. A bare local is not interesting.

@@ -3316,8 +3316,16 @@ namespace cruise_bubble
             F32 tmp = current_tweak->missle.fly.engine_pitch_max *
                       (iabs(shared.last_sp.x) + iabs(shared.last_sp.y));
 
+            // A one-pole filter on state that survives the frame, so the pitch
+            // chases the throttle four times as fast at 240 fps.
+#ifdef PLATFORM_PC
+            this->engine_pitch +=
+                (tmp - this->engine_pitch) *
+                xFrameApproach(current_tweak->missle.fly.engine_pitch_sensitivity, dt);
+#else
             this->engine_pitch +=
                 (tmp - this->engine_pitch) * current_tweak->missle.fly.engine_pitch_sensitivity;
+#endif
 
             set_pitch(2, this->engine_pitch, 0);
         }

@@ -1265,8 +1265,20 @@ void zEntPickup_Update(zEntPickup* ent, xScene* sc, F32 dt)
 
                 sSpatulaGrabbedSpinMult += 0.1f * dt;
 
+                // xMat3x3MulRotC composes its angle into the matrix once a
+                // frame, so the angle is radians per FRAME. PI * dt beside it is
+                // a rate times the frame and is right; sSpatulaGrabbedSpinMult
+                // ramps at a tenth per SECOND and is added raw, so the spin-up
+                // it contributes is four times as fast at 240 fps and the
+                // spatula finishes its three and a half seconds having turned
+                // three times as far.
+#ifdef PLATFORM_PC
+                xMat3x3MulRotC((xMat3x3*)ent->model->Mat, (xMat3x3*)ent->model->Mat, 0.0f, 1.0f,
+                               0.0f, PI * dt + sSpatulaGrabbedSpinMult * (60.0f * dt));
+#else
                 xMat3x3MulRotC((xMat3x3*)ent->model->Mat, (xMat3x3*)ent->model->Mat, 0.0f, 1.0f,
                                0.0f, PI * dt + sSpatulaGrabbedSpinMult);
+#endif
 
                 if (ent->model->Mat->pos.y - xEntGetPos(&globals.player.ent)->y < 2.0f)
                 {

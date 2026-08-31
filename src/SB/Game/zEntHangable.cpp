@@ -10,6 +10,12 @@
 
 #include <types.h>
 
+#ifdef PLATFORM_PC
+// For xpow, below. Guarded because adding a header to this unit on the
+// GameCube side can move its literal pool.
+#include "xMathInlines.h"
+#endif
+
 static zParEmitter* sCandleEmitter;
 static zParEmitter* sCandleSmokeEmitter;
 static U32 sChandelierHash;
@@ -215,7 +221,14 @@ void zEntHangable_Update(zEntHangable* ent, xScene*, F32 dt)
     ent->vel.y = -((dot * sub.y) - ent->vel.y);
     ent->vel.z = -((dot * sub.z) - ent->vel.z);
 
+    // Per-frame damping on the swing velocity, which the integrator above
+    // advances by dt. Written as a call rather than *=, which is why the sweep
+    // for the latter missed it.
+#ifdef PLATFORM_PC
+    xVec3SMul(&ent->vel, &ent->vel, xpow(0.97f, 60.0f * dt));
+#else
     xVec3SMul(&ent->vel, &ent->vel, 0.97f);
+#endif
 
     if (xVec3Length2(&ent->vel) < 0.001f)
     {
@@ -334,11 +347,25 @@ S32 zEntHangableEventCB(xBase* from, xBase* to, U32 toEvent, const F32* toParam,
     return 1;
 }
 
+// c is last frame's position and d is this frame's, so dist below is a
+// displacement per FRAME -- a quarter its console size at 240 fps, where the
+// band then never opens and the candles stay lit however hard the chandelier
+// swings. The band scales with the frame instead.
+#ifdef PLATFORM_PC
+static S32 HangableIsMovingTooMuch(xVec3* a, xVec3* b, xVec3* c, xVec3* d, F32 dt)
+#else
 static S32 HangableIsMovingTooMuch(xVec3* a, xVec3* b, xVec3* c, xVec3* d)
+#endif
 {
     F32 dist = ((d->x * d->x) + (d->y * d->y) + (d->z * d->z)) -
                ((c->x * c->x) + (c->y * c->y) + (c->z * c->z));
+#ifdef PLATFORM_PC
+    F32 limit = 20.0f * (60.0f * dt);
+
+    if ((dist > limit) || (dist < -limit))
+#else
     if ((dist > 20.0f) || (dist < -20.0f))
+#endif
     {
         return 1;
     }
@@ -422,7 +449,11 @@ void zEntHangable_SetMatrix(zEntHangable* ent, F32 dt)
         if (ent->candle_timer <= 0.0f)
         {
             ent->candle_timer = 0.0f;
+#ifdef PLATFORM_PC
+            moving = HangableIsMovingTooMuch(orot, &rot, opos, pos, dt);
+#else
             moving = HangableIsMovingTooMuch(orot, &rot, opos, pos);
+#endif
             if (moving != 0)
             {
                 ent->candle_state = 1;
@@ -445,7 +476,11 @@ void zEntHangable_SetMatrix(zEntHangable* ent, F32 dt)
         if (ent->candle_timer <= 0.0f)
         {
             ent->candle_timer = 0.0f;
+#ifdef PLATFORM_PC
+            moving = HangableIsMovingTooMuch(orot, &rot, opos, pos, dt);
+#else
             moving = HangableIsMovingTooMuch(orot, &rot, opos, pos);
+#endif
             if (moving == 0)
             {
                 ent->candle_timer = 3.0f;

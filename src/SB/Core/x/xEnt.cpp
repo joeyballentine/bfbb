@@ -1692,7 +1692,15 @@ void xEntCollideFloor(xEnt* p, xScene* sc, F32 dt)
                     ml = mf;
                     stepping = 0;
                 }
+                // mlen is this frame's horizontal displacement, so the epsilon
+                // is a distance per FRAME: 0.06 units a second on console and
+                // 3.2 at 3200 fps, where a walking entity stops being allowed
+                // to step up at all.
+#ifdef PLATFORM_PC
+                else if (mlen > 0.001f * (60.0f * dt) && mf->hdng.y < 0.65f / sbr - 1.0f &&
+#else
                 else if (mlen > 0.001f && mf->hdng.y < 0.65f / sbr - 1.0f &&
+#endif
                          mf->norm.y > icos(nsn_angle))
                 {
                     stepping = 1;

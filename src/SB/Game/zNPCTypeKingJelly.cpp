@@ -937,7 +937,13 @@ void zNPCKingJelly::Process(xScene* xscn, F32 dt)
     {
         xVec3& vel = frame->vel;
 
+#ifdef PLATFORM_PC
+        // Per-frame decay on frame->vel. The stop test below then fires after a
+        // number of FRAMES rather than after a length of time.
+        vel *= xpow(tweak.vel_decay, 60.0f * dt);
+#else
         vel *= tweak.vel_decay;
+#endif
 
         if (vel.length2() < 0.001f)
         {

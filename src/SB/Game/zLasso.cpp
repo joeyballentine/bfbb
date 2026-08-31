@@ -23,6 +23,20 @@ static zLassoGuideList sGuideList[64];
 
 static S32 negativeHondaX = 1;
 
+#ifdef PLATFORM_PC
+// The rope length fizzicalSlack last saw. lastDist and currDist are stamped in
+// zLasso_Render, once per RENDERED frame, but fizzicalSlack runs from
+// zLasso_Update, which is gated to sixty times a second so its FIR filters get
+// their samples at a fixed rate. At 240 fps three of every four length deltas
+// are therefore overwritten before they reach it, and the sum telescopes to a
+// quarter of the real change while the drain still takes the whole window --
+// so the rope reads far tauter than it is. Measuring against what the function
+// last saw closes the gap, and at 60 fps it holds exactly what lastDist holds.
+//
+// File scope for the same reason the update's carry is: there is one lasso.
+static F32 sSlackDist = 0.0f;
+#endif
+
 static void fizzicalRadius(zLasso* lasso, f32 arg1, xVec3* arg2);
 static void fizzicalCenter(zLasso* lasso, f32 arg1, xVec3* arg2);
 static void fizzicalNormal(zLasso* lasso, f32 arg1, xVec3* arg2);
@@ -925,6 +939,9 @@ void zLasso_InitTimer(zLasso* lasso, F32 interpTime)
     xVec3Copy(&lasso->honda, &lasso->crCenter);
 
     lasso->currDist = lasso->lastDist = 0.0f;
+#ifdef PLATFORM_PC
+    sSlackDist = 0.0f;
+#endif
 
     xVec3Init(&lasso->stNormal, 0, 1, 0);
     xVec3Init(&lasso->tgNormal, 0, 1, 0);
@@ -1034,7 +1051,12 @@ static void nonfizzicalHonda(zLasso* lasso, F32 dt, xVec3* newPoint)
 
 static void fizzicalSlack(zLasso* lasso, F32 dt, xVec3* newPoint)
 {
+#ifdef PLATFORM_PC
+    lasso->crSlack += (2.0f * (sSlackDist - lasso->currDist)) - (0.6f * dt);
+    sSlackDist = lasso->currDist;
+#else
     lasso->crSlack += (2.0f * (lasso->lastDist - lasso->currDist)) - (0.6f * dt);
+#endif
     if (lasso->crSlack < 0.0f)
     {
         lasso->crSlack = 0.0f;

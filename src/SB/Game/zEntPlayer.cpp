@@ -241,6 +241,7 @@ static xVec3 last_center;
 static U32 last_frame;
 #ifdef PLATFORM_PC
 static F64 last_time;
+static F64 last_center_time;
 #endif
 
 static F32 sBubbleBowlLastWindupTime = -1.0f;
@@ -353,10 +354,27 @@ static void zEntPlayer_SpawnWandBubbles(xVec3* center, U32 count)
         xVec3 wand;
         xVec3ScaleC(&wand, (xVec3*)&globals.player.model_wand->Mat->at, 0.25f, 0.25f, 0.25f);
         xVec3Sub(&last_center, center, &wand);
+#ifdef PLATFORM_PC
+        last_center_time = gGameSeconds;
+#endif
     }
 
     xVec3 dir;
     xVec3Sub(&dir, center, &last_center);
+#ifdef PLATFORM_PC
+    // dir is the wand's displacement since the last spawn, and it becomes the
+    // bubble's velocity in units a SECOND. The two differ by the spawn
+    // interval, which is a sixtieth of a second only on console: the emission
+    // count below holds at 180 a second, so above 180 fps the interval settles
+    // at a hundred-and-eightieth and the bubbles inherit a third of the wand's
+    // drift. Rebase it onto the interval that actually elapsed.
+    F32 spawn_dt = (F32)(gGameSeconds - last_center_time);
+
+    if (spawn_dt > 0.0f)
+    {
+        xVec3SMulBy(&dir, (1.0f / 60.0f) / spawn_dt);
+    }
+#endif
 
     U32 num = 3;
     if (count != 0)
@@ -410,6 +428,7 @@ static void zEntPlayer_SpawnWandBubbles(xVec3* center, U32 count)
     last_frame = gFrameCount;
 #ifdef PLATFORM_PC
     last_time = gGameSeconds;
+    last_center_time = gGameSeconds;
 #endif
 }
 
@@ -7886,7 +7905,17 @@ void zEntPlayer_Update(xEnt* ent, xScene* sc, F32 dt)
                 (req_motion.x != 0.0f || req_motion.z != 0.0f || surfSlickRatio != 0.0f))
             {
                 globals.player.slope = -1;
+                // ndotm is this frame's advance along the downhill direction, a
+                // distance per FRAME, and its square root is not linear in it:
+                // the descent asked for per second grows with the square root
+                // of the frame rate -- twice retail's pull at 240 fps. Take the
+                // root of the console frame's share, which is xsqrt(ndotm) at a
+                // sixtieth of a second.
+#ifdef PLATFORM_PC
+                ent->frame->mat.pos.y -= xsqrt(ndotm * (60.0f * dt));
+#else
                 ent->frame->mat.pos.y -= xsqrt(ndotm);
+#endif
             }
             else if (ndotm < 0.0f)
             {
@@ -16429,7 +16458,12 @@ U8 zEntPlayer_MinimalUpdate(xEnt* ent, xScene* sc, F32 dt, xVec3& drive_motion)
         if (ndotm > 0.0f && (req_motion.x != 0.0f || req_motion.z != 0.0f || surfSlickRatio))
         {
             globals.player.slope = -1;
+            // The same per-frame distance under a root as in PlayerCollide.
+#ifdef PLATFORM_PC
+            ent->frame->mat.pos.y -= xsqrt(ndotm * (60.0f * dt));
+#else
             ent->frame->mat.pos.y -= xsqrt(ndotm);
+#endif
         }
         else if (ndotm < 0.0f)
         {

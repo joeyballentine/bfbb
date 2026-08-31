@@ -1547,7 +1547,14 @@ void NPAR_Upd_TubeConfetti(NPARMgmt* mgmt, F32 dt)
         F32 fac_keep = MAX(0.0f, MIN(0.01f * npparm->pct_keep, 100.0f));
 
         npdata->pos += npdata->vel * dt;
+#ifdef PLATFORM_PC
+        // Per-frame decay on state that survives the frame, the same shape as
+        // vel_decay above. fac_keep comes from the asset, so it is rebased here
+        // rather than hoisted.
+        npdata->vel *= xpow(fac_keep, 60.0f * dt);
+#else
         npdata->vel *= fac_keep;
+#endif
         npdata->vel += npparm->acc_base * beans;
 
         if (npdata->nparmode == 0)
@@ -1785,7 +1792,14 @@ void NPAR_Upd_SleepyZeez(NPARMgmt* mgmt, F32 dt)
         F32 fac_keep = MAX(0.0f, MIN(0.01f * npparm->pct_keep, 100.0f));
 
         npdata->pos += npdata->vel * dt;
+#ifdef PLATFORM_PC
+        // Per-frame decay on state that survives the frame, the same shape as
+        // vel_decay above. fac_keep comes from the asset, so it is rebased here
+        // rather than hoisted.
+        npdata->vel *= xpow(fac_keep, 60.0f * dt);
+#else
         npdata->vel *= fac_keep;
+#endif
         npdata->vel += npparm->acc_base * beans;
 
         if (npdata->nparmode == 0)
@@ -1887,7 +1901,14 @@ void NPAR_Upd_ChuckSplash(NPARMgmt* mgmt, F32 dt)
         F32 fac_keep = MAX(0.0f, MIN(0.01f * npparm->pct_keep, 100.0f));
 
         npdata->pos += npdata->vel * dt;
+#ifdef PLATFORM_PC
+        // Per-frame decay on state that survives the frame, the same shape as
+        // vel_decay above. fac_keep comes from the asset, so it is rebased here
+        // rather than hoisted.
+        npdata->vel *= xpow(fac_keep, 60.0f * dt);
+#else
         npdata->vel *= fac_keep;
+#endif
         npdata->vel += npparm->acc_base * beans;
 
         if (npdata->nparmode == 0)
@@ -1969,7 +1990,14 @@ void NPAR_Upd_VisSplash(NPARMgmt* mgmt, F32 dt)
         F32 fac_keep = MAX(0.0f, MIN(0.01f * npparm->pct_keep, 100.0f));
 
         npdata->pos += npdata->vel * dt;
+#ifdef PLATFORM_PC
+        // Per-frame decay on state that survives the frame, the same shape as
+        // vel_decay above. fac_keep comes from the asset, so it is rebased here
+        // rather than hoisted.
+        npdata->vel *= xpow(fac_keep, 60.0f * dt);
+#else
         npdata->vel *= fac_keep;
+#endif
         npdata->vel += npparm->acc_base * beans;
 
         if (npdata->nparmode == 0)
@@ -2051,7 +2079,14 @@ void NPAR_Upd_TarTarGunk(NPARMgmt* mgmt, F32 dt)
         F32 fac_keep = MAX(0.0f, MIN(0.01f * npparm->pct_keep, 100.0f));
 
         npdata->pos += npdata->vel * dt;
+#ifdef PLATFORM_PC
+        // Per-frame decay on state that survives the frame, the same shape as
+        // vel_decay above. fac_keep comes from the asset, so it is rebased here
+        // rather than hoisted.
+        npdata->vel *= xpow(fac_keep, 60.0f * dt);
+#else
         npdata->vel *= fac_keep;
+#endif
         npdata->vel += npparm->acc_base * beans;
 
         if (npdata->nparmode == 0)
@@ -2157,7 +2192,14 @@ void NPAR_Upd_DogBreath(NPARMgmt* mgmt, F32 dt)
         F32 fac_keep = MAX(0.0f, MIN(0.01f * npparm->pct_keep, 100.0f));
 
         npdata->pos += npdata->vel * dt;
+#ifdef PLATFORM_PC
+        // Per-frame decay on state that survives the frame, the same shape as
+        // vel_decay above. fac_keep comes from the asset, so it is rebased here
+        // rather than hoisted.
+        npdata->vel *= xpow(fac_keep, 60.0f * dt);
+#else
         npdata->vel *= fac_keep;
+#endif
         npdata->vel += npparm->acc_base * beans;
 
         F32 arch = ARCH(rat_rev);
@@ -2235,7 +2277,14 @@ void NPAR_Upd_Fireworks(NPARMgmt* mgmt, F32 dt)
         F32 fac_keep = MAX(0.0f, MIN(0.01f * npparm->pct_keep, 100.0f));
 
         npdata->pos += npdata->vel * dt;
+#ifdef PLATFORM_PC
+        // Per-frame decay on state that survives the frame, the same shape as
+        // vel_decay above. fac_keep comes from the asset, so it is rebased here
+        // rather than hoisted.
+        npdata->vel *= xpow(fac_keep, 60.0f * dt);
+#else
         npdata->vel *= fac_keep;
+#endif
         npdata->vel += npparm->acc_base * beans;
 
         if (npdata->nparmode == 0)
