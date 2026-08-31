@@ -147,6 +147,29 @@ elseif(BFBB_INPUT_BACKEND STREQUAL "sdl")
   set(SDL_DIALOG OFF CACHE BOOL "" FORCE)
   set(SDL_POWER OFF CACHE BOOL "" FORCE)
 
+  # libusb is not an optimisation. SDL routes five devices EXCLUSIVELY through
+  # it -- the Switch 2 Pro controller, both Switch 2 Joy-Cons, the Switch 2
+  # GameCube controller and the original GameCube adapter -- because they look
+  # like HID devices but are read over raw USB bulk endpoints, so SDL's Windows
+  # HID backend is told to skip them. Without libusb they enumerate as nameless
+  # joysticks with no layout and cannot be played on at all.
+  #
+  # It needs nothing installed on the player's machine. Those controllers are
+  # composite devices whose bulk interface already carries Microsoft OS
+  # descriptors, so Windows binds it to WinUSB by itself; the HID interface is
+  # separate and stays where it is, which is why the pad goes on working
+  # everywhere else at the same time.
+  #
+  # Linked rather than opened by name. SDL's SHARED mode reads the DLL's name
+  # out of the import library with dlltool or dumpbin, and this toolchain is
+  # clang with neither: the detection falls back to writing the IMPORT LIBRARY's
+  # name into SDL_LIBUSB_DYNAMIC, which SDL_LoadObject can never open. That
+  # fails at run time and silently, which is the worst of both. Linking makes
+  # the DLL a load-time dependency instead -- the same deal the movie decoder's
+  # DLLs are already on, and staged beside the executable the same way.
+  set(SDL_HIDAPI_LIBUSB ON CACHE BOOL "" FORCE)
+  set(SDL_HIDAPI_LIBUSB_SHARED OFF CACHE BOOL "" FORCE)
+
   add_subdirectory(third_party/SDL EXCLUDE_FROM_ALL)
 
   # SDL is not warning-clean under this compiler and it is not this project's
@@ -623,6 +646,21 @@ if(WIN32 AND FMV_INCLUDES)
     add_custom_command(TARGET bfbb POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different ${FMV_RUNTIME_DLLS} $<TARGET_FILE_DIR:bfbb>
       COMMENT "Staging the movie decoder's DLLs"
+    )
+  endif()
+endif()
+
+# And libusb's, for the same reason. Keyed on LibUSB_LIBRARY rather than
+# LibUSB_FOUND: the find module runs inside SDL's directory and only its cache
+# entries reach back up here. The DLL sits in bin/ beside that library's lib/.
+if(WIN32 AND LibUSB_LIBRARY)
+  get_filename_component(LIBUSB_LIB_DIR "${LibUSB_LIBRARY}" DIRECTORY)
+  file(GLOB LIBUSB_RUNTIME_DLLS "${LIBUSB_LIB_DIR}/../bin/libusb*.dll")
+  if(LIBUSB_RUNTIME_DLLS)
+    add_custom_command(TARGET bfbb POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LIBUSB_RUNTIME_DLLS}
+              $<TARGET_FILE_DIR:bfbb>
+      COMMENT "Staging libusb"
     )
   endif()
 endif()
