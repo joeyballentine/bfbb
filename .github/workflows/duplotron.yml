@@ -63,30 +63,21 @@ jobs:
           # that always passes.
           fetch-depth: 0
 
-      - name: Line endings
+      # Resolve the base commit ONCE, for both content checks below. Take it
+      # from the EVENT, never from a branch name: under actions/checkout there
+      # is no origin/main to merge-base against, and a check that cannot find
+      # its base is a check that always passes.
+      - name: Resolve base commit
+        id: base
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
         run: |
-          bad=$(git ls-files -z 'src/*.cpp' 'src/*.h' 'include/*.h' 'tools/*.py' \
-                | xargs -0 grep -lIP '\r$' || true)
-          if [ -n "$bad" ]; then
-            echo "::error::CRLF line endings found:"; echo "$bad"; exit 1
-          fi
-          echo "all checked files are LF-only"
-
-      - name: clang-format
-        run: |
-          # Only what this push or PR changed. The tree is not globally
-          # clang-format clean -- zEntPlayer.cpp alone carries 237 pre-existing
-          # violations -- and making it so would bury every real change. So each
-          # file is compared against the base and only NEW violations complain.
-          #
-          # Resolve the base from the EVENT, never from a branch name: under
-          # actions/checkout there is no origin/main to merge-base against, and
-          # a step that cannot find its base is a step that always passes.
-          if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
-            base="${{ github.event.pull_request.base.sha }}"
-          elif [ -n "${{ github.event.before }}" ] && \
-               [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
-            base="${{ github.event.before }}"
+          ZERO=0000000000000000000000000000000000000000
+          if [ -n "$PR_BASE" ]; then
+            base="$PR_BASE"
+          elif [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "$ZERO" ]; then
+            base="$PUSH_BEFORE"
           else
             base=$(git rev-parse HEAD~1)
           fi
@@ -95,17 +86,47 @@ jobs:
             exit 1
           fi
           echo "comparing against $base"
-          files=$(git diff --name-only --diff-filter=ACM "$base" HEAD \
-                  -- 'src/*.cpp' 'src/*.h' 'include/*.h' || true)
+          echo "sha=$base" >> "$GITHUB_OUTPUT"
+          git diff --name-only --diff-filter=ACM "$base" HEAD > changed.txt || true
+          echo "changed:"; cat changed.txt
+
+      # Only what this push or PR touched. Two files inherited from upstream
+      # main -- include/inline/fastmath.h and src/bink/.../expand.c -- have
+      # been CRLF since long before this branch existed, and normalising other
+      # people's files to make a checkmark green is not this workflow's job.
+      # What the rule protects is that WE do not introduce CRLF, so that is
+      # what it checks.
+      - name: Line endings
+        run: |
+          files=$(grep -E '\.(cpp|cp|c|h|py)$' changed.txt || true)
+          bad=""
+          for f in $files; do
+            [ -f "$f" ] || continue
+            if grep -qIP '\r$' "$f"; then bad="$bad $f"; fi
+          done
+          if [ -n "$bad" ]; then
+            echo "::error::CRLF line endings introduced"
+            for f in $bad; do echo "::error file=$f::CRLF line endings"; done
+            exit 1
+          fi
+          echo "no CRLF in the files this change touches"
+
+      - name: clang-format
+        env:
+          BASE: ${{ steps.base.outputs.sha }}
+        run: |
+          # Only what this change touched, and only NEW violations. The tree is
+          # not globally clang-format clean -- zEntPlayer.cpp alone carries 237
+          # pre-existing violations -- and making it so would bury every real
+          # change.
+          files=$(grep -E '^(src|include)/.*\.(cpp|cp|h)$' changed.txt || true)
           if [ -z "$files" ]; then echo "no C++ files changed"; exit 0; fi
           echo "checking:"; echo "$files"
           fail=0
           for f in $files; do
             [ -f "$f" ] || continue
             now=$(clang-format -n --Werror "$f" 2>&1 | grep -c error || true)
-            was=$(git show "$base:$f" 2>/dev/null \
-                  | clang-format -n --Werror --assume-filename="$f" 2>&1 \
-                  | grep -c error || true)
+            was=$(git show "$BASE:$f" 2>/dev/null | clang-format -n --Werror --assume-filename="$f" 2>&1 | grep -c error || true)
             if [ "$now" -gt "$was" ]; then
               echo "::error file=$f::$((now - was)) new formatting violation(s)"
               fail=1
