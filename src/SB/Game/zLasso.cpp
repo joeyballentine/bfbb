@@ -755,6 +755,27 @@ void zLasso_Render(zLasso* lasso)
 
 void zLasso_Update(zLasso* lasso, xEnt* ent, F32 dt)
 {
+#ifdef PLATFORM_PC
+    // fizzicalCenter, fizzicalNormal and fizzicalHonda are FIR filters over
+    // lastRefs, a five-slot ring that this function pushes one sample into per
+    // frame. Their smoothing window is measured in frames, so rebasing a
+    // coefficient cannot fix them -- the samples have to arrive at a fixed
+    // rate. Run the whole update sixty times a second, which is the rate the
+    // rope was tuned at, and hand it the time that has actually passed. There
+    // is one lasso, so the carry lives at file scope.
+    static F32 sUpdateTime = 0.0f;
+
+    sUpdateTime += dt;
+
+    if (sUpdateTime < 1.0f / 60.0f)
+    {
+        return;
+    }
+
+    dt = sUpdateTime;
+    sUpdateTime = 0.0f;
+#endif
+
     xVec3 newPoint;
     iModelTagEval(ent->model->Data, &lasso->tag, lasso->model->Mat, &newPoint);
     xVec3Copy(&lasso->anchor, (xVec3*)&ent->model->Mat->pos);
