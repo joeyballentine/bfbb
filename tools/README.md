@@ -125,6 +125,15 @@ touched, so another agent compiling the same unit at the same moment does not
 silently get numbers from the wrong tree. That failure mode is invisible — the
 numbers look perfectly ordinary — which is why it is worth the extra step.
 
+**It only shadows headers, and that is a trap for a return-type change.** The
+declaration moves into the shadow; the DEFINITION stays in the real `.cpp`,
+which the shadow build still compiles unchanged. So the unit that defines the
+function is never measured under the change. Declaring
+`iSndIsPlayingByHandle` as `U8` in a shadowed `iSnd.h` measured a clean +1 in
+`zEntPlayer`; applying it for real also cost `iSndIsPlayingByHandle` itself
+100.000 -> 85.588, because the conversion moved inside. Measure the defining
+unit explicitly, with the real edit, before believing a signature change.
+
 `--mw` picks any compiler under `build/compilers`. `GC/2.0p1` is the stock
 compiler this branch's patched `GC/2.0p1a` is derived from, and it answers the
 cheapest question in the project: *is this function my problem or the patch's?*
