@@ -452,6 +452,9 @@ namespace
         sCount++;
     }
 
+    // Defined below, next to the writer it shares its layout with.
+    void appendMissingSettings(const char* path);
+
     bool readFile(const char* path)
     {
         FILE* f = fopen(path, "rb");
@@ -475,7 +478,138 @@ namespace
         }
 
         fclose(f);
+
+        // Only now, with the whole file parsed: whether a key is missing is a
+        // question about the file as a whole, not about any one line.
+        appendMissingSettings(path);
         return true;
+    }
+
+    // Whether the file that was just read mentions a key at all. Distinct from
+    // valueOf, which answers from the settings table when the file is silent --
+    // which is exactly the case being looked for here.
+    bool fileHas(const char* section, const char* name)
+    {
+        char key[kMaxKey];
+        snprintf(key, sizeof(key), "%s.%s", section, name);
+        lowerInPlace(key);
+        return findEntry(key) != NULL;
+    }
+
+    // Settings this build has that the file does not.
+    //
+    // A config.ini written by an older build is missing every setting added
+    // since, and iConfigWriteDefaults refuses to touch a file that already
+    // exists -- so those settings stayed invisible, sitting at their defaults
+    // with nothing anywhere naming them. That defeats the reason the file is
+    // written at all: nobody should have to learn from documentation that a
+    // setting exists.
+    //
+    // APPENDED, never rewritten. The existing bytes are not read back,
+    // reordered or reformatted, so comments, ordering and hand edits survive
+    // exactly, and the worst a failed write can do is leave a partial line at
+    // the end -- which the parser reports by name rather than misreading.
+    //
+    // The section headers therefore repeat. The parser tracks the current
+    // section as it goes and does not care, and one block under one banner is
+    // easier to find than the same keys threaded back into place would be.
+    void appendMissingSettings(const char* path)
+    {
+        S32 missing = 0;
+        for (size_t i = 0; i < kSettingCount; i++)
+        {
+            if (!fileHas(kSettings[i].section, kSettings[i].name))
+            {
+                missing++;
+            }
+        }
+        for (S32 i = 0; i < kPadBindButtonCount; i++)
+        {
+            if (!fileHas(kPadSection, kPadBindButtons[i].name))
+            {
+                missing++;
+            }
+            if (!fileHas(kKeyboardSection, kPadBindButtons[i].name))
+            {
+                missing++;
+            }
+        }
+
+        if (missing == 0)
+        {
+            return;
+        }
+
+        FILE* f = fopen(path, "ab");
+        if (f == NULL)
+        {
+            printf("bfbb: %s is missing %d setting%s this build has, and could not be "
+                   "added to; they are at their defaults\n",
+                   path, (int)missing, missing == 1 ? "" : "s");
+            fflush(stdout);
+            return;
+        }
+
+        fprintf(f, "\n");
+        fprintf(f, "; ------------------------------------------------------------------\n");
+        fprintf(f, "; Settings added by a newer build of the port.\n");
+        fprintf(f, ";\n");
+        fprintf(f, "; Every value below is its default, so this block changes nothing\n");
+        fprintf(f, "; about what the game was already doing. The [section] headers repeat\n");
+        fprintf(f, "; the ones above on purpose -- the settings are new, the sections they\n");
+        fprintf(f, "; belong to are not.\n");
+
+        const char* section = NULL;
+        for (size_t i = 0; i < kSettingCount; i++)
+        {
+            if (fileHas(kSettings[i].section, kSettings[i].name))
+            {
+                continue;
+            }
+            if (section == NULL || strcmp(section, kSettings[i].section) != 0)
+            {
+                section = kSettings[i].section;
+                fprintf(f, "\n[%s]\n", section);
+            }
+            fprintf(f, "\n; %s\n", kSettings[i].comment);
+            fprintf(f, "%s = %s\n", kSettings[i].name, kSettings[i].value);
+        }
+
+        // The bindings, which are one line each and carry their grammar in the
+        // header the file already has further up.
+        for (S32 pass = 0; pass < 2; pass++)
+        {
+            const char* sect = pass == 0 ? kPadSection : kKeyboardSection;
+            bool wroteHeader = false;
+            for (S32 i = 0; i < kPadBindButtonCount; i++)
+            {
+                const iPadBindButton* b = &kPadBindButtons[i];
+                if (fileHas(sect, b->name))
+                {
+                    continue;
+                }
+                if (!wroteHeader)
+                {
+                    fprintf(f, "\n[%s]\n", sect);
+                    wroteHeader = true;
+                }
+                const char* value = pass == 0 ? b->pad : b->key;
+                if (b->does != NULL)
+                {
+                    fprintf(f, "%-6s = %-9s ; %s\n", b->name, value, b->does);
+                }
+                else
+                {
+                    fprintf(f, "%-6s = %s\n", b->name, value);
+                }
+            }
+        }
+
+        fclose(f);
+        printf("bfbb: %s did not have %d setting%s this build has; appended at the "
+               "defaults\n",
+               path, (int)missing, missing == 1 ? "" : "s");
+        fflush(stdout);
     }
 
     // Where to write one when none was found. Beside the executable, because

@@ -164,6 +164,37 @@ static bool scratch_dir(const char* tag, char* out, size_t outsize)
 // BFBB_CONFIG is set before any query, so the load reads this file rather than
 // a config.ini someone happens to have beside the test binary, and so that the
 // write-when-missing path cannot leave one there either.
+// Lines in `text` that begin with `prefix`, ignoring leading spaces. Counting
+// LINES rather than occurrences because the settings' own documentation
+// mentions the names of settings, and a substring search cannot tell a comment
+// about a key from the key itself.
+static int countLinesStartingWith(const char* text, const char* prefix)
+{
+    size_t n = strlen(prefix);
+    int count = 0;
+    const char* p = text;
+
+    while (*p != '\0')
+    {
+        const char* line = p;
+        while (*line == ' ' || *line == '\t')
+        {
+            line++;
+        }
+        if (strncmp(line, prefix, n) == 0)
+        {
+            count++;
+        }
+        const char* nl = strchr(p, '\n');
+        if (nl == NULL)
+        {
+            break;
+        }
+        p = nl + 1;
+    }
+    return count;
+}
+
 static void test_config()
 {
     printf("iConfig\n");
@@ -284,6 +315,56 @@ static void test_config()
           "a binding for a button that does not exist is dropped, like any unknown key");
 
     check(iConfigGetInt("input.controller", 0) == 3, "input.controller comes off the file");
+
+    // The load appends the settings this build has and the file did not.
+    //
+    // A config.ini written by an older build is missing every setting added
+    // since, and iConfigWriteDefaults refuses to touch a file that exists -- so
+    // without this those settings are invisible, sitting at their defaults with
+    // nothing anywhere naming them. The file above omits most of the table, so
+    // the load that has already run should have grown it.
+    {
+        FILE* a = fopen(path, "rb");
+        check(a != NULL, "the config file can be read back after the load");
+        if (a != NULL)
+        {
+            char grown[32768];
+            size_t gn = fread(grown, 1, sizeof(grown) - 1, a);
+            fclose(a);
+            grown[gn] = '\0';
+
+            check(strstr(grown, "; Settings added by a newer build") != NULL,
+                  "the appended block says where it came from");
+            check(strstr(grown, "msaa = 4") != NULL,
+                  "a setting the file never had is appended at its default");
+            check(strstr(grown, "shadow_resolution = auto") != NULL, "and so is another");
+
+            // The bindings are not in the settings table -- they come from
+            // iPadBind.cpp -- and are appended the same way. The file names two
+            // of them, so the rest have to arrive.
+            check(countLinesStartingWith(grown, "y ") == 2,
+                  "a binding the file omits arrives for both devices");
+
+            // What was already there is untouched. The append never rewrites,
+            // so a value the file set keeps its own line and gains no second
+            // one at the default.
+            check(countLinesStartingWith(grown, "width") == 1,
+                  "a setting the file already had is not appended again");
+            check(strstr(grown, "width = 1280") != NULL, "and keeps the value it had");
+            // Spelling and spacing included: the file is grown, never reread
+            // and rewritten, so a line someone typed by hand comes back byte
+            // for byte and gains no tidied-up twin at the default.
+            check(strstr(grown, "  Glow   =   OFF   ") != NULL,
+                  "a hand-written line keeps its case and its spacing");
+            check(strstr(grown, "glow = on") == NULL,
+                  "and the table's default is not appended beside it");
+
+            // The section headers repeat on purpose: the settings are new, the
+            // sections they belong to are not.
+            check(countLinesStartingWith(grown, "[video]") == 1,
+                  "the appended settings sit under a section header of their own");
+        }
+    }
 
     iHostRemoveFile(path);
 
