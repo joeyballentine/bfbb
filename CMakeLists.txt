@@ -392,7 +392,15 @@ endif()
 add_subdirectory(third_party/librw)
 
 # librw is not warning-clean and it is not this project's code to fix.
-target_compile_options(librw PRIVATE -Wno-everything)
+#
+# -Werror=switch comes after and puts exactly one warning back, as an error: a
+# switch over an enum that is missing a case and has no default. The device
+# backends' setRenderState and getRenderState are those switches, and this is
+# what stops a render state being added to rwrender.h, wired up on one backend,
+# and silently dropped by the others -- which is what happened to COLORWRITEMASK
+# and left every depth-priming pass painting under GL3. A backend that cannot
+# support a state now has to say so with an empty case.
+target_compile_options(librw PRIVATE -Wno-everything -Werror=switch)
 
 # librw links libm whenever the compiler ID is GNU or Clang
 # (third_party/librw/src/CMakeLists.txt:114). Targeting the MSVC ABI, clang
