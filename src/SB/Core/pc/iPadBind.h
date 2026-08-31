@@ -98,4 +98,22 @@ bool iPadBindParse(const char* text, const iPadBindToken* tokens, S32 tokenCount
 // Is the binding satisfied right now? `held` answers for one device input id.
 bool iPadBindHeld(const iPadBind& bind, bool (*held)(S16 id));
 
+// Which config.ini section a device reads, and which column of the table it
+// defaults from. The two always travel together -- a device that read [pad]
+// and defaulted from the keyboard column would be a silent mess -- so they are
+// one argument rather than two.
+enum iPadBindDevice
+{
+    IPAD_BIND_PAD,
+    IPAD_BIND_KEYBOARD
+};
+
+// Every button's binding for one device, read from config.ini and parsed with
+// that device's token table. `out` must hold IPAD_BIND_MAX_BUTTONS.
+//
+// Shared rather than written per backend: the loop is the same either way and
+// only the token table differs, which is the whole reason ids are opaque here.
+void iPadBindLoad(iPadBindDevice device, const iPadBindToken* tokens, S32 tokenCount,
+                  iPadBind* out);
+
 #endif

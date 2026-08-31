@@ -2,6 +2,7 @@
 
 #include "iPadBind.h"
 
+#include "iConfig.h"
 #include "iHost.h"
 #include "xPad.h"
 
@@ -254,6 +255,33 @@ bool iPadBindParse(const char* text, const iPadBindToken* tokens, S32 tokenCount
 
     *out = built;
     return true;
+}
+
+void iPadBindLoad(iPadBindDevice device, const iPadBindToken* tokens, S32 tokenCount, iPadBind* out)
+{
+    const char* section = (device == IPAD_BIND_PAD) ? "pad" : "keyboard";
+
+    for (S32 i = 0; i < kPadBindButtonCount && i < IPAD_BIND_MAX_BUTTONS; i++)
+    {
+        const iPadBindButton* b = &kPadBindButtons[i];
+        const char* fallback = (device == IPAD_BIND_PAD) ? b->pad : b->key;
+
+        char key[96];
+        snprintf(key, sizeof(key), "%s.%s", section, b->name);
+
+        iPadBindParse(iConfigGetString(key, fallback), tokens, tokenCount, key, &out[i]);
+    }
+
+    // The array is sized by a macro and filled from a table whose length the
+    // compiler will not hand over, so this is where the two are compared. A
+    // button past the end would silently never be pressable.
+    if (kPadBindButtonCount > IPAD_BIND_MAX_BUTTONS)
+    {
+        printf("bfbb: %d buttons to bind but room for %d; the last %d are unbound\n",
+               (int)kPadBindButtonCount, (int)IPAD_BIND_MAX_BUTTONS,
+               (int)(kPadBindButtonCount - IPAD_BIND_MAX_BUTTONS));
+        fflush(stdout);
+    }
 }
 
 bool iPadBindHeld(const iPadBind& bind, bool (*held)(S16 id))

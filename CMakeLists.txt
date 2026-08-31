@@ -77,33 +77,83 @@ if(BFBB_BUILD_32BIT)
 endif()
 
 # --- input backend -----------------------------------------------------------
-# "win32" is XInput for controllers with the keyboard covering port 0 when
-# nothing is plugged into it. XInput is loaded at run time, so this needs no
-# import library and starts on a machine that has none.
+# "sdl" is the default and reaches every controller SDL knows: DualSense,
+# Switch Pro, arcade sticks and generic USB pads as well as the Xbox ones,
+# through DirectInput, raw input, HID and Windows.Gaming.Input at once. It also
+# maps them all onto one standard layout, which is what lets config.ini name a
+# button and have it mean the same thing on every device.
+#
+# "win32" is XInput only, and needs nothing built alongside it: XInput is loaded
+# at run time, so it needs no import library and starts on a machine that has
+# none. It is what a checkout with no submodules still has.
 #
 # "null" reports no controllers and is available everywhere. It is a real
 # configuration, not a missing implementation: a build with no input library
 # genuinely has no controllers, and the game handles that -- it shows its
 # "please reconnect the controller" screen.
 if(WIN32)
-  set(BFBB_INPUT_BACKEND "win32" CACHE STRING "Host input backend: win32, null")
+  set(BFBB_INPUT_BACKEND "sdl" CACHE STRING "Host input backend: sdl, win32, null")
 else()
   set(BFBB_INPUT_BACKEND "null" CACHE STRING "Host input backend: null")
 endif()
-set_property(CACHE BFBB_INPUT_BACKEND PROPERTY STRINGS win32 null)
+set_property(CACHE BFBB_INPUT_BACKEND PROPERTY STRINGS sdl win32 null)
 
+# The keyboard is not a backend. It covers port 0 whenever no controller is on
+# it, and which controller API a build talks to says nothing about how it should
+# read a keyboard -- so both Windows backends link the same one. The SDL backend
+# deliberately does not use SDL's: SDL_GetKeyboardState wants the video
+# subsystem and an event loop tied to an SDL window, and iWindow owns the only
+# window this process has.
 set(INPUT_DEFINES)
+set(INPUT_LIBS)
 if(BFBB_INPUT_BACKEND STREQUAL "null")
   set(INPUT_SOURCES ${PC_DIR}/iPadHostNull.cpp)
 elseif(BFBB_INPUT_BACKEND STREQUAL "win32")
   if(NOT WIN32)
     message(FATAL_ERROR "BFBB_INPUT_BACKEND=win32 needs a Windows host")
   endif()
-  set(INPUT_SOURCES ${PC_DIR}/iPadHostWin32.cpp)
+  set(INPUT_SOURCES ${PC_DIR}/iPadHostWin32.cpp ${PC_DIR}/iPadKeyboardWin32.cpp)
   # So the self-test knows which backend it is linked against: the contract it
   # checks is the same either way, but "no controller on port 0" means an
-  # unplugged pad under null and a keyboard under win32.
-  set(INPUT_DEFINES BFBB_INPUT_BACKEND_WIN32)
+  # unplugged pad under null and a keyboard under the other two.
+  set(INPUT_DEFINES BFBB_INPUT_BACKEND_WIN32 BFBB_INPUT_HAVE_KEYBOARD)
+elseif(BFBB_INPUT_BACKEND STREQUAL "sdl")
+  if(NOT WIN32)
+    message(FATAL_ERROR "BFBB_INPUT_BACKEND=sdl needs a Windows host for its keyboard half")
+  endif()
+  set(INPUT_SOURCES ${PC_DIR}/iPadHostSDL.cpp ${PC_DIR}/iPadKeyboardWin32.cpp)
+  set(INPUT_DEFINES BFBB_INPUT_BACKEND_SDL BFBB_INPUT_HAVE_KEYBOARD)
+
+  if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL/CMakeLists.txt)
+    message(FATAL_ERROR
+      "third_party/SDL is empty -- run: git submodule update --init --recursive\n"
+      "  (or configure with -DBFBB_INPUT_BACKEND=win32 for XInput only)")
+  endif()
+
+  # Only the gamepad half of SDL is wanted. Video stays ON despite no SDL window
+  # ever being created: SDL gates its DirectInput joystick driver on the video
+  # target, so turning video off silently drops support for exactly the older
+  # pads this backend exists to reach. Compiled in and never initialised costs
+  # a larger static library and nothing at run time.
+  set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+  set(SDL_STATIC ON CACHE BOOL "" FORCE)
+  set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
+  set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
+  set(SDL_AUDIO OFF CACHE BOOL "" FORCE)
+  set(SDL_CAMERA OFF CACHE BOOL "" FORCE)
+  set(SDL_RENDER OFF CACHE BOOL "" FORCE)
+  set(SDL_GPU OFF CACHE BOOL "" FORCE)
+  set(SDL_DIALOG OFF CACHE BOOL "" FORCE)
+  set(SDL_POWER OFF CACHE BOOL "" FORCE)
+
+  add_subdirectory(third_party/SDL EXCLUDE_FROM_ALL)
+
+  # SDL is not warning-clean under this compiler and it is not this project's
+  # code to fix. Same treatment librw gets.
+  target_compile_options(SDL3-static PRIVATE -Wno-everything)
+
+  set(INPUT_LIBS SDL3::SDL3-static)
 else()
   message(FATAL_ERROR "unknown BFBB_INPUT_BACKEND '${BFBB_INPUT_BACKEND}'")
 endif()
@@ -323,6 +373,7 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iMenuFrame.cpp
   ${PC_DIR}/iPad.cpp
   ${PC_DIR}/iPadBind.cpp
+  ${PC_DIR}/iPadStick.cpp
   ${PC_DIR}/iSystem.cpp
   ${PC_DIR}/iTextPatch.cpp
   ${PC_DIR}/iTRC.cpp
@@ -469,6 +520,10 @@ target_link_libraries(bfbb_platform PUBLIC bfbb_rw)
 # The movie decoder and its audio device. PRIVATE: nothing above bfbb_platform
 # includes an FFmpeg header, and iFMV.cpp is the only caller of either seam.
 target_link_libraries(bfbb_platform PRIVATE ${FMV_LIBRARIES})
+
+# The input backend's library, if it has one. PUBLIC because both the game
+# and the self-test link the backend through this target.
+target_link_libraries(bfbb_platform PUBLIC ${INPUT_LIBS})
 if(FMV_INCLUDES)
   target_include_directories(bfbb_platform PRIVATE ${FMV_INCLUDES})
 endif()
@@ -656,12 +711,17 @@ add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   # than linking xTRC.cpp, which drags in the whole TRC screen stack.
   ${PC_DIR}/iPad.cpp
   ${PC_DIR}/iPadBind.cpp
+  ${PC_DIR}/iPadStick.cpp
 
   ${INPUT_SOURCES}
   ${AUDIO_SOURCES}
   ${HOST_SOURCES}
 )
 target_compile_definitions(pc_selftest PRIVATE ${INPUT_DEFINES} ${AUDIO_DEFINES})
+
+# pc_selftest compiles the backend sources itself rather than linking
+# bfbb_platform, so the input backend's library is its own to ask for.
+target_link_libraries(pc_selftest PRIVATE ${INPUT_LIBS})
 target_include_directories(pc_selftest PRIVATE
   ${PC_DIR}/compat
   ${PC_DIR}

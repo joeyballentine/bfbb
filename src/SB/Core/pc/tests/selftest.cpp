@@ -30,6 +30,7 @@
 #include "iMemMgr.h"
 #include "iPadBind.h"
 #include "iPadHost.h"
+#include "iPadStick.h"
 #include "iScreen.h"
 #include "iSystem.h"
 #include "iTextPatch.h"
@@ -1038,14 +1039,56 @@ static void test_pad_stick_shape()
           "a keyboard's square diagonal lands on the boundary, not past it");
 }
 
+// The stick deadzone, which every backend shares -- both of them read a
+// device that reports two signed 16-bit axes, and none of the arithmetic is
+// specific to one API. Outside the backend guard below for that reason.
+static void test_pad_stick_deadzone()
+{
+    const S32 dz = IPAD_STICK_DEADZONE_LEFT;
+    F32 x, y;
+
+    iPadStickConvert(0, 0, dz, &x, &y);
+    check(x == 0.0f && y == 0.0f, "a centred stick reads zero");
+
+    iPadStickConvert((S16)(dz - 1), 0, dz, &x, &y);
+    check(x == 0.0f && y == 0.0f, "inside the deadzone reads zero");
+
+    // The deadzone is radial, so a diagonal push whose components are each
+    // inside it but whose magnitude is not must still register. A per-axis
+    // deadzone reports zero here, and that is the bug this guards.
+    S16 diag = (S16)(dz * 0.8f);
+    iPadStickConvert(diag, diag, dz, &x, &y);
+    check(x > 0.0f && y > 0.0f, "a diagonal past the radial deadzone registers");
+
+    iPadStickConvert(32767, 0, dz, &x, &y);
+    check(fabsf(x - 1.0f) < 0.0001f, "full right deflection reads 1");
+    check(fabsf(y) < 0.0001f, "and nothing on the other axis");
+
+    iPadStickConvert(-32768, 0, dz, &x, &y);
+    check(fabsf(x + 1.0f) < 0.0001f, "full left deflection reads -1, not past it");
+
+    // Just past the deadzone edge the output must start near zero. Rescaling
+    // from that edge is what makes it true; without it the first movement jumps
+    // straight to the deadzone's fraction of full scale.
+    iPadStickConvert((S16)(dz + 40), 0, dz, &x, &y);
+    check(x > 0.0f && x < 0.01f, "just past the deadzone the stick barely moves");
+
+    // A full diagonal is clamped to the unit circle, so its magnitude cannot
+    // exceed what one axis alone reports.
+    iPadStickConvert(32767, 32767, dz, &x, &y);
+    check(sqrtf(x * x + y * y) <= 1.0001f, "a full diagonal does not exceed full scale");
+
+    iPadStickConvert(0, 32767, dz, &x, &y);
+    check(y > 0.99f, "up is positive, as iPadHost.h specifies");
+}
+
 #ifdef BFBB_INPUT_BACKEND_WIN32
-// The two pure conversions inside iPadHostWin32.cpp, which are named rather
-// than static so this file can reach them. Declared here rather than pulled in
-// from a header, so that a change to either signature is caught at link time
-// instead of the test silently retargeting itself at something else.
+// The button conversion inside iPadHostWin32.cpp, which is named rather than
+// static so this file can reach it. Declared here rather than pulled in from a
+// header, so that a change to its signature is caught at link time instead of
+// the test silently retargeting itself at something else.
 #include <windows.h>
 #include <xinput.h>
-void iPadHostWin32ConvertStick(S16 rawX, S16 rawY, S32 deadzone, F32* outX, F32* outY);
 U32 iPadHostWin32ConvertButtons(const XINPUT_GAMEPAD& gp);
 
 // The button bits, restated rather than included from xPad.h -- the same
@@ -1067,46 +1110,6 @@ U32 iPadHostWin32ConvertButtons(const XINPUT_GAMEPAD& gp);
 #define TEST_PAD_SQUARE 0x40000 // Y on the GameCube
 #define TEST_PAD_TRIANGLE 0x80000 // B on the GameCube
 #define TEST_PAD_Z 0x100000
-
-static void test_pad_win32_sticks()
-{
-    const S32 dz = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE;
-    F32 x, y;
-
-    iPadHostWin32ConvertStick(0, 0, dz, &x, &y);
-    check(x == 0.0f && y == 0.0f, "a centred stick reads zero");
-
-    iPadHostWin32ConvertStick((S16)(dz - 1), 0, dz, &x, &y);
-    check(x == 0.0f && y == 0.0f, "inside the deadzone reads zero");
-
-    // The deadzone is radial, so a diagonal push whose components are each
-    // inside it but whose magnitude is not must still register. A per-axis
-    // deadzone reports zero here, and that is the bug this guards.
-    S16 diag = (S16)(dz * 0.8f);
-    iPadHostWin32ConvertStick(diag, diag, dz, &x, &y);
-    check(x > 0.0f && y > 0.0f, "a diagonal past the radial deadzone registers");
-
-    iPadHostWin32ConvertStick(32767, 0, dz, &x, &y);
-    check(fabsf(x - 1.0f) < 0.0001f, "full right deflection reads 1");
-    check(fabsf(y) < 0.0001f, "and nothing on the other axis");
-
-    iPadHostWin32ConvertStick(-32768, 0, dz, &x, &y);
-    check(fabsf(x + 1.0f) < 0.0001f, "full left deflection reads -1, not past it");
-
-    // Just past the deadzone edge the output must start near zero. Rescaling
-    // from that edge is what makes it true; without it the first movement jumps
-    // straight to the deadzone's fraction of full scale.
-    iPadHostWin32ConvertStick((S16)(dz + 40), 0, dz, &x, &y);
-    check(x > 0.0f && x < 0.01f, "just past the deadzone the stick barely moves");
-
-    // A full diagonal is clamped to the unit circle, so its magnitude cannot
-    // exceed what one axis alone reports.
-    iPadHostWin32ConvertStick(32767, 32767, dz, &x, &y);
-    check(sqrtf(x * x + y * y) <= 1.0001f, "a full diagonal does not exceed full scale");
-
-    iPadHostWin32ConvertStick(0, 32767, dz, &x, &y);
-    check(y > 0.99f, "up is positive, as iPadHost.h specifies");
-}
 
 static void test_pad_win32_buttons()
 {
@@ -1276,20 +1279,28 @@ static void test_pad()
     iPadHostRumble(-1, 1);
     check(true, "rumbling an absent or out-of-range port is harmless");
 
-#ifdef BFBB_INPUT_BACKEND_WIN32
-    // This process has no window, so GetActiveWindow reports none and the
-    // keyboard path takes its unfocused branch: present, but holding nothing.
+#ifdef BFBB_INPUT_HAVE_KEYBOARD
+    // The keyboard is shared by both Windows backends, so this holds under
+    // either. This process has no window, so GetActiveWindow reports none and
+    // the keyboard path takes its unfocused branch: present, holding nothing.
+    //
+    // It assumes no controller is plugged into the machine running the test. A
+    // developer with a pad on their desk would see this fail, which is a worse
+    // trade than it looks -- the alternative is asserting nothing about the one
+    // path every keyboard-only player takes.
     check(s != NULL && s->connected,
-          "win32: the keyboard stands in for port 0 with no controller plugged in");
-    check(s != NULL && s->buttons == 0, "win32: an unfocused keyboard holds nothing");
-
-    test_pad_win32_sticks();
-    test_pad_win32_buttons();
+          "the keyboard stands in for port 0 with no controller plugged in");
+    check(s != NULL && s->buttons == 0, "and an unfocused keyboard holds nothing");
 #else
     check(s != NULL && !s->connected, "the null backend reports no controller");
 #endif
 
+#ifdef BFBB_INPUT_BACKEND_WIN32
+    test_pad_win32_buttons();
+#endif
+
     test_pad_bindings();
+    test_pad_stick_deadzone();
     test_pad_stick_shape();
 
     iPadHostExit();

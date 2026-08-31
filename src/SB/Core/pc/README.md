@@ -306,12 +306,24 @@ and not the table. If you port something, edit the row.
   found the way `src/SB/Core/gc/iSnd.cpp` finds them, through the table of
   contents, and read on first play into a capped LRU cache. Xbox ADPCM is
   decoded on the way in, so the mixer only ever sees 16-bit PCM.
-- **`iPadHost.h`** and **`iPadHostNull.cpp`** are the device end of input. The
+- **`iPadHost.h`** and its three backends are the device end of input. The
   GameCube has one controller API that is always there; a host has several and
   none is guaranteed at build time, so the part that touches hardware is behind
-  a seam and the part with the game's semantics in it is not. `null` reports no
-  controllers, which is the correct answer for a build with no input library —
-  the game shows its "please reconnect the controller" screen.
+  a seam and the part with the game's semantics in it is not. `iPadHostSDL.cpp`
+  is the default and reaches every controller SDL knows, through DirectInput,
+  raw input, HID and Windows.Gaming.Input at once, all mapped onto one layout.
+  `iPadHostWin32.cpp` is XInput only and needs no submodule, so a checkout
+  without one still has controllers -- the Xbox ones. `iPadHostNull.cpp` reports
+  none, which is the correct answer for a build with no input library — the
+  game shows its "please reconnect the controller" screen.
+- **`iPadBind.h`**, **`iPadStick.h`** and **`iPadKeyboard.h`** are the parts of
+  input that are not a device API, so they are shared rather than written per
+  backend. `iPadBind` parses `[pad]` and `[keyboard]` against a token table the
+  backend supplies, which is why the ids in it are opaque to it; `iPadStick`
+  takes the deadzone out of two signed 16-bit axes; `iPadKeyboard` covers port 0
+  whenever nothing is on it. The SDL backend deliberately does not use SDL's
+  keyboard: `SDL_GetKeyboardState` wants the video subsystem and an event loop
+  tied to an SDL window, and `iWindow` owns the only window this process has.
 - **`VERBATIM.txt`** records the 19 files copied unchanged from `gc/`, with
   the hash each was copied at. Sixteen are headers; three are implementations
   -- `iMath3.cpp`, `iCollide.cpp` and `iCollideFast.cpp` -- which turned out to

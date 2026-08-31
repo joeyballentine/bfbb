@@ -2,3 +2,7 @@
 	path = third_party/librw
 	url = https://github.com/joeyballentine/librw
 	branch = bfbb-port
+[submodule "third_party/SDL"]
+	path = third_party/SDL
+	url = https://github.com/libsdl-org/SDL.git
+	branch = release-3.4.14

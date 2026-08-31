@@ -98,7 +98,10 @@ You need:
   it links against. The port is 32-bit and that isn't negotiable (see the comment
   above `add_compile_options(-m32)` in `CMakeLists.txt`).
 - CMake 3.16+ and Ninja.
-- The librw submodule: `git submodule update --init --recursive`
+- The submodules: `git submodule update --init --recursive`. That is librw,
+  which the renderer is, and SDL, which reads the controllers. A checkout
+  without SDL still builds with `-DBFBB_INPUT_BACKEND=win32`, which reaches
+  Xbox controllers through XInput and nothing else.
 
 Then:
 
@@ -233,13 +236,19 @@ dependency the movies use.
 
 ### Controls
 
+Controllers go through SDL, so a DualSense, a Switch Pro controller, an arcade
+stick and the generic USB pads work as well as the Xbox ones. SDL maps every
+device it knows onto one layout, so a button name below means the same physical
+button whichever pad is plugged in, and a `[pad]` section written for one
+controller works on another unchanged.
+
 ```ini
 [input]
 controller = auto
 ```
 
-`auto` plays on the first controller Windows actually has, so a single pad works
-whichever slot it landed in. A number from 1 to 4 pins the game to that slot and
+`auto` plays on the first controller the machine actually has, so a single pad
+works whichever slot it landed in. A number from 1 to 4 pins the game to that slot and
 ignores the rest — set that when a wheel, a flight stick or a dormant wireless
 receiver is holding slot 1 and the pad you want is behind it. The keyboard covers
 whichever controller you chose whenever nothing is on it.
