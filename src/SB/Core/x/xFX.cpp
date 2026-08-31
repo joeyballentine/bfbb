@@ -1992,10 +1992,25 @@ void xFXStreakUpdate(U32 id, const xVec3* a, const xVec3* b)
 
     s = &sStreakList[id];
 
+#ifdef PLATFORM_PC
+    // Most streaks start with a frequency of zero or less, which opens this
+    // gate on every call: the head advances once a frame, so the fifty elements
+    // span fifty frames however long a frame is. The player's melee and spin
+    // trails are all in that group and come out a quarter as long at 240 fps.
+    // Sixty a second is what they span on console. The carry means a frame that
+    // arrives a hair early only defers the advance, it does not drop it.
+    F32 frequency = s->frequency > 0.0f ? s->frequency : 1.0f / 60.0f;
+
+    if (s->elapsed >= frequency)
+    {
+        s->elapsed -= frequency;
+        s->head = s->head + 1;
+#else
     if (s->elapsed > s->frequency)
     {
         s->elapsed -= s->frequency;
         s->head = s->head + 1;
+#endif
 
         if (s->head >= 50)
         {
