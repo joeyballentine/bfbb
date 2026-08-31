@@ -139,6 +139,24 @@ The DLLs get copied next to the exe automatically.
 Skip it if you don't care. CMake prints `FMV decoder: none` and the game just
 advances past movies as if they'd played.
 
+### Switch 2 controllers (optional)
+
+Five controllers are readable only over raw USB: the Switch 2 Pro controller,
+its two Joy-Cons, the Switch 2 GameCube controller and the original GameCube
+adapter. SDL drives those through libusb, which vcpkg will build:
+
+```sh
+vcpkg install libusb:x86-windows
+```
+
+Same `-DCMAKE_PREFIX_PATH` as above, and `libusb-1.0.dll` is copied next to the
+exe automatically. Nothing is installed on the player's machine — those pads
+are composite devices whose USB interface already carries Microsoft OS
+descriptors, so Windows binds it itself and their HID interface is left alone.
+
+Skip it and every other controller still works. Those five report themselves as
+devices with no layout, which the game says at startup.
+
 ## Settings
 
 The game writes `config.ini` next to the executable the first time it runs. Every
@@ -277,6 +295,12 @@ shoulder and no stick clicks.
 
 The sticks are not remappable. The left one moves, the right one turns the
 camera, and on the keyboard that is WASD and IJKL.
+
+A Switch 2 controller is shared with Steam, and only one program can hold one
+at a time — Steam takes it whenever its Nintendo configuration support is on,
+and the port then reports it as a device it cannot use. Turn that off in Steam's
+controller settings to play on it here, or add `bfbb.exe` to Steam as a
+non-Steam game and let Steam Input hand it over as a standard pad.
 
 A controller SDL does not recognise says so at startup, with its USB ids, and
 cannot be played on until it has a layout. Put a `gamecontrollerdb.txt` beside
