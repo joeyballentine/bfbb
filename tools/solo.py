@@ -105,7 +105,17 @@ def compile_unit(unit):
         raise SystemExit("no build rule for %s - is the source file missing?" % obj)
     td = tempfile.mkdtemp(prefix="solo_")
     out = os.path.join(td, "o.o")
-    cmd = cwexec.compile_prefix(NINJA, info["rule"], info["mw"]) + \
+    # --shadow <dir> prepends an include directory, so a shared-header change
+    # can be measured from a private copy of the tree. Editing the real header
+    # while another agent is compiling silently hands that agent numbers from
+    # the wrong tree, and those numbers look perfectly ordinary.
+    shadow = opt_arg("--shadow")
+    # --mw <version> compiles with a different CodeWarrior under build/compilers,
+    # which is how you tell a patch cost from a source problem. `--mw GC/2.0p1`
+    # is the stock compiler this branch's GC/2.0p1a is derived from.
+    mw = opt_arg("--mw") or info["mw"]
+    cmd = cwexec.compile_prefix(NINJA, info["rule"], mw) + \
+        (["-i", shadow] if shadow else []) + \
         shlex.split(info["flags"], posix=False) + \
         ["-c", info["src"], "-o", out]
     cmd = [c.strip('"') if c.startswith('"') and c.endswith('"') else c for c in cmd]
