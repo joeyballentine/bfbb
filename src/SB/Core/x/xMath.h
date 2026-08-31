@@ -71,6 +71,32 @@ void xsqrtfast(F32& dst, F32 num);
 
 F32 xrmod(F32 ang);
 
+#ifdef PLATFORM_PC
+// Rescales a per-FRAME particle count to the frame's own length. Retail spawns
+// `count` particles every frame at a sixtieth of a second, which is a rate of
+// `60 * count` a second; this returns what that rate asks for in `dt` seconds.
+// The leftover fraction is resolved by a coin flip, so the average holds
+// without the caller keeping an accumulator.
+U32 xFrameEmitCount(F32 count, F32 dt);
+
+// The same for a per-FRAME probability. `chance` is how often a frame spawned
+// on the console; the result is the chance for a frame of `dt` seconds that
+// keeps the same number of spawns a second.
+F32 xFrameEmitChance(F32 chance, F32 dt);
+
+// A per-FRAME exponential approach rebased onto the frame's own length. `k` is
+// the fraction of the remaining distance a console frame closed; the result is
+// the fraction for a frame of `dt` seconds. What compounds is the part left
+// over, hence the 1 - k on both sides.
+//
+// `k` is clamped into [0,1] first. Several callers read it straight out of
+// level data with no bound of their own, and xpow of a negative base with a
+// fractional exponent is a NaN -- one that never washes out once it has reached
+// a position, a yaw or a quaternion, and that retail's plain multiply could not
+// produce.
+F32 xFrameApproach(F32 k, F32 dt);
+#endif
+
 template <class T> T range_limit(T v, T minv, T maxv);
 
 // The primary has no definition anywhere; every use resolves to one of these,

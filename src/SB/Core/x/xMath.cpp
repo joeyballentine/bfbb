@@ -51,6 +51,52 @@ F32 xurand()
     return xrand() * 2.3283064e-10f;
 }
 
+#ifdef PLATFORM_PC
+U32 xFrameEmitCount(F32 count, F32 dt)
+{
+    F32 want = count * (60.0f * dt);
+    U32 whole = (U32)want;
+    F32 frac = want - whole;
+
+    if (frac > 0.0f && xurand() < frac)
+    {
+        whole++;
+    }
+
+    return whole;
+}
+
+F32 xFrameEmitChance(F32 chance, F32 dt)
+{
+    if (chance >= 1.0f)
+    {
+        return 1.0f;
+    }
+
+    if (chance <= 0.0f)
+    {
+        return 0.0f;
+    }
+
+    return 1.0f - xpow(1.0f - chance, 60.0f * dt);
+}
+
+F32 xFrameApproach(F32 k, F32 dt)
+{
+    if (k >= 1.0f)
+    {
+        return 1.0f;
+    }
+
+    if (k <= 0.0f)
+    {
+        return 0.0f;
+    }
+
+    return 1.0f - xpow(1.0f - k, 60.0f * dt);
+}
+#endif
+
 U32 xMathSolveQuadratic(F32 a, F32 b, F32 c, F32* x1, F32* x2)
 {
     F32 d;
