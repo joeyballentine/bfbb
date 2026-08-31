@@ -652,12 +652,12 @@ void xAnimFileEval(xAnimFile* data, F32 time, F32* bilinear, U32 flags, xVec3* t
             biplus[i] = MIN(biindex[i] + 1, data->NumAnims[i]);
         }
 
-        q0 = (xQuat*)(giAnimScratch + 0x1560);
-        xVec3* t0 = (xVec3*)((U8*)q0 + 0x410);
+        q0 = ((iAnimPose*)giAnimScratch)[3].quat;
+        xVec3* t0 = ((iAnimPose*)q0)->tran;
         if (bilerp[0] && bilerp[1])
         {
-            xQuat* q1 = (xQuat*)(giAnimScratch + 0x1c80);
-            xVec3* t1 = (xVec3*)((U8*)q1 + 0x410);
+            xQuat* q1 = ((iAnimPose*)giAnimScratch)[4].quat;
+            xVec3* t1 = ((iAnimPose*)q1)->tran;
 
             iAnimEval(data->RawData[biindex[0] + biindex[1] * data->NumAnims[0]], time, flags, tran,
                       quat);
@@ -1775,8 +1775,8 @@ static void SingleEval(xAnimSingle* single, xVec3* tran, xQuat* quat)
 
         if (single->Blend && single->Blend->State)
         {
-            xQuat* qbuf = (xQuat*)(giAnimScratch + 0xE40);
-            xVec3* vbuf = (xVec3*)(qbuf + 0x41);
+            xQuat* qbuf = ((iAnimPose*)giAnimScratch)[2].quat;
+            xVec3* vbuf = ((iAnimPose*)qbuf)->tran;
 
             xAnimFileEval(single->Blend->State->Data, single->Blend->Time,
                           single->Blend->BilinearLerp, 0x2, vbuf, qbuf, NULL);
@@ -1953,14 +1953,14 @@ void xAnimPlayEval(xAnimPlay* play)
 {
     U32 i;
     U32 bone;
-    xQuat* quatresult = (xQuat*)giAnimScratch;
-    xVec3* tranresult = (xVec3*)((U8*)quatresult + 0x410);
+    xQuat* quatresult = ((iAnimPose*)giAnimScratch)->quat;
+    xVec3* tranresult = ((iAnimPose*)quatresult)->tran;
 
     if (play->BoneCount > 1)
     {
-        xQuat* quatblend = (xQuat*)((U8*)quatresult + 0x720);
-        xVec3* tranblend = (xVec3*)((U8*)quatblend + 0x410);
-        SingleEval(play->Single, tranresult, (xQuat*)giAnimScratch);
+        xQuat* quatblend = ((iAnimPose*)quatresult)[1].quat;
+        xVec3* tranblend = ((iAnimPose*)quatblend)->tran;
+        SingleEval(play->Single, tranresult, ((iAnimPose*)giAnimScratch)->quat);
         for (i = 1; i < play->NumSingle; ++i)
         {
             xAnimSingle* si = &play->Single[i];

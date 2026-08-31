@@ -3,6 +3,15 @@
 
 #include "xMath3.h"
 
+// giAnimScratch is five of these, indexed by pose number.
+// Size: 0x720
+struct iAnimPose
+{
+    xQuat quat[65];
+    xVec3 tran[65];
+    U32 pad_71C;
+};
+
 extern U8* giAnimScratch;
 
 void iAnimInit();
