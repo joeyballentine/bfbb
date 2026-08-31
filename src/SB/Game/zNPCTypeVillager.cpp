@@ -12,6 +12,30 @@
 #include "xDebug.h"
 #include "xutil.h"
 
+// These structs were used in deadstripped functions.
+// This function is here to force the symbols to be linked.
+//
+// The target opens .rodata with the same twelve unreferenced all-zero
+// templates other units carry -- four of 0x0C, seven of 0x28 and one of 0x10 --
+// which offsets every later .rodata relocation.
+void __deadstripped_zNPCTypeVillager_head()
+{
+    const char _405[0x0C] = {};
+    const char _406[0x0C] = {};
+    const char _410[0x0C] = {};
+    const char _441[0x0C] = {};
+
+    const char _607[0x28] = {};
+    const char _608[0x28] = {};
+    const char _609[0x28] = {};
+    const char _610[0x28] = {};
+    const char _611[0x28] = {};
+    const char _612[0x28] = {};
+    const char _613[0x28] = {};
+
+    const char _817[0x10] = {};
+}
+
 #define Unknown 0
 #define Idle01 1
 #define Move01 2
@@ -1451,6 +1475,13 @@ void zNPCNewsFish::PostSetup()
     xUpdateCull_SetCB(globals.updateMgr, this, xUpdateCull_AlwaysTrueCB, NULL);
 }
 
+// One more unreferenced all-zero xVec3 template, ahead of the one
+// zNPCNewsFish::Process creates.
+void __deadstripped_zNPCTypeVillager_newsfish()
+{
+    const char _1683[0x0C] = {};
+}
+
 void zNPCNewsFish::Process(xScene*, F32 dt)
 {
     xModelInstance* minst;
@@ -2115,6 +2146,13 @@ S32 zNPCBalloonBoy::IAmBallooning()
     }
 
     return result;
+}
+
+// The last unreferenced all-zero xVec3 template, after the one
+// zNPCBalloonBoy::IAmBallooning creates.
+void __deadstripped_zNPCTypeVillager_tail()
+{
+    const char _2321[0x0C] = {};
 }
 
 U32 zNPCBubbleBuddy::aid_fresnelTxtr = 0;

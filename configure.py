@@ -17,6 +17,9 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
+sys.path.append(str(Path(__file__).parent / "tools"))
+import aliaspatch_link  # noqa: E402  -- for the AliasPatch.c dependency path
+
 from tools.project import (
     Object,
     ProgressCategory,
@@ -487,7 +490,7 @@ config.libs = [
             Object(Matching, "SB/Core/x/xutil.cpp"),
             Object(Matching, "SB/Core/x/xVec3.cpp"),
             Object(Matching, "SB/Game/zActionLine.cpp"),
-            Object(Equivalent, "SB/Game/zAnimList.cpp"),
+            Object(Matching, "SB/Game/zAnimList.cpp"),
             Object(Equivalent, "SB/Game/zAssetTypes.cpp", extra_cflags=["-sym on"]),
             Object(NonMatching, "SB/Game/zCamera.cpp"),
             Object(Matching, "SB/Game/zConditional.cpp"),
@@ -1203,6 +1206,12 @@ compilers_dir = (
     if config.compilers_path
     else config.build_dir / "compilers"
 )
+# AliasPatch.c lives in the (local, unpublished) compiler decomp, so it is an
+# absolute path outside this tree and is absent on any machine that has only
+# the bfbb repo -- CI included. Treat it as a dependency when it is there; when
+# it is not, patch_compiler.py must derive from the checked-in blob instead.
+ALIASPATCH_SRC = aliaspatch_link.SRC
+
 config.custom_build_rules = [
     {
         "name": "patch_compiler",
@@ -1219,7 +1228,17 @@ config.custom_build_steps = {
             # compiler, which in turn rebuilds every object (see project.py).
             # When the compilers are downloaded that directory is a ninja
             # target; wait for it. With --compilers it already exists on disk.
-            "implicit": [Path("tools") / "patch_compiler.py"]
+            # The compiler is now derived from C (AliasPatch.c in the
+            # mwcc-gc repo) rather than from hand-assembled cave bytes, so all
+            # four of these are real inputs. Listing only patch_compiler.py
+            # meant editing the payload left a stale compiler behind and every
+            # object silently kept its old bytes.
+            "implicit": [
+                Path("tools") / "patch_compiler.py",
+                Path("tools") / "aliaspatch_link.py",
+                Path("tools") / "aliaspatch_asm.py",
+            ]
+            + ([Path(ALIASPATCH_SRC)] if Path(ALIASPATCH_SRC).exists() else [])
             + ([compilers_dir] if config.compilers_path is None else []),
         }
     ]

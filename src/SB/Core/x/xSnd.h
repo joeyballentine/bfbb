@@ -109,11 +109,11 @@ template <S32 N> struct sound_queue
     }
     S32 size() const
     {
-        if (tail >= head)
+        if (tail < head)
         {
-            return tail - head;
+            return tail + (N + 1) - head;
         }
-        return tail + (N + 1) - head;
+        return tail - head;
     }
     void clear()
     {

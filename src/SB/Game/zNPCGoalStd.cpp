@@ -1138,24 +1138,23 @@ S32 zNPCGoalWander::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene
     tmr_minwalk = MAX(-1.0f, tmr_minwalk - dt);
 
     xVec3 delta;
-    xVec3 vec_dest;
 
     if (tmr_minwalk < 0.0f)
     {
         xVec3Sub(&delta, &pos_home, xEntGetPos(npc));
 
-        F32 length2 = xVec3Length2(&delta);
-        S32 calc = 0;
-        if (length2 > 0.95f * SQ(rad_wand))
+        F32 ds2_dest = xVec3Length2(&delta);
+        S32 needdir = 0;
+        if (ds2_dest > 0.95f * SQ(rad_wand))
         {
-            calc = 1;
+            needdir = 1;
         }
         else if (tmr_newdir < 0.0f)
         {
-            calc = 1;
+            needdir = 1;
         }
 
-        if (calc)
+        if (needdir)
         {
             CalcNewDir();
         }
@@ -1163,18 +1162,18 @@ S32 zNPCGoalWander::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene
 
     if (tmr_remain < 0.0f)
     {
-        zMovePoint* nav_curr = npc->nav_curr;
-        if (nav_curr == NULL)
+        zMovePoint* nav = npc->nav_curr;
+        if (nav == NULL)
         {
             tmr_remain = 3.0f;
         }
         else if (npc->nav_dest == NULL)
         {
-            zMovePoint* next;
-            zMovePointGetNext(nav_curr, NULL, &next, NULL);
-            if (next == NULL)
+            zMovePoint* mvpt;
+            zMovePointGetNext(nav, NULL, &mvpt, NULL);
+            if (mvpt == NULL)
             {
-                tmr_remain = nav_curr->Delay();
+                tmr_remain = nav->Delay();
             }
         }
     }
@@ -1196,21 +1195,25 @@ S32 zNPCGoalWander::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScene
     }
 
     npc->ThrottleAccel(dt, 1, 0.75f);
-    NPCC_ang_toXZDir(npc->frame->rot.angle + npc->TurnToFace(dt, &dir_cur, -1.0f), &vec_dest);
-    npc->ThrottleApply(dt, &vec_dest, 0);
+
+    xVec3 dir;
+    NPCC_ang_toXZDir(npc->frame->rot.angle + npc->TurnToFace(dt, &dir_cur, -1.0f), &dir);
+    npc->ThrottleApply(dt, &dir, 0);
     flg_wand &= ~(1 << 1);
 
+    xVec3 vec_dest;
     if (npc->flg_move & (1 << 2))
     {
-        F32 dVar7 = npc->XYZDstSqToPos(&pos_home, &vec_dest);
-        F32 spd_dt = npc->spd_throttle * dt;
+        F32 dist = npc->XYZDstSqToPos(&pos_home, &vec_dest);
+        F32 rate = npc->spd_throttle * dt;
         if (flg_wand & (1 << 1))
         {
-            VerticalWander(spd_dt, &vec_dest);
+            VerticalWander(rate, &vec_dest);
         }
         else if (iabs(vec_dest.y) > 0.1f)
         {
-            npc->frame->dpos.y = vec_dest.y * (spd_dt / dVar7);
+            F32 rat = rate / dist;
+            npc->frame->dpos.y = rat * vec_dest.y;
             npc->frame->mode |= 2;
         }
     }
@@ -1279,8 +1282,6 @@ void zNPCGoalWander::CalcNewDir()
 {
     zNPCCommon* npc = (zNPCCommon*)psyche->clt_owner;
     xVec3 direction;
-    xVec3* player_pos;
-    xVec3* npc_pos;
 
     F32 dVar4 = NPCC_aimVary(&dir_cur, xEntGetPos(npc), &pos_home, rad_wand, 0, NULL);
     if (npc->flg_move & (1 << 1))
@@ -1289,9 +1290,7 @@ void zNPCGoalWander::CalcNewDir()
     }
     if (dVar4 < rad_wand)
     {
-        npc_pos = xEntGetPos(npc);
-        player_pos = xEntGetPos(&globals.player.ent);
-        xVec3Sub(&direction, player_pos, npc_pos);
+        xVec3Sub(&direction, xEntGetPos(&globals.player.ent), xEntGetPos(npc));
 
         F32 length = xVec3Length(&direction);
         if (length < 1.0f)

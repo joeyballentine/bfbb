@@ -31,8 +31,10 @@ accurate:
 
 - [splits.md](splits.md), format of `config/GQPE78/splits.txt`
 - [symbols.md](symbols.md), format of `config/GQPE78/symbols.txt`
-- [common_bss.md](common_bss.md), how `-common on` places uninitialised globals
-- [comment_section.md](comment_section.md), CodeWarrior's `.comment` section
+- [common_bss.md](common_bss.md), how `-common on` places uninitialised globals.
+  Worth knowing: retail's placement tells you whether a symbol was static.
+- [comment_section.md](comment_section.md), CodeWarrior's `.comment` section and
+  what it says about the compiler that built a unit
 
 `getting_started.md`, `github_actions.md` and `images/` were dropped. They were
 dtk template setup for starting a new decomp ("rename GAMEID", "create a repo

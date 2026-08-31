@@ -363,8 +363,8 @@ namespace
 
         result.x = 0.0f;
         result.y = (F32)-a.baseline / a.dv;
-        result.w = (F32)(a.char_pos[c].size + a.space.x) / (a.du + a.space.x);
         result.h = 1.0f;
+        result.w = (F32)(a.char_pos[c].size + a.space.x) / (a.du + a.space.x);
 
         return result;
     }
@@ -3855,11 +3855,13 @@ template <> void basic_rect<F32>::get_bounds(F32& x1, F32& y1, F32& x2, F32& y2)
 {
     F32 tx = x;
     F32 ty = y;
+    F32 bx = tx + w;
+    F32 by = ty + h;
 
     x1 = tx;
-    x2 = tx + w;
+    x2 = bx;
     y1 = ty;
-    y2 = ty + h;
+    y2 = by;
 }
 
 template <> basic_rect<F32>& basic_rect<F32>::move(F32 x, F32 y)

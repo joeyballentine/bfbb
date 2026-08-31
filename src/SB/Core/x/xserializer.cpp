@@ -43,18 +43,21 @@ S32 xSerialStartup(S32 count, st_SERIAL_PERCID_SIZE* sizeinfo)
 
 S32 xSerialShutdown()
 {
-    return g_serinit--;
+    g_serinit--;
+
+    return g_serinit;
 }
 
 void xSerialTraverse(S32 (*func)(U32, xSerial*))
 {
+    st_XSERIAL_DATA_PRIV* xsd = &g_xserdata;
     xSerial xser;
 
-    for (S32 i = 0; i < g_xserdata.cltlist.cnt; i++)
+    for (S32 i = 0; i < xsd->cltlist.cnt; i++)
     {
-        st_XSERIAL_DATA_PRIV* xsd = (st_XSERIAL_DATA_PRIV*)g_xserdata.cltlist.list[i];
-        xser.setClient(xsd->flg_info);
-        S32 rc = func(xsd->flg_info, &xser);
+        st_SERIAL_CLIENTINFO* clt = (st_SERIAL_CLIENTINFO*)xsd->cltlist.list[i];
+        xser.setClient(clt->idtag);
+        S32 rc = func(clt->idtag, &xser);
         if (rc == 0)
             break;
     }
@@ -81,45 +84,45 @@ void xSerial::setClient(U32 idtag)
     prepare(idtag);
 }
 
-// non-matching: scheduling
+// non-matching: register allocation
 S32 xSerial::Write(char* data, S32 elesize, S32 n)
 {
     S32 nbit;
 
     if (n == 0)
     {
-        nbit = 0;
+        return 0;
+    }
+
+    nbit = n > 0 ? n * elesize * 8 : -n;
+
+    if (n < 0)
+    {
+        S32 bidx = 0;
+        S32 i;
+        S32* iptr = (S32*)data;
+        for (i = 0; i < nbit; i++)
+        {
+            wrbit(*iptr & g_tbl_onbit[bidx]);
+            if (++bidx == 32)
+            {
+                bidx = 0;
+                iptr++;
+            }
+        }
     }
     else
     {
-        nbit = n > 0 ? n * elesize * 8 : -n;
-
-        if (n < 0)
+        S32 bidx = 0;
+        S32 i;
+        char* cptr = data;
+        for (i = 0; i < nbit; i++)
         {
-            S32 bidx = 0;
-            for (S32 i = 0; i < nbit; i++)
+            wrbit(*cptr & g_tbl_onbit[bidx]);
+            if (++bidx == 8)
             {
-                S32* iptr = (S32*)data;
-                wrbit(*iptr & g_tbl_onbit[bidx]);
-                if (++bidx == 32)
-                {
-                    bidx = 0;
-                    data = (char*)((U32*)data + 1);
-                }
-            }
-        }
-        else
-        {
-            S32 bidx = 0;
-            for (S32 i = 0; i < nbit; i++)
-            {
-                char* cptr = data;
-                wrbit(*cptr & g_tbl_onbit[bidx]);
-                if (++bidx == 8)
-                {
-                    bidx = 0;
-                    data++;
-                }
+                bidx = 0;
+                cptr++;
             }
         }
     }
@@ -162,7 +165,7 @@ S32 xSerial::Write(F32 data)
     return Write((char*)&data, 4, 1);
 }
 
-// non-matching: scheduling
+// non-matching: register allocation
 S32 xSerial::Read(char* buf, S32 elesize, S32 n)
 {
     S32 nbit = n > 0 ? n * elesize * 8 : -n;
@@ -299,7 +302,7 @@ S32 xSerial::rdbit()
 void xSerial::prepare(U32 idtag)
 {
     st_SERIAL_CLIENTINFO* clt = XSER_get_client(idtag);
-    idtag = clt->idtag;
+    this->idtag = clt->idtag;
     baseoff = clt->trueoff;
     ctxtdata = clt;
     warned = FALSE;
@@ -380,30 +383,34 @@ static void xSER_init_buffers(S32 count, st_SERIAL_PERCID_SIZE* sizeinfo)
     }
 }
 
-// non-matching
 static S32 xSER_ord_compare(void* e1, void* e2)
 {
+    S32 greater;
+
     if (*(U32*)e1 < *(U32*)e2)
     {
         return -1;
     }
 
-    if (*(U32*)e2 < *(U32*)e1)
+    greater = (*(U32*)e1 > *(U32*)e2) ? 1 : 0;
+    if (greater)
     {
         return 1;
     }
     return 0;
 }
 
-// non-matching
 static S32 xSER_ord_test(const void* key, void* elt)
 {
+    S32 greater;
+
     if ((U32)key < *(U32*)elt)
     {
         return -1;
     }
 
-    if (*(U32*)elt < (U32)key)
+    greater = ((U32)key > *(U32*)elt) ? 1 : 0;
+    if (greater)
     {
         return 1;
     }

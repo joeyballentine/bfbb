@@ -1,8 +1,14 @@
 name: Build
 
+# duplotron has its own workflow (.github/workflows/duplotron.yml). This one
+# exists to prove main links byte-identically and to feed bfbbdecomp's progress
+# website, so on a branch that is deliberately full of NonMatching units it
+# reports a failure that carries no information.
 on:
   push:
+    branches-ignore: [duplotron]
   pull_request:
+    branches-ignore: [duplotron]
 
 jobs:
   build:

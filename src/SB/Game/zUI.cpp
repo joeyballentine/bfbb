@@ -172,23 +172,21 @@ void zUIMgr::Update(zScene* s, F32 dt)
 void zUIMgr::Setup(zScene* s)
 {
     const U32 count = s->baseCount[eBaseTypeUI];
-    const U32 arraySize = count * sizeof(_zUI*);
 
     m_preUpdateStart = 0;
     m_preUpdateEnd = count - 1;
     m_preUpdateMax = count;
-    m_preUpdate = (_zUI**)xMemAllocSize(arraySize);
+    m_preUpdate = (_zUI**)xMemAllocSize(count * sizeof(_zUI*));
 
     m_updateStart = 0;
     m_updateEnd = count - 1;
     m_updateMax = count;
-    m_update = (_zUI**)xMemAllocSize(arraySize);
+    m_update = (_zUI**)xMemAllocSize(count * sizeof(_zUI*));
 
-    // non-matching: incorrect registers
-
+    U32 i;
     _zUI* ui = (_zUI*)s->baseList[eBaseTypeUI];
 
-    for (U32 i = 0; i < s->baseCount[eBaseTypeUI]; i++)
+    for (i = 0; i < s->baseCount[eBaseTypeUI]; i++)
     {
         Add(ui);
         ui++;
@@ -812,7 +810,7 @@ void zUI_Render(xEnt* ent)
 
     if (ui->uiFlags & 4)
     {
-        if (xEntIsVisible(ui))
+        if (xEntIsVisible(ent))
         {
             if (ui->sasset->textureID)
             {
@@ -932,12 +930,16 @@ void zUI_Render(xEnt* ent)
             }
             else if (ui->model != NULL)
             {
-                // zUIAsset & a;
+                zUIAsset& a = *ui->sasset;
+                F32 rw = a.dim[0] / 640.0f;
+                F32 rh = a.dim[1] / 480.0f;
+                F32 rx = a.pos.x / 640.0f;
+                F32 ry = a.pos.y / 480.0f;
                 basic_rect<F32> r = {};
-                r.x = ui->sasset->pos.x / 640.0f;
-                r.y = ui->sasset->pos.y / 480.0f;
-                r.w = ui->sasset->dim[0] / 640.0f;
-                r.h = ui->sasset->dim[1] / 480.0f;
+                r.x = rx;
+                r.y = ry;
+                r.w = rw;
+                r.h = rh;
 
                 if (r.w <= 0.0f || r.h <= 0.0f)
                 {
@@ -1311,7 +1313,7 @@ static menuWorldInfo sWorldInfo[] =
 };
 // clang-format on
 
-#define WORLD_COUNT (sizeof(sWorldInfo) / sizeof(sWorldInfo[0]))
+#define WORLD_COUNT 15
 
 #define WORLD_HB 0 // Bikini Bottom
 #define WORLD_JF 1 // Jellyfish Fields
@@ -1612,11 +1614,11 @@ void zUI_ScenePortalInit(zScene* zsc)
         }
 
         tempString[13] = c;
-        id = xStrHash(tempString);
+        uiID = xStrHash(tempString);
 
         c++;
 
-        sWorld[i].uiSelected = findUI(zsc, id);
+        sWorld[i].uiSelected = findUI(zsc, uiID);
     }
 
     strcpy(tempString, "TASK NONE UI 00");

@@ -105,6 +105,30 @@ namespace auto_tweak
     }
 }
 
+// These structs were used in deadstripped functions.
+// This function is here to force the symbols to be linked.
+//
+// The target opens .rodata with the same unreferenced all-zero templates other
+// units carry -- three more of 0x0C, seven of 0x28, one more 0x0C and one of
+// 0x10 -- which offsets every later .rodata relocation.
+void __deadstripped_zNPCTypeBossPlankton_head()
+{
+    const char _406[0x0C] = {};
+    const char _410[0x0C] = {};
+    const char _441[0x0C] = {};
+
+    const char _607[0x28] = {};
+    const char _608[0x28] = {};
+    const char _609[0x28] = {};
+    const char _610[0x28] = {};
+    const char _611[0x28] = {};
+    const char _612[0x28] = {};
+    const char _613[0x28] = {};
+
+    const char _781[0x0C] = {};
+    const char _842[0x10] = {};
+}
+
 namespace
 {
     struct sound_data_type
@@ -283,6 +307,13 @@ namespace
         { 5, "B101_SC_jump", 0, 0 },        { 5, "KJ_Charge", 0, 0 },
         { 5, "Laser_med_pwrup1", 0, 0 }
     };
+
+    // One more unreferenced all-zero xVec3 template the target holds between
+    // sound_assets and beam_ring_curve.
+    void __deadstripped_zNPCTypeBossPlankton_sound()
+    {
+        const char _896[0x0C] = {};
+    }
 
     static const xDecalEmitter::curve_node beam_ring_curve[2] = {
         { 0.0f, { 255, 255, 255, 255 }, 0.0f },
@@ -2005,6 +2036,15 @@ void zNPCBPlankton::update_follow_camera(F32 dt)
     }
 }
 
+// Three more unreferenced all-zero xVec3 templates, ahead of the { -1, 0, 0 }
+// one zNPCBPlankton::update_aim_gun creates.
+void __deadstripped_zNPCTypeBossPlankton_aim()
+{
+    const char _2236[0x0C] = {};
+    const char _2239[0x0C] = {};
+    const char _2244[0x0C] = {};
+}
+
 void zNPCBPlankton::update_aim_gun(F32)
 {
     if (flag.aim_gun)
@@ -2868,6 +2908,13 @@ namespace
         return out;
     }
 } // namespace
+
+// The last unreferenced all-zero xVec3 template, after the one
+// world_to_ring_loc creates.
+void __deadstripped_zNPCTypeBossPlankton_tail()
+{
+    const char _2634[0x0C] = {};
+}
 
 xFactoryInst* zNPCGoalBPlanktonHunt::create(S32 who, RyzMemGrow* grow, void* info)
 {

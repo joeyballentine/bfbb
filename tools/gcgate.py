@@ -105,8 +105,12 @@ if "--which" in sys.argv:
 sha, fns, pct = measure()
 
 if "--update" in sys.argv:
-    json.dump({"matched_functions": fns, "matched_code_percent": pct},
-              open(BASELINE, "w"), indent=1)
+    # newline="" keeps this LF on Windows too; the repo is LF-only and CI
+    # would otherwise see a spurious diff every time a maintainer updates it.
+    with open(BASELINE, "w", newline="") as f:
+        json.dump({"matched_functions": fns, "matched_code_percent": pct},
+                  f, indent=1)
+        f.write(chr(10))
     print("baseline recorded: %d functions, %.5f%%" % (fns, pct))
     sys.exit(0)
 

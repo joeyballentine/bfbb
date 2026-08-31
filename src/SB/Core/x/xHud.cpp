@@ -27,8 +27,30 @@
 // unmangled, so they live outside `namespace xhud`, and nothing in this
 // translation unit references them - their only consumers were deadstripped.
 // The byte contents are certain; the exact type is inferred.
+// These structs were used in deadstripped functions.
+// This function is here to force the symbols to be linked.
+void __deadstripped_xHud_head()
+{
+    const char _405[0x0C] = {};
+    const char _406[0x0C] = {};
+    const char _410[0x0C] = {};
+    const char _441[0x0C] = {};
+}
+
 static const basic_rect<F32> screen_bounds = { 0.0f, 0.0f, 1.0f, 1.0f };
 static const basic_rect<F32> default_adjust = { 0.0f, 0.0f, 1.0f, 1.0f };
+
+void __deadstripped_xHud_rects()
+{
+    const char _594[0x28] = {};
+    const char _595[0x28] = {};
+    const char _596[0x28] = {};
+    const char _597[0x28] = {};
+    const char _598[0x28] = {};
+    const char _599[0x28] = {};
+    const char _600[0x28] = {};
+    const char _713[0x10] = {};
+}
 
 namespace xhud
 {

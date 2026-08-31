@@ -225,10 +225,7 @@ void iCameraSetFOV(RwCamera* cam, F32 fov)
 {
     RwV2d vw;
 
-    vw.x = itan(PI * (0.5f * fov) / 180.0f);
-
-    // non-matching: frsp instruction is here for some reason
-    vw.y = 0.75f * vw.x;
+    vw.y = 0.75f * (vw.x = itan(PI * (0.5f * fov) / 180.0f));
 
 #ifdef PLATFORM_PC
     // Widescreen, and the only aspect-ratio assumption in the game.

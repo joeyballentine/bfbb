@@ -79,3 +79,5 @@ build-ci/
 # throwaway. build-pc/ above is the one that matters.
 build-librw-*/
 /.claude/worktrees/
+# Coordinator scratch space for analysis output; never part of a build.
+scratch/

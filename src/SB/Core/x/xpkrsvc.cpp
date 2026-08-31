@@ -254,7 +254,8 @@ S32 PKR_SetActive(st_PACKER_READ_DATA* pr, en_LAYER_TYPE layer)
         for (j = 0; j < laynode->assref.cnt; j++)
         {
             assnode = (st_PACKER_ATOC_NODE*)laynode->assref.list[j];
-            if (assnode->loadflag & 0x10000 || (assnode->loadflag & 0x80000) == 0)
+            result = assnode->loadflag & 0x80000;
+            if (assnode->loadflag & 0x10000 || result == 0)
             {
                 continue;
             }
@@ -592,8 +593,12 @@ S32 PKR_findNextLayerToLoad(st_PACKER_READ_DATA** work_on_pkg, st_PACKER_LTOC_NO
 
 void PKR_updateLayerAssets(st_PACKER_LTOC_NODE* laynode)
 {
-    st_PACKER_ATOC_NODE* tmpass = NULL;
-    for (S32 i = 0; i < laynode->assref.cnt; i++)
+    S32 i;
+    st_PACKER_ATOC_NODE* tmpass;
+    S32 lay_hip_pos;
+
+    tmpass = NULL;
+    for (i = 0; i < laynode->assref.cnt; i++)
     {
         tmpass = (st_PACKER_ATOC_NODE*)laynode->assref.list[i];
         if (tmpass->d_off > 0 && tmpass->d_size > 0)
@@ -605,10 +610,10 @@ void PKR_updateLayerAssets(st_PACKER_LTOC_NODE* laynode)
 
     if (tmpass != NULL)
     {
-        S32 lay_hip_pos = tmpass->d_off;
-        for (S32 i = 0; i < laynode->assref.cnt; i++)
+        lay_hip_pos = tmpass->d_off;
+        for (i = 0; i < laynode->assref.cnt; i++)
         {
-            st_PACKER_ATOC_NODE* tmpass = (st_PACKER_ATOC_NODE*)laynode->assref.list[i];
+            tmpass = (st_PACKER_ATOC_NODE*)laynode->assref.list[i];
             if (!(tmpass->loadflag & 0x100000))
             {
                 if (tmpass->loadflag & 0x200000)
@@ -1634,10 +1639,10 @@ void PKR_bld_typecnt(st_PACKER_READ_DATA* pr)
 
     for (i = 0; i < pr->laytoc.cnt; i++)
     {
-        st_PACKER_LTOC_NODE* laynode = (st_PACKER_LTOC_NODE*)pr->laytoc.list[i];
+        laynode = (st_PACKER_LTOC_NODE*)pr->laytoc.list[i];
         for (j = 0; j < laynode->assref.cnt; j++)
         {
-            st_PACKER_ATOC_NODE* assnode = (st_PACKER_ATOC_NODE*)laynode->assref.list[j];
+            assnode = (st_PACKER_ATOC_NODE*)laynode->assref.list[j];
             if (!(assnode->loadflag & 0x100000) && !(assnode->loadflag & 0x200000))
             {
                 S32 idx;

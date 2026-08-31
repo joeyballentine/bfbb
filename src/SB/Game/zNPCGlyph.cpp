@@ -50,40 +50,42 @@ void zNPCGlyph_Shutdown()
 // Nonmatching
 void zNPCGlyph_ScenePrepare()
 {
+    RpAtomic* mdl_raw;
+    NPCGlyph* glyph;
+    U32 aid;
     S32 i;
-    NPCGlyph* glist = NULL;
+    S32 k;
+    S32 cnt;
+    NPCGlyph* list = NULL;
 
     for (i = 0; i < 10; i++)
     {
         g_cnt_activeGlyphs[i] = 0;
     }
 
-    char** strs = &g_strz_glyphmodel[NPC_GLYPH_SHINYONE];
-
-    for (en_npcglyph gtyp = NPC_GLYPH_SHINYONE; gtyp < NPC_GLYPH_NOMORE;
-         gtyp = (en_npcglyph)(gtyp + 1), strs++)
+    for (i = NPC_GLYPH_SHINYONE; i < NPC_GLYPH_NOMORE; i++)
     {
-        S32 cnt = zNPCGlyph_TypeToList(gtyp, &glist);
+        cnt = zNPCGlyph_TypeToList((en_npcglyph)i, &list);
 
-        if (glist == NULL || cnt < 1)
+        if (list == NULL || cnt < 1)
         {
             continue;
         }
 
-        RpAtomic* model_data = NULL;
-        if (*strs != NULL)
+        mdl_raw = NULL;
+        if (g_strz_glyphmodel[i] != NULL)
         {
-            U32 aid = xStrHash(*strs);
+            aid = xStrHash(g_strz_glyphmodel[i]);
             if (aid != 0)
             {
-                model_data = (RpAtomic*)xSTFindAsset(aid, NULL);
+                mdl_raw = (RpAtomic*)xSTFindAsset(aid, NULL);
             }
         }
 
-        for (S32 j = 0; j < cnt; j++)
+        for (k = 0; k < cnt; k++)
         {
-            NPCGlyph* glyph = &glist[j];
-            glyph->Init(gtyp, model_data);
+            glyph = &list[k];
+            glyph->Init((en_npcglyph)i, mdl_raw);
         }
     }
 }
@@ -255,8 +257,13 @@ S32 zNPCGlyph_TypeNeedsLightKit(en_npcglyph gtyp)
 // Nonmatching
 void zNPCCommon_Glyphs_RenderAll(S32 doOpaqueStuff)
 {
-    NPCGlyph* glist = NULL;
-    _SDRenderState old_render_state = zRenderStateCurrent();
+    S32 k;
+    S32 i;
+    NPCGlyph* glyph;
+    S32 cnt;
+    NPCGlyph* list = NULL;
+    _SDRenderState old_rendstat = zRenderStateCurrent();
+
     if (doOpaqueStuff)
     {
         zRenderState(SDRS_OpaqueModels);
@@ -266,15 +273,12 @@ void zNPCCommon_Glyphs_RenderAll(S32 doOpaqueStuff)
         zRenderState(SDRS_NPCVisual);
     }
 
-    S32* counts = &g_cnt_activeGlyphs[NPC_GLYPH_SHINYONE];
-    S32 i;
-    for (en_npcglyph gtyp = NPC_GLYPH_SHINYONE; gtyp < NPC_GLYPH_NOMORE;
-         gtyp = (en_npcglyph)(gtyp + 1), counts++)
+    for (i = NPC_GLYPH_SHINYONE; i < NPC_GLYPH_NOMORE; i++)
     {
-        if ((!doOpaqueStuff || zNPCGlyph_TypeIsOpaque(gtyp)) &&
-            (doOpaqueStuff || !zNPCGlyph_TypeIsOpaque(gtyp)))
+        if ((!doOpaqueStuff || zNPCGlyph_TypeIsOpaque((en_npcglyph)i)) &&
+            (doOpaqueStuff || !zNPCGlyph_TypeIsOpaque((en_npcglyph)i)))
         {
-            if (zNPCGlyph_TypeNeedsLightKit(gtyp))
+            if (zNPCGlyph_TypeNeedsLightKit((en_npcglyph)i))
             {
                 xLightKit_Enable(globals.player.ent.lightKit, globals.currWorld);
             }
@@ -283,16 +287,16 @@ void zNPCCommon_Glyphs_RenderAll(S32 doOpaqueStuff)
                 xLightKit_Enable(NULL, globals.currWorld);
             }
 
-            S32 cnt = zNPCGlyph_TypeToList(gtyp, &glist);
+            cnt = zNPCGlyph_TypeToList((en_npcglyph)i, &list);
 
-            if (glist == NULL || cnt < 1 || *counts < 1)
+            if (list == NULL || cnt < 1 || g_cnt_activeGlyphs[i] < 1)
             {
                 continue;
             }
 
-            for (i = 0; i < cnt; i++)
+            for (k = 0; k < cnt; k++)
             {
-                NPCGlyph* glyph = &glist[i];
+                glyph = &list[k];
                 if (glyph->flg_glyph & (1 << 0) && glyph->flg_glyph & (1 << 1))
                 {
                     glyph->Render();
@@ -302,7 +306,7 @@ void zNPCCommon_Glyphs_RenderAll(S32 doOpaqueStuff)
     }
 
     xLightKit_Enable(NULL, globals.currWorld);
-    zRenderState(old_render_state);
+    zRenderState(old_rendstat);
 }
 
 NPCGlyph* GLYF_Acquire(en_npcglyph type)

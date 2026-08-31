@@ -19,6 +19,28 @@
 #include "xQuickCull.h"
 #include "xCollide.h"
 
+// These structs were used in deadstripped functions.
+// This function is here to force the symbols to be linked.
+//
+// The target opens .rodata with the same eleven unreferenced all-zero
+// templates other units carry -- four of 0x0C and seven of 0x28 -- which
+// offsets every later .rodata relocation.
+void __deadstripped_zNPCSupport_head()
+{
+    const char _405[0x0C] = {};
+    const char _406[0x0C] = {};
+    const char _410[0x0C] = {};
+    const char _441[0x0C] = {};
+
+    const char _597[0x28] = {};
+    const char _598[0x28] = {};
+    const char _599[0x28] = {};
+    const char _600[0x28] = {};
+    const char _601[0x28] = {};
+    const char _602[0x28] = {};
+    const char _603[0x28] = {};
+}
+
 #define MAX_FIREWORK 32
 
 static NPCWidget g_npc_widgets[1];
@@ -319,6 +341,16 @@ S32 NPCTarget::FindNearest(S32 flg_consider, xBase* skipme, xVec3* from, F32 dst
     return found;
 }
 
+// Four more unreferenced templates the target holds between the one
+// NPCTarget::FindNearest creates and the one NPCTarget::InCylinder creates.
+void __deadstripped_zNPCSupport_target()
+{
+    const char _1093[0x24] = {};
+    const char _1094[0x50] = {};
+    const char _1095[0x0C] = {};
+    const char _1123[0x0C] = {};
+}
+
 S32 NPCTarget::InCylinder(xVec3* from, F32 rad, F32 hyt, F32 off)
 {
     S32 inrange = 1;
@@ -344,6 +376,15 @@ S32 NPCTarget::InCylinder(xVec3* from, F32 rad, F32 hyt, F32 off)
     }
 
     return inrange;
+}
+
+// Three more unreferenced templates the target holds after the one
+// NPCTarget::InCylinder creates; the last is { 0.0f, 0.0f, 1.0f }.
+void __deadstripped_zNPCSupport_cylinder()
+{
+    const char _1146[0x0C] = {};
+    const char _1147[0x0C] = {};
+    const xVec3 _1375 = { 0.0f, 0.0f, 1.0f };
 }
 
 S32 NPCTarget::IsDead()
@@ -898,7 +939,15 @@ S32 NPCC_chk_hitEnt(xEnt* tgt, xBound* bnd, xCollis* collide)
     xCollis* colrec;
     xCollis lcl_collide = {};
 
-    colrec = collide ? collide : &lcl_collide;
+    if (collide)
+    {
+        colrec = collide;
+    }
+    else
+    {
+        colrec = &lcl_collide;
+    }
+
     colrec->optr = tgt;
     colrec->oid = tgt->id;
 
@@ -920,6 +969,15 @@ S32 NPCC_chk_hitEnt(xEnt* tgt, xBound* bnd, xCollis* collide)
     }
 
     return hittgt;
+}
+
+// Three more unreferenced templates the target holds after the xCollis one
+// NPCC_chk_hitEnt creates.
+void __deadstripped_zNPCSupport_collide()
+{
+    const char _1929[0x0C] = {};
+    const char _1930[0x50] = {};
+    const char _1945[0x0C] = {};
 }
 
 S32 NPCC_chk_hitPlyr(xBound* bnd, xCollis* collide)
@@ -1003,42 +1061,6 @@ RwRaster* NPCC_FindRWRaster(RwTexture* txtr)
         return txtr->raster;
     }
     return NULL;
-}
-
-void NPCC_GenSmooth(xVec3** pos_base, xVec3** pos_mid)
-{
-    static F32 prepute[4][4];
-    static const F32 yews[4] = { 0.25f, 0.5f, 0.75f, 1.0f };
-    static S32 init = 0;
-
-    S32 i;
-
-    if (!init)
-    {
-        init = 1;
-
-        for (i = 0; i < 4; i++)
-        {
-            F32 u2, u, u3;
-            F32* pre = prepute[i];
-            u = yews[i];
-            u2 = u * u;
-            u3 = u * u2;
-
-            pre[0] = u2 + -0.5f * u3 + -0.5f * u;
-            pre[1] = 1.5f * u3 + -2.5f * u2 + 1.0f;
-            pre[2] = -1.5f * u3 + 2.0f * u2 + 0.5f * u;
-            pre[3] = 0.5f * u3 + -0.5f * u2;
-        }
-    }
-
-    for (i = 0; i < 4; i++)
-    {
-        xVec3SMul(pos_mid[i], pos_base[0], prepute[i][0]);
-        xVec3AddScaled(pos_mid[i], pos_base[1], prepute[i][1]);
-        xVec3AddScaled(pos_mid[i], pos_base[2], prepute[i][2]);
-        xVec3AddScaled(pos_mid[i], pos_base[3], prepute[i][3]);
-    }
 }
 
 void zNPC_SNDInit()
@@ -1329,6 +1351,15 @@ void NPCC_Bounce(xVec3* vec_input, xVec3* vec_anti, F32 elastic)
     xVec3SMulBy(vec_input, elastic);
 }
 
+// Two more unreferenced templates the target holds between the one
+// NPCC_ds2_toCam creates and the xMat3x3 NPCC_rotHPB creates; the first is
+// { 0.0f, 0.0f, 1.0f }.
+void __deadstripped_zNPCSupport_cam()
+{
+    const xVec3 _2148 = { 0.0f, 0.0f, 1.0f };
+    const char _2149[0x0C] = {};
+}
+
 void NPCC_rotHPB(xMat3x3* mat, F32 heading, F32 pitch, F32 bank)
 {
     xMat3x3 mat_rot = {};
@@ -1338,6 +1369,51 @@ void NPCC_rotHPB(xMat3x3* mat, F32 heading, F32 pitch, F32 bank)
     xMat3x3Mul(mat, mat, &mat_rot);
     xMat3x3RotY(&mat_rot, heading);
     xMat3x3Mul(mat, mat, &mat_rot);
+}
+
+// Three more unreferenced templates the target holds after the xMat3x3
+// NPCC_rotHPB creates.
+void __deadstripped_zNPCSupport_rot()
+{
+    const char _2155[0x30] = {};
+    const char _2156[0x0C] = {};
+    const char _2157[0x30] = {};
+}
+
+void NPCC_GenSmooth(xVec3** pos_base, xVec3** pos_mid)
+{
+    static F32 prepute[4][4];
+    static const F32 yews[4] = { 0.25f, 0.5f, 0.75f, 1.0f };
+    static S32 init = 0;
+
+    S32 i;
+
+    if (!init)
+    {
+        init = 1;
+
+        for (i = 0; i < 4; i++)
+        {
+            F32 u2, u, u3;
+            F32* pre = prepute[i];
+            u = yews[i];
+            u2 = u * u;
+            u3 = u * u2;
+
+            pre[0] = u2 + -0.5f * u3 + -0.5f * u;
+            pre[1] = 1.5f * u3 + -2.5f * u2 + 1.0f;
+            pre[2] = -1.5f * u3 + 2.0f * u2 + 0.5f * u;
+            pre[3] = 0.5f * u3 + -0.5f * u2;
+        }
+    }
+
+    for (i = 0; i < 4; i++)
+    {
+        xVec3SMul(pos_mid[i], pos_base[0], prepute[i][0]);
+        xVec3AddScaled(pos_mid[i], pos_base[1], prepute[i][1]);
+        xVec3AddScaled(pos_mid[i], pos_base[2], prepute[i][2]);
+        xVec3AddScaled(pos_mid[i], pos_base[3], prepute[i][3]);
+    }
 }
 
 F32 NPCC_TmrCycle(float* tmr, float dt, float interval)

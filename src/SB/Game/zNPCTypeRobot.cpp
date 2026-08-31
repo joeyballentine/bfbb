@@ -5998,6 +5998,13 @@ void zNPCRobot::DoFX_Motorboat(F32 dt)
     }
 }
 
+// One more unreferenced xVec3 template the target holds after
+// zNPCRobot::DoFX_Motorboat's zeroed pos_emit: { 0.0f, 1.0f, 0.0f }.
+void __deadstripped_zNPCTypeRobot_6()
+{
+    const xVec3 _4731 = { 0.0f, 1.0f, 0.0f };
+}
+
 void zNPCRobot::VFXStarTrek(F32 dt, xVec3* pos, xVec3* vel)
 {
     g_parf_trek.vel.x = vel->x;

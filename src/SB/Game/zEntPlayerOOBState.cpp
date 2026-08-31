@@ -17,6 +17,37 @@
 
 bool oob_player_teleported;
 
+// These structs were used in deadstripped functions.
+// This function is here to force the symbols to be linked.
+void __deadstripped_zEntPlayerOOBState()
+{
+    const char _405[0x0C] = {};
+    const char _406[0x0C] = {};
+    const char _410[0x0C] = {};
+    const char _441[0x0C] = {};
+
+    const char _612[0x28] = {};
+    const char _613[0x28] = {};
+    const char _614[0x28] = {};
+    const char _615[0x28] = {};
+    const char _616[0x28] = {};
+    const char _617[0x28] = {};
+    const char _618[0x28] = {};
+}
+
+// Retail carries these two file-scope statics in .rodata, both 16 bytes of
+// { 0.0f, 0.0f, 1.0f, 1.0f }, and nothing in this unit references them --
+// their only consumers were deadstripped. Same pair as xHud.cpp and
+// zEntPlayerBungeeState.cpp.
+const basic_rect<F32> screen_bounds = { 0.0f, 0.0f, 1.0f, 1.0f };
+const basic_rect<F32> default_adjust = { 0.0f, 0.0f, 1.0f, 1.0f };
+
+void __deadstripped_zEntPlayerOOBState2()
+{
+    const char _792[0x10] = {};
+}
+
+
 namespace oob_state
 {
     namespace
