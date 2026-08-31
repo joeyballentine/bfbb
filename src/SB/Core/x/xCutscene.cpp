@@ -461,7 +461,7 @@ static void xcsCalcAnimMatrices(RwMatrixTag* animMat, RpAtomic* model, xCutscene
             xQuatFromMat(&quatresult[1], &m1);
 
             quatresult[1].s = -quatresult[1].s;
-            m1.pos = tranresult[1];
+            tranresult[1] = m1.pos;
         }
 
         U32 numbone = iModelNumBones(model);
