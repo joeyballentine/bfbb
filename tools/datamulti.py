@@ -33,7 +33,7 @@ from collections import Counter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OD = os.path.join(ROOT, "build", "binutils", "powerpc-eabi-objdump.exe")
-WORD = re.compile(r"^[0-9a-f]{8}$")
+HEX = re.compile(r"^[0-9a-f]{2,8}$")
 FRAGS = [a for a in sys.argv[1:] if not a.startswith("-")]
 
 DATA_SECTIONS = (".data", ".rodata", ".sdata", ".sdata2")
@@ -43,20 +43,31 @@ def words_by_section(obj):
     """{section: Counter(word)} -- one objdump run for the whole object."""
     out = subprocess.run([OD, "-s", os.path.abspath(obj)],
                          capture_output=True, text=True).stdout
-    cur, res = None, {}
+    cur, raw = None, {}
     for line in out.splitlines():
         m = re.match(r"Contents of section (\S+):", line)
         if m:
             cur = m.group(1)
-            res.setdefault(cur, Counter())
+            raw.setdefault(cur, [])
             continue
         if cur is None or not cur.startswith(DATA_SECTIONS):
             continue
-        # cols 2..5 are the hex words; the ASCII column contains spaces and
-        # would otherwise leak in, so every field is validated as 8 hex digits
+        # cols 2..5 are the hex groups; the ASCII column contains spaces and
+        # would otherwise leak in, so every field is validated as hex digits.
+        # The last group of a section can be short -- one side is padded to the
+        # section alignment and the other is not, and dropping the short group
+        # instead of padding it reported the padded side's word as target-only
+        # in 40 units that were byte-identical.
         for f in line.split()[1:5]:
-            if WORD.match(f) and f != "00000000":
-                res[cur][f] += 1
+            if HEX.match(f):
+                raw[cur].append(f)
+    res = {}
+    for sec, groups in raw.items():
+        h = "".join(groups)
+        h += "0" * (-len(h) % 8)
+        c = Counter(h[i:i + 8] for i in range(0, len(h), 8))
+        c.pop("00000000", None)
+        res[sec] = c
     return res
 
 
