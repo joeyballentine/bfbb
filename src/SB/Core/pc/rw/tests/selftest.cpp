@@ -1135,8 +1135,21 @@ static void test_perpixel_lighting()
     check(rw::d3d::getPerPixelLighting() != 0, "a non-zero other than 1 is on");
 
     rw::d3d::setPerPixelLightingEnabled(saved);
+#elif defined(RW_GL3)
+    const rw::bool32 saved = rw::gl3::getPerPixelLighting();
+
+    rw::gl3::setPerPixelLightingEnabled(TRUE);
+    check(rw::gl3::getPerPixelLighting() != 0, "on is remembered");
+
+    rw::gl3::setPerPixelLightingEnabled(FALSE);
+    check(rw::gl3::getPerPixelLighting() == 0, "off is remembered");
+
+    rw::gl3::setPerPixelLightingEnabled(37);
+    check(rw::gl3::getPerPixelLighting() != 0, "a non-zero other than 1 is on");
+
+    rw::gl3::setPerPixelLightingEnabled(saved);
 #else
-    check(TRUE, "not a D3D9 build; the setting lives in the D3D9 backend");
+    check(TRUE, "this backend has no shaders to light anything with");
 #endif
 }
 

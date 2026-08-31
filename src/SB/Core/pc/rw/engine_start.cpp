@@ -401,6 +401,8 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
         return FALSE;
     }
 
+    rw::gl3::setPerPixelLightingEnabled(iScreenPerPixelLighting());
+
     rw::EngineOpenParams params;
     params.window = (SDL_Window**)deferred->handleSlot;
     params.width = deferred->width;
@@ -628,11 +630,7 @@ RwBool RwEngineStart(void)
 #else
         S32 granted = (S32)rw::gl3::getVirtualScreenSamples();
         S32 coverage = rw::gl3::getAlphaToCoverage();
-        // Per-pixel lighting is written against src/d3d and only src/d3d, like
-        // the glow, the distortion and the snapshot before it. Reported off
-        // rather than left to do nothing quietly: a setting that is accepted
-        // and ignored is the one failure this backend has repeatedly produced.
-        S32 perPixel = FALSE;
+        S32 perPixel = rw::gl3::getPerPixelLighting();
 #endif
         S32 asked = iScreenMultiSample();
         printf("bfbb: %dx MSAA%s; alpha to coverage %s; per-pixel lighting %s\n",
