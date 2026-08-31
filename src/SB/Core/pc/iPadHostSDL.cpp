@@ -116,9 +116,14 @@ static bool PadInputHeld(S16 id)
 }
 
 // The triggers are analog and the game's buttons are not, so they click at a
-// threshold the way the GameCube's do -- gc/iPad.cpp uses 0x18 out of 255 for
-// exactly this, which is 7710 of SDL's 32767.
-#define IPAD_SDL_TRIGGER_THRESHOLD 7710
+// threshold the way the GameCube's do. gc/iPad.cpp uses 0x18 out of 255, which
+// is 9.4% of the travel; SDL reports a trigger from 0 to 32767, so the same
+// fraction is 3084.
+//
+// Not 65535. SDL's STICK axes are signed and span 65535, and reusing that span
+// here put the click at 23.5% -- far enough down a real analog trigger to feel
+// like the button was missing its first half.
+#define IPAD_SDL_TRIGGER_THRESHOLD 3084
 
 static U32 ConvertButtons(SDL_Gamepad* pad)
 {

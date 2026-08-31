@@ -1264,12 +1264,17 @@ static U32 virtual_press(SDL_GamepadButton button)
     return virtual_buttons();
 }
 
-// A trigger's raw axis runs the full signed range and the gamepad layer
-// rescales it to 0..32767, so a raw value is very nearly twice the gamepad one
-// less 32768. These two bracket the backend's 7710 threshold with enough room
-// that rounding cannot decide the answer.
-#define TEST_SDL_TRIGGER_OFF ((Sint16)(-18768)) // about 7000 to the gamepad layer
-#define TEST_SDL_TRIGGER_ON ((Sint16)(-15768)) // about 8500
+// Where the trigger has to click, worked out from the CONSOLE rather than from
+// the backend's constant: gc/iPad.cpp uses 0x18 of 255, so 9.4% of the travel.
+// Taking the number from the code under test instead is how the first version
+// of this check passed against a threshold that was two and a half times too
+// high.
+//
+// A virtual trigger's raw axis runs the full signed range and the gamepad layer
+// rescales it to 0..32767, so gamepad = (raw + 32768) / 2. These two are 5% and
+// 15% of travel, which straddle 9.4% with room to spare either side.
+#define TEST_SDL_TRIGGER_OFF ((Sint16)(-29492)) // 5% of the travel
+#define TEST_SDL_TRIGGER_ON ((Sint16)(-22938)) // 15%
 
 static void test_pad_sdl_virtual()
 {
