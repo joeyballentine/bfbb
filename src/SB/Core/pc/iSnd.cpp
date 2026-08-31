@@ -92,7 +92,14 @@ struct xbox_sndhdr
     U16 pad12; // 0x12 -- realigns the fields after the 18-byte WAVEFORMATEX
     U32 data_size; // 0x14 -- byte length of the SND asset
     U32 assetID; // 0x18
-    U32 runtime[4]; // 0x1C -- zero on disc; the retail backend's own bookkeeping
+    // 0x1C is the loop flag, the Xbox table's stand-in for the GameCube
+    // DSPADPCM header's loop_flag. Across all 121 retail HIPs and HOPs it holds
+    // 3271 zeroes and 268 ones and nothing else, and for the 70 sound assets
+    // Kelp Forest 01 has on both discs it agrees with the GameCube loop_flag on
+    // 69 -- the one exception, 768a463d, loops on Xbox and not on GameCube,
+    // which is an authoring difference and not a misread field.
+    U32 loop_flag; // 0x1C
+    U32 runtime[3]; // 0x20 -- zero in every entry of every retail asset
 };
 
 // The header of a loaded Xbox SNDI asset.
@@ -1089,14 +1096,16 @@ static S32 iStartVoice(xSndVoiceInfo* vp)
         sample.sample_rate = pcm.sample_rate;
     }
 
-    // The Xbox table carries no loop points -- its entries are a WAVEFORMATEX
-    // and a size, and nothing else. The GameCube reads loop_flag out of the
-    // DSPADPCM header OR takes the caller's 0x8000 (src/SB/Core/gc/iSnd.cpp:
-    // 1304); with no header to read, only the flag is left. zMusic sets it from
-    // a track's `loop` and xSFX sets it for a looping emitter, which is every
-    // looping sound the game has, so nothing is lost -- and a loop restarts at
-    // the beginning, because there is no other point to restart at.
-    sample.looping = (vp->flags & 0x8000) != 0;
+    // Both halves of the GameCube's test (src/SB/Core/gc/iSnd.cpp:1304): the
+    // asset's own loop flag OR the caller's 0x8000. Taking only the caller's
+    // flag silences every ambient loop in the game -- 28 of Kelp Forest 01's 51
+    // SFX emitters play a sound the table marks looping while carrying no
+    // looping flag themselves, because on hardware they never needed one. That
+    // is the waterfall that fades out after a few seconds.
+    //
+    // The Xbox table carries no loop POINTS, so a loop restarts at the
+    // beginning; there is no other point to restart at.
+    sample.looping = (vp->flags & 0x8000) != 0 || (e != NULL && e->loop_flag != 0);
     sample.loop_start = 0;
     sample.loop_end = 0;
 
