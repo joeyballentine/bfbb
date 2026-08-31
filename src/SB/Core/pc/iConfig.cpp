@@ -168,6 +168,26 @@ namespace
           "; This needs msaa above: there is nowhere to put the coverage at one\n"
           "; sample per pixel, so with msaa = 1 this does nothing whatever it is\n"
           "; set to. Some cards do not offer it at all, and it is off on those." },
+        { "video", "per_pixel_lighting", "on",
+          "Work out the lighting on a character once per pixel instead of once\n"
+          "; per corner of a triangle.\n"
+          ";\n"
+          "; The consoles lit each vertex and let the hardware blend between them\n"
+          "; across the triangle. On a low-polygon model that shows: a curved\n"
+          "; surface lights in visible flat facets, and a highlight that should\n"
+          "; slide over a face instead crawls between corners. Lighting each pixel\n"
+          "; on its own makes the same lights land smoothly.\n"
+          ";\n"
+          "; It changes nothing the artists drew. The lights, their colours, and\n"
+          "; the baked-in colour of the level are all exactly as they were -- this\n"
+          "; is only where the sum is worked out.\n"
+          ";\n"
+          "; The level itself barely moves, because its lighting was baked into\n"
+          "; the artwork rather than computed. Characters and objects are what\n"
+          "; this is for.\n"
+          ";\n"
+          "; Direct3D 9 only. An OpenGL build says so at startup and lights per\n"
+          "; vertex whatever this is set to." },
         { "video", "shadow_resolution", "auto",
           "How sharp the shadows under characters are.\n"
           ";\n"

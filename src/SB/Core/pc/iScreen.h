@@ -201,5 +201,7 @@ void iScreenSetMultiSample(S32 samples);
 // sample -- see iScreenMultiSample.
 S32 iScreenAlphaToCoverage();
 void iScreenSetAlphaToCoverage(S32 on);
+S32 iScreenPerPixelLighting();
+void iScreenSetPerPixelLighting(S32 on);
 
 #endif

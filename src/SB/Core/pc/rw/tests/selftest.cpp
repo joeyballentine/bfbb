@@ -1110,6 +1110,36 @@ static void test_renderstate_roundtrip()
 #endif
 }
 
+// Per-pixel lighting is a setting, and a setting that is accepted and ignored is
+// the failure this file exists to catch. The picture it makes is not something a
+// test can judge -- only the game can -- but whether librw took the answer is.
+//
+// Deliberately not on a live device: rwd3d.h promises this is safe to set before
+// one exists, because RenderWareInit pushes it in before rw::Engine::open.
+static void test_perpixel_lighting()
+{
+    printf("per-pixel lighting setting\n");
+
+#ifdef RW_D3D9
+    const rw::bool32 saved = rw::d3d::getPerPixelLighting();
+
+    rw::d3d::setPerPixelLightingEnabled(TRUE);
+    check(rw::d3d::getPerPixelLighting() != 0, "on is remembered");
+
+    rw::d3d::setPerPixelLightingEnabled(FALSE);
+    check(rw::d3d::getPerPixelLighting() == 0, "off is remembered");
+
+    // Any non-zero means on, because iConfigGetBool answers with whatever it
+    // parsed rather than with 1.
+    rw::d3d::setPerPixelLightingEnabled(37);
+    check(rw::d3d::getPerPixelLighting() != 0, "a non-zero other than 1 is on");
+
+    rw::d3d::setPerPixelLightingEnabled(saved);
+#else
+    check(TRUE, "not a D3D9 build; the setting lives in the D3D9 backend");
+#endif
+}
+
 // The loading-screen still: capture the frame, latch it, and be handed a
 // texture over it.
 //
@@ -3539,6 +3569,7 @@ int main()
     test_worlds();
     test_renderstate();
     test_renderstate_roundtrip();
+    test_perpixel_lighting();
     test_snapshot();
     test_immediate();
     test_geometry();

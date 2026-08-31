@@ -287,6 +287,21 @@ void iScreenSetAlphaToCoverage(S32 on)
     sAlphaToCoverage = on ? 1 : 0;
 }
 
+// Whether lighting is summed per pixel rather than per vertex. Held here with
+// the other two for the same reason: RenderWareInit pushes it into librw, and
+// the code that does must not learn what config.ini is.
+static S32 sPerPixelLighting = 1;
+
+S32 iScreenPerPixelLighting()
+{
+    return sPerPixelLighting;
+}
+
+void iScreenSetPerPixelLighting(S32 on)
+{
+    sPerPixelLighting = on ? 1 : 0;
+}
+
 void iScreenSetSize(S32 width, S32 height)
 {
     if (width <= 0 || height <= 0 || width > kMaxDimension || height > kMaxDimension)

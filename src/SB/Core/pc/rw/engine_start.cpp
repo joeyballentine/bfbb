@@ -365,6 +365,7 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     // samples they carry has to be decided before they exist.
     rw::d3d::setVirtualScreenSamples(iScreenMultiSample());
     rw::d3d::setAlphaToCoverageEnabled(iScreenAlphaToCoverage());
+    rw::d3d::setPerPixelLightingEnabled(iScreenPerPixelLighting());
     rw::d3d::setVirtualScreen(iScreenWidth(), iScreenHeight());
     if (!rw::Engine::open(&params))
     {
@@ -623,14 +624,21 @@ RwBool RwEngineStart(void)
 #ifdef RW_D3D9
         S32 granted = (S32)rw::d3d::getVirtualScreenSamples();
         S32 coverage = rw::d3d::getAlphaToCoverage();
+        S32 perPixel = rw::d3d::getPerPixelLighting();
 #else
         S32 granted = (S32)rw::gl3::getVirtualScreenSamples();
         S32 coverage = rw::gl3::getAlphaToCoverage();
+        // Per-pixel lighting is written against src/d3d and only src/d3d, like
+        // the glow, the distortion and the snapshot before it. Reported off
+        // rather than left to do nothing quietly: a setting that is accepted
+        // and ignored is the one failure this backend has repeatedly produced.
+        S32 perPixel = FALSE;
 #endif
         S32 asked = iScreenMultiSample();
-        printf("bfbb: %dx MSAA%s; alpha to coverage %s\n", (int)granted,
+        printf("bfbb: %dx MSAA%s; alpha to coverage %s; per-pixel lighting %s\n",
+               (int)granted,
                granted >= asked ? "" : " (asked for more; the card refused)",
-               coverage ? "on" : "off");
+               coverage ? "on" : "off", perPixel ? "on" : "off");
         fflush(stdout);
     }
 #endif
