@@ -511,28 +511,26 @@ namespace
             c->anim = (U8)anim;
         }
 
-        if (c->id != 0)
+        if (c->id == 0 || !xSTGetAssetInfo(c->id, &ainfo))
         {
-            S32 result = xSTGetAssetInfo(c->id, &ainfo);
-            if (result)
-            {
-                U32 source = ainfo.typeref->typetag;
-                if (source == 0x534E4420)
-                {
-                    c->source = sound_context::SOURCE_MEMORY;
-                }
-                else if (source == 0x534E4453)
-                {
-                    c->source = sound_context::SOURCE_STREAM;
-                }
-                else
-                {
-                    return;
-                }
-
-                j.context_size = sizeof(sound_context);
-            }
+            return;
         }
+
+        U32 source = ainfo.typeref->typetag;
+        if (source == 0x534E4420)
+        {
+            c->source = sound_context::SOURCE_MEMORY;
+        }
+        else if (source == 0x534E4453)
+        {
+            c->source = sound_context::SOURCE_STREAM;
+        }
+        else
+        {
+            return;
+        }
+
+        j.context_size = sizeof(sound_context);
     }
     void __deadstripped_zTalkbox()
     {
@@ -589,11 +587,7 @@ namespace
             return true;
         }
 
-        F32 vol = c.volume.left;
-        if (vol <= c.volume.right)
-        {
-            vol = c.volume.right;
-        }
+        F32 vol = MAX(c.volume.left, c.volume.right);
 
         shared.sounds.play(c.id, shared.volume * vol, 0.0f, 0x80, 0,
                            (U32)&shared.stream_locked[shared.next_stream], SND_CAT_DIALOG);
@@ -908,10 +902,10 @@ namespace
         if (!registered)
         {
             registered = true;
+            xDebugAddTweak("Temp|Talk Music Fade", &music_fade, 0.0f, 1.0f, NULL, NULL, 0);
+            xDebugAddTweak("Temp|Talk Music Fade Delay", &music_fade_delay, 0.0f, 10.0f, NULL, NULL,
+                           0);
         }
-
-        xDebugAddTweak("Temp|Talk Music Fade", &music_fade, 0.0f, 1.0f, NULL, NULL, 0);
-        xDebugAddTweak("Temp|Talk Music Fade Delay", &music_fade_delay, 0.0f, 10.0f, NULL, NULL, 0);
 
         switch (talk.asset->audio_effect)
         {
@@ -1981,8 +1975,7 @@ namespace
         shared.wait.reset_type();
         shared.wait.type.time = true;
         shared.wait.delay = 0.0f;
-        shared.quit_delay = 0.25f;
-        shared.prompt_delay = 0.25f;
+        shared.prompt_delay = shared.quit_delay = 0.25f;
         shared.quit_ready = false;
         shared.prompt_ready = false;
         refresh_prompts();
