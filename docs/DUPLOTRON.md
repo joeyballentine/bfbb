@@ -6191,8 +6191,13 @@ stock and not under ours. Tree-wide, that is **seven**:
 | `zNPCFXCinematic` | `NCIN_SleepyLamp_AR__…` | 87.567 | 628 |
 | `xMath3` | `xBoxFromCircle__FR4xBoxRC5xVec3RC5xVec3f` | 77.875 | 256 |
 
-Against E3n's +82, clause C+'s +19 and clause V's +25 this is a rounding
-error, and the list settles two things.
+The other direction, `patchcost.py --gains`, is **427 functions and 209,216
+bytes**: exact under `GC/2.0p1a` and not under stock. So the scoreboard for the
+whole patch is **+427 / -7**, and it is concentrated where the work has been --
+zEntPlayer 54, zNPCGoalRobo 22, zEntCruiseBubble 19, zNPCTypeKingJelly 12,
+xFX 12, zNPCTypeBossSandy 11, zNPCHazard 11.
+
+Against that the cost list is a rounding error, and it settles two things.
 
 **Every one of these seven is source-correct by construction.** Reaching
 100.000% under stock means the source already says what retail's said, so
