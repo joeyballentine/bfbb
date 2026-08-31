@@ -165,7 +165,7 @@ jobs:
             | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           img="ghcr.io/${{ github.repository_owner }}/bfbb-orig:main"
           docker create --name orig "$img"
-          docker cp orig:/orig ./orig
+          docker cp orig:/orig/. ./orig/
           docker rm orig
           test -f orig/GQPE78/sys/main.dol \
             || { echo "::error::orig/GQPE78/sys/main.dol missing from $img"; exit 1; }
@@ -257,7 +257,7 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker create --name orig "ghcr.io/${{ github.repository_owner }}/bfbb-orig:main"
-          docker cp orig:/orig ./orig
+          docker cp orig:/orig/. ./orig/
           docker rm orig
 
       - name: Toolchain

@@ -20,6 +20,10 @@
 # (That one push needs a token with write:packages, from your machine. CI does
 # not.)
 #
+# No container runtime? The image is one layer, one config blob and a manifest,
+# so it can be pushed straight to the registry API -- see the scratch script
+# recorded in docs/DUPLOTRON.md. That is how the current image was published.
+#
 # Then, once, on github.com:
 #   Your profile -> Packages -> bfbb-orig -> Package settings
 #     - Danger Zone -> Change visibility -> Private
