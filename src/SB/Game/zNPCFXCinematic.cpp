@@ -54,22 +54,6 @@ xVec3* SMOOTH(F32 t, xVec3* dst, const xVec3* a, const xVec3* b);
 void EmitFreezeBreath(xVec3* pos, xVec3* vel, F32 dt, F32 elapsed, F32 total);
 void NPAR_EmitTubeSpiralCin(const xVec3* pos, const xVec3* vel, F32 dt);
 
-// UNRESOLVED, 2026-08-26. Retail's .rodata carries one string ours lacks
-// entirely, "fx_pickup_emphasis". It pools immediately after "g-love_shrapnel",
-// and pool order is first-use order, so it belongs to a function somewhere after
-// NCIN_GloveShrapnel_Upd.
-//
-// A first attempt blamed this function, on a count that said retail referenced no
-// string here. That count was wrong: it attributed relocations using section
-// NAMES, and dtk gives the target many sections all called ".text", so this
-// function collided with another at the same offset and was dropped. Keying by
-// section index instead (tools/strdiff.py) shows retail references
-// "PAREMIT_BPLANK_JET_1" here exactly as we do, and strdiff reports zero
-// string-reference differences across the whole tree. This function is fine.
-//
-// So the missing string is named from somewhere strdiff cannot see -- a data
-// table rather than an instruction -- or by a function that does not exist in
-// our source at all. tools/datamulti.py is the lens for the first case.
 static void NCIN_Par_BPLANK_JET_1_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
     if (killit != 0)
@@ -2545,14 +2529,18 @@ static void NCIN_SleepyLamp_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpA
         SMOOTH(CLAMP(pct, 0.0f, 1.0f), &rgb_current, &rgb_peace, &rgb_anger);
     }
 
-    rgba_top.red = (U8)(255.0f * rgb_current.x);
-    rgba_top.green = (U8)(255.0f * rgb_current.y);
-    rgba_top.blue = (U8)(255.0f * rgb_current.z);
+    U8 red = (U8)(255.0f * rgb_current.x);
+    U8 green = (U8)(255.0f * rgb_current.y);
+    U8 blue = (U8)(255.0f * rgb_current.z);
+
+    rgba_top.red = red;
+    rgba_top.green = green;
+    rgba_top.blue = blue;
     rgba_top.alpha = 96;
 
-    rgba_bot.red = rgba_top.red;
-    rgba_bot.green = rgba_top.green;
-    rgba_bot.blue = rgba_top.blue;
+    rgba_bot.red = red;
+    rgba_bot.green = green;
+    rgba_bot.blue = blue;
     rgba_bot.alpha = 16;
 
     memset(&cone, 0, sizeof(NPCCone));
@@ -2838,6 +2826,18 @@ static void NCIN_FodProd_Upd(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     haz->custdata.typical.rad_cur = haz->custdata.typical.rad_min;
     haz->Start(&fxrec->pos_A[0], tym);
     fxrec->fxdata.hazdata.npchaz = haz;
+}
+
+// This vector was used in a deadstripped function.
+// This function is here to force the symbol to be linked.
+//
+// The target's .rodata carries an unreferenced 12-byte @1756
+// = { 0.25f, 0.0f, 0.0f } between tym_anger$1601 and
+// vec_offset$1853, so its owner was parsed between
+// NCIN_SleepyLamp_AR and NCIN_FodProd_AR.
+void __deadstripped2_zNPCFXCinematic()
+{
+    const xVec3 _1756 = { 0.25f, 0.0f, 0.0f };
 }
 
 static void NCIN_FodProd_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
@@ -3896,4 +3896,15 @@ void NPCCone::RadiusSet(F32 conefloat)
 void NPARMgmt::KillAll()
 {
     this->cnt_active = 0;
+}
+
+// This string was used in a deadstripped function.
+// This function is here to force the symbol to be linked.
+//
+// "fx_pickup_emphasis" is the last entry in the target's
+// @stringBase0 and nothing references it, so its owner was
+// parsed after every other string user in the unit.
+const char* __deadstripped3_zNPCFXCinematic()
+{
+    return "fx_pickup_emphasis";
 }
