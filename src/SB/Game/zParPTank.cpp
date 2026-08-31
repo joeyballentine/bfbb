@@ -679,12 +679,34 @@ static void zParPTankSteamUpdate(zParPTank* zp, float dt)
     RPATOMICPTANKPLUGINDATA(zp->ptank)->publicData.cSize = steam_size;
     RPATOMICPTANKPLUGINDATA(zp->ptank)->instFlags |= rpPTANKIFLAGCNSSIZE;
 
+#ifdef PLATFORM_PC
+    // Unlike the sparkle clock this one is never taken back, so past the first
+    // thirtieth of a second the gate is always open and the UV walk below steps
+    // every frame -- 60 Hz on console. Carry a sixtieth so it keeps stepping at
+    // that rate: each step advances u by an eighth and the particle dies at 1.0,
+    // so a steam puff otherwise lasts eight host frames instead of eight
+    // sixtieths of a second.
+    sSteamAnimTime += dt;
+
+    if (sSteamAnimTime < 1.0f / 60.0f)
+    {
+        return;
+    }
+
+    sSteamAnimTime -= 1.0f / 60.0f;
+
+    if (sSteamAnimTime > 1.0f / 60.0f)
+    {
+        sSteamAnimTime = 1.0f / 60.0f;
+    }
+#else
     sSteamAnimTime += dt;
 
     if (!(sSteamAnimTime >= 1.0f / 30.0f))
     {
         return;
     }
+#endif
 
     RpPTankLockStruct plock;
     RpPTankLockStruct uvlock;
