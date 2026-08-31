@@ -1261,10 +1261,19 @@ static void test_immediate()
 {
     printf("RwIm2D / RwIm3D\n");
 
-    // The null device's depth range. Real numbers, from the device rather than
-    // from here -- but 0 and 1 only because there is no backend to have a real
-    // depth buffer. xFont.cpp:425 and zGame.cpp:848 put their overlays at these.
-    check(RwIm2DGetNearScreenZ() == 0.0f, "RwIm2DGetNearScreenZ comes from the device");
+    // The depth range, which is the DEVICE's and is not the same on all of
+    // them: D3D9 and the null device clip to 0..1, OpenGL to -1..1. What is
+    // being checked is that the shim forwards whatever the linked device says
+    // rather than answering from a constant of its own -- xFont.cpp:425,
+    // zGame.cpp:848 and zEntPlayerOOBState.cpp:220 put their overlays at these
+    // numbers, and an overlay at 0 on a device whose near plane is -1 sits in
+    // the middle of the depth buffer instead of in front of it.
+#ifdef RW_GL3
+    const RwReal wantedNearZ = -1.0f;
+#else
+    const RwReal wantedNearZ = 0.0f;
+#endif
+    check(RwIm2DGetNearScreenZ() == wantedNearZ, "RwIm2DGetNearScreenZ comes from the device");
     check(RwIm2DGetFarScreenZ() == 1.0f, "RwIm2DGetFarScreenZ comes from the device");
 
     RwIm2DVertex quad[4];
@@ -1797,11 +1806,17 @@ static void test_uvxform()
 
     rw::ObjPipeline* pipe = rw::GetUVTransformPipeline();
 
-#ifdef RW_NULL
-    // No renderer, so no shader, so nothing to animate with. The contract is
-    // that this is SAFE rather than an error: xFX.cpp:883 leaves the atomic on
-    // its default pipeline and the surface draws unanimated.
-    check(pipe == NULL, "no backend, so no pipeline for animated UVs");
+#if defined(RW_NULL) || defined(RW_GL3)
+    // No shader, so nothing to animate with. Under RW_NULL there is no renderer
+    // at all; under GL3 there is one and the librw fork's UV-transform pipeline
+    // was only ever written for D3D9 -- see src/SB/Core/pc/README.md's iFX row.
+    //
+    // The contract is that this is SAFE rather than an error, and it is the
+    // same contract in both: xFX.cpp:883 leaves the atomic on its default
+    // pipeline and the surface draws with static texture coordinates. Checked
+    // rather than skipped, because "answers NULL" is the behaviour the game
+    // depends on and a pipeline that half exists would be worse than none.
+    check(pipe == NULL, "no shader for animated UVs on this backend, so no pipeline");
     check(iFXanimUVCreatePipe() == NULL,
           "and iFXanimUVCreatePipe says so rather than handing back one that cannot draw");
     return;
