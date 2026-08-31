@@ -411,23 +411,27 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     params.fullscreen = FALSE;
 #endif
 
-    // NO setVirtualScreen, and that is not an omission.
+    // The same fixed size the D3D9 arm above sets, for the same reason and from
+    // the same source.
     //
-    // D3D9 needs one because librw takes its viewport from the camera's raster
-    // and its back buffer from the window, so a fixed-size raster in a larger
-    // window leaves the picture in a corner. The GL3 device does not have that
-    // problem: a Raster::CAMERA is the DEFAULT framebuffer (gl3raster.cpp gives
-    // it fbo 0), gl3device.cpp's getFramebufferRect takes the viewport from the
-    // WINDOW for such a raster, and im2DSetXform still divides screen
-    // coordinates by cam->frameBuffer->width. So the world is drawn at the
-    // window's resolution, the 2D overlay is drawn in the game's own screen
-    // coordinates on top of it, and the scaling the virtual screen exists to
-    // provide is what the viewport already does.
+    // GL3 can run without one -- a Raster::CAMERA is the default framebuffer,
+    // and the viewport follows the window, so the picture fills whatever it is
+    // given. What it does not do is keep its shape: the camera's projection is
+    // fixed at startup and nothing revisits it, so a window resized to a
+    // different aspect ratio stretches the picture. D3D9 never had that,
+    // because its virtual screen is blitted in as the largest rectangle of the
+    // right shape that fits.
     //
-    // One consequence worth knowing: under GL3 the resolution setting sizes the
-    // game's coordinate space and NOT the pixels the world is rasterised at,
-    // which is why RwEngineGetVideoModeInfo below answers from iScreen rather
-    // than from anything the device reports.
+    // So GL3 has one too, and the two backends now differ in how they present
+    // rather than in what the game sees. The camera raster gets an FBO of its
+    // own at the size below, everything draws into that at that resolution, and
+    // showRaster scales it into the window with black bars.
+    //
+    // NOT from the window, for the reason the D3D9 arm gives: the two are equal
+    // in windowed mode and are not in either fullscreen mode, and taking the
+    // window's size would make `mode = fullscreen` silently override the
+    // resolution setting.
+    rw::gl3::setVirtualScreen(iScreenWidth(), iScreenHeight());
     if (!rw::Engine::open(&params))
     {
         printf("bfbb: librw refused to open an OpenGL device\n");
