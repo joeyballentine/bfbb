@@ -1,11 +1,18 @@
 // The last frame the port presented, kept as a texture.
 //
-// The interface and the argument for it are in iSnapshot.h. This is the D3D9
-// half: what to copy, from where, and how to know the copy is still there.
+// The interface and the argument for it are in iSnapshot.h. This is what to
+// copy, from where, and how to know the copy is still there, on each of the
+// backends that can do it.
 //
 // It lives beside the shim rather than in the platform layer because the one
 // thing it needs is the surface the game's picture lands on, and that is
 // librw's, not the operating system's.
+//
+// Both backends copy the same thing -- the surface every camera drawing to the
+// frame buffer actually lands on, which is the virtual screen. Reading that
+// rather than whatever target happens to be bound is what keeps the capture
+// right when the last thing to render before a present was a camera texture, a
+// shadow buffer say, and so left ITS surface bound.
 
 #include <rwcore.h>
 
@@ -55,9 +62,20 @@ static S32 sFailed;
 
 // config.ini's xbox.snapshot, pushed down by iSystem.cpp. See glow.cpp for why
 // it is pushed rather than read. Off, every call here answers the way the
-// non-D3D9 arm below does, and zGame falls back to the background texture
-// asset -- which is the GameCube and PS2 loading screen exactly.
+// unsupported-backend arm below does, and zGame falls back to the background
+// texture asset -- which is the GameCube and PS2 loading screen exactly.
 static S32 sEnabled = TRUE;
+
+#if defined(RW_D3D9) || defined(RW_GL3)
+
+// The size to capture at, and the raster to capture into. Shared by both
+// backends because neither the sizing rule nor the lifetime differs: the
+// snapshot is the picture at whatever size the port renders it, and the quad it
+// fills is in the transition camera's screen space and stretches to fit either
+// way.
+static S32 snapshotEnsureRaster(RwInt32 width, RwInt32 height);
+
+#endif
 
 #if defined(RW_D3D9)
 
@@ -117,43 +135,9 @@ void iSnapshotCapture()
         return;
     }
 
-    // Sized from the surface rather than from the game's 640x480, so that the
-    // snapshot is the picture at whatever size the port is rendering it. The
-    // quad it fills is in the transition camera's screen space and stretches to
-    // fit either way.
-    if (sRaster != NULL && ((RwInt32)desc.Width != sRaster->width ||
-                            (RwInt32)desc.Height != sRaster->height))
+    if (!snapshotEnsureRaster((RwInt32)desc.Width, (RwInt32)desc.Height))
     {
-        // The screen changed size under us. Nothing in the port does this today
-        // -- the virtual screen is fixed at the size the window opened at -- but
-        // a stale raster would make StretchRect scale rather than copy, and a
-        // silently scaled snapshot is worse than a rebuilt one.
-        RwTextureDestroy(sTexture);
-        sTexture = NULL;
-        sRaster = NULL;
-        sHaveFrame = 0;
-    }
-
-    if (sRaster == NULL)
-    {
-        sRaster = RwRasterCreate(desc.Width, desc.Height, 32,
-                                 rwRASTERTYPECAMERATEXTURE | rwRASTERFORMAT8888);
-        if (sRaster == NULL)
-        {
-            snapshotFail("this backend would not make a render-target texture", 0);
-            return;
-        }
-
-        // The texture is what the game is handed, and it owns the raster from
-        // here: RwTextureDestroy above takes both down together.
-        sTexture = RwTextureCreate(sRaster);
-        if (sTexture == NULL)
-        {
-            RwRasterDestroy(sRaster);
-            sRaster = NULL;
-            snapshotFail("a texture could not be made for the snapshot", 0);
-            return;
-        }
+        return;
     }
 
     IDirect3DTexture9* tex = (IDirect3DTexture9*)rasterTexture(sRaster);
@@ -208,16 +192,76 @@ RwTexture* iSnapshotBackgroundTexture()
     return sTexture;
 }
 
+#elif defined(RW_GL3)
+
+// GL3 has no device-lost equivalent to guard against. A GL context can be lost
+// -- GL_KHR_robustness spells out how -- but librw neither asks for that
+// extension nor recreates anything on it, so there is no half-alive state to
+// detect here the way there is on D3D9 after a Reset. The texture behind the
+// raster is a name that stays valid for as long as the raster does.
+
+// One report, and then off for good.
+static void snapshotFail(const char* what)
+{
+    sFailed = 1;
+    printf("bfbb: the loading-screen snapshot is off -- %s\n", what);
+    fflush(stdout);
+}
+
+void iSnapshotCapture()
+{
+    if (!sEnabled || sFailed || sLatched)
+    {
+        return;
+    }
+
+    // The size the virtual screen was made at, which is the size everything
+    // the game draws lands on. Zero before the engine has started, and zero
+    // for good if the driver refused the framebuffer -- in which case there is
+    // no picture to copy and the game falls back, which is the same answer the
+    // unsupported backends give.
+    RwInt32 width = (RwInt32)rw::gl3::virtualScreenWidth;
+    RwInt32 height = (RwInt32)rw::gl3::virtualScreenHeight;
+
+    if (width <= 0 || height <= 0 || rw::gl3::virtualScreenFramebuffer() == 0)
+    {
+        return;
+    }
+
+    if (!snapshotEnsureRaster(width, height))
+    {
+        return;
+    }
+
+    if (!rw::gl3::copyVirtualScreen(reinterpret_cast<rw::Raster*>(sRaster)))
+    {
+        // Every reason this returns false is a property of the device or of
+        // the raster, so it will be the same reason next frame.
+        snapshotFail("the frame could not be copied into a texture");
+        return;
+    }
+
+    sHaveFrame = 1;
+}
+
+RwTexture* iSnapshotBackgroundTexture()
+{
+    if (!sEnabled || sFailed || !sLatched || !sHaveFrame || sTexture == NULL)
+    {
+        return NULL;
+    }
+
+    return sTexture;
+}
+
 #else
 
 // Every other backend. The capture needs a way to copy the frame buffer into a
-// texture, and the shim has one for D3D9 only: NULL renders nothing to copy,
-// and GL3 renders into the default framebuffer, which is a glCopyTexSubImage2D
-// away from a texture and has simply not been written. Saying so here, rather
-// than leaving the file out of the build, keeps the call sites in camera.cpp
-// and zGame.cpp free of backend #ifdefs -- and the game already handles the
-// refusal: zGame falls back to the background texture asset, which is the
-// GameCube and PS2 loading screen exactly.
+// texture, and LIBRW_PLATFORM=NULL renders nothing to copy. Saying so here,
+// rather than leaving the file out of the build, keeps the call sites in
+// camera.cpp and zGame.cpp free of backend #ifdefs -- and the game already
+// handles the refusal: zGame falls back to the background texture asset, which
+// is the GameCube and PS2 loading screen exactly.
 
 void iSnapshotCapture()
 {
@@ -226,6 +270,61 @@ void iSnapshotCapture()
 RwTexture* iSnapshotBackgroundTexture()
 {
     return NULL;
+}
+
+#endif
+
+#if defined(RW_D3D9) || defined(RW_GL3)
+
+// The capture target, made on the first capture rather than at startup: until
+// the engine is open there is no device to create a render target on and
+// nothing has asked for one.
+//
+// Rebuilt if the screen ever changes size under us. Nothing in the port does
+// that today -- the virtual screen is fixed at the size the window opened at --
+// but a stale raster would make the copy scale rather than copy, and a silently
+// scaled snapshot is worse than a rebuilt one.
+static S32 snapshotEnsureRaster(RwInt32 width, RwInt32 height)
+{
+    if (sRaster != NULL && (width != sRaster->width || height != sRaster->height))
+    {
+        RwTextureDestroy(sTexture);
+        sTexture = NULL;
+        sRaster = NULL;
+        sHaveFrame = 0;
+    }
+
+    if (sRaster != NULL)
+    {
+        return TRUE;
+    }
+
+    sRaster = RwRasterCreate(width, height, 32,
+                             rwRASTERTYPECAMERATEXTURE | rwRASTERFORMAT8888);
+    if (sRaster == NULL)
+    {
+        sFailed = 1;
+        printf("bfbb: the loading-screen snapshot is off -- this backend would "
+               "not make a render-target texture\n");
+        fflush(stdout);
+        return FALSE;
+    }
+
+    // The texture is what the game is handed, and it owns the raster from here:
+    // RwTextureDestroy above takes both down together.
+    sTexture = RwTextureCreate(sRaster);
+    if (sTexture == NULL)
+    {
+        RwRasterDestroy(sRaster);
+        sRaster = NULL;
+        sFailed = 1;
+        printf("bfbb: the loading-screen snapshot is off -- a texture could not "
+               "be made for it\n");
+        fflush(stdout);
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
 #endif

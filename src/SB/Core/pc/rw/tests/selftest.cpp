@@ -54,6 +54,7 @@
 // matrix can be exercised, which is the part of that path a headless check can
 // actually reach.
 #include "iFX.h"
+#include "iSnapshot.h"
 
 // WITH_D3D above drags in d3d9.h and windows.h behind it, and windows.h still
 // carries the 16-bit memory model's `near` and `far` as empty macros. This file
@@ -1030,6 +1031,63 @@ static void test_renderstate_roundtrip()
     check(rw::GetRenderStatePtr(rw::TEXTURERASTER) == NULL, "TEXTURERASTER round-trips");
     rw::SetRenderStatePtr(rw::TEXTURERASTER, savedRaster);
 #endif
+}
+
+// The loading-screen still: capture the frame, latch it, and be handed a
+// texture over it.
+//
+// What this is really checking is that the backend can copy its frame buffer
+// into a texture at all -- the one thing the effect needs and the reason it was
+// D3D9-only. Everything above the copy is backend-independent, so a failure
+// here is a failure of the copy.
+//
+// It runs on a live engine with nothing drawn, so the captured frame is
+// whatever the device cleared to. That is not a problem: this asks whether a
+// capture HAPPENED, and only the game can say whether it looks right.
+static void test_snapshot()
+{
+    printf("iSnapshot\n");
+
+    // Nothing captured and nothing latched, which is the state at boot: the
+    // first loading screen of a session has no previous frame to stand on.
+    iSnapshotRelease();
+    check(iSnapshotBackgroundTexture() == NULL,
+          "no still before anything has been captured");
+
+    iSnapshotCapture();
+
+    // Latched second, because a capture while latched is refused -- that is
+    // what stops the presents made under the loading screen overwriting the
+    // picture with itself.
+    iSnapshotLatch();
+
+    RwTexture* still = iSnapshotBackgroundTexture();
+
+#if defined(RW_D3D9) || defined(RW_GL3)
+    check(still != NULL, "the frame was copied into a texture");
+    if (still != NULL)
+    {
+        check(still->raster != NULL, "and the texture has a raster");
+        check(still->raster != NULL && still->raster->width > 0 &&
+                  still->raster->height > 0,
+              "of the size the port is rendering at");
+    }
+
+    // Refused while latched, so the loading screen holds the frame it started
+    // with rather than the frames drawn over it.
+    iSnapshotCapture();
+    check(iSnapshotBackgroundTexture() == still,
+          "and a capture made while latched leaves it alone");
+#else
+    // LIBRW_PLATFORM=NULL renders nothing to copy. Answering NULL is the
+    // supported behaviour, not a failure: zGame falls back to the background
+    // texture asset, which is what the GameCube and PS2 releases draw.
+    check(still == NULL, "the null device has no frame to capture, and says so");
+#endif
+
+    iSnapshotRelease();
+    check(iSnapshotBackgroundTexture() == NULL,
+          "and releasing it puts the loading screen back to the asset");
 }
 
 static void test_renderstate()
@@ -3403,6 +3461,7 @@ int main()
     test_worlds();
     test_renderstate();
     test_renderstate_roundtrip();
+    test_snapshot();
     test_immediate();
     test_geometry();
     test_atomics();
