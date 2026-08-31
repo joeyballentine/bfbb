@@ -239,3 +239,21 @@ is a useful PR gate on its own.
 Encoding order matters and is easy to get wrong: shields.io wants a literal `-`
 doubled, and the percent-encoding has to run `%` first, then space, then `/`.
 Encoding the space before the percent turns `%20` into `%2520`.
+
+### `objsnap.py` — byte-identity snapshot, for compiler-patch work
+
+```
+objsnap.py save <out.json>     hash every built object, the DOL and the compiler
+objsnap.py cmp  <before.json>  compare the tree against a snapshot; exit 1 on any change
+```
+
+A change to `patch_compiler.py` changes the derived compiler's sha1, and then
+every measurement either side of it is incomparable. So the acceptance test for
+a refactor meant to change **no** behaviour is not the match percentage -- it is
+that all 542 objects come out byte-for-byte as they did, and the DOL still
+hashes to retail.
+
+`report.json` cannot do this job: it scores symbols by name and normalises pool
+ordinals, so an object can shift, gain a symbol or reorder its `.text` and still
+report identical percentages. Only the bytes settle it. This is `gcgate.py`'s
+counterpart for compiler changes rather than source changes.
