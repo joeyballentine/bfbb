@@ -328,7 +328,12 @@ static void UpdateGustFX(zGust* g, float seconds)
         }
 
         info.life.val[0] *= g->asset->partMod;
+        // A thirtieth of a second's worth of debris: two console frames.
+#ifdef PLATFORM_PC
+        xParEmitterEmitCustom(e, 1.0f / 30.0f, &info, 2.0f);
+#else
         xParEmitterEmitCustom(e, 1.0f / 30.0f, &info);
+#endif
     }
 }
 

@@ -149,7 +149,7 @@ static void zEntHangable_UpdateFX(zEntHangable* ent)
                 // zEntHangableMountFX below is NOT this: it runs on eEventMount,
                 // so its constant is a burst size.
 #ifdef PLATFORM_PC
-                xParEmitterEmitCustom(emitter, 2.0f * dt, &info);
+                xParEmitterEmitCustom(emitter, 2.0f * dt, &info, 2.0f);
 #else
                 xParEmitterEmitCustom(emitter, (1.0f / 30.0f), &info);
 #endif
@@ -250,7 +250,12 @@ static void zEntHangableMountFX(zEntHangable* ent)
             info.vel.x = 0.0f;
             info.vel.y = -2.0f - xurand() * 2.0f;
             info.vel.z = 0.0f;
+            // Two console frames' worth; see the note in the update above.
+#ifdef PLATFORM_PC
+            xParEmitterEmitCustom(sMountEmitter, (1.0f / 30.0f), &info, 2.0f);
+#else
             xParEmitterEmitCustom(sMountEmitter, (1.0f / 30.0f), &info);
+#endif
         }
     }
 }

@@ -163,7 +163,15 @@ void xParEmitterSetup(xParEmitter* t);
 void xParEmitterReset(xParEmitter* t);
 S32 xParEmitterEventCB(xBase* to, xBase* from, U32 toEvent, const F32* toParam,
                        xBase* toParamWidget);
+#ifdef PLATFORM_PC
+// par_frames is how many console frames the dt window stands for. It scales the
+// birth velocity only; the particle count still comes from dt. Callers passing
+// the frame's own dt, or a sixtieth of a second, want the default.
+xPar* xParEmitterEmitCustom(xParEmitter* p, F32 dt, xParEmitterCustomSettings* info,
+                            F32 par_frames = 1.0f);
+#else
 xPar* xParEmitterEmitCustom(xParEmitter* p, F32 dt, xParEmitterCustomSettings* info);
+#endif
 U32 xParEmitterCull(xParEmitter* t, xPar* p);
 F32 xParInterpCompute(S32 interp_mode, xParInterp* r, F32 time, S32 time_has_elapsed, F32 lastVal);
 xPar* xParEmitterEmitSetTexIdxs(xPar* p, const xParSys* ps);

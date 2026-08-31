@@ -227,13 +227,40 @@ S32 xParEmitterEventCB(xBase* to, xBase* from, U32 toEvent, const F32* toParam,
         break;
     case eEventEmit:
         memset(&sp8, 0, 0x16C);
+        // A thirtieth of a second's worth: two console frames.
+#ifdef PLATFORM_PC
+        xParEmitterEmitCustom((xParEmitter*)from, 0.033333335f, &sp8, 2.0f);
+#else
         xParEmitterEmitCustom((xParEmitter*)from, 0.033333335f, &sp8);
+#endif
         break;
     }
     return 1;
 }
 
+#ifdef PLATFORM_PC
+// The birth step for a burst worth `frames` console frames. m_vel is a
+// displacement per FRAME, so the step is always the frame's own length; the
+// burst size is what `frames` scales. One for the usual per-frame emit and for
+// a burst sized at a sixtieth of a second, two for the callers that pass a
+// thirtieth.
+static F32 xParFrameStep(F32 frames, F32 dt)
+{
+    if (globals.update_dt > 0.0f)
+    {
+        return frames * globals.update_dt;
+    }
+
+    return frames * dt;
+}
+#endif
+
+#ifdef PLATFORM_PC
+xPar* xParEmitterEmitCustom(xParEmitter* p, F32 dt, xParEmitterCustomSettings* info,
+                            F32 par_frames)
+#else
 xPar* xParEmitterEmitCustom(xParEmitter* p, F32 dt, xParEmitterCustomSettings* info)
+#endif
 
 {
     U32 custom_flags;
@@ -310,7 +337,11 @@ xPar* xParEmitterEmitCustom(xParEmitter* p, F32 dt, xParEmitterCustomSettings* i
             break;
         }
     }
+#ifdef PLATFORM_PC
+    xPar* newpar = xParEmitterEmit(p, dt, xParFrameStep(par_frames, dt));
+#else
     xPar* newpar = xParEmitterEmit(p, dt);
+#endif
     if ((custom_flags & eParEmitterCustomSaveRestore) != 0)
     {
         memcpy(p_tasset, &sSaveEmmiterSettings, sizeof(xParEmitterAsset));
@@ -447,12 +478,8 @@ xPar* xParEmitterEmit(xParEmitter* pe, F32 emit_dt, F32 par_dt)
     // beam, has the opposite problem.
     //
     // So the count keeps the caller's window and the step takes the frame's
-    // own. At a sixtieth of a second the two are the same number and nothing
-    // changes.
-    if (globals.update_dt > 0.0f)
-    {
-        par_dt = globals.update_dt;
-    }
+    // own share of it. Only the caller knows how many console frames its window
+    // stands for, so xParFrameStep below is applied there rather than here.
 #endif
 
     xParEmitterAsset* pea;
@@ -843,7 +870,11 @@ inline void xParInterp::order()
 
 inline xPar* xParEmitterEmit(xParEmitter* pe, F32 dt)
 {
+#ifdef PLATFORM_PC
+    return xParEmitterEmit(pe, dt, xParFrameStep(1.0f, dt));
+#else
     return xParEmitterEmit(pe, dt, dt);
+#endif
 }
 
 inline void xParInterp::operator=(const xParInterp& p)
