@@ -1998,13 +1998,57 @@ static void NCIN_BubSlam(const zCutsceneMgr*, NCINEntry* fxrec, S32 param)
     }
 }
 
+#ifdef PLATFORM_PC
+// The wipe's fifty bubbles a frame are an emission rate per frame. This is the
+// same wall built `num` bubbles wide, so the buffer grows with the count -- a
+// frame longer than a sixtieth of a second asks for more than fifty.
+static void NCIN_BubWipeEmit(const xMat4x3* mat, const xVec3& scl_wall, const xVec3& vel_wall,
+                             S32 num)
+{
+    if (num < 1)
+    {
+        return;
+    }
+
+    xVec3* pos = (xVec3*)xMemPushTemp(2 * num * sizeof(xVec3));
+    if (pos == NULL)
+    {
+        return;
+    }
+
+    xVec3* vel = pos + num;
+    xVec3 vec_infront = mat->at * 1.2f;
+
+    xVec3* pp = pos;
+    xVec3* vp = vel;
+
+    for (S32 i = 0; i < num; i++, pp++, vp++)
+    {
+        pp->x = mat->pos.x + (xurand() - 0.5f) + scl_wall.x * (xurand() - 0.5f);
+        pp->y = mat->pos.y + (xurand() - 0.5f) + scl_wall.y * (xurand() - 0.5f);
+        pp->z = mat->pos.z + (xurand() - 0.5f) + scl_wall.z * (xurand() - 0.5f);
+
+        *pp += vec_infront;
+
+        vp->x = vel_wall.x * (xurand() - 0.5f);
+        vp->y = vel_wall.y * (xurand() - 0.5f);
+        vp->z = vel_wall.z * (xurand() - 0.5f);
+    }
+
+    zParPTankSpawnBubbles(pos, vel, num, 1.0f);
+    xMemPopTemp(pos);
+}
+#endif
+
 static void NCIN_BubWipe(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 {
+#ifndef PLATFORM_PC
     xVec3* pos;
     xVec3* vel;
     xVec3* pp;
     xVec3* vp;
     S32 i;
+#endif
 
     static const xVec3 scl_wall = { 3.0f, 3.0f, 3.0f };
     static const xVec3 vel_wall = { 1.0f, 0.5f, 0.5f };
@@ -2023,6 +2067,11 @@ static void NCIN_BubWipe(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
     mat->up = fxrec->pos_B[0];
     mat->right = fxrec->pos_B[1];
 
+#ifdef PLATFORM_PC
+    // The callback takes no dt, so the frame's length comes from the global the
+    // update writes.
+    NCIN_BubWipeEmit(mat, scl_wall, vel_wall, xFrameEmitCount(50.0f, globals.update_dt));
+#else
     pos = (xVec3*)xMemPushTemp(2 * 50 * sizeof(xVec3));
     vel = pos + 50;
 
@@ -2056,6 +2105,7 @@ static void NCIN_BubWipe(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
 
     zParPTankSpawnBubbles(pos, vel, 50, 1.0f);
     xMemPopTemp(pos);
+#endif
 }
 
 static void NCIN_BubTrailBone_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, RwMatrixTag* animMat,
@@ -2076,7 +2126,14 @@ static void NCIN_BubTrailBone_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic
         pos_emit += *(const xVec3*)&animMat[idx_boneInterest].pos;
     }
 
+    // One bubble every animated frame is an emission rate per frame. The
+    // callback takes no dt, so the frame's length comes from the global the
+    // update writes.
+#ifdef PLATFORM_PC
+    zFX_SpawnBubbleTrail(&pos_emit, xFrameEmitCount(1.0f, globals.update_dt));
+#else
     zFX_SpawnBubbleTrail(&pos_emit, 1);
+#endif
 }
 
 static void NCIN_BubHit(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
@@ -2091,7 +2148,13 @@ static void NCIN_BubHit(const zCutsceneMgr*, NCINEntry* fxrec, S32 killit)
         {
             zFX_SpawnBubbleHit(&fxrec->pos_A[0], 16);
         }
+        // The sixteen above are the one-shot on the effect's first frame. These
+        // three run every frame after it, which is an emission rate per frame.
+#ifdef PLATFORM_PC
+        zFX_SpawnBubbleHit(&fxrec->pos_A[0], xFrameEmitCount(3.0f, globals.update_dt));
+#else
         zFX_SpawnBubbleHit(&fxrec->pos_A[0], 3);
+#endif
     }
 }
 
@@ -2594,13 +2657,25 @@ static void NCIN_SleepyDRay_AR(const zCutsceneMgr* csnmgr, NCINEntry* fxrec, RpA
     {
         const xVec3* pos_beam = &fxrec->pos_A[0];
 
+        // Four bubbles at each of seven points every animated frame is an
+        // emission rate per frame. The callback takes no dt, so the frame's
+        // length comes from the global the update writes.
         for (S32 i = 0; i < 6; i++)
         {
             LERP(i / 6.0f, &pos_trail, pos_beam, (const xVec3*)&animMat->pos);
+#ifdef PLATFORM_PC
+            zFX_SpawnBubbleTrail(&pos_trail, xFrameEmitCount(4.0f, globals.update_dt));
+#else
             zFX_SpawnBubbleTrail(&pos_trail, 4);
+#endif
         }
 
+#ifdef PLATFORM_PC
+        zFX_SpawnBubbleTrail((const xVec3*)&animMat->pos,
+                             xFrameEmitCount(4.0f, globals.update_dt));
+#else
         zFX_SpawnBubbleTrail((const xVec3*)&animMat->pos, 4);
+#endif
         return;
     }
 
@@ -2972,12 +3047,19 @@ static void NCIN_MidFish_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, Rw
 
     S32* idx;
 
+    // One bubble per bone every animated frame is an emission rate per frame.
+    // The callback takes no dt, so the frame's length comes from the global the
+    // update writes.
     if (animIndex == 0)
     {
         for (S32 i = 0; i < 24; i += 2)
         {
             xVec3 pos_emit = *(const xVec3*)&animMat[i].pos + *(const xVec3*)&animMat->pos;
+#ifdef PLATFORM_PC
+            zFX_SpawnBubbleTrail(&pos_emit, xFrameEmitCount(1.0f, globals.update_dt));
+#else
             zFX_SpawnBubbleTrail(&pos_emit, 1);
+#endif
         }
     }
     else if (animIndex == 2 || animIndex == 3)
@@ -2985,7 +3067,11 @@ static void NCIN_MidFish_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic*, Rw
         for (idx = g_idx_handbone; *idx >= 0; idx++)
         {
             xVec3 pos_emit = *(const xVec3*)&animMat[*idx].pos + *(const xVec3*)&animMat->pos;
+#ifdef PLATFORM_PC
+            zFX_SpawnBubbleTrail(&pos_emit, xFrameEmitCount(1.0f, globals.update_dt));
+#else
             zFX_SpawnBubbleTrail(&pos_emit, 1);
+#endif
         }
     }
 }
@@ -3002,7 +3088,14 @@ static void NCIN_BombTrail_AR(const zCutsceneMgr* mgr, NCINEntry* e, RpAtomic* a
 {
     if (i1 == 0x4)
     {
+        // Four bubbles every animated frame is an emission rate per frame. The
+        // callback takes no dt, so the frame's length comes from the global the
+        // update writes.
+#ifdef PLATFORM_PC
+        zFX_SpawnBubbleTrail((const xVec3*)&t->pos, xFrameEmitCount(4.0f, globals.update_dt));
+#else
         zFX_SpawnBubbleTrail((const xVec3*)&t->pos, 0x4);
+#endif
     }
 }
 
@@ -3018,7 +3111,12 @@ static void NCIN_BoneTrail_AR(const zCutsceneMgr* mgr, NCINEntry* e, RpAtomic* a
 {
     if (i1 == 0x7)
     {
+        // See NCIN_BombTrail_AR.
+#ifdef PLATFORM_PC
+        zFX_SpawnBubbleTrail((const xVec3*)&t->pos, xFrameEmitCount(4.0f, globals.update_dt));
+#else
         zFX_SpawnBubbleTrail((const xVec3*)&t->pos, 0x4);
+#endif
     }
 }
 
@@ -3056,10 +3154,17 @@ static void NCIN_HookRecoil_AR(const zCutsceneMgr* csnmgr, NCINEntry*, RpAtomic*
 
     U32 num_bones = iModelNumBones(model);
 
+    // One bubble per bone every animated frame is an emission rate per frame.
+    // The callback takes no dt, so the frame's length comes from the global the
+    // update writes.
     for (U32 i = 1; i < num_bones; i++)
     {
         xVec3 pos_emit = *(const xVec3*)&animMat[i].pos + *(const xVec3*)&animMat->pos;
+#ifdef PLATFORM_PC
+        zFX_SpawnBubbleTrail(&pos_emit, xFrameEmitCount(1.0f, globals.update_dt));
+#else
         zFX_SpawnBubbleTrail(&pos_emit, 1);
+#endif
     }
 }
 

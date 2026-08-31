@@ -5547,10 +5547,21 @@ void zNPCGoalDogLaunch::FurryFlurry()
     static const xVec3 pos_disperse = { 0.01f, 0.01f, 0.01f };
     static const xVec3 vel_disperse = { 3.0f, 2.5f, -2.0f };
 
+    // moreorless is reset to -1, so it is negative on every later call and the
+    // cone goes out every frame: fifteen bubbles a frame is an emission rate
+    // per frame. BubTrailCone spreads its angles over its own count, so a
+    // scaled count still covers the whole cone, just more sparsely per frame.
+    // FurryFlurry takes no dt and Process is its only caller, so the frame's
+    // length comes from the global the update writes.
     if ((--moreorless < 0) && (psyche->TimerGet(XPSY_TYMR_CURGOAL) > 0.04f))
     {
         moreorless = -1;
+#ifdef PLATFORM_PC
+        BubTrailCone(npc->Center(), xFrameEmitCount(15.0f, globals.update_dt), &pos_disperse,
+                     &vel_disperse, (xMat3x3*)npc->BoneMat(0));
+#else
         BubTrailCone(npc->Center(), 15, &pos_disperse, &vel_disperse, (xMat3x3*)npc->BoneMat(0));
+#endif
     }
 }
 

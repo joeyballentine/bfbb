@@ -318,6 +318,15 @@ static void zParPTankBubbleUpdate(zParPTank* zp, float dt)
 
     F32 damp = xpow(0.95f, 60.0f * dt);
 
+#ifdef PLATFORM_PC
+    // A bubble between 1.2 and 0.5 seconds of life left has a 4% chance of
+    // popping every frame, which is a rate per frame. Over the 0.7 seconds the
+    // window is open, four times the frames pop four times as often and almost
+    // nothing survives to fade out. This is the chance of surviving a frame of
+    // dt seconds at the same number of pops a second.
+    F32 pop_keep = 1.0f - xFrameEmitChance(0.04f, dt);
+#endif
+
     BubbleData* base_xp = zp == sBubblePTank ? sBubbleData : sMenuBubbleData;
     BubbleData* xp = base_xp;
 
@@ -359,7 +368,11 @@ static void zParPTankBubbleUpdate(zParPTank* zp, float dt)
             color->alpha = 0xFF;
         }
 
+#ifdef PLATFORM_PC
+        if ((xp->life < 1.2f && xp->life > 0.5f && xurand() > pop_keep) != 0 || xp->life < 0.0f)
+#else
         if ((xp->life < 1.2f && xp->life > 0.5f && xurand() > 0.96f) != 0 || xp->life < 0.0f)
+#endif
         {
             *pos = *(xVec3*)(plock_base + (zp->num_particles - 1) * plock.stride);
             *color = *(RwRGBA*)(clock_base + (zp->num_particles - 1) * clock.stride);

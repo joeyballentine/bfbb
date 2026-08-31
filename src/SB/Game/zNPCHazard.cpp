@@ -2163,7 +2163,17 @@ void NPCHazard::DeathStar()
         xVec3 vel_bub = { spd, spd, spd };
         xVec3 vel_rnd = { 2.0f, 2.0f, 2.0f };
 
+        // pam_interp is the fraction of the hazard's life spent, so this runs
+        // every frame of the first sixth of it: twenty bubbles a frame is an
+        // emission rate per frame. DeathStar takes no dt, and Upd_Explode is
+        // its only caller, so the frame's length comes from the global the
+        // update writes.
+#ifdef PLATFORM_PC
+        zFX_SpawnBubbleTrail(&pos_star, xFrameEmitCount(20.0f, globals.update_dt), &vel_bub,
+                             &vel_rnd);
+#else
         zFX_SpawnBubbleTrail(&pos_star, 20, &vel_bub, &vel_rnd);
+#endif
     }
 }
 

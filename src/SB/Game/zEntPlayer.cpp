@@ -7216,7 +7216,18 @@ void zEntPlayer_Update(xEnt* ent, xScene* sc, F32 dt)
             }
             else
             {
+                // A 24-bubble ring every frame, for the same quarter second.
+                // Scale the number of RINGS, not the bubbles in one: the ring
+                // spreads its angles over its own count, so a thinner ring
+                // would emit a few fixed spokes instead of a circle.
+#ifdef PLATFORM_PC
+                for (U32 r = xFrameEmitCount(1.0f, dt); r != 0; r--)
+                {
+                    zFX_SpawnBubbleSlam(&pos, 0x18, 0.15f, 12.0f, 2.0f);
+                }
+#else
                 zFX_SpawnBubbleSlam(&pos, 0x18, 0.15f, 12.0f, 2.0f);
+#endif
             }
         }
     }
@@ -7319,6 +7330,35 @@ void zEntPlayer_Update(xEnt* ent, xScene* sc, F32 dt)
             xVec3* pp = posbuf;
             xVec3* vp = velbuf;
             U32 j = 0;
+#ifdef PLATFORM_PC
+            // One bubble per bone every frame is an emission rate per frame.
+            // Each bone rolls its own so the contrail keeps its spread over all
+            // four instead of collapsing onto the first ones. The roll is 0 or
+            // 1 for any frame shorter than a sixtieth of a second, so the
+            // buffer retail sized for one bubble a bone still holds.
+            U32 emit = 0;
+            for (; j < num; j++, bonelist++)
+            {
+                if (xFrameEmitCount(1.0f, dt) != 0)
+                {
+                    xMat4x3 mat;
+                    xMat4x3Mul(&mat, (xMat4x3*)(ent->model->Mat + *bonelist),
+                               (xMat4x3*)ent->model->Mat);
+                    *pp = mat.pos;
+                    pp->x += 0.1f * (xurand() - 0.5f);
+                    pp->y += 0.1f * (xurand() - 0.5f);
+                    pp->z += 0.1f * (xurand() - 0.5f);
+                    vp->x = 0.2f * (xurand() - 0.5f);
+                    vp->y = 0.2f * (xurand() - 0.5f);
+                    vp->z = 0.2f * (xurand() - 0.5f);
+                    pp++;
+                    vp++;
+                    emit++;
+                }
+            }
+
+            zParPTankSpawnBubbles(posbuf, velbuf, emit, 1.0f);
+#else
             for (; j < num; j++, pp++, vp++, bonelist++)
             {
                 xMat4x3 mat;
@@ -7334,6 +7374,7 @@ void zEntPlayer_Update(xEnt* ent, xScene* sc, F32 dt)
             }
 
             zParPTankSpawnBubbles(posbuf, velbuf, num, 1.0f);
+#endif
             xMemPopTemp(posbuf);
         }
     }

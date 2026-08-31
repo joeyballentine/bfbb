@@ -182,6 +182,22 @@ Converted:
                             propel trails
     zNPCGoalAmbient.cpp     the bumped-jellyfish trail
     zNPCTypeBossPatrick.cpp the glob trail
+    zEntPlayer.cpp          the bubble bash and bounce bone contrails, one
+                            bubble a frame at each of four bones. Each bone
+                            rolls its own count, so the trail keeps its spread
+                            instead of collapsing onto the first bones
+    zEntPlayer.cpp          Patrick's StunLand slam, a 24-bubble ring every
+                            frame for the first quarter second. The number of
+                            RINGS scales, not the bubbles in one: the ring
+                            spreads its angles over its own count, so a thinner
+                            ring is a few fixed spokes rather than a circle
+    zNPCHazard.cpp          DeathStar, twenty bubbles a frame for the first
+                            sixth of the hazard's life
+    zNPCGoalRobo.cpp        FurryFlurry's cone. `moreorless` is reset to -1, so
+                            it is negative on every later call and the cone goes
+                            out every frame
+    zNPCFXCinematic.cpp     the `_AR` callbacks and NCIN_BubWipe/NCIN_BubHit --
+                            see below
 
 Left alone:
 
@@ -208,10 +224,39 @@ so a frame that wins no bubble costs nothing.
 Together with the wand trail above it, the bubble spin was emitting three
 bubbles a frame along the wand path plus ten a frame per object in the bound.
 
-Not settled: `zNPCFXCinematic.cpp`'s `_AR` callbacks (`NCIN_MidFish_AR`,
-`NCIN_BombTrail_AR`, `NCIN_BoneTrail_AR` and the bone-loop sites near 2079 and
-3062) spawn a fixed count per rendered frame and have no `dt` in scope. Cutscene
-only. `NCIN_BubTrail_AR` at 3773 already carries an accumulator.
+`zNPCFXCinematic.cpp` has no `dt` in any of its callback signatures, but it does
+not need one: `NCIN_BubbleTrail_AR` builds its own accumulator out of
+`globals.update_dt`, which is retail's own global and is written once a frame in
+`zGame.cpp`. The seven other per-frame sites now take their window from the same
+place — `NCIN_BubWipe` (fifty a frame, and its buffer is sized from the scaled
+count), `NCIN_BubHit`'s three-a-frame tail, `NCIN_BubTrailBone_AR`,
+`NCIN_SleepyDRay_AR`, `NCIN_MidFish_AR`, `NCIN_BombTrail_AR`,
+`NCIN_BoneTrail_AR` and `NCIN_HookRecoil_AR`.
+
+`flg_stat & 2` is the effect's first-frame flag: `zNPCFXCutscene` clears it after
+the first `cb_fxupd` call. Anything behind it is a one-shot and stays a fixed
+count — `NCIN_BubSlam`, `NCIN_SleepyDRay_Upd`, `NCIN_ShieldPop`, and the sixteen
+bubbles at the top of `NCIN_BubHit`.
+
+## The bubble pool
+
+`zParPTankBubbleUpdate` ages `life` by `dt`, moves by `vel * dt`, adds buoyancy
+as `3.0f * dt` and damps with `xpow(0.95f, 60 * dt)` — retail's own rebase, the
+`zFX.cpp:445` idiom. All correct.
+
+The one defect was the early pop. A bubble between 1.2 and 0.5 seconds of life
+left had a 4% chance of popping EVERY FRAME, which is a rate per frame. Over the
+0.7 seconds the window is open that is 42 rolls on the console and 0.96^42 = 18%
+survival; at 240 fps it is 168 rolls and 0.1%, so nothing reached the fade-out at
+all. It is now `xFrameEmitChance(0.04f, dt)`, computed once outside the particle
+loop.
+
+The pool caps at 0x300 bubbles (0x10 for the menu tank), and `zParPTankSpawnBubbles`
+silently truncates a request that would overflow it. Live count is spawn rate
+times the 1.75-second life, so a correct rate saturates it exactly as often as
+the console did. Every uncorrected site above was over that budget on its own:
+the StunLand slam alone asked for 1440 bubbles in a quarter second at 240 fps
+against a 768 pool.
 
 ## The emit window is two things at once
 
@@ -566,10 +611,8 @@ counter with no `dt` anywhere in the function. Nothing in the tree reads
 
 ### Still open
 
-`zNPCFXCinematic.cpp`'s `_AR` callbacks spawn a fixed count per rendered frame
-with no `dt` in scope. Cutscene only. `zNPCGoalVillager.cpp:346`'s
-`cnt_nextMedic` decrements per frame to grant a health point — frame-rate
-dependent, but it is a cheat.
+`zNPCGoalVillager.cpp:346`'s `cnt_nextMedic` decrements per frame to grant a
+health point — frame-rate dependent, but it is a cheat.
 
 `zMain.cpp:1152`, the memory-card screen, calls `xPadUpdate(pad, 1.0f/60)`, so
 rumble timers there age one console frame per iteration of an uncapped loop.
