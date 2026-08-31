@@ -491,11 +491,19 @@ void iPadHostPoll()
 {
     if (sReady)
     {
-        // Draining the queue is what refreshes the gamepad state as well as
+        // Pumping the queue is what refreshes the gamepad state as well as
         // what reports a controller arriving or leaving, so hot-plugging needs
         // no timer here -- unlike the XInput backend, which has to ask.
+        //
+        // Only the joystick and gamepad range is taken, not the whole queue.
+        // SDL has one queue per process and iWindowSDL.cpp reads it too; a
+        // catch-all here swallowed the window's close button before that file
+        // ever saw it. iWindowPump has the other half of this comment.
+        SDL_PumpEvents();
+
         SDL_Event e;
-        while (SDL_PollEvent(&e))
+        while (SDL_PeepEvents(&e, 1, SDL_GETEVENT, SDL_EVENT_JOYSTICK_AXIS_MOTION,
+                              SDL_EVENT_FINGER_DOWN - 1) > 0)
         {
             if (e.type == SDL_EVENT_GAMEPAD_ADDED)
             {

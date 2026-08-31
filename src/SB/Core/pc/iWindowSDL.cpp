@@ -166,10 +166,29 @@ void iWindowClose()
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
 
+// **SDL's event queue is one queue per process, and this file is not its only
+// reader.** iPadHostSDL.cpp's iPadHostPoll drains it too, for hot-plug, and
+// both run every frame. A plain SDL_PollEvent on either side is therefore a
+// catch-all that takes the other side's events as well, and whichever ran
+// first won: iPadHostPoll ran first every frame, swallowed
+// SDL_EVENT_WINDOW_CLOSE_REQUESTED, and the window could not be closed at all.
+//
+// So each side takes only the range it owns. The joystick and gamepad event
+// types occupy 0x600 through 0x6FF and are the pad host's; everything else is
+// this one's, including the sweep of what nothing in the port reads -- SDL's
+// queue is unbounded and fills with mouse, keyboard and display events for as
+// long as the game runs.
+//
+// The D3D9 build is unaffected either way: SDL's video subsystem is never
+// started there, so the only events that exist are the pad host's own.
 void iWindowPump()
 {
+    SDL_PumpEvents();
+
     SDL_Event event;
-    while (SDL_PollEvent(&event))
+
+    while (SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_EVENT_FIRST,
+                          SDL_EVENT_JOYSTICK_AXIS_MOTION - 1) > 0)
     {
         switch (event.type)
         {
@@ -192,6 +211,13 @@ void iWindowPump()
         default:
             break;
         }
+    }
+
+    // Touch, pen, drop, audio device, sensor, camera and render events, none of
+    // which anything here reads. Dropped rather than left to pile up.
+    while (SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_EVENT_FINGER_DOWN,
+                          SDL_EVENT_LAST) > 0)
+    {
     }
 }
 

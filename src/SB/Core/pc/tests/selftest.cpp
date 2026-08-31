@@ -1254,8 +1254,8 @@ static void virtual_release_all()
 // buttons and blaming one.
 //
 // The virtual driver applies queued state at the next joystick update, which is
-// what iPadHostPoll's own SDL_PollEvent loop triggers -- so one poll is enough,
-// and a second would only paper over it not being.
+// what iPadHostPoll's own SDL_PumpEvents triggers -- so one poll is enough, and
+// a second would only paper over it not being.
 static U32 virtual_press(SDL_GamepadButton button)
 {
     virtual_neutral();
