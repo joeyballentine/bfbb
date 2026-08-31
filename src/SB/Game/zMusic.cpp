@@ -36,8 +36,6 @@ static F32 sMusicTimer[TRACK_COUNT] = { 0.0f, 0.0f };
 extern eGameMode gGameMode;
 extern zGlobals globals;
 
-static const F32 minDelay = 0.001f;
-
 static void volume_update(F32 vol);
 
 static void volume_reset()
@@ -273,7 +271,6 @@ static S32 zMusicDo(S32 track)
 void zMusicNotify(S32 situation)
 {
     zMusicSituation* s;
-    S32 track;
 
     if (sMusicPaused)
     {
@@ -292,10 +289,9 @@ void zMusicNotify(S32 situation)
         return;
     }
 
-    track = s->track;
-    sMusicQueueData[track] = &sMusicInfo[situation];
-    sMusicTimer[track] = s->punchDelay;
-    sMusicQueueData[track]->game_state = (gGameMode == eGameMode_Game);
+    sMusicQueueData[s->track] = s;
+    sMusicTimer[s->track] = s->punchDelay;
+    sMusicQueueData[s->track]->game_state = (gGameMode == eGameMode_Game);
 }
 
 void zMusicNotifyEvent(const F32* toParam, xBase* base)
@@ -325,10 +321,10 @@ void zMusicNotifyEvent(const F32* toParam, xBase* base)
     if (musicEnum != sMusicLastEnum[track] && sMusicQueueData[track] == NULL &&
         (s->countMax == 0 || s->count < s->countMax) && !(s->delay > s->elapsedTime))
     {
-        sMusicQueueData[track] = s;
-        sMusicTimer[track] = s->punchDelay;
-        sMusicQueueData[track]->game_state = (gGameMode == eGameMode_Game);
-        sMusicQueueData[track]->music_enum = musicEnum;
+        sMusicQueueData[s->track] = s;
+        sMusicTimer[s->track] = s->punchDelay;
+        sMusicQueueData[s->track]->game_state = (gGameMode == eGameMode_Game);
+        sMusicQueueData[s->track]->music_enum = musicEnum;
     }
 }
 
@@ -473,10 +469,9 @@ void zMusicUnpause(S32 kill)
 void zMusicSetVolume(float vol, float delay)
 {
     volume.end = vol;
-    volume.inc = volume.end - volume.cur; // This makes it introduce the "frsp" instruction.
+    volume.inc = volume.end - volume.cur;
 
-    if (delay >
-        minDelay) // Doing the if statement likes this makes it generate the "blelr" instruction
+    if (delay > 0.001f)
     {
         volume.inc = volume.inc / delay;
     }
