@@ -388,10 +388,10 @@ float CalcRecipBlendMax(U16* arg0)
         }
         else
         {
-            f3 = 1.0f / (0.0009765625f * arg0[1]);
+            f3 = 1.0f / (arg0[1] / 1024.0f);
         }
 
-        f3 = 0.0009765625f * arg0[0] + f3;
+        f3 = arg0[0] / 1024.0f + f3;
         if (f3 > max)
         {
             max = f3;
@@ -823,50 +823,23 @@ static void _xAnimTableAddTransitionHelper(xAnimState* state, xAnimTransition* t
     }
 }
 
-// WIP
 void _xAnimTableAddTransition(xAnimTable* table, xAnimTransition* tran, const char* source,
                               const char* dest)
 {
-    //   unsigned char * buffer; // r29+0x110
-    //     class xAnimState * * stateList; // r29+0x100
-    //     unsigned int i; // r4
-    //     unsigned int stateCount; // r30
-    //     unsigned int allocCount; // r21
-    //     char * stateName; // r29+0xFC
-    //     class xAnimTransitionList * tlist; // r29+0xE0
-    //     class xAnimTransition * substTransitionList[32]; // r29+0x230
-    //     unsigned int substTransitionCount; // r29+0xD0
-    //     unsigned char hasSubst; // r29+0xC0
-    //     signed int i; // r5
-    //     unsigned char isComplex; // r8
-    //     char * COMPLEX_PATTERNS; // r7
-    //     char * search; // r6
-    //     class xAnimState * state; // r23
-    //     char extra[128]; // r29+0x1B0
-    //     char tempName[128]; // r29+0x130
-    //     char * tempIterator; // r19
-    //     char * extraIterator; // r18
-    //     unsigned char allowMissingState; // r29+0xB0
-    //     signed int i; // r17
-    //     unsigned int extraIteratorLength; // r16
-    //     class xAnimTransition * duplicatedTransition; // r17
-    //     class xAnimTransitionList * curr; // r7
-
     U8* buffer = (U8*)giAnimScratch;
     xAnimState** stateList = (xAnimState**)(giAnimScratch + 0x400);
-    S32 i;
-    U32 stateCount = 0;
+    U32 i;
     U32 allocCount = 0;
+    U32 stateCount = 0;
+    char* stateName;
 
     xAnimTransitionList* tlist;
     xAnimTransition* substTransitionList[32];
+    U32 substTransitionCount = 0;
+    U8 hasSubst = false;
 
     char tempName[128];
     char extra[128];
-
-    U8 bVar2 = false;
-    U32 bVar1 = false;
-    U32 iVar12 = 0;
 
     if (dest != NULL)
     {
@@ -874,56 +847,57 @@ void _xAnimTableAddTransition(xAnimTable* table, xAnimTransition* tran, const ch
         {
             if (dest[i] == '@' || dest[i] == '~')
             {
-                bVar2 = true;
+                hasSubst = true;
                 break;
             }
         }
     }
 
-    for (char* x = xStrTokBuffer(source, " ,\t\n\r", buffer); x != NULL;
-         x = xStrTokBuffer(NULL, " ,\t\n\r", buffer))
+    for (stateName = xStrTokBuffer(source, " ,\t\n\r", buffer); stateName != NULL;
+         stateName = xStrTokBuffer(NULL, " ,\t\n\r", buffer))
     {
-        bVar1 = dest != NULL;
-        if (!bVar1)
+        bool isComplex = dest != NULL;
+        if (!isComplex)
         {
-            for (char* it = x; *it != NULL; ++it)
+            const char* COMPLEX_PATTERNS = "#+*?{}()<>|;";
+            for (char* search = stateName; *search != NULL; ++search)
             {
-                if (_xCharIn(*it, "#+*?{}()<>|;") != 0)
+                if (_xCharIn(*search, COMPLEX_PATTERNS) != 0)
                 {
-                    bVar1 = true;
+                    isComplex = true;
                     break;
                 }
             }
         }
 
-        if (bVar1)
+        if (isComplex)
         {
             for (xAnimState* state = table->StateList; state != NULL; state = state->Next)
             {
-                if (_xCheckAnimName(state->Name, x, tempName))
+                if (_xCheckAnimName(state->Name, stateName, tempName))
                 {
-                    if (bVar2)
+                    if (hasSubst)
                     {
                         // tempName is a run of NUL-separated capture groups written by
                         // _xCheckAnimNameInner, so each '@'/'~' in dest consumes the next one.
-                        const char* tempIterator = tempName;
                         char* extraIterator = extra;
-                        U8 allowMissingState = false;
+                        const char* tempIterator = tempName;
+                        bool allowMissingState = false;
 
-                        for (S32 j = 0; dest[j] != NULL; ++j)
+                        for (S32 i = 0; dest[i] != NULL; ++i)
                         {
-                            if (dest[j] == '@' || dest[j] == '~')
+                            if (dest[i] == '@' || dest[i] == '~')
                             {
-                                allowMissingState = dest[j] == '~';
-                                U32 l = strlen(tempIterator);
+                                allowMissingState = dest[i] == '~';
+                                U32 extraIteratorLength = strlen(tempIterator);
                                 strcpy(extraIterator, tempIterator);
-                                tempIterator += l;
-                                extraIterator += l;
+                                tempIterator += extraIteratorLength;
+                                extraIterator += extraIteratorLength;
                                 tempIterator++;
                             }
                             else
                             {
-                                *extraIterator = dest[j];
+                                *extraIterator = dest[i];
                                 extraIterator++;
                             }
                         }
@@ -935,7 +909,7 @@ void _xAnimTableAddTransition(xAnimTable* table, xAnimTransition* tran, const ch
                             continue;
                         }
 
-                        if (iVar12 != 0)
+                        if (substTransitionCount != 0)
                         {
                             xAnimTransition* duplicatedTransition;
                             if (gxAnimUseGrowAlloc)
@@ -952,8 +926,7 @@ void _xAnimTableAddTransition(xAnimTable* table, xAnimTransition* tran, const ch
                             tran = duplicatedTransition;
                         }
                         tran->Dest = sp;
-                        substTransitionList[iVar12] = tran;
-                        iVar12++;
+                        substTransitionList[substTransitionCount++] = tran;
                     }
                     if (tran->Dest != state)
                     {
@@ -965,7 +938,7 @@ void _xAnimTableAddTransition(xAnimTable* table, xAnimTransition* tran, const ch
         }
         else
         {
-            xAnimState* ssp = xAnimTableGetState(table, x);
+            xAnimState* ssp = xAnimTableGetState(table, stateName);
             if (ssp != NULL && tran->Dest != ssp)
             {
                 _xAnimTableAddTransitionHelper(ssp, tran, stateCount, allocCount, stateList);
@@ -973,23 +946,17 @@ void _xAnimTableAddTransition(xAnimTable* table, xAnimTransition* tran, const ch
         }
     }
 
-    xAnimTransitionList* curr;
     if (stateCount != 0)
     {
-        if (gxAnimUseGrowAlloc)
-        {
-            curr = (xAnimTransitionList*)xMemGrowAlloc(gActiveHeap,
-                                                       stateCount * sizeof(xAnimTransitionList));
-        }
-        else
-        {
-            curr = (xAnimTransitionList*)xMemAlloc(gActiveHeap,
-                                                   stateCount * sizeof(xAnimTransitionList), 0);
-        }
+        tlist = (xAnimTransitionList*)(gxAnimUseGrowAlloc ?
+                                           xMemGrowAlloc(gActiveHeap,
+                                                         stateCount * sizeof(xAnimTransitionList)) :
+                                           xMemAlloc(gActiveHeap,
+                                                     stateCount * sizeof(xAnimTransitionList), 0));
     }
     if (tran->Flags & 0x10)
     {
-        for (S32 i = 0; i < allocCount; ++i)
+        for (i = 0; i < allocCount; ++i)
         {
             if (DefaultOverride(stateList[i], tran) != 0)
             {
@@ -998,47 +965,34 @@ void _xAnimTableAddTransition(xAnimTable* table, xAnimTransition* tran, const ch
 
             if (tran->Conditional == NULL && stateList[i]->Default != NULL)
             {
-                xAnimTransitionList* tail = stateList[i]->Default;
-                while (tail->Next != NULL)
+                xAnimTransitionList* curr = stateList[i]->Default;
+                while (curr->Next != NULL)
                 {
-                    tail = tail->Next;
+                    curr = curr->Next;
                 }
 
-                curr->T = bVar2 ? substTransitionList[i] : tran;
-                curr->Next = NULL;
-                tail->Next = curr;
-                curr++;
+                tlist->T = hasSubst ? substTransitionList[i] : tran;
+                tlist->Next = NULL;
+                curr->Next = tlist;
+                tlist++;
             }
             else
             {
-                curr->T = bVar2 ? substTransitionList[i] : tran;
-                curr->Next = stateList[i]->Default;
-                stateList[i]->Default = curr;
-                curr++;
+                tlist->T = hasSubst ? substTransitionList[i] : tran;
+                tlist->Next = stateList[i]->Default;
+                stateList[i]->Default = tlist;
+                tlist++;
             }
         }
     }
     else
     {
-        if (bVar2)
+        for (i = 0; i < allocCount; ++i)
         {
-            for (S32 i = 0; i < allocCount; ++i)
-            {
-                curr->T = substTransitionList[i];
-                curr->Next = stateList[i]->List;
-                stateList[i]->List = curr;
-                curr++;
-            }
-        }
-        else
-        {
-            for (S32 i = 0; i < allocCount; ++i)
-            {
-                curr->T = tran;
-                curr->Next = stateList[i]->List;
-                stateList[i]->List = curr;
-                curr++;
-            }
+            tlist->T = hasSubst ? substTransitionList[i] : tran;
+            tlist->Next = stateList[i]->List;
+            stateList[i]->List = tlist;
+            tlist++;
         }
     }
 }
