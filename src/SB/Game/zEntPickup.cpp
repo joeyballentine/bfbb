@@ -1160,8 +1160,8 @@ void zEntPickup_Update(zEntPickup* ent, xScene* sc, F32 dt)
             ent->animTime -= duration;
         }
 
-        xQuat* q0 = (xQuat*)giAnimScratch;
-        xVec3* t0 = (xVec3*)((U8*)q0 + 0x410);
+        xQuat* q0 = ((iAnimPose*)giAnimScratch)->quat;
+        xVec3* t0 = ((iAnimPose*)q0)->tran;
 
         iAnimEval(ent->anim, ent->animTime, 0, t0, q0);
         iModelAnimMatrices(ent->model->Data, q0, t0, ent->model->Mat + 1);
