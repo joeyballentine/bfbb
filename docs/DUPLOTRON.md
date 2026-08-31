@@ -6324,3 +6324,70 @@ is worth writing.
 So "1483 functions have no implementation at all", recorded above under the open
 leads, is a whole-project figure dominated by Renderware and Bink. For `src/SB`
 the bucket is closed: the remaining work is all wrong bodies, not absent ones.
+
+## Where the remaining 404 game functions actually sit (2026-08-31, after the day's work)
+
+`classify.py`'s mechanical buckets, restricted to the functions `report.json`
+scores as non-matching:
+
+| class | count | share |
+|---|---|---|
+| OTHER | 145 | 35.9% |
+| SIZE | 120 | 29.7% |
+| SCHED | 72 | 17.8% |
+| REGS | 67 | 16.6% |
+
+So 34.4% is compiler-track by the mechanical reading — **and that is an
+undercount.** A whole day of hand-sampling the SIZE and OTHER rows kept landing
+on register numbering and constant-load placement: `NightLightUVStep` (60.700,
+SIZE), `DiscoRender` (81.053, SIZE), `zNPCCommon::GetParm` (94.490, OTHER),
+`zNPCCommon::Reset` (93.297, OTHER), `xBinaryCamera::update` (91.392, OTHER) and
+`CalcJumpImpulse_Smooth` (88.147, OTHER) are every one of them a permutation or
+a hoist, not a wrong expression. `classify` calls them SIZE or OTHER because one
+extra `mr`, `clrlwi` or rematerialised `li` changes the instruction count, which
+is exactly what a register-allocation difference does.
+
+Treat the SIZE/OTHER buckets as "not yet triaged", not as "source is wrong".
+
+### A patch-neutral witness worth keeping: `NightLightUVStep`
+
+`zNPCSleepy::NightLightUVStep` (`zNPCTypeRobot`, 200 bytes) sits at **60.700%
+under BOTH `GC/2.0p1a` and stock `GC/2.0p1`** — the clauses do not reach it at
+all. Its source is four obviously-correct `+=` pairs over two 2-element static
+float arrays followed by four `RANGEWRAP` calls, and the entire residue is our
+scheduler hoisting a `.sdata2` literal load above a `stfs` to a small static,
+which is the shape clause C and E3n exist to cover.
+
+Small, self-contained, correct source, patch-insensitive. That makes it the best
+first specimen for anyone reworking the clause set.
+
+### Leads recorded, not yet worked
+
+- **`PlayerAbsControl` (zEntPlayer, 5460 b, 97.601) is one callee-saved FP
+  register short.** Target frame 0xd0 saving f26-f31; ours 0xc0 saving f27-f31.
+  By the frame-size rule that is a missing named local, and the source names the
+  candidates for us — it carries six commented-out declarations
+  (`scalemag`, `dir_dp`, `turnfactor`, `diffAngle`, `autodist2d`, `camAngle`).
+  The target also does `fmr f30, f29` right after `stfs f29, maxVelmag`, keeping
+  a second copy of the 0.0f, which is the `fmr` copy-trio shape.
+- **`zEntPlayer_Update` (18,188 b, 96.700)** is a whole-function callee-saved
+  GPR rotation: ours uses r15/r16/r23/r24 where retail uses r26/r27/r17/r18.
+  Everything else lines up. One decision somewhere near the top of the function
+  shifts the entire allocation.
+
+### Measured NO-GOs from the same pass
+
+- **`iCamera` cannot be promoted by suppressing `__as__6RwRGBA`.** The unit is
+  15/15 functions and 64/64 data, and `symorder.py` says the only blocker is a
+  weak `__as__6RwRGBAFRC6RwRGBA` our object emits between `iCameraUpdateFog` and
+  `iCameraSetFogRenderStates` that the target does not have. Copy-initialising
+  `a` and `b` at their point of use instead of declaring them at the top and
+  assigning — the documented way to get a flat word copy instead of an
+  `operator=` — **breaks `iCameraUpdateFog` outright, 100.000 -> 76.024**. So
+  retail assigned, and the weak copy comes with it. Whatever suppresses it is
+  not the assignment shape.
+- **`xAccelMove__FRfRfffff` (99.670) is not a bug.** `bugrank.py` flags it at
+  two terms, and the difference is `mr r4, r3` against our `li r4, 0x1` at
+  `var_r4 = var_r3;` where `var_r3` is provably 1. Rematerialise-vs-copy, the
+  documented class. The source is already correct; the "Possible missing debug
+  subroutine" comment above it is not evidence of anything.
