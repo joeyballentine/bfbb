@@ -303,6 +303,16 @@ namespace
 
 namespace
 {
+    // librw exports exactly one of these as a public compile definition, and
+    // CMakeLists.txt explains why every target of the port has to see it.
+#if defined(RW_D3D9)
+    const char* const kRenderBackend = "D3D9";
+#elif defined(RW_GL3)
+    const char* const kRenderBackend = "OpenGL";
+#else
+    const char* const kRenderBackend = "no renderer";
+#endif
+
     struct StartupBanner
     {
         StartupBanner()
@@ -323,11 +333,12 @@ namespace
             SetUnhandledExceptionFilter(CrashHandler);
             setvbuf(stdout, NULL, _IONBF, 0);
             setvbuf(stderr, NULL, _IONBF, 0);
-            // Names the decoder that is actually linked. A banner claiming a
-            // gap that has since been filled is worse than no banner: it is
-            // the first thing anyone reads when something does not work.
-            printf("bfbb: PC port, D3D9. Movie decoder: %s, movie audio: %s.\n",
-                   iFMVDecoderName(), iFMVAudioName());
+            // Names what is actually linked, renderer included. A banner
+            // claiming a gap that has since been filled -- or a backend that is
+            // not the one running -- is worse than no banner: it is the first
+            // thing anyone reads when something does not work.
+            printf("bfbb: PC port, %s. Movie decoder: %s, movie audio: %s.\n",
+                   kRenderBackend, iFMVDecoderName(), iFMVAudioName());
             if (getenv("BFBB_TEST_CRASH")) { *(volatile int*)0 = 1; }
         }
     };
