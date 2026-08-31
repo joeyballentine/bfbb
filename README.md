@@ -107,6 +107,13 @@ cmake -S . -B build-pc -G Ninja -DCMAKE_CXX_COMPILER=clang++
 cmake --build build-pc
 ```
 
+OR, to build with imgui support:
+
+```sh
+cmake -S . -B build-pc -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DENABLE_IMGUI
+cmake --build build-pc
+```
+
 Run it:
 
 ```sh
