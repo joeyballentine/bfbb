@@ -26,44 +26,46 @@ void xSFXUpdateEnvironmentalStreamSounds(xSFX* pSFXList, U32 numSounds)
     static xSFX* bestSFX[1];
     static F32 bestDist2[1];
 
-    for (U32 i = 0; i < numSounds; i++)
+    U32 i;
+
+    for (i = 0; i < numSounds; i++)
     {
         xSFXUpdate(&pSFXList[i]);
     }
 
     memset(bestSFX, 0, sizeof(bestSFX));
 
-    for (U32 j = 0; j < numSounds; j++)
+    for (i = 0; i < numSounds; i++)
     {
-        if (!(pSFXList[j].asset->flagsSFX & 0x200) || !(pSFXList[j].asset->flagsSFX & 0x1000))
+        if (!(pSFXList[i].asset->flagsSFX & 0x200) || !(pSFXList[i].asset->flagsSFX & 0x1000))
         {
             continue;
         }
-        
+
         xVec3 playPos;
-        xSndProcessSoundPos(&pSFXList[j].asset->pos, &playPos);
+        xSndProcessSoundPos(&pSFXList[i].asset->pos, &playPos);
 
         xVec3 delta = gSnd.pos - playPos;
 
         F32 dist = xVec3Length2(&delta);
-        if (dist > pSFXList[j].cachedOuterDistSquared)
+        if (dist > pSFXList[i].cachedOuterDistSquared)
         {
             continue;
         }
 
         if (*bestSFX == NULL)
         {
-            *bestSFX = &pSFXList[j];
-            *bestDist2 = dist;  
-        } 
-        else if ((*bestSFX)->asset->priority < pSFXList[j].asset->priority)
-        {
-            *bestSFX = &pSFXList[j];
+            *bestSFX = &pSFXList[i];
             *bestDist2 = dist;
         }
-        else if ((*bestSFX)->asset->priority == pSFXList[j].asset->priority && *bestDist2 > dist)
+        else if ((*bestSFX)->asset->priority < pSFXList[i].asset->priority)
         {
-            *bestSFX = &pSFXList[j];
+            *bestSFX = &pSFXList[i];
+            *bestDist2 = dist;
+        }
+        else if ((*bestSFX)->asset->priority == pSFXList[i].asset->priority && *bestDist2 > dist)
+        {
+            *bestSFX = &pSFXList[i];
             *bestDist2 = dist;
         }
     }
