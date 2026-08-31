@@ -6090,3 +6090,87 @@ leave only the entry-4 swap (`BoulderRollCB` 94.437 -> 99.946).
 **100.000%** under stock. They are E3n over-fire cost, paid for by E3n's +82,
 and the narrowing that would rescue them is the conclusively failed 204-probe
 attempt. Nobody should hunt a scheduler defect in them.
+
+### `xVec3::cross`'s brace init: +1 in xCollide, -1 in zEntPlayerBungeeState. REJECTED.
+
+Measured 2026-08-31. The change looks compelling and nets zero.
+
+```diff
+     xVec3 cross(const xVec3& c) const
+     {
+-        xVec3 v = xVec3::m_Null;
++        xVec3 v = { 0.0f, 0.0f, 0.0f };
+```
+
+The evidence for it is real: the target's `cross` in `xCollide.o` references an
+anonymous all-zero 12-byte `.rodata` object (`@410`), `m_Null__5xVec3` does not
+appear in that object at all, and `cross__5xVec3CFRC5xVec3` goes **59.355 ->
+100.000**. All eight TUs that call `.cross(` are `NonMatching`, so the DOL cannot
+move.
+
+It still loses. `start__…hanging_state_type` in `zEntPlayerBungeeState` goes
+**100.000 -> 99.950**, and `rodatalayout.py` says why: that unit's
+`__deadstripped_zEntPlayerBungeeState` already reproduces `@410`, so the brace
+init interns a *second* 12-byte zero template. It lands fifth, not third, and
+shifts every later `.rodata` object by 12 — visible as `addi r5,r30,0x1ec` where
+retail has `0x1e0`. `datamulti.py` cannot see it, because a duplicated all-zero
+object is filtered as padding; only `rodatalayout.py` shows it.
+
+So the two units disagree about whether `cross` interns a template, and one
+header cannot satisfy both. Either the real shape is something else that emits
+the template only where the target has it, or `zEntPlayerBungeeState`'s
+deadstripped block is wrong about `_410` and the ordering has to be re-derived
+there first. Do not re-apply the diff on the xCollide measurement alone.
+
+### `get_grid_index`: 60.558 -> 98.372, banks nothing, held
+
+Also measured, also in a shared header (`xGrid.h`), also not applied — 98.372 is
+worth zero and it is a 169-TU header:
+
+```diff
+ inline grid_index get_grid_index(const xGrid& grid, F32 x, F32 z)
+ {
+-    grid_index index;
+-    index.x = range_limit<U16>((U16)((x - grid.minx) * grid.inv_csizex), 0, grid.nx - 1);
+-    index.z = range_limit<U16>((U16)((z - grid.minz) * grid.inv_csizez), 0, grid.nz - 1);
++    F32 gx = (x - grid.minx) * grid.inv_csizex;
++    F32 gz = (z - grid.minz) * grid.inv_csizez;
++    grid_index index = { range_limit<U16>((U16)gx, 0, grid.nx - 1),
++                         range_limit<U16>((U16)gz, 0, grid.nz - 1) };
+     return index;
+ }
+```
+
+The target's `lwz @587 / stw 0x8(r1)` ahead of the field stores is a brace-init
+template, and the `F32` temps are what hold `gz` in `f31` across the first
+`range_limit` call. The other two `xScene` functions are unchanged by it. Land it
+for fidelity if something else in that unit ever crosses; on its own it is not
+worth the blast radius.
+
+### Levers that paid on 2026-08-31, worth trying first on a new function
+
+- **A missing local shows up as a frame-size difference.** `Process__zNPCGoalWander`
+  had `stwu r1,-0x60` against retail's `-0x70`; the gap was a third `xVec3` that
+  retail passes to `XYZDstSqToPos`. Adding it fixed every offset in the function.
+  Compare the two prologues before anything else.
+- **mwcc unswitches a small loop.** Retail's two adjacent tail loops in
+  `_xAnimTableAddTransition` come from ONE source loop carrying a ternary; written
+  as two they do not share the hoisted preheader or the induction registers. The
+  larger loop earlier in the same function is *not* unswitched, so this is a
+  size heuristic, not a rule about the file.
+- **Operand order inside a folded constant.** `arg0[i] / 1024.0f` and
+  `0.0009765625f * arg0[i]` fold to the same word but emit `fmuls` with the
+  operands swapped. That alone took `CalcRecipBlendMax` 98.293 -> 100.000.
+- **Reading a struct field back forces a second rounding.**
+  `vw.y = 0.75f * (vw.x = itan(...))` matched where
+  `vw.x = itan(...); vw.y = 0.75f * vw.x;` emitted an extra `frsp`.
+- **A hand-written word-by-word struct copy is an inlined assignment.** Seventeen
+  `*(U32*)&a.x = *(U32*)&b.x;` lines in `zSaveLoad_Tick` were one
+  `xMat4x3 m = *xEntGetFrame(...)`, and the hand version did not even follow the
+  struct's field order.
+- **Post-increment subscript recovers an indexed store.** `list[count++] = x`
+  emits `stwx`; `list[count] = x; count++;` does not.
+- **Binding a literal to a named local can stop a hoist.** `const F32 zero = 0.0f;`
+  above the cross products in `nearestFloorCB` put the pool load ahead of the
+  pdx/pdz stores, where retail has it: 95.581 -> 100.000. Same device as
+  `nearestTrackCB`.
