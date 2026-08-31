@@ -190,7 +190,6 @@ poles getting thicker.
 ```ini
 [video]
 draw_distance = on
-alpha_cutout = on
 ```
 
 The consoles stop drawing an object past a distance the level designer set, swap
@@ -202,20 +201,6 @@ It does not affect fog. In a fogged level the far clip plane sits where the
 picture is already fully fogged, so there is nothing behind it to reveal. It
 also does not change how far away the game thinks things are, only what it
 draws.
-
-`alpha_cutout` changes how transparent parts of a texture are drawn. Foliage,
-fences, grates and cave walls are solid shapes cut out of a texture.
-RenderWare's D3D drivers draw these by blending, which leaves a partly
-transparent border one texel wide around the edge of the shape. At the
-resolution the art was drawn for, that border is a soft edge about a pixel wide.
-At 4K it is about six pixels, and you can see the level's own sky through the
-edges of cave walls.
-
-With the setting on, that border is drawn fully solid up to a cutoff and
-discarded past it, so the shape on screen matches the shape in the texture at
-any resolution. `off` gives you the console behaviour. A number from 1 to 255
-sets the cutoff, and `on` means 128. Glass, water, particles and the interface
-are not affected, because they ask to be blended.
 
 ### Soundtrack replacement
 

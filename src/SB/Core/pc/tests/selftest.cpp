@@ -322,7 +322,6 @@ static void test_config()
         check(strstr(buf, "width = 640") != NULL, "and the render width at its default");
         check(strstr(buf, "height = 480") != NULL, "and the height");
         check(strstr(buf, "draw_distance = on") != NULL, "and the draw distance");
-        check(strstr(buf, "alpha_cutout = on") != NULL, "and the alpha cutout");
         check(strstr(buf, "[xbox]") != NULL, "it has the [xbox] section header");
         check(strstr(buf, "glow = on") != NULL, "and glow at its default");
         check(strstr(buf, "distortion = on") != NULL, "and distortion");

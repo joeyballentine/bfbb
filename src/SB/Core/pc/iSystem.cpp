@@ -331,43 +331,6 @@ static iWindowMode WindowModeFromConfig()
     return iWINDOW_FULLSCREEN;
 }
 
-// Where a texture's own transparency is cut, from config.ini's
-// video.alpha_cutout, or 0 for the blend the consoles drew. Held for the same
-// reason sWindowMode is, plus one of its own: the cutout is a render state on
-// a device that does not exist yet when this is read.
-static S32 sAlphaCutoutRef;
-
-static S32 AlphaCutoutFromConfig()
-{
-    const char* value = iConfigGetString("video.alpha_cutout", "on");
-
-    if (iHostStrCaseCmp(value, "off") == 0)
-    {
-        return 0;
-    }
-    if (iHostStrCaseCmp(value, "on") == 0)
-    {
-        return 128;
-    }
-
-    // Anything else is a reference, and is REJECTED rather than clamped outside
-    // 1 to 255. 0 already spells off and 256 does not mean anything, so a value
-    // out there was meant to do something this cannot do -- clamping it would
-    // silently do something else instead and look like the setting working.
-    char* end;
-    long ref = strtol(value, &end, 10);
-
-    if (end != value && *end == '\0' && ref >= 1 && ref <= 255)
-    {
-        return (S32)ref;
-    }
-
-    printf("bfbb: config: video.alpha_cutout is not on, off or 1-255, using the "
-           "default: %s\n",
-           value);
-    return 128;
-}
-
 // The size of the shadow raster, from config.ini's video.shadow_resolution.
 // 0 means auto: derive it from the render size instead of pinning a number.
 // Read back through iShadowResolution rather than pushed, because xShadowInit
@@ -417,11 +380,10 @@ static S32 ShadowResolutionFromConfig()
     }
 
     // Anything else is a power of two, 64 to 4096, and is REJECTED rather than
-    // clamped or rounded, for the reason the alpha cutout is: D3D9 refuses a
-    // non-power-of-two render target on hardware without that capability, and
-    // the refusal arrives as a shadow camera that failed to build -- no
-    // character shadows at all, and nothing anywhere naming the setting that
-    // caused it.
+    // clamped or rounded: D3D9 refuses a non-power-of-two render target on
+    // hardware without that capability, and the refusal arrives as a shadow
+    // camera that failed to build -- no character shadows at all, and nothing
+    // anywhere naming the setting that caused it.
     char* end;
     long res = strtol(value, &end, 10);
 
@@ -457,7 +419,6 @@ static const char* WindowModeName(iWindowMode mode)
 static void ApplyConfig()
 {
     sWindowMode = WindowModeFromConfig();
-    sAlphaCutoutRef = AlphaCutoutFromConfig();
     sShadowResPinned = ShadowResolutionFromConfig();
 
     // The render size, before RenderWareInit opens the window at it. Pushed the
@@ -514,16 +475,6 @@ static void ApplyConfig()
     // Said out loud, and always, because these change what the game looks and
     // sounds like. Someone reporting that the port looks wrong should not have
     // to be asked whether they have a config.ini -- the log already says.
-    char cutout[16];
-    if (sAlphaCutoutRef == 0)
-    {
-        strcpy(cutout, "off");
-    }
-    else
-    {
-        sprintf(cutout, "%d", (int)sAlphaCutoutRef);
-    }
-
     const char* path = iConfigPath();
     // The shadow size is said with where it came from, because auto and a
     // pinned number that happen to agree are worth telling apart when someone
@@ -531,10 +482,10 @@ static void ApplyConfig()
     char shadows[24];
     sprintf(shadows, "%d%s", (int)iShadowResolution(), sShadowResPinned != 0 ? "" : " (auto)");
 
-    printf("bfbb: %s -- %s; draw distance %s; alpha cutout %s; shadows %s; Xbox features: "
+    printf("bfbb: %s -- %s; draw distance %s; shadows %s; Xbox features: "
            "glow %s, distortion %s, snapshot %s, reverb %s\n",
            path != NULL ? path : "no config.ini, defaults", WindowModeName(sWindowMode),
-           drawDistance ? "unlimited" : "console", cutout, shadows, glow ? "on" : "off",
+           drawDistance ? "unlimited" : "console", shadows, glow ? "on" : "off",
            distortion ? "on" : "off", snapshot ? "on" : "off", reverb ? "on" : "off");
     printf("bfbb: text rewritten for a PC: %s\n", wording ? "on" : "off");
 }
@@ -631,20 +582,14 @@ void iSystemInit(U32 options)
         exit(1);
     }
 
-    // The cutout, only now: it is a render state, and until RenderWareInit
-    // returns there is no device to set one on. ApplyConfig decided the value
-    // several hundred lines above, where every other setting is decided and
-    // where a bad one gets reported with the rest.
+    // The reference every alpha test is measured against, which librw leaves
+    // at 10 and the console leaves at 1. Only now: it is a render state, and
+    // until RenderWareInit returns there is no device to set one on.
+    // renderstate.cpp says why the value matters.
     //
     // Declared here rather than in a header for the same reason
     // rwSetColorWriteMask is at iDraw.cpp:80 -- one seam, one caller.
     {
-        void rwSetAlphaCutout(U32 ref);
-        rwSetAlphaCutout((U32)sAlphaCutoutRef);
-
-        // And the reference everything else is tested against, which librw
-        // leaves at 10 and the console leaves at 1. Same moment, same reason --
-        // there is no device before this. renderstate.cpp says why it matters.
         void rwSetConsoleAlphaTest(void);
         rwSetConsoleAlphaTest();
     }

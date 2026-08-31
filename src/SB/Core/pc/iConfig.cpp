@@ -114,21 +114,6 @@ namespace
           "; lower-detail models, and clipped the world at 400 units. Off restores\n"
           "; those limits exactly. Fog is unaffected, and nothing extra is\n"
           "; simulated -- only drawn." },
-        { "video", "alpha_cutout", "on",
-          "Draw texture transparency as a hard edge instead of a fade, on scenery\n"
-          "; the game draws as solid.\n"
-          ";\n"
-          "; Foliage, fences, grates and cave walls are shapes punched out of a\n"
-          "; texture. The consoles blended the half-transparent pixels at the edge\n"
-          "; of the shape, which is a one-pixel soft edge at 640x480 but six pixels\n"
-          "; of sky showing through the level at 4K. On, those pixels are drawn\n"
-          "; solid up to a cutoff and dropped after it, so the silhouette matches\n"
-          "; the artwork at any resolution.\n"
-          ";\n"
-          "; off matches the consoles. A number from 1 to 255 sets the cutoff:\n"
-          "; lower keeps more of the band and stays softer, higher trims the shape.\n"
-          "; on means 128. Glass, water, particles and the interface are unaffected\n"
-          "; -- they ask to be blended, and are." },
         { "video", "shadow_resolution", "auto",
           "How sharp the shadows under characters are.\n"
           ";\n"

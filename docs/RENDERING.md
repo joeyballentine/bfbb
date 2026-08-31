@@ -83,12 +83,11 @@ should be split out so nobody has to compute it.
 
 ### Alpha-to-coverage
 
-This pairs directly with the existing `video.alpha_cutout` setting, which turns
-the soft blended band at a cutout's edge into a hard cut. The hard cut is
-correct at any resolution but it is aliased, and MSAA will not fix it because
-the edge comes from an alpha test rather than from geometry. Alpha-to-coverage
-is a single render state and it gives that silhouette proper antialiasing.
-Highest gain per line in part one.
+The game cuts out its own foliage, fences and grates with an alpha test. Those
+edges are aliased, and MSAA will not fix them because the edge comes from the
+test rather than from geometry. Alpha-to-coverage is a single render state and
+it gives that silhouette proper antialiasing. Highest gain per line in part
+one.
 
 ### Per-pixel fog
 
@@ -200,9 +199,8 @@ should start this work expecting a backend to already be sitting there.
 - `default_PS.hlsl` is `diffuse * texture` then a fog lerp. That is one texture
   stage set to `MODULATE(TEXTURE, DIFFUSE)`, and fixed-function fog.
 - `im2d` is pre-transformed 2D. `D3DFVF_XYZRHW`.
-- Alpha test, including the `alpha_cutout` work, is render state
-  (`D3DRS_ALPHATESTENABLE`, `ALPHAREF`, `ALPHAFUNC`) rather than shader code, so
-  it crosses over unchanged.
+- Alpha test is render state (`D3DRS_ALPHATESTENABLE`, `ALPHAREF`,
+  `ALPHAFUNC`) rather than shader code, so it crosses over unchanged.
 - matfx environment mapping maps to `D3DTSS_TCI_CAMERASPACEREFLECTIONVECTOR`
   plus a second blended stage. Fiddly rather than hard. It needs two texture
   stages, which is exactly what DX7-era parts have, so it just fits.
