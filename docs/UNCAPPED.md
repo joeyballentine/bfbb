@@ -660,9 +660,81 @@ The claim that the `drot.angle` DECAY rebase was wrong was itself wrong:
 `zNPCGoalRobo.cpp:3729` builds the value as `dt * -bonkSpinRate`, so it is a
 rate times the frame and the `xpow` rebase is right.
 
+## The second sweep
+
+Everything above came out of the first pass and the play test that followed it.
+A second pass went after three shapes the first had no scan for.
+
+### Ribbons and streaks: joints laid per frame
+
+Every ribbon in the game draws joints from ONE pool -- `joint_alloc.init(...,
+32, 128)` at `xFX.cpp:2906`, so 4096 joints for the whole game -- and
+`xFXRibbon::insert` evicts a ribbon's own tail when that pool is full. So a
+ribbon that lays a joint per frame does not just get denser at 240 fps, it
+shortens every other ribbon on screen with it.
+
+    zEntCruiseBubble.cpp:1087   the wake's `samples <= 0` floor threw the carry
+                                away and took a sample anyway. Carries the
+                                unspent time now, so the frame that does sample
+                                still spans the whole path
+    zNPCTypeDutchman.cpp:3329   the eye scorch subdivides by distance and then
+                                adds one more joint for the leftover. The
+                                subdivided joints stay; the leftover is gated
+    zNPCTypeBossSandy.cpp:2105  the Poseidome laser show, fixed in the first
+                                pass, is the same shape -- two joints a frame,
+                                each pair a separate beam
+
+`xFXStreakUpdate` is the same thing one level up. It advances the head when
+`elapsed > frequency`, and almost every streak starts with a frequency of `0.0f`
+or `-1.0f`, both of which are always true. The head moves once a frame and the
+fifty elements span fifty frames. The player's melee and spin trails and the
+bubble wand are all in that group.
+
+`zLasso.cpp`'s `fizzicalCenter`, `fizzicalNormal` and `fizzicalHonda` are FIR
+filters over a five-slot ring pushed once per frame. Rebasing a coefficient
+cannot fix a FIR window, so `zLasso_Update` runs at 60 Hz instead.
+
+### Probability gates
+
+A random draw against a constant, on a path that runs once per frame, is a rate
+per frame. `xFrameEmitChance` rebases it. The first pass found the bubble pop;
+the second found one more:
+
+    zNPCTypeAmbient.cpp:494     jellyfish lightning, a twentieth chance a frame
+                                through `xUtil_yesno` -- the indirection is why
+                                a grep for `xurand` missed it. Two bolts a
+                                flash out of a 48-bolt pool, so a shoal can
+                                starve every other lightning effect in the scene
+
+### Facing filters written as two calls
+
+`x = 0.9*x + 0.1*target` does not look like `x *= 0.9f` when it is spelled
+
+    xVec3SMul(&frame->mat.at, &model->Mat->at, 0.9f);
+    xVec3AddScaled(&frame->mat.at, &newAt, 0.1f);
+
+`xEntBeginUpdate` copies `model->Mat` into `frame->mat` and `xEntEndUpdate`
+copies it back, so the value read is last frame's own output. Sandy does this
+in all eight of her goals and turns four times as fast at 240 fps, which costs
+the player the lead-in before a charge. `xEntBoulder.cpp:611` does it to the
+boulder's spin axis and rate, which costs the skid after a deflection, and
+`zEntPlayer.cpp:14359`'s `0.95f * hangDist + 0.2f` does it to the lasso swing
+radius, which turns the rope into a rigid rod.
+
+### Frame counters, again
+
+    zNPCGoalDuplotron.cpp:213   `cnt_destruct = 120; // 2 seconds`. The whole
+                                self-destruct body now runs at 60 Hz, which also
+                                fixes the light strobe and the overheat smoke
+                                throttle inside it
+    zNPCHazard.cpp:1985         `cnt_skipcol` staggers a hazard's collision test
+                                five or six frames apart to spread the load.
+                                Counted in frames it is four times as many
+                                chances to connect at 240 fps
+
 ## Telling a real site from a false one
 
-Five things wear the same clothes, in rough order of how often they turn up:
+Eight things wear the same clothes, in rough order of how often they turn up:
 
 1. A RATE. Multiplied by a timestep, ACCUMULATES into persistent state. Needs
    `dt`. Example: the hazard spin rates.
@@ -682,6 +754,17 @@ Five things wear the same clothes, in rough order of how often they turn up:
    `xFX.cpp:364`, which stalled the whole ring pool at anything over 1000 fps.
    The rest of the codebase's guards are at 1e-5, which is 100,000 fps and out
    of reach; that one was at 1e-3.
+7. A BOUNDED HISTORY. A fixed number of slots -- a ribbon's joint queue, a
+   streak's fifty elements, a FIR filter's five-sample ring -- pushed once per
+   frame. The window is then measured in frames, so the trail gets shorter and
+   the filter less smooth as the frame rate rises. No coefficient can be
+   rebased to fix this; the samples have to arrive at a fixed rate. Examples:
+   `xFXStreakUpdate`, `zLasso_Update`, the cruise bubble wake.
+8. AN ACCUMULATOR NEVER TAKEN BACK. `x += dt; if (x < period) return;` with no
+   `x -= period` anywhere. It reads as a rate limiter and is one exactly once,
+   after which the gate stays open and the body runs every frame. Example:
+   `sSteamAnimTime` in `zParPTank.cpp`, which made steam die in eight host
+   frames rather than eight sixtieths of a second.
 
 What separates 1 from 2 is whether the value survives the frame. If it is reset
 at the top of the function, or consumed and discarded, it is integrating nothing
