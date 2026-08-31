@@ -336,6 +336,19 @@ void xScrFxUpdateLetterBox(RwCamera*, F32 seconds)
 
     F32 o = mLetterboxO;
 
+#ifdef PLATFORM_PC
+    // sLetterBoxSize is SB.INI's `ScrFxLetterBoxSize`, 32, and its unit is a
+    // pixel of the console's 640x480 framebuffer -- a fifteenth of the height.
+    // Drawn as an absolute pixel count on a render size the console never had,
+    // the same 32 covers a sixty-seventh of a 2160-tall screen, which reads as
+    // no bars at all.
+    //
+    // The ramp above is left in console pixels. Its rate is a fixed 100 px/s,
+    // so scaling the distance rather than the draw would stretch the third of a
+    // second the bars take to slide in by the same factor as the screen.
+    o *= xScreenHeightF() * (1.0f / 480.0f);
+#endif
+
     if (o > 0.0f)
     {
         RwVideoMode video_mode;

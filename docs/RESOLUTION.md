@@ -180,6 +180,14 @@ and the autosave smoke all take the screen size rather than the UI box. That
 split is what makes this widescreen rather than a stretch, and it is the rule
 for anything added later.
 
+An effect sized by a *tuning value* rather than by the screen needs that value
+scaled as well. The letterbox is the one case: `SB.INI` gives its bar thickness
+as `ScrFxLetterBoxSize = 32`, and the unit is a pixel of the console's 640x480
+framebuffer. Taken literally at 3840x2160 the bars come out under a quarter of
+the height they should be, so `xScrFxUpdateLetterBox` multiplies by
+`xScreenHeightF() / 480` at the draw. The bar's slide-in stays in console pixels
+because its rate is a fixed 100 px/s.
+
 What is NOT done is anchoring the HUD to the true screen edges. At 16:9 the
 interface sits inside the centred 4:3 box, about 12% in from each side. Pushing
 the in-game HUD out to the corners would look more native and needs a per-widget
