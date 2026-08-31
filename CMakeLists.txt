@@ -20,6 +20,43 @@
 #     proves this build has not changed that one.
 
 cmake_minimum_required(VERSION 3.16)
+
+# 32-bit is a project-wide constraint, not a preference. gMemInfo.DRAM.addr is
+# a U32 and xMemInitHeap does pointer arithmetic on it as an integer; every
+# asset-overlaid struct addresses memory in 32 bits; and sizeof(xSndVoiceInfo)
+# is 100, which iSndPlay divides a byte offset by. On LP64 all of that is
+# wrong. See docs/PCPORT-HANDOFF.md 5(a): 162/198 units compile 64-bit against these
+# headers and 195/198 under -m32.
+#
+# tools/pcprogress.py measures with the same flag. If you change it here, change
+# it there -- the two disagreeing is how the metric lied once before.
+#
+# THIS HAS TO COME BEFORE project(). project() runs CMake's compiler detection,
+# which compiles and then LINKS a test program. This build runs with the 32-bit
+# MSVC libraries on LIB (vcvarsall x86, or ilammy/msvc-dev-cmd with arch: x86),
+# but clang++ still targets x86-64 unless told otherwise -- so without the flag
+# the probe links a 64-bit object against 32-bit import libraries and dies with
+#
+#     lld-link: error: <root>: undefined symbol: mainCRTStartup
+#
+# before a line of this file's own configuration is reached. Setting it after
+# project() with add_compile_options was too late and is what broke the PC port
+# workflow on every run.
+#
+# CMAKE_<LANG>_FLAGS_INIT seeds CMAKE_<LANG>_FLAGS as each language is enabled,
+# so this reaches the submodules as well: SDL calls its own project() and
+# enables C there. The one cost of _INIT over add_compile_options: it is read
+# once, when the language is enabled, so flipping BFBB_BUILD_32BIT in an
+# existing build directory does nothing. Configure a fresh one.
+option(BFBB_BUILD_32BIT "Build 32-bit, which the asset layouts require" ON)
+if(BFBB_BUILD_32BIT)
+  set(CMAKE_C_FLAGS_INIT "-m32")
+  set(CMAKE_CXX_FLAGS_INIT "-m32")
+  set(CMAKE_EXE_LINKER_FLAGS_INIT "-m32")
+  set(CMAKE_SHARED_LINKER_FLAGS_INIT "-m32")
+  set(CMAKE_MODULE_LINKER_FLAGS_INIT "-m32")
+endif()
+
 project(bfbb-pc CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -60,21 +97,6 @@ add_compile_definitions(_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH)
 # __declspec out on this build, which is also what made __declspec(deprecated)
 # start meaning something.
 add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
-
-# 32-bit is a project-wide constraint, not a preference. gMemInfo.DRAM.addr is
-# a U32 and xMemInitHeap does pointer arithmetic on it as an integer; every
-# asset-overlaid struct addresses memory in 32 bits; and sizeof(xSndVoiceInfo)
-# is 100, which iSndPlay divides a byte offset by. On LP64 all of that is
-# wrong. See docs/PCPORT-HANDOFF.md 5(a): 162/198 units compile 64-bit against these
-# headers and 195/198 under -m32.
-#
-# tools/pcprogress.py measures with the same flag. If you change it here, change
-# it there -- the two disagreeing is how the metric lied once before.
-option(BFBB_BUILD_32BIT "Build 32-bit, which the asset layouts require" ON)
-if(BFBB_BUILD_32BIT)
-  add_compile_options(-m32)
-  add_link_options(-m32)
-endif()
 
 # --- render backend ----------------------------------------------------------
 # Which of librw's three the port is built against.
