@@ -40,6 +40,28 @@ bool xSphereHitsBound(const xSphere& o, const xBound& b);
 void xQuickCullForSphere(xQCData* q, const xSphere* s);
 void xCameraRotate(xCamera* cam, const xVec3& at, F32 roll, F32 time, F32 accel, F32 decl);
 
+// These structs were used in deadstripped functions.
+// This function is here to force the symbols to be linked.
+//
+// The target opens .rodata with the same eleven unreferenced all-zero
+// templates other units carry -- four of 0x0C and seven of 0x28 -- which
+// offsets every later .rodata relocation.
+void __deadstripped_zEntCruiseBubble_head()
+{
+    const char _405[0x0C] = {};
+    const char _406[0x0C] = {};
+    const char _410[0x0C] = {};
+    const char _441[0x0C] = {};
+
+    const char _624[0x28] = {};
+    const char _625[0x28] = {};
+    const char _626[0x28] = {};
+    const char _627[0x28] = {};
+    const char _628[0x28] = {};
+    const char _629[0x28] = {};
+    const char _630[0x28] = {};
+}
+
 const basic_rect<F32> screen_bounds = { 0.0f, 0.0f, 1.0f, 1.0f };
 const basic_rect<F32> default_adjust = { 0.0f, 0.0f, 1.0f, 1.0f };
 
@@ -50,6 +72,14 @@ namespace cruise_bubble
         tweak_group normal_tweak;
         tweak_group cheat_tweak;
         xMat4x3 start_cam_mat;
+
+        // Two more unreferenced templates the target holds between
+        // default_adjust and wake_ribbon_curve.
+        void __deadstripped_zEntCruiseBubble_rects()
+        {
+            const char _822[0x10] = {};
+            const char _881[0x0C] = {};
+        }
 
         const xFXRibbon::curve_node wake_ribbon_curve[2] = {
             { 0.0f, { 0xFF, 0xFF, 0xFF, 0x64 }, 0.3f },
