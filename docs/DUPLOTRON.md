@@ -1981,6 +1981,56 @@ Both populations are real: stock `GC/2.0p1` keeps **0 of 11** zEntPlayer winners
 while giving AnimTable 100.000. One rule must split them and **nothing in the
 state clause E3n is given does**.
 
+#### What the six unpromotable units actually are
+
+Diagnosed 2026-08-31. The blocker is **weak out-of-line copies of inline
+functions**, not function bodies -- every function in all six is already
+100%.
+
+CodeWarrior emits an out-of-line copy of an inline (`operator=`, a static
+helper, a template member) into whichever object first needs it, and the
+linker keeps ONE copy across the whole link. dtk carves the target objects out
+of the linked dol, so a copy the retail linker resolved elsewhere is simply
+absent from the target object. When our object emits that symbol, or emits it
+at a different position, OUR copy wins the link, its address moves, and every
+`bl` to it in every other unit moves with it. That is why promoting one unit
+perturbs `xFont.o`, `xFX.o`, `xScrFx.o` and `xTRC.o`.
+
+Comparing definition order has to be restricted to symbols present in BOTH
+objects or the extras alone make every unit look reordered:
+
+| unit | order of common symbols | extras in ours |
+|---|---|---|
+| `zAnimList` (control, promotes) | OK | 0 |
+| `iCamera` | **OK** | 1 (`__as__6RwRGBA`) |
+| `zSurface` | **OK** | 1 (`__as__5xVec3`) |
+| `xDebug` | one symbol displaced | 1 |
+| `xParEmitterType` | differs from #15/27 | 7 |
+| `zShrapnel` | differs from #15/37 | 5 |
+| `xHudMeter` | differs from #1/15 | 4 |
+
+`iCamera` and `zSurface` have correct order, so their defect is content or the
+extra symbol, not layout.
+
+**`xDebug` is diagnosed and is NOT source-reachable.** Promoted alone it is
+120 differing bytes, and the whole cause is that
+`__as__10iColor_tagFRC10iColor_tag` sits at emission index 12 instead of 10
+(target: `create__5xfont`, `__as__10iColor_tag`, `NSCREENY`, `NSCREENX`; ours
+swaps the operator= to last). Two source attempts inside
+`__deadstripped_xDebug` failed to move it: adding `iColor_tag c; c = col;`
+(dead-store eliminated, no reference emitted) and then feeding `c` to
+`xfont::create` so the assignment survives. Neither changed the emission
+index, so the position is not controlled from that function. The reason is
+almost certainly that all six real functions in `xDebug.cpp` are `// Redacted.
+:}` empty stubs -- it was retail's actual bodies that fixed where the operator=
+copy got queued, and a synthetic `__deadstripped_` helper reproduces the symbol
+SET but not the ORDER. Do not spend another session on xDebug's ordering
+without first recovering those bodies.
+
+**`__deadstripped_` helpers are not themselves a blocker.** They link `UNUSED`
+(confirmed in `main.elf.MAP` for `__deadstripped_zVar__Fv` and
+`__deadstripped_xHudText`), so they never reach the dol.
+
 #### Unit promotion is an audit, and six of seven units fail it
 
 `tools/promotable.py` lists units whose every function is 100% but which
