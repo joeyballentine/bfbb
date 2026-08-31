@@ -490,7 +490,7 @@ config.libs = [
             Object(Matching, "SB/Core/x/xutil.cpp"),
             Object(Matching, "SB/Core/x/xVec3.cpp"),
             Object(Matching, "SB/Game/zActionLine.cpp"),
-            Object(Equivalent, "SB/Game/zAnimList.cpp"),
+            Object(Matching, "SB/Game/zAnimList.cpp"),
             Object(Equivalent, "SB/Game/zAssetTypes.cpp", extra_cflags=["-sym on"]),
             Object(NonMatching, "SB/Game/zCamera.cpp"),
             Object(Matching, "SB/Game/zConditional.cpp"),

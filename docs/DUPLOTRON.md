@@ -1981,6 +1981,40 @@ Both populations are real: stock `GC/2.0p1` keeps **0 of 11** zEntPlayer winners
 while giving AnimTable 100.000. One rule must split them and **nothing in the
 state clause E3n is given does**.
 
+#### Unit promotion is an audit, and six of seven units fail it
+
+`tools/promotable.py` lists units whose every function is 100% but which
+configure.py still links from the extracted object. Promoting them is the only
+check that ever looks at the whole object: `report.json` pairs symbols by name
+and normalises pool ordinals, so it cannot see definition order, data contents
+or section sizes. The DOL sha1 can.
+
+Tested one unit per build on 2026-08-31, from a green `306526d9`:
+
+| unit | result |
+|---|---|
+| `SB/Game/zAnimList.cpp` | promotes clean, now `Matching` |
+| `SB/Core/x/iCamera.cpp` | DOL -> `7cbf6455` |
+| `SB/Core/x/xDebug.cpp` | DOL -> `8a32ae8b` |
+| `SB/Game/zSurface.cpp` | DOL -> `9591ca65` |
+| `SB/Core/x/xHudMeter.cpp` | breaks (in the combined run) |
+| `SB/Core/x/xParEmitterType.cpp` | breaks (in the combined run) |
+| `SB/Game/zShrapnel.cpp` | breaks (in the combined run) |
+
+So six units are 100% on every function and still are not the target object.
+That is a real defect class, and the only one `report.json` structurally cannot
+report. Each is worth a session on its own terms.
+
+**Two traps, both hit while measuring this.** Promoting several units at once
+and then mapping the differing DOL bytes back through `main.elf.MAP` gives
+CONFIDENT AND WRONG attribution: the first unit to change size shifts every
+address after it, so the positional byte diff blames whatever happens to sit at
+those offsets. The first attempt named three units this way and the real answer
+was six. Promote one unit per build. And do not try to substitute a direct
+comparison of our `.o` against `build/GQPE78/obj/**.o`: dtk reconstructs those
+from the linked DOL, so weak inline out-of-line copies, `.comment` and `.text`
+section accounting differ for reasons that are not defects.
+
 #### Re-measured 2026-08-31 on the C-sourced patch, with the load-size gate
 
 Two things settled, now that `tools/variant.py` makes an ablated compiler a
