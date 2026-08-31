@@ -512,6 +512,83 @@ static void test_images()
     check(RwImageSetFromRaster(NULL, NULL) == NULL, "RwImageSetFromRaster(NULL, NULL) is refused");
 }
 
+// The alpha classification a DXT surface gets at load, which decides whether a
+// texture is blended, cut or left alone entirely.
+//
+// Worth checking by hand because every one of the three formats hides its
+// alpha somewhere different -- DXT1 in the ORDER of its two colour endpoints,
+// DXT3 in a nibble per texel, DXT5 in two endpoints plus a 3-bit index whose
+// ramp changes shape depending on which endpoint is larger -- and a bit order
+// got wrong in any of them misreads the artwork rather than failing.
+static void test_alpha_kind()
+{
+    printf("\nDXT alpha classification\n");
+
+    // DXT1 carries its transparency in the block mode: colour endpoints stored
+    // high-to-low are the four-colour opaque mode, low-to-high reserves index
+    // three for a hole.
+    const RwUInt8 dxt1Opaque[8] = { 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+    const RwUInt8 dxt1Keyed[8] = { 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00 };
+    const RwUInt8 dxt1NoHole[8] = { 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00 };
+
+    check(rw::d3d::classifyDXTAlpha(1, dxt1Opaque, 4, 4) == rw::d3d::ALPHAOPAQUE,
+          "a four-colour DXT1 block is opaque");
+    check(rw::d3d::classifyDXTAlpha(1, dxt1Keyed, 4, 4) == rw::d3d::ALPHAKEYED,
+          "a three-colour DXT1 block using its hole is keyed");
+    check(rw::d3d::classifyDXTAlpha(1, dxt1NoHole, 4, 4) == rw::d3d::ALPHAOPAQUE,
+          "and is opaque when it never indexes the hole -- the mode alone is not "
+          "transparency");
+
+    // DXT3 stores four bits per texel outright, low nibble first, so 15 is the
+    // only opaque value and 0 the only clear one.
+    RwUInt8 dxt3[16];
+    memset(dxt3, 0, sizeof(dxt3));
+    memset(dxt3, 0xFF, 8);
+    check(rw::d3d::classifyDXTAlpha(3, dxt3, 4, 4) == rw::d3d::ALPHAOPAQUE,
+          "every DXT3 nibble at 15 is opaque");
+
+    dxt3[0] = 0x0F; // texel 0 opaque, texel 1 clear
+    check(rw::d3d::classifyDXTAlpha(3, dxt3, 4, 4) == rw::d3d::ALPHAKEYED,
+          "a DXT3 nibble at 0 among opaque ones is keyed");
+
+    dxt3[0] = 0x8F; // texel 1 lands in between
+    check(rw::d3d::classifyDXTAlpha(3, dxt3, 4, 4) == rw::d3d::ALPHAGRADED,
+          "and one nibble anywhere in between makes the whole surface graded");
+
+    // DXT5: alpha0 above alpha1 is the eight-value ramp, and every index in
+    // between the two endpoints lands off both ends.
+    RwUInt8 dxt5[16];
+    memset(dxt5, 0, sizeof(dxt5));
+    dxt5[0] = 0xFF;
+    dxt5[1] = 0x00;
+    check(rw::d3d::classifyDXTAlpha(5, dxt5, 4, 4) == rw::d3d::ALPHAOPAQUE,
+          "a DXT5 block indexing only its high endpoint is opaque");
+
+    dxt5[2] = 0x09; // texels 0 and 1 take index 1, the low endpoint
+    check(rw::d3d::classifyDXTAlpha(5, dxt5, 4, 4) == rw::d3d::ALPHAKEYED,
+          "one indexing both endpoints, 255 and 0, is keyed");
+
+    dxt5[2] = 0x02; // texel 0 takes index 2, six sevenths of the way up
+    check(rw::d3d::classifyDXTAlpha(5, dxt5, 4, 4) == rw::d3d::ALPHAGRADED,
+          "and one reaching an interpolated step is graded");
+
+    // A surface smaller than the 4x4 block grid is padded out to it, and what
+    // the encoder left in the padding is not the artwork. Reading it would
+    // classify a small opaque texture off whatever happened to be there.
+    memset(dxt3, 0, sizeof(dxt3));
+    dxt3[0] = 0xFF; // texels 0 and 1 -- the top row of a 2x2
+    dxt3[1] = 0x08; // texel 2, outside a 2-wide surface, in between
+    dxt3[2] = 0xFF; // texels 4 and 5 -- the bottom row
+    check(rw::d3d::classifyDXTAlpha(3, dxt3, 4, 4) == rw::d3d::ALPHAGRADED,
+          "the padding of a 2x2 surface is graded when read as a whole block");
+    check(rw::d3d::classifyDXTAlpha(3, dxt3, 2, 2) == rw::d3d::ALPHAOPAQUE,
+          "and is not read at all at the surface's real size");
+
+    check(rw::d3d::classifyDXTAlpha(2, dxt3, 4, 4) == rw::d3d::ALPHAGRADED,
+          "a format that is not DXT1, 3 or 5 is graded -- the safe answer, and "
+          "the one every raster had before this existed");
+}
+
 static void test_cameras()
 {
     printf("RwCamera\n");
@@ -3456,6 +3533,7 @@ int main()
     test_streams();
     test_textures();
     test_images();
+    test_alpha_kind();
     test_cameras();
     test_lights();
     test_worlds();
