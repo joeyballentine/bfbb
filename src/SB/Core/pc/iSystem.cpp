@@ -426,6 +426,7 @@ static void ApplyConfig()
     // is read by game code, which must not learn what config.ini is.
     iScreenSetSize(iConfigGetInt("video.width", 640), iConfigGetInt("video.height", 480));
     iScreenSetMultiSample(iConfigGetInt("video.msaa", 4));
+    iScreenSetAlphaToCoverage(iConfigGetBool("video.alpha_to_coverage", TRUE));
 
     // How the interface sits on a screen that is not 4:3. Nothing to report
     // when it cannot matter, which is every 4:3 render size.

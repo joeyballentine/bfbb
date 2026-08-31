@@ -404,6 +404,11 @@ static void test_config()
         check(strstr(buf, "width = 640") != NULL, "and the render width at its default");
         check(strstr(buf, "height = 480") != NULL, "and the height");
         check(strstr(buf, "draw_distance = on") != NULL, "and the draw distance");
+        check(strstr(buf, "msaa = 4") != NULL, "and the sample count");
+        // Written as its own setting, not folded into the one above. Coverage
+        // needs samples and does nothing without them, but that is a fact about
+        // what the two mean together, not a reason for one to imply the other.
+        check(strstr(buf, "alpha_to_coverage = on") != NULL, "and alpha to coverage separately");
         check(strstr(buf, "[xbox]") != NULL, "it has the [xbox] section header");
         check(strstr(buf, "glow = on") != NULL, "and glow at its default");
         check(strstr(buf, "distortion = on") != NULL, "and distortion");

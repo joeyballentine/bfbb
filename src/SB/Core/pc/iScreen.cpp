@@ -272,6 +272,21 @@ void iScreenSetMultiSample(S32 samples)
     sMultiSample = samples;
 }
 
+// Whether the alpha edges of a cutout are drawn as sample coverage. Needs
+// samples to spread across, so it does nothing at one; that is not a mistake to
+// report, it is just what the two settings together mean.
+static S32 sAlphaToCoverage = 1;
+
+S32 iScreenAlphaToCoverage()
+{
+    return sAlphaToCoverage;
+}
+
+void iScreenSetAlphaToCoverage(S32 on)
+{
+    sAlphaToCoverage = on ? 1 : 0;
+}
+
 void iScreenSetSize(S32 width, S32 height)
 {
     if (width <= 0 || height <= 0 || width > kMaxDimension || height > kMaxDimension)

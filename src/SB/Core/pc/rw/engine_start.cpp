@@ -364,6 +364,7 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     // Samples first: the surfaces are made when the size is set, and how many
     // samples they carry has to be decided before they exist.
     rw::d3d::setVirtualScreenSamples(iScreenMultiSample());
+    rw::d3d::setAlphaToCoverageEnabled(iScreenAlphaToCoverage());
     rw::d3d::setVirtualScreen(iScreenWidth(), iScreenHeight());
     if (!rw::Engine::open(&params))
     {
