@@ -163,6 +163,21 @@ directionals plus ambient is about forty instructions of the sixty-four
 available. Unused light slots are uploaded zeroed rather than skipped, which is
 what makes one shader cover every light count.
 
+Both backends have it. The two implementations differ in one interesting way.
+D3D9 needs a whole second set of pixel shader constants, because its constants
+are per-stage; GL3 needs none, because a uniform of the same name declared in
+both stages is one uniform in the linked program and `Shader::create` resolves
+locations against the whole program. And GL3's shader keeps the light loop,
+where ps_2_0 has neither loops nor branches and has to unroll.
+
+Writing the GL3 side turned up a live bug in `setLights`: it bailed out of its
+loops with a `goto` that landed past all five `setUniform` calls, so an atomic
+lit by exactly `MAX_LIGHTS` lights drew with the previous atomic's lights.
+Reachable here -- the game ships a light kit of eight directionals, and
+`MAX_LIGHTS` is eight. Fixed. That is the second bug found by making the two
+backends do the same thing, which is the argument part two makes for a second
+pipeline.
+
 ### Better bloom
 
 The glow chain is faithful to the Xbox: two passes, four taps, weights and tap

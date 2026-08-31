@@ -184,10 +184,7 @@ namespace
           ";\n"
           "; The level itself barely moves, because its lighting was baked into\n"
           "; the artwork rather than computed. Characters and objects are what\n"
-          "; this is for.\n"
-          ";\n"
-          "; Direct3D 9 only. An OpenGL build says so at startup and lights per\n"
-          "; vertex whatever this is set to." },
+          "; this is for." },
         { "video", "shadow_resolution", "auto",
           "How sharp the shadows under characters are.\n"
           ";\n"
