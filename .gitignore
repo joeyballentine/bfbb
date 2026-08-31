@@ -42,3 +42,6 @@ compile_commands.json
 
 # Analysis output
 classify.json
+
+# Coordinator scratch space for analysis output; never part of a build.
+scratch/

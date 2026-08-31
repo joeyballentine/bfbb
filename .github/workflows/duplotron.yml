@@ -1,0 +1,145 @@
+name: Duplotron
+
+# CI for the duplotron branch.
+#
+# The Build workflow is upstream's and is the wrong shape here. It exists to
+# prove main still links byte-identically, so it treats anything less as a
+# failure, and it feeds bfbbdecomp's progress website from artifacts this fork
+# has no business writing. On a branch whose whole point is that most units are
+# deliberately NonMatching, a red X carries no information.
+#
+# This one reports instead. It fails only on a real regression, which
+# tools/gcgate.py defines as either of two things: the DOL sha1 moving, or the
+# matched-function count going DOWN. The second is the one that matters here --
+# NonMatching units link from the extracted object, so their source can regress
+# to 0% with the DOL still green, and that is exactly where all the work is.
+
+on:
+  push:
+    branches: [duplotron]
+  pull_request:
+    branches: [duplotron]
+  workflow_dispatch:
+
+# One run per ref. A push while a build is in flight cancels the stale one,
+# which also stops two runs racing to write the badge commit.
+concurrency:
+  group: duplotron-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  metrics:
+    name: Build and report
+    # The same private container upstream's Build uses: it carries /orig (the
+    # retail DOL, which is not and cannot be in the repo), /binutils and
+    # /compilers.
+    container: ghcr.io/bfbbdecomp/bfbb-build:main
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          # Needed so the badge commit can be pushed back to the branch.
+          ref: ${{ github.event_name == 'pull_request'
+                   && github.event.pull_request.head.sha
+                   || github.ref }}
+
+      - name: Git config
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Prepare
+        run: |
+          cp -R /orig .
+          # tools/patch_compiler.py writes GC/2.0p1a NEXT TO the stock GC/2.0p1,
+          # so the compilers directory has to be writable. /compilers belongs to
+          # the container image; copy it rather than mutating it.
+          cp -R /compilers ./compilers
+
+      - name: Build
+        run: |
+          python configure.py --map --version GQPE78 \
+              --binutils /binutils --compilers ./compilers
+          ninja
+          ninja build/GQPE78/report.json build/GQPE78/progress.json
+
+      # The gate. Exits non-zero only if the DOL moved or functions regressed;
+      # "not everything matches yet" is the normal state and is not a failure.
+      - name: Regression gate
+        run: python tools/gcgate.py
+
+      - name: Report
+        run: |
+          {
+            echo "## duplotron"
+            echo
+            python tools/badges.py --summary --report build/GQPE78/report.json
+            echo
+            echo '```'
+            python tools/metrics.py build/GQPE78/report.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # On a pull request the badges are informational only -- the branch is
+      # what publishes them, and a PR cannot push to it.
+      - name: Check badges are current
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: python tools/badges.py --check
+
+      - name: Update badges and gate baseline
+        if: github.event_name == 'push'
+        run: |
+          python tools/badges.py --write
+          python tools/gcgate.py --update
+          if git diff --quiet README.md tools/gcgate.json; then
+            echo "nothing to update"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md tools/gcgate.json
+          git commit -m "chore(ci): Update the progress badges [skip ci]"
+          git push origin HEAD:${{ github.ref_name }}
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: GQPE78_report
+          path: |
+            build/GQPE78/report.json
+            build/GQPE78/progress.json
+
+  # Advisory only. --non-matching links every src/SB unit from OUR object, which
+  # is what the PC port and the playtest disc need, and it can break on a unit
+  # the matching build never links. Worth knowing about; not worth failing the
+  # branch over, because it says nothing about whether the decomp regressed.
+  link-non-matching:
+    name: Link check (advisory)
+    container: ghcr.io/bfbbdecomp/bfbb-build:main
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Git config
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Prepare
+        run: |
+          cp -R /orig .
+          cp -R /compilers ./compilers
+
+      - name: Build non-matching
+        run: |
+          python configure.py --non-matching --version GQPE78 \
+              --binutils /binutils --compilers ./compilers
+          ninja

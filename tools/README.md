@@ -216,3 +216,26 @@ metrics.py [path/to/report.json]
 
 Per-category exact and fuzzy percentages with function and unit counts. The two
 have decoupled, so quote both.
+
+### `badges.py` — regenerate the README's progress badges
+
+```
+badges.py                    print the six values
+badges.py --check            exit 1 if the README is out of date
+badges.py --write            rewrite the badge lines in place
+badges.py --summary          markdown table with deltas, for a CI job summary
+```
+
+The badge URLs are the only place this fork publishes its numbers, and they
+were hand-maintained, so they drifted -- before this existed they read 7250
+functions where `report.json` said 7251, and the percentages were truncated
+rather than rounded.
+
+**The README is the snapshot.** `--summary`'s deltas come from parsing the
+values already in the README before rewriting them, so there is no second build
+and no extra state file that can fall out of sync. That is also why `--check`
+is a useful PR gate on its own.
+
+Encoding order matters and is easy to get wrong: shields.io wants a literal `-`
+doubled, and the percent-encoding has to run `%` first, then space, then `/`.
+Encoding the space before the percent turns `%20` into `%2520`.
