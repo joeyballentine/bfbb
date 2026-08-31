@@ -27,6 +27,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(PC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/pc)
 
+option(ENABLE_IMGUI "Use ImGui menus from within the game" OFF)
+
 # Not a style preference. The source is full of *(U32*)&someFloat, written that
 # way because it made CodeWarrior emit the right instruction; GCC and Clang at
 # -O2 are entitled to miscompile it. See "Other things that will bite" in
@@ -278,6 +280,21 @@ if(WIN32)
   endif()
 endif()
 
+# --- dear imgui ---------------------------------------------------------------
+# Vendored at src/imgui with RenderWare backend taken from librw
+set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/imgui)
+add_library(imgui STATIC
+  ${IMGUI_DIR}/imgui.cpp
+  ${IMGUI_DIR}/imgui_draw.cpp
+  ${IMGUI_DIR}/imgui_tables.cpp
+  ${IMGUI_DIR}/imgui_widgets.cpp
+  ${IMGUI_DIR}/imgui_demo.cpp
+  ${IMGUI_DIR}/imgui_impl_rw.cpp
+  ${IMGUI_DIR}/imgui_impl_win32.cpp
+)
+target_link_libraries(imgui PUBLIC librw)
+target_compile_options(imgui PRIVATE -Wno-everything)
+
 # --- the RenderWare shim -----------------------------------------------------
 # The RenderWare C API, implemented on top of librw's rw:: C++ one. See
 # src/SB/Core/pc/rw/README.md for why this layer has to exist -- librw is a
@@ -299,6 +316,13 @@ target_include_directories(bfbb_rw PUBLIC
 )
 target_link_libraries(bfbb_rw PUBLIC librw)
 target_compile_options(bfbb_rw PRIVATE -Wno-everything)
+
+if(ENABLE_IMGUI)
+  target_compile_options(bfbb_rw PUBLIC -DENABLE_IMGUI)
+  target_link_libraries(bfbb_rw PUBLIC imgui)
+  target_include_directories(bfbb_rw PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/imgui)
+endif()
+
 
 # --- the platform layer ------------------------------------------------------
 # Only the interfaces that are implemented. The rest of the i* set is listed in
@@ -443,6 +467,7 @@ add_library(bfbb_platform STATIC
   ${AUDIO_SOURCES}
   ${HOST_SOURCES}
   ${FMV_SOURCES}
+  ${PC_DIR}/iImgui.cpp
 )
 
 # NOT just for the include path: this is what gives bfbb_platform the backend

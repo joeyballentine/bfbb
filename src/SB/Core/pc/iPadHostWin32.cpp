@@ -1,3 +1,4 @@
+#include "iImgui.h"
 #include "iPadHost.h"
 
 #include "xPad.h"
@@ -21,6 +22,7 @@
 // itself.
 
 #include "iConfig.h"
+#include "iImgui.h"
 #include "iHost.h"
 #include "iPadBind.h"
 
@@ -432,8 +434,12 @@ static void PollKeyboard(iPadHostState* s)
 {
     s->connected = true;
 
-    if (GetActiveWindow() == NULL)
-    {
+    if (
+        GetActiveWindow() == NULL
+#ifdef ENABLE_IMGUI
+        || iImguiWantCapture()
+#endif
+    ) {
         // Focus is elsewhere. Still connected -- reporting the pad as unplugged
         // because the user alt-tabbed would drop the game into its reconnect
         // screen -- but nothing held, so the character stops rather than

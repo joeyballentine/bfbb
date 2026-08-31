@@ -3,6 +3,7 @@
 #include "iDrawDist.h"
 #include "iFile.h"
 #include "iHost.h"
+#include "iImgui.h"
 #include "iPad.h"
 #include "iPadHost.h"
 #include "iScreen.h"
@@ -250,6 +251,7 @@ static S32 RenderWareInit()
         RwEngineTerm();
         return TRUE;
     }
+    iImguiInit();
     RwTextureSetReadCallBack(TextureRead);
     RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLBACK);
     xShadowInit();

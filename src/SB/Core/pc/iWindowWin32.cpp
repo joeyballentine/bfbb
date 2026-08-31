@@ -83,8 +83,19 @@ static void MakeProcessDpiAware()
     SetProcessDPIAware();
 }
 
+#ifdef ENABLE_IMGUI
+#include "imgui.h"
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+#endif
 static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
+    #ifdef ENABLE_IMGUI
+    if(ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam))
+    {        
+        return true;
+    }
+    #endif
+    
     switch (msg)
     {
     case WM_CLOSE:

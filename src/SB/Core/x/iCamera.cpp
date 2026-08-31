@@ -1,5 +1,6 @@
 #include "iCamera.h"
 
+#include "iImgui.h"
 #include "xDrawDist.h"
 #include "xScreen.h"
 #include "xShadow.h"
@@ -112,10 +113,12 @@ void iCameraBegin(RwCamera* cam, S32 clear)
 
     RwCameraSetNearClipPlane(cam, sCameraNearClip);
     RwCameraBeginUpdate(cam);
+    iImguiNewFrame();
 }
 
 void iCameraEnd(RwCamera* cam)
 {
+    iImguiRender();
     iScrFxCameraEndScene(cam);
     RwCameraEndUpdate(cam);
     iScrFxPostCameraEnd(cam);
