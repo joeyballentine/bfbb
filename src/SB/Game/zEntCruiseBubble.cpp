@@ -133,6 +133,9 @@ namespace cruise_bubble
                 F32 bubbles;
                 xMat4x3 mat;
                 xQuat dir;
+#ifdef PLATFORM_PC
+                F32 unspent_dt;
+#endif
             } trail;
             struct
             {
@@ -1080,12 +1083,33 @@ namespace cruise_bubble
                 return;
             }
 
+#ifdef PLATFORM_PC
+            // sample_rate is joints a second and shared.trail.samples carries the
+            // unspent fraction, but the floor below throws that carry away and
+            // takes a sample anyway. Above sample_rate frames a second the floor
+            // fires every frame, so the wake gains a joint however little the
+            // bubble moved, and the ribbon holds a fixed number of joints, so the
+            // wake gets shorter the faster the game runs.
+            //
+            // Carry the unspent time next to the unspent fraction and hand the
+            // whole span to the frame that does sample, so the samples still
+            // cover the path travelled since the last one.
+            shared.trail.unspent_dt += dt;
+#endif
+
             F32 nsamples = shared.trail.samples + dt * current_tweak->trail.sample_rate;
             shared.trail.samples = nsamples;
             S32 samples = (S32)nsamples;
 
             if (samples <= 0)
             {
+#ifdef PLATFORM_PC
+                // A rate of zero means every frame; any other rate waits.
+                if (current_tweak->trail.sample_rate > 0.0f)
+                {
+                    return;
+                }
+#endif
                 shared.trail.samples = 0.0f;
                 samples = 1;
             }
@@ -1094,6 +1118,11 @@ namespace cruise_bubble
                 // float cast
                 shared.trail.samples = nsamples - (F32)samples;
             }
+
+#ifdef PLATFORM_PC
+            dt = shared.trail.unspent_dt;
+            shared.trail.unspent_dt = 0.0f;
+#endif
 
             xMat4x3 end_mat;
             xQuat end_dir;

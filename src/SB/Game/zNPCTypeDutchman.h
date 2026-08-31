@@ -396,8 +396,13 @@ struct zNPCGoalDutchmanBeam : zNPCGoalCommon
     void refresh_beam(S32);
     void start_effects(S32, F32);
     void add_miss_effects(S32, F32);
+#ifdef PLATFORM_PC
+    void add_blast_effects(S32, F32, bool scorch = true);
+    void add_effects(S32, F32, bool scorch = true);
+#else
     void add_blast_effects(S32, F32);
     void add_effects(S32, F32);
+#endif
     void predict_target(xVec3&) const;
 
     static xFactoryInst* create(S32 who, RyzMemGrow* grow, void* info);

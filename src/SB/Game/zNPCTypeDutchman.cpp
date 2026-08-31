@@ -318,6 +318,11 @@ namespace
     static zParEmitter* hand_trail_emitter;
     static zParEmitter* blob_emitter;
     static xFXRibbon eye_scorch[2];
+#ifdef PLATFORM_PC
+    // Unspent time since each beam's last per-frame scorch joint. File scope to
+    // match eye_scorch: there is only ever one Dutchman.
+    static F32 eye_scorch_dt[2];
+#endif
     static sound_data_type sound_data[6];
 
     static void init_sound()
@@ -3279,7 +3284,20 @@ void zNPCGoalDutchmanBeam::update_beam(F32 dt, beam_data& beam, S32 which)
     beam.vel = vel;
 
     refresh_beam(which);
+#ifdef PLATFORM_PC
+    eye_scorch_dt[which] += dt;
+
+    bool scorch = eye_scorch_dt[which] >= 1.0f / 60.0f;
+
+    if (scorch)
+    {
+        eye_scorch_dt[which] = 0.0f;
+    }
+
+    add_effects(which, ddt, scorch);
+#else
     add_effects(which, ddt);
+#endif
 }
 
 void zNPCGoalDutchmanBeam::refresh_beam(S32 which)
@@ -3317,7 +3335,11 @@ void zNPCGoalDutchmanBeam::add_miss_effects(S32 which, F32 dt)
     owner.beam[which].segments++;
 }
 
+#ifdef PLATFORM_PC
+void zNPCGoalDutchmanBeam::add_blast_effects(S32 which, F32 dt, bool scorch)
+#else
 void zNPCGoalDutchmanBeam::add_blast_effects(S32 which, F32 dt)
+#endif
 {
     zNPCDutchman::beam_end& end = owner.beam[which].end[owner.beam[which].segments];
 
@@ -3326,8 +3348,23 @@ void zNPCGoalDutchmanBeam::add_blast_effects(S32 which, F32 dt)
 
     owner.beam[which].segments++;
 
+#ifdef PLATFORM_PC
+    // update_beam subdivides by distance and then always adds one more joint for
+    // the leftover, so a slow-moving beam still lays a joint every frame. Those
+    // joints come out of the one 4096-joint pool every ribbon in the game shares,
+    // and a full pool makes every ribbon drop its oldest joints, so four times
+    // the frames would eat the pool four times as fast. The subdivided joints are
+    // distance-driven and stay; only the leftover joint is gated, and at 60 fps
+    // it always passes.
+    if (scorch)
+    {
+        eye_scorch[which].insert(beam[which].loc, 0.0f, 1.0f, 1.0f, beam[which].ribbon_flags);
+        beam[which].ribbon_flags = 0;
+    }
+#else
     eye_scorch[which].insert(beam[which].loc, 0.0f, 1.0f, 1.0f, beam[which].ribbon_flags);
     beam[which].ribbon_flags = 0;
+#endif
 
     plasma_emitter_settings.pos = beam[which].loc;
     owner.emit_particles(*plasma_emitter, dt, plasma_emitter_settings);
@@ -3347,7 +3384,11 @@ void zNPCGoalDutchmanBeam::add_blast_effects(S32 which, F32 dt)
 #endif
 }
 
+#ifdef PLATFORM_PC
+void zNPCGoalDutchmanBeam::add_effects(S32 which, F32 dt, bool scorch)
+#else
 void zNPCGoalDutchmanBeam::add_effects(S32 which, F32 dt)
+#endif
 {
     // `offset` is const so that the scheduler does not treat the store of its
     // initialiser as aliasing the tweak/literal loads that retail hoists above
@@ -3361,7 +3402,11 @@ void zNPCGoalDutchmanBeam::add_effects(S32 which, F32 dt)
     }
     else
     {
+#ifdef PLATFORM_PC
+        add_blast_effects(which, dt, scorch);
+#else
         add_blast_effects(which, dt);
+#endif
     }
 }
 
