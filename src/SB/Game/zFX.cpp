@@ -187,6 +187,9 @@ tweak_callback tweak_callback::create_change(void (*on_change)(const tweak_info&
 
 static void init_poppers();
 static void setup_entrails(zScene&);
+#ifdef PLATFORM_PC
+static void drop_entrails();
+#endif
 void zFX_SceneEnter(RpWorld* world)
 {
     xFXanimUV2PSetTexture(NULL);
@@ -211,6 +214,21 @@ void zFX_SceneExit(RpWorld* world)
 {
     xFX_SceneExit(world);
     zFXGoo_SceneExit();
+
+#ifdef PLATFORM_PC
+    // Both of these hold xEnt pointers into the scene that is going away, and
+    // the entrail array is itself scene-heap memory.
+    //
+    // Nothing rebuilds them for the menu. zMain.cpp's menu path calls
+    // xFX_SceneEnter directly rather than zFX_SceneEnter, so init_poppers and
+    // setup_entrails run for game scenes only -- entrails_size survives the
+    // scene it was counted for, and zMenuLoop's zSceneUpdate then runs
+    // update_entrails over freed memory. Quitting to the menu from a level with
+    // entrails in it is a use-after-free that the console gets away with
+    // because its heap stays mapped and readable.
+    reset_poppers();
+    drop_entrails();
+#endif
 }
 
 void zFX_SceneReset()
@@ -2065,6 +2083,18 @@ namespace
         emitted = 0.0f;
     }
 } // namespace
+
+#ifdef PLATFORM_PC
+// Forget the array rather than reset it: the memory it names belongs to the
+// scene heap and is gone by the time this runs, so walking it to call reset()
+// would be the very access this is here to prevent. setup_entrails allocates a
+// fresh one for the next scene.
+static void drop_entrails()
+{
+    entrails = NULL;
+    entrails_size = 0;
+}
+#endif
 
 void update_entrails(F32 dt)
 {
