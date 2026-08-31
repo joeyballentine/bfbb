@@ -296,7 +296,7 @@ namespace
                                         10.0f,
                                         10.0f,
                                         30.0f,
-                                        -DEG2RAD(10) } };
+                                        -0.17453292f } };
     static tweak_group tweak;
     static zParEmitter* plasma_emitter;
     static xParEmitterCustomSettings plasma_emitter_settings;
