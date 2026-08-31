@@ -131,8 +131,12 @@ def main():
         print("README badges are current")
         return 0
 
-    for label, _, _ in BADGES:
-        print("%-18s %s" % (label, want[label]))
+    # Plain listing only when no mode was asked for. --summary already
+    # printed the table, and the workflow pipes that straight into the job
+    # summary, where a second copy in a different format is just noise.
+    if "--summary" not in sys.argv:
+        for label, _, _ in BADGES:
+            print("%-18s %s" % (label, want[label]))
     return 0
 
 
