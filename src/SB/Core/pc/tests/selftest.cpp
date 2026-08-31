@@ -1082,15 +1082,6 @@ static void test_pad_stick_deadzone()
     check(y > 0.99f, "up is positive, as iPadHost.h specifies");
 }
 
-#ifdef BFBB_INPUT_BACKEND_WIN32
-// The button conversion inside iPadHostWin32.cpp, which is named rather than
-// static so this file can reach it. Declared here rather than pulled in from a
-// header, so that a change to its signature is caught at link time instead of
-// the test silently retargeting itself at something else.
-#include <windows.h>
-#include <xinput.h>
-U32 iPadHostWin32ConvertButtons(const XINPUT_GAMEPAD& gp);
-
 // The button bits, restated rather than included from xPad.h -- the same
 // reasoning as the sound table above. These are the values the GAME reads, so
 // a test that took them from the same header as the code under test could not
@@ -1110,6 +1101,15 @@ U32 iPadHostWin32ConvertButtons(const XINPUT_GAMEPAD& gp);
 #define TEST_PAD_SQUARE 0x40000 // Y on the GameCube
 #define TEST_PAD_TRIANGLE 0x80000 // B on the GameCube
 #define TEST_PAD_Z 0x100000
+
+#ifdef BFBB_INPUT_BACKEND_WIN32
+// The button conversion inside iPadHostWin32.cpp, which is named rather than
+// static so this file can reach it. Declared here rather than pulled in from a
+// header, so that a change to its signature is caught at link time instead of
+// the test silently retargeting itself at something else.
+#include <windows.h>
+#include <xinput.h>
+U32 iPadHostWin32ConvertButtons(const XINPUT_GAMEPAD& gp);
 
 static void test_pad_win32_buttons()
 {
@@ -1186,6 +1186,239 @@ static void test_pad_win32_buttons()
 
     gp.wButtons = XINPUT_GAMEPAD_BACK;
     check(iPadHostWin32ConvertButtons(gp) == 0, "and stops answering to what it had");
+}
+#endif
+
+#ifdef BFBB_INPUT_BACKEND_SDL
+#include <SDL3/SDL.h>
+
+// A controller that is not there.
+//
+// SDL's virtual joystick driver presents one to the rest of SDL exactly as a
+// real device: same enumeration, same generated gamepad mapping, same arriving
+// and leaving events. That makes it the only way to test the half of
+// iPadHostSDL.cpp a fake input struct cannot reach -- which SDL button becomes
+// which of the game's, that a device arriving mid-session is picked up, and
+// that one leaving is dropped.
+//
+// What it does NOT cover is a real driver: DirectInput, HIDAPI and raw input
+// are the reason this backend exists and none of them is exercised here. This
+// checks the code above them.
+
+// The virtual driver hands out button and axis indices by walking the
+// SDL_GamepadButton and SDL_GamepadAxis enums and packing the bits that are
+// set in the masks below. With every bit from SOUTH to DPAD_RIGHT set, and
+// every axis, index N is enum value N -- which is what lets the checks below
+// pass an SDL_GamepadButton straight through as a joystick button number.
+#define TEST_SDL_BUTTON_MASK ((1u << (SDL_GAMEPAD_BUTTON_DPAD_RIGHT + 1)) - 1u)
+#define TEST_SDL_AXIS_MASK ((1u << (SDL_GAMEPAD_AXIS_RIGHT_TRIGGER + 1)) - 1u)
+
+// Which port the virtual pad ended up on, and the handle that drives it.
+static S32 sVirtualPort = -1;
+static SDL_Joystick* sVirtualJoystick;
+
+static U32 virtual_buttons()
+{
+    const iPadHostState* s = (sVirtualPort >= 0) ? iPadHostGet(sVirtualPort) : NULL;
+    return (s != NULL) ? s->buttons : 0;
+}
+
+// Everything up, every stick centred, both triggers at rest. Queued only --
+// the caller polls.
+static void virtual_neutral()
+{
+    for (S32 i = 0; i <= SDL_GAMEPAD_BUTTON_DPAD_RIGHT; i++)
+    {
+        SDL_SetJoystickVirtualButton(sVirtualJoystick, i, false);
+    }
+    for (S32 i = 0; i <= SDL_GAMEPAD_AXIS_RIGHTY; i++)
+    {
+        SDL_SetJoystickVirtualAxis(sVirtualJoystick, i, 0);
+    }
+
+    // A trigger rests at the BOTTOM of its axis rather than the centre, which
+    // is how the gamepad layer gets 0..32767 out of a signed axis.
+    SDL_SetJoystickVirtualAxis(sVirtualJoystick, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, SDL_MIN_SINT16);
+    SDL_SetJoystickVirtualAxis(sVirtualJoystick, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, SDL_MIN_SINT16);
+}
+
+static void virtual_release_all()
+{
+    virtual_neutral();
+    iPadHostPoll();
+}
+
+// Hold one button and nothing else, let the backend see it, and report what the
+// game would read. Everything else is put back to neutral first: a check that
+// inherited a held trigger from the check before it would be reading two
+// buttons and blaming one.
+//
+// The virtual driver applies queued state at the next joystick update, which is
+// what iPadHostPoll's own SDL_PollEvent loop triggers -- so one poll is enough,
+// and a second would only paper over it not being.
+static U32 virtual_press(SDL_GamepadButton button)
+{
+    virtual_neutral();
+    SDL_SetJoystickVirtualButton(sVirtualJoystick, (S32)button, true);
+    iPadHostPoll();
+    return virtual_buttons();
+}
+
+// A trigger's raw axis runs the full signed range and the gamepad layer
+// rescales it to 0..32767, so a raw value is very nearly twice the gamepad one
+// less 32768. These two bracket the backend's 7710 threshold with enough room
+// that rounding cannot decide the answer.
+#define TEST_SDL_TRIGGER_OFF ((Sint16)(-18768)) // about 7000 to the gamepad layer
+#define TEST_SDL_TRIGGER_ON ((Sint16)(-15768)) // about 8500
+
+static void test_pad_sdl_virtual()
+{
+    if (!SDL_WasInit(SDL_INIT_GAMEPAD))
+    {
+        printf("    (SDL's gamepad subsystem did not start; the virtual pad is skipped)\n");
+        return;
+    }
+
+    SDL_VirtualJoystickDesc desc;
+    SDL_INIT_INTERFACE(&desc);
+    desc.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+    desc.naxes = SDL_GAMEPAD_AXIS_RIGHT_TRIGGER + 1;
+    desc.nbuttons = SDL_GAMEPAD_BUTTON_DPAD_RIGHT + 1;
+    desc.button_mask = TEST_SDL_BUTTON_MASK;
+    desc.axis_mask = TEST_SDL_AXIS_MASK;
+    desc.name = "bfbb self-test pad";
+
+    SDL_JoystickID id = SDL_AttachVirtualJoystick(&desc);
+    check(id != 0, "a virtual gamepad attaches");
+    if (id == 0)
+    {
+        printf("    (%s)\n", SDL_GetError());
+        return;
+    }
+
+    check(SDL_IsGamepad(id), "and SDL gives it a layout, so it is a gamepad and not just a stick");
+
+    sVirtualJoystick = SDL_OpenJoystick(id);
+    check(sVirtualJoystick != NULL, "and a handle to drive it with");
+    if (sVirtualJoystick == NULL)
+    {
+        SDL_DetachVirtualJoystick(id);
+        return;
+    }
+
+    // The arriving device, through the same event the game gets. Which port it
+    // lands on is not fixed -- the harness config pins input.controller, and a
+    // controller on the developer's desk takes a slot first -- so the port is
+    // found by pressing a button and seeing which one moves rather than
+    // assumed.
+    iPadHostPoll();
+
+    sVirtualPort = -1;
+    for (S32 i = 0; i <= SDL_GAMEPAD_BUTTON_DPAD_RIGHT; i++)
+    {
+        SDL_SetJoystickVirtualButton(sVirtualJoystick, i, i == SDL_GAMEPAD_BUTTON_SOUTH);
+    }
+    iPadHostPoll();
+
+    for (S32 p = 0; p < IPAD_MAX_CONTROLLERS; p++)
+    {
+        const iPadHostState* s = iPadHostGet(p);
+        if (s != NULL && s->connected && s->buttons == TEST_PAD_X)
+        {
+            sVirtualPort = p;
+            break;
+        }
+    }
+
+    check(sVirtualPort >= 0, "a controller that arrives mid-session reaches a port");
+    if (sVirtualPort < 0)
+    {
+        SDL_CloseJoystick(sVirtualJoystick);
+        SDL_DetachVirtualJoystick(id);
+        sVirtualJoystick = NULL;
+        return;
+    }
+
+    // SDL names the face buttons by POSITION, and that is the whole reason a
+    // config.ini written for an Xbox pad works on a Switch one: south is the
+    // button under your thumb on every controller ever made, and only the
+    // letter printed on it changes. These four are that claim.
+    check(virtual_press(SDL_GAMEPAD_BUTTON_SOUTH) == TEST_PAD_X,
+          "the south face button is the GameCube's A");
+    check(virtual_press(SDL_GAMEPAD_BUTTON_EAST) == TEST_PAD_TRIANGLE,
+          "east is the GameCube's B");
+    check(virtual_press(SDL_GAMEPAD_BUTTON_WEST) == TEST_PAD_O, "west is the GameCube's X");
+    check(virtual_press(SDL_GAMEPAD_BUTTON_NORTH) == TEST_PAD_SQUARE,
+          "north is the GameCube's Y");
+
+    check(virtual_press(SDL_GAMEPAD_BUTTON_START) == TEST_PAD_START, "start is start");
+    check(virtual_press(SDL_GAMEPAD_BUTTON_DPAD_UP) == TEST_PAD_UP, "the d-pad comes through");
+    check(virtual_press(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) == 0,
+          "LB maps to nothing, as on the other backend");
+
+    // RB is the GameCube's Z, and held it promotes the triggers to L2 and R2
+    // INSTEAD of L1 and R1 -- the exclusivity iPadBind.h's '!' exists for.
+    check(virtual_press(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) == TEST_PAD_Z,
+          "RB alone is the GameCube's Z");
+
+    virtual_release_all();
+    SDL_SetJoystickVirtualAxis(sVirtualJoystick, SDL_GAMEPAD_AXIS_LEFT_TRIGGER,
+                               TEST_SDL_TRIGGER_OFF);
+    SDL_SetJoystickVirtualAxis(sVirtualJoystick, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER,
+                               TEST_SDL_TRIGGER_OFF);
+    iPadHostPoll();
+    check(virtual_buttons() == 0, "a trigger short of the threshold does nothing");
+
+    SDL_SetJoystickVirtualAxis(sVirtualJoystick, SDL_GAMEPAD_AXIS_LEFT_TRIGGER,
+                               TEST_SDL_TRIGGER_ON);
+    SDL_SetJoystickVirtualAxis(sVirtualJoystick, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER,
+                               TEST_SDL_TRIGGER_ON);
+    iPadHostPoll();
+    check(virtual_buttons() == (TEST_PAD_L1 | TEST_PAD_R1),
+          "the triggers are L1 and R1 once past it");
+
+    SDL_SetJoystickVirtualButton(sVirtualJoystick, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, true);
+    iPadHostPoll();
+    U32 modified = virtual_buttons();
+    check(modified == (TEST_PAD_Z | TEST_PAD_L2 | TEST_PAD_R2),
+          "Z held turns the triggers into L2 and R2");
+    check((modified & (TEST_PAD_L1 | TEST_PAD_R1)) == 0, "and stops reporting L1 and R1");
+
+    // The harness config.ini rebinds one button -- `select = ls` -- so this is
+    // the whole path from that line to the bits the game reads, on this backend
+    // too. Without it the binding layer could be inert on the SDL side and
+    // every check above would still pass on the defaults.
+    check(virtual_press(SDL_GAMEPAD_BUTTON_LEFT_STICK) == TEST_PAD_SELECT,
+          "a rebound button answers to what config.ini gave it");
+    check(virtual_press(SDL_GAMEPAD_BUTTON_BACK) == 0, "and stops answering to what it had");
+
+    // The sticks, and the one thing about them this backend has to get right
+    // that the XInput one does not: SDL reports Y the way a screen does, down
+    // positive, and iPadHost.h asks for it the way the GameCube's stick does.
+    virtual_release_all();
+    SDL_SetJoystickVirtualAxis(sVirtualJoystick, SDL_GAMEPAD_AXIS_LEFTY, SDL_MIN_SINT16);
+    iPadHostPoll();
+
+    const iPadHostState* s = iPadHostGet(sVirtualPort);
+    check(s != NULL && s->stick_y > 0.99f, "a stick pushed up reads positive, not negative");
+    check(s != NULL && s->stick_x > -0.01f && s->stick_x < 0.01f,
+          "and the axis it was not pushed along stays at zero");
+
+    virtual_release_all();
+    s = iPadHostGet(sVirtualPort);
+    check(s != NULL && s->buttons == 0 && s->stick_y == 0.0f, "released, it reads neutral again");
+
+    // And leaving. The XInput backend has to poll for this; here it is an
+    // event, so it is worth checking the event is actually acted on.
+    SDL_CloseJoystick(sVirtualJoystick);
+    sVirtualJoystick = NULL;
+    check(SDL_DetachVirtualJoystick(id), "the virtual gamepad detaches");
+
+    iPadHostPoll();
+    s = iPadHostGet(sVirtualPort);
+    check(s != NULL && !s->connected, "and the port it was on reports no controller");
+
+    sVirtualPort = -1;
 }
 #endif
 
@@ -1297,6 +1530,10 @@ static void test_pad()
 
 #ifdef BFBB_INPUT_BACKEND_WIN32
     test_pad_win32_buttons();
+#endif
+
+#ifdef BFBB_INPUT_BACKEND_SDL
+    test_pad_sdl_virtual();
 #endif
 
     test_pad_bindings();

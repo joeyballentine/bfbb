@@ -278,6 +278,12 @@ shoulder and no stick clicks.
 The sticks are not remappable. The left one moves, the right one turns the
 camera, and on the keyboard that is WASD and IJKL.
 
+A controller SDL does not recognise says so at startup, with its USB ids, and
+cannot be played on until it has a layout. Put a `gamecontrollerdb.txt` beside
+`bfbb.exe` to give it one — the community file of that name, or a single line
+from SDL's own gamepad mapping tool. It is read before anything is enumerated,
+so a device it covers is a controller like any other.
+
 ### The rest
 
 `[xbox]` has a switch for each of the four Xbox features described at the top of

@@ -268,6 +268,54 @@ static void CloseGamepad(SDL_JoystickID id)
     }
 }
 
+// gamecontrollerdb.txt, if someone has put one beside the executable. SDL
+// carries a layout for every controller it knows, and this is where a
+// controller it does not know gets one -- the community file of that name, or
+// a single line produced by SDL's own gamepad mapping tool.
+//
+// Optional, and silent when absent: not having one is the normal case.
+static void LoadMappings()
+{
+    char dir[512];
+    if (!iHostExeDir(dir, sizeof(dir)))
+    {
+        return;
+    }
+
+    char path[600];
+    snprintf(path, sizeof(path), "%s/gamecontrollerdb.txt", dir);
+
+    S32 added = SDL_AddGamepadMappingsFromFile(path);
+    if (added > 0)
+    {
+        printf("bfbb: %d controller layouts from gamecontrollerdb.txt\n", (int)added);
+        fflush(stdout);
+    }
+}
+
+// A device SDL can see but has no layout for. It enumerates as a joystick --
+// an ordered pile of axes and buttons with nothing saying which is which --
+// and never becomes a gamepad, so nothing above opens it.
+//
+// Worth saying out loud. Silence reads as "the port cannot see my controller"
+// when what happened is "SDL does not know this one", and the two have
+// different answers.
+static void ReportIfUnmapped(SDL_JoystickID id)
+{
+    if (SDL_IsGamepad(id))
+    {
+        return;
+    }
+
+    const char* name = SDL_GetJoystickNameForID(id);
+    printf("bfbb: %s (%04x:%04x) is plugged in, but SDL has no button layout for it, so it "
+           "cannot be played on. A line for it in gamecontrollerdb.txt beside the exe would "
+           "give it one.\n",
+           name != NULL ? name : "an unnamed device", (unsigned)SDL_GetJoystickVendorForID(id),
+           (unsigned)SDL_GetJoystickProductForID(id));
+    fflush(stdout);
+}
+
 void iPadHostInit()
 {
     for (S32 i = 0; i < IPAD_MAX_CONTROLLERS; i++)
@@ -302,6 +350,10 @@ void iPadHostInit()
 
     sReady = true;
 
+    // Before anything is enumerated, so a device the file covers is already a
+    // gamepad by the time it is looked at.
+    LoadMappings();
+
     // Whatever is already plugged in. Everything after this arrives as an event.
     S32 count = 0;
     SDL_JoystickID* ids = SDL_GetGamepads(&count);
@@ -313,6 +365,7 @@ void iPadHostInit()
         }
         SDL_free(ids);
     }
+
 }
 
 void iPadHostExit()
@@ -396,6 +449,17 @@ void iPadHostPoll()
             else if (e.type == SDL_EVENT_GAMEPAD_REMOVED)
             {
                 CloseGamepad(e.gdevice.which);
+            }
+            else if (e.type == SDL_EVENT_JOYSTICK_ADDED)
+            {
+                // Every gamepad is a joystick, so this fires for those too and
+                // ReportIfUnmapped drops them. What is left is a device that
+                // arrived and will do nothing.
+                //
+                // SDL posts this for devices that were already plugged in when
+                // it started, as well as for ones arriving later, so the first
+                // poll covers both and iPadHostInit does not enumerate.
+                ReportIfUnmapped(e.jdevice.which);
             }
         }
 
