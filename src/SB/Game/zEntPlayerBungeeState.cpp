@@ -544,7 +544,11 @@ namespace bungee_state
             void collide_start(xScene& s);
             void update_camera(F32 dt);
             void update_camera_direction(F32 dt);
+#ifdef PLATFORM_PC
+            void rotate_camera(F32 dt);
+#else
             void rotate_camera();
+#endif
             void interpolate_camera_loc(const xVec3& dest, F32 dt);
             bool update_free_look(F32 dt);
             void update_movement(F32 dt);
@@ -1105,7 +1109,14 @@ namespace bungee_state
             rot_vel += stick_frac * (angle - PI) * fixed.turn.spring * stick_mag * dt;
 
             rot += rot_vel * dt;
+#ifdef PLATFORM_PC
+            // fixed.turn.decay is a multiplier applied once per frame, so the
+            // settle rate follows the frame rate. Raise it to the number of
+            // 60 Hz frames in dt.
+            rot_vel *= xpow(fixed.turn.decay, 60.0f * dt);
+#else
             rot_vel *= fixed.turn.decay;
+#endif
         }
 
         S32 hanging_state_type::detach_update(xScene& scene, F32& dt)
@@ -2536,18 +2547,40 @@ namespace bungee_state
         {
         }
 
+#ifdef PLATFORM_PC
+        void hanging_state_type::update_camera_direction(F32 dt)
+#else
         void hanging_state_type::update_camera_direction(F32)
+#endif
         {
             xVec3 start = cam_dir;
             xVec3 dir = (loc - cam_loc).normal();
 
+            // An exponential approach: cam_dir closes on dir by turn_speed of
+            // the remaining distance each frame, so how fast it gets there is
+            // set by the frame rate. The fraction that is left over is what
+            // compounds, hence the 1 - x on both sides.
+#ifdef PLATFORM_PC
+            F32 turn = xFrameApproach(h.camera.turn_speed, dt);
+
+            cam_dir = start + (dir - start) * turn;
+#else
             cam_dir = start + (dir - start) * h.camera.turn_speed;
+#endif
             cam_dir.normalize();
 
+#ifdef PLATFORM_PC
+            rotate_camera(dt);
+#else
             rotate_camera();
+#endif
         }
 
+#ifdef PLATFORM_PC
+        void hanging_state_type::rotate_camera(F32 dt)
+#else
         void hanging_state_type::rotate_camera()
+#endif
         {
             F32 yaw;
             F32 pitch;
@@ -2564,7 +2597,16 @@ namespace bungee_state
             }
 
             F32 roll = roll_offset + (yaw - h.camera.view_angle);
+
+            // roll_decay is 1 - roll_speed, a multiplier applied once per frame.
+#ifdef PLATFORM_PC
+            // roll_decay is 1 - roll_speed, and roll_speed comes out of the hook
+            // asset unclamped, so the decay can be negative. Expressed as the
+            // fraction that is lost per frame, which the helper clamps.
+            roll_offset *= 1.0f - xFrameApproach(1.0f - eh.camera.roll_decay, dt);
+#else
             roll_offset *= eh.camera.roll_decay;
+#endif
 
             xCameraLookYPR(&globals.camera, 0, yaw, pitch, roll, 0.0f, 0.0f, 0.0f);
         }
@@ -2714,7 +2756,11 @@ namespace bungee_state
 
             v = accel * dt + v0;
             x = x0 + (dt * (0.5f * accel * dt) + v * dt);
+#ifdef PLATFORM_PC
+            v *= xpow(fixed.horizontal.decay, 60.0f * dt);
+#else
             v *= fixed.horizontal.decay;
+#endif
         }
 
     } // namespace

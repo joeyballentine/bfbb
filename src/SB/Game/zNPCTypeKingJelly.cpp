@@ -836,6 +836,10 @@ void zNPCKingJelly::Reset()
     life = tweak.max_life;
     player_life = globals.player.Health;
     last_tentacle_shock = 0.0f;
+#ifdef PLATFORM_PC
+    tmr_ringemit = 0.0f;
+    tmr_zapemit = 0.0f;
+#endif
     disable_tentacle_damage = 0;
     first_update = 1;
     blink.active = 0;
@@ -2735,6 +2739,36 @@ void zNPCKingJelly::update_tentacle_lightning(F32 dt)
 
     if (tweak.tentacle.particles > 0.0f)
     {
+#ifdef PLATFORM_PC
+        // generate_zap_particles rounds its count the same way the wave ring
+        // does, so a frame shorter than a sixtieth of a second emits nothing.
+        // Same fixed step and carried remainder.
+        tmr_zapemit += dt;
+
+        // A ceiling, not a correction. Reset() zeroes this, but the
+        // constructor does not and RyzMemData::operator new clears only
+        // the first four bytes -- so an accumulator that was never reset
+        // would send the loop below round billions of times. dt is
+        // clamped to 0.1 s upstream, so this can never clip a real frame.
+        if (tmr_zapemit > 0.1f)
+        {
+            tmr_zapemit = 0.1f;
+        }
+
+        while (tmr_zapemit >= 1.0f / 60.0f)
+        {
+            tmr_zapemit -= 1.0f / 60.0f;
+
+            for (S32 i = 0; i < 7; i++)
+            {
+                if (tentacle_lightning[i] != NULL)
+                {
+                    generate_zap_particles(*tentacle_lightning[i], tweak.tentacle.particles,
+                                           1.0f / 60.0f);
+                }
+            }
+        }
+#else
         for (S32 i = 0; i < 7; i++)
         {
             if (tentacle_lightning[i] != NULL)
@@ -2742,6 +2776,7 @@ void zNPCKingJelly::update_tentacle_lightning(F32 dt)
                 generate_zap_particles(*tentacle_lightning[i], tweak.tentacle.particles, dt);
             }
         }
+#endif
     }
 
     if (disable_tentacle_damage)
@@ -2903,7 +2938,32 @@ void zNPCKingJelly::update_rings(F32 dt)
 
     if (wave_rings[0].active)
     {
+#ifdef PLATFORM_PC
+        // generate_ring_particles counts particles as amount * dt rounded to
+        // nearest, so the count is zero for every frame shorter than a
+        // sixtieth of a second and the ring emits nothing. Step the emission at
+        // a fixed sixtieth of a second and carry the remainder, which holds the
+        // count per second at what the console emitted.
+        tmr_ringemit += dt;
+
+        // A ceiling, not a correction. Reset() zeroes this, but the
+        // constructor does not and RyzMemData::operator new clears only
+        // the first four bytes -- so an accumulator that was never reset
+        // would send the loop below round billions of times. dt is
+        // clamped to 0.1 s upstream, so this can never clip a real frame.
+        if (tmr_ringemit > 0.1f)
+        {
+            tmr_ringemit = 0.1f;
+        }
+
+        while (tmr_ringemit >= 1.0f / 60.0f)
+        {
+            tmr_ringemit -= 1.0f / 60.0f;
+            generate_ring_particles(wave_rings[0], 1.0f / 60.0f);
+        }
+#else
         generate_ring_particles(wave_rings[0], dt);
+#endif
     }
 }
 

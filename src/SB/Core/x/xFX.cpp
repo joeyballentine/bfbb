@@ -361,10 +361,22 @@ static void xFXRingUpdate(F32 dt)
 {
     xFXRing* ring = &ringlist[0];
 
+#ifdef PLATFORM_PC
+    // The threshold is a pause test: retail's shortest frame was a sixtieth of
+    // a second, sixteen times the epsilon. Here a frame under a millisecond is
+    // ordinary, and skipping it stops ring->time advancing at all -- rings then
+    // never reach the end of their lifetime, hold their pool slot forever and
+    // keep drawing at the radius they were born with.
+    if (dt <= 0.0f)
+    {
+        return;
+    }
+#else
     if ((F32)iabs(dt) < 0.001f)
     {
         return;
     }
+#endif
 
     for (S32 i = 0; i < RING_COUNT; i++, ring++)
     {
@@ -1649,7 +1661,15 @@ void xFXFireworksUpdate(F32 dt)
                     memcpy(xplo_info.color_death, &xplo_info.color_birth,
                            sizeof(xplo_info.color_birth));
                     xplo_info.color_death[3].set(0.0f, 0.0f, 1.0f, 0);
+#ifdef PLATFORM_PC
+                    // The burst fires once, on the frame the fuel runs out, so
+                    // the window is how big the explosion is rather than a rate
+                    // over elapsed time. A console frame's worth is the amount
+                    // the effect was tuned at.
+                    xParEmitterEmitCustom(femit, 1.0f / 60.0f, &xplo_info);
+#else
                     xParEmitterEmitCustom(femit, dt, &xplo_info);
+#endif
                 }
 
                 xScrFXGlareAdd(&sFirework[i].pos, 0.5f * xurand() + 0.5f, 0.3f * xurand() + 0.1f,
@@ -2355,6 +2375,9 @@ void xFXRibbon::init(const char* group, const char* name)
 {
     activated = false;
     mtime = 0;
+#ifdef PLATFORM_PC
+    mtime_carry = 0.0f;
+#endif
 
     joints.init(joint_alloc);
 
@@ -2479,7 +2502,18 @@ void xFXRibbon::update(F32 dt)
 {
     debug_update(dt);
 
+#ifdef PLATFORM_PC
+    // mtime is a whole-millisecond clock and joints expire by mtime - born.
+    // Truncating each frame's own milliseconds loses the remainder every frame:
+    // a frame shorter than a millisecond contributes nothing at all, the clock
+    // stops, and no joint ever ages out. The remainder is carried instead.
+    F32 ms = mtime_carry + 1000.0f * dt;
+    U32 whole = (U32)ms;
+    mtime += whole;
+    mtime_carry = ms - whole;
+#else
     mtime += (U32)(1000.0f * dt);
+#endif
 
     while (!joints.empty())
     {

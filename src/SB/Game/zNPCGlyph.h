@@ -29,6 +29,13 @@ struct NPCGlyph
     xMat3x3 rot_glyph;
     xVec3 scl_glyph;
     F32 tmr_glyph;
+#ifdef PLATFORM_PC
+    // rot_glyph holds a rotation applied once per frame. angrate_glyph is the
+    // same rotation as euler angles a second and angspin_glyph is the angle
+    // accumulated from it.
+    xVec3 angrate_glyph;
+    xVec3 angspin_glyph;
+#endif
 
     NPCGlyph()
     {
@@ -51,6 +58,9 @@ struct NPCGlyph
     void RotSet(xMat3x3* mat_rot, S32 doautospin);
     void VelSet_Shiny();
     void RotAddDelta(xMat3x3* mat_rot);
+#ifdef PLATFORM_PC
+    void RotAddDelta(xMat3x3* mat_rot, F32 dt);
+#endif
     void Timestep(F32 dt);
 };
 

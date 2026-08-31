@@ -8,6 +8,9 @@
 #include "zScene.h"
 
 #include "xEntBoulder.h"
+#ifdef PLATFORM_PC
+#include "xMath.h"
+#endif
 #include "xMathInlines.h"
 #include "xstransvc.h"
 #include "zEntButton.h"
@@ -687,7 +690,13 @@ static void zThrown_Update(xEnt* ent, xScene* sc, F32 dt)
     }
 
     checkAgainstButtons(ent);
+
+    // One bubble a frame is an emission rate per frame.
+#ifdef PLATFORM_PC
+    zFX_SpawnBubbleTrail((xVec3*)&ent->model->Mat->pos, xFrameEmitCount(1.0f, dt));
+#else
     zFX_SpawnBubbleTrail((xVec3*)&ent->model->Mat->pos, 1);
+#endif
 
     if (ent->bupdate != NULL)
     {
@@ -704,8 +713,16 @@ static void zThrown_Update(xEnt* ent, xScene* sc, F32 dt)
             collis.colls[0].optr == thrown->driveLastFloor &&
             ((xEnt*)collis.colls[0].optr)->frame != NULL && thrown->vel.y <= 0.0f)
         {
+            // Three consecutive frames of contact before a thrown object rides
+            // a moving floor, five without before it steps off. Both are
+            // durations, so hold them in seconds at the same period.
+#ifdef PLATFORM_PC
+            thrown->driveDebounceTime += dt;
+            if (thrown->driveDebounceTime > 2.0f / 60.0f)
+#else
             thrown->driveDebounce++;
             if (thrown->driveDebounce > 2)
+#endif
             {
                 xEntDriveMount(&thrown->drv, (xEnt*)collis.colls[0].optr, 0.1f, NULL);
             }
@@ -713,12 +730,20 @@ static void zThrown_Update(xEnt* ent, xScene* sc, F32 dt)
         else
         {
             thrown->driveDebounce = 0;
+#ifdef PLATFORM_PC
+            thrown->driveDebounceTime = 0.0f;
+#endif
         }
     }
     else if (!(collis.colls[0].flags & k_HIT_IT) || collis.colls[0].optr != thrown->drv.driver)
     {
+#ifdef PLATFORM_PC
+        thrown->driveDebounceTime += dt;
+        if (thrown->driveDebounceTime > 4.0f / 60.0f)
+#else
         thrown->driveDebounce++;
         if (thrown->driveDebounce > 4)
+#endif
         {
             xEntDriveDismount(&thrown->drv, 0.3f);
         }
@@ -726,6 +751,9 @@ static void zThrown_Update(xEnt* ent, xScene* sc, F32 dt)
     else
     {
         thrown->driveDebounce = 0;
+#ifdef PLATFORM_PC
+        thrown->driveDebounceTime = 0.0f;
+#endif
     }
 
     thrown->driveLastFloor = (xEnt*)collis.colls[0].optr;
@@ -821,6 +849,9 @@ void zThrown_LaunchVel(xEnt* ent, xVec3* vel)
         newThrown->oldRecShadow = ent->baseFlags & 0x10;
         xEntDriveInit(&newThrown->drv, ent);
         newThrown->driveDebounce = 0;
+#ifdef PLATFORM_PC
+        newThrown->driveDebounceTime = 0.0f;
+#endif
         newThrown->driveLastFloor = NULL;
     }
 
@@ -1008,6 +1039,9 @@ void zThrown_AddFruit(xEnt* ent)
                 xEntDriveDismount(&zThrownList[i].drv, 1e-5f);
             }
             zThrownList[i].driveDebounce = 0;
+#ifdef PLATFORM_PC
+            zThrownList[i].driveDebounceTime = 0.0f;
+#endif
             zThrownList[i].driveLastFloor = NULL;
             return;
         }
@@ -1043,6 +1077,9 @@ void zThrown_AddFruit(xEnt* ent)
     zThrown_AddTempFrame(newThrown);
     xEntDriveInit(&newThrown->drv, ent);
     newThrown->driveDebounce = 0;
+#ifdef PLATFORM_PC
+    newThrown->driveDebounceTime = 0.0f;
+#endif
     newThrown->driveLastFloor = NULL;
 }
 

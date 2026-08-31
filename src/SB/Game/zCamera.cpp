@@ -924,6 +924,23 @@ void zCameraUpdate(xCamera* cam, F32 dt)
         if (x > 32)
         {
             F32 dp = (F32)(MAX(32, MIN(x, 110)) - 32);
+
+            // This constant is NOT a timestep, and giving it dt makes the
+            // camera turn at half speed when the frame rate doubles.
+            //
+            // dp does not accumulate. It is added to cam->pcur and to a LOCAL
+            // pgoal, and xCameraMove below then writes that local into
+            // cam->pgoal, so the goal is always exactly dp ahead of where the
+            // camera is. xCameraUpdate re-derives pcur from mat.pos through
+            // xCam_worldtocyl at the top of every frame, which throws the pcur
+            // write away, and xCam_CorrectP springs the POSITION toward the
+            // goal by a fraction proportional to dt.
+            //
+            // So the angle moved per frame is (something * dt) * dp, and the
+            // rate per second is that over dt -- dp with the dt cancelled out.
+            // A constant dp is what makes the turn rate frame-rate independent;
+            // the 1/60 is the unit conversion from stick units to radians of
+            // gap. Same shape as pitch_s below.
             dp = 0.016666668f * (dp * zcam_pad_pyaw_scale);
 
             if (lassocam_enabled && stop_track == 0)
@@ -975,6 +992,13 @@ void zCameraUpdate(xCamera* cam, F32 dt)
 
     pitch_s = 0.0f;
 
+    // The two constants below are the same number as the yaw pair above and are
+    // not the same thing. `pitch_s` is zeroed on the line above every frame and
+    // consumed by zCameraFreeLookSetGoals as a blend weight,
+    // `dgoal = pitch_s * (zcam_below_d - d) + d`. The constant converts stick
+    // units into a 0..1 fraction; nothing accumulates it, so it is not a
+    // timestep. Multiplying it by dt makes the pitch target shrink as the frame
+    // rate rises.
     if (input_enabled && wall_jump_enabled == WJVS_DISABLED && zcam_highbounce == 0)
     {
         S8 y = globals.pad0->analog2.y;

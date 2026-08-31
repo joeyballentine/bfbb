@@ -323,6 +323,13 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
 
     U32 numBubbles;
     dVar18 = xVec3LengthFast(&ent->vel) * 0.1f;
+
+    // A tenth of the speed in bubbles every frame is a rate per frame. Scale
+    // the count by the frame's own length; the sub-one case is the same coin
+    // flip retail does, taken over the scaled count instead.
+#ifdef PLATFORM_PC
+    numBubbles = xFrameEmitCount(dVar18, dt);
+#else
     if (dVar18 >= 1.0f)
     {
         numBubbles = dVar18;
@@ -331,6 +338,7 @@ void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
     {
         numBubbles = xurand() < dVar18;
     }
+#endif
 
     if (numBubbles != 0)
     {

@@ -7,6 +7,26 @@
 
 extern U32 gFrameCount;
 
+#ifdef PLATFORM_PC
+// Seconds of game time, incremented alongside gFrameCount by the frame's dt.
+//
+// gFrameCount is a frame COUNTER, and retail has consumers that read it as a
+// clock -- zSurface.cpp's mode 1 UV animation is `gFrameCount * (1/60)`, which
+// is a time in seconds only while a frame is a sixtieth of a second. This is
+// that time, measured rather than counted, so those consumers keep meaning what
+// they meant at any frame rate.
+//
+// Not a substitute for gFrameCount everywhere: the consumers that compare it
+// for EQUALITY -- xFXAura stamps ap->frame and the render draws only the auras
+// stamped this frame -- want the counter and are correct with it, because the
+// port runs one update per presented frame.
+// F64: at a few thousand frames a second the per-frame addend is ~3e-4, and an
+// F32 accumulator stops advancing entirely once it passes 8192 because the
+// addend falls below half an ulp. That is a couple of hours of uncapped play,
+// after which every consumer of this clock freezes.
+extern F64 gGameSeconds;
+#endif
+
 struct uint_data
 {
     U32 value_def;

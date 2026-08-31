@@ -144,7 +144,15 @@ static void UpdateRain(_tagClimate* climate, float seconds)
         return;
     }
 
+#ifdef PLATFORM_PC
+    // zParPTankSpawnSnow adds `num` flakes outright, each with a three second
+    // life, so a count per frame sets the flake population from the frame rate.
+    // The rain path and the non-PTank snow path above hand the emitter the
+    // frame's length instead and are already a rate.
+    S32 num = xFrameEmitCount((F32)(S32)((F32)total_snow_flakes * 0.1f), seconds);
+#else
     S32 num = (F32)total_snow_flakes * 0.1f;
+#endif
     if (num > 0)
     {
         xVec3* pos = (xVec3*)xMemPushTemp(num * 2 * sizeof(xVec3));

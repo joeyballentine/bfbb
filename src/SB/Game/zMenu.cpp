@@ -126,7 +126,13 @@ U32 zMenuLoop()
     iColor_tag black = { 0, 0, 0, 255 }; //BlackColorInitializer;
     iColor_tag clear = { 0 }; //ClearColorInitializer;
     xScrFxFade(&black, &clear, 0.0f, NULL, 1);
+    // Ten frames of grace before the menu counts as entered and the pad-removed
+    // dialog may appear. Ten frames is a sixth of a second only at 60 fps.
+#ifdef PLATFORM_PC
+    F32 ostrich_delay = 10.0f / 60.0f;
+#else
     S32 ostrich_delay = 0xa;
+#endif
 
     time_last = 1.0f / float(GET_BUS_FREQUENCY() >> 2) * iTimeGet() - 1.0f / 60.f;
 
@@ -280,7 +286,11 @@ U32 zMenuLoop()
 
         if (ostrich_delay > 0)
         {
+#ifdef PLATFORM_PC
+            ostrich_delay -= time_elapsed;
+#else
             --ostrich_delay;
+#endif
         }
         else
         {

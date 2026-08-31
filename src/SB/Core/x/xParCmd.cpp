@@ -91,7 +91,15 @@ void xParCmdKillSlow_Update(xParCmd* c, xParGroup* ps, F32 dt)
 {
     xPar* p = ps->m_root;
     xParCmdKillSlow* cmd = (xParCmdKillSlow*)c->tasset;
+
+    // The test is against m_vel, a displacement per FRAME, whose square shrinks
+    // as dt squared while this limit shrinks as dt. The extra 60*dt makes both
+    // sides scale together and is one at a sixtieth of a second.
+#ifdef PLATFORM_PC
+    F32 speedLimit = cmd->speedLimitSqr * dt * (60.0f * dt);
+#else
     F32 speedLimit = cmd->speedLimitSqr * dt;
+#endif
 
     if (cmd->kill_less_than)
     {
@@ -135,7 +143,16 @@ void xParCmdFollow_Update(xParCmd* c, xParGroup* ps, F32 dt)
 {
     xPar* p = ps->m_root;
     xParCmdFollow* cmd = (xParCmdFollow*)c->tasset;
+
+    // xPar::m_vel is a displacement per FRAME -- xParCmdVelocityApply_Update
+    // adds it to the position with no dt -- so an acceleration added to it
+    // needs dt twice, not once. The extra 60*dt is one at a sixtieth of a
+    // second and leaves the console's pull unchanged.
+#ifdef PLATFORM_PC
+    F32 mdt = cmd->gravity * dt * (60.0f * dt);
+#else
     F32 mdt = cmd->gravity * dt;
+#endif
 
     while (p && p->m_next)
     {
@@ -160,7 +177,13 @@ void xParCmdOrbitPoint_Update(xParCmd* c, xParGroup* ps, F32 dt)
 {
     xPar* p = ps->m_root;
     xParCmdOrbitPoint* cmd = (xParCmdOrbitPoint*)c->tasset;
+
+    // An acceleration on a per-frame displacement. See xParCmdFollow_Update.
+#ifdef PLATFORM_PC
+    F32 mdt = cmd->gravity * dt * (60.0f * dt);
+#else
     F32 mdt = cmd->gravity * dt;
+#endif
 
     while (p)
     {
@@ -189,7 +212,13 @@ void xParCmdOrbitLine_Update(xParCmd* c, xParGroup* ps, F32 dt)
 {
     xPar* p = ps->m_root;
     xParCmdOrbitLine* cmd = (xParCmdOrbitLine*)c->tasset;
+
+    // An acceleration on a per-frame displacement. See xParCmdFollow_Update.
+#ifdef PLATFORM_PC
+    F32 mdt = cmd->gravity * dt * (60.0f * dt);
+#else
     F32 mdt = cmd->gravity * dt;
+#endif
 
     while (p)
     {
@@ -225,7 +254,12 @@ void xParCmdAccelerate_Update(xParCmd* c, xParGroup* ps, F32 dt)
     xVec3 var_28;
     var_28 = cmd->acc;
 
+    // An acceleration on a per-frame displacement. See xParCmdFollow_Update.
+#ifdef PLATFORM_PC
+    xVec3SMulBy(&var_28, dt * (60.0f * dt));
+#else
     xVec3SMulBy(&var_28, dt);
+#endif
 
     p = ps->m_root;
 
@@ -288,8 +322,26 @@ void xParCmdMoveRandomPar_Update(xParCmd* c, xParGroup* ps, F32 dt)
 {
     xPar* p = ps->m_root;
     xParCmdMoveRandomPar* cmd = (xParCmdMoveRandomPar*)c->tasset;
+#ifdef PLATFORM_PC
+    // A random walk, not a velocity: the steps are independent, so the spread
+    // after a second grows with the square root of the step count, not the
+    // count. A step proportional to dt shrinks the wander to a quarter at four
+    // times the frame rate. Dividing by the square root of the frame's share of
+    // a sixtieth of a second holds the spread, and is one at 60 fps.
+    if (dt <= 0.0f)
+    {
+        // Retail moves nothing on a zero frame either, and the scale below
+        // would be a division by zero.
+        return;
+    }
+
+    F32 rate_scale = 1.0f / xsqrt(60.0f * dt);
+    F32 f31 = cmd->dim.x * (dt / 2.0f) * rate_scale;
+    F32 f30 = cmd->dim.z * (dt / 2.0f) * rate_scale;
+#else
     F32 f31 = cmd->dim.x * (dt / 2.0f);
     F32 f30 = cmd->dim.z * (dt / 2.0f);
+#endif
 
     while (p)
     {
@@ -347,7 +399,13 @@ void xParCmdApplyWind_Update(xParCmd* c, xParGroup* ps, F32 dt)
     // The wind direction is hardcoded to (1, _, 1); only its magnitude is data-driven.
     F32 wind_x = 1.0f;
     F32 wind_z = 1.0f;
+
+    // An acceleration on a per-frame displacement. See xParCmdFollow_Update.
+#ifdef PLATFORM_PC
+    F32 mag = cmd->unknown * dt * (60.0f * dt);
+#else
     F32 mag = cmd->unknown * dt;
+#endif
 
     wind_x *= mag;
     wind_z *= mag;
@@ -363,6 +421,24 @@ void xParCmdApplyWind_Update(xParCmd* c, xParGroup* ps, F32 dt)
     }
 }
 
+#ifdef PLATFORM_PC
+namespace
+{
+    // A whole byte-angle of turn for a frame, from a rate given per console
+    // frame. xFrameEmitCount rounds at random so the average holds; it only
+    // counts up, and a rotation rate runs either way.
+    U8 rot_step(F32 per_frame, F32 dt)
+    {
+        if (per_frame < 0.0f)
+        {
+            return (U8)(-(S32)xFrameEmitCount(-per_frame, dt));
+        }
+
+        return (U8)xFrameEmitCount(per_frame, dt);
+    }
+} // namespace
+#endif
+
 void xParCmdRotPar_Update(xParCmd* c, xParGroup* ps, F32 dt)
 {
     xPar* p = ps->m_root;
@@ -376,9 +452,19 @@ void xParCmdRotPar_Update(xParCmd* c, xParGroup* ps, F32 dt)
 
     while (p)
     {
+#ifdef PLATFORM_PC
+        // The step truncates to a whole byte-angle. A sixtieth of a second of
+        // turn is a small number, so a shorter frame rounds it to zero and the
+        // particle stops turning: a 255-a-second spin holds still above 255
+        // fps and runs at half speed from 128.
+        p->m_rotdeg[0] += rot_step((f30 * xurand() + f27) * (1.0f / 60.0f), dt);
+        p->m_rotdeg[1] += rot_step((f29 * xurand() + f26) * (1.0f / 60.0f), dt);
+        p->m_rotdeg[2] += rot_step((f28 * xurand() + f25) * (1.0f / 60.0f), dt);
+#else
         p->m_rotdeg[0] += (U8)(dt * (f30 * xurand() + f27));
         p->m_rotdeg[1] += (U8)(dt * (f29 * xurand() + f26));
         p->m_rotdeg[2] += (U8)(dt * (f28 * xurand() + f25));
+#endif
 
         p = p->m_next;
     }
@@ -455,6 +541,28 @@ void xParCmdTexAnim_Update(xParCmd* c, xParGroup* ps, F32 dt)
         return;
     }
 
+#ifdef PLATFORM_PC
+    // Every mode below advances the flipbook by exactly one cell per call, so
+    // with no throttle the animation runs at the frame rate. A throttle of a
+    // sixtieth of a second is what the console gave it.
+    F32 throttle = cmd->throttle_time > 0.0f ? cmd->throttle_time : 1.0f / 60.0f;
+
+    cmd->throttle_time_elapsed -= dt;
+
+    // Retail leaves the field alone when there is no throttle, so an asset
+    // authored without one need never have held a sane value.
+    if (cmd->throttle_time_elapsed > throttle)
+    {
+        cmd->throttle_time_elapsed = throttle;
+    }
+
+    if (cmd->throttle_time_elapsed > 0.0f)
+    {
+        return;
+    }
+
+    cmd->throttle_time_elapsed = throttle;
+#else
     if (cmd->throttle_time > 0.0f)
     {
         cmd->throttle_time_elapsed -= dt;
@@ -466,6 +574,7 @@ void xParCmdTexAnim_Update(xParCmd* c, xParGroup* ps, F32 dt)
 
         cmd->throttle_time_elapsed = cmd->throttle_time;
     }
+#endif
 
     p = ps->m_root;
 
@@ -679,7 +788,19 @@ void xParCmdCollideFall_Update(xParCmd* c, xParGroup* ps, F32 dt)
 void xParCmdCollideFallSticky_Update(xParCmd* c, xParGroup* ps, F32 dt)
 {
     xParCmdCollideFallSticky& cmd = *(xParCmdCollideFallSticky*)c->tasset;
+#ifdef PLATFORM_PC
+    // A particle resting on the plane is damped every frame it stays there, so
+    // the fraction that survives has to be the frame's share of a sixtieth of a
+    // second.
+    // xpow of a negative base is a NaN, and a NaN velocity never comes back.
     F32 xzdamp = 1.0f - cmd.sticky;
+    if (xzdamp > 0.0f)
+    {
+        xzdamp = xpow(xzdamp, 60.0f * dt);
+    }
+#else
+    F32 xzdamp = 1.0f - cmd.sticky;
+#endif
     xPar* p = ps->m_root;
 
     while (p)
@@ -834,7 +955,15 @@ void xParCmd_Shaper_Update(xParCmd* c, xParGroup* ps, F32 dt)
     if (cmd->enabled)
     {
         F32 damp = dt * cmd->dampSpeed;
+
+        // An acceleration on a per-frame displacement. See xParCmdFollow_Update.
+        // damp above is not one -- it scales m_vel by a fraction of itself,
+        // which compounds to the same factor a second whatever the frame rate.
+#ifdef PLATFORM_PC
+        F32 grav = dt * cmd->gravity * (60.0f * dt);
+#else
         F32 grav = dt * cmd->gravity;
+#endif
         S32 doalpha = 1;
         S32 dosize = 1;
 

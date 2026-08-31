@@ -89,7 +89,11 @@ void zEntHangable_Init(zEntHangable* ent, xEntAsset* asset)
     HangableSetup(ent, asset);
 }
 
+#ifdef PLATFORM_PC
+static void zEntHangable_UpdateFX(zEntHangable* ent, F32 dt)
+#else
 static void zEntHangable_UpdateFX(zEntHangable* ent)
+#endif
 {
     // Points of a (wobbly) circle in 3D space.
     xVec3 offset_rlii0006[8] =
@@ -133,7 +137,22 @@ static void zEntHangable_UpdateFX(zEntHangable* ent)
                 xVec3 mul;
                 xMat3x3RMulVec(&mul, xEntGetFrame(ent), &local_offset[i]);
                 xVec3Add(&info.pos, &mul, xEntGetPos(ent));
+
+                // A time window, and this runs every frame: the chandelier's
+                // candles emit flame and smoke for that much elapsed time.
+                //
+                // TWO console frames' worth every frame, which is retail asking
+                // for twice the emitter's authored rate -- so the host window is
+                // 2 * dt, not dt. Plain dt halves the flame and the smoke at
+                // every frame rate including 60.
+                //
+                // zEntHangableMountFX below is NOT this: it runs on eEventMount,
+                // so its constant is a burst size.
+#ifdef PLATFORM_PC
+                xParEmitterEmitCustom(emitter, 2.0f * dt, &info);
+#else
                 xParEmitterEmitCustom(emitter, (1.0f / 30.0f), &info);
+#endif
             }
             break;
         }
@@ -154,7 +173,11 @@ void zEntHangable_Update(zEntHangable* ent, xScene*, F32 dt)
         ent->enabled = 1;
     }
 
+#ifdef PLATFORM_PC
+    zEntHangable_UpdateFX(ent, dt);
+#else
     zEntHangable_UpdateFX(ent);
+#endif
 
     if (!(ent->hangInfo->flags & 0x80000000))
     {

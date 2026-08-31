@@ -274,7 +274,15 @@ void zEntSimpleObj_MgrUpdateRender(RpWorld* world, F32 dt)
                 }
                 xLightKit_Enable(ent->lightKit, globals.currWorld);
                 zEntSimpleObj_Render(ent);
+                // An 0x55-in-0x10000 chance of a bubble burst every frame is an
+                // emission rate per frame. Rebase the chance on the frame's own
+                // length; the burst size stays what it was.
+#ifdef PLATFORM_PC
+                if ((picklod == 0) &&
+                    (xurand() < xFrameEmitChance(0x55 / 65536.0f, dt)))
+#else
                 if ((picklod == 0) && ((u16)xrand() < 0x55U))
+#endif
                 {
                     xVec3 blob_posrnd = { 0.25f, 1.0f, 0.25f };
                     xVec3 pos;

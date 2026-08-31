@@ -249,6 +249,17 @@ struct NPCHazard
     zNPCCommon* npc_owner;
     NPCHazard* haz_parent;
     xShadowCache* shadowCache;
+#ifdef PLATFORM_PC
+    // Euler spin rate in radians per second. custdata.typical.mat_rotDelta
+    // holds the same spin baked into a sixtieth-of-a-second step, which spins
+    // at the frame rate when applied once per frame; Timestep rebuilds the
+    // delta from this rate and the frame's dt instead.
+    xVec3 ang_spinRate;
+
+    // Seconds until the next trail particle. cnt_nextemit above is the same
+    // thing counted in frames, which emits at the frame rate.
+    F32 tmr_nextemit;
+#endif
 
     S32 ConfigHelper(en_npchaz haztype);
     void Reconfigure(en_npchaz haztype);
@@ -289,7 +300,11 @@ struct NPCHazard
     void TarTarFalumpf();
     void TarTarGunkTrail();
     void TarTarSplash(const xVec3* dir_norm);
+#ifdef PLATFORM_PC
+    void TarTarLinger(F32 dt);
+#else
     void TarTarLinger();
+#endif
     void Upd_ChuckBomb(F32 dt);
     void DisperseBubWake(F32 radius, const xVec3* velocity);
     void ReconChuck();

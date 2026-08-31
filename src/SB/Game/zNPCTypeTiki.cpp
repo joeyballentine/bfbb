@@ -1638,9 +1638,26 @@ static S32 thunderCountCB(xGoal* rawgoal, void*, en_trantype* trantype, F32 dt, 
     thunderEmitterInfo.pos.y += 3.0f;
     thunderEmitterInfo.pos.z += tiki->t3;
 
+    // The second argument is a time window, not a particle count. This call runs
+    // every frame, so the constant is one console frame's worth and a host frame
+    // has to supply its own or the cloud emits in proportion to the frame rate.
+#ifdef PLATFORM_PC
+    xParEmitterEmitCustom(cloudEmitter, dt, &thunderEmitterInfo);
+#else
     xParEmitterEmitCustom(cloudEmitter, 1.0f / 60.0f, &thunderEmitterInfo);
+#endif
 
+    // t2 and t3 walk a grid under the cloud so consecutive emissions do not
+    // stack on one point. The emitter now spends dt out of its own fractional
+    // count, so a particle comes out every few frames rather than every frame;
+    // a per-frame walk would alias against that and sample a sub-grid. Sweep at
+    // a quarter per sixtieth of a second instead. t3 is a carry digit and stays
+    // a quarter per wrap.
+#ifdef PLATFORM_PC
+    tiki->t2 += 15.0f * dt;
+#else
     tiki->t2 += 0.25f;
+#endif
     if (tiki->t2 > 0.5001f)
     {
         tiki->t2 = -0.5f;

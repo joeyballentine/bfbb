@@ -96,7 +96,16 @@ namespace xhud
 
     block_allocator* widget::motive_allocator()
     {
+        // 40 is sizeof(motive_node) on the console -- a motive plus the list
+        // pointer -- and the allocator hands out blocks of exactly that size,
+        // so a motive that outgrows it writes over the next block's fp_update.
+        // PC adds step_time to motive, so the size is derived rather than
+        // written down twice.
+#ifdef PLATFORM_PC
+        static block_allocator ba(sizeof(motive_node), 16);
+#else
         static block_allocator ba(40, 16);
+#endif
         return &ba;
     }
 
@@ -595,7 +604,11 @@ namespace xhud
         }
     }
 
-    bool shake_motive_update(widget& w, motive& m, F32 dt)
+#ifdef PLATFORM_PC
+    // One console frame of the shake. m.context counts those frames: the
+    // displacement flips sign every frame, the amplitude decays every fourth,
+    // and the whole thing ends after fifty.
+    static bool shake_motive_step(motive& m)
     {
         static const float mult[4] = { -1.0f, -1.0f, 1.0f, 1.0f };
 
@@ -619,6 +632,53 @@ namespace xhud
         m.offset += diff;
 
         return true;
+    }
+#endif
+
+    bool shake_motive_update(widget& w, motive& m, F32 dt)
+    {
+#ifdef PLATFORM_PC
+        // The shake is measured in frames, not seconds, so run it on a fixed
+        // sixtieth-second step and carry the remainder. dt is clamped to 0.1 s
+        // in zGame.cpp, so the catch-up loop runs at most six times.
+        m.step_time += dt;
+
+        while (m.step_time >= 1.0f / 60.0f)
+        {
+            m.step_time -= 1.0f / 60.0f;
+
+            if (!shake_motive_step(m))
+            {
+                m.step_time = 0.0f;
+                return false;
+            }
+        }
+
+        return true;
+#else
+        static const float mult[4] = { -1.0f, -1.0f, 1.0f, 1.0f };
+
+        *((U32*)&m.context) += 1;
+        U32 i = *((U32*)&m.context);
+        if (i > 0x32)
+        {
+            m.context = 0;
+            *m.value -= m.offset;
+            m.offset = 0.0f;
+            return false;
+        }
+
+        F32 diff = m.delta * mult[i & 0x3];
+        if ((i & 0x3) == 0)
+        {
+            m.delta = m.delta * m.accel;
+        }
+
+        *m.value += diff;
+        m.offset += diff;
+
+        return true;
+#endif
     }
 
     bool delay_motive_update(widget& w, motive& m, F32 dt)

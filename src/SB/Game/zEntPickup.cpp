@@ -1733,7 +1733,15 @@ static void zEntPickup_UpdateFX(zEntPickup* ent, xScene*, F32 dt)
 
             gEmitShinySparkles->prop->rate.set(rate, rate, 1.0f, 0);
 
+            // The second argument is a time window, not a constant: it is added
+            // to the emitter's rate_time and turned into a count of particles
+            // for that much elapsed time. The console's frame is one, so a host
+            // frame has to pass its own or the sparkles come out per FRAME.
+#ifdef PLATFORM_PC
+            S32 count = zParPTankConvertEmitRate(gEmitShinySparkles, dt);
+#else
             S32 count = zParPTankConvertEmitRate(gEmitShinySparkles, 1.0f / 60.0f);
+#endif
 
             count = MAX(0, MIN(count, 64));
 
@@ -1999,7 +2007,13 @@ void zEntPickup_UpdateFlyToInterface(zEntPickup* ent, U32 pcount, F32 dt)
                     info.color_death[2].set(sp->db, sp->db, 1.0f, 0);
                     info.color_death[3].set(sp->da, sp->da, 1.0f, 0);
 
+                    // A time window, as at the matching call in
+                    // zEntPickup_UpdateFX above.
+#ifdef PLATFORM_PC
+                    xParEmitterEmitCustom(gEmitShinySparkles, dt, &info);
+#else
                     xParEmitterEmitCustom(gEmitShinySparkles, 1.0f / 60.0f, &info);
+#endif
 
                     break;
                 }
@@ -2026,7 +2040,11 @@ void zEntPickup_UpdateFlyToInterface(zEntPickup* ent, U32 pcount, F32 dt)
 
                 gEmitShinySparkles->prop->rate.set(sp->fly_rate, sp->fly_rate, 1.0f, 0);
 
+#ifdef PLATFORM_PC
+                S32 count = zParPTankConvertEmitRate(gEmitShinySparkles, dt);
+#else
                 S32 count = zParPTankConvertEmitRate(gEmitShinySparkles, 1.0f / 60.0f);
+#endif
 
                 count = MAX(0, MIN(count, 64));
 
@@ -2138,7 +2156,27 @@ void zEntPickup_SceneUpdate(F32 dt)
         return;
     }
 
+    // Rebuild the basis from an accumulated angle rather than multiplying the
+    // matrix into itself. xMat3x3RMulRotY does not renormalise, so its error
+    // accumulates per MULTIPLICATION rather than per second: at fifty times the
+    // console's frame rate the drift is fifty times as fast, and the line below
+    // then declares the matrix orthonormal when it is no longer. Every pickup
+    // copies this one matrix.
+    //
+    // PI * dt is half a turn a second either way.
+#ifdef PLATFORM_PC
+    static F32 sPickupAngle = 0.0f;
+
+    sPickupAngle += PI * dt;
+    if (sPickupAngle >= 2.0f * PI)
+    {
+        sPickupAngle -= 2.0f * PI;
+    }
+
+    xMat3x3RotY((xMat3x3*)&sPickupOrientation, sPickupAngle);
+#else
     xMat3x3RMulRotY((xMat3x3*)&sPickupOrientation, (xMat3x3*)&sPickupOrientation, PI * dt);
+#endif
 
     sPickupOrientation.flags = rwMATRIXTYPEORTHONORMAL;
 

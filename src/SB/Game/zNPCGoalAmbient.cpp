@@ -89,7 +89,12 @@ S32 zNPCGoalJellyBumped::Process(en_trantype* trantyp, F32 dt, void* updCxt, xSc
 
     npc->JellyBoneWorldPos(&pos, -1);
 
+    // Four bubbles a frame is an emission rate per frame.
+#ifdef PLATFORM_PC
+    zFX_SpawnBubbleTrail(&pos, xFrameEmitCount(4.0f, dt));
+#else
     zFX_SpawnBubbleTrail(&pos, 0x4);
+#endif
 
     StreakUpdate();
 

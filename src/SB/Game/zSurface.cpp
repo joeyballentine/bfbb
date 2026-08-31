@@ -382,10 +382,25 @@ void zSurfaceUpdate(xBase* to, xScene* sc, F32 dt)
             }
             case 1:
             {
+                // gFrameCount * (1/60) is a time in seconds, and only while a
+                // frame is a sixtieth of a second. gGameSeconds is that time
+                // measured rather than counted; see xDebug.h.
+#ifdef PLATFORM_PC
+                // Wrapped before the cast to F32: sin repeats every 2*PI, so
+                // the whole turns carry no information and dropping them is what
+                // keeps the angle exact after hours of play.
+                F32 uvTime = (F32)fmod(2.0 * gGameSeconds, 2.0 * (F64)PI);
+
+                moprops->uvfx[j].trans.x = isin(uvTime);
+                moprops->uvfx[j].trans.y = isin(uvTime);
+                moprops->uvfx[j].scale.x = isin(uvTime);
+                moprops->uvfx[j].scale.y = isin(uvTime);
+#else
                 moprops->uvfx[j].trans.x = isin(2.0f * gFrameCount * (1.0f/60));
                 moprops->uvfx[j].trans.y = isin(2.0f * gFrameCount * (1.0f/60));
                 moprops->uvfx[j].scale.x = isin(2.0f * gFrameCount * (1.0f/60));
                 moprops->uvfx[j].scale.y = isin(2.0f * gFrameCount * (1.0f/60));
+#endif
                 break;
             }
             case 2:

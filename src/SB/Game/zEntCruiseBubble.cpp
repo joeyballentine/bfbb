@@ -2938,7 +2938,16 @@ namespace cruise_bubble
             F32 r =
                 range_limit<F32>(this->yaw_vel * current_tweak->player.aim.anim_delta, -1.0f, 1.0f);
             xAnimSingle* s = globals.player.ent.model->Anim->Single;
+#ifdef PLATFORM_PC
+            // 0.5f * ((1 + L) + r) is L + 0.5 * ((1 + r) - L): the lean blend
+            // weight closes half the distance to 1 + r every frame, and the
+            // weight persists across frames. Half a frame is half a sixtieth of
+            // a second here, so the fraction is rebased on elapsed time.
+            F32 k = 1.0f - xpow(0.5f, 60.0f * dt);
+            s->BilinearLerp[0] += k * ((1.0f + r) - s->BilinearLerp[0]);
+#else
             s->BilinearLerp[0] = 0.5f * ((1.0f + s->BilinearLerp[0]) + r);
+#endif
         }
 
         void cruise_bubble::state_player_aim::apply_yaw()
@@ -2973,7 +2982,16 @@ namespace cruise_bubble
             {
                 diff += PI * 2;
             }
+#ifdef PLATFORM_PC
+            // yaw closes a fraction of the remaining angle every frame, so the
+            // turn finishes in a number of frames rather than a length of time.
+            // turn_speed is that fraction per console frame; xexp(dt) moves it
+            // by under two percent at 60 fps and does not make it a rate. What
+            // compounds is the part that survives the frame.
+            F32 tspeed = xFrameApproach(current_tweak->player.aim.turn_speed, dt);
+#else
             F32 tspeed = current_tweak->player.aim.turn_speed * xexp(dt);
+#endif
             if (tspeed > 1.0f)
             {
                 tspeed = 1.0f;
@@ -3773,7 +3791,13 @@ namespace cruise_bubble
             xMat3x3LookVec(&mat, &dir);
             xQuatFromMat(&this->target, &mat);
 
+#ifdef PLATFORM_PC
+            // The slerp closes a fraction of the angle to the target each
+            // frame, the same exponential approach as the player's aim yaw.
+            F32 t = xFrameApproach(current_tweak->camera.aim.turn_speed, dt);
+#else
             F32 t = current_tweak->camera.aim.turn_speed * xexp(dt);
+#endif
             if (t >= 1.0f)
             {
                 this->facing = this->target;

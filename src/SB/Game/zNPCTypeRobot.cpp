@@ -1688,7 +1688,11 @@ void zNPCRobot::SyncStunGlyph(F32 dt, F32 tmr_remain, F32 height)
         }
 
         glyf_stun->PosSet(&vec);
+#ifdef PLATFORM_PC
+        glyf_stun->RotAddDelta(NULL, dt);
+#else
         glyf_stun->RotAddDelta(NULL);
+#endif
 
         trun = 0;
 
@@ -3271,7 +3275,14 @@ void zNPCSleepy_Timestep(F32 dt)
         init = 1;
     }
 
+    // NPCC_TmrCycle's second argument is the time to advance the cycle by; every
+    // other caller passes its own dt. A constant here runs the night light's
+    // pulse at a speed proportional to the frame rate.
+#ifdef PLATFORM_PC
+    F32 dVar1 = NPCC_TmrCycle(&tmr_cycle, dt, 2.63f);
+#else
     F32 dVar1 = NPCC_TmrCycle(&tmr_cycle, 0.016666667f, 2.63f);
+#endif
     zNPCSleepy::hyt_NightLightCurrent = 4.0f;
     zNPCSleepy::hyt_NightLightCurrent += (0.35f * isin(PI * dVar1));
 }
@@ -5956,6 +5967,19 @@ void zNPCRobot::DoFX_Motorboat(F32 dt)
 
     if (xEntIsVisible(this))
     {
+        // A bubble on six of every sixteen frames is an emission rate per
+        // frame. Emit the same six sixteenths of a bubble scaled by the frame's
+        // own length instead of counting frames.
+        //
+        // Six, not five. From cnt_nextemit = 15 the decrement gives 14 down to
+        // 5 silent -- ten calls, since `< 5` is false at 5 -- then 4, 3, 2, 1,
+        // 0 and -1 emitting, and -1 is where the reset fires.
+#ifdef PLATFORM_PC
+        if (xVec3Length2(&frame->vel) > SQ(0.2f) && GetVertPos(NPC_MDLVERT_PROPEL, &pos_emit))
+        {
+            zFX_SpawnBubbleTrail(&pos_emit, xFrameEmitCount(6.0f / 16.0f, dt));
+        }
+#else
         cnt_nextemit--;
 
         if (cnt_nextemit < 5)
@@ -5970,6 +5994,7 @@ void zNPCRobot::DoFX_Motorboat(F32 dt)
         {
             cnt_nextemit = 15;
         }
+#endif
     }
 }
 

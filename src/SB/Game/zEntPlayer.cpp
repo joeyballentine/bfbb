@@ -352,6 +352,21 @@ static void zEntPlayer_SpawnWandBubbles(xVec3* center, U32 count)
         num = count;
     }
 
+#ifdef PLATFORM_PC
+    // Every caller runs once a frame while its effect is live, so `num` is an
+    // emission rate per frame. Scale it to the frame's own length. last_frame
+    // is stamped even on a frame that spawns nothing, so the five-frame gap
+    // that restarts the trail still measures a break in the effect. last_center
+    // is not, so the next spawn spreads its bubbles over the whole path the
+    // wand travelled since the last one.
+    num = xFrameEmitCount((F32)num, update_dt);
+    if (num == 0)
+    {
+        last_frame = gFrameCount;
+        return;
+    }
+#endif
+
     xVec3* posbuf = (xVec3*)xMemPushTemp(num * 2 * sizeof(xVec3));
     xVec3* velbuf = posbuf + num;
     if (posbuf)
@@ -1081,8 +1096,18 @@ static void PlayerAbsControl(xEnt* ent, F32 x, F32 z, F32 dt)
                                 targetLean = 1.0f;
                             }
 
+#ifdef PLATFORM_PC
+                            // The lean blend weight closes 4% of the distance to
+                            // its target every frame and survives the frame, so
+                            // the fraction that compounds is rebased on elapsed
+                            // time.
+                            globals.player.SlideTrackLean +=
+                                (1.0f - xpow(0.96f, 60.0f * dt)) *
+                                (targetLean - globals.player.SlideTrackLean);
+#else
                             globals.player.SlideTrackLean +=
                                 0.04f * (targetLean - globals.player.SlideTrackLean);
+#endif
                             ent->model->Anim->Single->BilinearLerp[0] =
                                 1.0f + globals.player.SlideTrackLean;
                         }
@@ -4378,7 +4403,18 @@ static S32 CheckObjectAgainstMeleeBound(xEnt* cbent, void* cbdata)
 
     if (hitsomething)
     {
+        // Ten bubbles for as long as the target stays inside the bound, not ten
+        // per hit -- all three callers of MeleeAttackBoundCollide run once a
+        // frame while their move is live (the slide track, the bubble spin's
+        // wand and Sandy's melee tag), so this is a rate per frame. The other
+        // callers of zFX_SpawnBubbleHit are one-shot bursts on their own events
+        // and are left alone, which is why this scales here rather than inside
+        // it.
+#ifdef PLATFORM_PC
+        zFX_SpawnBubbleHit(&meleeB->sph.center, xFrameEmitCount(10.0f, update_dt));
+#else
         zFX_SpawnBubbleHit(&meleeB->sph.center, 10);
+#endif
     }
 
     data->hitsomething = hitsomething;
@@ -6281,7 +6317,13 @@ static void zEntPlayer_SpringboardFX(xEnt* ent, F32 dt)
         }
         else
         {
+            // Three bubbles a frame is an emission rate per frame.
+#ifdef PLATFORM_PC
+            zFX_SpawnBubbleTrail((xVec3*)&globals.player.ent.model->Mat->pos,
+                                 xFrameEmitCount(3.0f, dt));
+#else
             zFX_SpawnBubbleTrail((xVec3*)&globals.player.ent.model->Mat->pos, 3);
+#endif
         }
     }
 }
@@ -6607,7 +6649,19 @@ static void zEntPlayer_PredictionUpdate(xEnt* ent, F32 dt)
         xVec3Copy(&g->PredictCurrDir, (xVec3*)&ent->model->Mat->at);
     }
 
+#ifdef PLATFORM_PC
+    // Two one-pole filters smooth the player's speed and turn rate for
+    // zEntPlayer_PredictPos, which every NPC that leads its aim reads. Both
+    // values survive the frame, so the decay and the input weight are rebased
+    // together onto elapsed time; leaving them at 0.9/0.1 shortens the smoothing
+    // window in proportion to the frame rate and hands the NPCs the raw
+    // per-frame measurement.
+    F32 predict_decay = xpow(0.9f, 60.0f * dt);
+
+    g->PredictCurrVel = predict_decay * lastVel + (1.0f - predict_decay) * g->PredictCurrVel;
+#else
     g->PredictCurrVel = 0.9f * lastVel + (1.0f - 0.9f) * g->PredictCurrVel;
+#endif
 
     if (g->PredictCurrVel > 0.05f)
     {
@@ -6630,7 +6684,11 @@ static void zEntPlayer_PredictionUpdate(xEnt* ent, F32 dt)
         }
 
         newAngV /= dt;
+#ifdef PLATFORM_PC
+        g->PredictAngV = predict_decay * g->PredictAngV + (1.0f - predict_decay) * newAngV;
+#else
         g->PredictAngV = 0.9f * g->PredictAngV + (1.0f - 0.9f) * newAngV;
+#endif
 
         if (g->PredictAngV > 0.05f || g->PredictAngV < -0.05f)
         {
@@ -7089,7 +7147,13 @@ void zEntPlayer_Update(xEnt* ent, xScene* sc, F32 dt)
 
         if (!gPTankDisable && StunBubbleTrail(single))
         {
+            // One bubble a frame is an emission rate per frame.
+#ifdef PLATFORM_PC
+            zFX_SpawnBubbleTrail((xVec3*)&globals.player.ent.model->Mat->pos,
+                                 xFrameEmitCount(1.0f, dt));
+#else
             zFX_SpawnBubbleTrail((xVec3*)&globals.player.ent.model->Mat->pos, 1);
+#endif
         }
 
         if (sRingDelay > 0.0f)
@@ -7140,7 +7204,14 @@ void zEntPlayer_Update(xEnt* ent, xScene* sc, F32 dt)
                     info.life.set(1.0f, 1.0f, 1.0f, 0);
                     info.size_birth.set(0.05f, 0.05f, 1.0f, 0);
                     info.size_death.set(0.25f, 0.25f, 1.0f, 0);
+                    // The second argument is a time window, not a count. This
+                    // block runs every frame for the first quarter second of
+                    // StunLand, so a constant emits a fixed amount per frame.
+#ifdef PLATFORM_PC
+                    xParEmitterEmitCustom(gEmitBFX, dt, &info);
+#else
                     xParEmitterEmitCustom(gEmitBFX, 1.0f / 60.0f, &info);
+#endif
                 }
             }
             else
@@ -7163,6 +7234,13 @@ void zEntPlayer_Update(xEnt* ent, xScene* sc, F32 dt)
             sLastInvulnEmit += dt;
             if (sLastInvulnEmit > 0.02f)
             {
+#ifdef PLATFORM_PC
+                // The 0.02 s gate already sets the cadence, so dt is the wrong
+                // window here. At 60 fps this is reached every other frame and
+                // emits a sixtieth of a second; half the elapsed time is that
+                // same amount per second at any frame rate.
+                F32 emit_dt = 0.5f * sLastInvulnEmit;
+#endif
                 sLastInvulnEmit = 0.0f;
 
                 xParEmitterCustomSettings info;
@@ -7181,7 +7259,11 @@ void zEntPlayer_Update(xEnt* ent, xScene* sc, F32 dt)
                 info.rate.set(150.0f, 150.0f, 1.0f, 0);
                 info.life.set(1.5f, 2.0f, 1.0f, 2);
 
+#ifdef PLATFORM_PC
+                xParEmitterEmitCustom(sEmitStankBreath, emit_dt, &info);
+#else
                 xParEmitterEmitCustom(sEmitStankBreath, 1.0f / 60.0f, &info);
+#endif
             }
         }
     }
@@ -8095,10 +8177,19 @@ catchtunnel_done:
         if (fcoll->colls[0].flags & 1)
         {
             in_goo_tmr += dt;
+
+            // A 191-in-256 chance of a bubble every frame is an emission rate
+            // per frame. The chance becomes an expected count so the frame's
+            // own length can scale it.
+#ifdef PLATFORM_PC
+            zFX_SpawnBubbleTrail((xVec3*)&ent->model->Mat->pos,
+                                 xFrameEmitCount(191.0f / 256.0f, dt));
+#else
             if ((U8)xrand() > 0x40)
             {
                 zFX_SpawnBubbleTrail((xVec3*)&ent->model->Mat->pos, 1);
             }
+#endif
         }
     }
     else
@@ -8315,6 +8406,15 @@ catchtunnel_done:
         {
             crs = 1.72f * (globals.player.HangElapsed - 0.25f);
         }
+
+#ifdef PLATFORM_PC
+        // crs is the distance RootUp travels toward RootUpTarget in one frame,
+        // and RootUp persists across frames -- the model orientation and the
+        // player bound both read it. That makes crs a rate per 60 Hz frame.
+        // The rads test below is a "would step past the target" guard and takes
+        // the same scale.
+        crs *= 60.0f * dt;
+#endif
 
         if (rads < crs * crs)
         {
@@ -9174,7 +9274,13 @@ catchtunnel_done:
         meleeB.sph.r = 0.3f;
 
         xQuickCullForBound(&meleeB.qcd, &meleeB);
+
+        // One bubble a frame is an emission rate per frame.
+#ifdef PLATFORM_PC
+        zFX_SpawnBubbleTrail(&meleeB.sph.center, xFrameEmitCount(1.0f, dt));
+#else
         zFX_SpawnBubbleTrail(&meleeB.sph.center, 1);
+#endif
 
         if (MeleeAttackBoundCollide(ent, (zScene*)sc, &meleeB))
         {
@@ -9691,29 +9797,54 @@ void zEntPlayerUpdateModel()
 static void zEntPlayerEmitTongueBubbles()
 {
     xModelInstance* model = globals.player.sb_models[6];
+#ifndef PLATFORM_PC
     U8 rand;
+#endif
     xVec3 vec;
 
+    // An even chance of a bubble every frame is an emission rate per frame. The
+    // chance becomes an expected count so the frame's own length can scale it.
+#ifdef PLATFORM_PC
+    if (model->Flags & 1)
+    {
+        xVec3Copy(&vec, (xVec3*)&model->Mat->pos);
+        vec.y -= 0.5f;
+        zFX_SpawnBubbleTrail(&vec, xFrameEmitCount(0.5f, update_dt));
+    }
+#else
     if ((model->Flags & 1) && (rand = xrand(), rand < 0x80))
     {
         xVec3Copy(&vec, (xVec3*)&model->Mat->pos);
         vec.y -= 0.5f;
         zFX_SpawnBubbleTrail(&vec, 1);
     }
+#endif
 }
 
 static void zEntPlayerEmitSlideBubbles()
 {
     xModelInstance* model = globals.player.ent.model;
+#ifndef PLATFORM_PC
     U8 rand;
+#endif
     xVec3 vec;
 
+    // See zEntPlayerEmitTongueBubbles.
+#ifdef PLATFORM_PC
+    if (model->Flags & 1)
+    {
+        xVec3Copy(&vec, (xVec3*)&model->Mat->pos);
+        vec.y -= 0.5f;
+        zFX_SpawnBubbleTrail(&vec, xFrameEmitCount(0.5f, update_dt));
+    }
+#else
     if ((model->Flags & 1) && (rand = xrand(), rand < 0x80))
     {
         xVec3Copy(&vec, (xVec3*)&model->Mat->pos);
         vec.y -= 0.5f;
         zFX_SpawnBubbleTrail(&vec, 1);
     }
+#endif
 }
 
 static void zEntPlayerCheckHelmetPop()
@@ -10731,8 +10862,16 @@ static void zEntPlayerJumpUpdate(xEnt* ent, xScene* sc, F32 dt)
 
                 if (globals.player.JumpState == 3)
                 {
+#ifdef PLATFORM_PC
+                    // A per-frame multiplier settles at a rate set by the frame
+                    // rate. Raise it to the number of 60 Hz frames in dt.
+                    F32 decay = xpow(0.96f, 60.0f * dt);
+                    ent->frame->vel.x *= decay;
+                    ent->frame->vel.z *= decay;
+#else
                     ent->frame->vel.x *= 0.96f;
                     ent->frame->vel.z *= 0.96f;
+#endif
                 }
             }
 
@@ -10985,8 +11124,14 @@ static void zEntPlayerVelUpdate(xEnt* ent, xScene* sc, F32 dt)
 
                     if (dh > 0.0f)
                     {
+#ifdef PLATFORM_PC
+                        F32 decay = xpow(0.97f, 60.0f * dt);
+                        v->x *= decay;
+                        v->z *= decay;
+#else
                         v->x *= 0.97f;
                         v->z *= 0.97f;
+#endif
                     }
                 }
                 else
@@ -14212,7 +14357,17 @@ static void PlayerSwingUpdate(xEnt* ent, F32 mag, F32 angle, F32 dt)
 
     F32 camDot = xVec3Dot(&globals.camera.mat.at, &unitHang);
 
+#ifdef PLATFORM_PC
+    // A one-pole filter on lassocam_factor, which the camera reads every frame
+    // to blend its distance, height and pitch toward the near set. The decay and
+    // the input weight sum to one, so both move together.
+    F32 lassocam_decay = xpow(0.8f, 60.0f * dt);
+
+    zCameraSetLassoCamFactor(lassocam_decay * curFactor +
+                             (1.0f - lassocam_decay) * (0.5f - 0.5f * camDot));
+#else
     zCameraSetLassoCamFactor(0.8f * curFactor + 0.2f * (0.5f - 0.5f * camDot));
+#endif
 }
 
 static void PlayerTeeterCheck(xEnt* ent, xScene* sc, F32 dt)
@@ -14324,7 +14479,17 @@ static void PlayerRotMatchUpdateEnt(xEnt* ent, xScene* sc, F32 dt, void* fdata)
                 if (s)
                 {
                     s = s * rang;
+
+                    // A deadband taken off a step that is already proportional
+                    // to dt. rang is recomputed from RootUpTarget every frame,
+                    // so the pair settles where the step equals the deadband:
+                    // a constant here leaves a residual tilt proportional to the
+                    // frame rate. Take the same amount per 60 Hz frame instead.
+#ifdef PLATFORM_PC
+                    s -= 0.001f * (60.0f * dt);
+#else
                     s -= 0.001f;
+#endif
 
                     xMat4x3 rot;
 

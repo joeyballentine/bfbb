@@ -4,6 +4,10 @@
 
 U32 gFrameCount;
 
+#ifdef PLATFORM_PC
+F64 gGameSeconds;
+#endif
+
 // Remaining weak definitions will match once referenced e.g. iColor_tag::operator=
 
 void xprintf(const char* msg, ...)

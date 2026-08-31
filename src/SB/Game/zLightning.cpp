@@ -456,7 +456,17 @@ static void UpdateLightning(zLightning* l, F32 seconds)
         if (l->type == LYT_TYPE_LINE || l->type == LYT_TYPE_ZEUS)
         {
             S32 i;
+#ifdef PLATFORM_PC
+            // full is the width of the band each point is jittered into, in
+            // world units, and every point is rebuilt from base_point rather
+            // than displaced further -- nothing here accumulates, so the elapsed
+            // time does not belong in the amplitude. Scaled by dt the bolt goes
+            // straight as the frame rate rises. A console frame's worth is the
+            // width the effect was tuned at.
+            F32 full = l->legacy.rand_radius * (1.0f / 60.0f);
+#else
             F32 full = l->legacy.rand_radius * seconds;
+#endif
             F32 half = 0.5f * full;
 
             for (i = 1; i < l->legacy.total_points - 1; i++)
@@ -482,7 +492,12 @@ static void UpdateLightning(zLightning* l, F32 seconds)
                      &l->legacy.base_point[0]);
             xVec3Normalize(&dir, &dir);
 
+#ifdef PLATFORM_PC
+            // Same jitter band as the LINE case above, same reason.
+            F32 full = l->legacy.rand_radius * (1.0f / 60.0f);
+#else
             F32 full = l->legacy.rand_radius * seconds;
+#endif
             F32 half = 0.5f * full;
 
             for (S32 i = 1; i < l->legacy.total_points - 1; i++)

@@ -2026,10 +2026,22 @@ void zNPCBSandy::Process(xScene* xscn, F32 dt)
 
     amp = xJaw_EvalData(this->jawData, this->jawTime);
 
+#ifdef PLATFORM_PC
+    // These are one-pole filters: the decay and the input weight sum to one.
+    // Rebasing the decay alone would leave the weight at 0.1 while the decay
+    // approaches 1, and the level would run away as the frame rate rises.
+    F32 level_decay = xpow(0.9f, 60.0f * dt);
+    F32 threshold_decay = xpow(0.99f, 60.0f * dt);
+
+    this->jawLevel = (1.0f - level_decay) * amp + level_decay * this->jawLevel;
+    this->jawThreshold =
+        (1.0f - threshold_decay) * amp + threshold_decay * this->jawThreshold;
+#else
     this->jawLevel *= 0.9f;
     this->jawLevel = 0.1f * amp + this->jawLevel;
     this->jawThreshold *= 0.99f;
     this->jawThreshold = 0.01f * amp + this->jawThreshold;
+#endif
 
     wasBeat = this->isBeat;
 

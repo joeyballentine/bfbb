@@ -150,7 +150,11 @@ void zNPCGlyph_Timestep(F32 dt)
 
             if (glyph->mdl_glyph != NULL && glyph->flg_glyph & (1 << 5))
             {
+#ifdef PLATFORM_PC
+                glyph->RotAddDelta(NULL, dt);
+#else
                 glyph->RotAddDelta(NULL);
+#endif
             }
             if (glyph->flg_glyph & ((1 << 3) | (1 << 2)))
             {
@@ -337,6 +341,10 @@ void NPCGlyph::Reset()
     xVec3Copy(&pos_glyph, &g_O3);
     xVec3Copy(&vel_glyph, &g_O3);
     tmr_glyph = 0.0f;
+#ifdef PLATFORM_PC
+    xVec3Copy(&angrate_glyph, &g_O3);
+    xVec3Copy(&angspin_glyph, &g_O3);
+#endif
 }
 
 void NPCGlyph::Init(en_npcglyph gtyp, RpAtomic* model_data)
@@ -480,11 +488,22 @@ void NPCGlyph::RotSet(xVec3* ang, S32 doautospin)
     xMat3x3 mat_rot = {};
     xMat3x3Euler(&mat_rot, ang);
     RotSet(&mat_rot, doautospin);
+#ifdef PLATFORM_PC
+    // ang is a delta per console frame. Keep it as a rate a second so
+    // RotAddDelta can step it by the real frame time.
+    xVec3SMul(&angrate_glyph, ang, 60.0f);
+#endif
 }
 
 void NPCGlyph::RotSet(xMat3x3* mat_rot, S32 doautospin)
 {
     xMat3x3Copy(&rot_glyph, mat_rot);
+#ifdef PLATFORM_PC
+    // A caller-supplied matrix carries no angles to step. The euler overload
+    // fills these in after it calls here.
+    xVec3Copy(&angrate_glyph, &g_O3);
+    xVec3Copy(&angspin_glyph, &g_O3);
+#endif
     if (doautospin)
     {
         flg_glyph |= (1 << 5);
@@ -543,6 +562,36 @@ void NPCGlyph::RotAddDelta(xMat3x3* mat_rot)
     xModelSetFrame(mdl_glyph, frame);
 }
 
+#ifdef PLATFORM_PC
+// rot_glyph is one console frame's worth of rotation, so multiplying it into
+// the model frame spins the glyph once per frame rather than once per second.
+// Step the euler angles by dt and rebuild the basis instead. Rebuilding also
+// removes the drift of xMat3x3Mul composing a matrix into itself without
+// renormalising.
+void NPCGlyph::RotAddDelta(xMat3x3* mat_rot, F32 dt)
+{
+    if (mat_rot != NULL || xVec3Length2(&angrate_glyph) == 0.0f)
+    {
+        RotAddDelta(mat_rot);
+        return;
+    }
+
+    xVec3AddScaled(&angspin_glyph, &angrate_glyph, dt);
+
+    angspin_glyph.x = xfmod(angspin_glyph.x, 2.0f * PI);
+    angspin_glyph.y = xfmod(angspin_glyph.y, 2.0f * PI);
+    angspin_glyph.z = xfmod(angspin_glyph.z, 2.0f * PI);
+
+    xMat4x3* frame = xModelGetFrame(mdl_glyph);
+    xVec3 pos = frame->pos;
+
+    xMat3x3Euler(frame, &angspin_glyph);
+    frame->pos = pos;
+
+    xModelSetFrame(mdl_glyph, frame);
+}
+#endif
+
 void NPCGlyph::Timestep(F32 dt)
 {
     xVec3 vec = {};
@@ -556,7 +605,11 @@ void NPCGlyph::Timestep(F32 dt)
     case NPC_GLYPH_SHINYHUNDRED:
     {
         VelSet_Shiny();
+#ifdef PLATFORM_PC
+        RotAddDelta(NULL, dt);
+#else
         RotAddDelta(NULL);
+#endif
 
         // Do we use sph here?
         F32 x_delta = globals.player.ent.bound.sph.center.x - pos_glyph.x;

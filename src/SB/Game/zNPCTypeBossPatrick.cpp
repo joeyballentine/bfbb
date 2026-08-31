@@ -1580,10 +1580,18 @@ void zNPCBPatrick::Process(xScene* xscn, F32 dt)
         {
             if ((this->glob[i].flags & 1) && !(this->glob[i].flags & 4))
             {
+                // An even chance of a bubble every frame is an emission rate
+                // per frame. The chance becomes an expected count so the
+                // frame's own length can scale it.
+#ifdef PLATFORM_PC
+                zParPTankSpawnBubbles(&this->glob[i].lastPos, &bubbleVel,
+                                      xFrameEmitCount(0.5f, dt), 1.0f);
+#else
                 if (xrand() & 0x200)
                 {
                     zParPTankSpawnBubbles(&this->glob[i].lastPos, &bubbleVel, 1, 1.0f);
                 }
+#endif
 
                 if (xVec3Dist2(&this->glob[i].lastPos, &globals.player.ent.bound.sph.center) < 1.0f)
                 {

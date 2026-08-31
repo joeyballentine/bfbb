@@ -3602,7 +3602,14 @@ void zSceneSpawnRandomBubbles()
     RwMatrix* mat = RwFrameGetMatrix(RwCameraGetFrame(currentCamera));
     F32 floatRand = xurand();
 
+    // A 1.5% chance of a bubble every frame is an emission rate per frame.
+    // Rebase the chance on the frame's own length so the menu fills at the same
+    // speed whatever the frame rate.
+#ifdef PLATFORM_PC
+    if (floatRand > 1.0f - xFrameEmitChance(0.015f, sTimeElapsed))
+#else
     if (floatRand > 0.985f)
+#endif
     {
         xVec3 pos, var_48;
         F32 r;

@@ -813,6 +813,12 @@ void NPAR_Upd_OilBubble(NPARMgmt* mgmt, F32 dt)
     pool.rs.flags = 0;
     pool.reset();
 
+#ifdef PLATFORM_PC
+    // Retail drops 10% of the velocity per frame, which settles at whatever
+    // rate the frame rate happens to be. Match the sixtieth-of-a-second curve.
+    F32 vel_decay = xpow(0.9f, 60.0f * dt);
+#endif
+
     for (S32 i = 0; i < mgmt->cnt_active; i++)
     {
         NPARData* npdata = &mgmt->par_buf[i];
@@ -825,7 +831,11 @@ void NPAR_Upd_OilBubble(NPARMgmt* mgmt, F32 dt)
 
         npdata->pos += npdata->vel * dt;
         npdata->vel += npparm->acc_oilBubble * dt;
+#ifdef PLATFORM_PC
+        npdata->vel *= vel_decay;
+#else
         npdata->vel *= 0.9f;
+#endif
 
         F32 arch = ARCH(1.0f - rat);
 
@@ -1015,7 +1025,13 @@ void NPAR_CopyNPARToPTPool(NPARData* param_1, ptank_pool__pos_color_size_uv2* pa
 
 void NPAR_Upd_TubeSpiral(NPARMgmt* mgmt, F32 dt)
 {
+#ifdef PLATFORM_PC
+    // The name is literal: the spiral ages tmr_remain and integrates pos with a
+    // hardcoded sixtieth of a second, so both ran at the frame rate.
+    const F32 useFixedTimestepForSpiral = dt;
+#else
     static const F32 useFixedTimestepForSpiral = 1.0f / 60.0f;
+#endif
     static const F32 seg_allowCollide[2] = { 0.0f, 0.9f };
 
     ptank_pool__pos_color_size_uv2 pool;

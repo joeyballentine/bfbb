@@ -1094,11 +1094,19 @@ void zFrag_ProjectileManager(F32 dt)
                 {
                     xParabolaEvalVel(&frag->info.projectile.path, &uVar1, frag->info.projectile.t);
 
+                    // A fifth of the speed in bubbles every frame, at least
+                    // one, is an emission rate per frame. Scale the count by
+                    // the frame's own length.
+#ifdef PLATFORM_PC
+                    F32 want = 0.2f * xVec3LengthFast(&uVar1);
+                    U32 numBubbles = xFrameEmitCount(MAX(want, 1.0f), dt);
+#else
                     U32 numBubbles = 0.2f * xVec3LengthFast(&uVar1);
                     if (numBubbles < 1)
                     {
                         numBubbles = 1;
                     }
+#endif
 
                     zFX_SpawnBubbleTrail((xVec3*)&frag->info.projectile.model->Mat->pos,
                                          numBubbles);

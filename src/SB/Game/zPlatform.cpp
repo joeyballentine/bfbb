@@ -799,7 +799,16 @@ void zPlatform_Update(xEnt* entplat, xScene* sc, F32 dt)
     zPlatform* plat = (zPlatform*)entplat;
 
     if (plat->subType != ePlatformTypeBreakaway) {
+#ifdef PLATFORM_PC
+        // pauseDelta is a step per frame -- eEventPlatPause sets it to
+        // 1/toParam[0], so the ramp from running to stopped takes toParam[0]
+        // frames. Counting elapsed console frames instead keeps that ramp the
+        // length it is at 60 fps whatever the frame rate.
+        plat->pauseMult =
+            CLAMP(plat->pauseMult + plat->pauseDelta * (60.0f * dt), 0.000001f, 1.0f);
+#else
         plat->pauseMult = CLAMP(plat->pauseMult + plat->pauseDelta, 0.000001f, 1.0f);
+#endif
         dt *= plat->pauseMult;
     }
 

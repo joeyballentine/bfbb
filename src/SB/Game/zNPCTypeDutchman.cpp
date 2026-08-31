@@ -3337,7 +3337,14 @@ void zNPCGoalDutchmanBeam::add_blast_effects(S32 which, F32 dt)
 
     light_emitter_settings.pos = beam[which].loc;
     light_emitter_settings.rate.set(119.99999f * tweak.beam.light_rate);
+    // A time window, like the plasma and spark calls above. add_effects runs
+    // every frame while the beam travels, so the constant is one console frame's
+    // worth and a host frame has to supply its own.
+#ifdef PLATFORM_PC
+    owner.emit_particles(*light_emitter, dt, light_emitter_settings);
+#else
     owner.emit_particles(*light_emitter, 1.0f / 60.0f, light_emitter_settings);
+#endif
 }
 
 void zNPCGoalDutchmanBeam::add_effects(S32 which, F32 dt)

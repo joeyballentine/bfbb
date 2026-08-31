@@ -176,6 +176,12 @@ namespace xhud
         motive_proc* fp_update;
         void* context;
         U8 inverse;
+#ifdef PLATFORM_PC
+        // Seconds left over from the last fixed step. shake_motive_update
+        // counts console frames, so it advances a sixtieth of a second at a
+        // time and carries the remainder here.
+        F32 step_time;
+#endif
 
         motive(F32* value, F32 delta, F32 max_offset, F32 accel, bool (*fp_update)(xhud::widget&, motive&, F32), void* context)
         {
@@ -187,6 +193,9 @@ namespace xhud
             this->accel = accel;
             this->fp_update = fp_update;
             this->context = context;
+#ifdef PLATFORM_PC
+            this->step_time = 0.0f;
+#endif
         }
         motive(const motive& other)
         {
@@ -198,6 +207,9 @@ namespace xhud
             accel = other.accel;
             fp_update = other.fp_update;
             context = other.context;
+#ifdef PLATFORM_PC
+            step_time = other.step_time;
+#endif
         }
 
         bool update(widget& w, F32 dt)

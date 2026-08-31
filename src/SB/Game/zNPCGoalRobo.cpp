@@ -1469,10 +1469,16 @@ void zNPCGoalAlertFodBzzt::DeathRayUpdate(F32 dt)
     xVec3Copy(&pos_laserSource, &pos_src);
     xVec3Copy(&pos_laserTarget, &pos_tgt);
 
+    // An even chance of a bubble every frame is an emission rate per frame. The
+    // chance becomes an expected count so the frame's own length can scale it.
+#ifdef PLATFORM_PC
+    zFX_SpawnBubbleTrail(&pos_tgt, xFrameEmitCount(0.5f, dt));
+#else
     if (xrand() & 0x800000)
     {
         zFX_SpawnBubbleTrail(&pos_tgt, 1);
     }
+#endif
 
     npc->flg_xtrarend |= 1;
 }
@@ -2490,11 +2496,23 @@ S32 zNPCGoalAlertGlove::Process(en_trantype* trantype, F32 dt, void* updCtxt, xS
         tmr_attack = 2.0f * dst / npc->cfg_npc->spd_moveMax;
     }
 
+    // A whirlwind burst every four frames is an emission rate per frame. Hold
+    // the same period in seconds instead.
+#ifdef PLATFORM_PC
+    tmr_nextemit -= dt;
+
+    if (tmr_nextemit <= 0.0f)
+#else
     if (--cnt_nextemit < 0)
+#endif
     {
         U32 astid;
 
+#ifdef PLATFORM_PC
+        tmr_nextemit = 4.0f / 60.0f;
+#else
         cnt_nextemit = 3;
+#endif
         astid = npc->AnimCurStateID();
 
         if (astid != g_hash_roboanim[17])
@@ -3715,7 +3733,13 @@ S32 zNPCGoalAlertTubelet::Process(en_trantype* trantype, F32 dt, void* updCtxt, 
     }
     else if (npc->hitpoints < 1)
     {
+#ifdef PLATFORM_PC
+        // Per-frame decay on state that survives the frame. xpow rebases the
+        // constant onto the sixtieth-of-a-second curve retail settles on.
+        npc->frame->drot.angle *= xpow(0.97f, 60.0f * dt);
+#else
         npc->frame->drot.angle *= 0.97f;
+#endif
         npc->frame->mode |= 0x20;
     }
 
@@ -3813,6 +3837,39 @@ void zNPCGoalAlertTubelet::PeteAttackParSys(F32 dt, S32 param_2)
     zNPCTubelet* iVar2 = (zNPCTubelet*)(psyche->clt_owner);
     iVar1 = (iVar2->frame);
     F32 dVar3 = (iVar1->drot.angle);
+#ifdef PLATFORM_PC
+    // drot.angle is one FRAME's rotation -- xEntRotationToMatrix adds it to
+    // rot.angle once a frame with no dt -- so the two thresholds below are
+    // per-frame angles, and the band they trap it in is a spin of 5.24 to 5.76
+    // radians a second only while a frame is a sixtieth of one. Left alone the
+    // tubelet settles into spinning four times as fast at 240 fps.
+    //
+    // Worked in radians a second on both sides of the comparison instead. At
+    // dt = 1/60 every branch and every result is retail's.
+    if (dt > 0.0f)
+    {
+        F32 rate = dVar3 / dt;
+
+        if ((F32)__fabs(rate) > 60.0f * 0.09599312f)
+        {
+            iVar1->drot.angle = rate * xpow(0.8f, 60.0f * dt) * dt;
+            iVar2->frame->mode |= 0x20;
+        }
+        else if ((F32)__fabs(rate) < 60.0f * 0.08726647f)
+        {
+            iVar1->drot.angle = (rate - 60.0f * 0.0872664675116539f * dt) * dt;
+            iVar2->frame->mode |= 0x20;
+        }
+        else
+        {
+            iVar1->mode |= 0x20;
+            if (param_2 != 0)
+            {
+                EmitSteam(dt);
+            }
+        }
+    }
+#else
     if ((F32)__fabs(dVar3) > 0.09599312f)
     {
         iVar1->drot.angle *= 0.8f;
@@ -3834,6 +3891,7 @@ void zNPCGoalAlertTubelet::PeteAttackParSys(F32 dt, S32 param_2)
             }
         }
     }
+#endif
 }
 
 void zNPCGoalAlertTubelet::EmitSteam(F32 dt)
@@ -5764,7 +5822,11 @@ S32 zNPCGoalHokeyPokey::Process(en_trantype* trantype, F32 dt, void* updCtxt, xS
 
     if (zNPCFodBzzt::tmr_hokeypokey < 0.5f)
     {
+#ifdef PLATFORM_PC
+        ang_spinrate *= xpow(0.8f, 60.0f * dt);
+#else
         ang_spinrate *= 0.8f;
+#endif
     }
     else if (xabs(ang_spinrate) < 1.5707964f)
     {
@@ -8109,7 +8171,11 @@ S32 zNPCGoalTubeBonked::Process(en_trantype* trantype, F32 dt, void* updCtxt, xS
         vec_offsetPete += dir_want;
     }
 
+#ifdef PLATFORM_PC
+    ang_spinrate *= xpow(0.99f, 60.0f * dt);
+#else
     ang_spinrate *= 0.99f;
+#endif
 
     CheckForTran(trantype, &nextgoal);
 
@@ -8321,7 +8387,13 @@ S32 zNPCGoalTubeDying::Process(en_trantype* trantype, F32 dt, void* updCtxt, xSc
     spd_gothatway = MIN(spd_gothatway, 10.0f);
 
     npc->GetVertPos(NPC_MDLVERT_PROPEL, &pos_emit);
+
+    // One bubble a frame is an emission rate per frame.
+#ifdef PLATFORM_PC
+    zFX_SpawnBubbleTrail(&pos_emit, xFrameEmitCount(1.0f, dt));
+#else
     zFX_SpawnBubbleTrail(&pos_emit, 1);
+#endif
 
     return xGoal::Process(trantype, dt, updCtxt, xscn);
 }
@@ -8425,7 +8497,13 @@ S32 zNPCGoalDeflate::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScen
     spd_gothatway = MIN(spd_gothatway, 10.0f);
 
     npc->GetVertPos(NPC_MDLVERT_PROPEL, &pos_emit);
+
+    // One bubble a frame is an emission rate per frame.
+#ifdef PLATFORM_PC
+    zFX_SpawnBubbleTrail(&pos_emit, xFrameEmitCount(1.0f, dt));
+#else
     zFX_SpawnBubbleTrail(&pos_emit, 1);
+#endif
 
     return xGoal::Process(trantype, dt, updCtxt, xscn);
 }

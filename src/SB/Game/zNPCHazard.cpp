@@ -528,6 +528,10 @@ void NPCHazard::WipeIt()
     this->cb_notify = NULL;
     this->npc_owner = NULL;
     memset(&this->custdata, 0, sizeof(this->custdata));
+#ifdef PLATFORM_PC
+    xVec3Copy(&this->ang_spinRate, &g_O3);
+    this->tmr_nextemit = 0.0f;
+#endif
 }
 
 S32 NPCHazard::ConfigHelper(en_npchaz haztype)
@@ -1129,7 +1133,19 @@ void NPCHazard::Timestep(F32 dt)
     if (this->mdl_hazard != NULL && (this->flg_hazard & 0x4000) &&
         (this->flg_hazard & 0x8000))
     {
+#ifdef PLATFORM_PC
+        // mat_rotDelta is one sixtieth of a second of spin, so applying it once
+        // per frame turns the hazard at the frame rate. Build this frame's
+        // delta from the stored rate instead.
+        xVec3 ang_step;
+        xMat3x3 mat_step;
+
+        xVec3SMul(&ang_step, &this->ang_spinRate, dt);
+        xMat3x3Euler(&mat_step, &ang_step);
+        this->TypData_RotMatApply(&mat_step);
+#else
         this->TypData_RotMatApply(&this->custdata.typical.mat_rotDelta);
+#endif
     }
 
     switch (this->typ_hazard)
@@ -1809,6 +1825,11 @@ void NPCHazard::TypData_RotMatStore(xVec3* euler)
     if (euler != NULL)
     {
         xMat3x3Euler(mat_spin, euler);
+#ifdef PLATFORM_PC
+        // Every caller hands in a rate scaled by a sixtieth of a second.
+        // Undo that scale to get radians per second; Timestep applies it.
+        xVec3SMul(&this->ang_spinRate, euler, 60.0f);
+#endif
     }
     else
     {
@@ -1819,6 +1840,9 @@ void NPCHazard::TypData_RotMatStore(xVec3* euler)
         ang_spin.z = 12.566371f * (2.0f * (xurand() - 0.5f));
         xVec3SMulBy(&ang_spin, 0.016666668f);
         xMat3x3Euler(mat_spin, &ang_spin);
+#ifdef PLATFORM_PC
+        xVec3SMul(&this->ang_spinRate, &ang_spin, 60.0f);
+#endif
     }
 
     this->flg_hazard |= 0x4000;
@@ -1835,6 +1859,16 @@ void NPCHazard::TypData_RotMatApply(xMat3x3* mat)
 {
     xMat3x3* frame = (xMat3x3*)xModelGetFrame(this->mdl_hazard);
     xMat3x3Mul(frame, mat, frame);
+#ifdef PLATFORM_PC
+    // The frame is multiplied into itself once per frame, so the basis loses
+    // orthogonality per multiply rather than per second. Rebuild it from `at`.
+    // The basis is a pure rotation -- the model's scale lives in
+    // mdl_hazard->Scale and is applied at render -- so nothing is lost.
+    xVec3Normalize(&frame->at, &frame->at);
+    xVec3Cross(&frame->right, &frame->up, &frame->at);
+    xVec3Normalize(&frame->right, &frame->right);
+    xVec3Cross(&frame->up, &frame->at, &frame->right);
+#endif
     xModelSetFrame(this->mdl_hazard, (xMat4x3*)frame);
 }
 
@@ -2337,11 +2371,25 @@ void NPCHazard::Upd_TubeletBlast(F32 dt)
                    SND_CAT_GAME, 0.0f);
     }
 
+    // A sparkle every four frames is an emission rate per frame. Hold the same
+    // period in seconds instead.
+#ifdef PLATFORM_PC
+    static F32 tmr_moreorless = 0.0f;
+
+    tmr_moreorless -= dt;
+
+    if (tmr_moreorless <= 0.0f)
+#else
     static S32 moreorless = 0;
 
     if (--moreorless < 0)
+#endif
     {
+#ifdef PLATFORM_PC
+        tmr_moreorless = 4.0f / 60.0f;
+#else
         moreorless = 3;
+#endif
 
         xVec3 vel_emit = { 0.0f, 0.0f, 0.0f };
         vel_emit.x = 2.0f * (xurand() - 0.5f);
@@ -2569,6 +2617,19 @@ void NPCHazard::Upd_TTFlight(F32 dt)
             TarTarGunkTrail();
         }
 
+        // Six bubbles every five frames is an emission rate per frame. Hold the
+        // same period in seconds instead.
+#ifdef PLATFORM_PC
+        static F32 tmr_moreorless = 0.0f;
+
+        tmr_moreorless -= dt;
+
+        if (tmr_moreorless <= 0.0f)
+        {
+            tmr_moreorless = 5.0f / 60.0f;
+            zFX_SpawnBubbleTrail(&this->pos_hazard, 0x6);
+        }
+#else
         static S32 moreorless = 0;
 
         if (--moreorless < 0)
@@ -2576,6 +2637,7 @@ void NPCHazard::Upd_TTFlight(F32 dt)
             moreorless = 4;
             zFX_SpawnBubbleTrail(&this->pos_hazard, 0x6);
         }
+#endif
     }
 }
 
@@ -2617,7 +2679,11 @@ void NPCHazard::Upd_TTSpill(F32 dt)
         }
     }
 
+#ifdef PLATFORM_PC
+    TarTarLinger(dt);
+#else
     TarTarLinger();
+#endif
 }
 
 S32 NPCHazard::KickSteamyStinky()
@@ -2661,7 +2727,11 @@ void NPCHazard::Upd_TTStink(F32 dt)
         }
     }
 
+#ifdef PLATFORM_PC
+    TarTarLinger(dt);
+#else
     TarTarLinger();
+#endif
 }
 
 void NPCHazard::TarTarFalumpf()
@@ -2744,17 +2814,34 @@ void NPCHazard::TarTarSplash(const xVec3* dir_norm)
     }
 }
 
+#ifdef PLATFORM_PC
+void NPCHazard::TarTarLinger(F32 dt)
+#else
 void NPCHazard::TarTarLinger()
+#endif
 {
     HAZBall* ball = &this->custdata.ball;
     const xVec3 vel_emit = g_Y3;
 
+    // One trail particle every eleven frames -- ten decrements plus the one
+    // that goes negative. A frame divider emits at the frame rate, so hold the
+    // same period in seconds instead.
+#ifdef PLATFORM_PC
+    this->tmr_nextemit -= dt;
+    if (this->tmr_nextemit > 0.0f)
+    {
+        return;
+    }
+
+    this->tmr_nextemit = 11.0f / 60.0f;
+#else
     if (--this->cnt_nextemit >= 0)
     {
         return;
     }
 
     this->cnt_nextemit = 10;
+#endif
 
     F32 rad_use = 0.75f * ball->rad_cur;
     xVec3 pos_emit = this->pos_hazard;
@@ -2820,6 +2907,19 @@ void NPCHazard::Upd_ChuckBomb(F32 dt)
         TypData_RotMatSet(&mat_rot);
     }
 
+    // A wake burst every four frames is an emission rate per frame. Hold the
+    // same period in seconds instead.
+#ifdef PLATFORM_PC
+    static F32 tmr_moreorless = 0.0f;
+
+    tmr_moreorless -= dt;
+
+    if (tmr_moreorless <= 0.0f)
+    {
+        tmr_moreorless = 4.0f / 60.0f;
+        DisperseBubWake(tartar->rad_cur, &tartar->vel);
+    }
+#else
     static S32 moreorless = 0;
 
     if (--moreorless < 0)
@@ -2827,6 +2927,7 @@ void NPCHazard::Upd_ChuckBomb(F32 dt)
         moreorless = 3;
         DisperseBubWake(tartar->rad_cur, &tartar->vel);
     }
+#endif
 
     if (this->flg_hazard & 0x2000)
     {
@@ -3119,12 +3220,23 @@ void NPCHazard::Upd_ChuckBloosh(F32 dt)
 
     OrientToDir(&tartar->vel, 0x0);
 
+    // A trail particle every six frames. See TarTarLinger.
+#ifdef PLATFORM_PC
+    this->tmr_nextemit -= dt;
+    if (this->tmr_nextemit > 0.0f)
+    {
+        return;
+    }
+
+    this->tmr_nextemit = 6.0f / 60.0f;
+#else
     if (--this->cnt_nextemit >= 0)
     {
         return;
     }
 
     this->cnt_nextemit = 5;
+#endif
 
     F32 rad_back = 0.5f * tartar->rad_cur;
     xVec3 pos_emit = this->pos_hazard;
@@ -3178,12 +3290,24 @@ void NPCHazard::Upd_BoneFlight(F32 dt)
     xParabolaEvalPos(parab, &this->pos_hazard, tym);
     xParabolaEvalVel(parab, &tartar->vel, tym);
 
+    // A bubble every four frames is an emission rate per frame. Hold the same
+    // period in seconds instead.
+#ifdef PLATFORM_PC
+    static F32 tmr_moreorless = 0.0f;
+    tmr_moreorless -= dt;
+    if (tmr_moreorless <= 0.0f)
+    {
+        tmr_moreorless = 4.0f / 60.0f;
+        zFX_SpawnBubbleTrail(&this->pos_hazard, 0x1);
+    }
+#else
     static S32 moreorless = 0;
     if (--moreorless < 0)
     {
         moreorless = 3;
         zFX_SpawnBubbleTrail(&this->pos_hazard, 0x1);
     }
+#endif
 
     if (this->flg_hazard & 0x2000)
     {
@@ -3311,10 +3435,22 @@ void NPCHazard::Upd_OilBubble(F32 dt)
             StreakUpdate(tartar->streakID, 0.35f);
         }
 
+        // A trail particle every four frames is an emission rate per frame.
+        // Hold the same period in seconds instead.
+#ifdef PLATFORM_PC
+        static F32 tmr_moreorless = 0.0f;
+        tmr_moreorless -= dt;
+        if (tmr_moreorless <= 0.0f)
+#else
         static S32 moreorless = 0;
         if (--moreorless < 0)
+#endif
         {
+#ifdef PLATFORM_PC
+            tmr_moreorless = 4.0f / 60.0f;
+#else
             moreorless = 3;
+#endif
 
             F32 rad = tartar->rad_cur;
             xVec3 pos = this->pos_hazard;
@@ -3480,9 +3616,19 @@ void NPCHazard::Upd_OilOoze(F32 dt)
         NPCC_Slick_MakePlayerSlip(this->npc_owner);
     }
 
+    // A trail particle every eleven frames. See TarTarLinger.
+#ifdef PLATFORM_PC
+    this->tmr_nextemit -= dt;
+    if (this->tmr_nextemit <= 0.0f)
+#else
     if (--this->cnt_nextemit < 0)
+#endif
     {
+#ifdef PLATFORM_PC
+        this->tmr_nextemit = 11.0f / 60.0f;
+#else
         this->cnt_nextemit = 10;
+#endif
 
         F32 rad_use = 0.75f * ball->rad_cur;
         xVec3 pos_emit = this->pos_hazard;
@@ -3596,9 +3742,19 @@ void NPCHazard::Upd_OilGlob(F32 dt)
         NPCC_Slick_MakePlayerSlip(this->npc_owner);
     }
 
+    // A trail particle every eleven frames. See TarTarLinger.
+#ifdef PLATFORM_PC
+    this->tmr_nextemit -= dt;
+    if (this->tmr_nextemit <= 0.0f)
+#else
     if (--this->cnt_nextemit < 0)
+#endif
     {
+#ifdef PLATFORM_PC
+        this->tmr_nextemit = 11.0f / 60.0f;
+#else
         this->cnt_nextemit = 10;
+#endif
 
         F32 rad_use = 0.75f * shroom->rad_cur;
         xVec3 pos_emit = this->pos_hazard;
@@ -3834,12 +3990,24 @@ void NPCHazard::Upd_FunFrag(F32 dt)
     xParabolaEvalPos(parab, &this->pos_hazard, tym);
     xParabolaEvalVel(parab, &tartar->vel, tym);
 
+    // A bubble every four frames is an emission rate per frame. Hold the same
+    // period in seconds instead.
+#ifdef PLATFORM_PC
+    static F32 tmr_moreorless = 0.0f;
+    tmr_moreorless -= dt;
+    if (tmr_moreorless <= 0.0f)
+    {
+        tmr_moreorless = 4.0f / 60.0f;
+        zFX_SpawnBubbleTrail(&this->pos_hazard, 1);
+    }
+#else
     static S32 moreorless = 0;
     if (--moreorless < 0)
     {
         moreorless = 3;
         zFX_SpawnBubbleTrail(&this->pos_hazard, 1);
     }
+#endif
 }
 
 void NPCHazard::StreakUpdate(U32 streakID, F32 rad)
@@ -3896,12 +4064,24 @@ void NPCHazard::Upd_RoboBits(F32 dt)
     xParabolaEvalPos(parab, &this->pos_hazard, tym);
     xParabolaEvalVel(parab, &tartar->vel, tym);
 
+    // A wake burst every four frames is an emission rate per frame. Hold the
+    // same period in seconds instead.
+#ifdef PLATFORM_PC
+    static F32 tmr_moreorless = 0.0f;
+    tmr_moreorless -= dt;
+    if (tmr_moreorless <= 0.0f)
+    {
+        tmr_moreorless = 4.0f / 60.0f;
+        DisperseBubWake(tartar->rad_cur, &tartar->vel);
+    }
+#else
     static S32 moreorless = 0;
     if (--moreorless < 0)
     {
         moreorless = 3;
         DisperseBubWake(tartar->rad_cur, &tartar->vel);
     }
+#endif
 }
 
 void NPCHazard::Upd_VisSplash(F32 dt)

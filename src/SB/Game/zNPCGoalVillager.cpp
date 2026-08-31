@@ -282,7 +282,11 @@ S32 zNPCGoalPlayerNear::Process(en_trantype* trantype, F32 dt, void* updCtxt, xS
         }
 
         talk_glyph->PosSet(&vec);
+#ifdef PLATFORM_PC
+        talk_glyph->RotAddDelta(NULL, dt);
+#else
         talk_glyph->RotAddDelta(NULL);
+#endif
     }
 
     if ((tmr_actBored < 0.0f) ? 1 : 0)
@@ -1059,7 +1063,13 @@ S32 zNPCGoalBoyWeep::Process(en_trantype* trantype, F32 dt, void* updCtxt, xScen
     }
     else
     {
+#ifdef PLATFORM_PC
+        // Per-frame decay on state that survives the frame. xpow rebases the
+        // constant onto the sixtieth-of-a-second curve retail settles on.
+        ang_spinrate *= xpow(0.985f, 60.0f * dt);
+#else
         ang_spinrate *= 0.985f;
+#endif
         npc->frame->drot.angle = -1.0f * (dt * ang_spinrate);
         npc->frame->mode |= 0x20;
     }

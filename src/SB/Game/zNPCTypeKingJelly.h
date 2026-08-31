@@ -171,6 +171,14 @@ struct zNPCKingJelly : zNPCSubBoss
     zEnt* curtain_ent;
     xModelInstance* curtain_model[5];
     U8 first_update; //0x10B4
+#ifdef PLATFORM_PC
+    // generate_ring_particles and generate_zap_particles round their particle
+    // count to nearest, so a frame shorter than a sixtieth of a second emits
+    // nothing at all. These carry the leftover time between fixed emission
+    // steps.
+    F32 tmr_ringemit;
+    F32 tmr_zapemit;
+#endif
 
     zNPCKingJelly(S32 myType);
     void Process(xScene* xscn, F32 dt);

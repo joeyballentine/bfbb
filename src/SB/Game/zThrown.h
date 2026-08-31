@@ -49,6 +49,11 @@ struct zThrownStruct
     U32 oldRecShadow;
     xEntDrive drv;
     S32 driveDebounce;
+#ifdef PLATFORM_PC
+    // driveDebounce counts consecutive frames of contact. Seconds of contact is
+    // what the mount and dismount thresholds mean.
+    F32 driveDebounceTime;
+#endif
     xEnt* driveLastFloor;
     xEntFrame frame;
 };

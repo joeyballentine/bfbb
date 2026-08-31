@@ -761,6 +761,9 @@ public:
     {
         xGoal::SetFlags(6);
         flg_npcgable |= 1;
+#ifdef PLATFORM_PC
+        tmr_nextemit = 0.0f;
+#endif
     }
     S32 Enter(F32 dt, void* updCtxt);
     S32 Exit(F32 dt, void* updCtxt);
@@ -780,6 +783,11 @@ public:
     F32 dst_extend; // offset 0x78, size 0x4
     S32 goback; // offset 0x7C, size 0x4
     S32 cnt_nextemit; // offset 0x80, size 0x4
+#ifdef PLATFORM_PC
+    // Seconds until the next whirlwind burst. cnt_nextemit above is the same
+    // thing counted in frames, which bursts at the frame rate.
+    F32 tmr_nextemit;
+#endif
 };
 
 struct zNPCGoalAlertTarTar : zNPCGoalCommon

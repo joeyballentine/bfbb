@@ -502,7 +502,15 @@ static void zGameUpdateMode();
 // ostrich_delay at r28).  Same instruction multiset throughout.
 void zGameLoop()
 {
+    // Grace before the scene counts as entered and the pad-removed dialog may
+    // appear. Ten frames is a sixth of a second on the console; held as a
+    // count it would be three milliseconds at a few thousand frames a second,
+    // which is short enough to raise the dialog before a pad is enumerated.
+#ifdef PLATFORM_PC
+    F32 ostrich_delay = 10.0f / 60.0f;
+#else
     S32 ostrich_delay = 10;
+#endif
     S32 cheats;
 
     gGameWhereAmI = eGameWhere_LoopStart;
@@ -719,9 +727,18 @@ void zGameLoop()
 
         gFrameCount++;
 
+#ifdef PLATFORM_PC
+        // The same tick, in seconds. See xDebug.h.
+        gGameSeconds += sTimeElapsed;
+#endif
+
         if (ostrich_delay > 0)
         {
+#ifdef PLATFORM_PC
+            ostrich_delay -= sTimeElapsed;
+#else
             ostrich_delay--;
+#endif
         }
         else
         {

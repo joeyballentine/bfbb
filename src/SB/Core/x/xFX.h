@@ -71,6 +71,12 @@ struct xFXRibbon
     F32 ilife;
     U32 mtime;
     U32 mlife;
+#ifdef PLATFORM_PC
+    // Milliseconds of the current frame that mtime could not take, carried into
+    // the next one. Guarded because the GameCube's xFXRibbon has to keep its
+    // size and layout.
+    F32 mtime_carry;
+#endif
 
     bool visible() const;
 
