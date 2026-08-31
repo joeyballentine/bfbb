@@ -28,9 +28,13 @@ for u in rep["units"]:
         continue
     if int(m.get("matched_data", 0)) != int(m.get("total_data", 0)):
         continue
-    path = n.replace("main/", "") + ".cpp"
-    mm = re.search(r'Object\((\w+), "%s"[,)]' % re.escape(path), cfg)
-    st = mm.group(1) if mm else "?"
+    st = "?"
+    for ext in (".cpp", ".c"):
+        path = n.replace("main/", "") + ext
+        mm = re.search(r'Object\((\w+), "%s"[,)]' % re.escape(path), cfg)
+        if mm:
+            st = mm.group(1)
+            break
     if st != "Matching":
         out.append((st, path, m.get("total_functions", 0)))
 
