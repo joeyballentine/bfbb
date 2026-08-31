@@ -53,7 +53,7 @@ were recovered from the `.xbe`.
 | Window mode | `[video] mode` | Exclusive fullscreen, borderless, or windowed. Separate from the render size. |
 | UI anchoring | `[video] ui` | The HUD either stays in a centred 4:3 box as the console drew it, or moves out to the real screen edges. |
 | Frame rate and vsync | `[video] framerate`, `vsync` | Any rate, the monitor's refresh rate, or uncapped. The port runs one simulation step per frame, so this is the speed of the game as well as the picture. `docs/UNCAPPED.md` lists what was converted off a per-frame rate and what has not been swept yet. |
-| Antialiasing | `[video] msaa`, `alpha_to_coverage` | MSAA, plus alpha-to-coverage for the alpha-tested edges MSAA cannot touch: foliage, fences, grates, cave walls. D3D9 only. |
+| Antialiasing | `[video] msaa`, `alpha_to_coverage` | MSAA, plus alpha-to-coverage for the alpha-tested edges MSAA cannot touch: foliage, fences, grates, cave walls. |
 | Shadow resolution | `[video] shadow_resolution` | Character shadows scale with the render size instead of staying at the consoles' 256 pixels. |
 | Draw distance | `[video] draw_distance` | Drops the per-object cull distance, the low-detail swap and the 400-unit world clip. Affects what is drawn, not what is simulated, and not fog. |
 | Soundtrack replacement | `[audio] soundtrack` | Play your own files instead of the game's music. The game's music is mono, as are all 3537 of its sounds, so this is mainly how to get a stereo soundtrack in. Looping tracks loop where the game's version ended, not where your file does. |
@@ -230,8 +230,7 @@ including the camera, the HUD and the menus.
 Not done: this is still Windows only -- the OpenGL renderer builds and runs,
 but the input, audio, movie and host layers underneath it are Win32. Two effects
 are D3D9-only and go quiet under GL3: the Xbox glow and the cruise-bubble screen
-warp, both for want of a way to sample the frame buffer. MSAA and
-alpha-to-coverage are D3D9-only as well. The frame rate is a setting rather than
+warp, both for want of a way to sample the frame buffer. The frame rate is a setting rather than
 a cap now, but the sweep behind it is not finished -- `docs/UNCAPPED.md` says
 what is still keyed to a frame count. The rest is a lot of smaller things. Individual source files have their own
 notes on what is wrong and why, which are more useful than a list here.
