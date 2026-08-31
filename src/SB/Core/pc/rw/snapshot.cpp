@@ -211,10 +211,13 @@ RwTexture* iSnapshotBackgroundTexture()
 #else
 
 // Every other backend. The capture needs a way to copy the frame buffer into a
-// texture, and the shim has one for D3D9 only; NULL renders nothing to copy and
-// the GL3 arm of the port does not exist yet (see engine_start.cpp). Saying so
-// here, rather than leaving the file out of the build, keeps the call sites in
-// camera.cpp and zGame.cpp free of backend #ifdefs.
+// texture, and the shim has one for D3D9 only: NULL renders nothing to copy,
+// and GL3 renders into the default framebuffer, which is a glCopyTexSubImage2D
+// away from a texture and has simply not been written. Saying so here, rather
+// than leaving the file out of the build, keeps the call sites in camera.cpp
+// and zGame.cpp free of backend #ifdefs -- and the game already handles the
+// refusal: zGame falls back to the background texture asset, which is the
+// GameCube and PS2 loading screen exactly.
 
 void iSnapshotCapture()
 {

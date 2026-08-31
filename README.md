@@ -89,8 +89,10 @@ exits before the window opens. It tells you the path it looked in and whether
 
 ## Building
 
-Windows only right now. The renderer is D3D9 and there's no GL3 window backend
-yet, so other platforms stop at `RwEngineOpen`.
+Windows only right now. Two renderers build: D3D9, which is the default, and
+OpenGL 3.3 on SDL3 with `-DBFBB_RENDER_BACKEND=GL3`. The GL build is the one
+that can eventually run elsewhere; nothing else in the port is ported off
+Windows yet, so it does not today.
 
 You need:
 
@@ -365,9 +367,12 @@ Working: rendering, world, characters, animation, collision, audio, music,
 input, saves, HUD, menus, movies, loading screen. Widescreen works throughout,
 including the camera, the HUD and the menus.
 
-Not done: there is no GL3 window backend, so this is Windows only. The frame
-rate is capped at 60, and `docs/UNCAPPED.md` explains what breaks without the
-cap. The rest is a lot of smaller things. Individual source files have their own
+Not done: this is still Windows only -- the OpenGL renderer builds and runs,
+but the input, audio, movie and host layers underneath it are Win32. Three
+effects are D3D9-only and go quiet under GL3: the Xbox glow, the cruise-bubble
+screen warp and the loading-screen snapshot, all for want of a way to sample the
+frame buffer. The frame rate is capped at 60, and `docs/UNCAPPED.md` explains
+what breaks without the cap. The rest is a lot of smaller things. Individual source files have their own
 notes on what is wrong and why, which are more useful than a list here.
 
 ## Credit

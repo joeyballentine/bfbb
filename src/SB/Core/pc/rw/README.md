@@ -101,7 +101,8 @@ Then compile against `-Ilibrw -Ilibrw/src`. It builds clean 32-bit under clang
 targeting the MSVC ABI, which was checked before any of this was written.
 
 `LIBRW_PLATFORM=NULL` is the core with no renderer backend, which is all the
-shim needs to compile against. `GL3` or `D3D9` come later, with a window.
+shim needs to compile against. `GL3` and `D3D9` both work too, and both want a
+window -- see the window backend section of the top-level `CMakeLists.txt`.
 
 ## Checking it
 
