@@ -166,8 +166,8 @@ void zSaveLoad_Tick()
     }
 
     dontPoll = dontPoll - time_elapsed;
-    t0 = t1;
     time_last = time_current;
+    t0 = t1;
     t1 = iTimeGet();
     sTimeCurrent = iTimeGet();
     sTimeElapsed = iTimeDiffSec(sTimeLast, sTimeCurrent);
@@ -178,25 +178,7 @@ void zSaveLoad_Tick()
     xParMgrUpdate(time_elapsed);
     zSceneUpdate(time_elapsed);
 
-    xMat4x3 playerMat;
-    xMat4x3* ma = xEntGetFrame(&(xEnt)globals.player.ent);
-    // This feels like a normal assignment but that calls the assignment operator function.
-    *(U32*)&playerMat.right.x = *(U32*)&ma->right.x;
-    *(U32*)&playerMat.right.y = *(U32*)&ma->right.y;
-    *(U32*)&playerMat.right.z = *(U32*)&ma->right.z;
-    *(U32*)&playerMat.flags = *(U32*)&ma->flags;
-    *(U32*)&playerMat.up.x = *(U32*)&ma->up.x;
-    *(U32*)&playerMat.up.y = *(U32*)&ma->up.y;
-    *(U32*)&playerMat.up.z = *(U32*)&ma->up.z;
-    *(U32*)&playerMat.pad1 = *(U32*)&ma->pad1;
-    *(U32*)&playerMat.at.x = *(U32*)&ma->at.x;
-    *(U32*)&playerMat.at.y = *(U32*)&ma->at.y;
-    *(U32*)&playerMat.at.z = *(U32*)&ma->at.z;
-    *(U32*)&playerMat.pad2 = *(U32*)&ma->pad2;
-    *(U32*)&playerMat.pos.x = *(U32*)&ma->pos.x;
-    *(U32*)&playerMat.pos.z = *(U32*)&ma->pos.z;
-    *(U32*)&playerMat.pad3 = *(U32*)&ma->pad3;
-    *(U32*)&playerMat.pos.y = *(U32*)&ma->pos.y;
+    xMat4x3 playerMat = *xEntGetFrame(&(xEnt)globals.player.ent);
     playerMat.pos.y += 0.6f;
 
     xSndSetListenerData(SND_LISTENER_CAMERA, &globals.camera.mat);
