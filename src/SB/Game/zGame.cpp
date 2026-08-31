@@ -542,6 +542,67 @@ void zGameLoop()
                 sTimeElapsed = 1.0f / 60.0f;
             }
 
+#ifdef PLATFORM_PC
+            // A boxcar over the last two FRAMES. That is a thirtieth of a
+            // second of smoothing on console and an eighth of that at 240 fps,
+            // so the one filter standing between an uneven frame and every
+            // system's dt stops filtering exactly where jitter starts to matter
+            // most: a one-millisecond hitch is a sixteenth of a console frame
+            // and a quarter of a 240 fps one.
+            //
+            // Average over the newest samples that cover the same thirtieth of
+            // a second instead. At 60 fps that is the two the boxcar took, and
+            // the same two in the same order, so the sequence handed to the
+            // game is unchanged. The ring is sized to reach a thirtieth of a
+            // second at 3840 fps; past that it averages everything it holds,
+            // which is still a longer window than two frames.
+            static const S32 kFrames = 128;
+            static F32 sPreviousFrames[kFrames];
+            static S32 sCurrentFrame = 0;
+            static bool sFramesSeeded = false;
+
+            // Every slot, not just the first: the walk below stops on elapsed
+            // time, so a ring of zeros would make the opening frames average
+            // over the whole 128. Retail only seeds [0] and gets half a frame
+            // on its first pass; two samples of a console frame is what it
+            // settles to and what it should have started at.
+            if (!sFramesSeeded)
+            {
+                for (S32 n = 0; n < kFrames; n++)
+                {
+                    sPreviousFrames[n] = 1.0f / 60.0f;
+                }
+
+                sFramesSeeded = true;
+            }
+
+            sPreviousFrames[sCurrentFrame] = sTimeElapsed;
+
+            F32 total = 0.0f;
+            S32 taken = 0;
+
+            for (S32 n = 0; n < kFrames; n++)
+            {
+                S32 i = sCurrentFrame - n;
+
+                if (i < 0)
+                {
+                    i += kFrames;
+                }
+
+                total += sPreviousFrames[i];
+                taken++;
+
+                if (taken >= 2 && total >= 2.0f / 60.0f)
+                {
+                    break;
+                }
+            }
+
+            sCurrentFrame = (sCurrentFrame + 1) % kFrames;
+
+            sTimeElapsed = total / taken;
+#else
             static F32 sPreviousFrames[2] = { 1.0f / 60.0f };
             static U32 sCurrentFrame = 0;
 
@@ -566,6 +627,7 @@ void zGameLoop()
             total += sPreviousFrames[i];
 
             sTimeElapsed = total / sAverageRange;
+#endif
         }
 
         if (globals.QuarterSpeed)

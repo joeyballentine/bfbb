@@ -354,8 +354,8 @@ static void zMusicReport()
         return;
     }
 
-    sSince += 1.0f;
-    if (sSince < 60.0f)
+    sSince += globals.update_dt;
+    if (sSince < 1.0f)
     {
         return;
     }

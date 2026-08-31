@@ -20,6 +20,12 @@ guarded line and not the retail line beside it:
             dt. A counter ticked once a frame measures frames
   gate      a random draw against a constant on a per-frame path. A 4% chance
             per FRAME is four times the pops at 240 fps
+  history   one sample pushed per frame into something with a fixed number of
+            slots -- a ribbon's joint queue, a streak's fifty elements, a FIR
+            ring. The window is then measured in frames, and no coefficient can
+            be rebased to fix it: the samples have to arrive at a fixed rate.
+            This shape is why the sweeps for the four above found nothing in the
+            cruise bubble's wake, which was a quarter of its length at 240 fps
 
 It is a lead generator, not a defect list. Roughly one in five of what it finds
 is worth changing, and which one cannot be told without reading the function --
@@ -69,7 +75,16 @@ GATE = re.compile(r"(xurand\s*\(\s*\)|xrand\s*\(\s*\))\s*[<>]=?\s*[-\d.]"
 # A function whose body is a frame: it takes the frame's length.
 DT_PARAM = re.compile(r"\b(F32|float|f32)\s*&?\s*(dt|seconds|timeDelta|elapsed)\b")
 
-SHAPES = ("timestep", "damping", "counter", "gate")
+# A sample pushed into a bounded store. The container calls are the reliable
+# half; the rolling index is the half that catches a hand-rolled ring, which is
+# what zLasso's five-slot FIR is.
+HISTORY = re.compile(
+    r"\.(insert|push_front|push_back|push)\s*\("
+    r"|->(insert|push_front|push_back|push)\s*\("
+    r"|xFXStreakUpdate\s*\("
+    r"|\b(head|tail|first|next|write|widx|windex)\s*(\+\+|=\s*\w+\s*\+\s*1\b)")
+
+SHAPES = ("timestep", "damping", "counter", "gate", "history")
 
 
 def pc_arm(lines):
@@ -174,6 +189,8 @@ def scan():
                         shape = "damping"
                     elif inside and GATE.search(code):
                         shape = "gate"
+                    elif inside and HISTORY.search(code):
+                        shape = "history"
                     elif inside and COUNTER.search(code):
                         shape = "counter"
 
@@ -223,6 +240,13 @@ def main():
         return 0
 
     baseline = load_baseline()
+
+    # --shape narrows the scan, so it has to narrow the baseline with it or
+    # every other shape reads as a site that has gone away.
+    if shape_filter:
+        baseline = {k: n for k, n in baseline.items()
+                    if k.split("\t")[1] == shape_filter}
+
     seen = {}
     new = []
 

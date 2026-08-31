@@ -3172,6 +3172,9 @@ namespace cruise_bubble
             this->engine_pitch = 0.0f;
             this->flash_time = 0.0f;
             this->last_loc = globals.player.ent.bound.sph.center;
+#ifdef PLATFORM_PC
+            this->record_dt = 0.0f;
+#endif
 
             missle_record.reset();
             missle_record.push_front(missle_record_data(this->last_loc, this->rot.z));
@@ -3226,6 +3229,47 @@ namespace cruise_bubble
             this->update_turn(dt);
             this->update_move(dt);
 
+#ifdef PLATFORM_PC
+            // One sample a frame into 127 slots is 2.1 seconds of flight on
+            // console and a quarter of that at 240 fps. The explosion's survey
+            // camera walks 6 to 8 world units back along this path, and
+            // eval_missle_path does not clamp its lerp: once the record is
+            // shorter than that, the camera is extrapolated off the oldest pair
+            // of samples, through whatever the missile flew past, at a roll of
+            // one frame's roll times however far past the end it landed.
+            //
+            // Sample at the rate the 127 slots were sized for. The impact
+            // sample is never skipped -- the path has to end at hit_loc.
+            this->record_dt += dt;
+
+            bool record = this->record_dt >= 1.0f / 60.0f;
+
+            if (record)
+            {
+                this->record_dt -= 1.0f / 60.0f;
+            }
+
+            if (this->collide() || this->collide_hazards())
+            {
+                if (missle_record.full())
+                {
+                    missle_record.pop_back();
+                }
+
+                missle_record.push_front(missle_record_data(shared.hit_loc, this->rot.z));
+                return STATE_MISSLE_EXPLODE;
+            }
+
+            if (record)
+            {
+                if (missle_record.full())
+                {
+                    missle_record.pop_back();
+                }
+
+                missle_record.push_front(missle_record_data(get_missle_mat()->pos, this->rot.z));
+            }
+#else
             if (missle_record.full())
             {
                 missle_record.pop_back();
@@ -3237,6 +3281,7 @@ namespace cruise_bubble
                 return STATE_MISSLE_EXPLODE;
             }
             missle_record.push_front(missle_record_data(get_missle_mat()->pos, this->rot.z));
+#endif
 
             this->last_loc = get_missle_mat()->pos;
             this->update_engine_sound(dt);

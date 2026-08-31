@@ -211,6 +211,10 @@ namespace cruise_bubble
             xVec3 last_loc;
             // Offset: 0x38
             F32 flash_time;
+#ifdef PLATFORM_PC
+            // Unspent time since the last entry in missle_record.
+            F32 record_dt;
+#endif
 
             state_missle_fly();
 
