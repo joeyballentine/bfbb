@@ -481,6 +481,7 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iMenuFrame.cpp
   ${PC_DIR}/iPad.cpp
   ${PC_DIR}/iPadBind.cpp
+  ${PC_DIR}/iPadGlyph.cpp
   ${PC_DIR}/iPadStick.cpp
   ${PC_DIR}/iSystem.cpp
   ${PC_DIR}/iTextPatch.cpp
@@ -788,6 +789,19 @@ if(WIN32 AND LibUSB_LIBRARY)
     )
   endif()
 endif()
+# The button glyphs, beside the executable, for the same reason as the DLLs:
+# the port is run out of its build directory more often than it is installed.
+#
+# Copied whole rather than file by file so that a set someone adds to
+# src/SB/Core/pc/res/buttons/ needs no edit here, and copied to `buttons/`
+# because that is the folder name input.button_icons documents. These are the
+# port's own files, not the game's, so they do not live under the assets path.
+add_custom_command(TARGET bfbb POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          ${PC_DIR}/res/buttons $<TARGET_FILE_DIR:bfbb>/buttons
+  COMMENT "Staging the button glyphs"
+)
+
 target_compile_options(bfbb PRIVATE -Wno-everything)
 
 if(WIN32)

@@ -50,4 +50,21 @@ void iPadHostRumble(S32 port, S32 on);
 // Names the backend that was linked in, for the startup log.
 const char* iPadHostName();
 
+// The device input bound to one XPAD_BUTTON_*, by the name config.ini writes
+// it as -- "a", "lt". NULL when nothing is bound to it, and NULL when what is
+// bound is a chord: `l2 = lt+rb` is two inputs and there is no single name for
+// it.
+//
+// For the button prompts. A glyph has to follow the BINDING rather than the
+// console, or the game would keep drawing the disc's button while a different
+// one presses it. Only a backend can answer: the parsed bindings hold opaque
+// ids and only the backend has the table that names them. See iPadGlyph.h.
+const char* iPadHostBoundInput(U32 xpadButton);
+
+// What sort of controller is on port 0, as the name of a glyph set: "xbox",
+// "gamecube", "ps2". NULL when there is no pad, or when the backend cannot
+// tell one kind from another -- `video.button_icons = auto` then falls back on
+// the Xbox set, which is what the game's own assets are.
+const char* iPadHostPadKind();
+
 #endif

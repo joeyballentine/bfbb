@@ -13,6 +13,10 @@
 #include "iTime.h"
 #include "zScene.h"
 
+#ifdef PLATFORM_PC
+#include "iPadGlyph.h"
+#endif
+
 #include <string.h>
 #include <stdio.h>
 #ifdef __MWERKS__
@@ -1070,6 +1074,20 @@ namespace
             }
 
             RwTexture* texture = (RwTexture*)xSTFindAsset(id, NULL);
+
+#ifdef PLATFORM_PC
+            // Every button prompt in the game is a {tex:} naming one of twelve
+            // textures in font.HIP, so this is the one place a prompt resolves
+            // and the only place the port has to reach to draw the player's own
+            // controller instead. NULL for all the other {tex:} in the game,
+            // and for every one of them when the feature is off, which is when
+            // the disc's own glyph goes through unchanged. See iPadGlyph.h.
+            RwTexture* glyph = iPadGlyphFor(name.text, name.size);
+            if (glyph != NULL)
+            {
+                texture = glyph;
+            }
+#endif
 
             if (texture && texture->raster && texture->raster->width > 0 &&
                 texture->raster->height > 0 && texture->raster->width <= 4096 &&

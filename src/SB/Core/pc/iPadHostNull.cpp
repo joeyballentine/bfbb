@@ -49,3 +49,13 @@ const char* iPadHostName()
 {
     return "null (no input backend)";
 }
+
+const char* iPadHostBoundInput(U32)
+{
+    return NULL;
+}
+
+const char* iPadHostPadKind()
+{
+    return NULL;
+}

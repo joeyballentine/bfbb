@@ -484,6 +484,22 @@ static void MapPortsToSlots()
     {
         printf("bfbb: playing on controller %d\n", (int)(sPortSlot[0] + 1));
         fflush(stdout);
+
+        // Port 0 changed hands, so re-read the bindings: under
+        // `input.preset = auto` the defaults come from what KIND of pad this
+        // is, and that is exactly what just changed. A player who unplugs an
+        // Xbox pad and plugs in a GameCube one gets the GameCube scheme without
+        // restarting, the same way the button prompts follow.
+        //
+        // Unconditional rather than only when the preset is auto. It is fifteen
+        // lookups against an already-parsed file, it happens once per
+        // hot-plug, and a version that had to ask what the preset was would be
+        // the second place that knows.
+        //
+        // Anything config.ini spells out in [pad] is still what wins -- this
+        // reloads the same file, it does not override it -- which is why the
+        // generated [pad] listing is commented out.
+        iPadBindLoad(IPAD_BIND_PAD, kPadTokens, kPadTokenCount, sPadBind);
     }
 }
 
@@ -649,4 +665,53 @@ const char* iPadHostName()
 {
     return sReady ? "sdl (every controller SDL knows, plus keyboard)"
                   : "sdl (keyboard only -- SDL's gamepad subsystem did not start)";
+}
+
+const char* iPadHostBoundInput(U32 xpadButton)
+{
+    for (S32 i = 0; i < kPadBindButtonCount && i < IPAD_BIND_MAX_BUTTONS; i++)
+    {
+        if (kPadBindButtons[i].mask != xpadButton)
+        {
+            continue;
+        }
+
+        S16 id = iPadBindSoleInput(sPadBind[i]);
+        return (id >= 0) ? iPadBindTokenName(id, kPadTokens, kPadTokenCount) : NULL;
+    }
+
+    return NULL;
+}
+
+const char* iPadHostPadKind()
+{
+    S32 slot = sPortSlot[0];
+    if (slot < 0 || sGamepad[slot] == NULL)
+    {
+        return NULL;
+    }
+
+    // SDL knows more kinds than there are glyph sets, so this is a narrowing
+    // rather than a translation. A DualSense gets the PS2's glyphs because the
+    // shapes on it are the same four.
+    //
+    // A Switch pad deliberately gets NEITHER, and so falls back on the Xbox
+    // set. Nintendo's A and B are mirrored from everyone else's, so the
+    // GameCube set -- the nearest thing by make -- would print the wrong letter
+    // on two of the four, which is worse than a set that at least agrees about
+    // where each button is. It wants a set of its own.
+    switch (SDL_GetGamepadType(sGamepad[slot]))
+    {
+    case SDL_GAMEPAD_TYPE_PS3:
+    case SDL_GAMEPAD_TYPE_PS4:
+    case SDL_GAMEPAD_TYPE_PS5:
+        return "ps2";
+    case SDL_GAMEPAD_TYPE_XBOX360:
+    case SDL_GAMEPAD_TYPE_XBOXONE:
+        return "xbox";
+    case SDL_GAMEPAD_TYPE_GAMECUBE:
+        return "gamecube";
+    default:
+        return NULL;
+    }
 }

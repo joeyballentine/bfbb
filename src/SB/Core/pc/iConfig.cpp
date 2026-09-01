@@ -220,6 +220,44 @@ namespace
           "; holding slot 1 and the pad you want is behind it.\n"
           ";\n"
           "; The keyboard covers this controller whenever nothing is on it." },
+        { "input", "preset", "auto",
+          "Which console's controls to start from: auto, xbox, ps2 or gamecube.\n"
+          ";\n"
+          "; auto uses the controls of whatever controller is plugged in, and\n"
+          "; follows it: swap a GameCube pad in mid-game and the buttons move to\n"
+          "; the GameCube's scheme without a restart. A pad the port cannot place\n"
+          "; -- and every pad on a build without the SDL backend -- gets the Xbox\n"
+          "; scheme, which is the release these assets came off.\n"
+          ";\n"
+          "; All three put the same move in the same PLACE -- jump under your\n"
+          "; thumb, Bubble Bash at the top, Bubble Bounce on the right, Bubble\n"
+          "; Spin on the left -- and differ in the letter printed there. So xbox\n"
+          "; and ps2 are the same buttons on a modern controller and gamecube is\n"
+          "; the one that moves anything: its B is where an Xbox pad's X is.\n"
+          ";\n"
+          "; gamecube also chords the shoulders, because the GameCube has three\n"
+          "; and the game wants four: Z+L is L2 there, where xbox and ps2 have a\n"
+          "; button each and nothing to hold.\n"
+          ";\n"
+          "; This only sets what [pad] starts from. A line written out in [pad]\n"
+          "; wins over the preset, so changing this does not undo your remapping." },
+        { "input", "button_icons", "auto",
+          "Which controller's buttons the game DRAWS in its prompts: auto, xbox,\n"
+          "; gamecube, ps2, or off for the ones on the disc.\n"
+          ";\n"
+          "; auto asks the controller what it is and picks from that, so plugging\n"
+          "; a different pad in changes the prompts without a restart. A pad the\n"
+          "; port cannot identify gets the Xbox set, which is what the game's own\n"
+          "; files hold.\n"
+          ";\n"
+          "; The glyph follows your BINDING, not the name here: rebind Bubble Spin\n"
+          "; in [pad] and the prompt draws the button you moved it to. A move bound\n"
+          "; to two buttons at once has no single picture, so it falls back to what\n"
+          "; that console drew for it.\n"
+          ";\n"
+          "; A set is a folder of PNGs under buttons/ named after the controller's\n"
+          "; inputs -- a.png, lt.png, start.png. Copy one, draw over it, and the\n"
+          "; folder's name is a value this setting accepts." },
         { "audio", "soundtrack", "",
           "Folder of your own music files to play instead of the game's. Empty\n"
           "; uses the game's music.\n"
@@ -324,7 +362,7 @@ namespace
         const iPadBindButton* b = findBinding(key, kPadSection);
         if (b != NULL)
         {
-            return b->pad;
+            return iPadBindPadDefault(b);
         }
 
         b = findBinding(key, kKeyboardSection);
@@ -349,18 +387,38 @@ namespace
         fprintf(f, ";\n");
         fprintf(f, "%s", extra);
 
+        // The [pad] lines are written COMMENTED OUT, and that is not tidiness.
+        // A line here beats input.preset, so a generated file that spelled all
+        // fifteen out would pin the pad to whichever preset was current when
+        // the file was made and leave the setting doing nothing ever after.
+        // Commented, they are what they should be: a listing of every button
+        // and what is on it now, with uncommenting one the way to take it over.
+        //
+        // [keyboard] has no preset behind it, so its lines are the values and
+        // are written as values.
+        bool pad = (section == kPadSection);
+
+        if (pad)
+        {
+            fprintf(f, "; These are what input.preset gives you, listed so you can see\n");
+            fprintf(f, "; them. Uncomment a line to take that one button over; the rest\n");
+            fprintf(f, "; keep following the preset.\n");
+            fprintf(f, ";\n");
+        }
+
         for (S32 i = 0; i < kPadBindButtonCount; i++)
         {
             const iPadBindButton* b = &kPadBindButtons[i];
-            const char* value = (section == kPadSection) ? b->pad : b->key;
+            const char* value = pad ? iPadBindPadDefault(b) : b->key;
+            const char* lead = pad ? "; " : "";
 
             if (b->does != NULL)
             {
-                fprintf(f, "%-6s = %-9s ; %s\n", b->name, value, b->does);
+                fprintf(f, "%s%-6s = %-9s ; %s\n", lead, b->name, value, b->does);
             }
             else
             {
-                fprintf(f, "%-6s = %s\n", b->name, value);
+                fprintf(f, "%s%-6s = %s\n", lead, b->name, value);
             }
         }
     }
@@ -370,12 +428,12 @@ namespace
         writeBindingSection(
             f, kPadSection,
             "a b x y lb rb lt rt ls rs back start dpup dpdown dpleft dpright",
-            "; The '!' is why l1 and l2 can share one trigger below: the GameCube\n"
-            "; had three shoulders where the game wants four, so it read Z as a\n"
-            "; modifier, and rb stands in for Z here.\n"
+            "; The '!' is there for the gamecube preset, where l1 and l2 share one\n"
+            "; trigger: that console had three shoulders where the game wants\n"
+            "; four, so it read Z as a modifier, and rb stands in for Z.\n"
             ";\n"
-            "; lb, ls and rs start out bound to nothing -- the GameCube has no\n"
-            "; fourth shoulder and no stick clicks, so they are free.\n"
+            "; ls and rs start out bound to nothing -- no console this came off\n"
+            "; had stick clicks -- so they are free for anything you want on them.\n"
             ";\n"
             "; The sticks are not remappable: the left one moves and the right one\n"
             "; turns the camera, as they did on the console.\n"
@@ -577,12 +635,15 @@ namespace
                 missing++;
             }
         }
+        // Only [keyboard]. [pad] is neither counted here nor written below: a
+        // generated file lists the pad bindings COMMENTED, so input.preset
+        // stays in charge of them, and a comment is not an entry -- fileHas
+        // would call all fifteen missing on every run and append fifteen more
+        // commented lines each time. Nothing is lost by leaving them out, since
+        // a pad binding the file does not mention is answered by the preset,
+        // which is what the setting is for.
         for (S32 i = 0; i < kPadBindButtonCount; i++)
         {
-            if (!fileHas(kPadSection, kPadBindButtons[i].name))
-            {
-                missing++;
-            }
             if (!fileHas(kKeyboardSection, kPadBindButtons[i].name))
             {
                 missing++;
@@ -629,33 +690,30 @@ namespace
             fprintf(f, "%s = %s\n", kSettings[i].name, kSettings[i].value);
         }
 
-        // The bindings, which are one line each and carry their grammar in the
-        // header the file already has further up.
-        for (S32 pass = 0; pass < 2; pass++)
+        // The keyboard bindings, one line each, carrying their grammar in the
+        // header the file already has further up. [pad] is left alone, for the
+        // reason given where the count is taken.
+        bool wroteHeader = false;
+        for (S32 i = 0; i < kPadBindButtonCount; i++)
         {
-            const char* sect = pass == 0 ? kPadSection : kKeyboardSection;
-            bool wroteHeader = false;
-            for (S32 i = 0; i < kPadBindButtonCount; i++)
+            const iPadBindButton* b = &kPadBindButtons[i];
+            if (fileHas(kKeyboardSection, b->name))
             {
-                const iPadBindButton* b = &kPadBindButtons[i];
-                if (fileHas(sect, b->name))
-                {
-                    continue;
-                }
-                if (!wroteHeader)
-                {
-                    fprintf(f, "\n[%s]\n", sect);
-                    wroteHeader = true;
-                }
-                const char* value = pass == 0 ? b->pad : b->key;
-                if (b->does != NULL)
-                {
-                    fprintf(f, "%-6s = %-9s ; %s\n", b->name, value, b->does);
-                }
-                else
-                {
-                    fprintf(f, "%-6s = %s\n", b->name, value);
-                }
+                continue;
+            }
+            if (!wroteHeader)
+            {
+                fprintf(f, "\n[%s]\n", kKeyboardSection);
+                wroteHeader = true;
+            }
+
+            if (b->does != NULL)
+            {
+                fprintf(f, "%-6s = %-9s ; %s\n", b->name, b->key, b->does);
+            }
+            else
+            {
+                fprintf(f, "%-6s = %s\n", b->name, b->key);
             }
         }
 

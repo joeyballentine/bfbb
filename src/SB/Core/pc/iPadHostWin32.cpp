@@ -517,3 +517,26 @@ const char* iPadHostName()
     // however many are plugged in, and the reason is this machine's DLLs.
     return "win32 (keyboard only -- no XInput DLL found)";
 }
+
+const char* iPadHostBoundInput(U32 xpadButton)
+{
+    for (S32 i = 0; i < kPadBindButtonCount && i < IPAD_BIND_MAX_BUTTONS; i++)
+    {
+        if (kPadBindButtons[i].mask != xpadButton)
+        {
+            continue;
+        }
+
+        S16 id = iPadBindSoleInput(sPadBind[i]);
+        return (id >= 0) ? iPadBindTokenName(id, kPadTokens, kPadTokenCount) : NULL;
+    }
+
+    return NULL;
+}
+
+const char* iPadHostPadKind()
+{
+    // XInput speaks only to XUSB devices, and every one of them reports itself
+    // as an Xbox pad whatever it is physically. There is nothing to detect.
+    return NULL;
+}

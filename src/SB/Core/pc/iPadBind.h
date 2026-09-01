@@ -85,6 +85,56 @@ extern const S32 kPadBindButtonCount;
 // The row for `name`, or NULL. Case-insensitive.
 const iPadBindButton* iPadBindFind(const char* name);
 
+// ---------------------------------------------------------------------------
+// Presets
+//
+// The three discs do not agree on which button does what, and none of them can
+// be called the right answer: the port runs the Xbox assets, but the mapping
+// people remember is whichever console they played. So the pad defaults are a
+// named set rather than one table, and `input.preset` picks it.
+//
+// What actually differs is smaller than it looks. All three consoles put the
+// same MOVE in the same POSITION -- jump south, Bubble Bash north, Bubble
+// Bounce east, Bubble Spin west -- and differ only in the letter printed
+// there. The Xbox and the PS2 come out identical on a modern controller; the
+// GameCube differs because its B is west and its X is east, the opposite way
+// round from an Xbox pad, and because it has three shoulders where the game
+// wants four and so has to chord.
+
+struct iPadBindPreset
+{
+    const char* name;
+
+    // What it does, for the comment above the setting in a generated file.
+    const char* does;
+
+    // One entry per row of kPadBindButtons, in that order. NULL falls back to
+    // the row's own `pad`, so a preset spells out only what it changes.
+    const char* pad[IPAD_BIND_MAX_BUTTONS];
+};
+
+extern const iPadBindPreset kPadBindPresets[];
+extern const S32 kPadBindPresetCount;
+
+// The default binding for one row on the pad, under whatever preset
+// `input.preset` names. iConfig.cpp answers `pad.*` with this and writes a
+// generated file from it, so changing the preset changes both together and the
+// file a player reads always says what the game is actually doing.
+const char* iPadBindPadDefault(const iPadBindButton* button);
+
+// The single device input a binding names, or -1 when it does not name exactly
+// one -- `l2 = lt+rb` is two, and an empty binding is none. A negated member
+// does not count against it: `lt+!rb` is still the left trigger, plus a
+// condition on when it counts.
+//
+// For the button prompts, which have one picture to draw and so need one input
+// to draw it for. See iPadGlyph.h.
+S16 iPadBindSoleInput(const iPadBind& bind);
+
+// A device input's name, given the backend's own token table -- the reverse of
+// what the parser does. NULL for an id the table does not have.
+const char* iPadBindTokenName(S16 id, const iPadBindToken* tokens, S32 tokenCount);
+
 // Parse one binding. `what` names the setting for the diagnostics -- an unknown
 // token, too many alternatives, a chord of nothing but negations -- which are
 // printed rather than returned, as the rest of the config layer does it.

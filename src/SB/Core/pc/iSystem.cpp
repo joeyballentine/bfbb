@@ -8,6 +8,7 @@
 #include "iScreen.h"
 #include "iTRC.h"
 #include "iSnapshot.h"
+#include "iPadGlyph.h"
 #include "iSoundtrack.h"
 #include "iTextPatch.h"
 #include "iTime.h"
@@ -527,6 +528,20 @@ static void ApplyConfig()
     // nothing at startup.
     iSoundtrackSetFolder(iConfigGetString("audio.soundtrack", ""));
 
+    // Which controller's buttons the prompts draw. Pushed the same way, and
+    // told where to look separately: the sets ship beside the executable, not
+    // under the assets folder, because they are the port's files rather than
+    // the game's. A player who moved them can say so in the setting by naming a
+    // folder that is already there.
+    const char* icons = iConfigGetString("input.button_icons", "auto");
+    char beside[512];
+    if (iHostExeDir(beside, sizeof(beside)))
+    {
+        iPadGlyphSetRoot(beside);
+    }
+    iPadGlyphSetChoice(icons);
+    iPadGlyphSetEnabled(iHostStrCaseCmp(icons, "off") != 0);
+
     S32 glow = iConfigGetBool("xbox.glow", TRUE);
     S32 distortion = iConfigGetBool("xbox.distortion", TRUE);
     S32 snapshot = iConfigGetBool("xbox.snapshot", TRUE);
@@ -677,6 +692,7 @@ void iSystemExit()
 
     xSndExit();
     xPadKill();
+    iPadGlyphExit();
     iFileExit();
     iTimeExit();
     xMemExit();

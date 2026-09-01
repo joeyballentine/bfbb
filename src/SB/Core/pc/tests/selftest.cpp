@@ -305,9 +305,18 @@ static void test_config()
           "a [pad] binding comes off the file");
     check(strcmp(iConfigGetString("keyboard.start", "!"), "f1") == 0, "and a [keyboard] one");
 
+    // Answered from the ACTIVE PRESET, not from the row's own column: the
+    // generated file and a missing key have to agree, and under a preset the
+    // row's column is only the base one preset happens to be written against.
+    // The harness file names no preset, so this is the default one.
     const iPadBindButton* b = iPadBindFind("b");
-    check(b != NULL && strcmp(iConfigGetString("pad.b", "!"), b->pad) == 0,
-          "a binding the file omits is answered from the button table, not the fallback");
+    check(b != NULL && strcmp(iConfigGetString("pad.b", "!"), iPadBindPadDefault(b)) == 0,
+          "a binding the file omits is answered from the preset, not the fallback");
+    // The default is "auto", which asks the backend what kind of pad is on
+    // port 0. Nothing identifiable is plugged in at this point in the run, so
+    // this is the fallback arm: the Xbox scheme, which puts Bubble Spin on x.
+    check(b != NULL && strcmp(iPadBindPadDefault(b), "x") == 0,
+          "an unplaceable pad falls back on the Xbox scheme, which puts Bubble Spin on x");
     check(b != NULL && strcmp(iConfigGetString("keyboard.b", "!"), b->key) == 0,
           "on both devices");
 
@@ -355,8 +364,21 @@ static void test_config()
             // The bindings are not in the settings table -- they come from
             // iPadBind.cpp -- and are appended the same way. The file names two
             // of them, so the rest have to arrive.
-            check(countLinesStartingWith(grown, "y ") == 2,
-                  "a binding the file omits arrives for both devices");
+            //
+            // [keyboard] writes values; [pad] writes the same listing commented
+            // out, because an uncommented line there would beat input.preset
+            // and pin the pad to whichever preset made the file. That the pad
+            // side is COMMENTED is the whole point, so it is what is checked.
+            check(countLinesStartingWith(grown, "y ") == 1,
+                  "a keyboard binding the file omits arrives as a value");
+
+            // The pad's does NOT arrive. A generated file lists those commented
+            // so input.preset stays in charge, and a comment is not an entry --
+            // appending them would add fifteen more commented lines on every
+            // single run, forever. Nothing is lost: a pad binding the file does
+            // not mention is answered by the preset.
+            check(countLinesStartingWith(grown, "; y ") == 0,
+                  "and the pad's is not appended at all, so the file cannot grow each run");
 
             // What was already there is untouched. The append never rewrites,
             // so a value the file set keeps its own line and gains no second
@@ -1073,6 +1095,172 @@ static void test_pad_bindings()
         }
     }
     check(true, "every button has a mask and a default for each device");
+
+    // ---------------------------------------------------------------------
+    // Which single input a binding names, which is how a button prompt picks
+    // its picture. See iPadGlyph.h.
+
+    iPadBindParse("two", kFakeTokens, kFakeTokenCount, "test", &b);
+    check(iPadBindSoleInput(b) == FAKE_TWO, "one input is that input");
+
+    iPadBindParse("one+two", kFakeTokens, kFakeTokenCount, "test", &b);
+    check(iPadBindSoleInput(b) < 0, "a chord of two names neither");
+
+    // The case the whole thing turns on: the GameCube preset writes L1 as
+    // `lt+!rb`, and that IS the left trigger -- the negation says when it
+    // counts, not what it is. A prompt that fell back here would draw the
+    // console's own L1 art while the trigger was what pressed it.
+    iPadBindParse("one+!two", kFakeTokens, kFakeTokenCount, "test", &b);
+    check(iPadBindSoleInput(b) == FAKE_ONE, "a negated member does not count against it");
+
+    iPadBindParse("", kFakeTokens, kFakeTokenCount, "test", &b);
+    check(iPadBindSoleInput(b) < 0, "and an empty binding names nothing");
+
+    check(iPadBindTokenName(FAKE_THREE, kFakeTokens, kFakeTokenCount) != NULL &&
+              strcmp(iPadBindTokenName(FAKE_THREE, kFakeTokens, kFakeTokenCount), "three") == 0,
+          "an input's name comes back from its id");
+    check(iPadBindTokenName(99, kFakeTokens, kFakeTokenCount) == NULL,
+          "and an id the table does not have has no name");
+
+    // ---------------------------------------------------------------------
+    // The presets.
+
+    check(kPadBindPresetCount > 0, "there is at least one preset");
+
+    for (S32 i = 0; i < kPadBindPresetCount; i++)
+    {
+        if (kPadBindPresets[i].name == NULL || kPadBindPresets[i].does == NULL)
+        {
+            check(false, "every preset has a name and a description");
+            return;
+        }
+    }
+    check(true, "every preset has a name and a description");
+
+    // A preset is positional against kPadBindButtons, so a row inserted in one
+    // and not the other silently rebinds every button after it. Nothing in the
+    // types catches that; this is what does.
+    for (S32 i = 0; i < kPadBindPresetCount; i++)
+    {
+        for (S32 r = kPadBindButtonCount; r < IPAD_BIND_MAX_BUTTONS; r++)
+        {
+            if (kPadBindPresets[i].pad[r] != NULL)
+            {
+                check(false, "no preset binds past the end of the button table");
+                return;
+            }
+        }
+    }
+    check(true, "no preset binds past the end of the button table");
+
+    // Every preset must be sayable in the grammar, on the real token table, or
+    // a player selecting it gets a diagnostic per button and an unbound pad.
+    // The fake table above cannot answer for it -- these are the names a
+    // backend actually publishes.
+    static const iPadBindToken kRealPadTokens[] = {
+        { "a", 0 },      { "b", 1 },      { "x", 2 },       { "y", 3 },
+        { "lb", 4 },     { "rb", 5 },     { "lt", 6 },      { "rt", 7 },
+        { "ls", 8 },     { "rs", 9 },     { "back", 10 },   { "start", 11 },
+        { "dpup", 12 },  { "dpdown", 13 }, { "dpleft", 14 }, { "dpright", 15 },
+    };
+    static const S32 kRealPadTokenCount =
+        (S32)(sizeof(kRealPadTokens) / sizeof(kRealPadTokens[0]));
+
+    for (S32 i = 0; i < kPadBindPresetCount; i++)
+    {
+        for (S32 r = 0; r < kPadBindButtonCount && r < IPAD_BIND_MAX_BUTTONS; r++)
+        {
+            const char* text = kPadBindPresets[i].pad[r];
+            if (text == NULL)
+            {
+                text = kPadBindButtons[r].pad;
+            }
+
+            if (!iPadBindParse(text, kRealPadTokens, kRealPadTokenCount, "preset", &b))
+            {
+                check(false, "every preset parses against a backend's token table");
+                return;
+            }
+        }
+    }
+    check(true, "every preset parses against a backend's token table");
+
+    // What the presets are FOR. Bubble Spin is XPAD_BUTTON_TRIANGLE, which is
+    // the row called "b" after the GameCube's letter for it. Every console put
+    // that move on the button west of jump; the GameCube calls that B and the
+    // Xbox calls it X, so the two presets have to disagree here and nowhere
+    // that matters more.
+    {
+        const iPadBindPreset* gc = NULL;
+        const iPadBindPreset* xb = NULL;
+        const iPadBindPreset* ps = NULL;
+        for (S32 i = 0; i < kPadBindPresetCount; i++)
+        {
+            if (strcmp(kPadBindPresets[i].name, "gamecube") == 0) gc = &kPadBindPresets[i];
+            if (strcmp(kPadBindPresets[i].name, "xbox") == 0) xb = &kPadBindPresets[i];
+            if (strcmp(kPadBindPresets[i].name, "ps2") == 0) ps = &kPadBindPresets[i];
+        }
+
+        check(gc != NULL && xb != NULL && ps != NULL, "all three console presets are there");
+
+        if (gc != NULL && xb != NULL && ps != NULL)
+        {
+            S32 spin = -1;
+            S32 bounce = -1;
+            S32 l2 = -1;
+            for (S32 i = 0; i < kPadBindButtonCount; i++)
+            {
+                if (kPadBindButtons[i].mask == XPAD_BUTTON_TRIANGLE) spin = i;
+                if (kPadBindButtons[i].mask == XPAD_BUTTON_O) bounce = i;
+                if (kPadBindButtons[i].mask == XPAD_BUTTON_L2) l2 = i;
+            }
+
+            check(spin >= 0 && bounce >= 0 && l2 >= 0, "Spin, Bounce and L2 have rows");
+
+            // The face buttons are POSITIONS, and every console agrees on them,
+            // so no preset may move one. SDL names positions too -- its `b` is a
+            // GameCube pad's X -- so a preset that moved Spin to `b` for the
+            // GameCube would put it on the wrong physical button of the very
+            // controller it was named after. That was a real bug; this is what
+            // stops it coming back.
+            check(strcmp(kPadBindButtons[spin].pad, "x") == 0, "Bubble Spin is west, on x");
+            check(strcmp(kPadBindButtons[bounce].pad, "b") == 0, "Bubble Bounce is east, on b");
+
+            for (S32 i = 0; i < kPadBindPresetCount; i++)
+            {
+                if (kPadBindPresets[i].pad[spin] != NULL ||
+                    kPadBindPresets[i].pad[bounce] != NULL)
+                {
+                    check(false, "no preset moves a face button");
+                    return;
+                }
+            }
+            check(true, "no preset moves a face button");
+
+            // What a preset IS for: the GameCube has three shoulders where the
+            // game wants four, and SDL gives that pad no leftshoulder at all,
+            // so L2 has to be chorded there and is a button of its own on the
+            // other two.
+            check(gc->pad[l2] != NULL && strcmp(gc->pad[l2], "lt+rb") == 0,
+                  "the gamecube preset chords L2 onto the trigger");
+            check(xb->pad[l2] == NULL && strcmp(kPadBindButtons[l2].pad, "lb") == 0,
+                  "and the xbox preset leaves it on a shoulder of its own");
+
+            // xbox and ps2 differ only in what is drawn for them, so an edit to
+            // one that misses the other is a bug.
+            for (S32 r = 0; r < kPadBindButtonCount && r < IPAD_BIND_MAX_BUTTONS; r++)
+            {
+                const char* a = xb->pad[r];
+                const char* c = ps->pad[r];
+                if ((a == NULL) != (c == NULL) || (a != NULL && strcmp(a, c) != 0))
+                {
+                    check(false, "xbox and ps2 bind the same buttons");
+                    return;
+                }
+            }
+            check(true, "xbox and ps2 bind the same buttons");
+        }
+    }
 }
 
 static void test_pad_stick_shape()
@@ -1220,16 +1408,18 @@ static void test_pad_win32_buttons()
 
     check(iPadHostWin32ConvertButtons(gp) == 0, "an idle pad reports no buttons");
 
-    // Face buttons map by name onto the GameCube's, and gc/iPad.cpp is what
-    // says which XPAD_BUTTON_* each of those becomes.
+    // Face buttons under the default preset, which is the Xbox release's --
+    // the release the port runs the assets of. Its font.HIP draws the X button
+    // for Bubble Spin and the B button for Bubble Bounce, the opposite way
+    // round from the GameCube's letters, and these four are that.
     gp.wButtons = XINPUT_GAMEPAD_A;
-    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_X, "A is the GameCube's A");
+    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_X, "A is jump");
     gp.wButtons = XINPUT_GAMEPAD_B;
-    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_TRIANGLE, "B is the GameCube's B");
+    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_O, "B is Bubble Bounce");
     gp.wButtons = XINPUT_GAMEPAD_X;
-    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_O, "X is the GameCube's X");
+    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_TRIANGLE, "X is Bubble Spin");
     gp.wButtons = XINPUT_GAMEPAD_Y;
-    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_SQUARE, "Y is the GameCube's Y");
+    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_SQUARE, "Y is Bubble Bash");
 
     gp.wButtons = XINPUT_GAMEPAD_START;
     check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_START, "start is start");
@@ -1250,32 +1440,32 @@ static void test_pad_win32_buttons()
     check(iPadHostWin32ConvertButtons(gp) == (TEST_PAD_L1 | TEST_PAD_R1),
           "the triggers are L1 and R1 once past it");
 
-    // RB is the GameCube's Z. zHud.cpp shows the HUD on that bit and zCamera.cpp
-    // toggles the near camera with it, so pressing it alone has to produce it
-    // alone -- anything else riding along would fire an action with the HUD.
+    // RB carries Z, which zHud.cpp shows the HUD on and zCamera.cpp toggles the
+    // near camera with. The Xbox drew its black button for both that prompt and
+    // R2, and R2 has no prompt anywhere in the game, so RB carries both rather
+    // than leaving a bit the game reads unreachable.
     gp.wButtons = XINPUT_GAMEPAD_RIGHT_SHOULDER;
     gp.bLeftTrigger = 0;
     gp.bRightTrigger = 0;
-    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_Z, "RB alone is the GameCube's Z");
+    check(iPadHostWin32ConvertButtons(gp) == (TEST_PAD_Z | TEST_PAD_R2), "RB is Z and R2");
 
-    // Held, it promotes the triggers the way Z does on the GameCube, and goes on
-    // reporting itself while it does.
+    // And it does NOT modify the triggers. That is the GameCube preset's trick,
+    // for a controller with three shoulders; this one has four and each says one
+    // thing. iPadBindHeld's handling of the '!' that makes the GameCube's
+    // version exclusive is checked in test_pad_bindings.
     gp.bLeftTrigger = 255;
     gp.bRightTrigger = 255;
     U32 modified = iPadHostWin32ConvertButtons(gp);
-    check(modified == (TEST_PAD_Z | TEST_PAD_L2 | TEST_PAD_R2),
-          "Z held turns the triggers into L2 and R2");
+    check(modified == (TEST_PAD_Z | TEST_PAD_R2 | TEST_PAD_L1 | TEST_PAD_R1),
+          "and holding it leaves the triggers as L1 and R1");
 
-    // The promotion has to replace L1 and R1, not add to them: on the GameCube
-    // one button reads as one or the other, and menu code in zUI.cpp tests for
-    // each separately, so reporting both would give it a button nobody pressed.
-    check((modified & (TEST_PAD_L1 | TEST_PAD_R1)) == 0, "and stops reporting L1 and R1");
+    check((modified & TEST_PAD_L2) == 0, "nothing is promoted to L2");
 
-    // LB is unbound by default. The GameCube has no fourth shoulder.
+    // LB is L2, which the GameCube had to chord for.
     gp.wButtons = XINPUT_GAMEPAD_LEFT_SHOULDER;
     gp.bLeftTrigger = 0;
     gp.bRightTrigger = 0;
-    check(iPadHostWin32ConvertButtons(gp) == 0, "LB maps to nothing");
+    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_L2, "LB is L2");
 
     // Everything above is the DEFAULT mapping. The harness config.ini rebinds
     // one button -- `select = ls` -- and this is the whole path from that line
@@ -1455,22 +1645,18 @@ static void test_pad_sdl_virtual()
     // button under your thumb on every controller ever made, and only the
     // letter printed on it changes. These four are that claim.
     check(virtual_press(SDL_GAMEPAD_BUTTON_SOUTH) == TEST_PAD_X,
-          "the south face button is the GameCube's A");
-    check(virtual_press(SDL_GAMEPAD_BUTTON_EAST) == TEST_PAD_TRIANGLE,
-          "east is the GameCube's B");
-    check(virtual_press(SDL_GAMEPAD_BUTTON_WEST) == TEST_PAD_O, "west is the GameCube's X");
-    check(virtual_press(SDL_GAMEPAD_BUTTON_NORTH) == TEST_PAD_SQUARE,
-          "north is the GameCube's Y");
+          "the south face button is jump");
+    check(virtual_press(SDL_GAMEPAD_BUTTON_EAST) == TEST_PAD_O, "east is Bubble Bounce");
+    check(virtual_press(SDL_GAMEPAD_BUTTON_WEST) == TEST_PAD_TRIANGLE, "west is Bubble Spin");
+    check(virtual_press(SDL_GAMEPAD_BUTTON_NORTH) == TEST_PAD_SQUARE, "north is Bubble Bash");
 
     check(virtual_press(SDL_GAMEPAD_BUTTON_START) == TEST_PAD_START, "start is start");
     check(virtual_press(SDL_GAMEPAD_BUTTON_DPAD_UP) == TEST_PAD_UP, "the d-pad comes through");
-    check(virtual_press(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) == 0,
-          "LB maps to nothing, as on the other backend");
+    check(virtual_press(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) == TEST_PAD_L2,
+          "LB is L2, as on the other backend");
 
-    // RB is the GameCube's Z, and held it promotes the triggers to L2 and R2
-    // INSTEAD of L1 and R1 -- the exclusivity iPadBind.h's '!' exists for.
-    check(virtual_press(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) == TEST_PAD_Z,
-          "RB alone is the GameCube's Z");
+    check(virtual_press(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) == (TEST_PAD_Z | TEST_PAD_R2),
+          "RB is Z and R2");
 
     virtual_release_all();
     SDL_SetJoystickVirtualAxis(sVirtualJoystick, SDL_GAMEPAD_AXIS_LEFT_TRIGGER,
@@ -1488,12 +1674,15 @@ static void test_pad_sdl_virtual()
     check(virtual_buttons() == (TEST_PAD_L1 | TEST_PAD_R1),
           "the triggers are L1 and R1 once past it");
 
+    // RB does not modify the triggers under this preset. That is the GameCube
+    // one's trick, for a controller with three shoulders where the game wants
+    // four; the default has four and each says one thing.
     SDL_SetJoystickVirtualButton(sVirtualJoystick, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, true);
     iPadHostPoll();
     U32 modified = virtual_buttons();
-    check(modified == (TEST_PAD_Z | TEST_PAD_L2 | TEST_PAD_R2),
-          "Z held turns the triggers into L2 and R2");
-    check((modified & (TEST_PAD_L1 | TEST_PAD_R1)) == 0, "and stops reporting L1 and R1");
+    check(modified == (TEST_PAD_Z | TEST_PAD_R2 | TEST_PAD_L1 | TEST_PAD_R1),
+          "RB held leaves the triggers as L1 and R1");
+    check((modified & TEST_PAD_L2) == 0, "and promotes nothing to L2");
 
     // The harness config.ini rebinds one button -- `select = ls` -- so this is
     // the whole path from that line to the bits the game reads, on this backend
