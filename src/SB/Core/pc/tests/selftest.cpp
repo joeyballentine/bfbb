@@ -1304,6 +1304,39 @@ static void test_pad_bindings()
             }
             check(true, "every preset cancels on B and opens options on X");
 
+            // The GameCube read the HUD and the close camera off one button,
+            // Z, because it had nowhere else to put them. The Xbox had white
+            // and black, so the two presets have to disagree here -- and a
+            // preset that put them back together on a pad with a button spare
+            // would be throwing one away.
+            {
+                S32 z = -1;
+                S32 hud = -1;
+                for (S32 i = 0; i < kPadBindButtonCount; i++)
+                {
+                    if (kPadBindButtons[i].mask == XPAD_BUTTON_Z)
+                        z = i;
+                    if (kPadBindButtons[i].mask == XPAD_BUTTON_HUD)
+                        hud = i;
+                }
+
+                check(z >= 0 && hud >= 0 && z != hud,
+                      "the close camera and the HUD are two buttons, not one bit");
+
+                if (z >= 0 && hud >= 0)
+                {
+                    const char* gz = (gc->pad[z] != NULL) ? gc->pad[z] : kPadBindButtons[z].pad;
+                    const char* gh =
+                        (gc->pad[hud] != NULL) ? gc->pad[hud] : kPadBindButtons[hud].pad;
+                    check(strcmp(gz, gh) == 0, "gamecube puts both on one button, as that pad did");
+
+                    const char* xz = (xb->pad[z] != NULL) ? xb->pad[z] : kPadBindButtons[z].pad;
+                    const char* xh =
+                        (xb->pad[hud] != NULL) ? xb->pad[hud] : kPadBindButtons[hud].pad;
+                    check(strcmp(xz, xh) != 0, "and xbox gives them one each");
+                }
+            }
+
             // The GameCube has three shoulders where the game wants four, and
             // SDL gives that pad no leftshoulder at all, so L2 has to be chorded
             // there and is a button of its own on the other two.
@@ -1578,6 +1611,7 @@ static void test_pad_stick_deadzone()
 #define TEST_PAD_SQUARE 0x40000 // Y on the GameCube
 #define TEST_PAD_TRIANGLE 0x80000 // B on the GameCube
 #define TEST_PAD_Z 0x100000
+#define TEST_PAD_HUD 0x200000 // PC-only: the HUD, which the GameCube read off Z
 
 #ifdef BFBB_INPUT_BACKEND_WIN32
 // The button conversion inside iPadHostWin32.cpp, which is named rather than
@@ -1634,7 +1668,8 @@ static void test_pad_win32_buttons()
     gp.wButtons = XINPUT_GAMEPAD_RIGHT_SHOULDER;
     gp.bLeftTrigger = 0;
     gp.bRightTrigger = 0;
-    check(iPadHostWin32ConvertButtons(gp) == (TEST_PAD_Z | TEST_PAD_R2), "RB is Z and R2");
+    check(iPadHostWin32ConvertButtons(gp) == (TEST_PAD_HUD | TEST_PAD_R2),
+          "RB shows the HUD, and is R2");
 
     // And it does NOT modify the triggers. That is the GameCube preset's trick,
     // for a controller with three shoulders; this one has four and each says one
@@ -1643,16 +1678,19 @@ static void test_pad_win32_buttons()
     gp.bLeftTrigger = 255;
     gp.bRightTrigger = 255;
     U32 modified = iPadHostWin32ConvertButtons(gp);
-    check(modified == (TEST_PAD_Z | TEST_PAD_R2 | TEST_PAD_L1 | TEST_PAD_R1),
+    check(modified == (TEST_PAD_HUD | TEST_PAD_R2 | TEST_PAD_L1 | TEST_PAD_R1),
           "and holding it leaves the triggers as L1 and R1");
 
     check((modified & TEST_PAD_L2) == 0, "nothing is promoted to L2");
 
-    // LB is L2, which the GameCube had to chord for.
+    // LB is L2, which the GameCube had to chord for, and the close camera --
+    // the other half of that console's Z, which the Xbox had a button spare
+    // for.
     gp.wButtons = XINPUT_GAMEPAD_LEFT_SHOULDER;
     gp.bLeftTrigger = 0;
     gp.bRightTrigger = 0;
-    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_L2, "LB is L2");
+    check(iPadHostWin32ConvertButtons(gp) == (TEST_PAD_L2 | TEST_PAD_Z),
+          "LB is L2 and pulls the camera in");
 
     // Everything above is the DEFAULT mapping. The harness config.ini rebinds
     // one button -- `select = ls` -- and this is the whole path from that line
@@ -1840,11 +1878,11 @@ static void test_pad_sdl_virtual()
 
     check(virtual_press(SDL_GAMEPAD_BUTTON_START) == TEST_PAD_START, "start is start");
     check(virtual_press(SDL_GAMEPAD_BUTTON_DPAD_UP) == TEST_PAD_UP, "the d-pad comes through");
-    check(virtual_press(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) == TEST_PAD_L2,
-          "LB is L2, as on the other backend");
+    check(virtual_press(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) == (TEST_PAD_L2 | TEST_PAD_Z),
+          "LB is L2 and the close camera, as on the other backend");
 
-    check(virtual_press(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) == (TEST_PAD_Z | TEST_PAD_R2),
-          "RB is Z and R2");
+    check(virtual_press(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) == (TEST_PAD_HUD | TEST_PAD_R2),
+          "and RB shows the HUD, which is the other half of the GameCube's Z");
 
     virtual_release_all();
     SDL_SetJoystickVirtualAxis(sVirtualJoystick, SDL_GAMEPAD_AXIS_LEFT_TRIGGER,
@@ -1868,7 +1906,7 @@ static void test_pad_sdl_virtual()
     SDL_SetJoystickVirtualButton(sVirtualJoystick, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, true);
     iPadHostPoll();
     U32 modified = virtual_buttons();
-    check(modified == (TEST_PAD_Z | TEST_PAD_R2 | TEST_PAD_L1 | TEST_PAD_R1),
+    check(modified == (TEST_PAD_HUD | TEST_PAD_R2 | TEST_PAD_L1 | TEST_PAD_R1),
           "RB held leaves the triggers as L1 and R1");
     check((modified & TEST_PAD_L2) == 0, "and promotes nothing to L2");
 

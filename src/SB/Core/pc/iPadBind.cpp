@@ -31,7 +31,8 @@ const iPadBindButton kPadBindButtons[] = {
     { "b", XPAD_BUTTON_TRIANGLE, "b", "lctrl", "cancel; Bubble Spin on gamecube" },
     { "x", XPAD_BUTTON_O, "x", "e", "options; Bubble Bounce on gamecube" },
     { "y", XPAD_BUTTON_SQUARE, "y", "q", "Bubble Bash" },
-    { "z", XPAD_BUTTON_Z, "rb", "f", "near camera, HUD" },
+    { "z", XPAD_BUTTON_Z, "lb", "f", "pull the camera in close" },
+    { "hud", XPAD_BUTTON_HUD, "rb", "g", "show the HUD" },
     { "l1", XPAD_BUTTON_L1, "lt", "z", "camera left" },
     { "r1", XPAD_BUTTON_R1, "rt", "c", "camera right" },
     { "l2", XPAD_BUTTON_L2, "lb", "x", NULL },
@@ -83,24 +84,33 @@ const S32 kPadBindButtonCount = (S32)(sizeof(kPadBindButtons) / sizeof(kPadBindB
 
 const iPadBindPreset kPadBindPresets[] = {
     // FIRST, and so what "auto" settles on when it cannot place the pad. Four
-    // shoulders, so nothing chords: the black button was the Xbox's HUD button
-    // -- font.HIP draws it for the status prompt -- and R2 has no prompt of its
-    // own anywhere in the game, so both land on RB rather than leaving a bit
-    // the game reads unreachable.
-    { "xbox", "the Xbox original: Spin on X, Bounce on B, four shoulders", { PAD_FACES } },
+    // shoulders, so nothing chords, and the two jobs the GameCube fused onto Z
+    // get one each: the HUD on the right, which is where the Xbox's black
+    // button is and what font.HIP draws for the status prompt, and the close
+    // camera on the left, where its white button is.
+    //
+    // R2 has no prompt of its own anywhere in the game and nothing outside
+    // cheat_mode reads it, so it stays on RB beside the HUD rather than leaving
+    // a bit the game reads unreachable.
+    { "xbox",
+      "the Xbox original: Spin on X, Bounce on B, four shoulders",
+      { PAD_FACES, "lb", "rb" } },
 
     // Same buttons as the Xbox, drawn with PlayStation glyphs, except that the
     // PS2 release put Spin on square rather than circle. Its four shoulders sit
     // the same way.
-    { "ps2", "the PS2 original: Spin on square, Bounce on circle", { PAD_FACES } },
+    { "ps2", "the PS2 original: Spin on square, Bounce on circle", { PAD_FACES, "lb", "rb" } },
 
     // Three shoulders where the game wants four, so Z modifies: L alone is L1,
     // Z+L is L2, and holding Z still sets Z in its own right. SDL gives a
     // GameCube pad no leftshoulder at all, so the base's `l2 = lb` is a button
     // that does not exist there and the chord is the only way to reach L2.
+    //
+    // z and hud land on the same button here, which is the point: that console
+    // had nowhere else to put the HUD, so one press does both.
     { "gamecube",
       "the GameCube original: Spin on B, Bounce on X, Z chords the shoulders",
-      { PAD_FACES, "rb", "lt+!rb", "rt+!rb", "lt+rb", "rt+rb" } },
+      { PAD_FACES, "rb", "rb", "lt+!rb", "rt+!rb", "lt+rb", "rt+rb" } },
 };
 
 const S32 kPadBindPresetCount = (S32)(sizeof(kPadBindPresets) / sizeof(kPadBindPresets[0]));

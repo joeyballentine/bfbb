@@ -86,10 +86,13 @@ namespace
     // names in a set are keyed to, since a set is extracted into the port's
     // slot order.
     //
-    // pad_button_R2 carries XPAD_BUTTON_Z rather than R2. button_status_text is
-    // the only prompt that uses it, the HUD toggle reads Z (zHud.cpp:197), and
-    // every disc drew its own HUD button in that slot: the GameCube's Z, the
-    // PS2's R2, the Xbox's black button. The R2 bit has no prompt of its own.
+    // pad_button_R2 carries XPAD_BUTTON_HUD rather than R2. button_status_text
+    // is the only prompt that uses it, it is the HUD prompt, and every disc
+    // drew its own HUD button in that slot: the GameCube's Z, the PS2's R2, the
+    // Xbox's black button. The R2 bit has no prompt of its own.
+    //
+    // Nothing draws the close camera. No disc has a prompt for it, so giving it
+    // a button of its own costs no picture.
     //
     // The face four are read off the discs, and all three agree. Each disc's
     // menu prompts name a picture, that picture names one of these textures,
@@ -120,7 +123,7 @@ namespace
         { "pad_button_L1", XPAD_BUTTON_L1, GLYPH_LT },
         { "pad_button_R1", XPAD_BUTTON_R1, GLYPH_RT },
         { "pad_button_L2", XPAD_BUTTON_L2, GLYPH_LB },
-        { "pad_button_R2", XPAD_BUTTON_Z, GLYPH_RB },
+        { "pad_button_R2", XPAD_BUTTON_HUD, GLYPH_RB },
         { "pad_button_start", XPAD_BUTTON_START, GLYPH_START },
         { "pad_button_select", XPAD_BUTTON_SELECT, GLYPH_BACK },
         { "pad_button_L_analog", 0, GLYPH_STICK_LEFT },

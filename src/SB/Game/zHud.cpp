@@ -194,7 +194,8 @@ namespace zhud
             zhud::hide();
         }
 
-        if (!globals.player.ControlOff && globals.pad0->pressed & 0x100000 && !zGameIsPaused() &&
+        if (!globals.player.ControlOff && globals.pad0->pressed & XPAD_BUTTON_HUD &&
+            !zGameIsPaused() &&
             globals.sceneCur->sceneID != 'PG12')
         {
             zhud::show();

@@ -112,6 +112,18 @@ void xPadAnalogIsDigital(F32, F32);
 inline F32 normalize_analog(S32 v, S32 v_min, S32 v_max, S32 dead_center, S32 dead_min,
                             S32 dead_max);
 
+// PLATFORM_PC: a bit of its own for showing the HUD, which the GameCube read
+// off Z along with the near camera because it had no button to spare. The Xbox
+// had two -- white and black, and its status prompt draws the black one -- so
+// the port gives the job a bit and lets a preset decide whether the two land on
+// one button or two. Off PLATFORM_PC it IS Z, so nothing moves. See
+// pc/iPadBind.cpp.
+#ifdef PLATFORM_PC
+#define XPAD_BUTTON_HUD 0x200000
+#else
+#define XPAD_BUTTON_HUD XPAD_BUTTON_Z
+#endif
+
 // PLATFORM_PC: the bit a PLAYER MOVE reads, which is not the same on every
 // console. Wrapped around the mask rather than around the pad so that menus,
 // which the three releases agree about, keep reading the bits the code names.
