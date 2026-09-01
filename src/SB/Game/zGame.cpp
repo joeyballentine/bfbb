@@ -22,6 +22,10 @@
 // zGameTakeSnapShot is an empty function on the console with a live call site.
 // This is what fills it in. See iSnapshot.h.
 #include "iSnapshot.h"
+
+// video.load_time, whose clock starts when the loading screen goes up. See
+// iLoadScreen.h.
+#include "iLoadScreen.h"
 #endif
 
 #include "iDraw.h"
@@ -1371,6 +1375,17 @@ RpLight* DirectionalLight;
 void zGameScreenTransitionBegin()
 {
     gGameWhereAmI = eGameWhere_TransitionBegin;
+#ifdef PLATFORM_PC
+    zParPTankSpawnWithoutPlayer(TRUE);
+    // video.load_time. Not on the first boot: zGameScreenTransitionUpdate
+    // returns without drawing or presenting anything while zMenuIsFirstBoot,
+    // so a floor held over that would be a frozen window rather than a bubble
+    // wall.
+    if (!zMenuIsFirstBoot())
+    {
+        iLoadScreenBegin();
+    }
+#endif
     zGameSetOstrich(eGameOstrich_Loading);
     globals.dontShowPadMessageDuringLoadingOrCutScene = '\0';
     sGameScreenTransCam = iCameraCreate(xScreenWidth(), xScreenHeight(), 0);
@@ -1622,6 +1637,7 @@ void zGameScreenTransitionEnd()
     RwFrame* frame;
     gGameWhereAmI = eGameWhere_TransitionEnd;
 #ifdef PLATFORM_PC
+    zParPTankSpawnWithoutPlayer(FALSE);
     // The other half of zGameTakeSnapShot's latch. The loading screen is done
     // with the still, so let the next presented frames replace it -- the first
     // of which is the level that has just finished loading.

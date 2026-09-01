@@ -28,6 +28,9 @@ void zParPTankSpawnMenuBubbles(xVec3* pos, xVec3* vel, U32 count);
 void zParPTankSpawnSnow(xVec3* pos, xVec3* vel, U32 count);
 void zParPTankExit();
 void zParPTankRender();
+#ifdef PLATFORM_PC
+void zParPTankSpawnWithoutPlayer(S32 allow);
+#endif
 void zParPTankUpdate(F32 dt);
 
 extern const U32 gPTankDisable;

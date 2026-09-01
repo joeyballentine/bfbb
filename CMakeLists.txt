@@ -475,6 +475,7 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iConfig.cpp
   ${PC_DIR}/iDrawDist.cpp
   ${PC_DIR}/iFile.cpp
+  ${PC_DIR}/iLoadScreen.cpp
   ${PC_DIR}/intrin.cpp
   ${PC_DIR}/iMath.cpp
   ${PC_DIR}/iMemMgr.cpp

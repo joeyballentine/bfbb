@@ -2,6 +2,9 @@
 
 #ifdef PLATFORM_PC
 #include <stdlib.h>
+
+// video.load_time, whose floor is held below. See iLoadScreen.h.
+#include "iLoadScreen.h"
 #endif
 
 #include "zEntTrigger.h"
@@ -1185,6 +1188,17 @@ void zSceneInit(U32 theSceneID, S32 reloadInProgress)
     }
 
     xModelInstStaticAlloc = 0;
+
+#ifdef PLATFORM_PC
+    // video.load_time: keep the loading screen up until its animation has had
+    // the time the setting asks for. Here because it is the last point at
+    // which there is still a loading screen to draw -- zGameScreenTransitionEnd
+    // below takes its camera down.
+    while (iLoadScreenHolding())
+    {
+        zGameScreenTransitionUpdate(100.0f, NULL, rgba_bkgrd);
+    }
+#endif
 
     zGameScreenTransitionEnd();
     zSceneObjHashtableUsage();

@@ -408,8 +408,37 @@ static void zParPTankBubbleUpdate(zParPTank* zp, float dt)
 }
 
 // regswaps
+#ifdef PLATFORM_PC
+// Whether a wall may be spawned with no player in the world. See the guard
+// below.
+static S32 sSpawnWithoutPlayer;
+
+void zParPTankSpawnWithoutPlayer(S32 allow)
+{
+    sSpawnWithoutPlayer = allow;
+}
+#endif
+
 static void zParPTankSpawnBubbles(xVec3* pos, xVec3* vel, U32 count, float scale, zParPTank* zp)
 {
+#ifdef PLATFORM_PC
+    // Every bubble in the game is spawned off something the player did, so the
+    // guard below stands in for "the game is live" -- except for the one caller
+    // that is not: zGameScreenTransitionUpdate spawns a wall every frame of the
+    // loading screen, and there is no player during a load. zGameExit tore it
+    // down and zGameSetupPlayer does not run until zSceneInit has returned.
+    //
+    // So the loading screen's wall is dropped. Not always: globals.player.ent
+    // .model is left dangling rather than cleared, so for the two or three
+    // frames before the loader writes over that memory it still reads as a
+    // model and about a hundred bubbles get through. That is the whole of the
+    // wall on the console too, and it is why the screen looks nearly empty.
+    //
+    // zGame turns this on for the length of the loading screen. Nothing in
+    // here touches the player -- the guard is the only mention of it -- so
+    // there is nothing else to stand in for.
+    if (!sSpawnWithoutPlayer)
+#endif
     if (globals.player.ent.model == 0 || globals.player.ent.model->Mat == 0)
     {
         return;
