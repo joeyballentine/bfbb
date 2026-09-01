@@ -112,4 +112,15 @@ void xPadAnalogIsDigital(F32, F32);
 inline F32 normalize_analog(S32 v, S32 v_min, S32 v_max, S32 dead_center, S32 dead_min,
                             S32 dead_max);
 
+// PLATFORM_PC: the bit a PLAYER MOVE reads, which is not the same on every
+// console. Wrapped around the mask rather than around the pad so that menus,
+// which the three releases agree about, keep reading the bits the code names.
+// Compiles away to the constant everywhere else. See pc/iPadLayout.h.
+#ifdef PLATFORM_PC
+U32 iPadLayoutButton(U32 mask);
+#define XPAD_MOVE(mask) iPadLayoutButton(mask)
+#else
+#define XPAD_MOVE(mask) (mask)
+#endif
+
 #endif

@@ -93,13 +93,15 @@ const iPadBindButton* iPadBindFind(const char* name);
 // people remember is whichever console they played. So the pad defaults are a
 // named set rather than one table, and `input.preset` picks it.
 //
-// What actually differs is smaller than it looks. All three consoles put the
-// same MOVE in the same POSITION -- jump south, Bubble Bash north, Bubble
-// Bounce east, Bubble Spin west -- and differ only in the letter printed
-// there. The Xbox and the PS2 come out identical on a modern controller; the
-// GameCube differs because its B is west and its X is east, the opposite way
-// round from an Xbox pad, and because it has three shoulders where the game
-// wants four and so has to chord.
+// What differs is the LETTER each move sits on. The Xbox and PS2 discs spin on
+// X and bounce on B; the GameCube disc has them the other way round. So a
+// preset's face rows name a letter and the port finds it on the pad in hand --
+// see the '#' rows in iPadBind.cpp -- which is why `preset = gamecube` means "B
+// does the spin" whether that is an Xbox pad's east button or a GameCube pad's
+// west one.
+//
+// The shoulders differ too: the GameCube has three where the game wants four,
+// so it chords Z, and SDL gives that pad no leftshoulder at all.
 
 struct iPadBindPreset
 {
@@ -121,6 +123,14 @@ extern const S32 kPadBindPresetCount;
 // generated file from it, so changing the preset changes both together and the
 // file a player reads always says what the game is actually doing.
 const char* iPadBindPadDefault(const iPadBindButton* button);
+
+// The preset actually in force: what input.preset says, with "auto" resolved
+// against the controller on port 0. Never NULL -- an unplaceable pad answers
+// "xbox", which is the release the port's assets came off.
+//
+// Shared so iPadLayout.cpp and iTextPatch.cpp resolve "auto" the same way this
+// one does rather than growing a second copy of the rule.
+const char* iPadBindActivePreset();
 
 // The single device input a binding names, or -1 when it does not name exactly
 // one -- `l2 = lt+rb` is two, and an empty binding is none. A negated member

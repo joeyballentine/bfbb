@@ -540,3 +540,11 @@ const char* iPadHostPadKind()
     // as an Xbox pad whatever it is physically. There is nothing to detect.
     return NULL;
 }
+
+const char* iPadHostInputForLabel(char)
+{
+    // XInput has no notion of what is printed on a button, and every device it
+    // speaks to is an Xbox pad or pretending to be one, so the letters are
+    // already the positions and the base bindings say so.
+    return NULL;
+}

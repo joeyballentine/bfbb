@@ -715,3 +715,63 @@ const char* iPadHostPadKind()
         return NULL;
     }
 }
+
+const char* iPadHostInputForLabel(char letter)
+{
+    S32 slot = sPortSlot[0];
+    if (slot < 0 || sGamepad[slot] == NULL)
+    {
+        return NULL;
+    }
+
+    // The four face positions and the token each one is called by. Walking
+    // positions and asking SDL what is PRINTED on each is the only way round
+    // this: there is no call that goes the other way.
+    struct Face
+    {
+        SDL_GamepadButton button;
+        const char* token;
+    };
+
+    static const Face kFaces[] = {
+        { SDL_GAMEPAD_BUTTON_SOUTH, "a" },
+        { SDL_GAMEPAD_BUTTON_EAST, "b" },
+        { SDL_GAMEPAD_BUTTON_WEST, "x" },
+        { SDL_GAMEPAD_BUTTON_NORTH, "y" },
+    };
+
+    for (S32 i = 0; i < (S32)(sizeof(kFaces) / sizeof(kFaces[0])); i++)
+    {
+        SDL_GamepadButtonLabel label = SDL_GetGamepadButtonLabel(sGamepad[slot], kFaces[i].button);
+        char printed = '\0';
+
+        switch (label)
+        {
+        case SDL_GAMEPAD_BUTTON_LABEL_A:
+        case SDL_GAMEPAD_BUTTON_LABEL_CROSS:
+            printed = 'A';
+            break;
+        case SDL_GAMEPAD_BUTTON_LABEL_B:
+        case SDL_GAMEPAD_BUTTON_LABEL_CIRCLE:
+            printed = 'B';
+            break;
+        case SDL_GAMEPAD_BUTTON_LABEL_X:
+        case SDL_GAMEPAD_BUTTON_LABEL_SQUARE:
+            printed = 'X';
+            break;
+        case SDL_GAMEPAD_BUTTON_LABEL_Y:
+        case SDL_GAMEPAD_BUTTON_LABEL_TRIANGLE:
+            printed = 'Y';
+            break;
+        default:
+            break;
+        }
+
+        if (printed == letter)
+        {
+            return kFaces[i].token;
+        }
+    }
+
+    return NULL;
+}

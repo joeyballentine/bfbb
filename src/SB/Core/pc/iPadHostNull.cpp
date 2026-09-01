@@ -59,3 +59,8 @@ const char* iPadHostPadKind()
 {
     return NULL;
 }
+
+const char* iPadHostInputForLabel(char)
+{
+    return NULL;
+}

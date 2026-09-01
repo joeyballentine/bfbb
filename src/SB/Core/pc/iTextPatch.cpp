@@ -3,6 +3,9 @@
 
 #include "iTextPatch.h"
 
+#include "iPadLayout.h"
+#include "xPad.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -10,11 +13,11 @@ namespace
 {
     S32 sEnabled;
 
-    // The registered-trademark sign, as the game's font encodes it. It has to
-    // be spliced in as its own literal rather than written "\xae2": a hex
-    // escape in C runs as far as there are hex digits, so "\xae2" is one
-    // character 0xAE2, not two.
-    #define REG "\xae"
+// The registered-trademark sign, as the game's font encodes it. It has to
+// be spliced in as its own literal rather than written "\xae2": a hex
+// escape in C runs as far as there are hex digits, so "\xae2" is one
+// character 0xAE2, not two.
+#define REG "\xae"
 
     // A word swap, applied to every TEXT asset outside its {markup}.
     //
@@ -69,7 +72,7 @@ namespace
 
     const size_t kRuleCount = sizeof(kRules) / sizeof(kRules[0]);
 
-    #undef REG
+#undef REG
 
     // Whole strings, replaced by name.
     //
@@ -97,6 +100,79 @@ namespace
         const char* name;
         const char* text;
     };
+
+    // Prompts for a MOVE, which is the one thing the three releases really
+    // disagree about.
+    //
+    // Their pad layers are the same and their menus are the same. What each
+    // build changed is which bit zEntPlayer reads for a move: the GameCube
+    // spins on TRIANGLE and bounces on O, the Xbox has those two the other way
+    // round, the PS2 spins on SQUARE and bashes on TRIANGLE. iPadLayout.h
+    // carries the table and the evidence for it.
+    //
+    // The port ships the Xbox archives, so their move prompts are right only
+    // under the xbox preset. Under the others the prompt has to name the
+    // picture whose button the move has moved to, or a sign in Bikini Bottom
+    // tells you to press a button that does something else.
+    //
+    // Rewriting two digits rather than the whole string keeps every word around
+    // them, so a translated archive keeps its translation.
+    enum
+    {
+        MOVE_SPIN,
+        MOVE_BASH,
+        MOVE_BOUNCE
+    };
+
+    // The bit each move reads in the code this is, before any preset moves it.
+    const U32 kMoveBit[] = { XPAD_BUTTON_TRIANGLE, XPAD_BUTTON_SQUARE, XPAD_BUTTON_O };
+
+    struct PictureFix
+    {
+        const char* name;
+        S32 move;
+    };
+
+    const PictureFix kPictureFixes[] = {
+        { "button_spinattack_text", MOVE_SPIN },
+        { "button_bellyattack_text", MOVE_SPIN },
+        { "button_chopattack_text", MOVE_SPIN },
+        { "button_kickattack_text", MOVE_SPIN },
+
+        { "button_bashattack_text", MOVE_BASH },
+
+        // Bounce, and the two things that share its button: picking up and
+        // throwing. Retail gives each its own prompt and they all name the same
+        // picture on a given disc.
+        { "button_bounceattack_text", MOVE_BOUNCE },
+        { "button_bowlattack_text", MOVE_BOUNCE },
+        { "button_flopattack_text", MOVE_BOUNCE },
+        { "button_lassoattack_text", MOVE_BOUNCE },
+        { "button_lassoswing_text", MOVE_BOUNCE },
+        { "button_pickup_text", MOVE_BOUNCE },
+        { "button_throw_text", MOVE_BOUNCE },
+    };
+
+    // The two digits of the button_picture_NN that draws this bit. The mapping
+    // is the discs' own and is the same on all three: 1 is accept, 2 the third
+    // menu choice, 3 cancel, 4 options. iPadGlyph.cpp reads the same table from
+    // the other end.
+    const char* pictureForBit(U32 mask)
+    {
+        switch (mask)
+        {
+        case XPAD_BUTTON_X:
+            return "01";
+        case XPAD_BUTTON_SQUARE:
+            return "02";
+        case XPAD_BUTTON_TRIANGLE:
+            return "03";
+        case XPAD_BUTTON_O:
+            return "04";
+        default:
+            return NULL;
+        }
+    }
 
     const Override kOverrides[] = {
         // The four assets the rest include by name. Fixing these settles every
@@ -226,10 +302,61 @@ namespace
     };
 
     const size_t kOverrideCount = sizeof(kOverrides) / sizeof(kOverrides[0]);
+    const size_t kPictureFixCount = sizeof(kPictureFixes) / sizeof(kPictureFixes[0]);
 
     // Filled on the first patch, not at static initialisation: the order in
     // which these run against the config load is not worth depending on.
     U32 sOverrideID[kOverrideCount];
+    U32 sPictureFixID[kPictureFixCount];
+
+    // Rewrites the picture this asset names, in place. Both numbers are two
+    // digits, so nothing moves and no length can change.
+    S32 applyPictureFix(U32 assetID, char* text)
+    {
+        static const char kTag[] = "button_picture_";
+        const size_t tagLen = sizeof(kTag) - 1;
+        S32 changed = FALSE;
+        size_t i;
+
+        for (i = 0; i < kPictureFixCount; i++)
+        {
+            if (sPictureFixID[i] != assetID)
+            {
+                continue;
+            }
+
+            // Patched at load, so a preset changed mid-session does not reach
+            // prompts already in memory until the next level load. Everything
+            // else about a pad swap is live; this one is not, because the text
+            // is only rewritten as it comes off the disc.
+            const char* want = pictureForBit(iPadLayoutButton(kMoveBit[kPictureFixes[i].move]));
+            if (want == NULL)
+            {
+                continue;
+            }
+
+            char* at = text;
+            while ((at = strstr(at, kTag)) != NULL)
+            {
+                char* digits = at + tagLen;
+
+                // Only the face four. A move prompt names one of those and
+                // nothing else, and leaving the rest alone means a shoulder or
+                // a stick picture in the same string cannot be walked on.
+                if (digits[0] == '0' && digits[1] >= '1' && digits[1] <= '4' &&
+                    (digits[0] != want[0] || digits[1] != want[1]))
+                {
+                    digits[0] = want[0];
+                    digits[1] = want[1];
+                    changed = TRUE;
+                }
+
+                at = digits;
+            }
+        }
+
+        return changed;
+    }
     S32 sHashed;
 
     char foldByte(char c)
@@ -348,7 +475,7 @@ namespace
 
         return changed;
     }
-}
+} // namespace
 
 U32 iTextPatchAssetID(const char* name)
 {
@@ -376,8 +503,8 @@ S32 iTextPatchRulesFit()
     {
         if (strlen(kRules[i].to) > strlen(kRules[i].from))
         {
-            printf("bfbb: text rule '%s' -> '%s' is longer than what it replaces\n",
-                   kRules[i].from, kRules[i].to);
+            printf("bfbb: text rule '%s' -> '%s' is longer than what it replaces\n", kRules[i].from,
+                   kRules[i].to);
             return FALSE;
         }
     }
@@ -418,6 +545,11 @@ S32 iTextPatchAsset(U32 assetID, char* text, U32 capacity)
             sOverrideID[i] = iTextPatchAssetID(kOverrides[i].name);
         }
 
+        for (i = 0; i < kPictureFixCount; i++)
+        {
+            sPictureFixID[i] = iTextPatchAssetID(kPictureFixes[i].name);
+        }
+
         sHashed = TRUE;
     }
 
@@ -444,5 +576,7 @@ S32 iTextPatchAsset(U32 assetID, char* text, U32 capacity)
         break;
     }
 
-    return applyRules(text);
+    S32 fixed = applyPictureFix(assetID, text);
+
+    return applyRules(text) || fixed;
 }

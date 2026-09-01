@@ -154,16 +154,18 @@ namespace
           "; 1 is off. 2, 4 and 8 are the counts most cards offer, and 4 is the\n"
           "; default. A count the card will not grant falls back to off." },
         { "video", "alpha_to_coverage", "on",
-          "Draw the see-through edges of foliage, fences, grates and cave walls\n"
-          "; as coverage rather than blending them.\n"
+          "Antialias the see-through edges of grass, seaweed, netting and the\n"
+          "; other shapes the game punches out of a texture.\n"
           ";\n"
-          "; Those are solid shapes punched out of a texture, and magnifying one\n"
-          "; blurs the edge where the shape ends. Blended, that blur mixes into\n"
-          "; whatever was drawn there first rather than into what is really\n"
-          "; behind the surface -- which is what makes the sky show through the\n"
-          "; edges of a cave wall. Drawn as coverage the same blur is spread over\n"
-          "; the pixel's samples, and what belongs behind is drawn into the ones\n"
-          "; the shape does not cover.\n"
+          "; Those edges come from an alpha test rather than from geometry, so\n"
+          "; msaa does nothing for them on its own and they stay stepped however\n"
+          "; many samples you ask for. Coverage spreads the edge across the\n"
+          "; pixel's samples instead, which is what smooths it.\n"
+          ";\n"
+          "; Only the surfaces the artists marked as cutouts are drawn this way\n"
+          "; -- 43 of them in the whole game. Soft art keeps its blend: coverage\n"
+          "; can only express as many levels as there are samples, so a gradient\n"
+          "; drawn with it comes out in bands.\n"
           ";\n"
           "; This needs msaa above: there is nowhere to put the coverage at one\n"
           "; sample per pixel, so with msaa = 1 this does nothing whatever it is\n"
@@ -203,8 +205,7 @@ namespace
           "; A power of two from 64 to 4096 pins it instead. Larger costs video\n"
           "; memory and a little time per shadow; 256 is what the consoles used.\n"
           "; The texture is never made larger than the render size either way." },
-        { "xbox", "glow", "on",
-          "The full-screen glow, usually called the Xbox version's bloom." },
+        { "xbox", "glow", "on", "The full-screen glow, usually called the Xbox version's bloom." },
         { "xbox", "distortion", "on", "The Cruise Bubble's screen warp." },
         { "xbox", "snapshot", "on",
           "Use a still of the level you just left as the loading screen\n"
@@ -229,11 +230,19 @@ namespace
           "; -- and every pad on a build without the SDL backend -- gets the Xbox\n"
           "; scheme, which is the release these assets came off.\n"
           ";\n"
-          "; All three put the same move in the same PLACE -- jump under your\n"
-          "; thumb, Bubble Bash at the top, Bubble Bounce on the right, Bubble\n"
-          "; Spin on the left -- and differ in the letter printed there. So xbox\n"
-          "; and ps2 are the same buttons on a modern controller and gamecube is\n"
-          "; the one that moves anything: its B is where an Xbox pad's X is.\n"
+          "; The menus are the same on all three and do not move: A accepts, B\n"
+          "; backs out, X opens options. What each release changed is where the\n"
+          "; player's moves sit. xbox spins on X and bounces on B; gamecube has\n"
+          "; those two the other way round; ps2 spins on square and bashes on\n"
+          "; triangle. A preset names the letter and the port finds it on\n"
+          "; whatever pad is in your hands, so gamecube means 'B does the spin'\n"
+          "; whether you are holding a GameCube pad or an Xbox one.\n"
+          ";\n"
+          "; The prompt on screen draws the button that actually acts, so\n"
+          "; whichever you pick, what you see is what you press. The signs and\n"
+          "; reminders in the world are rewritten as a level loads, so a preset\n"
+          "; changed mid-game reaches those at the next load; the pad itself and\n"
+          "; every menu prompt follow straight away.\n"
           ";\n"
           "; gamecube also chords the shoulders, because the GameCube has three\n"
           "; and the game wants four: Z+L is L2 there, where xbox and ps2 have a\n"
@@ -250,9 +259,9 @@ namespace
           "; port cannot identify gets the Xbox set, which is what the game's own\n"
           "; files hold.\n"
           ";\n"
-          "; The glyph follows your BINDING, not the name here: rebind Bubble Spin\n"
-          "; in [pad] and the prompt draws the button you moved it to. A move bound\n"
-          "; to two buttons at once has no single picture, so it falls back to what\n"
+          "; The glyph follows your BINDING, not the name here: move a button in\n"
+          "; [pad] and every prompt for it draws the one you moved it to. A button\n"
+          "; bound to two at once has no single picture, so it falls back to what\n"
           "; that console drew for it.\n"
           ";\n"
           "; A set is a folder of PNGs under buttons/ named after the POSITION of\n"
@@ -370,7 +379,12 @@ namespace
         }
 
         b = findBinding(key, kKeyboardSection);
-        return b != NULL ? b->key : NULL;
+        if (b != NULL)
+        {
+            return b->key;
+        }
+
+        return NULL;
     }
 
     // [pad] and [keyboard]. One line per game button, and the grammar spelled
@@ -430,8 +444,7 @@ namespace
     void writeBindings(FILE* f)
     {
         writeBindingSection(
-            f, kPadSection,
-            "a b x y lb rb lt rt ls rs back start dpup dpdown dpleft dpright",
+            f, kPadSection, "a b x y lb rb lt rt ls rs back start dpup dpdown dpleft dpright",
             "; The '!' is there for the gamecube preset, where l1 and l2 share one\n"
             "; trigger: that console had three shoulders where the game wants\n"
             "; four, so it read Z as a modifier, and rb stands in for Z.\n"
@@ -760,7 +773,7 @@ namespace
         }
         fflush(stdout);
     }
-}
+} // namespace
 
 bool iConfigWriteDefaults(const char* path)
 {

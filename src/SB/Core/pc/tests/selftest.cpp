@@ -28,6 +28,7 @@
 #include "xSnd.h"
 #include "iMath.h"
 #include "iMemMgr.h"
+#include "iPadLayout.h"
 #include "iPadBind.h"
 #include "iPadHost.h"
 #include "iPadStick.h"
@@ -294,8 +295,7 @@ static void test_config()
     check(iConfigGetBool("xbox.nothing", TRUE) == TRUE, "an unknown key falls back");
     check(iConfigGetInt("xbox.nothing", 7) == 7, "an unknown int falls back");
     check(iConfigGetFloat("xbox.nothing", 0.5f) == 0.5f, "an unknown float falls back");
-    check(strcmp(iConfigGetString("xbox.nothing", "d"), "d") == 0,
-          "an unknown string falls back");
+    check(strcmp(iConfigGetString("xbox.nothing", "d"), "d") == 0, "an unknown string falls back");
 
     // The two binding sections are not in the settings table -- their contents
     // are one row per game button, and that list lives in iPadBind.cpp. They
@@ -313,12 +313,12 @@ static void test_config()
     check(b != NULL && strcmp(iConfigGetString("pad.b", "!"), iPadBindPadDefault(b)) == 0,
           "a binding the file omits is answered from the preset, not the fallback");
     // The default is "auto", which asks the backend what kind of pad is on
-    // port 0. Nothing identifiable is plugged in at this point in the run, so
-    // this is the fallback arm: the Xbox scheme, which puts Bubble Spin on x.
-    check(b != NULL && strcmp(iPadBindPadDefault(b), "x") == 0,
-          "an unplaceable pad falls back on the Xbox scheme, which puts Bubble Spin on x");
-    check(b != NULL && strcmp(iConfigGetString("keyboard.b", "!"), b->key) == 0,
-          "on both devices");
+    // port 0. Nothing identifiable is plugged in at this point in the run, and
+    // nobody can say which button is printed B without a pad, so the row's own
+    // base answers -- and that column is written for an Xbox pad.
+    check(b != NULL && strcmp(iPadBindPadDefault(b), "b") == 0,
+          "with no pad to read letters off, a preset falls back on the row's base");
+    check(b != NULL && strcmp(iConfigGetString("keyboard.b", "!"), b->key) == 0, "on both devices");
 
     check(strcmp(iConfigGetString("pad.nonsense", "!"), "!") == 0,
           "a binding for a button that does not exist is dropped, like any unknown key");
@@ -329,7 +329,8 @@ static void test_config()
     // default reaching a caller whose fallback is the wrong answer -- and it is
     // the one setting where the wrong answer is not visible on screen but in
     // how fast the game runs.
-    check(iConfigGetInt("video.framerate", 1) == 60, "video.framerate defaults to the console's rate");
+    check(iConfigGetInt("video.framerate", 1) == 60,
+          "video.framerate defaults to the console's rate");
     check(iConfigGetBool("video.vsync", FALSE) == TRUE, "and vsync defaults on");
 
     // `display` and `off` are words iConfigGetInt cannot parse; iSystem reads
@@ -623,8 +624,7 @@ static void test_screen()
     // Nothing is left over on either axis at any shape, including narrower
     // than 4:3, where the box is short of the screen the other way about.
     iScreenSetSize(1280, 1024);
-    check(iScreenStretchX(1.0f) == 1280.0f && iScreenStretchY(1.0f) == 1024.0f,
-          "5:4 fills it too");
+    check(iScreenStretchX(1.0f) == 1280.0f && iScreenStretchY(1.0f) == 1024.0f, "5:4 fills it too");
 
     // Pillarbox does not fill anything -- the art goes back in the box, black
     // bars and all, because that is the mode that draws what the console drew.
@@ -731,7 +731,8 @@ static void test_textpatch()
     iTextPatchSetEnabled(FALSE);
     patch_setup(&p, "Please don't turn off your Xbox console.", 64);
     check(!patch_run(&p, "MNU4 AUTO SAVE TXT"), "off, nothing is rewritten");
-    check(strcmp(p.buf, "Please don't turn off your Xbox console.") == 0, "and the text is retail's");
+    check(strcmp(p.buf, "Please don't turn off your Xbox console.") == 0,
+          "and the text is retail's");
 
     iTextPatchSetEnabled(TRUE);
     check(iTextPatchEnabled() != FALSE, "the switch reads back");
@@ -739,7 +740,8 @@ static void test_textpatch()
     // The word swap, on the string a player actually meets.
     patch_setup(&p, "Please don't turn off your Xbox console.", 64);
     check(patch_run(&p, "MNU4 AUTO SAVE TXT"), "on, the console's name goes");
-    check(strcmp(p.buf, "Please don't turn off your computer.") == 0, "'your Xbox console' becomes 'your computer'");
+    check(strcmp(p.buf, "Please don't turn off your computer.") == 0,
+          "'your Xbox console' becomes 'your computer'");
 
     // The same rule at the start of a sentence. Matching folds case, so this
     // hits the rule spelled in lower case, and the capital has to survive.
@@ -757,7 +759,8 @@ static void test_textpatch()
     // stripping.
     patch_setup(&p, "Your Xbox doesn't have enough free blocks.", 64);
     patch_run(&p, "SV BADSAVE TXT");
-    check(strcmp(p.buf, "Your PC doesn't have enough free blocks.") == 0, "'Xbox' alone becomes 'PC'");
+    check(strcmp(p.buf, "Your PC doesn't have enough free blocks.") == 0,
+          "'Xbox' alone becomes 'PC'");
 
     patch_setup(&p, "Memory card (8MB) (for PlayStation\xae\x32) is not inserted.", 96);
     patch_run(&p, "some other asset");
@@ -767,6 +770,51 @@ static void test_textpatch()
     // lookup key. An asset called "xbox_button" that became "PC_button" would
     // resolve to nothing, and the failure would show up as a missing glyph
     // three menus away from this file.
+    // A MOVE's prompt follows the preset, because that is the one thing the
+    // three releases really changed: the GameCube spins on TRIANGLE and the
+    // Xbox on O. The port ships the Xbox archives, so under the xbox preset
+    // their numbering is already right and nothing moves; under the others the
+    // prompt has to be pointed at the picture the move has moved to. Asking
+    // iPadLayoutButton rather than hard-coding an arm keeps this true whichever
+    // pad the machine running the tests happens to have plugged in.
+    {
+        // Spelled out because xPad.h is not in scope this far up the file.
+        const U32 kTriangle = 0x80000u;
+        const U32 kSquare = 0x40000u;
+
+        const U32 spin = iPadLayoutButton(kTriangle);
+        const char* digits = (spin == kTriangle) ? "03" : (spin == kSquare) ? "02" : "04";
+
+        char want[64];
+        snprintf(want, sizeof(want), "{i:button_picture_%s} Spin", digits);
+
+        patch_setup(&p, "{i:button_picture_04} Spin", 64);
+        patch_run(&p, "button_spinattack_text");
+        check(strcmp(p.buf, want) == 0, "a move's prompt names the button the preset moved it to");
+        check(strstr(p.buf, " Spin") != NULL, "and the word beside it is untouched either way");
+    }
+
+    // A MENU prompt is not rewritten at all. All three discs cancel on the
+    // button printed B, so the Xbox archives already name the right picture for
+    // this executable, and rewriting them is how cancel and options ended up
+    // drawing one glyph between them.
+    patch_setup(&p, "{i:button_picture_03} Cancel", 64);
+    patch_run(&p, "text_menu_cancel");
+    check(strcmp(p.buf, "{i:button_picture_03} Cancel") == 0,
+          "a menu prompt is left as the disc drew it");
+
+    patch_setup(&p, "{i:button_picture_04} Options", 64);
+    patch_run(&p, "ui_options");
+    check(strcmp(p.buf, "{i:button_picture_04} Options") == 0,
+          "and cancel and options keep the different pictures retail gave them");
+
+    // Only for the asset it is listed against. The same markup in anything else
+    // is somebody else's correct prompt and must be left alone.
+    patch_setup(&p, "{i:button_picture_04}", 64);
+    patch_run(&p, "some other asset");
+    check(strcmp(p.buf, "{i:button_picture_04}") == 0,
+          "and the same picture in another asset is not touched");
+
     patch_setup(&p, "{tex:xbox_button}Press it{i:PS2_MEMCARD}", 96);
     patch_run(&p, "some other asset");
     check(strcmp(p.buf, "{tex:xbox_button}Press it{i:PS2_MEMCARD}") == 0,
@@ -780,7 +828,8 @@ static void test_textpatch()
     // An override replaces the whole string, by name.
     patch_setup(&p, "{i:button_picture_03} Reboot to Xbox Dashboard", 48);
     check(patch_run(&p, "text_menu_reboot"), "an override matches by name");
-    check(strcmp(p.buf, "{i:button_picture_03} Quit to Desktop") == 0, "and replaces the whole string");
+    check(strcmp(p.buf, "{i:button_picture_03} Quit to Desktop") == 0,
+          "and replaces the whole string");
 
     // The save location under "Load saved game". Retail ships two different
     // strings under this one name -- "MEMORY CARD slot 1" in the shared menu
@@ -906,7 +955,8 @@ static void test_file()
     S32 key2 = iFileReadAsync(&afile, again, 16, NULL, 0);
     iFileAsyncService();
     check(iFileReadAsyncStatus(key2, NULL) == IFILE_RDSTAT_DONE, "a second read completes");
-    check(memcmp(again, payload, 16) == 0, "and returns the same bytes, the offset not having moved");
+    check(memcmp(again, payload, 16) == 0,
+          "and returns the same bytes, the offset not having moved");
 
     // The callback's seek is what advances it.
     iFileSeek(&afile, 16, IFILE_SEEK_CUR);
@@ -1072,8 +1122,7 @@ static void test_pad_bindings()
           "a trailing '+' is rejected");
     check(!iPadBindParse("one,", kFakeTokens, kFakeTokenCount, "test", &b),
           "and so is a trailing ','");
-    check(!iPadBindParse("+one", kFakeTokens, kFakeTokenCount, "test", &b),
-          "and a leading one");
+    check(!iPadBindParse("+one", kFakeTokens, kFakeTokenCount, "test", &b), "and a leading one");
 
     check(!iPadBindParse("one, two, three, one, two", kFakeTokens, kFakeTokenCount, "test", &b),
           "more alternatives than there is room for is rejected");
@@ -1158,13 +1207,12 @@ static void test_pad_bindings()
     // The fake table above cannot answer for it -- these are the names a
     // backend actually publishes.
     static const iPadBindToken kRealPadTokens[] = {
-        { "a", 0 },      { "b", 1 },      { "x", 2 },       { "y", 3 },
-        { "lb", 4 },     { "rb", 5 },     { "lt", 6 },      { "rt", 7 },
-        { "ls", 8 },     { "rs", 9 },     { "back", 10 },   { "start", 11 },
-        { "dpup", 12 },  { "dpdown", 13 }, { "dpleft", 14 }, { "dpright", 15 },
+        { "a", 0 },     { "b", 1 },       { "x", 2 },       { "y", 3 },
+        { "lb", 4 },    { "rb", 5 },      { "lt", 6 },      { "rt", 7 },
+        { "ls", 8 },    { "rs", 9 },      { "back", 10 },   { "start", 11 },
+        { "dpup", 12 }, { "dpdown", 13 }, { "dpleft", 14 }, { "dpright", 15 },
     };
-    static const S32 kRealPadTokenCount =
-        (S32)(sizeof(kRealPadTokens) / sizeof(kRealPadTokens[0]));
+    static const S32 kRealPadTokenCount = (S32)(sizeof(kRealPadTokens) / sizeof(kRealPadTokens[0]));
 
     for (S32 i = 0; i < kPadBindPresetCount; i++)
     {
@@ -1176,6 +1224,20 @@ static void test_pad_bindings()
                 text = kPadBindButtons[r].pad;
             }
 
+            // A '#' row names a letter printed on a button, not an input, and
+            // is resolved against the connected pad before it ever reaches the
+            // parser. What has to hold here is that the letter is one a face
+            // button can carry.
+            if (text != NULL && text[0] == '#')
+            {
+                if (strlen(text) != 2 || strchr("ABXY", text[1]) == NULL)
+                {
+                    check(false, "every preset parses against a backend's token table");
+                    return;
+                }
+                continue;
+            }
+
             if (!iPadBindParse(text, kRealPadTokens, kRealPadTokenCount, "preset", &b))
             {
                 check(false, "every preset parses against a backend's token table");
@@ -1185,69 +1247,74 @@ static void test_pad_bindings()
     }
     check(true, "every preset parses against a backend's token table");
 
-    // What the presets are FOR. Bubble Spin is XPAD_BUTTON_TRIANGLE, which is
-    // the row called "b" after the GameCube's letter for it. Every console put
-    // that move on the button west of jump; the GameCube calls that B and the
-    // Xbox calls it X, so the two presets have to disagree here and nowhere
-    // that matters more.
+    // What a preset does and does not do.
+    //
+    // It does NOT move the face buttons. Every disc's menu prompts resolve to
+    // the same physical button -- accept A, cancel B, options X -- so all three
+    // consoles map A to XPAD_BUTTON_X, B to TRIANGLE and X to O, and a preset
+    // that disagreed here would put a prompt and its button on opposite sides
+    // of the pad. What it moves is the shoulders; iPadLayout moves the bit each
+    // of the player's MOVES reads.
     {
         const iPadBindPreset* gc = NULL;
         const iPadBindPreset* xb = NULL;
         const iPadBindPreset* ps = NULL;
         for (S32 i = 0; i < kPadBindPresetCount; i++)
         {
-            if (strcmp(kPadBindPresets[i].name, "gamecube") == 0) gc = &kPadBindPresets[i];
-            if (strcmp(kPadBindPresets[i].name, "xbox") == 0) xb = &kPadBindPresets[i];
-            if (strcmp(kPadBindPresets[i].name, "ps2") == 0) ps = &kPadBindPresets[i];
+            if (strcmp(kPadBindPresets[i].name, "gamecube") == 0)
+                gc = &kPadBindPresets[i];
+            if (strcmp(kPadBindPresets[i].name, "xbox") == 0)
+                xb = &kPadBindPresets[i];
+            if (strcmp(kPadBindPresets[i].name, "ps2") == 0)
+                ps = &kPadBindPresets[i];
         }
 
         check(gc != NULL && xb != NULL && ps != NULL, "all three console presets are there");
 
         if (gc != NULL && xb != NULL && ps != NULL)
         {
-            S32 spin = -1;
-            S32 bounce = -1;
+            S32 cancel = -1;
+            S32 options = -1;
             S32 l2 = -1;
             for (S32 i = 0; i < kPadBindButtonCount; i++)
             {
-                if (kPadBindButtons[i].mask == XPAD_BUTTON_TRIANGLE) spin = i;
-                if (kPadBindButtons[i].mask == XPAD_BUTTON_O) bounce = i;
-                if (kPadBindButtons[i].mask == XPAD_BUTTON_L2) l2 = i;
+                if (kPadBindButtons[i].mask == XPAD_BUTTON_TRIANGLE)
+                    cancel = i;
+                if (kPadBindButtons[i].mask == XPAD_BUTTON_O)
+                    options = i;
+                if (kPadBindButtons[i].mask == XPAD_BUTTON_L2)
+                    l2 = i;
             }
 
-            check(spin >= 0 && bounce >= 0 && l2 >= 0, "Spin, Bounce and L2 have rows");
+            check(cancel >= 0 && options >= 0 && l2 >= 0, "cancel, options and L2 have rows");
 
-            // The face buttons are POSITIONS, and every console agrees on them,
-            // so no preset may move one. SDL names positions too -- its `b` is a
-            // GameCube pad's X -- so a preset that moved Spin to `b` for the
-            // GameCube would put it on the wrong physical button of the very
-            // controller it was named after. That was a real bug; this is what
-            // stops it coming back.
-            check(strcmp(kPadBindButtons[spin].pad, "x") == 0, "Bubble Spin is west, on x");
-            check(strcmp(kPadBindButtons[bounce].pad, "b") == 0, "Bubble Bounce is east, on b");
-
+            // Written as a LETTER, because which physical button carries a
+            // letter is the pad's business and the prompt is a picture of the
+            // letter. Positions would put cancel east on one pad and west on
+            // another while the prompt drew the same glyph for both.
             for (S32 i = 0; i < kPadBindPresetCount; i++)
             {
-                if (kPadBindPresets[i].pad[spin] != NULL ||
-                    kPadBindPresets[i].pad[bounce] != NULL)
+                const char* c = kPadBindPresets[i].pad[cancel];
+                const char* o = kPadBindPresets[i].pad[options];
+                if (c == NULL || o == NULL || strcmp(c, "#B") != 0 || strcmp(o, "#X") != 0)
                 {
-                    check(false, "no preset moves a face button");
+                    check(false, "every preset cancels on B and opens options on X");
                     return;
                 }
             }
-            check(true, "no preset moves a face button");
+            check(true, "every preset cancels on B and opens options on X");
 
-            // What a preset IS for: the GameCube has three shoulders where the
-            // game wants four, and SDL gives that pad no leftshoulder at all,
-            // so L2 has to be chorded there and is a button of its own on the
-            // other two.
+            // The GameCube has three shoulders where the game wants four, and
+            // SDL gives that pad no leftshoulder at all, so L2 has to be chorded
+            // there and is a button of its own on the other two.
             check(gc->pad[l2] != NULL && strcmp(gc->pad[l2], "lt+rb") == 0,
                   "the gamecube preset chords L2 onto the trigger");
             check(xb->pad[l2] == NULL && strcmp(kPadBindButtons[l2].pad, "lb") == 0,
                   "and the xbox preset leaves it on a shoulder of its own");
 
-            // xbox and ps2 differ only in what is drawn for them, so an edit to
-            // one that misses the other is a bug.
+            // xbox and ps2 bind the same pad. They differ in the glyphs drawn
+            // for them and in where the PS2 put Bubble Spin, and neither of
+            // those is a binding.
             for (S32 r = 0; r < kPadBindButtonCount && r < IPAD_BIND_MAX_BUTTONS; r++)
             {
                 const char* a = xb->pad[r];
@@ -1260,6 +1327,126 @@ static void test_pad_bindings()
             }
             check(true, "xbox and ps2 bind the same buttons");
         }
+    }
+}
+
+// Where each set prints the face buttons. This is what a prompt falls back on
+// when there is no binding to ask -- nobody on a pad, or a button chorded --
+// and getting it wrong draws the button beside the one that acts.
+//
+// The three rows are read off the discs: each one's cancel prompt draws the
+// button printed B and its options prompt the one printed X, and the code
+// cancels on TRIANGLE and opens options on O.
+static void test_pad_face_glyphs()
+{
+    struct Row
+    {
+        const char* set;
+        const char* accept;
+        const char* cancel;
+        const char* options;
+        const char* misc;
+    };
+
+    const Row rows[] = {
+        { "xbox", "south", "east", "west", "north" },
+        { "gamecube", "south", "west", "east", "north" },
+        { "ps2", "south", "north", "east", "west" },
+    };
+
+    for (S32 i = 0; i < (S32)(sizeof(rows) / sizeof(rows[0])); i++)
+    {
+        const char* a = iPadLayoutFaceGlyph(rows[i].set, XPAD_BUTTON_X);
+        const char* c = iPadLayoutFaceGlyph(rows[i].set, XPAD_BUTTON_TRIANGLE);
+        const char* o = iPadLayoutFaceGlyph(rows[i].set, XPAD_BUTTON_O);
+        const char* m = iPadLayoutFaceGlyph(rows[i].set, XPAD_BUTTON_SQUARE);
+
+        if (a == NULL || c == NULL || o == NULL || m == NULL || strcmp(a, rows[i].accept) != 0 ||
+            strcmp(c, rows[i].cancel) != 0 || strcmp(o, rows[i].options) != 0 ||
+            strcmp(m, rows[i].misc) != 0)
+        {
+            check(
+                false,
+                "every set prints accept, cancel, options and the third choice where its disc does");
+            return;
+        }
+    }
+    check(true,
+          "every set prints accept, cancel, options and the third choice where its disc does");
+
+    // Every console puts jump under the thumb, and no two face bits may land on
+    // one file or a set would draw the same picture for two buttons.
+    for (S32 i = 0; i < (S32)(sizeof(rows) / sizeof(rows[0])); i++)
+    {
+        const char* seen[4];
+        seen[0] = iPadLayoutFaceGlyph(rows[i].set, XPAD_BUTTON_X);
+        seen[1] = iPadLayoutFaceGlyph(rows[i].set, XPAD_BUTTON_TRIANGLE);
+        seen[2] = iPadLayoutFaceGlyph(rows[i].set, XPAD_BUTTON_O);
+        seen[3] = iPadLayoutFaceGlyph(rows[i].set, XPAD_BUTTON_SQUARE);
+
+        for (S32 x = 0; x < 4; x++)
+        {
+            for (S32 y = x + 1; y < 4; y++)
+            {
+                if (strcmp(seen[x], seen[y]) == 0)
+                {
+                    check(false, "and no two of them onto one picture");
+                    return;
+                }
+            }
+        }
+    }
+    check(true, "and no two of them onto one picture");
+
+    // A set nobody has a table for is a folder someone drew themselves. Those
+    // are named after positions already, so the slot's own answer stands.
+    check(iPadLayoutFaceGlyph("homemade", XPAD_BUTTON_TRIANGLE) == NULL,
+          "a set the port does not know is left to name its own files");
+    check(iPadLayoutFaceGlyph("xbox", XPAD_BUTTON_Z) == NULL,
+          "and a bit that is not a face button has no letter to look up");
+}
+
+// The per-console move layout. Every release read XPAD_BUTTON_X for jump and
+// disagreed only about the other three, and each disagreement is a
+// transposition -- so applying one twice has to give the bit back.
+static void test_pad_layout()
+{
+    const U32 faces[4] = { XPAD_BUTTON_X, XPAD_BUTTON_SQUARE, XPAD_BUTTON_O, XPAD_BUTTON_TRIANGLE };
+
+    for (S32 i = 0; i < 4; i++)
+    {
+        if (iPadLayoutButton(iPadLayoutButton(faces[i])) != faces[i])
+        {
+            check(false, "the layout is its own inverse");
+            return;
+        }
+    }
+    check(true, "the layout is its own inverse");
+
+    check(iPadLayoutButton(XPAD_BUTTON_X) == XPAD_BUTTON_X, "jump does not move on any console");
+    check(iPadLayoutButton(XPAD_BUTTON_Z) == XPAD_BUTTON_Z,
+          "and nothing outside the face four moves at all");
+
+    // A permutation, or a button would do two jobs and another none.
+    {
+        U32 seen[4];
+        for (S32 i = 0; i < 4; i++)
+        {
+            seen[i] = iPadLayoutButton(faces[i]);
+        }
+
+        for (S32 i = 0; i < 4; i++)
+        {
+            for (S32 j = i + 1; j < 4; j++)
+            {
+                if (seen[i] == seen[j])
+                {
+                    check(false, "no two moves land on the same button");
+                    return;
+                }
+            }
+        }
+        check(true, "no two moves land on the same button");
     }
 }
 
@@ -1644,10 +1831,11 @@ static void test_pad_sdl_virtual()
     // config.ini written for an Xbox pad works on a Switch one: south is the
     // button under your thumb on every controller ever made, and only the
     // letter printed on it changes. These four are that claim.
-    check(virtual_press(SDL_GAMEPAD_BUTTON_SOUTH) == TEST_PAD_X,
-          "the south face button is jump");
-    check(virtual_press(SDL_GAMEPAD_BUTTON_EAST) == TEST_PAD_O, "east is Bubble Bounce");
-    check(virtual_press(SDL_GAMEPAD_BUTTON_WEST) == TEST_PAD_TRIANGLE, "west is Bubble Spin");
+    check(virtual_press(SDL_GAMEPAD_BUTTON_SOUTH) == TEST_PAD_X, "the south face button is jump");
+    check(virtual_press(SDL_GAMEPAD_BUTTON_EAST) == TEST_PAD_TRIANGLE,
+          "east on this pad is printed B, and B cancels");
+    check(virtual_press(SDL_GAMEPAD_BUTTON_WEST) == TEST_PAD_O,
+          "west is printed X, and X opens options");
     check(virtual_press(SDL_GAMEPAD_BUTTON_NORTH) == TEST_PAD_SQUARE, "north is Bubble Bash");
 
     check(virtual_press(SDL_GAMEPAD_BUTTON_START) == TEST_PAD_START, "start is start");
@@ -1690,6 +1878,43 @@ static void test_pad_sdl_virtual()
     // every check above would still pass on the defaults.
     check(virtual_press(SDL_GAMEPAD_BUTTON_LEFT_STICK) == TEST_PAD_SELECT,
           "a rebound button answers to what config.ini gave it");
+
+    // The letter lookup input.preset resolves through. A face button's letter
+    // and its position are independent -- a GameCube pad prints B west of the
+    // stick where an Xbox pad prints X -- so a preset names the letter and this
+    // is what finds it. The virtual pad is a standard one, so every letter sits
+    // on its own position and the answer is the identity; what is being pinned
+    // is that the lookup is wired to a real pad at all and comes back with a
+    // token name a binding could have been written with.
+    //
+    // Only when the virtual pad reached port 0. The lookup answers for the pad
+    // the GAME is reading, and a real controller plugged into the machine
+    // running the tests takes that port first -- which is not a failure, just
+    // somebody else's pad.
+    if (sVirtualPort == 0)
+    {
+        const char* a = iPadHostInputForLabel('A');
+        const char* b = iPadHostInputForLabel('B');
+        const char* x = iPadHostInputForLabel('X');
+        const char* y = iPadHostInputForLabel('Y');
+
+        check(a != NULL && b != NULL && x != NULL && y != NULL,
+              "every face letter resolves to an input on a connected pad");
+
+        if (a != NULL && b != NULL && x != NULL && y != NULL)
+        {
+            check(strcmp(a, "a") == 0 && strcmp(b, "b") == 0 && strcmp(x, "x") == 0 &&
+                      strcmp(y, "y") == 0,
+                  "and on a standard pad each letter is its own position");
+        }
+
+        check(iPadHostInputForLabel('Q') == NULL, "a letter no face carries resolves to nothing");
+    }
+    else
+    {
+        printf("  (face-letter lookup not checked: a real controller holds port 0)\n");
+    }
+
     check(virtual_press(SDL_GAMEPAD_BUTTON_BACK) == 0, "and stops answering to what it had");
 
     // The sticks, and the one thing about them this backend has to get right
@@ -1738,8 +1963,7 @@ static void test_idtag()
 
     // The ordinary case. bufidx 0 takes the default branch, which is the one
     // zMain.cpp:823 uses and the one that reads the way the tag is written.
-    check(strcmp(xUtil_idtag2string(0x48423030, 0), "HB00") == 0,
-          "a printable tag round-trips");
+    check(strcmp(xUtil_idtag2string(0x48423030, 0), "HB00") == 0, "a printable tag round-trips");
 
     // bufidx 4 and 5 take the other branch and come out reversed. That is
     // retail's behaviour on both platforms, not an endian bug in the port: the
@@ -1839,6 +2063,8 @@ static void test_pad()
 
     test_pad_bindings();
     test_pad_stick_deadzone();
+    test_pad_layout();
+    test_pad_face_glyphs();
     test_pad_stick_shape();
 
     iPadHostExit();
@@ -1910,7 +2136,8 @@ static void test_savegame()
 
     // The two must not share a file namespace, or the second folder's three
     // game slots would be the first folder's three under another name.
-    check(strcmp(isg->mcdata[0].root, isg->mcdata[1].root) != 0, "and the two are different places");
+    check(strcmp(isg->mcdata[0].root, isg->mcdata[1].root) != 0,
+          "and the two are different places");
 
     check(iSGTgtSetActive(isg, 0) == 1, "back to target 0 for the rest of this");
 
@@ -2283,7 +2510,8 @@ static void test_snd_data()
         check(exact, "and the bytes at the sector-plus-offset the TOC describes");
     }
 
-    check(iSndDataAcquire(0x99999999, &pcm, &bytes, NULL) == NULL, "an unknown asset reads nothing");
+    check(iSndDataAcquire(0x99999999, &pcm, &bytes, NULL) == NULL,
+          "an unknown asset reads nothing");
     check(bytes == 0, "and reports no size");
 
     // Cached: the same pointer, without going back to the file.
@@ -2538,7 +2766,8 @@ static void test_soundtrack()
     }
 
     ch = 99;
-    check(iSoundtrackDecode(junk, &ch, &hz, &bytes) == NULL, "a file that is not audio decodes to nothing");
+    check(iSoundtrackDecode(junk, &ch, &hz, &bytes) == NULL,
+          "a file that is not audio decodes to nothing");
     check(ch == 0, "and says so rather than leaving the caller's channel count alone");
 
     iSoundtrackSetFolder("");
@@ -2813,8 +3042,7 @@ static void test_snd_reverb()
             break;
         }
     }
-    check(first == (U32)(0.008f * (float)rate),
-          "the first reflection lands at reflections_delay");
+    check(first == (U32)(0.008f * (float)rate), "the first reflection lands at reflections_delay");
 
     // --- the decay ----------------------------------------------------------
     // The headline claim: decay_time is an RT60 and the comb feedback is
@@ -3282,15 +3510,135 @@ static void put_tag(FILE* f, const char* tag)
 // read little-endian. None does read big-endian.
 static const U8 hb01_flythrough_keys[128] = {
     // key 0: frame 0, identity basis at the origin, aperture 0.98/0.735, focal 26.6906
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x48, 0xe1, 0x7a, 0x3f, 0xf6, 0x28, 0x3c, 0x3f, 0x4b, 0x86, 0xd5, 0x41,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x80,
+    0x3f,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x80,
+    0x3f,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x80,
+    0x3f,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x48,
+    0xe1,
+    0x7a,
+    0x3f,
+    0xf6,
+    0x28,
+    0x3c,
+    0x3f,
+    0x4b,
+    0x86,
+    0xd5,
+    0x41,
     // key 1: frame 1, the first real pose of the shot
-    0x01, 0x00, 0x00, 0x00, 0x87, 0x88, 0x7c, 0x3f, 0xeb, 0xc1, 0x24, 0xbe, 0x56, 0x57, 0x02, 0xbd,
-    0x25, 0xfe, 0xdb, 0x3d, 0xf9, 0xc8, 0x47, 0x3f, 0x51, 0xb0, 0x1d, 0xbf, 0xe8, 0xd4, 0xfd, 0x3d,
-    0xa4, 0xad, 0x1a, 0x3f, 0x0c, 0x81, 0x49, 0x3f, 0xc9, 0x96, 0x78, 0x42, 0xdd, 0x5c, 0xe0, 0x41,
-    0x03, 0x9d, 0x64, 0x41, 0x48, 0xe1, 0x7a, 0x3f, 0xf6, 0x28, 0x3c, 0x3f, 0x4b, 0x86, 0xd5, 0x41,
+    0x01,
+    0x00,
+    0x00,
+    0x00,
+    0x87,
+    0x88,
+    0x7c,
+    0x3f,
+    0xeb,
+    0xc1,
+    0x24,
+    0xbe,
+    0x56,
+    0x57,
+    0x02,
+    0xbd,
+    0x25,
+    0xfe,
+    0xdb,
+    0x3d,
+    0xf9,
+    0xc8,
+    0x47,
+    0x3f,
+    0x51,
+    0xb0,
+    0x1d,
+    0xbf,
+    0xe8,
+    0xd4,
+    0xfd,
+    0x3d,
+    0xa4,
+    0xad,
+    0x1a,
+    0x3f,
+    0x0c,
+    0x81,
+    0x49,
+    0x3f,
+    0xc9,
+    0x96,
+    0x78,
+    0x42,
+    0xdd,
+    0x5c,
+    0xe0,
+    0x41,
+    0x03,
+    0x9d,
+    0x64,
+    0x41,
+    0x48,
+    0xe1,
+    0x7a,
+    0x3f,
+    0xf6,
+    0x28,
+    0x3c,
+    0x3f,
+    0x4b,
+    0x86,
+    0xd5,
+    0x41,
 };
 
 // The loop zCameraFlyUpdate runs on the console, over as many words as it is
@@ -3554,8 +3902,7 @@ static void test_hip()
         return;
     }
 
-    check(hf->basesector(ld) == 0,
-          "base sector is 0 on a host, where there is no disc");
+    check(hf->basesector(ld) == 0, "base sector is 0 on a host, where there is no disc");
 
     U32 cid = hf->enter(ld);
     check(cid == TAG4('H', 'I', 'P', 'A'), "first chunk is HIPA");

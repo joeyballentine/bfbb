@@ -19,21 +19,17 @@
 // under a preset it is not even that. `does` is what disambiguates a row, and
 // it is what a generated file prints beside each line.
 //
-// The `pad` column is the base every preset starts from, and it is written in
-// SDL's names, which are POSITIONS -- `a` is the button under your thumb on
-// every controller ever made, whatever letter is printed on it. That matters
-// more than it looks: SDL maps a GameCube pad `a:b0,b:b2,x:b1,y:b3`, so its `b`
-// is the GameCube's X and its `x` is the GameCube's B. A binding written in
-// letters would land on the wrong button of a real GameCube pad.
+// The `pad` column is the base every preset starts from, written in SDL's
+// names, which are POSITIONS -- `a` is the button under your thumb on every
+// controller ever made, whatever letter is printed on it. It is what answers
+// before a pad is known, which is when the config writer asks, and the letters
+// it happens to name are an Xbox pad's.
 //
-// Which is why the face rows below are the same under every preset. All three
-// consoles put the same move in the same place -- jump south, Bubble Bash
-// north, Bubble Bounce east, Bubble Spin west -- so with positional names there
-// is one right answer and the presets differ only in the shoulders.
+// A preset overrides it by LETTER. See kPadBindPresets below.
 const iPadBindButton kPadBindButtons[] = {
     { "a", XPAD_BUTTON_X, "a", "space", "jump, confirm" },
-    { "b", XPAD_BUTTON_TRIANGLE, "x", "lctrl", "Bubble Spin, cancel" },
-    { "x", XPAD_BUTTON_O, "b", "e", "Bubble Bounce, pick up, throw" },
+    { "b", XPAD_BUTTON_TRIANGLE, "b", "lctrl", "cancel; Bubble Spin on gamecube" },
+    { "x", XPAD_BUTTON_O, "x", "e", "options; Bubble Bounce on gamecube" },
     { "y", XPAD_BUTTON_SQUARE, "y", "q", "Bubble Bash" },
     { "z", XPAD_BUTTON_Z, "rb", "f", "near camera, HUD" },
     { "l1", XPAD_BUTTON_L1, "lt", "z", "camera left" },
@@ -51,45 +47,76 @@ const iPadBindButton kPadBindButtons[] = {
 const S32 kPadBindButtonCount = (S32)(sizeof(kPadBindButtons) / sizeof(kPadBindButtons[0]));
 
 // The presets. Entries line up with kPadBindButtons above by position; a NULL
-// takes that row's own default, which is why the face rows are NULL everywhere
-// -- they are the same on every console and the base already says so.
+// takes that row's own default.
 //
-// **How the shoulder rows were arrived at, since it is not guesswork.** Each
-// disc's boot.HIP points a prompt at a button_picture_NN, that TEXT asset names
-// a pad_button texture, and that texture is a picture of a physical button.
-// Read end to end for a prompt whose game button the source already tells us --
-// zEntPlayer.cpp's Bubble Spin is XPAD_BUTTON_TRIANGLE, zHud.cpp's HUD is
-// XPAD_BUTTON_Z -- it says which physical button each console put it on. The
-// GameCube's answers come out equal to gc/iPad.cpp's mapping, which is the
-// independent check that the method is sound.
+// **The face four are the same on every console, so they are the same here.**
+// Each disc's menu prompts name a button_picture_NN, that TEXT asset names a
+// pad_button texture, and that texture is a picture of a physical button. Read
+// end to end on all three discs, they agree: accept is A, cancel is B, the
+// third menu choice is Y and options is X. The code accepts on XPAD_BUTTON_X,
+// cancels on TRIANGLE, reads SQUARE for the third and O for options, so every
+// console maps A->X, B->TRIANGLE, X->O, Y->SQUARE. That is gc/iPad.cpp exactly.
+//
+// So a preset does not move the face buttons. What the releases really changed
+// is which of those bits each of the player's MOVES reads -- the Xbox spins on
+// O and bounces on TRIANGLE, the PS2 spins on SQUARE -- and that lives in
+// iPadLayout.h, applied where the player reads the pad. It has to be done there
+// rather than here: a menu and a move share a bit, and moving the bit would
+// move the menu with it.
+//
+// A face row is written as the LETTER printed on the button, marked with '#',
+// and iPadBindPadDefault turns it into whatever input carries that letter on
+// the pad in hand. `#B` is "the button printed B" -- east on an Xbox pad, west
+// on a GameCube one -- so cancel is on the button the prompt draws wherever you
+// play it. Positions would not do that: the consoles print different letters in
+// the same places, and it is the letter the prompt is a picture of.
+//
+// What is left for a preset is the shoulders, where the GameCube is a button
+// short, and which glyph set is drawn -- and that last one is
+// input.button_icons, not this.
+#define PAD_LABEL_A "#A"
+#define PAD_LABEL_B "#B"
+#define PAD_LABEL_X "#X"
+#define PAD_LABEL_Y "#Y"
+
+#define PAD_FACES PAD_LABEL_A, PAD_LABEL_B, PAD_LABEL_X, PAD_LABEL_Y
+
 const iPadBindPreset kPadBindPresets[] = {
-    // FIRST, and so what "auto" settles on when it cannot place the pad. The
-    // port runs the Xbox assets, and that controller is shaped like a modern
-    // one: four shoulders, so nothing chords. The black button was the Xbox's
-    // HUD button -- font.HIP draws it for the status prompt -- and R2 has no
-    // prompt of its own anywhere in the game, so both land on RB rather than
-    // leaving a bit the game reads unreachable. All of that is the base.
-    { "xbox", "the Xbox original: four shoulders, nothing to hold down", {} },
+    // FIRST, and so what "auto" settles on when it cannot place the pad. Four
+    // shoulders, so nothing chords: the black button was the Xbox's HUD button
+    // -- font.HIP draws it for the status prompt -- and R2 has no prompt of its
+    // own anywhere in the game, so both land on RB rather than leaving a bit
+    // the game reads unreachable.
+    { "xbox", "the Xbox original: Spin on X, Bounce on B, four shoulders", { PAD_FACES } },
 
-    // The PS2's four shoulders sit the same way, so this differs from the Xbox
-    // only in the glyphs input.button_icons draws for it.
-    { "ps2", "the PS2 original; same buttons as xbox, PlayStation glyphs", {} },
+    // Same buttons as the Xbox, drawn with PlayStation glyphs, except that the
+    // PS2 release put Spin on square rather than circle. Its four shoulders sit
+    // the same way.
+    { "ps2", "the PS2 original: Spin on square, Bounce on circle", { PAD_FACES } },
 
-    // The one preset that moves anything. The GameCube has three shoulders
-    // where the game wants four, so Z modifies: L alone is L1, Z+L is L2, and
-    // holding Z still sets Z in its own right. SDL gives a GameCube pad no
-    // leftshoulder at all, so the base's `l2 = lb` is a button that does not
-    // exist there and the chord is the only way to reach L2.
-    //
-    // The face rows stay NULL. A GameCube player's muscle memory is a POSITION,
-    // and SDL already names positions -- putting Bubble Spin on `b` here would
-    // move it to the GameCube's X, which is not where anyone played it.
+    // Three shoulders where the game wants four, so Z modifies: L alone is L1,
+    // Z+L is L2, and holding Z still sets Z in its own right. SDL gives a
+    // GameCube pad no leftshoulder at all, so the base's `l2 = lb` is a button
+    // that does not exist there and the chord is the only way to reach L2.
     { "gamecube",
-      "the GameCube original: three shoulders, so Z+L is L2 and Z+R is R2",
-      { NULL, NULL, NULL, NULL, "rb", "lt+!rb", "rt+!rb", "lt+rb", "rt+rb" } },
+      "the GameCube original: Spin on B, Bounce on X, Z chords the shoulders",
+      { PAD_FACES, "rb", "lt+!rb", "rt+!rb", "lt+rb", "rt+rb" } },
 };
 
 const S32 kPadBindPresetCount = (S32)(sizeof(kPadBindPresets) / sizeof(kPadBindPresets[0]));
+
+const char* iPadBindActivePreset()
+{
+    const char* want = iConfigGetString("input.preset", "auto");
+
+    if (iHostStrCaseCmp(want, "auto") == 0)
+    {
+        const char* kind = iPadHostPadKind();
+        want = (kind != NULL) ? kind : "xbox";
+    }
+
+    return want;
+}
 
 const char* iPadBindPadDefault(const iPadBindButton* button)
 {
@@ -101,22 +128,11 @@ const char* iPadBindPadDefault(const iPadBindButton* button)
     // Safe to ask iConfig from here. Every accessor calls iConfigLoad, which
     // sets its `loaded` flag before it parses anything precisely so a getter
     // reached during parsing cannot recurse.
-    const char* want = iConfigGetString("input.preset", "auto");
-
-    // "auto" is the controller's own release. A pad the backend cannot place --
-    // and every pad at all, before the backend is up, which is when the config
-    // writer asks -- falls back on the Xbox scheme, since the Xbox release is
-    // the one whose assets the port runs.
     //
     // Asking the backend on every call rather than caching is what lets a
     // controller swapped mid-game rebind: iPadHostSDL.cpp reloads the bindings
-    // when port 0 changes hands, and this is the function that then answers
-    // differently.
-    if (iHostStrCaseCmp(want, "auto") == 0)
-    {
-        const char* kind = iPadHostPadKind();
-        want = (kind != NULL) ? kind : "xbox";
-    }
+    // when port 0 changes hands, and this is what then answers differently.
+    const char* want = iPadBindActivePreset();
 
     S32 row = (S32)(button - kPadBindButtons);
     if (row < 0 || row >= kPadBindButtonCount || row >= IPAD_BIND_MAX_BUTTONS)
@@ -126,11 +142,28 @@ const char* iPadBindPadDefault(const iPadBindButton* button)
 
     for (S32 i = 0; i < kPadBindPresetCount; i++)
     {
-        if (iHostStrCaseCmp(kPadBindPresets[i].name, want) == 0)
+        if (iHostStrCaseCmp(kPadBindPresets[i].name, want) != 0)
         {
-            const char* bound = kPadBindPresets[i].pad[row];
-            return (bound != NULL) ? bound : button->pad;
+            continue;
         }
+
+        const char* bound = kPadBindPresets[i].pad[row];
+        if (bound == NULL)
+        {
+            return button->pad;
+        }
+
+        // A '#' row names a LETTER, and which input carries it is the pad's
+        // business, not ours. Falling back on the row's own default covers the
+        // two cases where nobody can answer -- no pad yet, which is when the
+        // config writer asks, and a pad with no letter of that name on it.
+        if (bound[0] == '#')
+        {
+            const char* input = iPadHostInputForLabel(bound[1]);
+            return (input != NULL) ? input : button->pad;
+        }
+
+        return bound;
     }
 
     return button->pad;
@@ -237,7 +270,7 @@ namespace
         }
         return -1;
     }
-}
+} // namespace
 
 bool iPadBindParse(const char* text, const iPadBindToken* tokens, S32 tokenCount, const char* what,
                    iPadBind* out)

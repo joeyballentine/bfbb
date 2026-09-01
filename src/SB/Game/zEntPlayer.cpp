@@ -1723,7 +1723,7 @@ static U32 BubbleSpinCheck(xAnimTransition*, xAnimSingle*, void*)
         return 0;
     }
 
-    return (!globals.player.ControlOff && globals.pad0->pressed & XPAD_BUTTON_TRIANGLE);
+    return (!globals.player.ControlOff && globals.pad0->pressed & XPAD_MOVE(XPAD_BUTTON_TRIANGLE));
 }
 
 static U32 BubbleSpinCB(xAnimTransition*, xAnimSingle* anim, void*)
@@ -1752,7 +1752,7 @@ static U32 BubbleBashCheck(xAnimTransition*, xAnimSingle* anim, void*)
         return 0;
     }
 
-    return (!globals.player.ControlOff && globals.pad0->pressed & XPAD_BUTTON_SQUARE);
+    return (!globals.player.ControlOff && globals.pad0->pressed & XPAD_MOVE(XPAD_BUTTON_SQUARE));
 }
 
 // probably equivalent: looks like sda relocation memes on sPlayerCollAdjust
@@ -1796,7 +1796,7 @@ static U32 BubbleBounceCheck(xAnimTransition* tran, xAnimSingle* anim, void* par
         return false;
     }
 
-    return (!globals.player.ControlOff && (globals.pad0->pressed & XPAD_BUTTON_O));
+    return (!globals.player.ControlOff && (globals.pad0->pressed & XPAD_MOVE(XPAD_BUTTON_O)));
 }
 
 // equivalent: sda relocation memes
@@ -1873,7 +1873,7 @@ static U32 BbowlCheck(xAnimTransition* tran, xAnimSingle* anim, void* param_3)
         return false;
     }
 
-    return (!globals.player.ControlOff && ((globals.pad0->pressed & XPAD_BUTTON_O)) &&
+    return (!globals.player.ControlOff && ((globals.pad0->pressed & XPAD_MOVE(XPAD_BUTTON_O))) &&
             globals.player.g.PowerUp[0]);
 }
 
@@ -2865,7 +2865,7 @@ static U32 PatrickGrabThrow(xAnimTransition*, xAnimSingle*, void*)
         return 0;
     }
 
-    return !globals.player.ControlOff && globals.pad0->pressed & XPAD_BUTTON_O;
+    return !globals.player.ControlOff && globals.pad0->pressed & XPAD_MOVE(XPAD_BUTTON_O);
 }
 
 static U32 PatrickAttackCheck(xAnimTransition*, xAnimSingle*, void*)
@@ -2875,12 +2875,12 @@ static U32 PatrickAttackCheck(xAnimTransition*, xAnimSingle*, void*)
         return 0;
     }
 
-    return !globals.player.ControlOff && globals.pad0->pressed & XPAD_BUTTON_TRIANGLE;
+    return !globals.player.ControlOff && globals.pad0->pressed & XPAD_MOVE(XPAD_BUTTON_TRIANGLE);
 }
 
 static U32 PatrickStunCheck(xAnimTransition*, xAnimSingle*, void*)
 {
-    return !globals.player.ControlOff && globals.pad0->pressed & XPAD_BUTTON_O;
+    return !globals.player.ControlOff && globals.pad0->pressed & XPAD_MOVE(XPAD_BUTTON_O);
 }
 
 // Equivalent: scheduling
@@ -7039,7 +7039,7 @@ void zEntPlayer_Update(xEnt* ent, xScene* sc, F32 dt)
 
         if (!sShouldBubbleBowl)
         {
-            if (globals.player.ControlOff || !(globals.pad0->on & XPAD_BUTTON_O) ||
+            if (globals.player.ControlOff || !(globals.pad0->on & XPAD_MOVE(XPAD_BUTTON_O)) ||
                 sBubbleBowlTimer > globals.player.g.BubbleBowlTimeDelay)
             {
                 if (sBubbleBowlTimer > globals.player.g.BubbleBowlTimeDelay)
@@ -7159,7 +7159,7 @@ void zEntPlayer_Update(xEnt* ent, xScene* sc, F32 dt)
         }
 
         if (!globals.player.carry.grabbed && !globals.player.ControlOff &&
-            (globals.pad0->pressed & XPAD_BUTTON_O))
+            (globals.pad0->pressed & XPAD_MOVE(XPAD_BUTTON_O)))
         {
             if (gReticleTarget && sTypeOfTarget == 2)
             {
@@ -9113,7 +9113,7 @@ catchtunnel_done:
             }
         }
 
-        if (!globals.player.ControlOff && (globals.pad0->pressed & XPAD_BUTTON_O) &&
+        if (!globals.player.ControlOff && (globals.pad0->pressed & XPAD_MOVE(XPAD_BUTTON_O)) &&
             !gReticleTarget)
         {
             sTimeToRetarget = 0.0f;
@@ -9311,7 +9311,7 @@ catchtunnel_done:
             sLassoInfo->target = NULL;
             sLassoInfo->swingTarget = NULL;
 
-            if (!globals.player.ControlOff && (globals.pad0->pressed & XPAD_BUTTON_O))
+            if (!globals.player.ControlOff && (globals.pad0->pressed & XPAD_MOVE(XPAD_BUTTON_O)))
             {
                 if (gReticleTarget)
                 {
@@ -9334,7 +9334,8 @@ catchtunnel_done:
                     }
                 }
             }
-            else if (!globals.player.ControlOff && (globals.pad0->pressed & XPAD_BUTTON_TRIANGLE) &&
+            else if (!globals.player.ControlOff &&
+                     (globals.pad0->pressed & XPAD_MOVE(XPAD_BUTTON_TRIANGLE)) &&
                      strcmp(ent->model->Anim->Single->State->Name, "LedgeGrab01") != 0 &&
                      !globals.player.IsCoptering && !zEntTeleportBox_playerIn())
             {
@@ -10230,7 +10231,7 @@ static void zEntPlayer_Move(xEnt* ent, xScene*, F32 dt, xEntFrame* frame)
 
     if (globals.player.cheat_mode)
     {
-        if (!globals.player.ControlOff && (globals.pad0->on & XPAD_BUTTON_SQUARE))
+        if (!globals.player.ControlOff && (globals.pad0->on & XPAD_MOVE(XPAD_BUTTON_SQUARE)))
         {
             frame->dpos.y +=
                 dt * (7.0f * ((globals.pad0->on & (XPAD_BUTTON_L1 | XPAD_BUTTON_L2 |
@@ -10239,7 +10240,7 @@ static void zEntPlayer_Move(xEnt* ent, xScene*, F32 dt, xEntFrame* frame)
                                   1.56f));
             frame->mode |= 0x2;
         }
-        else if (!globals.player.ControlOff && (globals.pad0->on & XPAD_BUTTON_TRIANGLE))
+        else if (!globals.player.ControlOff && (globals.pad0->on & XPAD_MOVE(XPAD_BUTTON_TRIANGLE)))
         {
             frame->dpos.y -=
                 dt * (7.0f * ((globals.pad0->on & (XPAD_BUTTON_L1 | XPAD_BUTTON_L2 |
@@ -13923,7 +13924,8 @@ void zEntPlayerCollTrigger(xEnt* ent, xScene* sc)
             }
         }
 
-        if (inside && !globals.player.ControlOff && (globals.pad0->pressed & XPAD_BUTTON_O))
+        if (inside && !globals.player.ControlOff &&
+            (globals.pad0->pressed & XPAD_MOVE(XPAD_BUTTON_O)))
         {
             zEntEvent(trig, eEventButtonPressAction);
         }

@@ -67,4 +67,20 @@ const char* iPadHostBoundInput(U32 xpadButton);
 // the Xbox set, which is what the game's own assets are.
 const char* iPadHostPadKind();
 
+// Which device input carries the letter `letter` ('A', 'B', 'X' or 'Y') on the
+// controller on port 0, by the name config.ini writes it as. NULL when there is
+// no pad, or none of its buttons is printed with that letter.
+//
+// This exists because a face button's LETTER and its POSITION are independent.
+// A GameCube pad prints B west of the stick and X east of it; an Xbox pad has
+// them the other way round. So "the button that spins" cannot be written as a
+// position if it is meant to mean what the GameCube meant by it, and it cannot
+// be written as one of our own token names either, since those are positions.
+// input.preset says a letter and this finds it. See iPadBind.h.
+//
+// A pad whose buttons are printed with shapes rather than letters answers on
+// the conventional equivalence -- cross is A, circle B, square X, triangle Y --
+// so a preset does not have to enumerate every family of controller.
+const char* iPadHostInputForLabel(char letter);
+
 #endif

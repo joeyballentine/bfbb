@@ -16,6 +16,8 @@
 #include "iPadBind.h"
 #include "iPadGlyph.h"
 #include "iPadHost.h"
+
+#include "iPadLayout.h"
 #include "xPad.h"
 
 #include <stdio.h>
@@ -88,6 +90,21 @@ namespace
     // the only prompt that uses it, the HUD toggle reads Z (zHud.cpp:197), and
     // every disc drew its own HUD button in that slot: the GameCube's Z, the
     // PS2's R2, the Xbox's black button. The R2 bit has no prompt of its own.
+    //
+    // The face four are read off the discs, and all three agree. Each disc's
+    // menu prompts name a picture, that picture names one of these textures,
+    // and the texture is a picture of a physical button: cancel draws the
+    // button printed B everywhere, options the one printed X, accept A and the
+    // third choice Y. The code cancels on TRIANGLE and opens options on O, so
+    // B is TRIANGLE and X is O -- which is gc/iPad.cpp's mapping as well.
+    //
+    // A MOVE is not read here. The consoles do disagree about those, and what
+    // they disagree about is which bit the move reads rather than which button
+    // the bit is; iPadLayout.h holds that, and iTextPatch.cpp points a move's
+    // prompt at the picture to match.
+    //
+    // `fallback` is the Xbox set's own slot order, since that is the art this
+    // resolves against: 1 is A, 2 is Y, 3 is B, 4 is X.
     struct Slot
     {
         const char* name;
@@ -98,8 +115,8 @@ namespace
     const Slot kSlots[] = {
         { "pad_button1", XPAD_BUTTON_X, GLYPH_SOUTH },
         { "pad_button2", XPAD_BUTTON_SQUARE, GLYPH_NORTH },
-        { "pad_button3", XPAD_BUTTON_O, GLYPH_EAST },
-        { "pad_button4", XPAD_BUTTON_TRIANGLE, GLYPH_WEST },
+        { "pad_button3", XPAD_BUTTON_TRIANGLE, GLYPH_EAST },
+        { "pad_button4", XPAD_BUTTON_O, GLYPH_WEST },
         { "pad_button_L1", XPAD_BUTTON_L1, GLYPH_LT },
         { "pad_button_R1", XPAD_BUTTON_R1, GLYPH_RT },
         { "pad_button_L2", XPAD_BUTTON_L2, GLYPH_LB },
@@ -306,7 +323,7 @@ namespace
         }
         return -1;
     }
-}
+} // namespace
 
 void iPadGlyphSetEnabled(S32 on)
 {
@@ -376,6 +393,19 @@ RwTexture* iPadGlyphFor(const char* name, U32 nameLen)
     }
 
     S32 index = found->fallback;
+
+    // Where THIS set prints the button, when there turns out to be no binding
+    // to ask. Without it a GameCube set would draw its X beside "Return to
+    // Game", because the slot order the files are keyed to is the Xbox's.
+    const char* printed = iPadLayoutFaceGlyph(sActive, found->mask);
+    if (printed != NULL)
+    {
+        S32 at = glyphIndex(printed);
+        if (at >= 0)
+        {
+            index = at;
+        }
+    }
 
     // A prompt about a game button asks what presses it. A prompt about a stick
     // (mask 0) has nothing to ask and goes straight to its picture.

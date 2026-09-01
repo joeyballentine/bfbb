@@ -2092,7 +2092,7 @@ namespace bungee_state
 
         state_enum hanging_state_type::update(xScene& s, F32& dt)
         {
-            if (globals.pad0->pressed & XPAD_BUTTON_TRIANGLE && !dying && !detaching &&
+            if (globals.pad0->pressed & XPAD_MOVE(XPAD_BUTTON_TRIANGLE) && !dying && !detaching &&
                 find_drop_off())
             {
                 start_detaching();
