@@ -200,8 +200,21 @@ S32 zNPCGoalDuploLive::SDS_Countdown(F32 dt)
         return 0;
     }
 
-    dt = tmr_destruct;
-    tmr_destruct = 0.0f;
+    // Carry the remainder rather than zeroing it. The count moves by one a
+    // visit however much time the visit was handed, so time thrown away here
+    // is a tick lost: at 144 fps three frames buy one tick and the two seconds
+    // become two and a half, and at a nominal 60 the frames that come in a
+    // hair under a sixtieth drop most of the ticks outright.
+    tmr_destruct -= 1.0f / 60.0f;
+
+    if (tmr_destruct > 1.0f / 60.0f)
+    {
+        // Below 60 fps the count still cannot go faster than one a frame, so
+        // do not let the arrears build up.
+        tmr_destruct = 1.0f / 60.0f;
+    }
+
+    dt = 1.0f / 60.0f;
 #endif
 
     switch (cnt_destruct)
