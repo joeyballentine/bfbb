@@ -7,6 +7,9 @@
 #include "xutil.h"
 #include "xTRC.h"
 #include "iFile.h"
+#ifdef PLATFORM_PC
+#include "iTime.h"
+#endif
 
 static st_STRAN_DATA g_xstdata = {};
 static S32 g_straninit;
@@ -182,13 +185,61 @@ void xSTUnLoadScene(U32 sid, S32 flg_hiphop)
     }
 }
 
+#ifdef PLATFORM_PC
+// How long one call may keep stepping the loader before it has to hand a frame
+// back to whoever is drawing the loading screen.
+//
+// The console steps once per call, and the loops that call it -- zSceneLoad's
+// two, zEntPlayer_LoadHOP's -- draw a frame between calls. On a disc that cost
+// nothing: the step queues a read and the frame is time the drive needed
+// anyway. Here the read completes inside the step, so the frame is the only
+// thing the loader ever waits for, and a level's load time comes out as
+// steps divided by frame rate. That is why loads finish sooner the faster the
+// game runs, which is backwards.
+//
+// A thirtieth of a second, because the budget has to be at least one refresh
+// period for the coupling to go away entirely, and 30 Hz is the slowest display
+// worth designing for. Above that period BOTH of the things that pace a frame
+// stop waiting:
+//
+//   - iWindowPaceFrame drops a deadline it has already missed rather than
+//     sleeping out the remains of it, and a budget longer than the frame period
+//     misses every one.
+//   - the present queues a flip, and blocks only while an earlier flip is still
+//     pending. A refresh has always come and gone by the time the next one is
+//     handed over, so it never is.
+//
+// Keeping it near the floor rather than well above it is what leaves the
+// bubbles on the loading screen moving. The cost is the draw itself, a few ms
+// out of every 33, and that does not vary with the frame rate.
+static const F32 kLoadStepBudget = 1.0f / 30.0f;
+#endif
+
 F32 xSTLoadStep(U32)
 {
+#ifdef PLATFORM_PC
+    // Batching changes no call and no order: PKR_LoadStep_Async holds the layer
+    // it is working on in a static and drives one at a time, and the memory
+    // mark it pushes for a RenderWare handoff is popped by the step that hands
+    // the layer over. Only the gaps between the calls go away.
+    iTime start = iTimeGet();
+    S32 working;
+
+    do
+    {
+        working = PKRLoadStep(0);
+        iFileAsyncService();
+    } while (working != 0 && iTimeDiffSec(start, iTimeGet()) < kLoadStepBudget);
+
+    iTRCDisk::CheckDVDAndResetState();
+    return working != 0 ? 0.0f : 1.00001f;
+#else
     F32 pct = PKRLoadStep(0) != 0 ? 0.0f : 1.00001f;
 
     iTRCDisk::CheckDVDAndResetState();
     iFileAsyncService();
     return pct;
+#endif
 }
 
 void xSTDisconnect(U32 sid, S32 flg_hiphop)

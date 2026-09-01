@@ -950,6 +950,69 @@ That is above 100,000 fps and was never reached in testing, so it is not the
 cause of anything observed. Earlier notes in this repo blamed the spinning
 pickups on it. That was wrong. The real cause is in the pickups section above.
 
+## Loading paced by the frame rate — fixed
+
+Everything above is about a quantity advancing once per frame. This one is the
+other direction: work that only happens when a frame does.
+
+`xSTLoadStep` in `xstransvc.cpp` advances the package loader by one state
+transition per call. One call starts a layer's read, the next polls it and, when
+the read lands, runs the fixup and hands the layer to RenderWare. The loops that
+call it draw a frame between calls:
+
+    do {
+        zGameScreenTransitionUpdate(pdone, "... scene loading ...
+", rgba_bkgrd);
+    } while (xSTLoadStep(theSceneID) < 1.0f);
+
+`zScene.cpp:927` and `:975`. `zGameScreenTransitionUpdate` ends in
+`RwCameraShowRaster`, which waits for the display and then paces to the cap, so
+the loop runs at exactly the frame rate and a scene's load time is its step count
+divided by that rate.
+
+On the GameCube that costs nothing. The step queues a read on the drive and the
+frame is time the drive needed anyway. Here `iFileReadAsync` queues into
+`file_queue` and `iFileAsyncService` — which `xSTLoadStep` itself calls —
+completes the whole read in that one service call, so a layer costs the same
+fixed number of iterations however fast the disk is. The frame is the only thing
+the loader waits for. Loads finished sooner the faster the game ran.
+
+The PC arm of `xSTLoadStep` now keeps stepping until a thirtieth of a second has
+gone, then returns. Batching changes no call and no order: `PKR_LoadStep_Async`
+holds the layer it is working on in a static and drives one at a time, and the
+memory mark `PKR_LayerMemReserve` pushes for a RenderWare handoff is popped by
+the step that hands that same layer over. Only the gaps go away.
+
+A thirtieth is the floor for the coupling to go away rather than shrink, and
+both halves of the pacing have to clear it:
+
+`iWindowPaceFrame` advances a deadline by one frame period and, when the frame
+already overran it, drops it and returns without sleeping (`iWindowWin32.cpp:435`).
+A 33 ms budget overruns every period `video.framerate` can be set to, so the cap
+sleeps zero.
+
+The present is the half the first draft of this section got wrong. It reads as
+though `D3DPRESENT_INTERVAL_ONE` waits for a vblank boundary on every call, and
+it does not. librw asks for `BackBufferCount = 1` and `SWAPEFFECT_DISCARD`
+(`d3ddevice.cpp:2194`), so `Present` queues a flip and blocks only while an
+earlier flip is still pending. With 33 ms between presents and a 16.6 ms refresh,
+the earlier flip happened two refreshes ago. It returns immediately.
+
+So the budget has to be at least one refresh period, and 30 Hz is the slowest
+display worth designing for. Keeping it at the floor rather than well above it
+is what leaves the bubbles moving. The cost is the loading screen's own draw, a
+few ms out of every 33, and that is a constant — it does not vary with the frame
+rate, which is the whole point.
+
+Going past that constant means loading off the main thread, and it is not a
+small change: `xMemAlloc` is not thread safe and the RenderWare handoff at the
+end of `PKR_LoadStep_Async` has to happen where the device is. The split would
+be file reads on a worker and fixup on the main thread. Nothing here needs it.
+
+The startup loops in `zMain.cpp` — `BOOT`, `PLAT`, `MNU4`, `MNU5` — and
+`zEntPlayer_LoadHOP` have empty bodies and never drew a frame, so they were
+already running flat out. They are unchanged in speed.
+
 ## Reproducing the candidate lists
 
 Two scans, both lead generators. Neither output is a defect list.
