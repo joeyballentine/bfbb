@@ -2092,7 +2092,11 @@ namespace bungee_state
 
         state_enum hanging_state_type::update(xScene& s, F32& dt)
         {
-            if (globals.pad0->pressed & XPAD_MOVE(XPAD_BUTTON_TRIANGLE) && !dying && !detaching &&
+            // Not XPAD_MOVE: dismounting is on the button printed B on every
+            // disc, so the bit does not transpose. The Xbox archives' own
+            // button_bungee_exit names text_button_center_03, which is that
+            // disc's pad_button3, which is its B.
+            if (globals.pad0->pressed & XPAD_BUTTON_TRIANGLE && !dying && !detaching &&
                 find_drop_off())
             {
                 start_detaching();

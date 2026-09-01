@@ -38,6 +38,13 @@
 // A move and a menu action still share a bit -- Spin and cancel are both
 // TRIANGLE on the GameCube -- and that is not a fault to fix. The GameCube
 // release shipped that way and its own prompts say so.
+//
+// **Reading TRIANGLE does not make something a move.** Only the four rows above
+// transpose. Bungee dismount reads TRIANGLE and stays there on every disc --
+// each one's button_bungee_exit prompt draws the button printed B -- so that
+// read is left bare. Check a prompt before wrapping a read: the archives name
+// the bit, and a wrapped read that should not be moves the button under the
+// player.
 
 // The bit to read in place of `mask`, under the preset in force. Only the four
 // face bits move; everything else is returned unchanged.
