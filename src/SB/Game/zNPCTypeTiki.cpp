@@ -665,8 +665,8 @@ void zNPCTiki::Process(xScene* xscn, F32 dt)
             }
         }
 
-        xQuat* q0 = ((iAnimPose*)giAnimScratch)->quat;
-        xVec3* t0 = ((iAnimPose*)q0)->tran;
+        xQuat* q0 = (xQuat*)giAnimScratch;
+        xVec3* t0 = (xVec3*)(q0 + IANIM_MAXBONES);
         iAnimEval(this->tikiAnim, this->tikiAnimTime, 0, t0, q0);
         iModelAnimMatrices(this->model->Data, q0, t0, this->model->Mat + 1);
     }

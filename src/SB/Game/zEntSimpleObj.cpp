@@ -266,8 +266,8 @@ void zEntSimpleObj_MgrUpdateRender(RpWorld* world, F32 dt)
                     {
                         ent->animTime -= duration;
                     }
-                    q0 = ((iAnimPose*)giAnimScratch)->quat;
-                    t0 = ((iAnimPose*)q0)->tran;
+                    q0 = (xQuat*)giAnimScratch;
+                    t0 = (xVec3*)(q0 + IANIM_MAXBONES);
                     iAnimEval(ent->anim, ent->animTime, 0U, t0, q0);
                     model = ent->model;
                     iModelAnimMatrices(model->Data, q0, t0, model->Mat + 1);
@@ -478,8 +478,8 @@ void zEntSimpleObj_Update(zEntSimpleObj* ent, xScene* sc, float dt)
             {
                 ent->animTime = temp_f0 - duration;
             }
-            q0 = ((iAnimPose*)giAnimScratch)->quat;
-            t0 = ((iAnimPose*)q0)->tran;
+            q0 = (xQuat*)giAnimScratch;
+            t0 = (xVec3*)(q0 + IANIM_MAXBONES);
             iAnimEval(ent->anim, ent->animTime, 0U, t0, q0);
             temp_r3_2 = ent->model;
             iModelAnimMatrices(temp_r3_2->Data, q0, t0, temp_r3_2->Mat + 0x1);
