@@ -385,6 +385,134 @@ static void test_bubble_pop()
           "and the unrebased 4% a frame would leave under 1% of them");
 }
 
+// --- the boss camera's yaw ---------------------------------------------------
+//
+// xBinaryCamera::update runs the Robo-Sandy and Robo-Patrick fights, and three
+// of its lines decide how fast the camera can come round:
+//
+//     max_yaw_diff = max_yaw_vel * dt            the goal is at most this far
+//                                                ahead of the camera
+//     sloc         = 1 - exp(-move_speed * dt)   the camera closes this much of
+//                                                that goal this frame
+//     yaw_start    = atan2(B - A)                re-derived from the camera's
+//                                                own position next frame
+//
+// Both factors are per-frame and they multiply, and because yaw_start comes
+// back from the camera itself nothing carries over, so retail's rate falls off
+// with dt: 88 degrees a second at 60 fps, 38 at 144, 2 at 3000. The stick
+// offset rides on the same bound -- stick_yaw_vel and max_yaw_vel are both 10,
+// so full deflection sits exactly on it -- which is why rebasing the stick
+// alone changes nothing and both lines move together.
+//
+// This mirrors the source rather than calling it. Linking xCamera.cpp wants a
+// scene, a pad and an xCamera; the arithmetic under test is these three lines.
+
+static F32 wrap_pi(F32 a)
+{
+    a = fmodf(a + PI, 2.0f * PI);
+
+    if (a < 0.0f)
+    {
+        a += 2.0f * PI;
+    }
+
+    return a - PI;
+}
+
+// Degrees the camera turns in one second, from zNPCBSandy's own bossCam config.
+// `stick` picks what asks for the turn: the framing, which wants a half turn
+// and leaves the bound to decide the rest, or the player holding the stick.
+static F32 boss_cam_turn(S32 fps, bool rebased, bool stick)
+{
+    const F32 d = 6.0f;             // cfg.zone_rest.distance
+    const F32 move_speed = 10.0f;   // cfg.move_speed
+    const F32 max_yaw_vel = 10.0f;  // cfg.max_yaw_vel
+    const F32 stick_yaw_vel = 10.0f;
+    const F32 stick_speed = 10.0f;
+
+    F32 dt = 1.0f / (F32)fps;
+    F32 sloc = 1.0f - expf(-move_speed * dt);
+    F32 sloc60 = 1.0f - expf(-move_speed * kConsoleFrame);
+    F32 sstick = 1.0f - expf(-stick_speed * dt);
+
+    // The player sits at the origin; the camera starts d behind at yaw 0.
+    F32 ax = 0.0f;
+    F32 az = -d;
+    F32 stick_offset = 0.0f;
+
+    for (S32 i = 0; i < fps; i++)
+    {
+        F32 yaw_start = atan2f(-ax, -az);
+        F32 yaw_end;
+
+        if (stick)
+        {
+            F32 target = stick_yaw_vel * 1.0f * (rebased ? kConsoleFrame : dt);
+
+            stick_offset += (target - stick_offset) * sstick;
+            yaw_end = yaw_start + stick_offset;
+        }
+        else
+        {
+            yaw_end = PI;
+        }
+
+        F32 yaw_diff = wrap_pi(yaw_end - yaw_start);
+        F32 max_yaw_diff = max_yaw_vel * dt;
+
+        if (rebased)
+        {
+            max_yaw_diff *= sloc60 / sloc;
+        }
+
+        if (fabsf(yaw_diff) > max_yaw_diff)
+        {
+            yaw_end = yaw_start + (yaw_diff < 0.0f ? -max_yaw_diff : max_yaw_diff);
+        }
+
+        ax += (-d * sinf(yaw_end) - ax) * sloc;
+        az += (-d * cosf(yaw_end) - az) * sloc;
+    }
+
+    return fabsf(wrap_pi(atan2f(-ax, -az))) * (ONEEIGHTY / PI);
+}
+
+static void test_boss_camera_is_flat()
+{
+    printf("\nthe boss camera comes round at one rate however long a frame is\n");
+
+    for (S32 stick = 0; stick < 2; stick++)
+    {
+        F32 console = boss_cam_turn(60, false, stick != 0);
+        bool identity = near_rel(boss_cam_turn(60, true, stick != 0), console, 1e-3f);
+        bool flat = true;
+
+        for (S32 i = 0; i < kRateCount; i++)
+        {
+            if (!near_rel(boss_cam_turn(kRates[i], true, stick != 0), console, 0.05f))
+            {
+                flat = false;
+            }
+        }
+
+        char what[80];
+
+        snprintf(what, sizeof(what), "a console frame turns %.0f degrees a second on the %s",
+                 console, stick ? "stick" : "framing");
+        check(identity, what);
+
+        snprintf(what, sizeof(what), "and every rate up to 3000 turns the same %s",
+                 stick ? "on the stick" : "on the framing");
+        check(flat, what);
+    }
+
+    // What the fix is for: two per-frame factors multiplied, so the rate falls
+    // with dt rather than holding.
+    check(boss_cam_turn(144, false, false) < 0.5f * boss_cam_turn(60, false, false) &&
+              boss_cam_turn(3000, false, false) < 0.05f * boss_cam_turn(60, false, false),
+          "unrebased, 144 fps turns under half as far and 3000 under a twentieth");
+}
+
 int main()
 {
     printf("bfbb frame-rate independence self-test\n");
@@ -396,6 +524,7 @@ int main()
     test_emission_is_flat();
     test_chance_is_flat();
     test_bubble_pop();
+    test_boss_camera_is_flat();
 
     printf("\n%s (%d failure%s)\n", failures ? "FAILED" : "passed", failures,
            failures == 1 ? "" : "s");

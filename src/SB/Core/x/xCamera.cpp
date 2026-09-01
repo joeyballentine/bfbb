@@ -1635,11 +1635,43 @@ void xBinaryCamera::update(F32 dt)
     F32 sstick = 1.0f - xexp(-cfg.stick_speed * dt);
     _tagxPad::analog_data& stick = globals.pad0->analog[1];
 
+    // The target of this one-pole is an offset in radians, so writing it as
+    // stick_yaw_vel * dt shrinks the stick's push with the frame time. On its
+    // own that changes nothing, because stick_yaw_vel and max_yaw_vel are both
+    // 10 and the clamp below bounds the same quantity: full deflection sits
+    // exactly on the bound at any frame rate. It only bites once that clamp is
+    // rebased, and then the stick has to be rebased with it or it stops
+    // reaching the bound above 60 fps.
+#ifdef PLATFORM_PC
+    stick_offset.x +=
+        (cfg.stick_yaw_vel * stick.offset.x * (1.0f / 60.0f) - stick_offset.x) * sstick;
+#else
     stick_offset.x += (cfg.stick_yaw_vel * stick.offset.x * dt - stick_offset.x) * sstick;
+#endif
     yaw_end += stick_offset.x;
 
     F32 yaw_diff = xrmod(yaw_end - yaw_start + PI) - PI;
+    // This bound and the position lerp further down are each written against
+    // dt, and they multiply. The bound puts the GOAL at most max_yaw_vel * dt
+    // ahead of where the camera is now; the camera then closes only
+    // sloc = 1 - exp(-move_speed * dt) of that goal this frame, and yaw_start
+    // is re-derived from the camera's own position next frame, so nothing
+    // carries over. The angle turned per frame goes as dt * dt and the rate per
+    // second as dt: 88 degrees a second at 60 fps, 38 at 144, 2 at 3000.
+    //
+    // Scaling the bound by sloc(1/60) / sloc(dt) holds the achieved rate at
+    // console's. At 60 fps the factor is 1 and this is retail's line.
+#ifdef PLATFORM_PC
+    F32 sloc_now = 1.0f - xexp(-cfg.move_speed * dt);
     F32 max_yaw_diff = cfg.max_yaw_vel * dt;
+
+    if (sloc_now > 1e-6f)
+    {
+        max_yaw_diff *= (1.0f - xexp(-cfg.move_speed * (1.0f / 60.0f))) / sloc_now;
+    }
+#else
+    F32 max_yaw_diff = cfg.max_yaw_vel * dt;
+#endif
     if (xabs(yaw_diff) > max_yaw_diff)
     {
         if (yaw_diff < 0.0f)

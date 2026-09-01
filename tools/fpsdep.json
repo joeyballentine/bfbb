@@ -1,5 +1,7 @@
 {
  "src/SB/Core/x/xBehaveMgr.cpp\tcounter\tthis->cnt_transLastTimestep++;": 1,
+ "src/SB/Core/x/xCamera.cpp\ttimestep\t(cfg.stick_yaw_vel * stick.offset.x * (1.0f / 60.0f) - stick_offset.x) * sstick;": 1,
+ "src/SB/Core/x/xCamera.cpp\ttimestep\tmax_yaw_diff *= (1.0f - xexp(-cfg.move_speed * (1.0f / 60.0f))) / sloc_now;": 1,
  "src/SB/Core/x/xCamera.cpp\ttimestep\tstatic F32 last_dt = 1.0f / 60;": 1,
  "src/SB/Core/x/xCutscene.cpp\ttimestep\tbreaklist[i].Time - time < (1.0f / 30.0f))": 1,
  "src/SB/Core/x/xCutscene.cpp\ttimestep\treturn breaklist[i].Time - (1.0f / 30.0f);": 1,

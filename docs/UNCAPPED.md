@@ -58,6 +58,9 @@ position delta into a velocity. Retail wrote this camera for a variable frame
 time. It is one of the few systems in the game that was already right, which is
 why the naive reading fails here three times over.
 
+The boss fights do not use this camera. `xBinaryCamera` does, and that one has a
+real defect - see *A bound and a lag that multiply* below.
+
 ### Pickups — fixed
 
 `zEntPickup_SceneUpdate` multiplied one shared global matrix into itself every
@@ -845,6 +848,47 @@ filters beside it. At 240 fps three of every four deltas were overwritten before
 it saw them, so the sum telescoped to a quarter of the real length change while
 the drain still took the whole window, and the rope read taut. Gating an update
 does not gate what writes into it.
+
+## A bound and a lag that multiply
+
+Reported from play: the Poseidome camera is really slow, and only above 60 fps.
+
+`xBinaryCamera::update` runs the Robo-Sandy and Robo-Patrick fights.
+`zCameraDisableTracking(CO_BOSS)` hands it the camera for the whole battle, so
+none of the `pcur`/`pgoal` machinery above is live there. Every filter in it is
+written against a variable frame time and every one of them is right on its own.
+Three lines together are not:
+
+    F32 max_yaw_diff = cfg.max_yaw_vel * dt;              // the bound
+    F32 sloc = 1.0f - xexp(-cfg.move_speed * dt);         // the lag
+    F32 yaw_start = xatan2(B.x - A.x, B.z - A.z);         // re-derived from A
+
+The bound puts the goal at most `max_yaw_vel * dt` ahead of where the camera is
+now. The camera then closes `sloc` of that goal, which is itself proportional to
+`dt`. And `yaw_start` comes back from the camera's own position next frame, so
+the part it did not close is not carried over - it is simply gone. The angle
+turned per frame goes as `dt * dt` and the rate per second as `dt`:
+
+    retail    60: 88.5   144: 38.5   240: 23.4   1000: 5.7   3000: 1.9  deg/s
+    rebased   60: 88.5   144: 88.5   240: 88.5   1000: 88.5  3000: 88.6
+
+The fix scales the bound by `sloc(1/60) / sloc(dt)`, which is exactly 1 at a
+console frame. `stick_offset.x` is rebased with it: its target is written
+`stick_yaw_vel * stick.offset.x * dt`, and since `stick_yaw_vel` and
+`max_yaw_vel` are both 10 that lands full deflection exactly on the bound at any
+frame rate. Rebase the bound alone and the stick stops reaching it above 60 fps.
+
+Rebasing the stick ALONE does nothing at all, which is worth knowing before
+reading a site like this: the bound was the binding constraint, so the first
+attempt shipped, changed no behaviour anybody could feel, and had to come back
+out. Two per-frame quantities in series are one defect, not two, and neither
+line is wrong where it stands.
+
+`fpsdep.py` has no shape for this and cannot get one. Both lines already carry a
+`dt`, correctly; what is wrong is that they compose. The scan looks for a missing
+`dt`, and the fifth shape - the one-pole - looks at a single statement. `fps_selftest`
+covers the arithmetic instead, running a second of the loop at six frame rates
+against Sandy's own config, and the baseline covers the two rebased lines.
 
 ## Telling a real site from a false one
 
