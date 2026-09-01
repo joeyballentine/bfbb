@@ -3,14 +3,11 @@
 
 #include "xMath3.h"
 
-// giAnimScratch is five of these, indexed by pose number.
-// Size: 0x720
-struct iAnimPose
-{
-    xQuat quat[65];
-    xVec3 tran[65];
-    U32 pad_71C;
-};
+// giAnimScratch holds five poses. A pose is IANIM_MAXBONES quats followed by
+// IANIM_MAXBONES translations, the translation array padded to 16 bytes:
+// 0x410 + 0x310 = IANIM_POSE_SIZE.
+#define IANIM_MAXBONES 65
+#define IANIM_POSE_SIZE 0x720
 
 extern U8* giAnimScratch;
 
