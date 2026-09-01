@@ -255,9 +255,13 @@ namespace
           "; to two buttons at once has no single picture, so it falls back to what\n"
           "; that console drew for it.\n"
           ";\n"
-          "; A set is a folder of PNGs under buttons/ named after the controller's\n"
-          "; inputs -- a.png, lt.png, start.png. Copy one, draw over it, and the\n"
-          "; folder's name is a value this setting accepts." },
+          "; A set is a folder of PNGs under buttons/ named after the POSITION of\n"
+          "; each input -- south.png is the button under your thumb, then east,\n"
+          "; west, north, lt, rt, lb, rb, start, back and the two sticks. Named\n"
+          "; that way rather than by letter because the letter is the one thing\n"
+          "; controllers disagree on: east is B on an Xbox pad and X on a\n"
+          "; GameCube one. Copy a folder, draw over it, and its name is a value\n"
+          "; this setting accepts." },
         { "audio", "soundtrack", "",
           "Folder of your own music files to play instead of the game's. Empty\n"
           "; uses the game's music.\n"

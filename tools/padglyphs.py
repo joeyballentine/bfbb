@@ -5,9 +5,9 @@ The PC port draws button prompts from a folder of PNGs rather than from the
 textures in the player's font.HIP, so that the glyph can follow the CONTROLLER
 instead of the disc. This produces one such folder per console.
 
-Files come out named for the HOST input they depict -- a.png is the button in
-the south position, lt.png is the left trigger -- not for the retail texture
-slot. Two reasons:
+Files come out named for the POSITION of the input they depict -- south.png is
+the button under your thumb, lt.png is the left trigger -- not for the retail
+texture slot and not for the letter printed on the button. Three reasons:
 
   * The retail slot numbering is per-console. Xbox's button_picture_02 is the
     GameCube's and PS2's button_picture_03. Resolving that here means the
@@ -15,6 +15,11 @@ slot. Two reasons:
 
   * The port lets config.ini rebind anything, so the glyph has to be chosen
     from the binding, and a binding names host inputs.
+
+  * Letters would be ambiguous in the one place it matters. The button east of
+    jump is printed B on an Xbox pad and X on a GameCube one, so a file called
+    b.png could mean either, and gamecube/b.png holding an X looks like a bug.
+    Naming the position says exactly what is meant.
 
 All three discs agree on the POSITION of every face button -- jump is south,
 Bubble Bash is north, Bubble Bounce is east, Bubble Spin is west -- and differ
@@ -30,16 +35,15 @@ import os
 import struct
 import sys
 
-# The texture behind each host input, per console. The key is the output file
-# name; the value is the retail RWTX asset name on that disc.
+# The texture behind each face position, per console. The key is the output file
+# name; the value is the retail texture slot on that disc.
 #
-# The face buttons are keyed by position, which is why the four rows differ
-# between consoles: xbox pad_button2 and gamecube pad_button3 are both the
-# north button, and both come out as y.png.
+# The rows differ because the slot numbering does: xbox pad_button2 and gamecube
+# pad_button3 are both the north button, and both come out as north.png.
 FACE = {
-    "xbox": {"a": 1, "y": 2, "b": 3, "x": 4},
-    "gamecube": {"a": 1, "x": 2, "y": 3, "b": 4},
-    "ps2": {"a": 1, "x": 2, "y": 3, "b": 4},
+    "xbox": {"south": 1, "north": 2, "east": 3, "west": 4},
+    "gamecube": {"south": 1, "west": 2, "north": 3, "east": 4},
+    "ps2": {"south": 1, "west": 2, "north": 3, "east": 4},
 }
 
 # The rest is the same slot on every disc. lb and rb take the L2/R2 slots

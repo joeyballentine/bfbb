@@ -23,15 +23,20 @@
 
 namespace
 {
-    // One glyph a set can hold. The names are the host's inputs, which is what
-    // a [pad] binding is written in and what tools/padglyphs.py names its
-    // output after -- so a set is browsable: buttons/ps2/x.png is the square.
+    // One glyph a set can hold, and the file it comes out of.
+    //
+    // The face four are named for their POSITION rather than for a letter,
+    // because the letter is the one thing that is not shared: the button east
+    // of jump is printed B on an Xbox pad and X on a GameCube one. A file
+    // called b.png could mean either, and gamecube/b.png holding an X reads
+    // like a bug rather than like the truth. tools/padglyphs.py writes the same
+    // names.
     //
     // The two sticks are not inputs anything binds. They are the pictures
     // button_move_text and button_camtoggle_text ask for, and those prompts
     // mean "push the stick", not "press the click", so they resolve straight to
     // a file and never go near a binding.
-    const char* const kGlyphNames[] = { "a",     "b",    "x",          "y",
+    const char* const kGlyphNames[] = { "south", "east", "west",       "north",
                                         "lt",    "rt",   "lb",         "rb",
                                         "start", "back", "stick_left", "stick_right" };
 
@@ -39,10 +44,10 @@ namespace
 
     enum
     {
-        GLYPH_A,
-        GLYPH_B,
-        GLYPH_X,
-        GLYPH_Y,
+        GLYPH_SOUTH,
+        GLYPH_EAST,
+        GLYPH_WEST,
+        GLYPH_NORTH,
         GLYPH_LT,
         GLYPH_RT,
         GLYPH_LB,
@@ -52,6 +57,24 @@ namespace
         GLYPH_STICK_LEFT,
         GLYPH_STICK_RIGHT
     };
+
+    // A binding is written in SDL's input names, and those four ARE positions
+    // -- SDL calls the east button `b` whatever is printed on it -- so this is
+    // a rename, not a mapping. Every other input's name is already the file's.
+    struct TokenGlyph
+    {
+        const char* token;
+        S32 glyph;
+    };
+
+    const TokenGlyph kTokenGlyphs[] = {
+        { "a", GLYPH_SOUTH },
+        { "b", GLYPH_EAST },
+        { "x", GLYPH_WEST },
+        { "y", GLYPH_NORTH },
+    };
+
+    const S32 kTokenGlyphCount = (S32)(sizeof(kTokenGlyphs) / sizeof(kTokenGlyphs[0]));
 
     // What each of retail's twelve textures means, in the port's terms.
     //
@@ -73,10 +96,10 @@ namespace
     };
 
     const Slot kSlots[] = {
-        { "pad_button1", XPAD_BUTTON_X, GLYPH_A },
-        { "pad_button2", XPAD_BUTTON_SQUARE, GLYPH_Y },
-        { "pad_button3", XPAD_BUTTON_O, GLYPH_B },
-        { "pad_button4", XPAD_BUTTON_TRIANGLE, GLYPH_X },
+        { "pad_button1", XPAD_BUTTON_X, GLYPH_SOUTH },
+        { "pad_button2", XPAD_BUTTON_SQUARE, GLYPH_NORTH },
+        { "pad_button3", XPAD_BUTTON_O, GLYPH_EAST },
+        { "pad_button4", XPAD_BUTTON_TRIANGLE, GLYPH_WEST },
         { "pad_button_L1", XPAD_BUTTON_L1, GLYPH_LT },
         { "pad_button_R1", XPAD_BUTTON_R1, GLYPH_RT },
         { "pad_button_L2", XPAD_BUTTON_L2, GLYPH_LB },
@@ -263,11 +286,20 @@ namespace
         return true;
     }
 
-    S32 glyphIndex(const char* name)
+    // The glyph for one device input, named as a binding names it.
+    S32 glyphIndex(const char* token)
     {
+        for (S32 i = 0; i < kTokenGlyphCount; i++)
+        {
+            if (iHostStrCaseCmp(kTokenGlyphs[i].token, token) == 0)
+            {
+                return kTokenGlyphs[i].glyph;
+            }
+        }
+
         for (S32 i = 0; i < kGlyphCount; i++)
         {
-            if (iHostStrCaseCmp(kGlyphNames[i], name) == 0)
+            if (iHostStrCaseCmp(kGlyphNames[i], token) == 0)
             {
                 return i;
             }

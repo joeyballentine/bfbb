@@ -24,12 +24,17 @@
 // **The glyph follows the BINDING, not the console.** A set could be twelve
 // files named after the retail textures, swapped as a unit. That is wrong the
 // moment anyone edits [pad] in config.ini: the game would keep drawing the
-// console's button while a different one presses it. Instead a set is named
-// for the host's inputs -- a.png, lt.png -- and the chain is
+// console's button while a different one presses it. Instead a set is named for
+// the POSITION of each host input -- south.png, lt.png -- and the chain is
 //
 //     {tex:pad_button4}  ->  XPAD_BUTTON_TRIANGLE   (the slot table below)
 //                        ->  "x"                    (whatever [pad] binds it to)
-//                        ->  buttons/<set>/x.png
+//                        ->  buttons/<set>/west.png (SDL's `x` IS west)
+//
+// Positions rather than letters because the letter is the one thing the
+// controllers disagree on: the button east of jump is printed B on an Xbox pad
+// and X on a GameCube one, so b.png would be ambiguous and gamecube/b.png
+// holding an X would read like a bug instead of like the truth.
 //
 // **The slot table is the Xbox's, because the port runs the Xbox assets.** The
 // three discs number the slots differently -- Xbox's button_picture_02 is the
