@@ -10,6 +10,7 @@
 #ifdef PLATFORM_PC
 #include "iDistort.h"
 #include "iGlow.h"
+#include "iSnapshot.h"
 #endif
 
 struct _xFadeData
@@ -268,6 +269,15 @@ void xScrFxUpdateFade(RwCamera*, F32 seconds)
     c.b = InterpCol(t, mFade.src.b, mFade.dest.b);
     c.a = InterpCol(t, mFade.src.a, mFade.dest.a);
     
+#ifdef PLATFORM_PC
+    // Any coverage at all, not just full black: the loading screen's still is
+    // meant to be the level, and a level seen through a fade is not it.
+    if (c.a != 0)
+    {
+        iSnapshotSetObscured(TRUE);
+    }
+#endif
+
     RwVideoMode video_mode;
     RwEngineGetVideoModeInfo(&video_mode, RwEngineGetCurrentVideoMode());
     iScrFxDrawBox(0.0f, 0.0f, video_mode.width, video_mode.height, c.r, c.g, c.b, c.a);

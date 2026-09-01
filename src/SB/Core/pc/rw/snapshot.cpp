@@ -55,6 +55,9 @@ static S32 sHaveFrame;
 // while it is up must not overwrite it with itself.
 static S32 sLatched;
 
+// This frame has the screen fade over it. See iSnapshot.h.
+static S32 sObscured;
+
 // Set once, when something has gone wrong in a way that will go wrong the same
 // way every frame. Reported once and then the feature is simply off, because a
 // message a frame is not a diagnostic.
@@ -113,7 +116,13 @@ static void snapshotFail(const char* what, long hr)
 
 void iSnapshotCapture()
 {
-    if (!sEnabled || sFailed || sLatched)
+    // Read and cleared here rather than reset by the writer: xScrFxUpdateFade
+    // does not run on every frame the port presents, and a stale FALSE would
+    // be a captured fade while a stale TRUE would stop capturing for good.
+    const S32 obscured = sObscured;
+    sObscured = 0;
+
+    if (!sEnabled || sFailed || sLatched || obscured)
     {
         return;
     }
@@ -219,7 +228,13 @@ static void snapshotFail(const char* what)
 
 void iSnapshotCapture()
 {
-    if (!sEnabled || sFailed || sLatched)
+    // Read and cleared here rather than reset by the writer: xScrFxUpdateFade
+    // does not run on every frame the port presents, and a stale FALSE would
+    // be a captured fade while a stale TRUE would stop capturing for good.
+    const S32 obscured = sObscured;
+    sObscured = 0;
+
+    if (!sEnabled || sFailed || sLatched || obscured)
     {
         return;
     }
@@ -346,6 +361,11 @@ void iSnapshotLatch()
 void iSnapshotRelease()
 {
     sLatched = 0;
+}
+
+void iSnapshotSetObscured(S32 obscured)
+{
+    sObscured = obscured ? 1 : 0;
 }
 
 void iSnapshotSetEnabled(S32 enabled)

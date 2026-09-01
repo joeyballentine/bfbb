@@ -46,6 +46,18 @@
 // photograph itself.
 void iSnapshotCapture();
 
+// The frame about to be presented has the screen fade drawn over it, so it is
+// not a picture of the level; xScrFxUpdateFade says so, iSnapshotCapture reads
+// it and clears it. Set for the frame, not for a span: a frame nobody says
+// anything about is a clean one.
+//
+// Without this the still is whatever happened to be on screen at the scene
+// change, and on the way into a level that is the fade UP FROM BLACK. Warping
+// out again during that second latches a dark frame, and warping repeatedly
+// through the same door latches a darker one each time, because each capture is
+// taken earlier in a fade than the last.
+void iSnapshotSetObscured(S32 obscured);
+
 // Freeze the snapshot and hand it to the loading screen; zGameTakeSnapShot.
 void iSnapshotLatch();
 
