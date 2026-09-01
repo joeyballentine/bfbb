@@ -551,9 +551,20 @@ static void test_alpha_kind()
     check(rw::classifyDXTAlpha(3, dxt3, 4, 4) == rw::ALPHAKEYED,
           "a DXT3 nibble at 0 among opaque ones is keyed");
 
+    // A cutout is antialiased in the source, so its edge texels land in
+    // between and a strict test would call every real cutout graded. What
+    // separates the two is how much of the surface is edge: one texel in
+    // sixteen is a punched-out shape, a quarter of them is a gradient.
     dxt3[0] = 0x8F; // texel 1 lands in between
+    check(rw::classifyDXTAlpha(3, dxt3, 4, 4) == rw::ALPHAKEYED,
+          "one nibble in between is an antialiased edge, still keyed");
+
+    dxt3[0] = 0x88; // texels 0 and 1
+    dxt3[1] = 0x88; // texels 2 and 3 -- a quarter of the block
     check(rw::classifyDXTAlpha(3, dxt3, 4, 4) == rw::ALPHAGRADED,
-          "and one nibble anywhere in between makes the whole surface graded");
+          "and enough of them in between makes the surface graded");
+    dxt3[0] = 0xFF;
+    dxt3[1] = 0xFF;
 
     // DXT5: alpha0 above alpha1 is the eight-value ramp, and every index in
     // between the two endpoints lands off both ends.
@@ -569,8 +580,12 @@ static void test_alpha_kind()
           "one indexing both endpoints, 255 and 0, is keyed");
 
     dxt5[2] = 0x02; // texel 0 takes index 2, six sevenths of the way up
+    check(rw::classifyDXTAlpha(5, dxt5, 4, 4) == rw::ALPHAKEYED,
+          "and one reaching an interpolated step is still keyed");
+
+    dxt5[2] = 0x92; // texels 0, 1 and 2 all take index 2
     check(rw::classifyDXTAlpha(5, dxt5, 4, 4) == rw::ALPHAGRADED,
-          "and one reaching an interpolated step is graded");
+          "three of them is a ramp, not an edge");
 
     // A surface smaller than the 4x4 block grid is padded out to it, and what
     // the encoder left in the padding is not the artwork. Reading it would
@@ -579,8 +594,8 @@ static void test_alpha_kind()
     dxt3[0] = 0xFF; // texels 0 and 1 -- the top row of a 2x2
     dxt3[1] = 0x08; // texel 2, outside a 2-wide surface, in between
     dxt3[2] = 0xFF; // texels 4 and 5 -- the bottom row
-    check(rw::classifyDXTAlpha(3, dxt3, 4, 4) == rw::ALPHAGRADED,
-          "the padding of a 2x2 surface is graded when read as a whole block");
+    check(rw::classifyDXTAlpha(3, dxt3, 4, 4) == rw::ALPHAKEYED,
+          "the padding of a 2x2 surface is read as transparency in a whole block");
     check(rw::classifyDXTAlpha(3, dxt3, 2, 2) == rw::ALPHAOPAQUE,
           "and is not read at all at the surface's real size");
 

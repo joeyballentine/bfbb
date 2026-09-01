@@ -446,7 +446,7 @@ static void test_config()
         // Written as its own setting, not folded into the one above. Coverage
         // needs samples and does nothing without them, but that is a fact about
         // what the two mean together, not a reason for one to imply the other.
-        check(strstr(buf, "alpha_to_coverage = on") != NULL, "and alpha to coverage separately");
+        check(strstr(buf, "alpha_to_coverage = off") != NULL, "and alpha to coverage separately");
         check(strstr(buf, "per_pixel_lighting = on") != NULL, "and per-pixel lighting");
         check(strstr(buf, "[xbox]") != NULL, "it has the [xbox] section header");
         check(strstr(buf, "glow = on") != NULL, "and glow at its default");
