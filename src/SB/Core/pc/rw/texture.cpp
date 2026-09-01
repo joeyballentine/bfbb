@@ -9,6 +9,17 @@
 
 #include "stream.h" // brings in librw's rw.h, which must not be included twice
 
+// Declared rather than included, for the reason world.cpp gives: librw's
+// src/d3d/rwxbox.h has no include guard and redefines InstanceData,
+// InstanceDataHeader and ObjPipeline against what rw.h has already pulled in.
+namespace rw
+{
+    namespace xbox
+    {
+        int32 getLevelSize(Raster* raster, int32 level);
+    }
+}
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,6 +37,19 @@ static inline RwTexture* asRwTexture(rw::Texture* t)
 static inline rw::TexDictionary* asTexDictionary(const RwTexDictionary* d)
 {
     return const_cast<rw::TexDictionary*>(reinterpret_cast<const rw::TexDictionary*>(d));
+}
+
+// Whether an Xbox raster really does store one four-byte texel per pixel.
+//
+// The RW format field describes the colour a texel decodes to, not how it is
+// stored, so a DXT block-compressed raster can and does declare C888 at depth
+// 32. Level 0 of a 256x256 DXT1 is 32768 bytes; four bytes a pixel would be
+// 262144. Asking the raster for its own level size is the only way to tell the
+// two apart from here -- everything else in Raster reads the same on both.
+static bool xboxRasterIsPacked32(rw::Raster* raster)
+{
+    return raster->width > 0 && raster->height > 0 &&
+           rw::xbox::getLevelSize(raster, 0) == raster->width * raster->height * 4;
 }
 
 // Hands each texture's raster to librw's platform conversion and puts back
@@ -58,9 +82,18 @@ static rw::Texture* convertRasterToPlatform(rw::Texture* texture, void* data)
     // become transparency. Xbox's X8R8G8B8 leaves it undefined, and a texture
     // whose alpha came out zero would be invisible rather than wrong-looking,
     // which is the hardest kind of bug to see.
+    //
+    // A DXT raster answers yes to all three of those tests and is not one of
+    // these: db05, the only level in the game that ships compressed textures,
+    // has 55 that declare C888 at depth 32 and hold DXT1 blocks. Forcing C8888
+    // on those gives the d3d raster an alpha channel the blocks do not have,
+    // and the fill below then wrote 1024 bytes into each 512-byte row of the
+    // locked surface -- 224KB past the end of a 256x256 texture, which took the
+    // heap out and crashed the next allocation.
     const bool paddedRGB = (texture->raster->platform == rw::PLATFORM_XBOX) &&
                            ((texture->raster->format & 0xF00) == rw::Raster::C888) &&
-                           (texture->raster->depth == 32);
+                           (texture->raster->depth == 32) &&
+                           xboxRasterIsPacked32(texture->raster);
 
     if (paddedRGB)
     {
