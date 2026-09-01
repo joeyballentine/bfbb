@@ -64,236 +64,59 @@ namespace
 
     const Setting kSettings[] = {
         { "assets", "path", "",
-          "Folder holding the game's files -- the one with boot.HIP, FONT.HIP and\n"
-          "; fmv/ directly inside it. Not a parent folder, not a disc image. No\n"
-          "; assets ship with the port, so nothing runs until this is set.\n"
-          ";\n"
-          "; Forward or back slashes both work. Spaces need no quotes: everything\n"
-          "; after the '=' is the path.\n"
-          ";\n"
-          "; Empty means the folder the game was started from. BFBB_ASSETS\n"
-          "; overrides this when it is set." },
+          "Folder holding boot.HIP, FONT.HIP and fmv/. Empty means the folder the\n"
+          "; game was started from. BFBB_ASSETS overrides this." },
         { "video", "mode", "fullscreen",
-          "fullscreen, borderless or windowed.\n"
-          ";\n"
-          "; This does not change the render size below. The picture is scaled to\n"
-          "; fit, so the game can render at 640x480 and fill a 4K display, or\n"
-          "; render higher and be sampled back down.\n"
-          ";\n"
-          "; Aspect ratio comes from the render size, not the display. A 4:3 size\n"
-          "; on a 16:9 monitor gets black bars at the sides. Use a 16:9 size to\n"
-          "; fill a 16:9 screen.\n"
-          ";\n"
-          ";   fullscreen  exclusive fullscreen at the current desktop resolution.\n"
-          ";   borderless  a borderless window covering one monitor. Nothing else\n"
-          ";               on the desktop is disturbed and alt-tab is instant.\n"
-          ";   windowed    a normal window, opened at the size below." },
-        { "video", "width", "640",
-          "Render width in pixels. The consoles drew 640x480, and every texture,\n"
-          "; font and HUD element was made for it, so larger sizes sharpen the 3D\n"
-          "; but only magnify the 2D art." },
+          "How the picture is presented: fullscreen, borderless, windowed." },
+        { "video", "width", "640", "Render width in pixels." },
         { "video", "height", "480",
-          "Render height in pixels. Any ratio other than 4:3 is widescreen; there\n"
-          "; is no separate switch. The camera keeps its vertical view and widens,\n"
-          "; so 1280x720 shows more to the left and right instead of stretching." },
+          "Render height in pixels. Anything other than 4:3 widens the view rather\n"
+          "; than stretching it." },
         { "video", "ui", "pillarbox",
-          "Where the interface goes on a screen that is not 4:3.\n"
-          ";\n"
-          ";   pillarbox  the whole interface stays in a centred 4:3 box, as the\n"
-          ";              console drew it, sitting in from each side.\n"
-          ";   native     the HUD moves out to the real screen edges at the size\n"
-          ";              it would have had. Each counter moves with its own icon,\n"
-          ";              and anything centred stays centred.\n"
-          ";\n"
-          "; Menus, textboxes and cutscene overlays stay in the 4:3 box either way\n"
-          "; -- they are full-screen art with nothing to anchor. At 4:3 the two\n"
-          "; settings do the same thing." },
+          "Where the interface sits on a screen that is not 4:3: pillarbox (all of\n"
+          "; it in a centred 4:3 box), native (the HUD out at the screen edges)." },
         { "video", "framerate", "60",
-          "How many frames a second the game runs at.\n"
-          ";\n"
-          "; This is the simulation rate as well as the picture rate -- the port runs\n"
-          "; one update per frame, as the consoles did -- so it is not purely\n"
-          "; cosmetic. 60 is what the GameCube video interface gave the game, and\n"
-          "; what every number in its source was tuned against.\n"
-          ";\n"
-          ";   60          the console rate.\n"
-          ";   display     the refresh rate of the monitor the game is on.\n"
-          ";   0 or off    no cap. As fast as the machine will go, or as fast as\n"
-          ";               the display allows when vsync is on below.\n"
-          ";   any number  that many frames a second.\n"
-          ";\n"
-          "; Above 60 the game is in territory it was never run in. The rates that\n"
-          "; were written per frame rather than per second have been converted --\n"
-          "; see docs/UNCAPPED.md for which, and why -- but anything still keyed to\n"
-          "; a frame count rather than to elapsed time runs faster than it should." },
+          "Frames a second, simulation and picture both: 60, display (the monitor's\n"
+          "; rate), 0 or off for no cap, or any number." },
         { "video", "vsync", "on",
-          "Wait for the display before showing a finished frame.\n"
-          ";\n"
-          "; On, a frame is never torn in half, and the frame rate cannot exceed the\n"
-          "; refresh rate of the monitor whatever framerate says above. Off, frames\n"
-          "; are shown the moment they are finished, which is what framerate needs\n"
-          "; to be free of the display -- and what tears.\n"
-          ";\n"
-          "; This is separate from framerate on purpose. Vsync decides whether a\n"
-          "; frame is whole; framerate decides how fast the game runs. On a 144 Hz\n"
-          "; monitor, vsync on with framerate 60 gives sixty whole frames a second." },
+          "Wait for the display before showing a finished frame. Stops tearing, and\n"
+          "; caps the rate at the refresh rate." },
         { "video", "draw_distance", "on",
-          "Draw everything, however far away. The consoles stopped drawing an\n"
-          "; object past a distance the level author set, swapped distant ones for\n"
-          "; lower-detail models, and clipped the world at 400 units. Off restores\n"
-          "; those limits exactly. Fog is unaffected, and nothing extra is\n"
-          "; simulated -- only drawn." },
+          "Draw everything however far away. Off restores the console's culling,\n"
+          "; detail swaps and 400-unit world clip." },
         { "video", "msaa", "4",
-          "How many samples each pixel is drawn with.\n"
-          ";\n"
-          "; Antialiasing. The consoles drew one sample per pixel into a picture\n"
-          "; a quarter the size, so their stepped edges were never as visible as\n"
-          "; yours are. More samples means smoother edges on everything the game\n"
-          "; draws.\n"
-          ";\n"
-          "; 1 is off. 2, 4 and 8 are the counts most cards offer, and 4 is the\n"
-          "; default. A count the card will not grant falls back to off." },
+          "Samples per pixel, for smoother edges: 1 (off), 2, 4, 8. A count the card\n"
+          "; will not grant falls back to off." },
         { "video", "alpha_to_coverage", "on",
-          "Antialias the see-through edges of grass, seaweed, netting and the\n"
-          "; other shapes the game punches out of a texture.\n"
-          ";\n"
-          "; Those edges come from an alpha test rather than from geometry, so\n"
-          "; msaa does nothing for them on its own and they stay stepped however\n"
-          "; many samples you ask for. Coverage spreads the edge across the\n"
-          "; pixel's samples instead, which is what smooths it.\n"
-          ";\n"
-          "; Only the surfaces the artists marked as cutouts are drawn this way\n"
-          "; -- 43 of them in the whole game. Soft art keeps its blend: coverage\n"
-          "; can only express as many levels as there are samples, so a gradient\n"
-          "; drawn with it comes out in bands.\n"
-          ";\n"
-          "; This needs msaa above: there is nowhere to put the coverage at one\n"
-          "; sample per pixel, so with msaa = 1 this does nothing whatever it is\n"
-          "; set to. Some cards do not offer it at all, and it is off on those." },
+          "Antialias the cutout edges of grass, seaweed and netting. Does nothing at\n"
+          "; msaa = 1." },
         { "video", "per_pixel_lighting", "on",
-          "Work out the lighting on a character once per pixel instead of once\n"
-          "; per corner of a triangle.\n"
-          ";\n"
-          "; The consoles lit each vertex and let the hardware blend between them\n"
-          "; across the triangle. On a low-polygon model that shows: a curved\n"
-          "; surface lights in visible flat facets, and a highlight that should\n"
-          "; slide over a face instead crawls between corners. Lighting each pixel\n"
-          "; on its own makes the same lights land smoothly.\n"
-          ";\n"
-          "; It changes nothing the artists drew. The lights, their colours, and\n"
-          "; the baked-in colour of the level are all exactly as they were -- this\n"
-          "; is only where the sum is worked out.\n"
-          ";\n"
-          "; The level itself barely moves, because its lighting was baked into\n"
-          "; the artwork rather than computed. Characters and objects are what\n"
-          "; this is for." },
+          "Light characters once per pixel instead of once per vertex." },
         { "video", "shadow_resolution", "auto",
-          "How sharp the shadows under characters are.\n"
-          ";\n"
-          "; A character's shadow is drawn by rendering the character into a\n"
-          "; square texture and projecting that onto the ground. The consoles made\n"
-          "; that texture 256 pixels across against a 480-pixel picture, so it was\n"
-          "; never magnified much. A PC draws the same shadow across far more\n"
-          "; pixels, and the edge goes blocky.\n"
-          ";\n"
-          "; auto keeps the consoles' ratio -- half the render height, rounded up\n"
-          "; to a power of two -- so the shadow stays as sharp relative to the\n"
-          "; picture as it was on a television, at whatever size is set above:\n"
-          ";\n"
-          ";   480 -> 256    720 -> 512    1080 -> 1024    2160 -> 2048\n"
-          ";\n"
-          "; A power of two from 64 to 4096 pins it instead. Larger costs video\n"
-          "; memory and a little time per shadow; 256 is what the consoles used.\n"
-          "; The texture is never made larger than the render size either way." },
-        { "xbox", "glow", "on", "The full-screen glow, usually called the Xbox version's bloom." },
+          "Character shadow texture size: auto (half the render height, rounded up\n"
+          "; to a power of two), or a power of two from 64 to 4096." },
+        { "xbox", "glow", "on", "The full-screen glow, the Xbox version's bloom." },
         { "xbox", "distortion", "on", "The Cruise Bubble's screen warp." },
         { "xbox", "snapshot", "on",
-          "Use a still of the level you just left as the loading screen\n"
-          "; background, instead of the GameCube release's background texture." },
+          "Use a still of the level you just left as the loading screen." },
         { "xbox", "reverb", "on", "Cave reverb, in the Mermalair and the caves." },
         { "input", "controller", "auto",
-          "Which controller to play with, when more than one is plugged in.\n"
-          ";\n"
-          "; auto uses the first one Windows lists that is actually there, so a\n"
-          "; single controller works whichever slot it landed in. A number from 1\n"
-          "; to 4 pins the game to that slot and ignores the rest -- which is what\n"
-          "; to set when a wheel, a flight stick or a dormant wireless receiver is\n"
-          "; holding slot 1 and the pad you want is behind it.\n"
-          ";\n"
-          "; The keyboard covers this controller whenever nothing is on it." },
+          "Which controller to play with: auto (the first one present), or 1 to 4 to\n"
+          "; pin it to that slot." },
         { "input", "preset", "auto",
-          "Which console's controls to start from: auto, xbox, ps2 or gamecube.\n"
-          ";\n"
-          "; auto uses the controls of whatever controller is plugged in, and\n"
-          "; follows it: swap a GameCube pad in mid-game and the buttons move to\n"
-          "; the GameCube's scheme without a restart. A pad the port cannot place\n"
-          "; -- and every pad on a build without the SDL backend -- gets the Xbox\n"
-          "; scheme, which is the release these assets came off.\n"
-          ";\n"
-          "; The menus are the same on all three and do not move: A accepts, B\n"
-          "; backs out, X opens options. What each release changed is where the\n"
-          "; player's moves sit. xbox spins on X and bounces on B; gamecube has\n"
-          "; those two the other way round; ps2 spins on square and bashes on\n"
-          "; triangle. A preset names the letter and the port finds it on\n"
-          "; whatever pad is in your hands, so gamecube means 'B does the spin'\n"
-          "; whether you are holding a GameCube pad or an Xbox one.\n"
-          ";\n"
-          "; The prompt on screen draws the button that actually acts, so\n"
-          "; whichever you pick, what you see is what you press. The signs and\n"
-          "; reminders in the world are rewritten as a level loads, so a preset\n"
-          "; changed mid-game reaches those at the next load; the pad itself and\n"
-          "; every menu prompt follow straight away.\n"
-          ";\n"
-          "; gamecube also chords the shoulders, because the GameCube has three\n"
-          "; and the game wants four: Z+L is L2 there, where xbox and ps2 have a\n"
-          "; button each and nothing to hold.\n"
-          ";\n"
-          "; This only sets what [pad] starts from. A line written out in [pad]\n"
-          "; wins over the preset, so changing this does not undo your remapping." },
+          "Which console's controls to start from: auto (follows the pad plugged\n"
+          "; in), xbox, ps2, gamecube. A line in [pad] wins over this." },
         { "input", "button_icons", "auto",
-          "Which controller's buttons the game DRAWS in its prompts: auto, xbox,\n"
-          "; gamecube, ps2, or off for the ones on the disc.\n"
-          ";\n"
-          "; auto asks the controller what it is and picks from that, so plugging\n"
-          "; a different pad in changes the prompts without a restart. A pad the\n"
-          "; port cannot identify gets the Xbox set, which is what the game's own\n"
-          "; files hold.\n"
-          ";\n"
-          "; The glyph follows your BINDING, not the name here: move a button in\n"
-          "; [pad] and every prompt for it draws the one you moved it to. A button\n"
-          "; bound to two at once has no single picture, so it falls back to what\n"
-          "; that console drew for it.\n"
-          ";\n"
-          "; A set is a folder of PNGs under buttons/ named after the POSITION of\n"
-          "; each input -- south.png is the button under your thumb, then east,\n"
-          "; west, north, lt, rt, lb, rb, start, back and the two sticks. Named\n"
-          "; that way rather than by letter because the letter is the one thing\n"
-          "; controllers disagree on: east is B on an Xbox pad and X on a\n"
-          "; GameCube one. Copy a folder, draw over it, and its name is a value\n"
-          "; this setting accepts." },
+          "Which controller's buttons the prompts draw: auto, xbox, gamecube, ps2,\n"
+          "; off (the ones on the disc), or a folder name under buttons/. The glyph\n"
+          "; follows your binding, not the console named here." },
         { "audio", "soundtrack", "",
-          "Folder of your own music files to play instead of the game's. Empty\n"
-          "; uses the game's music.\n"
-          ";\n"
-          "; The game's music is mono, as is every sound in it, so this is mainly\n"
-          "; how to get a stereo soundtrack in. Any sample rate and channel count\n"
-          "; works; the mixer resamples as it already does. WAVE always works, and\n"
-          "; a build made with FFmpeg reads anything else FFmpeg can.\n"
-          ";\n"
-          "; Files are matched to tracks by name: music_00_hb_44.flac needs nothing\n"
-          "; else. Files named after the music instead -- as a soundtrack release\n"
-          "; is -- need a soundtrack.txt beside them, one 'asset name = file' per\n"
-          "; line.\n"
-          ";\n"
-          "; Looping tracks loop where the game's version ended, not where the file\n"
-          "; does, so a release with a full ending still loops like the console\n"
-          "; did." },
+          "Folder of your own music to play instead of the game's; empty uses the\n"
+          "; game's. Files are matched to tracks by asset name, or by a\n"
+          "; soundtrack.txt beside them holding one 'asset name = file' per line." },
         { "text", "platform_wording", "on",
-          "The game's text comes from the Xbox release and mentions Xbox hardware:\n"
-          "; the pause menu offers to reboot to the dashboard, autosaves warn about\n"
-          "; turning off your console, and saves are called memory card slots --\n"
-          "; here they are a folder. On, that text is rewritten as it loads; the\n"
-          "; files on disk are never touched. Off leaves it as the disc has it." },
+          "Rewrite the Xbox wording in the game's text -- dashboard, memory card\n"
+          "; slots -- as it loads. The files on disk are never touched." },
     };
 
     const size_t kSettingCount = sizeof(kSettings) / sizeof(kSettings[0]);
@@ -393,15 +216,13 @@ namespace
     void writeBindingSection(FILE* f, const char* section, const char* inputs, const char* extra)
     {
         fprintf(f, "\n[%s]\n", section);
-        fprintf(f, "; What presses each button the game reads. Left of the '=' is the\n");
-        fprintf(f, "; button, named as the console named it, and the trailing comment\n");
-        fprintf(f, "; says what it does. Right of it is what presses it:\n");
+        fprintf(f, "; What presses each game button. Left of the '=' is the button, right\n");
+        fprintf(f, "; of it is what presses it:\n");
         fprintf(f, ";\n");
         fprintf(f, ";   %s\n", inputs);
         fprintf(f, ";\n");
-        fprintf(f, "; ',' between two of them means either one on its own. '+' means\n");
-        fprintf(f, "; both at once, and '!' means NOT held. Nothing after the '=' leaves\n");
-        fprintf(f, "; the button unpressable, which is how to turn one off.\n");
+        fprintf(f, "; ',' is either one, '+' is both at once, '!' is NOT held, and nothing\n");
+        fprintf(f, "; at all leaves the button unpressable.\n");
         fprintf(f, ";\n");
         fprintf(f, "%s", extra);
 
@@ -418,9 +239,8 @@ namespace
 
         if (pad)
         {
-            fprintf(f, "; These are what input.preset gives you, listed so you can see\n");
-            fprintf(f, "; them. Uncomment a line to take that one button over; the rest\n");
-            fprintf(f, "; keep following the preset.\n");
+            fprintf(f, "; These are what input.preset gives you. Uncomment a line to take that\n");
+            fprintf(f, "; one button over; the rest keep following the preset.\n");
             fprintf(f, ";\n");
         }
 
@@ -445,15 +265,9 @@ namespace
     {
         writeBindingSection(
             f, kPadSection, "a b x y lb rb lt rt ls rs back start dpup dpdown dpleft dpright",
-            "; The '!' is there for the gamecube preset, where l1 and l2 share one\n"
-            "; trigger: that console had three shoulders where the game wants\n"
-            "; four, so it read Z as a modifier, and rb stands in for Z.\n"
-            ";\n"
-            "; ls and rs start out bound to nothing -- no console this came off\n"
-            "; had stick clicks -- so they are free for anything you want on them.\n"
-            ";\n"
-            "; The sticks are not remappable: the left one moves and the right one\n"
-            "; turns the camera, as they did on the console.\n"
+            "; The '!' is for the gamecube preset, where l1 and l2 share a trigger and\n"
+            "; rb stands in for Z. ls and rs start bound to nothing. The sticks are\n"
+            "; not remappable: left moves, right turns the camera.\n"
             ";\n");
 
         writeBindingSection(
@@ -461,9 +275,8 @@ namespace
             "any key by name -- letters, digits, space, enter, tab, escape,\n"
             ";   backspace, shift, ctrl, alt, up, down, left, right, f1 to f12,\n"
             ";   and the numeric keypad as numpad0 to numpad9",
-            "; The keyboard is only read while nothing is on the controller chosen\n"
-            "; above. WASD moves and IJKL turns the camera; those are not\n"
-            "; remappable, for the same reason the sticks are not.\n"
+            "; Only read while nothing is on the controller. WASD moves and IJKL turns\n"
+            "; the camera; those are not remappable.\n"
             ";\n");
     }
 
@@ -684,12 +497,8 @@ namespace
 
         fprintf(f, "\n");
         fprintf(f, "; ------------------------------------------------------------------\n");
-        fprintf(f, "; Settings added by a newer build of the port.\n");
-        fprintf(f, ";\n");
-        fprintf(f, "; Every value below is its default, so this block changes nothing\n");
-        fprintf(f, "; about what the game was already doing. The [section] headers repeat\n");
-        fprintf(f, "; the ones above on purpose -- the settings are new, the sections they\n");
-        fprintf(f, "; belong to are not.\n");
+        fprintf(f, "; Settings added by a newer build of the port. Every value below is\n");
+        fprintf(f, "; its default, so this block changes nothing.\n");
 
         const char* section = NULL;
         for (size_t i = 0; i < kSettingCount; i++)
@@ -787,10 +596,7 @@ bool iConfigWriteDefaults(const char* path)
     }
 
     fprintf(f, "; Battle for Bikini Bottom, PC port -- settings.\n");
-    fprintf(f, ";\n");
-    fprintf(f, "; Written because there was no config.ini. Every value here is a\n");
-    fprintf(f, "; default, so deleting this file changes nothing.\n");
-    fprintf(f, ";\n");
+    fprintf(f, "; Every value here is the default, so deleting this file changes nothing.\n");
     fprintf(f, "; Booleans take on/off, true/false, yes/no or 1/0.\n");
 
     const char* section = NULL;
@@ -800,38 +606,6 @@ bool iConfigWriteDefaults(const char* path)
         {
             section = kSettings[i].section;
             fprintf(f, "\n[%s]\n", section);
-
-            // The one thing the per-setting comments cannot say, said once
-            // where the section is introduced.
-            if (strcmp(section, "assets") == 0)
-            {
-                fprintf(f, "; Where the game's files are. This is the one setting the port\n");
-                fprintf(f, "; cannot guess and cannot run without.\n");
-            }
-            else if (strcmp(section, "video") == 0)
-            {
-                fprintf(f, "; The size the game renders at, and how that picture is shown.\n");
-                fprintf(f, "; The two are independent: the rendered picture is scaled onto\n");
-                fprintf(f, "; whatever it lands on -- a window, a borderless window covering\n");
-                fprintf(f, "; a monitor, or the display itself.\n");
-                fprintf(f, ";\n");
-                fprintf(f, "; Any resolution works, and anything not 4:3 is widescreen.\n");
-            }
-            else if (strcmp(section, "xbox") == 0)
-            {
-                fprintf(f, "; Things the Xbox release did that the GameCube release did not.\n");
-                fprintf(f, "; Turning one off gives the GameCube behaviour instead.\n");
-            }
-            else if (strcmp(section, "input") == 0)
-            {
-                fprintf(f, "; Which controller the game reads. What each of its buttons does\n");
-                fprintf(f, "; is further down, in [pad] and [keyboard].\n");
-            }
-            else if (strcmp(section, "text") == 0)
-            {
-                fprintf(f, "; The game's own text, which is the console release's. Nothing here\n");
-                fprintf(f, "; edits the files on disk -- the text is rewritten as it loads.\n");
-            }
         }
 
         fprintf(f, "\n; %s\n", kSettings[i].comment);
