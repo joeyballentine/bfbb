@@ -369,6 +369,31 @@ void iWindowPump()
             sShouldClose = 1;
             break;
 
+        // **Tell Windows the window has been painted, because D3D9 will not.**
+        //
+        // Present writes to the window through the display driver and never
+        // touches GDI, so the update region stays dirty and Windows posts
+        // WM_PAINT again on the next pump. SDL turns each of those into an
+        // exposed event, and at 3840x2160 the round trip cost 15 ms -- a whole
+        // frame spent in SDL_PumpEvents, every frame, which made the boot
+        // movies crawl and read as a hang. Validating here ends it: measured
+        // over the same run, the pump went from 15.7 ms to 2.9 us and the frame
+        // rate from about 34 to about 450.
+        //
+        // Not needed under GL3, where SDL_GL_SwapWindow paints through the GL
+        // driver and validates the window as a side effect.
+        case SDL_EVENT_WINDOW_EXPOSED:
+#if defined(_WIN32) && !defined(RW_GL3)
+        {
+            HWND hwnd = (HWND)iWindowNativeHandle();
+            if (hwnd != NULL)
+            {
+                ValidateRect(hwnd, NULL);
+            }
+        }
+#endif
+            break;
+
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
             sWidth = event.window.data1;
             sHeight = event.window.data2;
