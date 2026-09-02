@@ -36,6 +36,10 @@
 #include <windows.h>
 #include <d3d9.h>
 #endif
+#ifdef RW_D3D11
+#include <windows.h>
+#include <d3d11.h>
+#endif
 
 #include "rw.h"
 
@@ -373,6 +377,49 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
         return FALSE;
     }
 
+#elif defined(RW_D3D11)
+
+    rw::EngineOpenParams params;
+    params.window = (HWND)iWindowNativeHandle();
+
+    if (params.window == NULL)
+    {
+        return FALSE;
+    }
+
+    // The same probe the D3D9 arm above does and for the same reason: librw
+    // discards what DEVICEOPEN said, so a machine with no usable adapter faults
+    // later with nothing on screen to explain it. D3D11 asks in one call --
+    // creating a device with no swap chain costs a device and tells you
+    // everything the caps query would.
+    {
+        ID3D11Device* probe = NULL;
+        HRESULT hr = D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, 0, NULL, 0,
+                                       D3D11_SDK_VERSION, &probe, NULL, NULL);
+
+        if (FAILED(hr))
+        {
+            printf("bfbb: no adapter on this machine reports Direct3D 11 hardware "
+                   "support (hr=0x%08lx)\n",
+                   (unsigned long)hr);
+            fflush(stdout);
+            return FALSE;
+        }
+
+        probe->Release();
+    }
+
+    rw::d3d::setVirtualScreenSamples(iScreenMultiSample());
+    rw::d3d::setAlphaToCoverageEnabled(iScreenAlphaToCoverage());
+    rw::d3d::setPerPixelLightingEnabled(iScreenPerPixelLighting());
+    rw::d3d::setVirtualScreen(iScreenWidth(), iScreenHeight());
+    if (!rw::Engine::open(&params))
+    {
+        printf("bfbb: librw refused to open the D3D11 device on this window\n");
+        fflush(stdout);
+        return FALSE;
+    }
+
 #elif defined(RW_GL3)
 
     // **librw makes the window here; the port only says what to make.**
@@ -466,7 +513,7 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     return TRUE;
 }
 
-#if defined(RW_D3D9) || defined(RW_GL3)
+#if defined(RW_D3D9) || defined(RW_D3D11) || defined(RW_GL3)
 
 // Pick the display mode for exclusive fullscreen, if that is what was asked for.
 //
@@ -553,7 +600,7 @@ RwBool RwEngineStart(void)
         return FALSE;
     }
 
-#if defined(RW_D3D9) || defined(RW_GL3)
+#if defined(RW_D3D9) || defined(RW_D3D11) || defined(RW_GL3)
     SelectFullscreenVideoMode();
 #endif
 
@@ -614,12 +661,24 @@ RwBool RwEngineStart(void)
 
 #endif
 
-#if defined(RW_D3D9) || defined(RW_GL3)
+#ifdef RW_D3D11
+    // Same discarded result, same question. See the D3D9 arm above.
+    if (rw::d3d::d3d11device == NULL)
+    {
+        printf("bfbb: Direct3D 11 reported a hardware adapter but the device did "
+               "not come up\n");
+        fflush(stdout);
+        return FALSE;
+    }
+
+#endif
+
+#if defined(RW_D3D9) || defined(RW_D3D11) || defined(RW_GL3)
     // Said out loud because both can be refused by the card rather than by the
     // setting. Only now: the surfaces are made when the device comes up, and
     // until then there is nothing to have granted anything.
     {
-#ifdef RW_D3D9
+#if defined(RW_D3D9) || defined(RW_D3D11)
         S32 granted = (S32)rw::d3d::getVirtualScreenSamples();
         S32 perPixel = rw::d3d::getPerPixelLighting();
 #else
@@ -793,7 +852,7 @@ RwVideoMode* RwEngineGetVideoModeInfo(RwVideoMode* modeinfo, RwInt32 modeIndex)
         RwInt32 screenWidth = 0;
         RwInt32 screenHeight = 0;
 
-#if defined(RW_D3D9)
+#if defined(RW_D3D9) || defined(RW_D3D11)
         rw::d3d::getVirtualScreen(&screenWidth, &screenHeight);
 #elif defined(RW_GL3)
         // GL3 has no virtual screen and does not need one -- see the note in

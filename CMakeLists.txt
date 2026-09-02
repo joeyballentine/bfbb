@@ -105,6 +105,8 @@ add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 #          keeping this working is what lets the RenderWare layer be tested on
 #          a machine with no display at all.
 #   D3D9   Direct3D 9, on a Win32 window the port creates itself.
+#   D3D11  Direct3D 11, on the same window. Under construction -- it opens a
+#          device and clears, and draws nothing yet.
 #   GL3    OpenGL 3.3 (falling back through 2.1, GLES 3.1 and GLES 2.0), on an
 #          SDL3 window librw creates. Portable, and the only backend that can
 #          ever run off Windows.
@@ -119,8 +121,8 @@ add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 # rwplcore.h declares RwIm2DVertex per backend, and rw/layout_im2d.cpp asserts
 # it against the backend's own struct -- which is what stops a mismatched vertex
 # reaching a vertex declaration built from offsetof.
-set(BFBB_RENDER_BACKEND "D3D9" CACHE STRING "Render backend: D3D9, GL3 or NULL")
-set_property(CACHE BFBB_RENDER_BACKEND PROPERTY STRINGS D3D9 GL3 NULL)
+set(BFBB_RENDER_BACKEND "D3D9" CACHE STRING "Render backend: D3D9, D3D11, GL3 or NULL")
+set_property(CACHE BFBB_RENDER_BACKEND PROPERTY STRINGS D3D9 D3D11 GL3 NULL)
 
 # Set by any section that needs SDL built. Both the input backend and the GL3
 # window backend can ask for it, independently, and add_subdirectory may only

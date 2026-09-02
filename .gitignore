@@ -65,12 +65,14 @@ build-pc/
 #                   read state back out of the device and the null one answers
 #                   0 to everything.
 #   build-pc-gl3/   -DBFBB_RENDER_BACKEND=GL3, on SDL3.
+#   build-pc-d3d11/ -DBFBB_RENDER_BACKEND=D3D11.
 #   build-ci/       what .github/workflows/pc-port.yml configures, named here so
 #                   that reproducing a CI failure locally does not leave a
 #                   directory the tree would otherwise pick up.
 build-pc-null/
 build-pc-gl3/
 build-pc-d3d9/
+build-pc-d3d11/
 build-ci/
 #   build-pc-rel/   a Release configuration, which is a different cache again.
 build-pc-rel/
