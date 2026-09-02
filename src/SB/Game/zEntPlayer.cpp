@@ -12326,8 +12326,11 @@ static void zEntPlayerDriveUpdate(xEnt* ent, xScene* sc, F32 dt)
             xEntDriveDismount(drv, 0.3f);
         }
 
+        // plat came out of xCollis::optr, which is an xEnt*, and only
+        // CodeWarrior's layout lets that be an NPC pointer unchanged. The hop
+        // through it is free there. See xEnt.h.
         if ((plat->baseType == eBaseTypeNPC &&
-             (((xNPCBasic*)plat)->SelfType() & 0xffffff00) == 'NTT\0') ||
+             (((xNPCBasic*)(xEnt*)plat)->SelfType() & 0xffffff00) == 'NTT\0') ||
             plat->baseType == eBaseTypeBoulder)
         {
             xEntDriveMount(drv, (xEnt*)plat, 0.15f, coll);
