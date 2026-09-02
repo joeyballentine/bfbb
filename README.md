@@ -12,12 +12,12 @@
 [![Overall Functions]][progress]
 
 [progress]: docs/DUPLOTRON.md
-[Game Code]: https://img.shields.io/badge/Game%20Code-81.51%25-limegreen
-[Game Fuzzy]: https://img.shields.io/badge/Game%20Close%20Match-99.31%25-yellowgreen
-[Game Functions]: https://img.shields.io/badge/Game%20Functions-7285%20%2F%207673-lavender
-[Overall]: https://img.shields.io/badge/Overall-65.20%25-darkgreen
-[Overall Fuzzy]: https://img.shields.io/badge/Overall%20Close%20Match-79.15%25-olive
-[Overall Functions]: https://img.shields.io/badge/Overall%20Functions-8455%20%2F%2010147-slateblue
+[Game Code]: https://img.shields.io/badge/Game%20Code-81.97%25-limegreen
+[Game Fuzzy]: https://img.shields.io/badge/Game%20Close%20Match-99.35%25-yellowgreen
+[Game Functions]: https://img.shields.io/badge/Game%20Functions-7308%20%2F%207673-lavender
+[Overall]: https://img.shields.io/badge/Overall-65.50%25-darkgreen
+[Overall Fuzzy]: https://img.shields.io/badge/Overall%20Close%20Match-79.18%25-olive
+[Overall Functions]: https://img.shields.io/badge/Overall%20Functions-8478%20%2F%2010147-slateblue
 [Build Status]: https://github.com/joeyballentine/bfbb/actions/workflows/duplotron.yml/badge.svg?branch=duplotron
 [actions]: https://github.com/joeyballentine/bfbb/actions/workflows/duplotron.yml
 [Discord Badge]: https://img.shields.io/discord/829152115322257436?color=%237289DA&logo=discord&logoColor=%23FFFFFF
