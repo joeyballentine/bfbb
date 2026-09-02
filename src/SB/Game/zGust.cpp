@@ -148,7 +148,7 @@ void zGustUpdateEnt(xEnt* ent, xScene* sc, float dt, void* gdata)
             {
                 for (U32 j = 0; j < 4; j++)
                 {
-                    if (data->g[0] == &gusts[i] && data->lerp[0] == 1.0f)
+                    if (data->g[j] == &gusts[i] && data->lerp[j] == 1.0f)
                     {
                         data->lerp[j] = -1.0f;
                         break;
