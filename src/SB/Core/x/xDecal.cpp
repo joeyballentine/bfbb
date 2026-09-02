@@ -282,10 +282,10 @@ namespace
 
 void xDecalEmitter::update_frac(xDecalEmitter::unit_data& unit)
 {
-    U32 i;
-    for (i = this->curve_index; i < this->curve_size - 2; i++)
+    while (this->curve_index < this->curve_size - 2)
     {
-        if (unit.age >= this->curve[i].time && unit.age <= this->curve[i + 1].time)
+        if (unit.age >= this->curve[this->curve_index].time &&
+            unit.age <= this->curve[this->curve_index + 1].time)
         {
             break;
         }
@@ -293,16 +293,18 @@ void xDecalEmitter::update_frac(xDecalEmitter::unit_data& unit)
         this->curve_index++;
     }
 
-    unit.curve_index = i;
+    unit.curve_index = this->curve_index;
 
-    F32 curve_time = this->curve[this->curve_index].time;
-    unit.frac = (1.0f / (this->curve[this->curve_index + 1].time - curve_time)) *
-               (unit.age - curve_time);
+    curve_node& node0 = this->curve[this->curve_index];
+    curve_node& node1 = this->curve[this->curve_index + 1];
+    unit.frac = (1.0f / (node1.time - node0.time)) * (unit.age - node0.time);
 }
 
 void xDecalEmitter::get_render_data(const xDecalEmitter::unit_data& unit, F32 scale, iColor_tag& color, xMat4x3& mat, xVec2& uv0, xVec2& uv1)
 {
-    lerp(color, unit.frac, this->curve[unit.curve_index].color, this->curve[unit.curve_index + 1].color);
+    const curve_node& node0 = this->curve[unit.curve_index];
+    const curve_node& node1 = this->curve[unit.curve_index + 1];
+    lerp(color, unit.frac, node0.color, node1.color);
 
     if (this->cfg.flags & 0x2)
     {
@@ -351,11 +353,7 @@ S32 xDecalEmitter::select_texture_unit()
     case TM_RANDOM:
         return (xrand() / 8192) % this->texture.units;
     case TM_CYCLE:
-    {
-        S32 id = this->texture.prev;
-        this->texture.prev = this->texture.prev + 1;
-        return id % this->texture.units;
-    }
+        return ++this->texture.prev % this->texture.units;
     case TM_DEFAULT:
     default:
         return 0;

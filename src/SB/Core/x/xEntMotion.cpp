@@ -1296,8 +1296,6 @@ static void xEntMotionDebugDraw(const xEntMotion* xem)
 
 void xEntMotionDebugDraw(const xEntMotion*);
 
-_tagxPad* gDebugPad;
-
 void xQuatCopy(xQuat* a, const xQuat* b)
 {
     a->s = b->s;

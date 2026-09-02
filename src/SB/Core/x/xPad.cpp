@@ -15,6 +15,7 @@ _tagxPad mPad[4];
 // The retail object carries mRumbleList as a file-local .bss symbol and this
 // is the only translation unit that touches it, so it is static here.
 static _tagxRumble mRumbleList[32];
+_tagxPad* gDebugPad;
 _tagxPad* gPlayerPad;
 
 // NOTE: xPad.h declares this as xPadAnalogIsDigital(F32, F32), which does not

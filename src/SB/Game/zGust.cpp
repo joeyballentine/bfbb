@@ -148,7 +148,7 @@ void zGustUpdateEnt(xEnt* ent, xScene* sc, float dt, void* gdata)
             {
                 for (U32 j = 0; j < 4; j++)
                 {
-                    if (data->g[0] == &gusts[i] && data->lerp[0] == 1.0f)
+                    if (data->g[j] == &gusts[i] && data->lerp[j] == 1.0f)
                     {
                         data->lerp[j] = -1.0f;
                         break;
@@ -168,7 +168,7 @@ void zGustUpdateEnt(xEnt* ent, xScene* sc, float dt, void* gdata)
                 float lerpinc = g->asset->fade;
                 if (dt >= lerpinc)
                 {
-                    if (!(data->lerp[i] < 1.0f))
+                    if (!(data->lerp[i] < 0.0f))
                     {
                         data->lerp[i] = 1.0f;
                         continue;
@@ -311,7 +311,8 @@ static void UpdateGustFX(zGust* g, float seconds)
             info.vel.x = 0.0f;
             info.vel.y = 5.0f;
             info.vel.z = 0.0f;
-            info.life.val[0] = (box->box.upper.y - box->box.lower.y) / 5.0f * 2.0f;
+            info.life.val[0] = (box->box.upper.y - box->box.lower.y) / 5.0f;
+            info.life.val[0] *= 2.0f;
         }
         else
         {

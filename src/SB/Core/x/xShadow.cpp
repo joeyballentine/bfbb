@@ -180,7 +180,7 @@ void xShadowRenderWorld(xVec3* center, F32 radius, F32 max_dist)
     xCollis envcoll[1];
     xRay3 R[1];
     RpIntersection shadowZone;
-    F32 sf[3][2] = { { 0.0f, 0.0f }, { 0.0f, 0.5f }, { 0.0f, -0.5f } };
+    const F32 sf[3][2] = { { 0.0f, 0.0f }, { 0.0f, 0.5f }, { 0.0f, -0.5f } };
     xQCData q;
     xSphere zone;
     xVec3 ent_pos;
@@ -1059,7 +1059,7 @@ static S32 ShadowRender(RwCamera* shadowCamera, RwRaster* shadowRast, RpIntersec
 
     param.fade = (fadeDist > 0.0f) ? 1 : 0;
 
-    param.shadowValue = (S32)(255.0f * shadowFactor);
+    param.shadowValue = (U8)(255.0f * shadowFactor);
     param.shadowWord = (param.shadowValue << 24) | (param.shadowValue << 16) |
                        (param.shadowValue << 8) | param.shadowValue;
 
@@ -1736,7 +1736,7 @@ void xShadowVertical_DrawCache(xShadowCache* cache, F32 shadowFactor, F32 fadeDi
 
     param.fade = (fadeDist > 0.0f) ? 1 : 0;
 
-    param.shadowValue = (S32)(255.0f * shadowFactor);
+    param.shadowValue = (U8)(255.0f * shadowFactor);
     param.shadowWord = (param.shadowValue << 24) | (param.shadowValue << 16) |
                        (param.shadowValue << 8) | param.shadowValue;
 

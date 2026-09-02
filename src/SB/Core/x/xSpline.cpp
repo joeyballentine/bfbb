@@ -139,40 +139,37 @@ void Interpolate_Bspline(xVec3* data, xVec3* control, F32* knots, U32 nodata)
 F32 ArcLength3(xCoef3* coef, F64 ustart, F64 uend)
 {
     U32 i;
-    F64 A;
-    F64 B;
-    F64 C;
-    F64 D;
     F64 E;
+    F64 D;
+    F64 C;
+    F64 B;
+    F64 A;
     F64 h;
     F64 sum;
     F64 u;
 
-    F64 temp_y1;
-    F64 temp_z1;
-    F64 u_eval;
+    F64 y0 = coef->y.a[0];
+    F64 x0 = coef->x.a[0];
+    F64 z0 = coef->z.a[0];
+    F64 x1 = coef->x.a[1];
+    F64 y1 = coef->y.a[1];
+    F64 z1 = coef->z.a[1];
+    F64 y2 = coef->y.a[2];
+    F64 x2 = coef->x.a[2];
+    F64 z2 = coef->z.a[2];
 
-    A = coef->x.a[0];
-    C = coef->y.a[0];
-    h = coef->z.a[0];
+    F64 xx = x0 * x0;
+    F64 yy = y0 * y0;
+    F64 zz = z0 * z0;
 
-    B = coef->x.a[1];
-    temp_y1 = coef->y.a[1];
-    temp_z1 = coef->z.a[1];
-
-    sum = coef->x.a[2];
-    u = coef->y.a[2];
-    u_eval = coef->z.a[2];
-
-    E = 9.0 * (A * A + C * C + h * h);
-    D = 12.0 * (A * B + C * temp_y1 + h * temp_z1);
-    C = 6.0 * (A * sum + C * u + h * u_eval) +
-        4.0 * (B * B + temp_y1 * temp_y1 + temp_z1 * temp_z1);
-    A = sum * sum + u * u + u_eval * u_eval;
+    E = 9.0 * (xx + yy + zz);
+    D = 12.0 * (x0 * x1 + y0 * y1 + z0 * z1);
+    C = 6.0 * (x0 * x2 + y0 * y2 + z0 * z2) + 4.0 * (x1 * x1 + y1 * y1 + z1 * z1);
+    B = 4.0 * (x1 * x2 + y1 * y2 + z1 * z2);
+    A = x2 * x2 + y2 * y2 + z2 * z2;
     h = (uend - ustart) / 50.0;
-    B = 4.0 * (B * sum + temp_y1 * u + temp_z1 * u_eval);
-    u = ustart + h;
     sum = 0.0;
+    u = ustart + h;
 
     for (i = 2; i <= 50; i += 1)
     {

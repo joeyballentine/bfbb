@@ -847,19 +847,20 @@ namespace
                       zNPCPrawn::range_type* pattern, S32 count)
     {
         char name[128];
+        zNPCPrawn::range_type* p = pattern;
         S32 i;
 
-        for (i = 0; i < count; pattern++, i++)
+        for (i = 0; i < count; p++, i++)
         {
             sprintf(name, fmt, i);
             strcat(name, ".min");
-            pattern->min = zParamGetInt(ap, apsize, name, pattern->min);
+            p->min = zParamGetInt(ap, apsize, name, p->min);
 
             sprintf(name, fmt, i);
             strcat(name, ".max");
-            pattern->max = zParamGetInt(ap, apsize, name, pattern->max);
+            p->max = zParamGetInt(ap, apsize, name, p->max);
 
-            if (pattern->min < 0 || pattern->max < 0)
+            if (p->min < 0 || p->max < 0)
             {
                 break;
             }
@@ -2077,8 +2078,10 @@ S32 zNPCGoalPrawnBeam::update_hold(F32 dt)
 
 S32 zNPCGoalPrawnBeam::update_sweep(F32 dt)
 {
-    RwMatrix* mat = globals.player.ent.model->Mat;
+    RwMatrix* mat;
     zNPCPrawn& prawn = *((zNPCPrawn*)this->psyche->clt_owner);
+
+    mat = globals.player.ent.model->Mat;
 
     xVec3& center = prawn.get_center();
     xVec3& facing = prawn.get_facing();
@@ -2119,8 +2122,10 @@ S32 zNPCGoalPrawnBeam::update_stop(F32 dt)
 
 void zNPCGoalPrawnBeam::init_look_dir()
 {
-    RwMatrix* mat = globals.player.ent.model->Mat;
+    RwMatrix* mat;
     zNPCPrawn& prawn = *((zNPCPrawn*)this->psyche->clt_owner);
+
+    mat = globals.player.ent.model->Mat;
 
     xVec3& center = prawn.get_center();
 
