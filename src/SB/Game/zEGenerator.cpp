@@ -155,13 +155,10 @@ void zEGenerator_Render(zEGenerator* egen)
     xEntRender((xEnt*)egen);
 }
 
-// Nonmatch: the literal loads for the two zLightningAdd blocks are hoisted above
-// the stores into `add` instead of being interleaved with them. The target
-// reuses f0 for every literal, forcing lfs/stfs pairs; we allocate f0-f3 and
-// batch the loads. Instruction multiset is identical modulo FPR numbering, the
-// .sdata2 pool is byte-identical to the target's, and GC/2.0p1, 2.0, 2.5 all
-// emit the same code -- this is the memory-disambiguation ("float meme")
-// defect, with an .sdata2 load hoisted over a stack store, not a source shape.
+// Nonmatch: in both zLightningAdd blocks our scheduler places the `add.flags`
+// store nine slots above its program position, past the sibling stores to
+// `add`, and `&egen->src_pos` colours to r6 where the target uses r5, which
+// flips the last two xColorFromRGBA argument setups. Same instruction multiset.
 void zEGenerator_TurnOn(zEGenerator* egen)
 {
     egen->flags |= 1;
