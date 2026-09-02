@@ -817,4 +817,3 @@ inline xPar* xParEmitterEmit(xParEmitter* pe, F32 dt)
 {
     return xParEmitterEmit(pe, dt, dt);
 }
-
