@@ -75,6 +75,9 @@ F32 zFXGooFreezeTimeLeft();
 
 void zFX_SpawnBubbleHit(const xVec3* pos, U32 num);
 void zFX_SpawnBubbleWall();
+#ifdef PLATFORM_PC
+void zFX_SpawnBubbleWipe(F32 up);
+#endif
 void zFX_SpawnBubbleSlam(const xVec3* pos, U32 num, F32 rang, F32 bvel, F32 rvel);
 void zFX_SpawnBubbleBlast(const xVec3* pos, U32 num, F32 rang, F32 bvel, F32 rvel);
 

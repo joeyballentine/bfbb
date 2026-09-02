@@ -368,6 +368,11 @@ void iSnapshotSetObscured(S32 obscured)
     sObscured = obscured ? 1 : 0;
 }
 
+void iSnapshotDiscard()
+{
+    sHaveFrame = 0;
+}
+
 void iSnapshotSetEnabled(S32 enabled)
 {
     sEnabled = enabled ? TRUE : FALSE;

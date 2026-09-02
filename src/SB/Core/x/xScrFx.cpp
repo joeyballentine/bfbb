@@ -11,6 +11,7 @@
 #include "iDistort.h"
 #include "iGlow.h"
 #include "iSnapshot.h"
+#include "iLoadTransition.h"
 #endif
 
 struct _xFadeData
@@ -192,6 +193,28 @@ static U8 InterpCol(F32 t, U8 s, U8 d)
 
 void xScrFxFade(iColor_tag* base, iColor_tag* dest, F32 seconds, void (*callback)(), S32 hold)
 {
+#ifdef PLATFORM_PC
+    // video.load_time = fancy: the wipe is the transition, and fading the level
+    // up from black underneath it means the level being revealed is black --
+    // the one thing the reveal must not show.
+    //
+    // Refused here rather than skipped where it is asked for, because two
+    // separate places ask on the way into a level: zSceneSetup, and the
+    // player's own reset in zEntPlayer. Only a fade from opaque to clear is
+    // refused, and only while a wipe is up, so this cannot swallow anything
+    // else -- a fade OUT is how a level ends and the wipe is long over by then.
+    //
+    // Stopped rather than ignored. The fade the outgoing level ended on is
+    // held at black (hold = 1, so it sits on its destination rather than
+    // deactivating), and these are the calls that would have cleared it;
+    // returning without stopping it would leave the screen black for good.
+    if (iLoadTransitionWiping() && base->a == 0xff && dest->a == 0)
+    {
+        xScrFxStopFade();
+        return;
+    }
+#endif
+
     mFade.active = 1;
     mFade.src = *base;
     mFade.dest = *dest;

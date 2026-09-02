@@ -93,8 +93,9 @@ namespace
         { "video", "per_pixel_lighting", "on",
           "Light characters once per pixel instead of once per vertex." },
         { "video", "load_time", "1",
-          "Seconds to hold the loading screen, so its bubbles have time to play. A\n"
-          "; minimum, not a delay; off loads as fast as the machine can." },
+          "What to do about loads too fast to see: seconds to hold the loading\n"
+          "; screen for, fancy to wipe the still off the loaded level instead,\n"
+          "; or off for neither." },
         { "video", "shadow_resolution", "auto",
           "Character shadow texture size: auto (half the render height, rounded up\n"
           "; to a power of two), or a power of two from 64 to 4096." },

@@ -31,6 +31,9 @@
 
 void zParPTankSpawnBubbles(xVec3* pos, xVec3* vel, U32 count, F32 scale);
 void zParPTankSpawnMenuBubbles(xVec3* pos, xVec3* vel, U32 count);
+#ifdef PLATFORM_PC
+void zParPTankSpawnWipeBubbles(xVec3* pos, xVec3* vel, U32 count, F32 scale);
+#endif
 S32 zParPTankBubblesAvailable();
 
 void xBoundGetSphere(xSphere& o, const xBound& bound);
@@ -1218,6 +1221,77 @@ void zFX_SpawnBubbleWall()
 
     zParPTankSpawnBubbles(pos, vel, 50, 1.0f);
 }
+
+#ifdef PLATFORM_PC
+// The loading wipe's wall, which is not the loading screen's.
+//
+// zFX_SpawnBubbleWall fills the view, because a loading screen wants the whole
+// screen full of bubbles. The wipe wants the opposite: a band that sits under
+// the edge of the still and travels up with it, so the still reads as being
+// carried off by the bubbles rather than sliding out from behind a screenful
+// of them.
+//
+// `up` is where that edge is, 0 at the bottom of the screen and 1 at the top,
+// and negative before it has risen into view -- which is what puts the first
+// bubbles below the still rather than over it.
+void zFX_SpawnBubbleWipe(F32 up)
+{
+    RwCamera* camera = RwCameraGetCurrentCamera();
+    if (camera == NULL)
+    {
+        return;
+    }
+
+    RwMatrix* mat = RwFrameGetMatrix(RwCameraGetFrame(camera));
+    RwV2d* window = RwCameraGetViewWindow(camera);
+
+    // The plane the band is laid out on. The same distance zFX_SpawnBubbleWall
+    // puts its wall at, so the bubbles are the same size on screen.
+    const F32 dist = 1.2f;
+    const F32 halfWidth = dist * window->x;
+    const F32 halfHeight = dist * window->y;
+
+    // How far either side of the edge they go, in screen heights. Mostly
+    // under, with enough over the top for the still to be dissolving into
+    // bubbles rather than ending at a line of them.
+    const F32 kBelow = 0.30f;
+    const F32 kAbove = 0.08f;
+
+    // Enough per call to cover the screen over the third of a second the wall
+    // has to do it in, and short of filling the tank -- a wall dense enough to
+    // hide what is behind it and no denser.
+    const S32 kCount = 20;
+
+    xVec3 pos[kCount];
+    xVec3 vel[kCount];
+
+    for (S32 i = 0; i < kCount; i++)
+    {
+        // Screen position, in the -1..1 the camera's view window is stated in.
+        F32 x = 2.0f * xurand() - 1.0f;
+        F32 y = 2.0f * ((up - kBelow) + (kBelow + kAbove) * xurand()) - 1.0f;
+
+        pos[i].x = mat->pos.x + dist * mat->at.x + x * halfWidth * mat->right.x +
+                   y * halfHeight * mat->up.x;
+        pos[i].y = mat->pos.y + dist * mat->at.y + x * halfWidth * mat->right.y +
+                   y * halfHeight * mat->up.y;
+        pos[i].z = mat->pos.z + dist * mat->at.z + x * halfWidth * mat->right.z +
+                   y * halfHeight * mat->up.z;
+
+        // Their own drift only. Chasing the edge is not their job: it moves a
+        // screen height in half a second and a bubble's buoyancy tops out near
+        // one unit a second, so a bubble told to keep up would be a bullet.
+        // The band stays under the edge because a new one is laid there every
+        // hundred and twentieth of a second; these fall behind and become the
+        // foam it leaves.
+        vel[i].x = bubblewall_velscale.x * (xurand() - 0.5f);
+        vel[i].y = bubblewall_velscale.y * (xurand() - 0.5f);
+        vel[i].z = bubblewall_velscale.z * (xurand() - 0.5f);
+    }
+
+    zParPTankSpawnWipeBubbles(pos, vel, kCount, 1.0f);
+}
+#endif
 
 void zFX_SpawnBubbleSlam(const xVec3* pos, U32 num, F32 rang, F32 bvel, F32 rvel)
 {

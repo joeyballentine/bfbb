@@ -64,6 +64,13 @@ void iSnapshotLatch();
 // Thaw, so the next frames refresh it again; zGameScreenTransitionEnd.
 void iSnapshotRelease();
 
+// Forget the frame being held, so the next iSnapshotBackgroundTexture answers
+// NULL and the caller falls back to the background asset. For the one caller
+// that knows the held frame has gone stale: iLoadTransition, when a scene
+// change interrupts a wipe and no frame has been captured since the one the
+// wipe was drawing.
+void iSnapshotDiscard();
+
 // The latched frame as a texture, or NULL when there is not one to give: the
 // feature is off, no frame has been captured yet (the first boot has none), the
 // backend cannot do it, or a device reset has emptied the surface since it was

@@ -30,6 +30,10 @@ void zParPTankExit();
 void zParPTankRender();
 #ifdef PLATFORM_PC
 void zParPTankSpawnWithoutPlayer(S32 allow);
+void zParPTankSpawnWipeBubbles(xVec3* pos, xVec3* vel, U32 count, F32 scale);
+void zParPTankDeferBubbles(S32 defer);
+void zParPTankBubblesFollowCamera();
+void zParPTankRenderBubbles();
 #endif
 void zParPTankUpdate(F32 dt);
 

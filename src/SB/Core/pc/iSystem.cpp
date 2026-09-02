@@ -13,6 +13,7 @@
 #include "iTextPatch.h"
 #include "iTime.h"
 #include "iLoadScreen.h"
+#include "iLoadTransition.h"
 
 #include <types.h>
 
@@ -543,15 +544,23 @@ static void ApplyConfig()
     iPadGlyphSetChoice(icons);
     iPadGlyphSetEnabled(iHostStrCaseCmp(icons, "off") != 0);
 
-    // How long the loading screen is up for at the least. Pushed like the
-    // rest; the floor is held in zSceneInit, which is game code.
+    // What to do about a load too fast to see. One setting, because the two
+    // answers are alternatives rather than options: hold the console's screen
+    // up for a while, or replace the cut at the end of it with a wipe. Both
+    // pushed like the rest; the halves that act on them are in zSceneInit and
+    // zGameLoop, which are game code.
     const char* loadTime = iConfigGetString("video.load_time", "1");
-    F32 loadSeconds;
-    if (iHostStrCaseCmp(loadTime, "off") == 0 || iHostStrCaseCmp(loadTime, "none") == 0)
+    F32 loadSeconds = 0.0f;
+    S32 fancyLoad = FALSE;
+
+    if (iHostStrCaseCmp(loadTime, "fancy") == 0)
     {
-        loadSeconds = 0.0f;
+        // No hold. The wipe IS the transition, and it cannot start until the
+        // loading screen comes down, so holding as well would be a second of
+        // motionless still before anything happened.
+        fancyLoad = TRUE;
     }
-    else
+    else if (iHostStrCaseCmp(loadTime, "off") != 0 && iHostStrCaseCmp(loadTime, "none") != 0)
     {
         loadSeconds = iConfigGetFloat("video.load_time", 1.0f);
         if (loadSeconds < 0.0f)
@@ -562,7 +571,9 @@ static void ApplyConfig()
             loadSeconds = 1.0f;
         }
     }
+
     iLoadScreenSetMinTime(loadSeconds);
+    iLoadTransitionSetFancy(fancyLoad);
 
     S32 glow = iConfigGetBool("xbox.glow", TRUE);
     S32 distortion = iConfigGetBool("xbox.distortion", TRUE);
@@ -595,7 +606,11 @@ static void ApplyConfig()
            drawDistance ? "unlimited" : "console", shadows, glow ? "on" : "off",
            distortion ? "on" : "off", snapshot ? "on" : "off", reverb ? "on" : "off");
     printf("bfbb: text rewritten for a PC: %s\n", wording ? "on" : "off");
-    if (loadSeconds > 0.0f)
+    if (fancyLoad)
+    {
+        printf("bfbb: loading screen wipes off the level\n");
+    }
+    else if (loadSeconds > 0.0f)
     {
         printf("bfbb: loading screen up for at least %.2f s\n", (double)loadSeconds);
     }

@@ -48,6 +48,18 @@ static F32 sSparkleAnimTime;
 static BubbleData* sBubbleData;
 static BubbleData* sMenuBubbleData;
 
+#ifdef PLATFORM_PC
+// The loading wipe's own tank, and whether this frame's caller is drawing it
+// itself. It is a tank of its own rather than a share of the bubble tank
+// because the wipe draws its bubbles OVER the still, and the still covers the
+// level: anything in the tank it borrowed came over the still too, so a level
+// with ambient bubbles in it showed them through the picture of the level you
+// had just left. See zParPTankRenderBubbles.
+static zParPTank* sWipePTank;
+static BubbleData* sWipeBubbleData;
+static S32 sDeferBubbles;
+#endif
+
 namespace
 {
     // total size: 0x30
@@ -264,6 +276,46 @@ static void zParPTankBubbleCreate(zParPTank* zp, U32 max_particles, zParPTankUpd
     sBubbleData = (BubbleData*)xMemPushTemp(zp->max_particles * sizeof(BubbleData));
 }
 
+#ifdef PLATFORM_PC
+// zParPTankBubbleCreate with its own particle data. Everything else about the
+// tank is the same -- same texture, same additive blend, same update -- because
+// they are the same bubbles; only who draws them, and when, differs.
+static void zParPTankWipeBubbleCreate(zParPTank* zp, U32 max_particles,
+                                      zParPTankUpdateCallback update)
+{
+    zp->num_particles = 0;
+    zp->max_particles = max_particles;
+    zp->flags = 0;
+    zp->update = update;
+
+    RwTexture* tex = (RwTexture*)xSTFindAsset(xStrHash("partex0"), NULL);
+    if (!tex)
+    {
+        return;
+    }
+
+    RwTextureSetFilterMode(tex, rwFILTERLINEAR);
+
+    zp->ptank = RpPTankAtomicCreate(zp->max_particles,
+                                    rpPTANKDFLAGPOSITION | rpPTANKDFLAGCOLOR | rpPTANKDFLAGSIZE |
+                                        rpPTANKDFLAGVTX2TEXCOORDS | rpPTANKDFLAGARRAY,
+                                    0);
+
+    RwFrame* frame = RwFrameCreate();
+    RwMatrixSetIdentity(&frame->modelling);
+    RpAtomicSetFrame(zp->ptank, frame);
+
+    RpMaterialSetTexture(zp->ptank->geometry->matList.materials[0], tex);
+
+    RPATOMICPTANKPLUGINDATA(zp->ptank)->publicData.srcBlend = 5;
+    RPATOMICPTANKPLUGINDATA(zp->ptank)->publicData.dstBlend = 2;
+    RPATOMICPTANKPLUGINDATA(zp->ptank)->instFlags |= rpPTANKIFLAGALPHABLENDING;
+    RPATOMICPTANKPLUGINDATA(zp->ptank)->publicData.vertexAlphaBlend = 1;
+
+    sWipeBubbleData = (BubbleData*)xMemPushTemp(zp->max_particles * sizeof(BubbleData));
+}
+#endif
+
 static void zParPTankMenuBubbleCreate(zParPTank* zp, U32 max_particles,
                                       zParPTankUpdateCallback update)
 {
@@ -327,7 +379,13 @@ static void zParPTankBubbleUpdate(zParPTank* zp, float dt)
     F32 pop_keep = 1.0f - xFrameEmitChance(0.04f, dt);
 #endif
 
+#ifdef PLATFORM_PC
+    BubbleData* base_xp = zp == sBubblePTank   ? sBubbleData
+                          : zp == sWipePTank ? sWipeBubbleData
+                                             : sMenuBubbleData;
+#else
     BubbleData* base_xp = zp == sBubblePTank ? sBubbleData : sMenuBubbleData;
+#endif
     BubbleData* xp = base_xp;
 
     for (S32 i = 0; i < zp->num_particles; i++)
@@ -454,7 +512,13 @@ static void zParPTankSpawnBubbles(xVec3* pos, xVec3* vel, U32 count, float scale
         return;
     }
 
+#ifdef PLATFORM_PC
+    BubbleData* base_xp = zp == sBubblePTank   ? sBubbleData
+                          : zp == sWipePTank ? sWipeBubbleData
+                                             : sMenuBubbleData;
+#else
     BubbleData* base_xp = zp == sBubblePTank ? sBubbleData : sMenuBubbleData;
+#endif
 
     RpPTankLockStruct plock;
     RpPTankLockStruct clock;
@@ -542,6 +606,13 @@ S32 zParPTankBubblesAvailable()
 {
     return sBubblePTank->max_particles - sBubblePTank->num_particles;
 }
+
+#ifdef PLATFORM_PC
+void zParPTankSpawnWipeBubbles(xVec3* pos, xVec3* vel, U32 count, F32 scale)
+{
+    zParPTankSpawnBubbles(pos, vel, count, scale, sWipePTank);
+}
+#endif
 
 void zParPTankSpawnMenuBubbles(xVec3* pos, xVec3* vel, U32 count)
 {
@@ -795,6 +866,12 @@ void zParPTankInit()
     sBubblePTank = zParPTankAdd();
     zParPTankBubbleCreate(sBubblePTank, 0x300, zParPTankBubbleUpdate);
 
+#ifdef PLATFORM_PC
+    // The loading wipe's. Same particles, its own tank; see sWipePTank.
+    sWipePTank = zParPTankAdd();
+    zParPTankWipeBubbleCreate(sWipePTank, 0x400, zParPTankBubbleUpdate);
+#endif
+
     sSteamPTank = zParPTankAdd();
     zParPTankSteamCreate(sSteamPTank, 0x80, zParPTankSteamUpdate);
 }
@@ -838,6 +915,14 @@ void zParPTankExit()
         xMemPopTemp(sMenuBubbleData);
     }
     sMenuBubbleData = NULL;
+
+#ifdef PLATFORM_PC
+    if (sWipeBubbleData)
+    {
+        xMemPopTemp(sWipeBubbleData);
+    }
+    sWipeBubbleData = NULL;
+#endif
 }
 
 void zParPTankUpdate(float dt)
@@ -854,11 +939,132 @@ void zParPTankUpdate(float dt)
     }
 }
 
+#ifdef PLATFORM_PC
+// video.load_transition = fancy. The wipe draws the still over the whole
+// rendered frame and then wants the bubbles ON TOP of it, the way the loading
+// screen draws them over its background -- otherwise the only bubbles anyone
+// can see are the ones the wipe has already uncovered, and the wipe line looks
+// glued to the top of them.
+//
+// So while the wipe is up the bubble tank comes out of the pass below and
+// zGameLoop renders it after the still instead. Rendering it in both places
+// would draw every bubble under the line twice and put a brightness step along
+// the line, which is the thing being fixed.
+
+// Where the camera was when the bubbles were last carried, and whether that
+// is a camera from THIS wipe. See zParPTankBubblesFollowCamera.
+static xMat4x3 sFollowCam;
+static S32 sFollowValid;
+
+void zParPTankDeferBubbles(S32 defer)
+{
+    // Going up is the start of a wipe, which is the one moment the stored
+    // camera belongs to a different one. Keyed off this rather than off a flag
+    // of its own because both mean the same thing: the wipe is on screen.
+    if (defer && !sDeferBubbles)
+    {
+        sFollowValid = 0;
+    }
+
+    sDeferBubbles = defer;
+}
+
+// Carry the wall along with the camera.
+//
+// The bubbles are world particles, spawned a fixed distance in front of
+// wherever the camera was looking. That is right while the camera is the
+// player's, and wrong the moment it is not: a level that opens on a cutscene
+// flies the camera away and leaves the wall behind in empty world space, so the
+// wipe reveals a level with no bubbles in it.
+//
+// Each particle is taken into the previous frame's camera space and put back
+// out through this frame's, which pins the wall to the camera through both
+// movement and rotation. Velocities go with them, so a bubble keeps rising
+// relative to the view rather than swinging as the camera turns.
+void zParPTankBubblesFollowCamera()
+{
+    zParPTank* zp = sWipePTank;
+
+    if (zp == NULL || zp->ptank == NULL)
+    {
+        return;
+    }
+
+    const xMat4x3* cam = &globals.camera.mat;
+
+    // The first frame of a wipe has nowhere to carry the bubbles from.
+    if (!sFollowValid)
+    {
+        xMat4x3Copy(&sFollowCam, cam);
+        sFollowValid = 1;
+        return;
+    }
+
+    if (zp->num_particles != 0)
+    {
+        RpPTankLockStruct plock;
+        RpPTankAtomicLock(zp->ptank, &plock, rpPTANKDFLAGPOSITION, rpPTANKLOCKWRITE);
+
+        if (plock.data != NULL)
+        {
+            BubbleData* xp = sWipeBubbleData;
+
+            for (S32 i = 0; i < zp->num_particles; i++, xp++)
+            {
+                xVec3* pos = (xVec3*)plock.data;
+                xVec3 local;
+
+                xMat4x3Tolocal(&local, &sFollowCam, pos);
+                xMat4x3Toworld(pos, cam, &local);
+
+                xMat3x3Tolocal(&local, &sFollowCam, &xp->vel);
+                xMat3x3RMulVec(&xp->vel, cam, &local);
+
+                plock.data += plock.stride;
+            }
+
+            RpPTankAtomicUnlock(zp->ptank);
+        }
+    }
+
+    xMat4x3Copy(&sFollowCam, cam);
+}
+
+static void zParPTankRenderOne(zParPTank* zp)
+{
+    RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)1);
+    RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)1);
+    RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, 0);
+    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)5);
+    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)2);
+
+    if (zp->num_particles)
+    {
+        zp->ptank->renderCallBack(zp->ptank);
+    }
+}
+
+void zParPTankRenderBubbles()
+{
+    if (sWipePTank != NULL && sWipePTank->ptank != NULL)
+    {
+        zParPTankRenderOne(sWipePTank);
+    }
+}
+#endif
+
 void zParPTankRender()
 {
     zParPTank* zp = sPTank;
     for (S32 i = 0; i < sNumPTanks; i++, zp++)
     {
+#ifdef PLATFORM_PC
+        if (sDeferBubbles && zp == sWipePTank)
+        {
+            continue;
+        }
+#endif
+
         if ((!zGameIsPaused() || zp == sMenuBubblePTank) && zp->ptank)
         {
             RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)1);

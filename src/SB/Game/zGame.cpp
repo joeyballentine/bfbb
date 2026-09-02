@@ -26,6 +26,9 @@
 // video.load_time, whose clock starts when the loading screen goes up. See
 // iLoadScreen.h.
 #include "iLoadScreen.h"
+// video.load_transition, which holds the loading screen up long enough for the
+// bubbles and then wipes the still off the loaded level. See iLoadTransition.h.
+#include "iLoadTransition.h"
 #endif
 
 #include "iDraw.h"
@@ -770,8 +773,42 @@ void zGameLoop()
 
         zVolume_OccludePrecalc(&globals.camera.mat.pos);
 
+#ifdef PLATFORM_PC
+        // video.load_transition = fancy: the bubbles belong over the still,
+        // not under it, so they come out of the scene's own pass while the
+        // wipe is up and are drawn below instead. Sampled once for the frame
+        // so that the wipe ending mid-frame cannot drop them from both passes.
+        S32 wiping = iLoadTransitionWiping();
+        zParPTankDeferBubbles(wiping);
+
+        // Every frame, not only while the wipe is drawing: its bubbles live
+        // 1.75 seconds and the wipe is over in half of one, so carrying them
+        // only while it draws lets them drift off for the rest. It costs
+        // nothing once they are gone -- it counts them and returns.
+        //
+        // Before the scene renders them, and after zCameraUpdate has moved the
+        // camera this frame.
+        zParPTankBubblesFollowCamera();
+#endif
+
         gGameWhereAmI = eGameWhere_LoopSceneRender;
         zSceneRender();
+
+#ifdef PLATFORM_PC
+        if (wiping)
+        {
+            // The still wiping off the level, then the bubbles over it. After
+            // the scene so the still is over everything including the HUD, and
+            // before xCameraEnd because Im2D needs the camera still updating.
+            if (iLoadTransitionWipeFrame(sTimeElapsed))
+            {
+                zFX_SpawnBubbleWipe(iLoadTransitionBubbleUp());
+            }
+
+            zParPTankRenderBubbles();
+        }
+#endif
+
         xDebugUpdate();
 
         gGameWhereAmI = eGameWhere_LoopCameraEnd;
@@ -1333,6 +1370,15 @@ void zGameTakeSnapShot(RwCamera*)
 #endif
 }
 
+#ifdef PLATFORM_PC
+// video.load_transition. A load has begun, which is where a wipe still running
+// from the last one has to be abandoned.
+static void zGameLoadTransitionBegin()
+{
+    iLoadTransitionBegin();
+}
+#endif
+
 // The arms used to be the other way round, which fed 0.5s to the particle
 // tank on every normal frame and the real dt only when the frame took longer
 // than half a second.  The target settles it: after `fcmpo f0(sTimeElapsed),
@@ -1348,6 +1394,15 @@ void zGameUpdateTransitionBubbles()
     sTimeCurrent = iTimeGet();
     sTimeElapsed = iTimeDiffSec(sTimeLast, sTimeCurrent);
     sTimeLast = sTimeCurrent;
+#ifdef PLATFORM_PC
+    // The clock above is not the bubbles': xPadUpdate reads sTimeElapsed on
+    // the next loading-screen frame. Only the tank is skipped, and there is
+    // nothing in it to age -- nothing spawned any.
+    if (iLoadTransitionFancy())
+    {
+        return;
+    }
+#endif
     if (sTimeElapsed > 0.5f)
     {
         zParPTankUpdate(0.5f);
@@ -1385,6 +1440,7 @@ void zGameScreenTransitionBegin()
     {
         iLoadScreenBegin();
     }
+    zGameLoadTransitionBegin();
 #endif
     zGameSetOstrich(eGameOstrich_Loading);
     globals.dontShowPadMessageDuringLoadingOrCutScene = '\0';
@@ -1614,6 +1670,13 @@ void zGameScreenTransitionUpdate(F32 percentComplete, char* msg, U8* rgba)
     xDebugUpdate();
 
     gGameWhereAmI = eGameWhere_TransitionSpawnBubbles;
+#ifdef PLATFORM_PC
+    // video.load_transition = fancy: the loading screen is the still and
+    // nothing else. Its wall would stop dead the moment the wipe took over --
+    // the two are spawned at different cameras and cannot be one animation --
+    // so there is only the wipe's.
+    if (!iLoadTransitionFancy())
+#endif
     zFX_SpawnBubbleWall();
 
     gGameWhereAmI = eGameWhere_TransitionDrawEnd;
@@ -1641,7 +1704,14 @@ void zGameScreenTransitionEnd()
     // The other half of zGameTakeSnapShot's latch. The loading screen is done
     // with the still, so let the next presented frames replace it -- the first
     // of which is the level that has just finished loading.
-    iSnapshotRelease();
+    //
+    // Unless video.load_transition is fancy, in which case the still is not
+    // done: iLoadTransitionWipeFrame wipes it off the level over the first
+    // second of the game loop, and releases the latch when it has.
+    if (!iLoadTransitionStartWipe())
+    {
+        iSnapshotRelease();
+    }
 #endif
     _rwFrameSyncDirty();
     if (DirectionalLight != NULL)
