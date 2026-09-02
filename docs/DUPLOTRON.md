@@ -6634,3 +6634,107 @@ The general lesson: before fabricating a template, check whether a function you
 already have owns it and is merely defined in the wrong place. `rodatalayout.py`
 shows the count mismatch; the object being one of *ours* rather than the
 target's is what tells you to move code instead of adding it.
+
+## Session 2026-09-01: six crossings, and the classes they did not come from
+
+Measured with `solo.py`; report.json numbers are in the commit that follows the
+build. Crossings to 100.0: `xDecal` `update_frac`, `get_render_data`,
+`select_texture_unit` (unit now 46/46), `zNPCSndTable` `NPCS_SndPickSimilar`
+(unit 11/11), `zVolume` `zVolumeEventCB`, `xParEmitter`
+`xParInterp::operator=`. Moved without crossing: `UpdateGustFX` 97.16 -> 99.15,
+`GIDInStack` 86.1 -> 98.9, `IndexInStack` 85.4 -> 98.8.
+
+Two of the crossings were semantic bugs, both invisible to the percentage:
+
+- `select_texture_unit` returned `prev++ % units`; retail returns
+  `++prev % units` (the `divwu` reads the incremented register). Every cycling
+  decal texture was one frame behind.
+- `zGustUpdateEnt`'s release loop tested `data->g[0]` and `data->lerp[0]` for
+  every `j`; retail walks `g[j]`/`lerp[j]` (the target advances a pointer by 4
+  through the loop). Fixed, banks nothing -- the residue is the literal-reload
+  class below.
+
+### Levers that paid, for the pattern file
+
+- **Loop on the member, not a copy of it.** `update_frac` reloads
+  `this->curve_index` at the loop test and after `unit.curve_index = ...`,
+  because the `stb` through `unit` may alias `this`. Writing the loop over
+  `this->curve_index` directly, plus `curve_node&` references for the two
+  tail reads, went 70.9 -> 100. The same reference trick alone finished
+  `get_render_data` (89.2 -> 100): retail computes `(ci+1)*12` with a second
+  `mulli`; a single `this->curve[ci+1].color` expression lets CW fold it into
+  `curve[ci] + 0x10`.
+- **Initialise at the declaration.** `U32 aid_choice = 0;` instead of a later
+  `aid_choice = 0;` moved `NPCS_SndPickSimilar` 90.3 -> 98.0. Retail keeps the
+  zero in `r0` across the two template-copy loops; the late assignment let our
+  colourer hand `r0` to the copy counters first. Then `list[cnt++]` (84.8 ->
+  90.3 earlier) and an explicit `if/else` for the `trax` pick (98.0 -> 100).
+- **A global incremented in place is reloaded after the array store.**
+  `gOccludeCount++` after `gOccludeList[count] = vol` reproduces retail's
+  `lwz`/`addi`/`stw`; `gOccludeCount = count + 1` forwards the local and
+  cannot. 89.2 -> 100.
+- **The generated `operator=` copies an array member as words.** Retail's
+  `__as__10xParInterp` does `lwz/stw` for `val[2]` and `interp`, `lfs/stfs`
+  for `freq`/`oofreq` -- the memberwise copy CW generates, not the
+  hand-written one in `xParEmitter.cpp`. Deleting the declaration is a header
+  change; `sweep.py` over the 132 including TUs (with reloc rows counted) was
+  +1 / -0.
+- **Two statements where one expression would fold.** `info.life.val[0] = x / 5.0f;
+  info.life.val[0] *= 2.0f;` reproduces the target's two `stfs` to the same
+  slot in `UpdateGustFX`.
+- **A member bound to a local survives the call.** `S32 top = this->staktop;`
+  before the `GetID()` loop in `GIDInStack`/`IndexInStack` (the
+  held-across-a-call rule). The last ~1% in both is an `r30`/`r31` tie.
+
+### Measured NO-GOs, so nobody re-treads them
+
+- **`xatan2` returning `F64` is wrong tree-wide.** The "retail's `xatan2` may
+  return `double`" lead (`update_turn` `frsp`) was tested by changing the
+  declaration in `xMathInlines.h` and sweeping the 69 including TUs:
+  51 functions down (xCamera, zNPCTypeBoss*, zEntCruiseBubble, xPad, zEntPlayer
+  ...), 4 up. The three `update_turn` siblings' `frsp f0, f31` before
+  `yaw + diff` is not this.
+- **`xFuncPiece_Eval` (81.6) and `xFuncPiece_ShiftPiece` (95.5) are LICM with
+  no store in the loop.** Retail keeps `lfs 1e-5f`/`fsubs` (Eval) and
+  `lfs 0.0f` (ShiftPiece) inside loops that contain no store at all, so
+  clause H's "loop storing to a static array" does not describe them. Fifteen
+  source shapes on Eval (while/for/do/goto/const local/named local/...) all
+  hoist; `-O2` un-hoists but wrecks the other 14 functions; `#pragma
+  opt_loop_invariants off` is the IR optimiser's flag and changes nothing in
+  the backend. Same compiler under `--mw GC/2.0`, `1.3.2`, `2.5`, `2.6`.
+  Probe result worth keeping: a store *through a struct pointer* inside the
+  loop (`func->order = 0`, or `*it = func`) makes OUR compiler emit retail's
+  exact loop (`lfs const; lfs end; fsubs; fcmpo; blt`), and a global store does
+  not. So retail's LICM answers "may alias a loop def" for a literal load in a
+  loop with no def, which points at the `isloopinvariant` memory-operand path
+  in `CodeMotion.c`, not at `maymove`. Same class as `xSndAddDelayed` and
+  `zEntPlayer_SNDPlayStreamRandom` already listed.
+- **The offset-induction-variable shape is compiler-track, three witnesses.**
+  `find_entry` (86.9), `xShadowSimple_CacheInit` (97.0) and
+  `unit_meter_widget::unit_meter_widget` (90.2) all have retail keeping
+  `i*stride` in a register and doing `add base, iv` per iteration where we
+  strength-reduce to a walking pointer. Element references, inline indexing,
+  and pointer locals measured on all three: none moved, two got worse. It is
+  the "second `i*4` induction variable surviving" note under `zEntPlayer`.
+- **`xCMcolor_scale` ceiling is 74.3.** Retail homes the by-value `iColor_tag`
+  parameter to the frame and byte-reads the copy; ours reads through the
+  incoming pointer. `iColor_tag ret = color;` gets 65.7 -> 74.3 (retail does
+  pre-fill `ret` with `color`), and nine further shapes (assignment, second
+  copy, byte pointer, const param, address-of, inline args) do not home it.
+- **`xParCmdAnimalMagentism_Update` (81.0) is one callee-saved FPR short.**
+  Retail keeps `pos.x` in `f31` across the loop; ours reloads it from the
+  frame each iteration. Declaration order, assignment form, `xVec3Sub` and
+  splitting `pos.y += 1.0f` all measured <= baseline. dwarf lists exactly our
+  locals.
+- **`zMusicNotifyEvent`**: the `sMusicTimer[track]` / `music_enum = toParam[0]`
+  rewrite matches retail's second `fctiwz` but drops 86.1 -> 74.3 because our
+  compiler CSEs the body's `s->track` with the `track` local across the
+  condition blocks and retail reloads it (cross-block CSE class). Semantically
+  identical either way; kept the higher-scoring original.
+- Also compiler-track after measurement: `CoefToUnity3` (identical multiset,
+  a `factor2` local does nothing), `async_cb` (retail keeps both arms of the
+  `length` if/else, ours if-converts; ternary and plain `0x8000` measured
+  equal), `sqrt`'s missing second `fcmpu` (cross-block CSE), `DoAliveStuff`'s
+  missing `cmplwi 1/2/4` chain (retail keeps the switch skeleton after DCE;
+  an empty switch in our source is deleted outright), `Decompress_frame`'s
+  `lis 0x8000`+`and` (four mask spellings, none produce it).
