@@ -2,34 +2,33 @@
 #include "iHost.h"
 #include "iSndReverb.h"
 
-#define WIN32_LEAN_AND_MEAN
-#define COBJMACROS
-#include <windows.h>
-#include <objbase.h>
-#include <mmdeviceapi.h>
-#include <audioclient.h>
+#include <SDL3/SDL.h>
 
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-// The Windows audio backend: a software mixer feeding one WASAPI stream.
+// The audio backend: a software mixer feeding one SDL audio stream.
 //
 // The seam in iSndHost.h describes a device with 64 independent voices, each
 // with its own rate, volume per side and pitch. No host audio API offers that
-// directly -- WASAPI renders one stream, and the APIs that do offer voices
+// directly -- SDL renders one stream, and the APIs that do offer voices
 // (XAudio2, DirectSound) bring a submix graph, their own threading model and
 // their own idea of what a voice is. Mixing here instead is both less code and
 // a closer fit: the game's model becomes 64 float accumulations per output
-// frame, and the only thing the operating system is asked for is somewhere to
-// put the result.
+// frame, and the only thing SDL is asked for is somewhere to put the result.
 //
 // It also makes the pitch and rate handling exact rather than approximate.
 // Every voice is resampled to the device rate by stepping a fractional read
 // position, so a sound authored at 22050 Hz played at pitch 1.3 on a 48 kHz
 // device is one multiply, and the point where it runs out is known to the
 // sample rather than to the frame.
+//
+// The stream is opened at the device's own rate in float stereo, so SDL has no
+// conversion left to do on the way out. Which driver, what the hardware format
+// is, and how stereo reaches a mono endpoint are all below the stream and all
+// SDL's.
 //
 // **Failing to open a device is not an error.** A machine with no output, or
 // with the endpoint in use exclusively, still has to run the game correctly,
@@ -39,48 +38,6 @@
 // monotonic clock in iSndHostUpdate. The game cannot tell the difference, which
 // is the whole point of iSndHostNull.cpp and is preserved here rather than
 // replaced.
-
-// ---------------------------------------------------------------------------
-// COM identifiers
-//
-// Declared here rather than taken from uuid.lib. The library is not part of any
-// other dependency this port has, and four GUIDs are not worth acquiring one
-// for -- particularly as the linker error it produces when it is missing points
-// nowhere near audio.
-
-static const CLSID kCLSID_MMDeviceEnumerator = { 0xBCDE0395,
-                                                 0xE52F,
-                                                 0x467C,
-                                                 { 0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69,
-                                                   0x2E } };
-
-static const IID kIID_IMMDeviceEnumerator = { 0xA95664D2,
-                                              0x9614,
-                                              0x4F35,
-                                              { 0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6 } };
-
-static const IID kIID_IAudioClient = { 0x1CB9AD4C,
-                                       0xDBFA,
-                                       0x4C32,
-                                       { 0xB1, 0x78, 0xC2, 0xF5, 0x68, 0xA7, 0x03, 0xB2 } };
-
-static const IID kIID_IAudioRenderClient = { 0xF294ACFC,
-                                             0x3146,
-                                             0x4483,
-                                             { 0xA7, 0xBF, 0xAD, 0xDC, 0xA7, 0xC2, 0x60,
-                                               0xE2 } };
-
-// The two WAVEFORMATEXTENSIBLE subformats that matter, from ksmedia.h. Compared
-// by value so that header is not needed either.
-static const GUID kSUBTYPE_PCM = { 0x00000001,
-                                   0x0000,
-                                   0x0010,
-                                   { 0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71 } };
-
-static const GUID kSUBTYPE_IEEE_FLOAT = { 0x00000003,
-                                          0x0000,
-                                          0x0010,
-                                          { 0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71 } };
 
 // ---------------------------------------------------------------------------
 // Voices
@@ -120,25 +77,22 @@ struct hvoice
 };
 
 static hvoice sVoices[ISNDHOST_MAX_VOICES];
-static CRITICAL_SECTION sLock;
-static bool sLockReady;
+static SDL_Mutex* sLock;
 
 // ---------------------------------------------------------------------------
 // Device
 
-static IMMDeviceEnumerator* sEnumerator;
-static IMMDevice* sDevice;
-static IAudioClient* sClient;
-static IAudioRenderClient* sRender;
-static HANDLE sBufferEvent;
-static HANDLE sQuitEvent;
-static HANDLE sThread;
+static SDL_AudioStream* sStream;
+static bool sSubsystem;
 
+// The rate the stream runs at, which is the device's own. Also the rate the
+// silent path steps voices at when there is no device at all.
 static U32 sOutRate;
-static U32 sOutChannels;
-static bool sOutFloat;
-static U32 sOutBits;
-static U32 sBufferFrames;
+
+// What SDL says the device wants per callback. Reported in the backend name and
+// used to size the mix buffer. The callback is free to ask for more than this,
+// which the mix loop handles by running more than once.
+static U32 sDeviceFrames;
 
 static bool sDeviceUp;
 static char sName[128];
@@ -167,16 +121,16 @@ static bool iVoiceValid(S32 voice)
     return voice >= 0 && voice < ISNDHOST_MAX_VOICES && sVoices[voice].acquired;
 }
 
-// Entering an uninitialised CRITICAL_SECTION is undefined rather than merely
-// wrong, and the seam does not promise that iSndHostInit runs first -- the null
-// backend tolerates being called cold, so this one has to as well. Only the
-// game thread reaches these entry points, so a plain flag is enough.
+// The seam does not promise that iSndHostInit runs first -- the null backend
+// tolerates being called cold, so this one has to as well. Only the game thread
+// reaches these entry points, so no lock is needed to make the lock. If SDL
+// will not give us a mutex, every lock below becomes a no-op, which is the
+// right answer while there is no audio thread to race against.
 static void iEnsureLock()
 {
-    if (!sLockReady)
+    if (sLock == NULL)
     {
-        InitializeCriticalSection(&sLock);
-        sLockReady = true;
+        sLock = SDL_CreateMutex();
     }
 }
 
@@ -355,159 +309,66 @@ static void iMixLocked(U32 frames)
     iSndReverbProcess(sMixBuffer, frames);
 }
 
-// Write the mixed block into the endpoint buffer, in whatever format the device
-// asked for, spreading stereo across its first two channels.
-static void iEmit(BYTE* dst, U32 frames)
+// Keep the finished block inside the representable range. Sixty-four voices
+// summing at once can leave it, and float output means nothing below here will
+// notice: the wrap happens in the driver or the hardware, as a click.
+static void iClamp(U32 frames)
 {
-    U32 outch = sOutChannels;
-
-    for (U32 n = 0; n < frames; n++)
+    for (U32 n = 0; n < frames * 2; n++)
     {
-        float l = sMixBuffer[n * 2 + 0];
-        float r = sMixBuffer[n * 2 + 1];
-
-        // A mono endpoint gets the sum rather than the left channel alone, or
-        // everything panned right disappears.
-        if (outch == 1)
+        if (sMixBuffer[n] > 1.0f)
         {
-            l = (l + r) * 0.5f;
-            r = l;
+            sMixBuffer[n] = 1.0f;
         }
-
-        if (l > 1.0f) l = 1.0f;
-        else if (l < -1.0f) l = -1.0f;
-        if (r > 1.0f) r = 1.0f;
-        else if (r < -1.0f) r = -1.0f;
-
-        // Channels past the first two are left silent. Surround placement is
-        // the game's business and the game does not have one: xSnd computes a
-        // stereo pan and nothing else, so upmixing here would be inventing a
-        // mix rather than reproducing it.
-        if (sOutFloat)
+        else if (sMixBuffer[n] < -1.0f)
         {
-            float* p = (float*)dst;
-            for (U32 c = 0; c < outch; c++)
-            {
-                p[n * outch + c] = (c == 0) ? l : (c == 1 ? r : 0.0f);
-            }
-        }
-        else
-        {
-            S16* p = (S16*)dst;
-            S16 sl = (S16)(l * 32767.0f);
-            S16 sr = (S16)(r * 32767.0f);
-            for (U32 c = 0; c < outch; c++)
-            {
-                p[n * outch + c] = (c == 0) ? sl : (c == 1 ? sr : 0);
-            }
+            sMixBuffer[n] = -1.0f;
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// The render thread
+// The stream callback
+//
+// SDL calls this on its own audio thread whenever the stream is running short,
+// asking for `additional` bytes. It may ask for more than one mix buffer's
+// worth -- after a stall, or on a driver with a period longer than the one SDL
+// reported -- so this fills as many blocks as it takes rather than assuming the
+// request fits.
 
-static DWORD WINAPI iRenderThread(LPVOID)
+static void SDLCALL iStreamCallback(void* userdata, SDL_AudioStream* stream, int additional,
+                                    int total)
 {
-    // MTA: nothing here pumps a message loop, and the interfaces are used from
-    // this thread only.
-    HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
-    bool com = SUCCEEDED(hr);
+    (void)userdata;
+    (void)total;
 
-    // A short, steady deadline; the endpoint buffer is only ~30 ms.
-    HANDLE mmcss = NULL;
-    DWORD taskIndex = 0;
-    HMODULE avrt = LoadLibraryA("avrt.dll");
-    typedef HANDLE(WINAPI * PFN_SetMmThreadCharacteristicsA)(LPCSTR, LPDWORD);
-    typedef BOOL(WINAPI * PFN_RevertMmThreadCharacteristics)(HANDLE);
-    PFN_SetMmThreadCharacteristicsA setChars = NULL;
-    PFN_RevertMmThreadCharacteristics revertChars = NULL;
+    const int frame_bytes = (int)(sizeof(float) * 2);
 
-    if (avrt != NULL)
+    while (additional >= frame_bytes)
     {
-        setChars =
-            (PFN_SetMmThreadCharacteristicsA)GetProcAddress(avrt, "AvSetMmThreadCharacteristicsA");
-        revertChars =
-            (PFN_RevertMmThreadCharacteristics)GetProcAddress(avrt,
-                                                              "AvRevertMmThreadCharacteristics");
-        if (setChars != NULL)
+        U32 frames = (U32)(additional / frame_bytes);
+        if (frames > sMixBufferFrames)
         {
-            mmcss = setChars("Pro Audio", &taskIndex);
+            frames = sMixBufferFrames;
         }
+
+        SDL_LockMutex(sLock);
+        iMixLocked(frames);
+        SDL_UnlockMutex(sLock);
+
+        iClamp(frames);
+
+        int bytes = (int)frames * frame_bytes;
+        if (!SDL_PutAudioStreamData(stream, sMixBuffer, bytes))
+        {
+            // Nothing useful to do about it here. The next callback will try
+            // again, and the voices have already been advanced, so the game
+            // stays in step with what it thinks it is hearing.
+            return;
+        }
+
+        additional -= bytes;
     }
-
-    HANDLE waits[2] = { sQuitEvent, sBufferEvent };
-
-    for (;;)
-    {
-        DWORD w = WaitForMultipleObjects(2, waits, FALSE, 200);
-
-        if (w == WAIT_OBJECT_0)
-        {
-            break;
-        }
-
-        if (w == WAIT_FAILED)
-        {
-            break;
-        }
-
-        // A timeout means the endpoint stopped signalling -- a device change,
-        // usually. Keep waiting; the game is unaffected either way, and voices
-        // are retired by the fallback clock if the stream never comes back.
-        if (w == WAIT_TIMEOUT)
-        {
-            continue;
-        }
-
-        UINT32 padding = 0;
-        if (FAILED(sClient->GetCurrentPadding(&padding)))
-        {
-            continue;
-        }
-
-        UINT32 avail = sBufferFrames - padding;
-        if (avail == 0)
-        {
-            continue;
-        }
-
-        if (avail > sMixBufferFrames)
-        {
-            avail = sMixBufferFrames;
-        }
-
-        BYTE* dst = NULL;
-        if (FAILED(sRender->GetBuffer(avail, &dst)))
-        {
-            continue;
-        }
-
-        EnterCriticalSection(&sLock);
-        iMixLocked(avail);
-        LeaveCriticalSection(&sLock);
-
-        iEmit(dst, avail);
-
-        sRender->ReleaseBuffer(avail, 0);
-    }
-
-    if (mmcss != NULL && revertChars != NULL)
-    {
-        revertChars(mmcss);
-    }
-
-    if (avrt != NULL)
-    {
-        FreeLibrary(avrt);
-    }
-
-    if (com)
-    {
-        CoUninitialize();
-    }
-
-    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -515,237 +376,96 @@ static DWORD WINAPI iRenderThread(LPVOID)
 
 static void iTeardownDevice()
 {
-    if (sThread != NULL)
+    // Destroying the stream unbinds it from the logical device SDL opened for
+    // it and closes that device, which also stops the callback. Nothing below
+    // may run while it could still be in flight.
+    if (sStream != NULL)
     {
-        SetEvent(sQuitEvent);
-        WaitForSingleObject(sThread, 2000);
-        CloseHandle(sThread);
-        sThread = NULL;
-    }
-
-    if (sClient != NULL)
-    {
-        sClient->Stop();
-    }
-
-    if (sRender != NULL)
-    {
-        sRender->Release();
-        sRender = NULL;
-    }
-
-    if (sClient != NULL)
-    {
-        sClient->Release();
-        sClient = NULL;
-    }
-
-    if (sDevice != NULL)
-    {
-        sDevice->Release();
-        sDevice = NULL;
-    }
-
-    if (sEnumerator != NULL)
-    {
-        sEnumerator->Release();
-        sEnumerator = NULL;
-    }
-
-    if (sBufferEvent != NULL)
-    {
-        CloseHandle(sBufferEvent);
-        sBufferEvent = NULL;
-    }
-
-    if (sQuitEvent != NULL)
-    {
-        CloseHandle(sQuitEvent);
-        sQuitEvent = NULL;
+        SDL_DestroyAudioStream(sStream);
+        sStream = NULL;
     }
 
     free(sMixBuffer);
     sMixBuffer = NULL;
     sMixBufferFrames = 0;
 
-    // After the render thread has joined, which is the only other user of it.
+    // After the callback has gone, which is the only other user of it.
     // sReverbWanted deliberately survives: a device coming back should come
     // back with the effect the current scene asked for.
     iSndReverbExit();
 
+    if (sSubsystem)
+    {
+        SDL_QuitSubSystem(SDL_INIT_AUDIO);
+        sSubsystem = false;
+    }
+
     sDeviceUp = false;
-}
-
-// True if the mix format is one iEmit can write. WASAPI shared mode always
-// hands back the format the mixer is already running in, so this is a check
-// rather than a negotiation -- there is nothing to fall back to if it is
-// something else, and saying so is better than emitting noise.
-static bool iFormatUsable(const WAVEFORMATEX* wf)
-{
-    if (wf->wFormatTag == WAVE_FORMAT_IEEE_FLOAT)
-    {
-        return wf->wBitsPerSample == 32;
-    }
-
-    if (wf->wFormatTag == WAVE_FORMAT_PCM)
-    {
-        return wf->wBitsPerSample == 16;
-    }
-
-    if (wf->wFormatTag == WAVE_FORMAT_EXTENSIBLE && wf->cbSize >= 22)
-    {
-        const WAVEFORMATEXTENSIBLE* we = (const WAVEFORMATEXTENSIBLE*)wf;
-
-        if (memcmp(&we->SubFormat, &kSUBTYPE_IEEE_FLOAT, sizeof(GUID)) == 0)
-        {
-            return wf->wBitsPerSample == 32;
-        }
-
-        if (memcmp(&we->SubFormat, &kSUBTYPE_PCM, sizeof(GUID)) == 0)
-        {
-            return wf->wBitsPerSample == 16;
-        }
-    }
-
-    return false;
-}
-
-static bool iFormatIsFloat(const WAVEFORMATEX* wf)
-{
-    if (wf->wFormatTag == WAVE_FORMAT_IEEE_FLOAT)
-    {
-        return true;
-    }
-
-    if (wf->wFormatTag == WAVE_FORMAT_EXTENSIBLE && wf->cbSize >= 22)
-    {
-        const WAVEFORMATEXTENSIBLE* we = (const WAVEFORMATEXTENSIBLE*)wf;
-        return memcmp(&we->SubFormat, &kSUBTYPE_IEEE_FLOAT, sizeof(GUID)) == 0;
-    }
-
-    return false;
 }
 
 // Everything here reports and returns false rather than failing hard: see the
 // note at the top about a missing device being a configuration, not an error.
 static bool iBringUpDevice()
 {
-    HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
-    bool com_here = SUCCEEDED(hr);
-
-    // RPC_E_CHANGED_MODE means someone already initialised this thread as an
-    // STA, which is fine -- the objects are created here and used on the render
-    // thread, which does its own CoInitializeEx.
-    if (!com_here && hr != RPC_E_CHANGED_MODE)
+    // Refcounted, and the window and pad backends init their own subsystems the
+    // same way, so this neither depends on nor disturbs them.
+    if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
     {
-        printf("iSndHost: CoInitializeEx failed (0x%08lx); no audio\n", (unsigned long)hr);
+        printf("iSndHost: SDL audio would not start (%s); no audio\n", SDL_GetError());
         return false;
     }
 
-    hr = CoCreateInstance(kCLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL, kIID_IMMDeviceEnumerator,
-                          (void**)&sEnumerator);
-    if (FAILED(hr))
+    sSubsystem = true;
+
+    // Ask the device what it is already running at and open the stream there,
+    // so SDL has no resampling to do. A failure here means no output device at
+    // all, which is the silent path rather than an error.
+    SDL_AudioSpec have;
+    int device_frames = 0;
+
+    if (!SDL_GetAudioDeviceFormat(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &have, &device_frames))
     {
-        printf("iSndHost: no device enumerator (0x%08lx); no audio\n", (unsigned long)hr);
+        printf("iSndHost: no default output device (%s); no audio\n", SDL_GetError());
         return false;
     }
 
-    hr = sEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &sDevice);
-    if (FAILED(hr))
-    {
-        printf("iSndHost: no default output device (0x%08lx); no audio\n", (unsigned long)hr);
-        return false;
-    }
+    sOutRate = have.freq > 0 ? (U32)have.freq : 48000;
+    sDeviceFrames = device_frames > 0 ? (U32)device_frames : 1024;
 
-    hr = sDevice->Activate(kIID_IAudioClient, CLSCTX_ALL, NULL, (void**)&sClient);
-    if (FAILED(hr))
-    {
-        printf("iSndHost: could not activate the audio client (0x%08lx); no audio\n",
-               (unsigned long)hr);
-        return false;
-    }
-
-    WAVEFORMATEX* wf = NULL;
-    hr = sClient->GetMixFormat(&wf);
-    if (FAILED(hr) || wf == NULL)
-    {
-        printf("iSndHost: could not read the mix format (0x%08lx); no audio\n",
-               (unsigned long)hr);
-        return false;
-    }
-
-    if (!iFormatUsable(wf))
-    {
-        printf("iSndHost: the endpoint mix format is %d-bit tag %d, which this backend does not "
-               "write; no audio\n",
-               (int)wf->wBitsPerSample, (int)wf->wFormatTag);
-        CoTaskMemFree(wf);
-        return false;
-    }
-
-    sOutRate = wf->nSamplesPerSec;
-    sOutChannels = wf->nChannels;
-    sOutBits = wf->wBitsPerSample;
-    sOutFloat = iFormatIsFloat(wf);
-
-    // 30 ms, in 100-nanosecond units. Shared mode treats this as a request; the
-    // buffer that comes back is whatever the engine period allows, which is
-    // what sBufferFrames is read back for.
-    REFERENCE_TIME duration = 300000;
-
-    hr = sClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, duration,
-                             0, wf, NULL);
-    CoTaskMemFree(wf);
-
-    if (FAILED(hr))
-    {
-        printf("iSndHost: could not initialise the audio client (0x%08lx); no audio\n",
-               (unsigned long)hr);
-        return false;
-    }
-
-    hr = sClient->GetBufferSize(&sBufferFrames);
-    if (FAILED(hr) || sBufferFrames == 0)
-    {
-        printf("iSndHost: the endpoint reported no buffer (0x%08lx); no audio\n",
-               (unsigned long)hr);
-        return false;
-    }
-
-    hr = sClient->GetService(kIID_IAudioRenderClient, (void**)&sRender);
-    if (FAILED(hr))
-    {
-        printf("iSndHost: no render client (0x%08lx); no audio\n", (unsigned long)hr);
-        return false;
-    }
-
-    sBufferEvent = CreateEventA(NULL, FALSE, FALSE, NULL);
-    sQuitEvent = CreateEventA(NULL, TRUE, FALSE, NULL);
-
-    if (sBufferEvent == NULL || sQuitEvent == NULL)
-    {
-        printf("iSndHost: could not create the render events; no audio\n");
-        return false;
-    }
-
-    hr = sClient->SetEventHandle(sBufferEvent);
-    if (FAILED(hr))
-    {
-        printf("iSndHost: could not attach the render event (0x%08lx); no audio\n",
-               (unsigned long)hr);
-        return false;
-    }
-
-    sMixBufferFrames = sBufferFrames;
+    // Four periods of headroom. The callback asks for what the stream is short
+    // of rather than for one period, and a block bigger than this only costs an
+    // extra pass through the mix loop, so this is a size and not a limit.
+    sMixBufferFrames = sDeviceFrames * 4;
     sMixBuffer = (float*)malloc(sizeof(float) * 2 * sMixBufferFrames);
+
     if (sMixBuffer == NULL)
     {
         printf("iSndHost: could not allocate the mix buffer; no audio\n");
+        sMixBufferFrames = 0;
+        return false;
+    }
+
+    // Stereo float at the device's rate. SDL converts from this to whatever the
+    // hardware wants, including down to a mono endpoint, which is the one piece
+    // of format handling this backend does not have to write.
+    SDL_AudioSpec want;
+    want.format = SDL_AUDIO_F32;
+    want.channels = 2;
+    want.freq = (int)sOutRate;
+
+    // Opened paused, so the mix buffer above is guaranteed to exist before the
+    // first callback and the reverb below is built before it is heard.
+    sStream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &want, iStreamCallback,
+                                        NULL);
+
+    if (sStream == NULL)
+    {
+        printf("iSndHost: could not open an audio stream (%s); no audio\n", SDL_GetError());
         return false;
     }
 
     // The reverb's delay lengths are in samples, so it can only be built once
-    // the endpoint has said what rate it runs at. If the game already asked for
+    // the device has said what rate it runs at. If the game already asked for
     // an effect -- it sets one when a scene loads, which can be before a device
     // is available -- it is applied now rather than lost.
     iSndReverbInit(sOutRate);
@@ -754,22 +474,16 @@ static bool iBringUpDevice()
         iSndReverbSet(&sReverb);
     }
 
-    hr = sClient->Start();
-    if (FAILED(hr))
+    if (!SDL_ResumeAudioStreamDevice(sStream))
     {
-        printf("iSndHost: the stream would not start (0x%08lx); no audio\n", (unsigned long)hr);
+        printf("iSndHost: the stream would not start (%s); no audio\n", SDL_GetError());
         return false;
     }
 
-    sThread = CreateThread(NULL, 0, iRenderThread, NULL, 0, NULL);
-    if (sThread == NULL)
-    {
-        printf("iSndHost: could not start the render thread; no audio\n");
-        return false;
-    }
+    const char* driver = SDL_GetCurrentAudioDriver();
 
-    snprintf(sName, sizeof(sName), "WASAPI (%u Hz, %u ch, %s, %u-frame buffer)", sOutRate,
-             sOutChannels, sOutFloat ? "float32" : "int16", sBufferFrames);
+    snprintf(sName, sizeof(sName), "SDL3 %s (%u Hz, float32 stereo, %u-frame buffer)",
+             driver != NULL ? driver : "?", sOutRate, sDeviceFrames);
 
     return true;
 }
@@ -781,13 +495,13 @@ void iSndHostInit()
 {
     iEnsureLock();
 
-    EnterCriticalSection(&sLock);
+    SDL_LockMutex(sLock);
     memset(sVoices, 0, sizeof(sVoices));
     for (S32 i = 0; i < ISNDHOST_MAX_VOICES; i++)
     {
         sVoices[i].pitch = 1.0f;
     }
-    LeaveCriticalSection(&sLock);
+    SDL_UnlockMutex(sLock);
 
     if (sDeviceUp)
     {
@@ -799,7 +513,7 @@ void iSndHostInit()
     const char* off = getenv("BFBB_AUDIO");
     if (off != NULL && off[0] == '0')
     {
-        snprintf(sName, sizeof(sName), "win32 (silenced by BFBB_AUDIO=0, but keeps time)");
+        snprintf(sName, sizeof(sName), "SDL3 (silenced by BFBB_AUDIO=0, but keeps time)");
         sOutRate = 48000;
         sLastSilentNs = iHostMonotonicNs();
         return;
@@ -810,7 +524,7 @@ void iSndHostInit()
     if (!sDeviceUp)
     {
         iTeardownDevice();
-        snprintf(sName, sizeof(sName), "win32 (no device; silent, but keeps time)");
+        snprintf(sName, sizeof(sName), "SDL3 (no device; silent, but keeps time)");
 
         // The fallback clock needs a rate to convert its elapsed time into
         // frames. Any value works as long as it matches what the voices are
@@ -824,19 +538,16 @@ void iSndHostExit()
 {
     iTeardownDevice();
 
-    if (sLockReady)
-    {
-        EnterCriticalSection(&sLock);
-        memset(sVoices, 0, sizeof(sVoices));
-        LeaveCriticalSection(&sLock);
-    }
+    SDL_LockMutex(sLock);
+    memset(sVoices, 0, sizeof(sVoices));
+    SDL_UnlockMutex(sLock);
 }
 
 S32 iSndHostAcquire(U32 priority)
 {
     iEnsureLock();
 
-    EnterCriticalSection(&sLock);
+    SDL_LockMutex(sLock);
 
     S32 got = -1;
     for (S32 i = 0; i < ISNDHOST_MAX_VOICES; i++)
@@ -851,7 +562,7 @@ S32 iSndHostAcquire(U32 priority)
         }
     }
 
-    LeaveCriticalSection(&sLock);
+    SDL_UnlockMutex(sLock);
 
     // Every voice busy. Retail's AXAcquireVoice evicts a lower-priority one
     // here; the mixer has exactly as many voices as the game's own table, so
@@ -865,14 +576,14 @@ void iSndHostRelease(S32 voice)
 {
     iEnsureLock();
 
-    EnterCriticalSection(&sLock);
+    SDL_LockMutex(sLock);
 
     if (iVoiceValid(voice))
     {
         memset(&sVoices[voice], 0, sizeof(sVoices[voice]));
     }
 
-    LeaveCriticalSection(&sLock);
+    SDL_UnlockMutex(sLock);
 }
 
 void iSndHostStart(S32 voice, const iSndHostSample* sample)
@@ -884,7 +595,7 @@ void iSndHostStart(S32 voice, const iSndHostSample* sample)
 
     iEnsureLock();
 
-    EnterCriticalSection(&sLock);
+    SDL_LockMutex(sLock);
 
     if (iVoiceValid(voice))
     {
@@ -927,14 +638,14 @@ void iSndHostStart(S32 voice, const iSndHostSample* sample)
         v->curR = v->volR;
     }
 
-    LeaveCriticalSection(&sLock);
+    SDL_UnlockMutex(sLock);
 }
 
 void iSndHostStop(S32 voice)
 {
     iEnsureLock();
 
-    EnterCriticalSection(&sLock);
+    SDL_LockMutex(sLock);
 
     if (iVoiceValid(voice))
     {
@@ -948,21 +659,21 @@ void iSndHostStop(S32 voice)
         sVoices[voice].frames = 0;
     }
 
-    LeaveCriticalSection(&sLock);
+    SDL_UnlockMutex(sLock);
 }
 
 void iSndHostPause(S32 voice, bool paused)
 {
     iEnsureLock();
 
-    EnterCriticalSection(&sLock);
+    SDL_LockMutex(sLock);
 
     if (iVoiceValid(voice) && sVoices[voice].playing)
     {
         sVoices[voice].paused = paused;
     }
 
-    LeaveCriticalSection(&sLock);
+    SDL_UnlockMutex(sLock);
 }
 
 void iSndHostSetVol(S32 voice, F32 left, F32 right)
@@ -974,7 +685,7 @@ void iSndHostSetVol(S32 voice, F32 left, F32 right)
 
     iEnsureLock();
 
-    EnterCriticalSection(&sLock);
+    SDL_LockMutex(sLock);
 
     if (iVoiceValid(voice))
     {
@@ -982,7 +693,7 @@ void iSndHostSetVol(S32 voice, F32 left, F32 right)
         sVoices[voice].volR = right;
     }
 
-    LeaveCriticalSection(&sLock);
+    SDL_UnlockMutex(sLock);
 }
 
 void iSndHostSetPitch(S32 voice, F32 pitch)
@@ -994,25 +705,25 @@ void iSndHostSetPitch(S32 voice, F32 pitch)
 
     iEnsureLock();
 
-    EnterCriticalSection(&sLock);
+    SDL_LockMutex(sLock);
 
     if (iVoiceValid(voice))
     {
         sVoices[voice].pitch = pitch;
     }
 
-    LeaveCriticalSection(&sLock);
+    SDL_UnlockMutex(sLock);
 }
 
 bool iSndHostIsPlaying(S32 voice)
 {
     iEnsureLock();
 
-    EnterCriticalSection(&sLock);
+    SDL_LockMutex(sLock);
 
     bool playing = iVoiceValid(voice) && sVoices[voice].playing;
 
-    LeaveCriticalSection(&sLock);
+    SDL_UnlockMutex(sLock);
 
     return playing;
 }
@@ -1044,7 +755,7 @@ void iSndHostUpdate()
 
     iEnsureLock();
 
-    EnterCriticalSection(&sLock);
+    SDL_LockMutex(sLock);
 
     for (S32 i = 0; i < ISNDHOST_MAX_VOICES; i++)
     {
@@ -1064,14 +775,14 @@ void iSndHostUpdate()
         }
     }
 
-    LeaveCriticalSection(&sLock);
+    SDL_UnlockMutex(sLock);
 }
 
 void iSndHostSetReverb(const iSndHostReverb* params)
 {
     iEnsureLock();
 
-    EnterCriticalSection(&sLock);
+    SDL_LockMutex(sLock);
 
     if (params != NULL)
     {
@@ -1085,7 +796,7 @@ void iSndHostSetReverb(const iSndHostReverb* params)
         iSndReverbSet(NULL);
     }
 
-    LeaveCriticalSection(&sLock);
+    SDL_UnlockMutex(sLock);
 }
 
 // ---------------------------------------------------------------------------
@@ -1099,7 +810,7 @@ void iSndHostSetReverb(const iSndHostReverb* params)
 //
 // Mixes one block at `rate` into `out` as interleaved stereo, exactly as the
 // render thread would, and advances the voices by it.
-void iSndHostWin32TestMix(U32 rate, float* out, U32 frames)
+void iSndHostTestMix(U32 rate, float* out, U32 frames)
 {
     if (out == NULL || frames == 0 || rate == 0)
     {
@@ -1123,9 +834,9 @@ void iSndHostWin32TestMix(U32 rate, float* out, U32 frames)
     U32 saved = sOutRate;
     sOutRate = rate;
 
-    EnterCriticalSection(&sLock);
+    SDL_LockMutex(sLock);
     iMixLocked(frames);
-    LeaveCriticalSection(&sLock);
+    SDL_UnlockMutex(sLock);
 
     sOutRate = saved;
 
@@ -1134,5 +845,5 @@ void iSndHostWin32TestMix(U32 rate, float* out, U32 frames)
 
 const char* iSndHostName()
 {
-    return sName[0] != '\0' ? sName : "win32 (not initialised)";
+    return sName[0] != '\0' ? sName : "SDL3 (not initialised)";
 }

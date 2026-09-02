@@ -237,7 +237,7 @@ up on a D3D9 device. See LINKING.md.
 | `iTRC` | **done** | the three entry points game code uses; no disc, no error screen |
 | `iColor` | **done** | pure; copied from `gc` unchanged |
 | `isavegame` | **done** | a directory per target; saves written atomically |
-| `iSnd` | **done** | 22 entry points, plus 3D volume and pan; `win32` backend is a software mixer on WASAPI, `null` is silent but keeps time |
+| `iSnd` | **done** | 22 entry points, plus 3D volume and pan; `sdl` backend is a software mixer on one SDL stream, `null` is silent but keeps time |
 | `iModel` | **done** | not verbatim: RpAtomic has no interpolator on PC. Needed the RpHAnim group |
 | `iParMgr` | **done** | verbatim; the particle renderer, and `gRenderArr`/`gRenderBuffer` |
 | `iScrFX` | **done** | not verbatim: a `RwRasterLock` bracket a host must not honour. Its motion blur was cut from retail before ship |
@@ -285,13 +285,13 @@ and not the table. If you port something, edit the row.
   notice: the layer is only ever built for one host at a time, so a function
   added to one backend and forgotten in the other builds clean on that host and
   fails to link on the other.
-- **`iSndHost.h`**, **`iSndHostWin32.cpp`** and **`iSndHostNull.cpp`** are the
-  device end of audio, the same arrangement as input. `win32` mixes all 64
-  voices in software and feeds one WASAPI stream; no host API offers 64
-  independent voices with their own rates, and the ones that offer voices at all
-  bring a submix graph and a threading model with them. Mixing here makes the
-  resampling exact and asks the operating system for nothing but somewhere to
-  put the result.
+- **`iSndHost.h`**, **`iSndHostSDL.cpp`** and **`iSndHostNull.cpp`** are the
+  device end of audio, the same arrangement as input. `sdl` mixes all 64 voices
+  in software and feeds one SDL audio stream; no host API offers 64 independent
+  voices with their own rates, and the ones that offer voices at all bring a
+  submix graph and a threading model with them. Mixing here makes the resampling
+  exact and asks the operating system for nothing but somewhere to put the
+  result.
 
   Both backends **keep time**, and that is not decoration. zTalkBox holds a line
   until its clip finishes, cutscenes gate on `iSndIsPlayingByHandle`, and NPCs

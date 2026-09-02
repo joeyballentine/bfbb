@@ -316,7 +316,7 @@ DVD; what is here is the part carrying the game's semantics -- the voice table,
 the handle scheme, the six-stream/58-sound division, and the lookup with its two
 id ranges, which `xSnd.cpp` depends on.
 
-`iSndHostWin32.cpp` mixes 64 voices in software onto one WASAPI stream.
+`iSndHostSDL.cpp` mixes 64 voices in software onto one SDL audio stream.
 `iSndHostNull.cpp` is silent and still keeps time, which is the part that
 matters: `zTalkBox` holds a line on screen until its clip finishes, cutscenes
 gate on `iSndIsPlayingByHandle`, and NPCs stagger barks the same way. A backend

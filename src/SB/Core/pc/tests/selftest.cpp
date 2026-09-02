@@ -2816,8 +2816,8 @@ static void test_soundtrack()
 // The null backend's contract -- silent, but keeps time -- is checked by
 // test_snd below and holds for both.
 
-#ifdef BFBB_AUDIO_BACKEND_WIN32
-void iSndHostWin32TestMix(U32 rate, float* out, U32 frames);
+#ifdef BFBB_AUDIO_BACKEND_SDL
+void iSndHostTestMix(U32 rate, float* out, U32 frames);
 
 static void test_snd_mixer()
 {
@@ -2854,7 +2854,7 @@ static void test_snd_mixer()
     iSndHostSetVol(v, 1.0f, 1.0f);
     iSndHostStart(v, &s);
 
-    iSndHostWin32TestMix(2000, out, 100);
+    iSndHostTestMix(2000, out, 100);
 
     check(fabsf(out[0] - 0.0f) < 0.001f, "the first output frame is the first sample");
     check(fabsf(out[2 * 2] - (100.0f / 32768.0f)) < 0.001f,
@@ -2872,13 +2872,13 @@ static void test_snd_mixer()
     check(fabsf(out[2 * 2] - out[2 * 2 + 1]) < 0.0001f, "a mono source reaches both sides");
 
     // --- running out ---------------------------------------------------------
-    iSndHostWin32TestMix(2000, out, 100);
+    iSndHostTestMix(2000, out, 100);
     check(!iSndHostIsPlaying(v), "the voice finishes when the samples run out");
 
     // --- volume per side -----------------------------------------------------
     iSndHostSetVol(v, 0.5f, 0.0f);
     iSndHostStart(v, &s);
-    iSndHostWin32TestMix(1000, out, 16);
+    iSndHostTestMix(1000, out, 16);
 
     check(fabsf(out[2 * 8] - (800.0f / 32768.0f) * 0.5f) < 0.001f, "the left gain applies");
     check(fabsf(out[2 * 8 + 1]) < 0.0001f, "and a zero right gain silences that side");
@@ -2890,7 +2890,7 @@ static void test_snd_mixer()
 
     // 150 output frames at the source rate: past the 100-frame sample, so the
     // last 50 are the loop's second pass.
-    iSndHostWin32TestMix(1000, out, 150);
+    iSndHostTestMix(1000, out, 150);
     check(iSndHostIsPlaying(v), "a looping voice does not finish on its own");
     check(fabsf(out[2 * 120] - (2000.0f / 32768.0f)) < 0.001f,
           "and wraps to the start rather than running off the end");
@@ -2911,11 +2911,11 @@ static void test_snd_mixer()
     iSndHostStart(v, &q);
     check(iSndHostIsPlaying(v), "a voice with no samples still starts");
 
-    iSndHostWin32TestMix(1000, out, 50);
+    iSndHostTestMix(1000, out, 50);
     check(iSndHostIsPlaying(v), "and is still going halfway through its length");
     check(fabsf(out[0]) < 0.0001f, "while contributing nothing to the mix");
 
-    iSndHostWin32TestMix(1000, out, 60);
+    iSndHostTestMix(1000, out, 60);
     check(!iSndHostIsPlaying(v), "and finishes at the end of it");
 
     iSndHostRelease(v);
@@ -4238,7 +4238,7 @@ int main()
     test_savegame();
     test_snd_data();
     test_soundtrack();
-#ifdef BFBB_AUDIO_BACKEND_WIN32
+#ifdef BFBB_AUDIO_BACKEND_SDL
     test_snd_mixer();
 #endif
     test_snd();

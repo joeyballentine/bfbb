@@ -190,17 +190,13 @@ endif()
 # cutscene beats, NPC barks. A backend that finished everything instantly would
 # desynchronise all of them and look like a bug in the game code.
 #
-# "win32" is a software mixer feeding one WASAPI stream: 64 voices summed here
+# "sdl" is a software mixer feeding one SDL audio stream: 64 voices summed here
 # rather than handed to an API that has its own idea of what a voice is. It
 # keeps the null backend's timing promise -- if no device opens, it goes silent
 # and the voices still advance on the clock, so nothing the game derives from a
 # sound's length changes.
-if(WIN32)
-  set(BFBB_AUDIO_BACKEND "win32" CACHE STRING "Host audio backend: win32, null")
-else()
-  set(BFBB_AUDIO_BACKEND "null" CACHE STRING "Host audio backend: null")
-endif()
-set_property(CACHE BFBB_AUDIO_BACKEND PROPERTY STRINGS win32 null)
+set(BFBB_AUDIO_BACKEND "sdl" CACHE STRING "Host audio backend: sdl, null")
+set_property(CACHE BFBB_AUDIO_BACKEND PROPERTY STRINGS sdl null)
 
 # --- movie playback ----------------------------------------------------------
 #
@@ -252,14 +248,17 @@ else()
 endif()
 
 set(AUDIO_DEFINES)
+set(AUDIO_LIBS)
 if(BFBB_AUDIO_BACKEND STREQUAL "null")
   set(AUDIO_SOURCES ${PC_DIR}/iSndHostNull.cpp)
-elseif(BFBB_AUDIO_BACKEND STREQUAL "win32")
-  if(NOT WIN32)
-    message(FATAL_ERROR "BFBB_AUDIO_BACKEND=win32 needs a Windows host")
-  endif()
-  set(AUDIO_SOURCES ${PC_DIR}/iSndHostWin32.cpp)
-  set(AUDIO_DEFINES BFBB_AUDIO_BACKEND_WIN32)
+elseif(BFBB_AUDIO_BACKEND STREQUAL "sdl")
+  set(AUDIO_SOURCES ${PC_DIR}/iSndHostSDL.cpp)
+  set(AUDIO_DEFINES BFBB_AUDIO_BACKEND_SDL)
+  set(AUDIO_LIBS SDL3::SDL3-static)
+
+  # Built by the SDL section below rather than here, for the same reason the
+  # input backend defers: add_subdirectory may only run once.
+  set(BFBB_NEEDS_SDL ON)
 else()
   message(FATAL_ERROR "unknown BFBB_AUDIO_BACKEND '${BFBB_AUDIO_BACKEND}'")
 endif()
@@ -322,12 +321,18 @@ if(BFBB_NEEDS_SDL)
   # SDL_RENDER stays off with it. That is SDL's own 2D drawing API, which
   # neither the game nor librw uses -- librw talks to OpenGL directly and only
   # wants SDL for the window, the context and the swap.
+  #
+  # SDL_AUDIO is what iSndHostSDL.cpp and iFMVAudioSDL.cpp open their streams
+  # on. Without it SDL_InitSubSystem(SDL_INIT_AUDIO) fails with "SDL not built
+  # with audio support" and the game runs silent, which is a configuration the
+  # audio backend tolerates -- so this going missing is not a build error and
+  # has to be kept on deliberately.
   set(SDL_SHARED OFF CACHE BOOL "" FORCE)
   set(SDL_STATIC ON CACHE BOOL "" FORCE)
   set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
   set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
   set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
-  set(SDL_AUDIO OFF CACHE BOOL "" FORCE)
+  set(SDL_AUDIO ON CACHE BOOL "" FORCE)
   set(SDL_CAMERA OFF CACHE BOOL "" FORCE)
   set(SDL_RENDER OFF CACHE BOOL "" FORCE)
   set(SDL_GPU OFF CACHE BOOL "" FORCE)
@@ -633,9 +638,9 @@ target_link_libraries(bfbb_platform PUBLIC bfbb_rw)
 # includes an FFmpeg header, and iFMV.cpp is the only caller of either seam.
 target_link_libraries(bfbb_platform PRIVATE ${FMV_LIBRARIES})
 
-# The input backend's library, if it has one. PUBLIC because both the game
-# and the self-test link the backend through this target.
-target_link_libraries(bfbb_platform PUBLIC ${INPUT_LIBS})
+# The input and audio backends' libraries, if they have any. PUBLIC because
+# both the game and the self-test link the backends through this target.
+target_link_libraries(bfbb_platform PUBLIC ${INPUT_LIBS} ${AUDIO_LIBS})
 if(FMV_INCLUDES)
   target_include_directories(bfbb_platform PRIVATE ${FMV_INCLUDES})
 endif()
@@ -809,10 +814,7 @@ target_compile_options(bfbb PRIVATE -Wno-everything)
 
 if(WIN32)
   # dbghelp is the crash handler in bfbb_main.cpp; see the comment there.
-  # ole32 is CoCreateInstance in the WASAPI backend; the interfaces themselves
-  # are declared by the SDK headers and their GUIDs are defined in
-  # iSndHostWin32.cpp, so uuid.lib is deliberately not needed.
-  target_link_libraries(bfbb PRIVATE user32 gdi32 dbghelp ole32)
+  target_link_libraries(bfbb PRIVATE user32 gdi32 dbghelp)
 
   # EXPERIMENT: 64MB stack, to test whether the boot fault is stack depth.
   target_link_options(bfbb PRIVATE -Xlinker /STACK:67108864)
@@ -900,8 +902,8 @@ add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
 target_compile_definitions(pc_selftest PRIVATE ${INPUT_DEFINES} ${AUDIO_DEFINES})
 
 # pc_selftest compiles the backend sources itself rather than linking
-# bfbb_platform, so the input backend's library is its own to ask for.
-target_link_libraries(pc_selftest PRIVATE ${INPUT_LIBS})
+# bfbb_platform, so the backends' libraries are its own to ask for.
+target_link_libraries(pc_selftest PRIVATE ${INPUT_LIBS} ${AUDIO_LIBS})
 target_include_directories(pc_selftest PRIVATE
   ${PC_DIR}/compat
   ${PC_DIR}
