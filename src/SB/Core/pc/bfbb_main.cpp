@@ -307,6 +307,8 @@ namespace
     // CMakeLists.txt explains why every target of the port has to see it.
 #if defined(RW_D3D9)
     const char* const kRenderBackend = "D3D9";
+#elif defined(RW_D3D11)
+    const char* const kRenderBackend = "D3D11";
 #elif defined(RW_GL3)
     const char* const kRenderBackend = "OpenGL";
 #else
