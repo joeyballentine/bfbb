@@ -6814,3 +6814,204 @@ One sub-100 move the frida sweep did not predict: `zEntPlayer_Update` 96.776
 -> 96.677 on the real build. The frida test hooked `isloopinvariant` for
 every caller; the shipped stub retargets only `moveinvariantsfromloop`'s
 call, so `simpleunswitchloop` still sees the stock answer. No crossing lost.
+
+## Source sweep of never-tried functions (2026-09-01, evening)
+
+Targets were the game functions the doc had never mentioned, worked one unit
+per agent under the worker brief. Every entry below is measured; shapes that
+did not move are listed so nobody re-runs them.
+
+**Banked without a function moving.** `gDebugPad` was defined in
+`xEntMotion.cpp`; retail's `xPad.o` `.sbss` is `gDebugPad, gPlayerPad` and
+`xEntMotion.o` has no `gDebugPad`. Moved the definition to `xPad.cpp`
+(declaration in `xPad.h`). Both units' `.sbss` symbol sets now match.
+`xSnd` passed `fliptest` and is Matching (98/224 game units).
+
+**Data-section misses, triaged.** `xScene .sbss2` (0%, 8 b) is `get_grid_index`'s
+4-byte zero template `@587`, the held `xGrid.h` change above. `xCollide .rodata`'s
+missing `@12` is `xVec3::cross`'s zero template, the recorded DO-NOT-APPLY.
+`zAssetTypes` emits an extra `.rodata @12` and `.sbss2 @8` that no `.text`
+reloc on either side references. `xParEmitter .data` is three anonymous
+zero templates of identical size and content on both sides, no relocs, and
+objdiff still scores 78.75; cause unknown.
+
+**`zNPCSpawner::Owned` (87.145) — NO-GO, ten shapes.** The 7-instruction SIZE
+delta is our unroller folding eight `addi r3, r3, 0xc` base bumps into
+immediate displacements `0xe0..0x134` plus one `addi 0x60` at the tail; retail
+walks the base. Bit-identical at 87.145: `(npcpool + i)->npc`, `U32 i`,
+`i != 16`, `this->npcpool[i].npc`, `!(… != npc)`. Worse: a separate
+`const SMNPCStatus*` pointer local 83.455, `U8 found` + `break` 74.691. The
+dead `addi r5, r5, 0x7` IV is on both sides.
+
+**`_iGCUVRenderCallback` (iFX, 92.895) — NO-GO, two regions, 0 semantic
+diffs.** Region 1: `(header + n*8) + 0x14` vs ours `header + (n*8 + 0x14)`.
+Writing retail's association literally, in two spellings, emits ours
+unchanged: the backend canonicalises it. Eleven index spellings measured,
+best 92.895. Region 2: retail rematerialises four `lfs` at their `stfs` in 5
+FPRs; we hoist all eight into the `Mtx = {0}` copy block in f0-f7. Named
+locals, `= {}`, row-major ordering: 92.895 / 92.895 / 92.860. The
+rematerialise-vs-hold class, inverted.
+
+**`zEGenerator_TurnOn` (97.900) — NO-GO, 8 rows.** Group A: the `add.flags`
+`stw` sits last before `bl zLightningAdd` in retail and nine slots earlier in
+ours; moving the assignment above `add.rand_radius` in the source gives a
+byte-identical object, so the position is scheduler-fixed. Group B:
+`&egen->src_pos` in r5 (retail) vs r6, which flips the last two
+`xColorFromRGBA` argument fills. `color` before `thickness` 95.896, `end`
+before `start` 97.881. The file's nonmatch comment was rewritten to say this.
+
+**`xShadow`, three moves, no crossing.** `const F32 sf[3][2]` (read-only
+aggregate lever) takes `xShadowRenderWorld` 87.531 -> 98.315; `(U8)` instead
+of `(S32)` on `param.shadowValue` puts the `fctiwz` temp in r8 and takes
+`ShadowRender`/`xShadowVertical_DrawCache` to 99.943/99.952. All six residues
+now have identical multisets. `InvertRaster` (89.495) is scheduler entry 4
+(subrange stores of `vx[]` hoisted into `lfs` shadows), not opened.
+`Im2DRenderQuad`/`PickByRayCast` are one hoisted store each. The last two rows
+of `ShadowRender`/`DrawCache` are the `gRenderBuffer` address temp in r5 vs
+r4; seven block permutations measured, all <= baseline. `min_t`/`max_t` swap
+in `RenderWorld`: 97.842, reverted.
+
+**`TimerUpdate__7xPsycheFf` (xBehaveMgr, 52.941) — NO-GO, 22 shapes.** The
+target is `lwz/cmpwi/bltlr`, then two UNCONDITIONAL `b` to two byte-identical
+arms: an `if (A || B) { X } else { X }` whose condition folded while both arms
+survived. The `||` layout is reachable at exactly 68 bytes, but our compiler
+either reuses cr0 with a conditional branch or deletes the dead arm; it never
+emits `b`/`b`. Literal constants fold to one arm, re-tests of `staktop` give
+`bge`/`bge`, `this != 0` and friends emit a real compare. Same family as
+`DoAliveStuff`'s kept switch skeleton. The `staktop >= 0 || staktop < 0`
+spelling would score ~88 and was not written.
+
+**`zGame` / `zCutsceneMgr`, two moves, no crossing.**
+- LEVER: an anonymous CSE temp takes GPR colour index 0 unless a declared
+  local claims the value. `zGameUpdateMode` 99.088 -> 99.355: `zScene* scene
+  = globals.sceneCur` declared after the four byte temps (order pinned to
+  `b, d, a, c`; `a,b,c,d` and `d,c,b,a` 99.167, `b,a,d,c` 99.261) puts six
+  values on retail's registers. Residual: the `subfc/stw/subfe` 64-bit store
+  pair order, same at the identical site in `zGameLoop`.
+- `zCutsceneMgrPlayStart` 97.914 -> 98.777 from `if (x.radius)` instead of
+  `!= 0.0f` (operand order of `fcmpu`). Residual is retail reloading
+  `alphaBits` after `stw s_atomicNumber`.
+- NO-GO `zCutsceneMgrFinishLoad` (82.878) / `FinishExit` (85.151): retail
+  keeps `to` and `t = (zCutsceneMgr*)to` as two locations (two callee-saved
+  regs; a stack home in FinishExit; PS2 dwarf has `to` in memory in both).
+  Split decl/assign, reference binding, `t` inside the loop, either alias at
+  the final call, `for(;;)`: all bit-identical. `break` instead of `return`:
+  68.976.
+- `zGameUpdateTransitionBubbles` (80.000) and `zGameLoop` (93.949) are
+  entirely the 64-bit static reload-after-store class (semdiff 4 and 12
+  terms). `zGameScreenTransitionUpdate` / `zGame_HackDrawCard`: identical
+  multisets, Im2D vertex stores interleaved by our scheduler.
+- Recurring: retail rematerialises (`&globals.player.ent`, `li r0,0`,
+  `alphaBits`) where we hold. Four sites this session.
+- `solo.py zCutsceneMgr` once reported a phantom `check_hide_entities` row at
+  91.047 on unchanged source; the next three runs did not. Same flake as the
+  one recorded in `measuring.md` for the built object.
+
+**`zNPCTypePrawn`: three crossings, one lever.** `update_sweep`,
+`init_look_dir` (99.66 / 99.40 -> 100.0): `RwMatrix* mat;` declared bare
+BEFORE `prawn`, assigned AFTER it. A bare declaration sets the callee-saved
+colour (earlier declaration = higher register); the assignment position sets
+emission order. This settles the OPEN CONFLICT entry: lexical declaration
+point is the GPR colour key, definition point drives emission.
+`load_patterns` (98.33 -> 100.0): retail's prologue `mr r28, r7 / mr r30, r6`
+copies the 4th parameter into a HIGHER callee-saved register than parameter
+order predicts, which means retail walked a local copy: `range_type* p =
+pattern;` declared before `i`, and the loop walks `p`. Rule of thumb recorded.
+- NO-GO `turning__9zNPCPrawnCFv` (87.870): identical multiset; retail hoists
+  `lfs turn.vel` and `-1e-5f` above the `xVec2 facing` template stores.
+  `result` declared last: bit-identical. Brace-init `facing = { mat->at.x,
+  mat->at.z }`: 87.500.
+- NO-GO `update_turn__9zNPCPrawnFf` (99.566): retail reuses the `1` from
+  `decel = true` (`mr r4, r3`), we rematerialise. Swapped `==` operands
+  98.648; `bool decel` hoisted beside `time_to_target` 97.005.
+- `zFX`: `SkinXformVertAndNormal` 85.391 -> 85.504 from `mask` before
+  `shift` (mask on r27); the rest is a 3-cycle on r26/r27/r28 plus prologue
+  scheduling, `done,scratch,mask,shift` 85.353. `validate_popper` (91.651):
+  the 12-byte `scale` copy uses two scratch regs where retail uses three; bare
+  `xModelInstance* m` and hoisting `m = ent.model->Next` both bit-identical.
+  `set_popper_alpha` (92.0): epilogue `lwz r0, 0x24(r1)` placement only.
+  `zFX_SpawnBubbleWall` (96.774): `xVec3 offset;` at loop-body top is
+  bit-identical.
+
+### Worked directly, 2026-09-02 (fable, no agents)
+
+- **`xCMrender` 92.719 -> 99.921.** Real source differences, all faithful to
+  the target: `xfont::create`'s spacing argument is `0.0f` in all three calls
+  (ours read `char_spacing.x`); the second text box is created with
+  `box0->font`; `x0` is ONE outer local (declared before `a`), computed
+  before the colour call in case 0, accumulated with `+=` for the second box
+  and reused for the texture quad; `x0 = 0.5f * (1.0f - box0.x - box1.x -
+  innerspace)` in that order; the return is the bool expression (`clrlwi`).
+  Case 4's corners: bare `F32 y1; F32 x1; F32 y0;` before the assignments
+  gives retail's f27/f29/f31. Last two rows: `tex->x`/`tex->y` CSE temps
+  f5/f4 vs f4/f6; named temps, both orders, and six computation orders
+  measured, none better.
+- **`ArcLength3` (xSpline) 88.023 -> 100.0.** Three levers: (1) `E`'s three
+  squares as named `F64` locals (retail: fmul, fmul, fadd, where an inline
+  expression fuses) 88.0 -> 94.4; (2) the nine coefficient loads as named
+  `F64` temps and the eight loop doubles DEFINED in the order E, D, C, B, A,
+  h, sum, u, which is retail's callee-saved FPR order f31..f24 -> 99.06;
+  (3) temp declaration order `y0, x0, z0, x1, y1, z1, y2, x2, z2` for the
+  volatile colours -> 100.0. Retail's source never loaded the coefficients
+  into the loop variables; ours did (A = x.a[0] ... reassigned later).
+- **`xQuatMul` (xMath3) 84.243 -> 86.297.** Retail seeds each fmadd chain
+  with the RIGHT product of the first `+`: `a.s*b.x + a.x*b.s + a.y*b.z -
+  a.z*b.y` per component, statements x, y, z, s. Rest is FPR colouring;
+  z,y,x order with the new association 73.757.
+- **`iSG_mcidx2slot` (isavegame) 90.391 -> 95.672**: `*out_slot = -1` as the
+  first statement. Residue: retail reads the parameter from r25 (its
+  callee-saved copy) for that store and uses r4/r3 as template temps; ours
+  reads r4 and takes r8/r7. Nine declaration/statement orders measured
+  (90.156 .. 93.172), same under stock `GC/2.0p1`.
+- NO-GO `impart_velocity` (Plankton, 91.127): the `diff` template load is
+  hoisted above the `add` stores. `add.y = 0` after `diff` 87.746; split
+  decl 84.789; `max_dist` before `diff` 35.282; `loc` reference 70.451.
+- NO-GO `zCameraTweak` (all four): static loads hoisted over static stores;
+  stock compiler 36-80, patched 88-95, the residue is the uncovered entries.
+- NO-GO `LOD_r_PLAT` (xpkrsvc, 87.5): the four `char[32] = {}` copies are
+  scheduled interleaved by retail, hoisted by ours; the `@1244` vs
+  `.rodata+0` reloc names are the same address.
+- NO-GO `TTGunSmoke_AR` (zNPCFXCinematic, 83.5): the `0.0f` of
+  `MAX(0.0f, MIN(rat, 1.0f))` loaded into the `fdivs` latency; same as
+  `ConeOfRange`.
+- NO-GO `player_left_territory` (Plankton, 96.524): retail forms
+  `&territory[i]` (addi) for `.platform` and folds `.crony_size`;
+  `territory->platform` 93.310, mixed `territory[i].crony_size`/`t.platform`
+  bit-identical.
+- NO-GO `zNPCGlyph_ScenePrepare` (96.873): retail copies `i` into r29 for the
+  inner loop (one more callee-saved). Named `en_npcglyph` local, inline and
+  bare-declared: bit-identical.
+- NO-GO `xSerial::Read` (94.167): per-arm pointer locals 93.333. Retail's
+  `mr r30, r31` copy of a zero is rematerialise-vs-copy.
+- NO-GO `iScrFxCameraCreated` (90.083): retail materialises the pointer NULL
+  and the U16 zero separately; `(RwRaster*)NULL` bit-identical.
+- `NPCC_BuildStandardAnimTran` (96.05): retail reloads `ourAnims[i]` for the
+  `==` test after the `!= 0` test (cross-block CSE class).
+- **REFUTED: `xatan2` returning `double`** (the lead above). With `F64
+  xatan2(F32, F32)` in `xMathInlines.h`, `update_turn__12zNPCDutchmanFf`
+  emits `frsp f31, f1` AT the `cur` assignment and `fsub`+`frsp` for `diff`;
+  retail has `fmr f31, f1`, `fsubs`, and the lone `frsp f0, f31` only at
+  `angle + diff`. 94.308 -> 91.000; header reverted before any sweep.
+  `F64 cur` 89.292; `F64 cur` + `F64 diff` 86.215. The frsp is on a value
+  the compiler otherwise treats as single (it `stfs` it unrounded), so it is
+  not a declared-double local either. Still open, and it is the same row in
+  `update_turn` of Plankton and SB2.
+- **`zGustUpdateEnt` 93.554 -> 94.098, a SEMANTIC fix.** In the `dt >=
+  lerpinc` branch retail tests `!(data->lerp[i] < 0.0f)` (pool @789 = 0),
+  ours tested `< 1.0f`. Residue: GPR colour permutation (data r28/i r30/
+  minidx r29 vs ours r30/r29/r28), the unrolled `j` loop's `li` before the
+  `lwz`, and retail storing `gust_on = 0` from a held r31 where we
+  rematerialise. `data` declared before the `gusts` test 92.739; after
+  `coll` bit-identical.
+- `xCutscene_Render` (96.666): `(numFrame * 2 + numRun * 2 + 5)` — retail
+  keeps two `slwi` and adds; ours factors to `(a + b) << 1`. `2 * a + 2 * b`
+  bit-identical; `a*2 + (b*2 + 5)`, `a*2 + 5 + b*2`, `5 + a*2 + b*2` all
+  95.403. Also `lwzu` vs `addi`+`lwz` for the 16-byte NULL template of
+  `v_array`. Not closed.
+- `zParPTankBubbleUpdate` (95.779): ours hoists `plock.data`/`uvlock.data`
+  reloads above `stfs xp->life` and holds one more callee-saved; the
+  locals' addresses escaped to `RpPTankAtomicLock`, so this is the
+  alias-hoist class.
+- `Show_frame` (iFMV, 96.847): retail reloads the u32->double magic `lfd`
+  for the second conversion in the same block; we CSE it. Literal-reload
+  class.
