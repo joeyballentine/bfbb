@@ -6637,8 +6637,10 @@ target's is what tells you to move code instead of adding it.
 
 ## Session 2026-09-01: six crossings, and the classes they did not come from
 
-Measured with `solo.py`; report.json numbers are in the commit that follows the
-build. Crossings to 100.0: `xDecal` `update_frac`, `get_render_data`,
+Full `ninja`, DOL `306526d9...` intact: **matched_functions 8455 -> 8461,
+complete_units 236 -> 238** (zNPCSndTable and xDecal now link from our
+objects; xDecal's extra weak inline copies did not move the link). GAME exact
+81.513 -> 81.600, fuzzy 99.306 -> 99.321. Crossings to 100.0: `xDecal` `update_frac`, `get_render_data`,
 `select_texture_unit` (unit now 46/46), `zNPCSndTable` `NPCS_SndPickSimilar`
 (unit 11/11), `zVolume` `zVolumeEventCB`, `xParEmitter`
 `xParInterp::operator=`. Moved without crossing: `UpdateGustFX` 97.16 -> 99.15,
