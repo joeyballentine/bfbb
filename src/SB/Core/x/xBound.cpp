@@ -172,14 +172,9 @@ static void xBoundOBBIsectRay(const xBox* b, const xMat4x3* m, const xRay3* r, x
         {
             scale.x = 1.0f;
 
-            // non-matching: incorrect instruction + order
-            // (the target stores the raw components here, not their squares,
-            //  but our build fails to CSE the loads across the branch and
-            //  scores 4pp worse that way)
-
-            mnormal.right.x = SQR(m->right.x);
-            mnormal.right.y = SQR(m->right.y);
-            mnormal.right.z = SQR(m->right.z);
+            mnormal.right.x = m->right.x;
+            mnormal.right.y = m->right.y;
+            mnormal.right.z = m->right.z;
         }
         else if ((F32)iabs(len2) <= 0.00001f)
         {
@@ -210,14 +205,9 @@ static void xBoundOBBIsectRay(const xBox* b, const xMat4x3* m, const xRay3* r, x
         {
             scale.y = 1.0f;
 
-            // non-matching: incorrect instruction + order
-            // (the target stores the raw components here, not their squares,
-            //  but our build fails to CSE the loads across the branch and
-            //  scores 4pp worse that way)
-
-            mnormal.up.x = SQR(m->up.x);
-            mnormal.up.y = SQR(m->up.y);
-            mnormal.up.z = SQR(m->up.z);
+            mnormal.up.x = m->up.x;
+            mnormal.up.y = m->up.y;
+            mnormal.up.z = m->up.z;
         }
         else if ((F32)iabs(len2) <= 0.00001f)
         {
@@ -248,14 +238,9 @@ static void xBoundOBBIsectRay(const xBox* b, const xMat4x3* m, const xRay3* r, x
         {
             scale.z = 1.0f;
 
-            // non-matching: incorrect instruction + order
-            // (the target stores the raw components here, not their squares,
-            //  but our build fails to CSE the loads across the branch and
-            //  scores 4pp worse that way)
-
-            mnormal.at.x = SQR(m->at.x);
-            mnormal.at.y = SQR(m->at.y);
-            mnormal.at.z = SQR(m->at.z);
+            mnormal.at.x = m->at.x;
+            mnormal.at.y = m->at.y;
+            mnormal.at.z = m->at.z;
         }
         else if ((F32)iabs(len2) <= 0.00001f)
         {
