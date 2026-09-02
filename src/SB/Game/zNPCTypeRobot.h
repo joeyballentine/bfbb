@@ -241,15 +241,27 @@ struct zNPCChomper : zNPCRobot
 {
     S32 cnt_spurt;
     S32 cnt_skipEmit;
+#ifdef PLATFORM_PC
+    // Seconds banked toward the next console frame of breath. The two counters
+    // above step once per call, so the wisps came out at the frame rate.
+    F32 tmr_breath;
+#endif
 
     zNPCChomper(S32 myType) : zNPCRobot(myType)
     {
+#ifdef PLATFORM_PC
+        tmr_breath = 0.0f;
+#endif
     }
 
     zNPCLassoInfo* PRIV_GetLassoData();
     void ParseINI();
     void Init(xEntAsset*);
+#ifdef PLATFORM_PC
+    void BreathTrail(F32 dt);
+#else
     void BreathTrail();
+#endif
     void Process(xScene* xscn, F32 dt);
     void LassoModelIndex(S32* idxgrab, S32* idxhold);
     U32 AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal);

@@ -2718,7 +2718,11 @@ void zNPCChomper::Process(xScene* xscn, F32 dt)
         S32 gid = psy_instinct->GIDOfActive();
         if (gid != NPC_GOAL_ATTACKCHOMPER && gid != NPC_GOAL_RESPAWN)
         {
+#ifdef PLATFORM_PC
+            BreathTrail(dt);
+#else
             BreathTrail();
+#endif
         }
     }
 
@@ -2767,11 +2771,32 @@ U32 zNPCChomper::AnimPick(S32 gid, en_NPC_GOAL_SPOT gspot, xGoal* rawgoal)
     return hashid;
 }
 
+#ifdef PLATFORM_PC
+void zNPCChomper::BreathTrail(F32 dt)
+#else
 void zNPCChomper::BreathTrail()
+#endif
 {
     static const xVec3 vec_boneOffsetLeft = { -0.32f, -0.2f, 0.3f };
     static const xVec3 vec_boneOffsetRight = { 0.32f, -0.2f, 0.3f };
 
+#ifdef PLATFORM_PC
+    // The counters below step once per console frame, so the whole body runs on
+    // a sixtieth-of-a-second budget with the remainder carried. Capped so a
+    // hitch does not spend the backlog in one go.
+    tmr_breath += dt;
+
+    S32 steps = (S32)(60.0f * tmr_breath);
+
+    if (steps > 4)
+    {
+        steps = 4;
+    }
+
+    tmr_breath -= steps * (1.0f / 60.0f);
+
+    for (S32 step = 0; step < steps; step++)
+#endif
     if (--cnt_skipEmit <= 0)
     {
         if (--cnt_spurt < 0)
@@ -5558,14 +5583,34 @@ void zNPCSlick::SlipSlidenAway(F32 dt)
 {
     static S32 moreorless;
     static S8 init;
+#ifdef PLATFORM_PC
+    // The remainder of a console frame carried between updates.
+    static F32 tmr_moreorless;
+#endif
 
     if (init == 0)
     {
         moreorless = 0;
+#ifdef PLATFORM_PC
+        tmr_moreorless = 0.0f;
+#endif
         init = 1;
     }
 
-    if (--moreorless < 0)
+#ifdef PLATFORM_PC
+    // moreorless counts console frames; bank dt and spend whole sixtieths
+    // against it so the vapours come at the same rate per second.
+    tmr_moreorless += dt;
+
+    S32 nsteps = (S32)(60.0f * tmr_moreorless);
+
+    tmr_moreorless -= nsteps * (1.0f / 60.0f);
+    moreorless -= nsteps;
+#else
+    moreorless--;
+#endif
+
+    if (moreorless < 0)
     {
         moreorless = 8;
 

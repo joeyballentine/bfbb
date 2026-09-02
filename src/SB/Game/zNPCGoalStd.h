@@ -693,6 +693,10 @@ public:
     zNPCGoalAlertTubelet(S32 id) : zNPCGoalCommon(id)
     {
         xGoal::SetFlags(6);
+#ifdef PLATFORM_PC
+        tmr_nextlos = 0.0f;
+        tmr_emit = 0.0f;
+#endif
     }
 
     S32 Exit(F32 dt, void* updCtxt);
@@ -708,6 +712,13 @@ public:
     S32 cnt_nextlos; // offset 0x50, size 0x4
     F32 len_laser; // offset 0x54, size 0x4
     S32 pete_attack_last; // offset 0x58, size 0x4
+#ifdef PLATFORM_PC
+    // Real time spent against cnt_nextlos above, which counts console frames,
+    // and time banked toward the next steam particle. The steam is one particle
+    // per call and the check one per five frames, so both ran at the frame rate.
+    F32 tmr_nextlos;
+    F32 tmr_emit;
+#endif
 };
 
 struct zNPCGoalAlertChuck : zNPCGoalCommon
@@ -861,10 +872,19 @@ struct zNPCGoalAlertFodBzzt : zNPCGoalCommon
     xVec3 pos_laserTarget;
     RwRGBA rgba_deathRay;
     S32 cnt_inContact;
+#ifdef PLATFORM_PC
+    // Real time spent against cnt_nextlos above, which counts console frames.
+    // cnt_inContact is stepped inside the block that counter gates, so the death
+    // ray also hurt the player at the frame rate.
+    F32 tmr_nextlos;
+#endif
 
     zNPCGoalAlertFodBzzt(S32 id) : zNPCGoalCommon(id)
     {
         xGoal::SetFlags(6);
+#ifdef PLATFORM_PC
+        tmr_nextlos = 0.0f;
+#endif
     }
 
     S32 Enter(F32 dt, void* updCtxt);

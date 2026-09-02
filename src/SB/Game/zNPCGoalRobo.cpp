@@ -1410,7 +1410,19 @@ void zNPCGoalAlertFodBzzt::DeathRayUpdate(F32 dt)
     xVec3 dir_laser = pos_tgt - pos_src;
     dir_laser.normalize();
 
+#ifdef PLATFORM_PC
+    // cnt_nextlos counts console frames, and Enter, Resume and the warm-up path
+    // all zero it to force a check on the next update. So it stays the counter
+    // and only its step becomes real time: bank dt, spend whole sixtieths.
+    tmr_nextlos += dt;
+
+    S32 nlos = (S32)(60.0f * tmr_nextlos);
+
+    tmr_nextlos -= nlos * (1.0f / 60.0f);
+    cnt_nextlos -= nlos;
+#else
     cnt_nextlos--;
+#endif
 
     if (cnt_nextlos < 0)
     {
@@ -3913,7 +3925,20 @@ void zNPCGoalAlertTubelet::EmitSteam(F32 dt)
     xVec3Sub(&dir_steam, &pos_end, &pos_emit);
     xVec3Normalize(&dir_steam, &dir_steam);
 
-    if (--cnt_nextlos < 0)
+#ifdef PLATFORM_PC
+    // cnt_nextlos counts console frames; bank dt and spend whole sixtieths
+    // against it so the check keeps its cadence in seconds.
+    tmr_nextlos += dt;
+
+    S32 nlos = (S32)(60.0f * tmr_nextlos);
+
+    tmr_nextlos -= nlos * (1.0f / 60.0f);
+    cnt_nextlos -= nlos;
+#else
+    cnt_nextlos--;
+#endif
+
+    if (cnt_nextlos < 0)
     {
         memset(&g_SharedCollisRecord, 0, sizeof(g_SharedCollisRecord));
         g_SharedCollisRecord.flags = k_HIT_0xF00 | k_HIT_CALC_HDNG;
@@ -3944,7 +3969,28 @@ void zNPCGoalAlertTubelet::EmitSteam(F32 dt)
     xVec3 vel_emit;
     xVec3SMul(&vel_emit, &dir_steam, 5.0f);
 
+#ifdef PLATFORM_PC
+    // One particle per call is one per console frame. Bank the elapsed time and
+    // spend it at sixty a second, carrying the remainder so the count does not
+    // follow the frame rate.
+    tmr_emit += dt;
+
+    S32 count = (S32)(60.0f * tmr_emit);
+
+    if (count > 4)
+    {
+        count = 4;
+    }
+
+    tmr_emit -= count * (1.0f / 60.0f);
+
+    for (S32 i = 0; i < count; i++)
+    {
+        NPAR_EmitTubeSpiral(&pos_emit, &vel_emit, tym_life);
+    }
+#else
     NPAR_EmitTubeSpiral(&pos_emit, &vel_emit, tym_life);
+#endif
 }
 
 S32 zNPCGoalAlertSlick::Enter(F32 dt, void* updCtxt)
