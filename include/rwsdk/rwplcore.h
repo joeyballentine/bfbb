@@ -982,7 +982,7 @@ typedef struct rwGameCube2DVertex RwIm2DVertex;
 // stay put and the ORDER has to follow the backend. layout_im2d.cpp asserts
 // the result against the backend's own struct.
 
-#if defined(RW_D3D9) || defined(RW_D3D8)
+#if defined(RW_D3D9) || defined(RW_D3D8) || defined(RW_D3D11)
 struct RwIm2DVertexRGBA
 {
     RwUInt8 blue;

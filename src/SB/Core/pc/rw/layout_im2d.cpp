@@ -40,7 +40,7 @@ static_assert(sizeof(RwIm2DVertex) == 28, "RwIm2DVertex is not 28 bytes");
 // which is otherwise a bug you find by looking at the screen and guessing.
 static_assert(sizeof(RwIm2DVertexRGBA) == 4, "the vertex colour is not four bytes");
 
-#if defined(RW_D3D9) || defined(RW_D3D8)
+#if defined(RW_D3D9) || defined(RW_D3D8) || defined(RW_D3D11)
 
 // D3D packs the colour with COLOR_ARGB(a, r, g, b), so the bytes run
 // blue, green, red, alpha from the low address up.

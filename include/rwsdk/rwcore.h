@@ -69,7 +69,7 @@ struct RxObjSpace3DVertex
     // The field NAMES stay put, so every RwIm3DVertexSetRGBA call still means
     // what it says; only the bytes move. The GameCube keeps RenderWare's own
     // order, where GX reads the colour as RGBA.
-#if defined(RW_D3D9) || defined(RW_D3D8)
+#if defined(RW_D3D9) || defined(RW_D3D8) || defined(RW_D3D11)
     RwUInt8 b;
     RwUInt8 g;
     RwUInt8 r;
