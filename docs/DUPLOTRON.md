@@ -6809,3 +6809,8 @@ re-deriving. A frida sweep running at the same time died with
 `ExecutableNotFoundError`, and units compiled inside the window could have used
 the variant's bytes. Never run `variant.py` while any `solo`, `patchcost` or
 frida job is using `GC/2.0p1a`.
+
+One sub-100 move the frida sweep did not predict: `zEntPlayer_Update` 96.776
+-> 96.677 on the real build. The frida test hooked `isloopinvariant` for
+every caller; the shipped stub retargets only `moveinvariantsfromloop`'s
+call, so `simpleunswitchloop` still sees the stock answer. No crossing lost.
