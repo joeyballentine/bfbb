@@ -1714,6 +1714,17 @@ void xShadowVertical_DrawCache(xShadowCache* cache, F32 shadowFactor, F32 fadeDi
         }
     }
 
+#ifdef PLATFORM_PC
+    // The decal sits 0.008 along the receiver's normal, over a surface that is
+    // already in the frame buffer, so it has no business in the depth buffer.
+    // zScene draws the sorted alpha models after this, and a receiver that is
+    // itself an alpha model -- Industrial Park's goo -- loses every polygon the
+    // decal covered: the decal rasterises the whole triangle, not just the
+    // blob, because outside it the clamped shadow texture composites to no
+    // visible change. xShadowReceiveShadow does the same around its own draw.
+    RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+#endif
+
     RwMatrixTag* shadowMatrix;
     if (shadowMat != NULL)
     {
@@ -1779,6 +1790,9 @@ void xShadowVertical_DrawCache(xShadowCache* cache, F32 shadowFactor, F32 fadeDi
     RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)fogstate);
     RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
     RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+#ifdef PLATFORM_PC
+    RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+#endif
 }
 
 void xShadowManager_Init(S32 numEnts)
