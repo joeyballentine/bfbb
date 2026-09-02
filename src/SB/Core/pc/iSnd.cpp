@@ -888,12 +888,10 @@ static F32 iPitchRatio(F32 semitones)
 //
 //   Distance. The GameCube curve is nearly flat until you approach the outer
 //   radius and then drops off a cliff to silence. DirectSound's is the inverse
-//   law, innerRadius / distance, and it does not mute past the max distance --
-//   the buffers are created with DSBCAPS_CTRL3D and not MUTE3DATMAXDISTANCE, so
-//   beyond it the attenuation just stops falling. Kelp Forest's waterfall
-//   (`c6da94af`, a -5.4 dBFS loop, on emitters with a 45-unit outer radius) is
-//   14 dB louder here than on the Xbox at 30 units out, which is what issue #27
-//   is about.
+//   law, innerRadius / distance, which is already falling at the inner radius.
+//   Kelp Forest's waterfall (`c6da94af`, a -5.4 dBFS loop, on emitters with a
+//   45-unit outer radius) is 14 dB louder here than on the Xbox at 30 units
+//   out, which is what issue #27 is about.
 //
 //   Curve. DirectSound takes hundredths of a decibel and the Xbox converts with
 //   `100 * (int)(10 * log2(x))`, which is amplitude x^1.66. The GameCube's
@@ -932,8 +930,14 @@ static F32 iXboxFader(F32 x)
 }
 
 // DirectSound's inverse-distance law at the default rolloff factor of 1: full
-// volume inside the min distance, min/d out to the max distance, and held there
-// beyond it. Both radii are clamped to 1 on the way in, as the Xbox clamps them.
+// volume inside the min distance, min/d out to the max distance, silent past
+// it. Both radii are clamped to 1 on the way in, as the Xbox clamps them.
+//
+// The buffers are created with DSBCAPS_MUTE3DATMAXDISTANCE, so the max distance
+// is a cutoff and not a floor. Without it the emitters in Goo Lagoon 01 would
+// never stop: 49 of them are 3D, and the ratios are as tight as 9 in and 10
+// out, which would leave the fires burning a decibel down across the whole
+// level.
 static F32 iXboxDistanceAtten(const xSndVoiceInfo* vp, F32 dist)
 {
     F32 mn = sqrtf(vp->innerRadius2);
@@ -949,17 +953,17 @@ static F32 iXboxDistanceAtten(const xSndVoiceInfo* vp, F32 dist)
         mx = mn;
     }
 
-    F32 d = dist;
-    if (d < mn)
+    if (dist > mx)
     {
-        d = mn;
-    }
-    else if (d > mx)
-    {
-        d = mx;
+        return 0.0f;
     }
 
-    return mn / d;
+    if (dist < mn)
+    {
+        return 1.0f;
+    }
+
+    return mn / dist;
 }
 
 // The gain a voice mixes at, per side. Split out of iApplyVoiceMix so the

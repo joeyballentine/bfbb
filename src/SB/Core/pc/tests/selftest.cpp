@@ -3564,8 +3564,8 @@ static void test_snd_rolloff()
     check(gain_at(1.0f, 10.0f, 50.0f, 50.0f, FALSE) < 0.001f, "and nothing at the outer radius");
     check(gain_at(1.0f, 10.0f, 50.0f, 80.0f, FALSE) < 0.001f, "or beyond it");
 
-    // The Xbox's: DirectSound's inverse law, held rather than muted past the max
-    // distance, because the buffers carry no MUTE3DATMAXDISTANCE.
+    // The Xbox's: DirectSound's inverse law, cut off past the max distance,
+    // because the buffers carry DSBCAPS_MUTE3DATMAXDISTANCE.
     check(fabsf(gain_at(1.0f, 10.0f, 50.0f, 0.0f, TRUE) - 1.0f) < 0.001f,
           "Xbox: full volume at the emitter");
     check(fabsf(gain_at(1.0f, 10.0f, 50.0f, 10.0f, TRUE) - 1.0f) < 0.001f,
@@ -3573,9 +3573,15 @@ static void test_snd_rolloff()
     check(fabsf(gain_at(1.0f, 10.0f, 50.0f, 30.0f, TRUE) - 0.3333f) < 0.001f,
           "min over distance at 30 units, 8 dB below the GameCube");
     check(fabsf(gain_at(1.0f, 10.0f, 50.0f, 50.0f, TRUE) - 0.2f) < 0.001f,
-          "0.2 at the max distance");
-    check(fabsf(gain_at(1.0f, 10.0f, 50.0f, 80.0f, TRUE) - 0.2f) < 0.001f,
-          "and it holds there rather than cutting off");
+          "0.2 at the max distance, where the GameCube is already silent");
+    check(gain_at(1.0f, 10.0f, 50.0f, 80.0f, TRUE) < 0.001f, "and silent past it");
+
+    // A tight radius pair is the case that catches a missing cutoff: Goo
+    // Lagoon 01's fires are 9 in and 10 out, which is a decibel down at the
+    // edge and has to go to nothing rather than stay there.
+    check(fabsf(gain_at(1.0f, 9.0f, 10.0f, 10.0f, TRUE) - 0.9f) < 0.001f,
+          "0.9 at the edge of a 9/10 emitter");
+    check(gain_at(1.0f, 9.0f, 10.0f, 11.0f, TRUE) < 0.001f, "and nothing a unit past it");
 
     // A radius under 1 is clamped to 1 on the way into DirectSound, so an
     // emitter with no inner radius does not divide the whole level away.
