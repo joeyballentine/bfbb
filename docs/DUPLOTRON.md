@@ -6740,3 +6740,72 @@ Two of the crossings were semantic bugs, both invisible to the percentage:
   missing `cmplwi 1/2/4` chain (retail keeps the switch skeleton after DCE;
   an empty switch in our source is deleted outright), `Decompress_frame`'s
   `lis 0x8000`+`and` (four mask spellings, none produce it).
+
+## The fourth hook: LICM never hoists a whole static read (2026-09-01)
+
+Shipped. New `GC/2.0p1a` sha1 `a2feefd63e81ba708cc2e5cdfe5bd34066e72342`.
+Full `ninja`: **matched_functions 8461 -> 8474 (+13 / -0)**, DOL `306526d9...`
+intact, `objsnap.py cmp` shows exactly the 13 objects whose functions moved
+and nothing else. Fable agent's full record, scan and frida harness:
+session scratchpad `patch/patch_REPORT.md`, `patch_litscan.py`,
+`patch_frida.py`.
+
+**The defect, from the decomp and the 2.0 binary.** `CodeMotion.c:856`
+`isloopinvariant` decides a read by walking the defs of the read's OWN object
+and asking `may_alias` (0x511fc0) about each one. A loop with no store and no
+call has no def of a `.sdata2` literal, so the def loop runs zero times and
+NO alias table is consulted; the load goes to the preheader. Retail never does
+this: a scan of every retail object finds 2,442 literal loads inside loops and
+none hoisted by the compiler. The literal load reaches LICM as `flags 0x2`
+(`fIsRead` only -- `fIsConst` is NOT set in 2.0, so a predicate keyed on it
+never fires), alias kind 0 (whole object), object head 5 (static).
+
+**Where it hooks.** Not an alias predicate: the `call isloopinvariant` at
+`0x56f472` inside `moveinvariantsfromloop` (a REL32 with no `.reloc` entry) is
+retargeted to a stub that calls `sb_licm_invariant(pcode)` and returns 0 to
+the caller on a hit. `simpleunswitchloop` and `srawi_addze_isloopinvariant`
+keep the stock routine. Predicate: read, alias present, kind byte
+(`Alias+0x2c`) == 0, object head == static. Gains: `xFuncPiece_Eval`,
+`xFuncPiece_ShiftPiece`, `xSndAddDelayed`, `zEntPlayer_SNDPlayStreamRandom`,
+`xCutsceneConvertBreak`, `xFXRingCreate`, the three `xParCmd_*_Update`,
+`zNPCTiki::SetCarryState`, `slugs_ready`; up without crossing:
+`EffectSingleLoop` 99.78, `CalcJumpImpulse_Smooth` 90.1, `zGustUpdateEnt`
+93.6, `NPCLaser::Render` 94.7, `zNPCBSandy::Process` 99.7.
+
+**Shipped with it: clause E3n on scheduler entry 0** (one line in
+`AliasPatch.c`, ahead of C+). +2 / -0: `eval_joint` and `iModelMaterialMulCB`,
+the "entry-0 whole x whole" pair recorded above. Priced in isolation as
+variant `e3n0` before combining.
+
+**Corrections to earlier entries.**
+- `0x511cb0` (`may_alias_object`, clause H's hook) is called from
+  `computeusedeflists` and `precomputeusedefcounts` in UseDefChains, NOT from
+  CodeMotion. The "CodeMotion.c ONLY" attribution in the clause H section is a
+  module-map artefact (`computeusedeflists` sits at 0x56e8d0 directly before
+  CodeMotion). Clause H works by making a static-array store a def of every
+  small static in the usedef chains; C+ on entry 0 then answers.
+- The "thousands of matched functions with hoisted literals" premise used
+  to argue against a LICM change was false. Matched functions with a literal in
+  a store-free loop (`shadowCacheLeafCB`, `zFXGooFreezeTimeLeft`, `iSndGetVol`)
+  are blocked by `isuniquedefinition` or sit in an exit block.
+- The patch-cost list is six, not seven: `NCIN_SleepyLamp_AR` is 99.73 under
+  stock today, so it is a loss but not a "cost" by patchcost's definition.
+
+**Measured NO-GOs.**
+- Widening the predicate to subrange static reads (kind 0 OR 1): same +11,
+  but **-5 from 100** (`xSER_xsgclt_svinfo_fill`, `get_next_quadrant`,
+  `zNPCSpawner_GetInstance`, `NPAR_Upd_GloveDust`, `NPAR_Upd_MonsoonRain`).
+  Retail does hoist subrange static reads; the whole-object test is
+  load-bearing.
+- Narrowing to `lfs`/`lfd` is indistinguishable from the general rule: the
+  only whole-static reads LICM ever hoisted tree-wide were the 22 literal
+  loads.
+- Neither change moves the six-function cost list or `NightLightUVStep`
+  (60.7 under stock, old patch and new: a scheduler reorder against a
+  subrange static store).
+
+**Tooling hazard.** `variant.py` unlinks `GC/2.0p1a/mwcceppc.exe` while
+re-deriving. A frida sweep running at the same time died with
+`ExecutableNotFoundError`, and units compiled inside the window could have used
+the variant's bytes. Never run `variant.py` while any `solo`, `patchcost` or
+frida job is using `GC/2.0p1a`.
