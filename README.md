@@ -112,9 +112,8 @@ You need:
   above `add_compile_options(-m32)` in `CMakeLists.txt`).
 - CMake 3.16+ and Ninja.
 - The submodules: `git submodule update --init --recursive`. That is librw,
-  which the renderer is, and SDL, which reads the controllers. A checkout
-  without SDL still builds with `-DBFBB_INPUT_BACKEND=win32`, which reaches
-  Xbox controllers through XInput and nothing else.
+  which the renderer is, and SDL, which is the window, the controllers, the
+  keyboard and the audio device. Neither is optional.
 
 Then:
 

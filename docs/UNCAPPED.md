@@ -9,7 +9,7 @@ default is 60 and vsync on, which is what the GameCube's video interface gave
 the game.
 
 The two settings answer different questions and are wired separately.
-`iWindowPaceFrame` in `iWindowWin32.cpp` holds the cap and sleeps to a deadline;
+`iWindowPaceFrame` in `iWindowSDL.cpp` holds the cap and sleeps to a deadline;
 `RwCameraShowRaster` in `rw/camera.cpp` decides the flip flag. Vsync alone still
 runs at whatever the monitor gives, and a cap alone still tears.
 
@@ -987,7 +987,7 @@ A thirtieth is the floor for the coupling to go away rather than shrink, and
 both halves of the pacing have to clear it:
 
 `iWindowPaceFrame` advances a deadline by one frame period and, when the frame
-already overran it, drops it and returns without sleeping (`iWindowWin32.cpp:435`).
+already overran it, drops it and returns without sleeping (`iWindowSDL.cpp`).
 A 33 ms budget overruns every period `video.framerate` can be set to, so the cap
 sleeps zero.
 

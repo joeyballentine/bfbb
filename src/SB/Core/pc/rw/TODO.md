@@ -649,7 +649,7 @@ blockers here are done:
 
   - **`RwEngineOpen` builds real `EngineOpenParams`.** rw::d3d's is
     `{ HWND window; }`, taken from the port's own window seam
-    (`src/SB/Core/pc/iWindow.h`, `iWindowWin32.cpp`). RenderWare's `displayID`
+    (`src/SB/Core/pc/iWindow.h`, `iWindowSDL.cpp`). RenderWare's `displayID`
     is a `RwGameCubeDeviceConfig*` and had nothing to translate, so initParams
     is ignored. The GL3 arm still `#error`s on purpose: GL3's params differ by
     whether librw was built against GLFW, SDL2 or SDL3, and there is nothing

@@ -12,8 +12,8 @@
 // needs an SDL_Window.
 //
 // That is why this seam exists rather than a few #ifdefs inside iSystem.cpp,
-// and it has two implementations -- iWindowWin32.cpp and iWindowSDL.cpp --
-// exactly like iHost, iSndHost and iPadHost.
+// and iWindowSDL.cpp implements both arms of it: it creates the window under
+// D3D9 and holds the request for librw under GL3.
 //
 // The two do not merely differ in which OS calls they make. They differ in WHO
 // OWNS THE WINDOW: under D3D9 the port creates it and hands librw the handle,

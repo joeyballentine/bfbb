@@ -46,7 +46,7 @@
 //
 // Nothing here is synchronised. iSndReverbProcess runs on the backend's render
 // thread and iSndReverbSet on the game thread, so the caller owns the
-// exclusion; iSndHostWin32 holds its mixer lock across both.
+// exclusion; iSndHostSDL holds its mixer lock across both.
 
 // `rate` is the output rate the process step will be called at. Re-initialising
 // at a new rate is allowed and throws away the tail.

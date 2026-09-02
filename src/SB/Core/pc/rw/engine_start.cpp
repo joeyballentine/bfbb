@@ -393,7 +393,7 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     if (deferred == NULL || deferred->handleSlot == NULL)
     {
         // The GL3 build was linked against a window backend that owns its own
-        // window -- iWindowWin32.cpp -- and there is nothing to hand librw.
+        // window rather than deferring it, and there is nothing to hand librw.
         printf("bfbb: the GL3 backend needs a deferred-window iWindow (iWindowSDL.cpp), "
                "and iWindowOpen must have run first\n");
         fflush(stdout);

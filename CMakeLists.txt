@@ -134,49 +134,32 @@ set(BFBB_NEEDS_SDL OFF)
 # maps them all onto one standard layout, which is what lets config.ini name a
 # button and have it mean the same thing on every device.
 #
-# "win32" is XInput only, and needs nothing built alongside it: XInput is loaded
-# at run time, so it needs no import library and starts on a machine that has
-# none. It is what a checkout with no submodules still has.
-#
 # "null" reports no controllers and is available everywhere. It is a real
 # configuration, not a missing implementation: a build with no input library
 # genuinely has no controllers, and the game handles that -- it shows its
 # "please reconnect the controller" screen.
-if(WIN32)
-  set(BFBB_INPUT_BACKEND "sdl" CACHE STRING "Host input backend: sdl, win32, null")
-else()
-  set(BFBB_INPUT_BACKEND "null" CACHE STRING "Host input backend: null")
-endif()
-set_property(CACHE BFBB_INPUT_BACKEND PROPERTY STRINGS sdl win32 null)
+set(BFBB_INPUT_BACKEND "sdl" CACHE STRING "Host input backend: sdl, null")
+set_property(CACHE BFBB_INPUT_BACKEND PROPERTY STRINGS sdl null)
 
 # The keyboard is not a backend. It covers port 0 whenever no controller is on
-# it, and which controller API a build talks to says nothing about how it should
-# read a keyboard -- so both Windows backends link the same one. The SDL backend
-# deliberately does not use SDL's: SDL_GetKeyboardState wants the video
-# subsystem and an event loop tied to an SDL window, and iWindow owns the only
-# window this process has.
+# it, so it rides with whichever backend can read one -- which now means SDL,
+# since the window is SDL's and its video subsystem is what maintains the key
+# state.
 set(INPUT_DEFINES)
 set(INPUT_LIBS)
 if(BFBB_INPUT_BACKEND STREQUAL "null")
   set(INPUT_SOURCES ${PC_DIR}/iPadHostNull.cpp)
-elseif(BFBB_INPUT_BACKEND STREQUAL "win32")
-  if(NOT WIN32)
-    message(FATAL_ERROR "BFBB_INPUT_BACKEND=win32 needs a Windows host")
-  endif()
-  set(INPUT_SOURCES ${PC_DIR}/iPadHostWin32.cpp ${PC_DIR}/iPadKeyboardWin32.cpp)
+elseif(BFBB_INPUT_BACKEND STREQUAL "sdl")
+  set(INPUT_SOURCES ${PC_DIR}/iPadHostSDL.cpp ${PC_DIR}/iPadKeyboardSDL.cpp)
+
   # So the self-test knows which backend it is linked against: the contract it
   # checks is the same either way, but "no controller on port 0" means an
-  # unplugged pad under null and a keyboard under the other two.
-  set(INPUT_DEFINES BFBB_INPUT_BACKEND_WIN32 BFBB_INPUT_HAVE_KEYBOARD)
-elseif(BFBB_INPUT_BACKEND STREQUAL "sdl")
-  if(NOT WIN32)
-    message(FATAL_ERROR "BFBB_INPUT_BACKEND=sdl needs a Windows host for its keyboard half")
-  endif()
-  set(INPUT_SOURCES ${PC_DIR}/iPadHostSDL.cpp ${PC_DIR}/iPadKeyboardWin32.cpp)
+  # unplugged pad under null and a keyboard here.
   set(INPUT_DEFINES BFBB_INPUT_BACKEND_SDL BFBB_INPUT_HAVE_KEYBOARD)
+  set(INPUT_LIBS SDL3::SDL3-static)
 
-  # Built by the SDL section below rather than here: the GL3 render backend
-  # wants the same library and add_subdirectory may only run once.
+  # Built by the SDL section below rather than here: the render backend wants
+  # the same library and add_subdirectory may only run once.
   set(BFBB_NEEDS_SDL ON)
 
 else()
@@ -287,17 +270,17 @@ endif()
 # window belongs to librw and iWindowSDL.cpp only holds the request until
 # RwEngineStart asks for it.
 #
-# GL3 gets the SDL window on every host, Windows included. It is not the OS that
-# picks this one.
-if(BFBB_RENDER_BACKEND STREQUAL "GL3")
+# One file serves both. It creates an SDL window under D3D9 and reads the HWND
+# out of it, and holds the request under GL3; the pump, the pacer and the close
+# button are the same either way and used to be written twice.
+if(BFBB_RENDER_BACKEND STREQUAL "GL3" OR BFBB_RENDER_BACKEND STREQUAL "D3D9")
   set(WINDOW_SOURCES ${PC_DIR}/iWindowSDL.cpp)
+  set(WINDOW_LIBS SDL3::SDL3-static)
   set(BFBB_NEEDS_SDL ON)
-elseif(WIN32)
-  set(WINDOW_SOURCES ${PC_DIR}/iWindowWin32.cpp)
 else()
-  # NULL builds headless, so no window is needed and none is provided; a D3D9
-  # build off Windows is not a thing.
+  # NULL builds headless, so no window is needed and none is provided.
   set(WINDOW_SOURCES)
+  set(WINDOW_LIBS)
 endif()
 
 # --- SDL ---------------------------------------------------------------------
@@ -385,10 +368,6 @@ if(BFBB_NEEDS_SDL)
   set(SDL3_DIR ${CMAKE_CURRENT_BINARY_DIR}/sdl3-redirect CACHE PATH "" FORCE)
 endif()
 
-if(BFBB_INPUT_BACKEND STREQUAL "sdl")
-  set(INPUT_LIBS SDL3::SDL3-static)
-endif()
-
 # --- librw -------------------------------------------------------------------
 # A git submodule, pinned. Update it deliberately -- the shim in
 # src/SB/Core/pc/rw mirrors librw's object LAYOUTS, so a librw that reorders a
@@ -466,7 +445,9 @@ target_include_directories(bfbb_rw PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x
   ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Game
 )
-target_link_libraries(bfbb_rw PUBLIC librw)
+# WINDOW_LIBS is SDL. Under GL3 librw already drags it in; under D3D9 it does
+# not, and iWindowSDL.cpp is in this target rather than in bfbb_platform.
+target_link_libraries(bfbb_rw PUBLIC librw ${WINDOW_LIBS})
 target_compile_options(bfbb_rw PRIVATE -Wno-everything)
 
 # --- the platform layer ------------------------------------------------------

@@ -3,7 +3,7 @@
 // It exists for the devices XInput cannot see. XInput speaks only to XUSB
 // devices -- Xbox pads and the clones that pretend to be them -- so a DualSense,
 // a Switch Pro controller, an arcade stick or any of the generic USB pads
-// reports nothing at all through iPadHostWin32.cpp. SDL enumerates all of them,
+// reports nothing at all through XInput. SDL enumerates all of them,
 // through DirectInput, raw input, HID and Windows.Gaming.Input at once.
 //
 // The reason it is SDL rather than DirectInput directly is the mapping. A

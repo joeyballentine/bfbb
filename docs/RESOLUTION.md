@@ -208,7 +208,8 @@ the one moment the answer can still be acted on. Borderless needs nothing from
 the renderer at all -- it is a `WS_POPUP` the size of a monitor, and a window is
 a window.
 
-The process is per-monitor-DPI aware (`iWindowWin32.cpp`). Without that Windows
+The process is per-monitor-DPI aware, which SDL arranges when its video
+subsystem comes up (`iWindowSDL.cpp`). Without that Windows
 resizes the window itself when it crosses to a monitor at a different scaling,
 which reads as a user resize, resets the device, and grows the window by the
 ratio of the two scalings each time.

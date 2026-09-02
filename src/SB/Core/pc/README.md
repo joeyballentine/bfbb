@@ -165,7 +165,7 @@ Each is off unless set, and each costs a load per frame when it is.
                         sees the call with no context at all. This is what found
                         the HUD counter behind a sound playing six times over.
 
-    BFBB_AUDIO=0        force the silent path in the win32 backend. Voices still
+    BFBB_AUDIO=0        force the silent path in the audio backend. Voices still
                         keep time exactly as they do with a device, so this is
                         the way to tell a bug in the mixer apart from a bug in
                         the game logic that waits on it.
@@ -315,10 +315,9 @@ and not the table. If you port something, edit the row.
   a seam and the part with the game's semantics in it is not. `iPadHostSDL.cpp`
   is the default and reaches every controller SDL knows, through DirectInput,
   raw input, HID and Windows.Gaming.Input at once, all mapped onto one layout.
-  `iPadHostWin32.cpp` is XInput only and needs no submodule, so a checkout
-  without one still has controllers -- the Xbox ones. `iPadHostNull.cpp` reports
-  none, which is the correct answer for a build with no input library — the
-  game shows its "please reconnect the controller" screen.
+  `iPadHostNull.cpp` reports none, which is the correct answer for a build with
+  no input library — the game shows its "please reconnect the controller"
+  screen.
 - **`iPadBind.h`**, **`iPadStick.h`** and **`iPadKeyboard.h`** are the parts of
   input that are not a device API, so they are shared rather than written per
   backend. `iPadBind` parses `[pad]` and `[keyboard]` against a token table the

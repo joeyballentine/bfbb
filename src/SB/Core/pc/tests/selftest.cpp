@@ -1610,98 +1610,6 @@ static void test_pad_stick_deadzone()
 #define TEST_PAD_Z 0x100000
 #define TEST_PAD_HUD 0x200000 // PC-only: the HUD, which the GameCube read off Z
 
-#ifdef BFBB_INPUT_BACKEND_WIN32
-// The button conversion inside iPadHostWin32.cpp, which is named rather than
-// static so this file can reach it. Declared here rather than pulled in from a
-// header, so that a change to its signature is caught at link time instead of
-// the test silently retargeting itself at something else.
-#include <windows.h>
-#include <xinput.h>
-U32 iPadHostWin32ConvertButtons(const XINPUT_GAMEPAD& gp);
-
-static void test_pad_win32_buttons()
-{
-    XINPUT_GAMEPAD gp;
-    memset(&gp, 0, sizeof(gp));
-
-    check(iPadHostWin32ConvertButtons(gp) == 0, "an idle pad reports no buttons");
-
-    // Face buttons under the default preset, which is the Xbox release's --
-    // the release the port runs the assets of. Its font.HIP draws the X button
-    // for Bubble Spin and the B button for Bubble Bounce, the opposite way
-    // round from the GameCube's letters, and these four are that.
-    gp.wButtons = XINPUT_GAMEPAD_A;
-    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_X, "A is jump");
-    gp.wButtons = XINPUT_GAMEPAD_B;
-    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_O, "B is Bubble Bounce");
-    gp.wButtons = XINPUT_GAMEPAD_X;
-    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_TRIANGLE, "X is Bubble Spin");
-    gp.wButtons = XINPUT_GAMEPAD_Y;
-    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_SQUARE, "Y is Bubble Bash");
-
-    gp.wButtons = XINPUT_GAMEPAD_START;
-    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_START, "start is start");
-
-    gp.wButtons = XINPUT_GAMEPAD_DPAD_UP | XINPUT_GAMEPAD_DPAD_LEFT;
-    check(iPadHostWin32ConvertButtons(gp) == (TEST_PAD_UP | TEST_PAD_LEFT),
-          "two d-pad directions come through together");
-
-    // Shoulders: the triggers stand in for the GameCube's analog L and R, and
-    // click at the same threshold those do.
-    gp.wButtons = 0;
-    gp.bLeftTrigger = XINPUT_GAMEPAD_TRIGGER_THRESHOLD - 1;
-    gp.bRightTrigger = XINPUT_GAMEPAD_TRIGGER_THRESHOLD - 1;
-    check(iPadHostWin32ConvertButtons(gp) == 0, "a trigger short of the threshold does nothing");
-
-    gp.bLeftTrigger = XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
-    gp.bRightTrigger = 255;
-    check(iPadHostWin32ConvertButtons(gp) == (TEST_PAD_L1 | TEST_PAD_R1),
-          "the triggers are L1 and R1 once past it");
-
-    // RB carries Z, which zHud.cpp shows the HUD on and zCamera.cpp toggles the
-    // near camera with. The Xbox drew its black button for both that prompt and
-    // R2, and R2 has no prompt anywhere in the game, so RB carries both rather
-    // than leaving a bit the game reads unreachable.
-    gp.wButtons = XINPUT_GAMEPAD_RIGHT_SHOULDER;
-    gp.bLeftTrigger = 0;
-    gp.bRightTrigger = 0;
-    check(iPadHostWin32ConvertButtons(gp) == (TEST_PAD_HUD | TEST_PAD_R2),
-          "RB shows the HUD, and is R2");
-
-    // And it does NOT modify the triggers. That is the GameCube preset's trick,
-    // for a controller with three shoulders; this one has four and each says one
-    // thing. iPadBindHeld's handling of the '!' that makes the GameCube's
-    // version exclusive is checked in test_pad_bindings.
-    gp.bLeftTrigger = 255;
-    gp.bRightTrigger = 255;
-    U32 modified = iPadHostWin32ConvertButtons(gp);
-    check(modified == (TEST_PAD_HUD | TEST_PAD_R2 | TEST_PAD_L1 | TEST_PAD_R1),
-          "and holding it leaves the triggers as L1 and R1");
-
-    check((modified & TEST_PAD_L2) == 0, "nothing is promoted to L2");
-
-    // LB is L2, which the GameCube had to chord for, and the close camera --
-    // the other half of that console's Z, which the Xbox had a button spare
-    // for.
-    gp.wButtons = XINPUT_GAMEPAD_LEFT_SHOULDER;
-    gp.bLeftTrigger = 0;
-    gp.bRightTrigger = 0;
-    check(iPadHostWin32ConvertButtons(gp) == (TEST_PAD_L2 | TEST_PAD_Z),
-          "LB is L2 and pulls the camera in");
-
-    // Everything above is the DEFAULT mapping. The harness config.ini rebinds
-    // one button -- `select = ls` -- and this is the whole path from that line
-    // to the bits the game reads: parsed at iPadHostInit, evaluated here.
-    // Without it the binding layer could be inert and every check above would
-    // still pass on the defaults compiled into iPadBind.cpp.
-    gp.wButtons = XINPUT_GAMEPAD_LEFT_THUMB;
-    check(iPadHostWin32ConvertButtons(gp) == TEST_PAD_SELECT,
-          "a rebound button answers to what config.ini gave it");
-
-    gp.wButtons = XINPUT_GAMEPAD_BACK;
-    check(iPadHostWin32ConvertButtons(gp) == 0, "and stops answering to what it had");
-}
-#endif
 
 #ifdef BFBB_INPUT_BACKEND_SDL
 #include <SDL3/SDL.h>
@@ -2086,10 +1994,6 @@ static void test_pad()
     check(s != NULL && s->buttons == 0, "and an unfocused keyboard holds nothing");
 #else
     check(s != NULL && !s->connected, "the null backend reports no controller");
-#endif
-
-#ifdef BFBB_INPUT_BACKEND_WIN32
-    test_pad_win32_buttons();
 #endif
 
 #ifdef BFBB_INPUT_BACKEND_SDL
