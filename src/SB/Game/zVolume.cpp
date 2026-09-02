@@ -211,7 +211,7 @@ S32 zVolumeEventCB(xBase*, xBase* to, U32 toEvent, const F32*, xBase*)
         }
 
         gOccludeList[count] = vol;
-        gOccludeCount = count + 1;
+        gOccludeCount++;
 
         break;
     }
@@ -224,7 +224,7 @@ S32 zVolumeEventCB(xBase*, xBase* to, U32 toEvent, const F32*, xBase*)
             if (gOccludeList[i] == vol)
             {
                 gOccludeList[count] = gOccludeList[count - 1];
-                gOccludeCount = count - 1;
+                gOccludeCount--;
 
                 return 1;
             }
