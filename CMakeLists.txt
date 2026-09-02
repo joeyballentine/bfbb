@@ -239,13 +239,11 @@ else()
 endif()
 
 # The movie's own audio output, which is deliberately not the game's mixer --
-# see iFMVAudio.h. waveOut needs winmm.
-if(WIN32)
-  list(APPEND FMV_SOURCES ${PC_DIR}/iFMVAudioWin32.cpp)
-  list(APPEND FMV_LIBRARIES winmm)
-else()
-  list(APPEND FMV_SOURCES ${PC_DIR}/iFMVAudioNull.cpp)
-endif()
+# see iFMVAudio.h. On the same SDL the mixer uses, and for the same reason: one
+# audio library, on every host.
+list(APPEND FMV_SOURCES ${PC_DIR}/iFMVAudioSDL.cpp)
+list(APPEND FMV_LIBRARIES SDL3::SDL3-static)
+set(BFBB_NEEDS_SDL ON)
 
 set(AUDIO_DEFINES)
 set(AUDIO_LIBS)
