@@ -876,4 +876,3 @@ SHARED_INLINE xPar* xParEmitterEmit(xParEmitter* pe, F32 dt)
     return xParEmitterEmit(pe, dt, dt);
 #endif
 }
-

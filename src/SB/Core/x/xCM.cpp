@@ -203,11 +203,10 @@ static U32 xCMrender(F32 time, xCreditsData* data)
                     bounds.w = box->box.x;
                     bounds.h = box->box.y;
 
-                    xtextbox tb =
-                        xtextbox::create(xfont::create(box->font, NSCREENX(box->char_size.x),
-                                                       NSCREENY(box->char_size.y),
-                                                       0.0f, scaled, screen_bounds),
-                                         bounds, 2, 0.0f, 0.0f, 0.0f, 0.0f);
+                    xtextbox tb = xtextbox::create(
+                        xfont::create(box->font, NSCREENX(box->char_size.x),
+                                      NSCREENY(box->char_size.y), 0.0f, scaled, screen_bounds),
+                        bounds, 2, 0.0f, 0.0f, 0.0f, 0.0f);
                     tb.set_text(hp->text1);
                     tb.render(true);
                     break;
@@ -247,11 +246,11 @@ static U32 xCMrender(F32 time, xCreditsData* data)
                         bounds.w = box0->box.x;
                         bounds.h = box0->box.y;
 
-                        xtextbox tb = xtextbox::create(
-                            xfont::create(box0->font, NSCREENX(box0->char_size.x),
-                                          NSCREENY(box0->char_size.y), 0.0f,
-                                          scaled0, screen_bounds),
-                            bounds, alignL, 0.0f, 0.0f, 0.0f, 0.0f);
+                        xtextbox tb =
+                            xtextbox::create(xfont::create(box0->font, NSCREENX(box0->char_size.x),
+                                                           NSCREENY(box0->char_size.y), 0.0f,
+                                                           scaled0, screen_bounds),
+                                             bounds, alignL, 0.0f, 0.0f, 0.0f, 0.0f);
                         tb.set_text(hp->text1);
                         tb.render(true);
                     }
@@ -266,11 +265,11 @@ static U32 xCMrender(F32 time, xCreditsData* data)
                         bounds.w = box1->box.x;
                         bounds.h = box1->box.y;
 
-                        xtextbox tb = xtextbox::create(
-                            xfont::create(box0->font, NSCREENX(box1->char_size.x),
-                                          NSCREENY(box1->char_size.y), 0.0f,
-                                          scaled1, screen_bounds),
-                            bounds, alignR, 0.0f, 0.0f, 0.0f, 0.0f);
+                        xtextbox tb =
+                            xtextbox::create(xfont::create(box0->font, NSCREENX(box1->char_size.x),
+                                                           NSCREENY(box1->char_size.y), 0.0f,
+                                                           scaled1, screen_bounds),
+                                             bounds, alignR, 0.0f, 0.0f, 0.0f, 0.0f);
                         tb.set_text(hp->text2);
                         tb.render(true);
                     }
