@@ -1470,9 +1470,9 @@ namespace
                                 const xVec3* normals, const xMat4x3* mat, const xMat4x3* bone_mats,
                                 const F32* weights, const U32* bone_idx, const U16* idx, U32 count)
     {
-        U32 shift;
-        U32 mask;
         U32 done[2] = { 0, 0 };
+        U32 mask;
+        U32 shift;
         xMat4x3* scratch = (xMat4x3*)giAnimScratch;
 
         for (; count != 0; count--)
