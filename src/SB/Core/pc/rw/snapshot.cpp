@@ -19,15 +19,19 @@
 // BEFORE librw's headers, for the reason engine_start.cpp gives: rwd3d.h
 // declares EngineOpenParams from whether _D3D9_H_ is defined by the time it is
 // read.
-#if defined(RW_D3D9)
+#if defined(RW_D3D9) || defined(RW_D3D11)
 #include <windows.h>
-#include <d3d9.h>
 #define WITH_D3D
+#endif
+#if defined(RW_D3D9)
+#include <d3d9.h>
+#elif defined(RW_D3D11)
+#include <d3d11.h>
 #endif
 
 #include "rw.h"
 
-#if defined(RW_D3D9)
+#if defined(RW_D3D9) || defined(RW_D3D11)
 // d3d9Globals.defaultRenderTarget, which is the surface every camera drawing to
 // the frame buffer actually lands on: the virtual screen when there is one, the
 // back buffer when there is not. Reading it here is what makes the capture
@@ -69,7 +73,7 @@ static S32 sFailed;
 // texture asset -- which is the GameCube and PS2 loading screen exactly.
 static S32 sEnabled = TRUE;
 
-#if defined(RW_D3D9) || defined(RW_GL3)
+#if defined(RW_D3D9) || defined(RW_D3D11) || defined(RW_GL3)
 
 // The size to capture at, and the raster to capture into. Shared by both
 // backends because neither the sizing rule nor the lifetime differs: the
@@ -80,7 +84,7 @@ static S32 snapshotEnsureRaster(RwInt32 width, RwInt32 height);
 
 #endif
 
-#if defined(RW_D3D9)
+#if defined(RW_D3D9) || defined(RW_D3D11)
 
 // The D3D texture behind a raster at the moment it was written to.
 //
@@ -102,7 +106,11 @@ static inline void* rasterTexture(RwRaster* raster)
     // GETD3DRASTEREXT is a macro, so it is spelled unqualified and expands to
     // the qualified names itself.
     rw::Raster* r = reinterpret_cast<rw::Raster*>(raster);
+#if defined(RW_D3D11)
+    return GETD3DRASTEREXT(r)->tex11;
+#else
     return GETD3DRASTEREXT(r)->texture;
+#endif
 }
 
 // One report, and then off for good.
@@ -127,67 +135,41 @@ void iSnapshotCapture()
         return;
     }
 
-    if (rw::d3d::d3ddevice == NULL)
+    if (!rw::d3d::deviceOpen())
     {
         return;
     }
 
-    // The RESOLVED frame, not defaultRenderTarget: with multisampling on, the
-    // surface the scene is drawn into holds several samples per pixel and
-    // nothing can sample or stretch from it. resolveVirtualScreen collapses it
-    // and hands back the single-sampled copy; it answers null only when there
-    // is no virtual screen at all, and then the back buffer is what was drawn.
-    IDirect3DSurface9* src = rw::d3d::resolveVirtualScreen();
-    if (src == NULL)
-    {
-        src = rw::d3d::d3d9Globals.defaultRenderTarget;
-    }
-    if (src == NULL)
+    RwInt32 w = 0;
+    RwInt32 h = 0;
+    rw::d3d::getScreenExtent(&w, &h);
+    if (w <= 0 || h <= 0)
     {
         return;
     }
 
-    D3DSURFACE_DESC desc;
-    if (FAILED(src->GetDesc(&desc)))
+    if (!snapshotEnsureRaster(w, h))
     {
         return;
     }
 
-    if (!snapshotEnsureRaster((RwInt32)desc.Width, (RwInt32)desc.Height))
-    {
-        return;
-    }
-
-    IDirect3DTexture9* tex = (IDirect3DTexture9*)rasterTexture(sRaster);
-    if (tex == NULL)
+    if (rasterTexture(sRaster) == NULL)
     {
         // Between a device reset and librw recreating its video-memory rasters.
         // Not a failure; the next frame has one.
         return;
     }
 
-    IDirect3DSurface9* dst = NULL;
-    if (FAILED(tex->GetSurfaceLevel(0, &dst)) || dst == NULL)
+    if (!rw::d3d::captureFrame(reinterpret_cast<rw::Raster*>(sRaster)))
     {
+        // Whatever refused is a property of the device -- a multisampled source
+        // on D3D9, a format pair nothing will convert between -- so it will
+        // refuse again next frame.
+        snapshotFail("the frame could not be copied into a texture", 0);
         return;
     }
 
-    // D3DTEXF_NONE because this is a copy, not a scale: the surfaces agree on
-    // size by construction above. A filter here would be a lie about what the
-    // call is doing and is rejected outright by some drivers for equal extents.
-    HRESULT hr = rw::d3d::d3ddevice->StretchRect(src, NULL, dst, NULL, D3DTEXF_NONE);
-    dst->Release();
-
-    if (FAILED(hr))
-    {
-        // The one case worth naming: StretchRect refuses a multisampled source,
-        // and it refuses format pairs the driver will not convert between. Both
-        // are properties of the device, so both will fail again next frame.
-        snapshotFail("the frame could not be copied into a texture", hr);
-        return;
-    }
-
-    sCapturedInto = tex;
+    sCapturedInto = rasterTexture(sRaster);
     sHaveFrame = 1;
 }
 
@@ -298,7 +280,7 @@ RwTexture* iSnapshotBackgroundTexture()
 
 #endif
 
-#if defined(RW_D3D9) || defined(RW_GL3)
+#if defined(RW_D3D9) || defined(RW_D3D11) || defined(RW_GL3)
 
 // The capture target, made on the first capture rather than at startup: until
 // the engine is open there is no device to create a render target on and

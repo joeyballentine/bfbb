@@ -6,15 +6,19 @@
 
 #include <rwcore.h>
 
-#if defined(RW_D3D9)
+#if defined(RW_D3D9) || defined(RW_D3D11)
 #include <windows.h>
-#include <d3d9.h>
 #define WITH_D3D
+#endif
+#if defined(RW_D3D9)
+#include <d3d9.h>
+#elif defined(RW_D3D11)
+#include <d3d11.h>
 #endif
 
 #include "rw.h"
 
-#if defined(RW_D3D9)
+#if defined(RW_D3D9) || defined(RW_D3D11)
 #include "src/d3d/rwd3dimpl.h"
 #endif
 
@@ -28,16 +32,17 @@
 // because the setter is.
 static S32 sEnabled = TRUE;
 
-#if defined(RW_D3D9)
+#if defined(RW_D3D9) || defined(RW_D3D11)
 
-// fxc names every blob g_ps20_main, so each gets its own namespace.
+// fxc gives every blob the same name, so each gets its own namespace. PS_NAME
+// is what that name is, and librw's rwd3d.h picks it per shader model.
 namespace bright_ps
 {
-#include "shaders/glow_bright_PS.h"
+#include "glow_bright_PS.h"
 }
 namespace blur_ps
 {
-#include "shaders/glow_blur_PS.h"
+#include "glow_blur_PS.h"
 }
 
 // --- the chain's sizes, from the Xbox's three render targets ----------------
@@ -215,38 +220,24 @@ static void setBlurConstants(bool horizontal, F32 srcW, F32 srcH)
     F32 offs01[4] = { kNearTap * du, kNearTap * dv, kFarTap * du, kFarTap * dv };
     F32 offs23[4] = { -kNearTap * du, -kNearTap * dv, -kFarTap * du, -kFarTap * dv };
 
-    rw::d3d::d3ddevice->SetPixelShaderConstantF(1, weights, 1);
-    rw::d3d::d3ddevice->SetPixelShaderConstantF(2, offs01, 1);
-    rw::d3d::d3ddevice->SetPixelShaderConstantF(3, offs23, 1);
+    rw::d3d::setPixelShaderConstantF(1, weights, 1);
+    rw::d3d::setPixelShaderConstantF(2, offs01, 1);
+    rw::d3d::setPixelShaderConstantF(3, offs23, 1);
 }
 
 // Copy the frame so it can be sampled. Same as distort.cpp, and the same reason
 // the caller has to close the scene around it.
 static bool captureScreen()
 {
-    // The RESOLVED frame, not defaultRenderTarget: with multisampling on, the
-    // surface the scene is drawn into holds several samples per pixel and
-    // nothing can sample or stretch from it. resolveVirtualScreen collapses it
-    // and hands back the single-sampled copy; it answers null only when there
-    // is no virtual screen at all, and then the back buffer is what was drawn.
-    IDirect3DSurface9* src = rw::d3d::resolveVirtualScreen();
-    if (src == NULL)
-    {
-        src = rw::d3d::d3d9Globals.defaultRenderTarget;
-    }
-    if (src == NULL)
+    RwInt32 w = 0;
+    RwInt32 h = 0;
+    rw::d3d::getScreenExtent(&w, &h);
+    if (w <= 0 || h <= 0)
     {
         return false;
     }
 
-    D3DSURFACE_DESC desc;
-    if (FAILED(src->GetDesc(&desc)))
-    {
-        return false;
-    }
-
-    if (sScreen != NULL &&
-        ((RwInt32)desc.Width != sScreen->width || (RwInt32)desc.Height != sScreen->height))
+    if (sScreen != NULL && (w != sScreen->width || h != sScreen->height))
     {
         RwRasterDestroy(sScreen);
         sScreen = NULL;
@@ -254,8 +245,7 @@ static bool captureScreen()
 
     if (sScreen == NULL)
     {
-        sScreen = RwRasterCreate(desc.Width, desc.Height, 32,
-                                 rwRASTERTYPECAMERATEXTURE | rwRASTERFORMAT8888);
+        sScreen = RwRasterCreate(w, h, 32, rwRASTERTYPECAMERATEXTURE | rwRASTERFORMAT8888);
         if (sScreen == NULL)
         {
             glowFail("this backend would not make a render-target texture", 0);
@@ -263,34 +253,19 @@ static bool captureScreen()
         }
     }
 
-    IDirect3DTexture9* tex = (IDirect3DTexture9*)rasterTexture(sScreen);
-    if (tex == NULL)
+    if (!rw::d3d::captureFrame(reinterpret_cast<rw::Raster*>(sScreen)))
     {
+        glowFail("the frame could not be copied into a texture", 0);
         return false;
     }
 
-    IDirect3DSurface9* dst = NULL;
-    if (FAILED(tex->GetSurfaceLevel(0, &dst)) || dst == NULL)
-    {
-        return false;
-    }
-
-    HRESULT hr = rw::d3d::d3ddevice->StretchRect(src, NULL, dst, NULL, D3DTEXF_NONE);
-    dst->Release();
-
-    if (FAILED(hr))
-    {
-        glowFail("the frame could not be copied into a texture", hr);
-        return false;
-    }
-
-    sCapturedInto = tex;
+    sCapturedInto = rasterTexture(sScreen);
     return true;
 }
 
 void iGlowRender(RwCamera* cam, F32 strength)
 {
-    if (!sEnabled || sFailed || cam == NULL || rw::d3d::d3ddevice == NULL)
+    if (!sEnabled || sFailed || cam == NULL || !rw::d3d::deviceOpen())
     {
         return;
     }
@@ -309,8 +284,8 @@ void iGlowRender(RwCamera* cam, F32 strength)
 
     if (sBrightShader == NULL)
     {
-        sBrightShader = rw::d3d::createPixelShader((void*)bright_ps::g_ps20_main);
-        sBlurShader = rw::d3d::createPixelShader((void*)blur_ps::g_ps20_main);
+        sBrightShader = rw::d3d::createPixelShader((void*)bright_ps::PS_NAME);
+        sBlurShader = rw::d3d::createPixelShader((void*)blur_ps::PS_NAME);
         if (sBrightShader == NULL || sBlurShader == NULL)
         {
             glowFail("the glow shaders would not compile", 0);

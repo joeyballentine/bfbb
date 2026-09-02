@@ -7,15 +7,19 @@
 
 #include <rwcore.h>
 
-#if defined(RW_D3D9)
+#if defined(RW_D3D9) || defined(RW_D3D11)
 #include <windows.h>
-#include <d3d9.h>
 #define WITH_D3D
+#endif
+#if defined(RW_D3D9)
+#include <d3d9.h>
+#elif defined(RW_D3D11)
+#include <d3d11.h>
 #endif
 
 #include "rw.h"
 
-#if defined(RW_D3D9)
+#if defined(RW_D3D9) || defined(RW_D3D11)
 #include "src/d3d/rwd3dimpl.h"
 #endif
 
@@ -28,18 +32,19 @@
 // config.ini's xbox.distortion, pushed down by iSystem.cpp. See glow.cpp.
 static S32 sEnabled = TRUE;
 
-#if defined(RW_D3D9)
+#if defined(RW_D3D9) || defined(RW_D3D11)
 
 namespace
 {
-// The compiled pixel shader. Built the way librw builds its own --
-// `fxc /T ps_2_0 /Fh` -- see shaders/make_distort.cmd. The blob is named
-// g_ps20_main by fxc, which is also what librw's shader headers are called, so
-// it is kept in here rather than at file scope.
+// The compiled pixel shader. Built the way librw builds its own, by the
+// make_shaders.cmd in each shaders directory. PS_NAME is the name fxc gave the
+// blob, which librw's rwd3d.h picks per shader model; it is the same name in
+// every blob, so this is kept in an anonymous namespace rather than at file
+// scope.
 //
 // What it computes is read off the Xbox's D3DPIXELSHADERDEF, not guessed; the
 // decode is in iDistort.h.
-#include "shaders/distort_PS.h"
+#include "distort_PS.h"
 }
 
 // --- the numbers, and where they come from ----------------------------------
@@ -90,7 +95,11 @@ static void distortFail(const char* what, long hr)
 static inline void* rasterTexture(RwRaster* raster)
 {
     rw::Raster* r = reinterpret_cast<rw::Raster*>(raster);
+#if defined(RW_D3D11)
+    return GETD3DRASTEREXT(r)->tex11;
+#else
     return GETD3DRASTEREXT(r)->texture;
+#endif
 }
 
 // Copy what has just been drawn into a texture we can sample.
@@ -104,29 +113,15 @@ static inline void* rasterTexture(RwRaster* raster)
 // brackets its copy with the same pair (va 0x170a28 and 0x170d80).
 static bool captureScreen()
 {
-    // The RESOLVED frame, not defaultRenderTarget: with multisampling on, the
-    // surface the scene is drawn into holds several samples per pixel and
-    // nothing can sample or stretch from it. resolveVirtualScreen collapses it
-    // and hands back the single-sampled copy; it answers null only when there
-    // is no virtual screen at all, and then the back buffer is what was drawn.
-    IDirect3DSurface9* src = rw::d3d::resolveVirtualScreen();
-    if (src == NULL)
-    {
-        src = rw::d3d::d3d9Globals.defaultRenderTarget;
-    }
-    if (src == NULL)
+    RwInt32 w = 0;
+    RwInt32 h = 0;
+    rw::d3d::getScreenExtent(&w, &h);
+    if (w <= 0 || h <= 0)
     {
         return false;
     }
 
-    D3DSURFACE_DESC desc;
-    if (FAILED(src->GetDesc(&desc)))
-    {
-        return false;
-    }
-
-    if (sScreen != NULL &&
-        ((RwInt32)desc.Width != sScreen->width || (RwInt32)desc.Height != sScreen->height))
+    if (sScreen != NULL && (w != sScreen->width || h != sScreen->height))
     {
         RwRasterDestroy(sScreen);
         sScreen = NULL;
@@ -137,8 +132,7 @@ static bool captureScreen()
         // The picture's own size, not the Xbox's 512x512. That size was a
         // console's texture budget; here it would be a downsample and back for
         // nothing, and the shader samples this 1:1 with the quad either way.
-        sScreen = RwRasterCreate(desc.Width, desc.Height, 32,
-                                 rwRASTERTYPECAMERATEXTURE | rwRASTERFORMAT8888);
+        sScreen = RwRasterCreate(w, h, 32, rwRASTERTYPECAMERATEXTURE | rwRASTERFORMAT8888);
         if (sScreen == NULL)
         {
             distortFail("this backend would not make a render-target texture", 0);
@@ -146,28 +140,13 @@ static bool captureScreen()
         }
     }
 
-    IDirect3DTexture9* tex = (IDirect3DTexture9*)rasterTexture(sScreen);
-    if (tex == NULL)
+    if (!rw::d3d::captureFrame(reinterpret_cast<rw::Raster*>(sScreen)))
     {
-        return false;   // between a device reset and librw recreating it
-    }
-
-    IDirect3DSurface9* dst = NULL;
-    if (FAILED(tex->GetSurfaceLevel(0, &dst)) || dst == NULL)
-    {
+        distortFail("the frame could not be copied into a texture", 0);
         return false;
     }
 
-    HRESULT hr = rw::d3d::d3ddevice->StretchRect(src, NULL, dst, NULL, D3DTEXF_NONE);
-    dst->Release();
-
-    if (FAILED(hr))
-    {
-        distortFail("the frame could not be copied into a texture", hr);
-        return false;
-    }
-
-    sCapturedInto = tex;
+    sCapturedInto = rasterTexture(sScreen);
     return true;
 }
 
@@ -180,7 +159,7 @@ void iDistortRender(RwCamera* cam, RwTexture* map, F32 amount, F32 width, F32 he
         return;
     }
 
-    if (map == NULL || map->raster == NULL || rw::d3d::d3ddevice == NULL)
+    if (map == NULL || map->raster == NULL || !rw::d3d::deviceOpen())
     {
         return;
     }
@@ -192,7 +171,7 @@ void iDistortRender(RwCamera* cam, RwTexture* map, F32 amount, F32 width, F32 he
 
     if (sPixelShader == NULL)
     {
-        sPixelShader = rw::d3d::createPixelShader((void*)g_ps20_main);
+        sPixelShader = rw::d3d::createPixelShader((void*)PS_NAME);
         if (sPixelShader == NULL)
         {
             distortFail("the distortion pixel shader would not compile", 0);
@@ -240,7 +219,7 @@ void iDistortRender(RwCamera* cam, RwTexture* map, F32 amount, F32 width, F32 he
     displace[3] = 0.0f;
 
     // c1, because librw owns c0 for the fog colour.
-    rw::d3d::d3ddevice->SetPixelShaderConstantF(1, displace, 1);
+    rw::d3d::setPixelShaderConstantF(1, displace, 1);
 
     // Stage 0 through the render state, so librw's own cache stays right about
     // it; stage 1 through librw's setter for the same reason. Nothing in the

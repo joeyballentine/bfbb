@@ -447,6 +447,15 @@ target_include_directories(bfbb_rw PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x
   ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Game
 )
+# The screen passes' compiled shader blobs. Two trees carrying the same file
+# names, as in librw: rw/shaders at ps_2_0 for D3D9, rw/shaders11 at ps_4_0 for
+# D3D11. Which one is on the include path is what a build loads.
+if(BFBB_RENDER_BACKEND STREQUAL "D3D11")
+  target_include_directories(bfbb_rw PRIVATE ${PC_DIR}/rw/shaders11)
+else()
+  target_include_directories(bfbb_rw PRIVATE ${PC_DIR}/rw/shaders)
+endif()
+
 # WINDOW_LIBS is SDL. Under GL3 librw already drags it in; under D3D9 it does
 # not, and iWindowSDL.cpp is in this target rather than in bfbb_platform.
 target_link_libraries(bfbb_rw PUBLIC librw ${WINDOW_LIBS})
