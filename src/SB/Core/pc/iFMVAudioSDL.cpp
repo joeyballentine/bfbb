@@ -5,10 +5,10 @@
 // iSndHost.h is the wrong shape for something that produces audio a fragment at
 // a time. The two are never open at once.
 //
-// The stream is opened with no callback, which is SDL's push mode: audio goes
-// in with SDL_PutAudioStreamData and SDL pulls it out on its own thread as the
-// device asks. That is exactly the shape of this seam, so there is no ring of
-// blocks here and no device thread of ours.
+// Push mode: a stream bound to the device, filled with SDL_PutAudioStreamData
+// and pulled out by SDL on its own thread as the device asks. That is exactly
+// the shape of this seam, so there is no ring of blocks here and no device
+// thread of ours.
 //
 // SDL converts the movie's rate and channel count to whatever the hardware
 // wants, so a 22 kHz mono cutscene needs no resampling on this side.
@@ -22,6 +22,7 @@
 namespace
 {
     SDL_AudioStream* sStream;
+    SDL_AudioDeviceID sDevice;
     bool sSubsystem;
     U32 sChannels;
     U32 sRate;
@@ -35,6 +36,21 @@ namespace
     U32 QueuedFrames()
     {
         if (sStream == NULL)
+        {
+            return 0;
+        }
+
+        // **Zero once the device has taken everything it can.**
+        //
+        // A stream whose rate differs from the device's keeps a few input
+        // samples as resampler history, and SDL goes on counting them as
+        // queued: a 44.1 kHz movie on a 48 kHz device settles at seven frames
+        // and never reaches zero. iFMV.cpp hands its clock over to the wall
+        // only when the track has drained AND the queue is empty, so those
+        // seven frames stop the clock on the last video frame and the movie
+        // hangs there forever. Nothing is left to play when there is no
+        // converted output, so that is what "empty" means here.
+        if (SDL_GetAudioStreamAvailable(sStream) <= 0)
         {
             return 0;
         }
@@ -74,21 +90,29 @@ S32 iFMVAudioOpen(U32 sample_rate, U32 channels)
     spec.channels = (int)channels;
     spec.freq = (int)sample_rate;
 
-    // No callback: SDL pulls from the stream itself, and this file only ever
-    // puts data in.
-    sStream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);
+    sDevice = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec);
 
-    if (sStream == NULL)
+    if (sDevice == 0)
     {
         SDL_QuitSubSystem(SDL_INIT_AUDIO);
         sSubsystem = false;
         return FALSE;
     }
 
+    // Both ends of the stream are the movie's format; binding it to the device
+    // is what sets the output end to the hardware's.
+    sStream = SDL_CreateAudioStream(&spec, &spec);
+
+    if (sStream == NULL || !SDL_BindAudioStream(sDevice, sStream))
+    {
+        iFMVAudioClose();
+        return FALSE;
+    }
+
     sChannels = channels;
     sRate = sample_rate;
 
-    if (!SDL_ResumeAudioStreamDevice(sStream))
+    if (!SDL_ResumeAudioDevice(sDevice))
     {
         iFMVAudioClose();
         return FALSE;
@@ -101,10 +125,16 @@ void iFMVAudioClose()
 {
     if (sStream != NULL)
     {
-        // Takes the logical device with it, so nothing is left playing the tail
-        // of a movie the game has moved on from.
         SDL_DestroyAudioStream(sStream);
         sStream = NULL;
+    }
+
+    // After the stream, so nothing is left playing the tail of a movie the game
+    // has moved on from.
+    if (sDevice != 0)
+    {
+        SDL_CloseAudioDevice(sDevice);
+        sDevice = 0;
     }
 
     if (sSubsystem)
