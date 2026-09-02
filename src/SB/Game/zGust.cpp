@@ -168,7 +168,7 @@ void zGustUpdateEnt(xEnt* ent, xScene* sc, float dt, void* gdata)
                 float lerpinc = g->asset->fade;
                 if (dt >= lerpinc)
                 {
-                    if (!(data->lerp[i] < 1.0f))
+                    if (!(data->lerp[i] < 0.0f))
                     {
                         data->lerp[i] = 1.0f;
                         continue;
