@@ -158,7 +158,10 @@ F32 ArcLength3(xCoef3* coef, F64 ustart, F64 uend)
     u = coef->y.a[2];
     u_eval = coef->z.a[2];
 
-    E = 9.0 * (A * A + C * C + h * h);
+    F64 aa = A * A;
+    F64 cc = C * C;
+    F64 hh = h * h;
+    E = 9.0 * (aa + cc + hh);
     D = 12.0 * (A * B + C * temp_y1 + h * temp_z1);
     C = 6.0 * (A * sum + C * u + h * u_eval) +
         4.0 * (B * B + temp_y1 * temp_y1 + temp_z1 * temp_z1);
