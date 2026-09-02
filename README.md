@@ -44,7 +44,7 @@ were recovered from the `.xbe`.
 | Cruise Bubble distortion | `[xbox] distortion` | Swirls the picture while you fly the Cruise Bubble. The offset map is a genuine Xbox asset, `BXCruiseBubbleDistort`, already shipping in `plat.HIP`. |
 | Loading screen still | `[xbox] snapshot` | The frame you just left, behind the rising loading bubbles, instead of the GameCube backdrop. Falls back to the backdrop on the first load of a run. |
 | Cave reverb | `[xbox] reverb` | In the Mermalair and the caves. The game side already worked on both consoles; `iSndSetEnvironmentalEffect` was the empty part. The Xbox's reverb is DSP microcode that is not on the disc, so its twelve I3DL2 parameters were read out of the binary and fed to a reverb built on Microsoft's published I3DL2 design. |
-| Sound rolloff | `[xbox] sound_rolloff` | How a positioned sound fades with distance. The Xbox hands the emitter to DirectSound3D, which uses the inverse law and never mutes at the outer radius; the GameCube's own curve holds an ambient near full volume until it cuts off, which is why the Kelp Forest waterfall drowns the level. |
+| Sound rolloff | `[xbox] sound_rolloff` | Mixes sound effects the way the xbox Directsound implementation does, fixing various sound issues like the Kelp Forest waterfall. |
 
 ### New on PC
 

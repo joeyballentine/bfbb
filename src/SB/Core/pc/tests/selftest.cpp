@@ -3507,9 +3507,10 @@ static void test_snd()
 // with a 10/50 radius pair the GameCube is 8 dB louder. Both are arithmetic
 // nobody hears going subtly wrong, so both are pinned here.
 //
-// The gain is read as the magnitude of the two sides. The pan law is
-// equal-power, so left^2 + right^2 is the voice's gain whatever the pan is, and
-// this stays a test of the attenuation rather than of the panning.
+// The gain is read off the two sides in whichever way the setting's own pan law
+// makes independent of the pan: in quadrature under the GameCube's equal-power
+// law, off the louder side under the Xbox's. Either way these stay tests of the
+// attenuation. The pan laws themselves are pinned in test_snd_pan.
 
 void iSndTestVoiceGain(const xSndVoiceInfo* vp, S32 xboxRolloff, F32* left, F32* right);
 
@@ -3524,8 +3525,7 @@ static F32 gain_at(F32 vol, F32 inner, F32 outer, F32 dist, S32 xboxRolloff)
     vp.innerRadius2 = inner * inner;
     vp.outerRadius2 = outer * outer;
 
-    // Straight ahead: the pan comes out centred, and the magnitude below is the
-    // gain either way.
+    // Straight ahead, so the pan comes out centred.
     vp.playPos.x = 0.0f;
     vp.playPos.y = 0.0f;
     vp.playPos.z = dist;
@@ -3533,6 +3533,12 @@ static F32 gain_at(F32 vol, F32 inner, F32 outer, F32 dist, S32 xboxRolloff)
     F32 l;
     F32 r;
     iSndTestVoiceGain(&vp, xboxRolloff, &l, &r);
+
+    if (xboxRolloff)
+    {
+        return (l > r) ? l : r;
+    }
+
     return sqrtf(l * l + r * r);
 }
 
@@ -3592,6 +3598,97 @@ static void test_snd_rolloff()
     gSnd.categoryVolFader[SND_CAT_GAME] = 0.0f;
     check(gain_at(1.0f, 10.0f, 50.0f, 5.0f, TRUE) == 0.0f, "a muted category is silent");
     gSnd.categoryVolFader[SND_CAT_GAME] = 1.0f;
+}
+
+// ---------------------------------------------------------------------------
+// The pan laws.
+//
+// The two agree at the ends and differ in the middle: the GameCube crossfades
+// with equal power, so a centred sound is 3 dB down on both sides, while
+// DirectSound cuts one side and leaves the other at full. The gap lands on
+// every unpositioned voice -- a third of the live ones in play -- because the
+// Xbox never pans those at all. It reads as the game being quiet rather than as
+// anything to do with panning, so it is pinned here.
+//
+// Which speaker a given direction goes to is not what these check. They assert
+// only that one side is full and the other silent, which both laws do.
+
+static void pan_at(F32 x, F32 z, U32 flags, S32 xboxRolloff, F32* l, F32* r)
+{
+    xSndVoiceInfo vp;
+    memset(&vp, 0, sizeof(vp));
+
+    vp.flags = flags;
+    vp.category = SND_CAT_GAME;
+    vp.vol = 1.0f;
+    vp.innerRadius2 = 100.0f;
+    vp.outerRadius2 = 2500.0f;
+
+    // Inside the inner radius either way, so distance contributes nothing and
+    // what comes back is the pan on its own. x is across the listener, z ahead.
+    vp.playPos.x = x;
+    vp.playPos.y = 0.0f;
+    vp.playPos.z = z;
+
+    iSndTestVoiceGain(&vp, xboxRolloff, l, r);
+}
+
+static void test_snd_pan()
+{
+    printf("iSnd (pan laws)\n");
+
+    memset(&gSnd, 0, sizeof(gSnd));
+    for (S32 i = 0; i < 8; i++)
+    {
+        gSnd.categoryVolFader[i] = 1.0f;
+    }
+    gSnd.right.x = 1.0f;
+    gSnd.right.y = 0.0f;
+    gSnd.right.z = 0.0f;
+
+    F32 l;
+    F32 r;
+
+    // A voice with no position. The Xbox leaves its buffer at DSBPAN_CENTER,
+    // which is full on both sides.
+    pan_at(0.0f, 0.0f, 0x0, TRUE, &l, &r);
+    check(fabsf(l - 1.0f) < 0.001f && fabsf(r - 1.0f) < 0.001f,
+          "Xbox: an unpositioned voice is full on both sides");
+
+    pan_at(0.0f, 0.0f, 0x0, FALSE, &l, &r);
+    check(fabsf(l - 0.70711f) < 0.001f && fabsf(r - 0.70711f) < 0.001f,
+          "GameCube: the same voice is 3 dB down on both");
+
+    // A positioned voice the listener is facing straight on. Retail's index runs
+    // 0 to 0x7f, so its 0x40 is a sixth of a decibel off true centre and the two
+    // sides come back very slightly apart.
+    pan_at(0.0f, 5.0f, 0x8, TRUE, &l, &r);
+    check(fabsf(l - 1.0f) < 0.02f && fabsf(r - 1.0f) < 0.02f,
+          "Xbox: a centred 3D voice is full on both sides too");
+
+    pan_at(0.0f, 5.0f, 0x8, FALSE, &l, &r);
+    check(fabsf(l - 0.70711f) < 0.02f && fabsf(r - 0.70711f) < 0.02f,
+          "GameCube: and 3 dB down on both");
+
+    // Hard over, where the laws agree: all of it on one side, none on the other.
+    pan_at(5.0f, 0.0f, 0x8, TRUE, &l, &r);
+    check(fabsf(l - 1.0f) < 0.001f && r < 0.001f, "Xbox: hard over is full and silent");
+
+    pan_at(5.0f, 0.0f, 0x8, FALSE, &l, &r);
+    check(fabsf(l - 1.0f) < 0.001f && r < 0.001f, "GameCube: and hard over agrees");
+
+    // The other way, to catch a law that only works in one direction.
+    pan_at(-5.0f, 0.0f, 0x8, TRUE, &l, &r);
+    check(l < 0.001f && fabsf(r - 1.0f) < 0.001f, "Xbox: hard the other way is the mirror");
+
+    pan_at(-5.0f, 0.0f, 0x8, FALSE, &l, &r);
+    check(l < 0.001f && fabsf(r - 1.0f) < 0.001f, "GameCube: as is the GameCube's");
+
+    // Part of the way over. The near side stays at the voice's own volume and
+    // the far side is cut, which is what SetPan does; the pan never adds gain.
+    pan_at(3.0f, 4.0f, 0x8, TRUE, &l, &r);
+    check(fabsf(l - 1.0f) < 0.001f, "Xbox: the near side of a partial pan is uncut");
+    check(r > 0.001f && r < l, "and the far side is down but not silent");
 }
 
 // ---------------------------------------------------------------------------
@@ -4144,6 +4241,7 @@ int main()
 #endif
     test_snd();
     test_snd_rolloff();
+    test_snd_pan();
     test_snd_reverb();
     test_hip();
     test_flykey();

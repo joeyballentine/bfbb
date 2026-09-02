@@ -84,8 +84,9 @@ at load rather than ignored.
     distortion          the Cruise Bubble's screen warp
     snapshot            the loading screen standing on the last frame drawn
     reverb              cave reverb, in the Mermalair and the caves
-    sound_rolloff       fade a positioned sound with distance the way the
-                        Xbox does, not the way the GameCube does
+    sound_rolloff       fade a sound with distance and pan it across the
+                        speakers the way the Xbox does, not the way the
+                        GameCube does
 
     [text]              The game's own words, which are the Xbox release's.
 

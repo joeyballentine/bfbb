@@ -902,9 +902,9 @@ static F32 iPitchRatio(F32 semitones)
 //   is linear and they lean opposite ways.
 //
 // `xbox.sound_rolloff` picks between them, on by default because the port reads
-// the Xbox asset set. Panning is not part of this: DirectSound pans a 3D buffer
-// from the position itself, and reproducing its law is a different job from
-// reproducing its loudness, so both settings pan the same way.
+// the Xbox asset set. It also picks the pan law, for the same reason -- see the
+// end of iVoiceGain. The pan index itself is retail's either way; only how a
+// side's gain follows from it changes.
 
 // vol -> amplitude, the Xbox's own conversion, truncation and floor included
 // (va 0x172b39). The floor is -64 dB rather than silence, which is what
@@ -1051,9 +1051,27 @@ static void iVoiceGain(const xSndVoiceInfo* vp, F32* outLeft, F32* outRight)
     }
 
     F32 theta = pan01 * 1.5707963f;
+    F32 l = cosf(theta);
+    F32 r = sinf(theta);
 
-    *outLeft = cosf(theta) * vol;
-    *outRight = sinf(theta) * vol;
+    if (sXboxRolloff)
+    {
+        // DirectSound pans by attenuating one side and leaving the other at
+        // full, so a centred buffer plays at full in both channels. Normalising
+        // the louder side to unity reproduces that at both ends -- centre
+        // full/full, hard over full/silent -- where the equal-power law puts a
+        // centred sound 3 dB down. It matters most for the voices that are
+        // never panned at all: on the Xbox a 2D buffer keeps DSBPAN_CENTER,
+        // because SetPosition in the per-frame update is gated on the 3D flag
+        // (va 0x172ab7) and nothing else sets a pan.
+        F32 m = (l > r) ? l : r;
+
+        l /= m;
+        r /= m;
+    }
+
+    *outLeft = l * vol;
+    *outRight = r * vol;
 }
 
 static void iApplyVoiceMix(S32 i)

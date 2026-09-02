@@ -105,9 +105,10 @@ namespace
           "Use a still of the level you just left as the loading screen." },
         { "xbox", "reverb", "on", "Cave reverb, in the Mermalair and the caves." },
         { "xbox", "sound_rolloff", "on",
-          "Fade a positioned sound with distance the way the Xbox does. Off uses the\n"
-          "; GameCube's curve, which holds an ambient near full volume out to its\n"
-          "; radius -- the Kelp Forest waterfall is much louder that way." },
+          "Fade and pan a sound the way the Xbox does. Off uses the GameCube's\n"
+          "; curves, which hold an ambient near full volume out to its radius -- the\n"
+          "; Kelp Forest waterfall is much louder that way -- and which put a centred\n"
+          "; sound 3 dB down, which the Xbox does not." },
         { "input", "controller", "auto",
           "Which controller to play with: auto (the first one present), or 1 to 4 to\n"
           "; pin it to that slot." },
