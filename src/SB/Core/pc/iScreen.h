@@ -196,11 +196,6 @@ void iScreenSetSize(S32 width, S32 height);
 S32 iScreenMultiSample();
 void iScreenSetMultiSample(S32 samples);
 
-// Whether a cutout's alpha edge is drawn as sample coverage rather than
-// blended. Needs somewhere to put the coverage, so it has no effect at one
-// sample -- see iScreenMultiSample.
-S32 iScreenAlphaToCoverage();
-void iScreenSetAlphaToCoverage(S32 on);
 S32 iScreenPerPixelLighting();
 void iScreenSetPerPixelLighting(S32 on);
 

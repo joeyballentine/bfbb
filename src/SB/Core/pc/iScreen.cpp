@@ -272,21 +272,6 @@ void iScreenSetMultiSample(S32 samples)
     sMultiSample = samples;
 }
 
-// Whether the alpha edges of a cutout are drawn as sample coverage. Needs
-// samples to spread across, so it does nothing at one; that is not a mistake to
-// report, it is just what the two settings together mean.
-static S32 sAlphaToCoverage = 1;
-
-S32 iScreenAlphaToCoverage()
-{
-    return sAlphaToCoverage;
-}
-
-void iScreenSetAlphaToCoverage(S32 on)
-{
-    sAlphaToCoverage = on ? 1 : 0;
-}
-
 // Whether lighting is summed per pixel rather than per vertex. Held here with
 // the other two for the same reason: RenderWareInit pushes it into librw, and
 // the code that does must not learn what config.ini is.

@@ -364,7 +364,6 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     // Samples first: the surfaces are made when the size is set, and how many
     // samples they carry has to be decided before they exist.
     rw::d3d::setVirtualScreenSamples(iScreenMultiSample());
-    rw::d3d::setAlphaToCoverageEnabled(iScreenAlphaToCoverage());
     rw::d3d::setPerPixelLightingEnabled(iScreenPerPixelLighting());
     rw::d3d::setVirtualScreen(iScreenWidth(), iScreenHeight());
     if (!rw::Engine::open(&params))
@@ -439,11 +438,10 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     // window's size would make `mode = fullscreen` silently override the
     // resolution setting.
     //
-    // The samples and the coverage setting go in first, for the reason the D3D9
-    // arm gives: both are properties of the surface, and the surface is built
-    // the first time a camera raster asks for it.
+    // The samples go in first, for the reason the D3D9 arm gives: they are a
+    // property of the surface, and the surface is built the first time a camera
+    // raster asks for it.
     rw::gl3::setVirtualScreenSamples(iScreenMultiSample());
-    rw::gl3::setAlphaToCoverageEnabled(iScreenAlphaToCoverage());
     rw::gl3::setVirtualScreen(iScreenWidth(), iScreenHeight());
     if (!rw::Engine::open(&params))
     {
@@ -618,25 +616,20 @@ RwBool RwEngineStart(void)
 
 #if defined(RW_D3D9) || defined(RW_GL3)
     // Said out loud because both can be refused by the card rather than by the
-    // setting, and because alpha to coverage is what decides whether the blurred
-    // edge of a cutout mixes into the scene behind it or into whatever was drawn
-    // there first. Only now: the surfaces are made when the device comes up, and
+    // setting. Only now: the surfaces are made when the device comes up, and
     // until then there is nothing to have granted anything.
     {
 #ifdef RW_D3D9
         S32 granted = (S32)rw::d3d::getVirtualScreenSamples();
-        S32 coverage = rw::d3d::getAlphaToCoverage();
         S32 perPixel = rw::d3d::getPerPixelLighting();
 #else
         S32 granted = (S32)rw::gl3::getVirtualScreenSamples();
-        S32 coverage = rw::gl3::getAlphaToCoverage();
         S32 perPixel = rw::gl3::getPerPixelLighting();
 #endif
         S32 asked = iScreenMultiSample();
-        printf("bfbb: %dx MSAA%s; alpha to coverage %s; per-pixel lighting %s\n",
-               (int)granted,
+        printf("bfbb: %dx MSAA%s; per-pixel lighting %s\n", (int)granted,
                granted >= asked ? "" : " (asked for more; the card refused)",
-               coverage ? "on" : "off", perPixel ? "on" : "off");
+               perPixel ? "on" : "off");
         fflush(stdout);
     }
 #endif

@@ -87,9 +87,6 @@ namespace
         { "video", "msaa", "4",
           "Samples per pixel, for smoother edges: 1 (off), 2, 4, 8. A count the card\n"
           "; will not grant falls back to off." },
-        { "video", "alpha_to_coverage", "off",
-          "Antialias the cutout edges of grass, seaweed and netting. Does nothing at\n"
-          "; msaa = 1." },
         { "video", "per_pixel_lighting", "on",
           "Light characters once per pixel instead of once per vertex." },
         { "video", "load_time", "1",
