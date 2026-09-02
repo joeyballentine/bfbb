@@ -480,7 +480,7 @@ config.libs = [
             Object(NonMatching, "SB/Core/x/xserializer.cpp"),
             Object(NonMatching, "SB/Core/x/xSFX.cpp"),
             Object(NonMatching, "SB/Core/x/xShadow.cpp"),
-            Object(NonMatching, "SB/Core/x/xSnd.cpp"),
+            Object(Matching, "SB/Core/x/xSnd.cpp"),
             Object(NonMatching, "SB/Core/x/xSpline.cpp"),
             Object(Equivalent, "SB/Core/x/xstransvc.cpp"),
             Object(NonMatching, "SB/Core/x/xString.cpp"),
