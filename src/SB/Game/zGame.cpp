@@ -993,6 +993,11 @@ static void zGame_HackPostPortalAutoSaveDraw()
 
 static void zGameUpdateMode()
 {
+    U32 b;
+    U32 d;
+    U32 a;
+    U32 c;
+    zScene* scene;
     xPortalAsset* passet;
     char* id;
     U32 nextSceneID;
@@ -1055,17 +1060,18 @@ static void zGameUpdateMode()
     {
         gGameWhereAmI = eGameWhere_ModeSceneSwitch;
 
-        passet = globals.sceneCur->pendingPortal->passet;
+        scene = globals.sceneCur;
+        passet = scene->pendingPortal->passet;
 
         // c/d used to be crossed over in the two expressions below, which made
         // nextSceneID come out as [+3][+1][+2][+0] - neither the sceneID nor its
         // byteswap.  The target's `or r31, r5, r3` / `or r3, r7, r0` pin it:
         // nextSceneID is the plain big-endian sceneID ([+0][+1][+2][+3]) and the
         // value compared against globals.sceneCur->sceneID is the full byteswap.
-        U32 d = *(char *)((int)&passet->sceneID + 3);
-        U32 c = *(char *)((int)&passet->sceneID + 0);
-        U32 b = *(char *)((int)&passet->sceneID + 2);
-        U32 a = *(char *)((int)&passet->sceneID + 1);
+        d = *(char *)((int)&passet->sceneID + 3);
+        c = *(char *)((int)&passet->sceneID + 0);
+        b = *(char *)((int)&passet->sceneID + 2);
+        a = *(char *)((int)&passet->sceneID + 1);
 
         U32 x = (((b << 8) & 0xff00) | (((c << 24) & 0xff000000) | ((a << 16) & 0x00ffffff)) & 0xffff00ff);
         U32 y = (((a << 8) & 0xff00) | (((d << 24) & 0xff000000) | ((b << 16) & 0x00ffffff)) & 0xffff00ff);
@@ -1073,7 +1079,7 @@ static void zGameUpdateMode()
         nextSceneID = d | x;
         x = c | y;
 
-        if ((g_hiphopReloadHIP != 0) || ((g_hiphopForcePortal != 0) || (x != globals.sceneCur->sceneID)))
+        if ((g_hiphopReloadHIP != 0) || ((g_hiphopForcePortal != 0) || (x != scene->sceneID)))
         {
             sPlayerMarkerStartID = passet->assetMarkerID;
             sPlayerMarkerStartCamID = passet->assetCameraID;

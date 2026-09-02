@@ -221,7 +221,7 @@ void zCutsceneMgrPlayStart(zCutsceneMgr* t)
                 continue;
             }
 
-            if (cutsceneHackTable[i].radius != 0.0f)
+            if (cutsceneHackTable[i].radius)
             {
                 RpClumpForAllAtomics(((RpAtomic*)t->csn->Data[j].DataPtr)->clump, HackBoundCB,
                                      &cutsceneHackTable[i].radius);
