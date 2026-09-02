@@ -7015,3 +7015,16 @@ pattern;` declared before `i`, and the loop walks `p`. Rule of thumb recorded.
 - `Show_frame` (iFMV, 96.847): retail reloads the u32->double magic `lfd`
   for the second conversion in the same block; we CSE it. Literal-reload
   class.
+- **`update_turn` x3 (Dutchman 94.308, Plankton 94.308, SB2 96.552): the
+  `frsp` is on the yaw copy, and twelve shapes are bit-identical or worse.**
+  All three retail bodies emit `frsp f0, f31` at the wrap-branch join, then
+  `stfs f31, 0x8(r1)` for the by-reference argument, then `fadds f3, f0, f3`.
+  Measured on Dutchman: `angle` removed and `cur` passed by reference 74.431
+  (same on Plankton; SB2 83.598); the copy moved above the wrap branches
+  88.615 (SB2 92.874); `F64 cur` 89.292; `F64 cur` + `F64 diff` 86.215;
+  named `target = angle + diff`, `diff + angle`, `F32& ref = angle`, and bare
+  `F32 angle; angle = cur;` all bit-identical at 94.308. In matched code the
+  same `frsp` appears on a value that was stored to an address-taken slot and
+  read back (`CheckObjectAgainstMeleeBound`: `stfs f1; frsp f0, f1; fcmpo`),
+  and after `fabs`/`fneg` (`xGridInit`, `xQuickCullForSphere`); none of those
+  constructs is present here. The build is otherwise DOL-clean at 7308/7673.
