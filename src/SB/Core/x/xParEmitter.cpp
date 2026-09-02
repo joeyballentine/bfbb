@@ -818,11 +818,3 @@ inline xPar* xParEmitterEmit(xParEmitter* pe, F32 dt)
     return xParEmitterEmit(pe, dt, dt);
 }
 
-inline void xParInterp::operator=(const xParInterp& p)
-{
-    this->interp = p.interp;
-    this->val[0] = p.val[0];
-    this->val[1] = p.val[1];
-    this->freq = p.freq;
-    this->oofreq = p.oofreq;
-}
