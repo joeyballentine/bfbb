@@ -351,9 +351,7 @@ S32 xDecalEmitter::select_texture_unit()
     case TM_RANDOM:
         return (xrand() / 8192) % this->texture.units;
     case TM_CYCLE:
-        S32 id = this->texture.prev;
-        this->texture.prev = this->texture.prev + 1;
-        return id % this->texture.units;
+        return ++this->texture.prev % this->texture.units;
     case TM_DEFAULT:
     default:
         return 0;
