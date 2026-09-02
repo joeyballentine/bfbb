@@ -311,7 +311,8 @@ static void UpdateGustFX(zGust* g, float seconds)
             info.vel.x = 0.0f;
             info.vel.y = 5.0f;
             info.vel.z = 0.0f;
-            info.life.val[0] = (box->box.upper.y - box->box.lower.y) / 5.0f * 2.0f;
+            info.life.val[0] = (box->box.upper.y - box->box.lower.y) / 5.0f;
+            info.life.val[0] *= 2.0f;
         }
         else
         {
