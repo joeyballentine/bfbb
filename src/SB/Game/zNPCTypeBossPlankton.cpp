@@ -2597,7 +2597,9 @@ void zNPCBPlankton::fall(F32 accel, F32 max_vel)
 
 void zNPCBPlankton::aim_gun(xAnimPlay* play, xQuat* q, xVec3* v, S32 count)
 {
-    zNPCBPlankton* npc = (zNPCBPlankton*)play->Object;
+    // play->Object is the xEnt* that zEntRecurseModelInfo stored, and only
+    // CodeWarrior's layout lets that be an NPC pointer unchanged. See xEnt.h.
+    zNPCBPlankton* npc = (zNPCBPlankton*)(xEnt*)play->Object;
 
     if (npc->flag.aim_gun)
     {
