@@ -453,6 +453,7 @@ static void test_config()
         check(strstr(buf, "distortion = on") != NULL, "and distortion");
         check(strstr(buf, "snapshot = on") != NULL, "and snapshot");
         check(strstr(buf, "reverb = on") != NULL, "and reverb");
+        check(strstr(buf, "sound_rolloff = on") != NULL, "and the sound rolloff");
         check(strstr(buf, "[text]") != NULL, "it has the [text] section header");
         check(strstr(buf, "platform_wording = on") != NULL, "and the text rewrite at its default");
     }
@@ -3499,6 +3500,101 @@ static void test_snd()
 }
 
 // ---------------------------------------------------------------------------
+// The two distance curves
+//
+// xbox.sound_rolloff picks between the GameCube's attenuation and the Xbox's,
+// and the difference is the whole of issue #27: at 30 units from an emitter
+// with a 10/50 radius pair the GameCube is 8 dB louder. Both are arithmetic
+// nobody hears going subtly wrong, so both are pinned here.
+//
+// The gain is read as the magnitude of the two sides. The pan law is
+// equal-power, so left^2 + right^2 is the voice's gain whatever the pan is, and
+// this stays a test of the attenuation rather than of the panning.
+
+void iSndTestVoiceGain(const xSndVoiceInfo* vp, S32 xboxRolloff, F32* left, F32* right);
+
+static F32 gain_at(F32 vol, F32 inner, F32 outer, F32 dist, S32 xboxRolloff)
+{
+    xSndVoiceInfo vp;
+    memset(&vp, 0, sizeof(vp));
+
+    vp.flags = 0x8;
+    vp.category = SND_CAT_GAME;
+    vp.vol = vol;
+    vp.innerRadius2 = inner * inner;
+    vp.outerRadius2 = outer * outer;
+
+    // Straight ahead: the pan comes out centred, and the magnitude below is the
+    // gain either way.
+    vp.playPos.x = 0.0f;
+    vp.playPos.y = 0.0f;
+    vp.playPos.z = dist;
+
+    F32 l;
+    F32 r;
+    iSndTestVoiceGain(&vp, xboxRolloff, &l, &r);
+    return sqrtf(l * l + r * r);
+}
+
+static void test_snd_rolloff()
+{
+    printf("iSnd (distance curves)\n");
+
+    memset(&gSnd, 0, sizeof(gSnd));
+    for (S32 i = 0; i < 8; i++)
+    {
+        gSnd.categoryVolFader[i] = 1.0f;
+    }
+    gSnd.right.x = 1.0f;
+
+    // The GameCube's: flat inside the inner radius, sqrt of the squared-distance
+    // interpolation between them, silence past the outer one.
+    check(fabsf(gain_at(1.0f, 10.0f, 50.0f, 0.0f, FALSE) - 1.0f) < 0.001f,
+          "GameCube: full volume at the emitter");
+    check(fabsf(gain_at(1.0f, 10.0f, 50.0f, 10.0f, FALSE) - 1.0f) < 0.001f,
+          "and still full at the inner radius");
+    check(fabsf(gain_at(1.0f, 10.0f, 50.0f, 30.0f, FALSE) - 0.8165f) < 0.001f,
+          "0.82 at 30 units, most of the way out");
+    check(gain_at(1.0f, 10.0f, 50.0f, 50.0f, FALSE) < 0.001f, "and nothing at the outer radius");
+    check(gain_at(1.0f, 10.0f, 50.0f, 80.0f, FALSE) < 0.001f, "or beyond it");
+
+    // The Xbox's: DirectSound's inverse law, held rather than muted past the max
+    // distance, because the buffers carry no MUTE3DATMAXDISTANCE.
+    check(fabsf(gain_at(1.0f, 10.0f, 50.0f, 0.0f, TRUE) - 1.0f) < 0.001f,
+          "Xbox: full volume at the emitter");
+    check(fabsf(gain_at(1.0f, 10.0f, 50.0f, 10.0f, TRUE) - 1.0f) < 0.001f,
+          "and still full at the min distance");
+    check(fabsf(gain_at(1.0f, 10.0f, 50.0f, 30.0f, TRUE) - 0.3333f) < 0.001f,
+          "min over distance at 30 units, 8 dB below the GameCube");
+    check(fabsf(gain_at(1.0f, 10.0f, 50.0f, 50.0f, TRUE) - 0.2f) < 0.001f,
+          "0.2 at the max distance");
+    check(fabsf(gain_at(1.0f, 10.0f, 50.0f, 80.0f, TRUE) - 0.2f) < 0.001f,
+          "and it holds there rather than cutting off");
+
+    // A radius under 1 is clamped to 1 on the way into DirectSound, so an
+    // emitter with no inner radius does not divide the whole level away.
+    check(fabsf(gain_at(1.0f, 0.0f, 50.0f, 1.0f, TRUE) - 1.0f) < 0.001f,
+          "an inner radius of 0 reads as 1");
+    check(fabsf(gain_at(1.0f, 0.0f, 50.0f, 4.0f, TRUE) - 0.25f) < 0.001f,
+          "and attenuates from there");
+
+    // The volume curve, which the Xbox applies to every voice and not just the
+    // positioned ones: 10*log2 truncated to whole decibels.
+    check(fabsf(gain_at(0.7f, 10.0f, 50.0f, 5.0f, FALSE) - 0.7f) < 0.001f,
+          "GameCube: the port passes a volume through as it is");
+    check(fabsf(gain_at(0.7f, 10.0f, 50.0f, 5.0f, TRUE) - 0.56234f) < 0.001f,
+          "Xbox: 0.7 is -5 dB, not -3.1");
+    check(fabsf(gain_at(0.9f, 10.0f, 50.0f, 5.0f, TRUE) - 0.89125f) < 0.001f,
+          "and 0.9 is -1 dB");
+
+    // The floor DirectSound is handed is -64 dB, but a category the player has
+    // silenced has to be silent, so zero stays zero.
+    gSnd.categoryVolFader[SND_CAT_GAME] = 0.0f;
+    check(gain_at(1.0f, 10.0f, 50.0f, 5.0f, TRUE) == 0.0f, "a muted category is silent");
+    gSnd.categoryVolFader[SND_CAT_GAME] = 1.0f;
+}
+
+// ---------------------------------------------------------------------------
 // The HIP container reader.
 //
 // The container is big-endian on every platform, including Xbox -- it is the
@@ -4047,6 +4143,7 @@ int main()
     test_snd_mixer();
 #endif
     test_snd();
+    test_snd_rolloff();
     test_snd_reverb();
     test_hip();
     test_flykey();

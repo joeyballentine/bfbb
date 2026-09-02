@@ -187,6 +187,10 @@ static U64 sLastMixReportNs;
 static U32 sWhoAsset;
 static S32 sWhoLeft;
 
+// config.ini's xbox.sound_rolloff: which console's distance attenuation and
+// volume curve the mix uses. See the block above iApplyVoiceMix.
+static S32 sXboxRolloff = TRUE;
+
 static iSndExternalCallback sExternalCallback;
 static bool sStereo = true;
 static bool sSuspended;
@@ -277,6 +281,8 @@ void iSndInit()
 
     sReportMix = getenv("BFBB_SNDMIX") != NULL;
     sLastMixReportNs = 0;
+
+    sXboxRolloff = iConfigGetBool("xbox.sound_rolloff", TRUE);
 
     sWhoAsset = 0;
     sWhoLeft = 0;
@@ -867,17 +873,105 @@ static F32 iPitchRatio(F32 semitones)
 // mixer wants and converting to decibels and back would only lose precision.
 // So the curve is the same and the last step differs: an equal-power pan, which
 // keeps a sound's loudness constant as it crosses in front of the listener.
+//
+// ---------------------------------------------------------------------------
+// The Xbox does not run any of that.
+//
+// It hands each emitter to DirectSound3D and lets DirectSound do the distance
+// work: `iSndPlay` un-squares the same innerRadius2 and outerRadius2 this file
+// stores and passes them as the buffer's min and max distance (va 0x172eea and
+// 0x172f1b), and the per-frame update (va 0x172a44 and 0x172b14) then sets a
+// volume that is `vol * categoryVolFader[category]` and nothing else -- no
+// distance term anywhere in it.
+//
+// That makes two differences, and they compound:
+//
+//   Distance. The GameCube curve is nearly flat until you approach the outer
+//   radius and then drops off a cliff to silence. DirectSound's is the inverse
+//   law, innerRadius / distance, and it does not mute past the max distance --
+//   the buffers are created with DSBCAPS_CTRL3D and not MUTE3DATMAXDISTANCE, so
+//   beyond it the attenuation just stops falling. Kelp Forest's waterfall
+//   (`c6da94af`, a -5.4 dBFS loop, on emitters with a 45-unit outer radius) is
+//   14 dB louder here than on the Xbox at 30 units out, which is what issue #27
+//   is about.
+//
+//   Curve. DirectSound takes hundredths of a decibel and the Xbox converts with
+//   `100 * (int)(10 * log2(x))`, which is amplitude x^1.66. The GameCube's
+//   iVolFromX is `43.4294 * ln(x)` in MIX's tenth-of-a-decibel units, which is
+//   10*log10(x) dB, or amplitude sqrt(x) -- louder, not quieter. Neither console
+//   is linear and they lean opposite ways.
+//
+// `xbox.sound_rolloff` picks between them, on by default because the port reads
+// the Xbox asset set. Panning is not part of this: DirectSound pans a 3D buffer
+// from the position itself, and reproducing its law is a different job from
+// reproducing its loudness, so both settings pan the same way.
 
-static void iApplyVoiceMix(S32 i)
+// vol -> amplitude, the Xbox's own conversion, truncation and floor included
+// (va 0x172b39). The floor is -64 dB rather than silence, which is what
+// DirectSound is handed; a volume of zero is still zero, because a category the
+// player has muted has to actually go quiet.
+static F32 iXboxFader(F32 x)
 {
-    if (i < 0 || i >= ISND_TOTAL_VOICES || !sVoices[i].in_use)
+    if (x <= 0.0f)
     {
-        return;
+        return 0.0f;
     }
 
-    xSndVoiceInfo* vp = &gSnd.voice[i];
+    S32 db = (S32)(14.42695f * logf(x));
 
+    if (db > 0)
+    {
+        db = 0;
+    }
+    else if (db < -64)
+    {
+        db = -64;
+    }
+
+    return powf(10.0f, (F32)db / 20.0f);
+}
+
+// DirectSound's inverse-distance law at the default rolloff factor of 1: full
+// volume inside the min distance, min/d out to the max distance, and held there
+// beyond it. Both radii are clamped to 1 on the way in, as the Xbox clamps them.
+static F32 iXboxDistanceAtten(const xSndVoiceInfo* vp, F32 dist)
+{
+    F32 mn = sqrtf(vp->innerRadius2);
+    F32 mx = sqrtf(vp->outerRadius2);
+
+    if (mn < 1.0f)
+    {
+        mn = 1.0f;
+    }
+
+    if (mx < mn)
+    {
+        mx = mn;
+    }
+
+    F32 d = dist;
+    if (d < mn)
+    {
+        d = mn;
+    }
+    else if (d > mx)
+    {
+        d = mx;
+    }
+
+    return mn / d;
+}
+
+// The gain a voice mixes at, per side. Split out of iApplyVoiceMix so the
+// self-test can run the curves without a voice table or a device behind them.
+static void iVoiceGain(const xSndVoiceInfo* vp, F32* outLeft, F32* outRight)
+{
     F32 vol = vp->vol * gSnd.categoryVolFader[vp->category];
+
+    if (sXboxRolloff)
+    {
+        vol = iXboxFader(vol);
+    }
 
     // Retail's pan index, 0 hard left through 0x40 centre to 0x7f hard right.
     // A voice with no position stays centred, which is what iSndCalcVol does.
@@ -890,7 +984,11 @@ static void iApplyVoiceMix(S32 i)
         F32 dist2 = xVec3Length2(&to);
 
         F32 scale;
-        if (dist2 > vp->outerRadius2)
+        if (sXboxRolloff)
+        {
+            scale = iXboxDistanceAtten(vp, sqrtf(dist2));
+        }
+        else if (dist2 > vp->outerRadius2)
         {
             scale = 0.0f;
         }
@@ -953,13 +1051,41 @@ static void iApplyVoiceMix(S32 i)
     }
 
     F32 theta = pan01 * 1.5707963f;
-    F32 left = cosf(theta) * vol;
-    F32 right = sinf(theta) * vol;
+
+    *outLeft = cosf(theta) * vol;
+    *outRight = sinf(theta) * vol;
+}
+
+static void iApplyVoiceMix(S32 i)
+{
+    if (i < 0 || i >= ISND_TOTAL_VOICES || !sVoices[i].in_use)
+    {
+        return;
+    }
+
+    F32 left;
+    F32 right;
+    iVoiceGain(&gSnd.voice[i], &left, &right);
 
     sVoices[i].last_left = left;
     sVoices[i].last_right = right;
 
     iSndHostSetVol(sVoices[i].host, left, right);
+}
+
+// ---------------------------------------------------------------------------
+// Test hook
+//
+// Deliberately not in iSnd.h: nothing in the game may call this, and its only
+// caller is src/SB/Core/pc/tests/selftest.cpp. The mix is otherwise reachable
+// only through a started voice on a real device, and the two distance curves
+// are exactly the sort of arithmetic that goes wrong quietly.
+void iSndTestVoiceGain(const xSndVoiceInfo* vp, S32 xboxRolloff, F32* left, F32* right)
+{
+    S32 saved = sXboxRolloff;
+    sXboxRolloff = xboxRolloff;
+    iVoiceGain(vp, left, right);
+    sXboxRolloff = saved;
 }
 
 // BFBB_SNDMIX: every second, every live voice and the gain it is being mixed

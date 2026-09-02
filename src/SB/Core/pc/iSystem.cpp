@@ -579,6 +579,7 @@ static void ApplyConfig()
     S32 distortion = iConfigGetBool("xbox.distortion", TRUE);
     S32 snapshot = iConfigGetBool("xbox.snapshot", TRUE);
     S32 reverb = iConfigGetBool("xbox.reverb", TRUE);
+    S32 rolloff = iConfigGetBool("xbox.sound_rolloff", TRUE);
 
     iGlowSetEnabled(glow);
     iDistortSetEnabled(distortion);
@@ -601,10 +602,11 @@ static void ApplyConfig()
     sprintf(shadows, "%d%s", (int)iShadowResolution(), sShadowResPinned != 0 ? "" : " (auto)");
 
     printf("bfbb: %s -- %s; draw distance %s; shadows %s; Xbox features: "
-           "glow %s, distortion %s, snapshot %s, reverb %s\n",
+           "glow %s, distortion %s, snapshot %s, reverb %s, sound rolloff %s\n",
            path != NULL ? path : "no config.ini, defaults", WindowModeName(sWindowMode),
            drawDistance ? "unlimited" : "console", shadows, glow ? "on" : "off",
-           distortion ? "on" : "off", snapshot ? "on" : "off", reverb ? "on" : "off");
+           distortion ? "on" : "off", snapshot ? "on" : "off", reverb ? "on" : "off",
+           rolloff ? "on" : "off");
     printf("bfbb: text rewritten for a PC: %s\n", wording ? "on" : "off");
     if (fancyLoad)
     {
