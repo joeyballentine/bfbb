@@ -7,9 +7,10 @@ mwcceppc.exe GC/2.0p1 answers memory-disambiguation questions more
 aggressively than the compiler that built the retail DOL: a float constant
 loaded from the .sdata2 literal pool gets hoisted above a store it is assumed
 not to touch (the long-standing "float meme"), a store to a small static does
-not kill a cached literal load, and a loop-invariant literal load is hoisted
-out of a loop that stores to a static array. This patch narrows those answers
-back toward retail's.
+not kill a cached literal load, a loop-invariant literal load is hoisted out
+of a loop that stores to a static array, and a whole static read is hoisted
+out of any loop that has no def of it. This patch narrows those answers back
+toward retail's.
 
 The narrowing is expressed as C, not as hand-assembled bytes. It lives in the
 CodeWarrior decompilation repo:
@@ -27,11 +28,21 @@ inlined call site, because a byte patch cannot call a shared function.
 
 HOW IT IS INJECTED
 ------------------
-Three sites are hooked, each dispatched by an operand-kind table in Alias.c:
+Three sites are hooked through the operand-kind tables in Alias.c, and one
+call site in CodeMotion.c:
 
     0x5bd068  update_alias_value (0x511a30)  entry 0 -> clauses V and F
     0x5bd074  may_alias_object   (0x511cb0)  pre-dispatch -> clause H
     0x5bd0bc  may_alias          (0x511fc0)  entries 0,1,3 -> A/B/C/C+/E3n
+    0x56f472  call isloopinvariant (0x570f60) from moveinvariantsfromloop
+              -> sb_licm_invariant (a whole static read is never invariant)
+
+The fourth is a REL32 call retargeted to a stub: isloopinvariant decides a
+read by the defs of its own object, so for a loop with no store and no call
+none of the three alias tables is ever consulted, and the only place to say
+"not invariant" is the call itself. Only moveinvariantsfromloop's call is
+redirected; simpleunswitchloop and srawi_addze_isloopinvariant keep the stock
+routine.
 
 `may_alias` and `may_alias_object` keep the original PCode arguments in esi/ebp
 at the dispatch point, so the predicates read opcode and flags directly; eax and
@@ -41,7 +52,7 @@ The injected image is one page grown onto the tail of .text (SizeOfRawData
 0x17dc00 -> 0x17e000 -> 0x17f000; no VirtualSize, VA or RVA changes, exactly as
 the loader already maps the padding past VirtualSize). It holds:
 
-  * five register-marshalling stubs (tools/aliaspatch_asm.py) that hand each
+  * six register-marshalling stubs (tools/aliaspatch_asm.py) that hand each
     query to the right C predicate in cdecl form and act on the answer -- jump
     to the compiler's own "may alias" answer tail on a hit, fall into the
     compiler's own stock test on a miss;
@@ -62,7 +73,8 @@ and needs no base relocations of its own. The three redirected dispatch entries
 and the CodeMotion hook are the only absolute edits; the dispatch entries
 already carry HIGHLOW relocations that rebase their new in-image targets, and
 the hook is a rel32 jump with the displaced table-operand relocation retyped to
-a padding no-op.
+a padding no-op. The LICM call-site retarget is a rel32 with no relocation
+entry of its own (verified against .reloc), so it needs none.
 
 The original 436-byte .text tail cave (VA 0x57ea4c) is left pristine.
 
@@ -90,7 +102,7 @@ BASE_SHA1 = "74bc177b10d1bbe8a60a21a6c0aa86d2dd9c0668"
 # The C-sourced GC/2.0p1a. This is a NEW hash: the old byte-cave p1a was
 # 5c6862b641adb8845f0fc09a6569902df068a83f. The derived-compiler bytes differ;
 # the OBJECTS it produces do not (verified byte-identical on 450 SB units).
-PATCHED_SHA1 = "e71f58023db2a11619a99ebd3ee411bd0ac72bc6"
+PATCHED_SHA1 = "a2feefd63e81ba708cc2e5cdfe5bd34066e72342"
 
 # ---- where the injected code goes ---------------------------------------
 # The executable tail of .text is the run from VirtualSize's end to the next
@@ -133,6 +145,12 @@ CM_RELOC_OFFSET = 0x1E6A98          # pre-insert file offset of the reloc u16
 CM_RELOC_OLD = 0x3CE8               # HIGHLOW @ RVA 0x111ce8
 CM_RELOC_NEW = 0x0CE8               # ABSOLUTE (padding no-op), offset kept
 
+# ---- CodeMotion LICM call site (0x56f472) --------------------------------
+# `call isloopinvariant` inside moveinvariantsfromloop, retargeted to the
+# licm-invariant stub. A REL32 call carries no base relocation.
+LICM_CALL_OFFSET = 0x16E872         # VA 0x56f472
+LICM_CALL_OLD = bytes.fromhex("e8e91a0000")   # call 0x570f60
+
 
 def sha1_bytes(b: bytes) -> str:
     return hashlib.sha1(b).hexdigest()
@@ -159,6 +177,7 @@ def build_injection():
     sched = exp["_sb_sched_clause"]
     licm = exp["_sb_licm_clause"]
     vn = exp["_sb_vn_store_kill"]
+    inv = exp["_sb_licm_invariant"]
 
     at = CAVE1_VA
     parts = []
@@ -175,6 +194,7 @@ def build_injection():
     emit("s3", A.sched_stub(at, sched, 3, A.STOCK_E1_E3))
     emit("licm", A.licm_stub(at, licm))
     emit("vn", A.vn_stub(at, vn, ALIAS_LIST_HEAD_VA))
+    emit("inv", A.licm_invariant_stub(at, inv))
 
     stub_len = at - CAVE1_VA
     if stub_len > CAVE1_LEN:
@@ -224,7 +244,15 @@ def _apply(data: bytearray) -> bytes:
                  f"expected {CM_RELOC_OLD:#x}")
     struct.pack_into("<H", data, CM_RELOC_OFFSET, CM_RELOC_NEW)
 
-    # 4. grow .text's raw data by one page and bump later sections' raw
+    # 4. retarget moveinvariantsfromloop's call isloopinvariant -> licm-invariant stub
+    if data[LICM_CALL_OFFSET:LICM_CALL_OFFSET + 5] != LICM_CALL_OLD:
+        sys.exit(f"LICM call bytes at {LICM_CALL_OFFSET:#x} are "
+                 f"{data[LICM_CALL_OFFSET:LICM_CALL_OFFSET + 5].hex()}, expected "
+                 f"{LICM_CALL_OLD.hex()}")
+    rel = vas["inv"] - (0x0056F472 + 5)
+    data[LICM_CALL_OFFSET:LICM_CALL_OFFSET + 5] = b"\xE8" + struct.pack("<i", rel)
+
+    # 5. grow .text's raw data by one page and bump later sections' raw
     #    pointers, then insert the page image (done LAST so every offset above
     #    was written at its pristine location)
     pe = struct.unpack_from("<I", data, 0x3C)[0]

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble the five register-marshalling stubs that reach AliasPatch.c.
+"""Assemble the six register-marshalling stubs that reach AliasPatch.c.
 
 The C blob computes the clause predicates; these stubs stand at the dispatch
 sites, hand the query to the right predicate in cdecl form, and act on its
@@ -26,6 +26,7 @@ STOCK_E1_E3      = 0x00511FFF      # a->object == b->object
 LICM_TABLE       = 0x005BD074      # may_alias_object dispatch table
 LICM_ANSWER_TAIL = 0x00511E05      # mov al,bl; epilogue (may_alias_object)
 VN_STOCK_KILL    = 0x00511A53      # AliasType0 whole-object kill
+ISLOOPINVARIANT  = 0x00570F60      # CodeMotion isloopinvariant(pcode, loop, vec, f1, f2)
 
 
 def sched_stub(at, sb_sched_clause, entry, stock_target):
@@ -92,4 +93,23 @@ def vn_stub(at, sb_vn_store_kill, alias_list_head_va):
     b += b"\x7E\x02"                       # jle +2   (ret 0 or -1 -> no F)
     b += b"\x31\xF6"                       # xor esi,esi   (clause F)
     b += b"\xE9"; b += _rel32(at + len(b) + 4, VN_STOCK_KILL)     # jmp stock kill
+    return bytes(b)
+
+
+def licm_invariant_stub(at, sb_licm_invariant):
+    """Stands in for isloopinvariant at moveinvariantsfromloop's call site
+       (0x56f472) only. cdecl: [esp+4] is the pcode and the caller cleans its
+       five args, so a bare `ret` hands 0 back. Hit -> return 0 (not
+       invariant). Miss -> tail-jump into the stock isloopinvariant with the
+       caller's frame untouched."""
+    b = bytearray()
+    b += b"\x8B\x44\x24\x04"               # mov eax,[esp+4]   (pcode)
+    b += b"\x50"                           # push eax
+    b += b"\xE8"; b += _rel32(at + len(b) + 4, sb_licm_invariant)   # call sb_licm_invariant
+    b += b"\x59"                           # pop ecx
+    b += b"\x85\xC0"                       # test eax,eax
+    b += b"\x74\x03"                       # jz stock
+    b += b"\x31\xC0"                       # xor eax,eax
+    b += b"\xC3"                           # ret            (not invariant)
+    b += b"\xE9"; b += _rel32(at + len(b) + 4, ISLOOPINVARIANT)     # stock: jmp isloopinvariant
     return bytes(b)

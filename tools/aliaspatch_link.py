@@ -52,7 +52,8 @@ CFLAGS = ["-c", "-opt", "l=4,space", "-enum", "min", "-nosyspath", "-inline", "o
 EXTERNS = {"_killmemory": 0x0050A2C0}
 
 # The exported predicates the stubs call.
-EXPORTS = ("_sb_sched_clause", "_sb_licm_clause", "_sb_vn_store_kill")
+EXPORTS = ("_sb_sched_clause", "_sb_licm_clause", "_sb_vn_store_kill",
+           "_sb_licm_invariant")
 
 REL32 = 0x14
 DIR32 = 0x06
