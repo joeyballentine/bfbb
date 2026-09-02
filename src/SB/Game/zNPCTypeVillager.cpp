@@ -1281,14 +1281,16 @@ void zNPCFish::MonitorCowering(xScene* xscn, F32 dt)
     {
         this->tmr_robonear = cfg->tym_alert * (0.25f * (xurand() - 0.5f)) + cfg->tym_alert;
         this->tmr_checkagain = cfg->tym_alert * (0.25f * (xurand() - 0.5f)) + cfg->tym_alert;
-        zNPCMsg_SendMsg(NPC_MID_BECOMESCARED, *(U32*)this);
+        // The U32 overload wants xBase::id. Reading it through the type is what
+        // keeps it off the vptr on a host, the same way zNPCMgr's comparator does.
+        zNPCMsg_SendMsg(NPC_MID_BECOMESCARED, this->id);
     }
     else
     {
         this->tmr_robonear = -1.0f;
         this->tmr_checkagain =
             cfg->tym_alert * PI * (0.25f * (xurand() - 0.5f)) + cfg->tym_alert * PI;
-        zNPCMsg_SendMsg(NPC_MID_NOLONGERSCARED, *(U32*)this);
+        zNPCMsg_SendMsg(NPC_MID_NOLONGERSCARED, this->id);
     }
 }
 
