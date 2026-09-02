@@ -410,7 +410,6 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     }
 
     rw::d3d::setVirtualScreenSamples(iScreenMultiSample());
-    rw::d3d::setAlphaToCoverageEnabled(iScreenAlphaToCoverage());
     rw::d3d::setPerPixelLightingEnabled(iScreenPerPixelLighting());
     rw::d3d::setVirtualScreen(iScreenWidth(), iScreenHeight());
     if (!rw::Engine::open(&params))
