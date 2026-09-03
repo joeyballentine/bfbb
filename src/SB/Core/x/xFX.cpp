@@ -3321,56 +3321,6 @@ void xFXRibbon::debug_update(F32)
 {
 }
 
-// These four are inline members of the containers in containers.h; they are
-// weak in the target object. containers.h is shared with 75 TUs, so the bodies
-// live here (marked inline, which reproduces the weak scope) rather than there.
-inline xFXRibbon::joint_data& tier_queue<xFXRibbon::joint_data>::operator[](S32 index)
-{
-    return get_at(wrap_index(first + index));
-}
-
-inline tier_queue<xFXRibbon::joint_data>::iterator*
-tier_queue<xFXRibbon::joint_data>::iterator::operator--()
-{
-    *this -= 1;
-    return this;
-}
-
-inline void tier_queue_allocator::init(u32 unit_size, u32 block_size, u32 max_blocks)
-{
-    _unit_size = (unit_size + 3) & ~3;
-    _block_size_shift = log2_ceil(block_size);
-    _block_size = 1 << _block_size_shift;
-    _max_blocks_shift = log2_ceil(max_blocks);
-    _max_blocks = 1 << _max_blocks_shift;
-    blocks = (block_data*)xMemAlloc(gActiveHeap, sizeof(block_data) * _max_blocks, 0);
-
-    u32 i;
-    u32 count = _max_blocks;
-
-    for (i = 0; i < count; i++)
-    {
-        blocks[i].data = NULL;
-    }
-
-    clear();
-}
-
-inline void tier_queue_allocator::clear()
-{
-    head = 0;
-
-    u32 mask = _max_blocks - 1;
-    u32 count = _max_blocks;
-    u32 i;
-
-    for (i = 0; i < count; i++)
-    {
-        blocks[i].prev = (i - 1) & mask;
-        blocks[i].next = (i + 1) & mask;
-    }
-}
-
 F32 xFXRibbon::get_age(const joint_data& joint) const
 {
     return 0.001f * (mtime - joint.born);

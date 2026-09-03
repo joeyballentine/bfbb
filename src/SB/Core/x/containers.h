@@ -22,8 +22,7 @@ struct tier_queue_allocator
     U32 _max_blocks_shift;
     U8 head;
 
-    // Used by the target but declared nowhere; bodies still to be written.
-    void init(u32, u32, u32);
+    void init(u32 unit_size, u32 block_size, u32 max_blocks);
     void clear();
 
     U32 block_size() const
@@ -73,6 +72,41 @@ struct tier_queue_allocator
     void free_block(U8 block);
 };
 
+inline void tier_queue_allocator::init(u32 unit_size, u32 block_size, u32 max_blocks)
+{
+    _unit_size = (unit_size + 3) & ~3;
+    _block_size_shift = log2_ceil(block_size);
+    _block_size = 1 << _block_size_shift;
+    _max_blocks_shift = log2_ceil(max_blocks);
+    _max_blocks = 1 << _max_blocks_shift;
+    blocks = (block_data*)xMemAlloc(gActiveHeap, sizeof(block_data) * _max_blocks, 0);
+
+    u32 i;
+    u32 count = _max_blocks;
+
+    for (i = 0; i < count; i++)
+    {
+        blocks[i].data = NULL;
+    }
+
+    clear();
+}
+
+inline void tier_queue_allocator::clear()
+{
+    head = 0;
+
+    u32 mask = _max_blocks - 1;
+    u32 count = _max_blocks;
+    u32 i;
+
+    for (i = 0; i < count; i++)
+    {
+        blocks[i].prev = (i - 1) & mask;
+        blocks[i].next = (i + 1) & mask;
+    }
+}
+
 template <class T> struct tier_queue
 {
     U32 first;
@@ -96,8 +130,11 @@ template <class T> struct tier_queue
             return &operator*();
         }
 
-        // Used by the target (__mm__...8iteratorFv); body still to be written.
-        iterator* operator--();
+        iterator* operator--()
+        {
+            *this -= 1;
+            return this;
+        }
 
         bool operator==(const iterator& other) const
         {
@@ -175,8 +212,10 @@ template <class T> struct tier_queue
         return data[alloc->mod_block_size(index)];
     }
 
-    // Used by the target (__vc__36tier_queue<...>Fi); body still to be written.
-    T& operator[](S32 index);
+    T& operator[](S32 index)
+    {
+        return get_at(wrap_index(first + index));
+    }
 
     iterator create_iterator(u32 index) const
     {
