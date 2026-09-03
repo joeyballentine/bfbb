@@ -90,7 +90,7 @@ struct xFXRibbon
 
     bool debug_need_update() const;
 
-    // Defined below, past the specialization declarations. Leaving the body
+    // Defined below, past the specialization declaration. Leaving the body
     // here would instantiate tier_queue<joint_data>::clear() at this point,
     // which is before the specialization in xFX.cpp is visible -- and joint_data
     // is nested in this class, so the declaration cannot be hoisted above it.
@@ -123,19 +123,19 @@ struct xFXRibbon
     void set_raster(RwRaster*);
 };
 
-// tier_queue<xFXRibbon::joint_data> is specialized wholesale in xFX.cpp -- the
-// target has hand-written bodies for these three rather than the template ones.
-// A specialization has to be DECLARED before anything instantiates it, and the
+// tier_queue<xFXRibbon::joint_data>::clear() is specialized in xFX.cpp -- the
+// target has a hand-written body for it rather than the template one. A
+// specialization has to be DECLARED before anything instantiates it, and the
 // only instantiation in this header is xFXRibbon::clear() just above, whose body
-// therefore lives below these lines rather than in the class.
+// therefore lives below this line rather than in the class.
 //
-// They cannot go any earlier: naming xFXRibbon::joint_data requires xFXRibbon to
-// be complete, so this is the first point in the file where these are sayable.
+// It cannot go any earlier: naming xFXRibbon::joint_data requires xFXRibbon to
+// be complete, so this is the first point in the file where it is sayable.
+//
+// operator[] and iterator::operator-- were declared here too, and must not be:
+// the declaration alone suppresses the implicit instantiation, so the template
+// bodies in containers.h go unused and the link has nothing to call.
 template <> void tier_queue<xFXRibbon::joint_data>::clear();
-template <> xFXRibbon::joint_data& tier_queue<xFXRibbon::joint_data>::operator[](S32);
-template <>
-tier_queue<xFXRibbon::joint_data>::iterator*
-tier_queue<xFXRibbon::joint_data>::iterator::operator--();
 
 inline void xFXRibbon::clear()
 {
