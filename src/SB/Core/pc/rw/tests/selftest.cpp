@@ -1209,7 +1209,7 @@ static void test_perpixel_lighting()
 {
     printf("per-pixel lighting setting\n");
 
-#ifdef RW_D3D9
+#if defined(RW_D3D9) || defined(RW_D3D11)
     const rw::bool32 saved = rw::d3d::getPerPixelLighting();
 
     rw::d3d::setPerPixelLightingEnabled(TRUE);
@@ -1272,7 +1272,7 @@ static void test_snapshot()
 
     RwTexture* still = iSnapshotBackgroundTexture();
 
-#if defined(RW_D3D9) || defined(RW_GL3)
+#if defined(RW_D3D9) || defined(RW_D3D11) || defined(RW_GL3)
     check(still != NULL, "the frame was copied into a texture");
     if (still != NULL)
     {
@@ -2168,7 +2168,7 @@ static void test_uvxform()
         return;
     }
 
-#ifdef RW_D3D9
+#if defined(RW_D3D9) || defined(RW_D3D11)
     // Compiled by fxc into headers checked into librw, then handed to the
     // device at driver open. A blob the device rejects leaves these nil, and
     // then every animated surface would draw with no vertex shader at all.
