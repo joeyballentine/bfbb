@@ -39,9 +39,9 @@
 // So the port casts first and flattens second. The console keeps retail's
 // expression exactly, the way XFONT_CHARIDX does in xFont.cpp.
 #ifdef PLATFORM_PC
-#define NPC_SND_OWNER(_this) ((U32)(UPtr)(xEnt*)(_this))
+#define NPC_SND_OWNER(_this) ((UPtr)(xEnt*)(_this))
 #else
-#define NPC_SND_OWNER(_this) ((U32)(UPtr)(_this))
+#define NPC_SND_OWNER(_this) ((UPtr)(_this))
 #endif
 
 

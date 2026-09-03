@@ -184,7 +184,7 @@ void xSndDelayedUpdate()
     }
 }
 
-void xSndAddDelayed(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, U32 parentID, xEnt* parentEnt, xVec3* pos, F32 innerRadius, F32 outerRadius, sound_category category, F32 delay)
+void xSndAddDelayed(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, UPtr parentID, xEnt* parentEnt, xVec3* pos, F32 innerRadius, F32 outerRadius, sound_category category, F32 delay)
 {
     _xSndDelayed* snd = &sDelayedSnd[0];
 
@@ -276,7 +276,7 @@ void xSndInternalUpdateVoicePos(xSndVoiceInfo* pVoice)
             }
             else if (pVoice->parentID != 0)
             {
-                xEnt* ent = (xEnt*)(UPtr)(pVoice->parentID & 0xfffffffc); // uhh...
+                xEnt* ent = (xEnt*)(pVoice->parentID & ~(UPtr)3); // uhh...
                 if (pVoice->flags & 0x800)
                 {
                     pVoice->actualPos = *(xVec3*)(ent);
@@ -336,7 +336,7 @@ void xSndExit()
     reset_faders();
 }
 
-U32 xSndPlay(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, U32 parentID,
+U32 xSndPlay(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, UPtr parentID,
              sound_category category, F32 delay)
 {
     return xSndPlayInternal(id, vol, pitch, priority, flags, parentID, NULL, NULL, 0.0f, 0.0f,
@@ -381,7 +381,7 @@ struct iSndLookupInfo
 
 bool xSndCategoryGetsEffects(sound_category category);
 
-U32 xSndPlayInternal(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, U32 parentID,
+U32 xSndPlayInternal(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, UPtr parentID,
                      xEnt* parentEnt, const xVec3* pos, F32 innerRadius, F32 outerRadius,
                      sound_category category, F32 delay)
 {
@@ -409,7 +409,7 @@ U32 xSndPlayInternal(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, U32 pa
             {
                 if (gSnd.voice[i].assetID == id &&
                     (gSnd.voice[i].parentID == parentID ||
-                     gSnd.voice[i].parentID == (U32)(UPtr)parentEnt) &&
+                     gSnd.voice[i].parentID == (UPtr)parentEnt) &&
                     (gSnd.voice[i].flags & 1))
                 {
                     return 0;
@@ -504,18 +504,18 @@ U32 xSndPlayInternal(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, U32 pa
     if (parentEnt != NULL)
     {
         vp->flags |= 0x18;
-        vp->parentID = (U32)(UPtr)parentEnt;
+        vp->parentID = (UPtr)parentEnt;
         vp->parentPos = NULL;
         vp->innerRadius2 = innerRadius * innerRadius;
         vp->outerRadius2 = (outerRadius <= 0.0f) ? 1000000.0f : outerRadius * outerRadius;
 
         if (flags & 0x800)
         {
-            vp->actualPos = *(xVec3*)(UPtr)((U32)(UPtr)parentEnt & 0xfffffffc);
+            vp->actualPos = *(xVec3*)((UPtr)parentEnt & ~(UPtr)3);
         }
         else
         {
-            vp->actualPos = *xEntGetPos((xEnt*)(UPtr)((U32)(UPtr)parentEnt & 0xfffffffc));
+            vp->actualPos = *xEntGetPos((xEnt*)((UPtr)parentEnt & ~(UPtr)3));
         }
     }
     else if (pos != NULL)
@@ -574,7 +574,7 @@ void xSndStop(U32 snd)
     iSndStop(snd);
 }
 
-void xSndParentDied(U32 pid)
+void xSndParentDied(UPtr pid)
 {
     xSndVoiceInfo* voice = gSnd.voice;
     for (S32 i = 0; i < 64; i++, voice++)
@@ -586,7 +586,7 @@ void xSndParentDied(U32 pid)
     }
 }
 
-void xSndStopChildren(U32 pid)
+void xSndStopChildren(UPtr pid)
 {
     U32 i = 0;
     xSndVoiceInfo* voice = gSnd.voice;

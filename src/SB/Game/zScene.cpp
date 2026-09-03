@@ -3467,7 +3467,7 @@ void zSceneForAllBase(xBase* (*func)(xBase*, zScene*, void*), S32 baseType, void
 
 static xBase* zSceneExitSoundIteratorCB(xBase* b, zScene*, void*)
 {
-    xSndParentDied((U32)(UPtr)b);
+    xSndParentDied((UPtr)b);
     return b;
 }
 

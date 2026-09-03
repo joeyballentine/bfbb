@@ -708,7 +708,7 @@ void iSndUpdate()
     }
 }
 
-S32 iSndFindFreeVoice(U32 priority, U32 flags, U32 owner)
+S32 iSndFindFreeVoice(U32 priority, U32 flags, UPtr owner)
 {
     if (priority > 0xff)
     {

@@ -203,7 +203,7 @@ void xhud::meter_widget::updater(F32 dt)
 // emits a weak out-of-line copy into every translation unit that instantiates
 // them.
 template <S32 N>
-void sound_queue<N>::play(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, U32 parentID,
+void sound_queue<N>::play(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, UPtr parentID,
                           sound_category snd_category)
 {
     U32 assetID = xSndPlay(id, vol, pitch, priority, flags, parentID, snd_category, 0.0f);
@@ -214,7 +214,7 @@ void sound_queue<N>::play(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, U
 // zTalkBox.cpp calls this and cannot instantiate it from here. See the
 // SHARED_INLINE note in include/types.h.
 #ifdef PLATFORM_PC
-template void sound_queue<4>::play(U32, F32, F32, U32, U32, U32, sound_category);
+template void sound_queue<4>::play(U32, F32, F32, U32, U32, UPtr, sound_category);
 #endif
 
 template <S32 N> void sound_queue<N>::push(U32 id)

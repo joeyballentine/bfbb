@@ -22,7 +22,10 @@ struct xSndVoiceInfo
 {
     U32 assetID;
     U32 sndID;
-    U32 parentID;
+    // The parent an owned sound follows. Retail stores either a base id or the
+    // xEnt pointer itself here -- xSndInternalUpdateVoicePos masks the low bits
+    // off and dereferences it -- so the field has to hold a pointer.
+    UPtr parentID;
     xVec3* parentPos;
     S32 internalID;
     U32 flags;
@@ -70,7 +73,7 @@ struct _xSndDelayed
     F32 pitch;
     U32 priority;
     U32 flags;
-    U32 parentID;
+    UPtr parentID;
     xEnt* parentEnt;
     xVec3* pos;
     F32 innerRadius;
@@ -98,7 +101,7 @@ template <S32 N> struct sound_queue
         tail = 0;
     }
 
-    void play(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, U32 parentID,
+    void play(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, UPtr parentID,
               sound_category snd_category);
     void push(U32 id);
 
@@ -196,7 +199,7 @@ void xSndPauseAll(U32 pause_effects, U32 pause_streams);
 void xSndPauseCategory(U32 mask, U32 pause);
 void xSndDelayedInit();
 void reset_faders();
-void xSndParentDied(U32 pid);
+void xSndParentDied(UPtr pid);
 void xSndCalculateListenerPosition();
 void xSndDelayedUpdate();
 void update_faders(F32 timeElapsed);
@@ -205,13 +208,13 @@ void xSndInternalUpdateVoicePos(xSndVoiceInfo* voiceInfo);
 void xSndSetListenerData(sound_listener_type listenerType, const xMat4x3* pMat);
 void xSndSelectListenerMode(sound_listener_game_mode listenerMode);
 void xSndExit();
-U32 xSndPlay(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, U32 parentID,
+U32 xSndPlay(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, UPtr parentID,
              sound_category category, F32 delay);
 U32 xSndPlay3D(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, xEnt* parent, F32 innerRadius,
                F32 outerRadius, sound_category category, F32 delay);
 U32 xSndPlay3D(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, const xVec3* pos,
                F32 innerRadius, F32 outerRadius, sound_category category, F32 delay);
-U32 xSndPlayInternal(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, U32 parentID,
+U32 xSndPlayInternal(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, UPtr parentID,
                      xEnt* parentEnt, const xVec3* pos, F32 innerRadius, F32 outerRadius,
                      sound_category category, F32 delay);
 void xSndStartStereo(U32 id1, U32 id2, F32 pitch);
@@ -219,8 +222,8 @@ U8 xSndIsPlayingByHandle(U32 sndID);
 U32 xSndIsPlaying(U32 assetID);
 U32 xSndIDIsPlaying(U32 sndID);
 void xSndStop(U32 snd);
-void xSndParentDied(U32 pid);
-void xSndStopChildren(U32 pid);
+void xSndParentDied(UPtr pid);
+void xSndStopChildren(UPtr pid);
 void xSndSetVol(U32 snd, F32 vol);
 void xSndSetPitch(U32 snd, F32 pitch);
 void xSndSetCategoryVol(sound_category category, F32 vol);
