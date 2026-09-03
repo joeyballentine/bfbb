@@ -136,6 +136,17 @@ before anything below works. You do not need to run `vcvarsall` yourself:
 `build-release.bat` finds Visual Studio with `vswhere` and enters the x86
 environment itself.
 
+MinGW-w64 builds it too, in place of clang and Visual Studio. It has to be an
+**i686** toolchain: the port is 32-bit and the configure stops if the compiler
+produces 64-bit pointers, and the x86_64 MinGW has no 32-bit runtime to fall
+back on. Put `gcc` and `g++` on `PATH` and name them on the configure line.
+`build-release.bat` is the clang path and does not take a compiler.
+
+```sh
+cmake -S . -B build-pc -G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+cmake --build build-pc
+```
+
 ### 2. Get the source
 
 ```sh
@@ -178,6 +189,36 @@ so Windows binds it itself and their HID interface is left alone.
 ```sh
 %USERPROFILE%\vcpkg\vcpkg install libusb:x86-windows
 ```
+
+**SDL3**, if one is installed, is linked instead of building
+`third_party/SDL`. The submodule is not going anywhere and nothing has to be
+installed, but SDL is the longest thing in this build, and a build directory
+per backend and per configuration means each one compiling its own copy. An
+installed SDL is compiled once and found by all of them.
+
+```sh
+%USERPROFILE%\vcpkg\vcpkg install sdl3:x86-windows
+```
+
+Or build the submodule once, by hand, and install it where every build
+directory can find it:
+
+```sh
+cmake -S third_party/SDL -B build-sdl -G Ninja -DCMAKE_BUILD_TYPE=Release ^
+      -DCMAKE_INSTALL_PREFIX=%USERPROFILE%/sdl3
+cmake --build build-sdl --target install
+```
+
+Add `-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON` under MinGW: SDL builds through a
+precompiled header and GCC on Windows cannot always load one back. The port's
+own build turns it off already.
+
+It has to be 32-bit and match this build's ABI. CMake links a test program
+against whatever it finds and quietly falls back to the submodule when that
+fails, so a 64-bit SDL on the prefix path costs a few seconds and nothing else.
+`-DBFBB_SDL=vendored` skips the search; `-DBFBB_SDL=system` fails instead of
+falling back, which is what to use when an installed SDL is meant to be found
+and is not.
 
 `build-release.bat` looks in `%USERPROFILE%\vcpkg\installed\x86-windows` and
 uses whatever is there. Set `BFBB_VCPKG` if your vcpkg is somewhere else. The
@@ -223,8 +264,8 @@ cmake --build build-pc
 ```
 
 Add `-DBFBB_RENDER_BACKEND=GL3` for the OpenGL build and
-`-DCMAKE_PREFIX_PATH=%USERPROFILE%/vcpkg/installed/x86-windows` for FFmpeg and
-libusb. `-m32` is set by `CMakeLists.txt` before `project()` and is not
+`-DCMAKE_PREFIX_PATH=%USERPROFILE%/vcpkg/installed/x86-windows` for FFmpeg,
+libusb and SDL. `-m32` is set by `CMakeLists.txt` before `project()` and is not
 something to pass yourself. This leaves the executable in `build-pc\`; add
 `-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=<repo>/bin` to put it where the scripts do.
 

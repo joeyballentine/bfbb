@@ -1,5 +1,7 @@
 #include "iHost.h"
 
+#include <fcntl.h>
+#include <io.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -190,6 +192,35 @@ bool iHostMakeDir(const char* path)
 bool iHostRemoveFile(const char* path)
 {
     return DeleteFileA(path) != 0;
+}
+
+FILE* iHostCreateNewFile(const char* path)
+{
+    // CREATE_NEW is the whole point: it fails when the file exists, and it is
+    // the OS that decides, so two processes racing cannot both win.
+    HANDLE h = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_NEW,
+                           FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE)
+    {
+        return NULL;
+    }
+
+    // The handle becomes the FILE*'s, and closing the FILE* closes it.
+    int fd = _open_osfhandle((intptr_t)h, _O_WRONLY | _O_BINARY);
+    if (fd == -1)
+    {
+        CloseHandle(h);
+        return NULL;
+    }
+
+    FILE* f = _fdopen(fd, "wb");
+    if (f == NULL)
+    {
+        _close(fd);
+        return NULL;
+    }
+
+    return f;
 }
 
 bool iHostRemoveDir(const char* path)

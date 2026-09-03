@@ -80,3 +80,77 @@ jobs:
         run: |
           build-ci\rw_selftest.exe
           build-ci\pc_selftest.exe
+
+  # The same three backends under MinGW's GCC.
+  #
+  # A second toolchain is not redundancy. clang here targets the MSVC ABI and
+  # Microsoft's STL, so it and MinGW disagree about which headers exist, what
+  # __declspec means, how the linker spells its options and what the C library
+  # provides -- and the port has an OpenGL backend whose whole point is running
+  # off Windows, which is a GCC build with the Win32 parts swapped out. This is
+  # where that stays true.
+  #
+  # NOT GATING. Nothing had ever compiled the game code with GCC when this was
+  # added, so it reports and does not block. Drop continue-on-error once it has
+  # been green for a while.
+  mingw:
+    runs-on: windows-latest
+    continue-on-error: true
+
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: ["NULL", "D3D9", "GL3"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      # i686, not x86_64: the port is 32-bit and CMakeLists.txt stops the
+      # configure if the compiler disagrees. The x86_64 MinGW takes -m32 and
+      # then has no 32-bit runtime to link against.
+      #
+      # A pinned winlibs zip: a plain 32-bit toolchain in an archive, with no
+      # package manager to install and configure first.
+      - name: MinGW-w64 (i686)
+        shell: pwsh
+        run: |
+          $url = "https://github.com/brechtsanders/winlibs_mingw/releases/download/14.3.0posix-12.0.0-msvcrt-r1/winlibs-i686-posix-dwarf-gcc-14.3.0-mingw-w64msvcrt-12.0.0-r1.zip"
+          curl.exe -L -o mingw32.zip $url
+          tar.exe -xf mingw32.zip -C C:\
+          # The bundle ships its own cmake, ctest and ninja, and GITHUB_PATH
+          # PREPENDS -- so they would shadow the runner's. That cmake cannot
+          # start on this image and the failure is a bare 0xC0000135 from a
+          # step that looks like it should work.
+          Remove-Item C:\mingw32\bin\cmake.exe, C:\mingw32\bin\ctest.exe, `
+                      C:\mingw32\bin\cpack.exe, C:\mingw32\bin\ninja.exe `
+                      -ErrorAction SilentlyContinue
+          "C:\mingw32\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          C:\mingw32\bin\g++.exe --version
+
+      # BFBB_SDL=vendored says out loud what this runner would do anyway: there
+      # is no installed SDL3 on the image, so `auto` would fall back to the
+      # submodule. Naming it means a future image that ships one cannot quietly
+      # change what this job tests.
+      - name: Configure
+        run: >
+          cmake -S . -B build-mingw -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_C_COMPILER=gcc
+          -DCMAKE_CXX_COMPILER=g++
+          -DBFBB_SDL=vendored
+          -DBFBB_RENDER_BACKEND=${{ matrix.backend }}
+
+      - name: Build
+        run: cmake --build build-mingw
+
+      - name: Self-tests
+        if: matrix.backend == 'NULL'
+        run: |
+          build-mingw\rw_selftest.exe
+          build-mingw\pc_selftest.exe

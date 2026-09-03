@@ -21,6 +21,12 @@
 #define BFBB_STRNCASECMP strncasecmp
 #endif
 
+// MinGW's <string.h> declares all three itself, as deprecated aliases for the
+// underscored forms, so the host does not lack them and defining them here is
+// a redeclaration -- extern first, then static, which GCC rejects. The MSVC CRT
+// declares none of the three; that is the case this header exists for.
+#ifndef __MINGW32__
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -45,5 +51,7 @@ static inline int strcmpi(const char* a, const char* b)
 #ifdef __cplusplus
 }
 #endif
+
+#endif // !__MINGW32__
 
 #endif

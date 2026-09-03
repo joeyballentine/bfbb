@@ -1,6 +1,7 @@
 #include "iHost.h"
 
 #include <dirent.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -123,6 +124,24 @@ bool iHostMakeDir(const char* path)
 bool iHostRemoveFile(const char* path)
 {
     return unlink(path) == 0;
+}
+
+FILE* iHostCreateNewFile(const char* path)
+{
+    int fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0666);
+    if (fd < 0)
+    {
+        return NULL;
+    }
+
+    FILE* f = fdopen(fd, "wb");
+    if (f == NULL)
+    {
+        close(fd);
+        return NULL;
+    }
+
+    return f;
 }
 
 bool iHostRemoveDir(const char* path)

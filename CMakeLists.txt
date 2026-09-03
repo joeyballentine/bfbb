@@ -62,6 +62,47 @@ project(bfbb-pc CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# -m32 is a request until the compiler agrees to it. An x86_64 MinGW takes the
+# flag and then has no 32-bit runtime to link against, and what CMake reports is
+# a linker error out of the compiler probe rather than anything naming the
+# cause. i686-w64-mingw32, and clang with the x86 MSVC libraries on LIB, pass.
+if(BFBB_BUILD_32BIT AND NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
+  message(FATAL_ERROR
+    "BFBB_BUILD_32BIT is on, but ${CMAKE_CXX_COMPILER_ID} produced a "
+    "${CMAKE_SIZEOF_VOID_P}-byte pointer.\n"
+    "  clang: enter the x86 MSVC environment first (vcvarsall x86).\n"
+    "  MinGW: use an i686 toolchain -- the x86_64 one has no 32-bit runtime.")
+endif()
+
+# "Every warning off", which every target the port compiles itself is given:
+# the game code is decompiled and its warnings are not ours to act on. The two
+# front ends spell it differently, and the one place that puts a warning back --
+# -Werror=switch on librw -- relies on coming after it in the command line.
+#
+# GCC needs -Wno-narrowing on top of -w. A narrowing conversion in a braced
+# initialiser is ill-formed rather than merely warned about, so -w does not
+# reach it, and the game's character tables are full of them: xFont.cpp
+# initialises a U8[] with '\xFC' and friends, which are negative chars. The
+# values are right; it is the spelling retail used, and it is shared with the
+# GameCube build, so this is the toolchain's problem to absorb.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  set(BFBB_NO_WARNINGS -w -Wno-narrowing)
+else()
+  set(BFBB_NO_WARNINGS -Wno-everything)
+endif()
+
+# Whether this build links Microsoft's CRT and STL, which is what several
+# things below actually turn on -- not the operating system, and not the
+# compiler. CMake's own MSVC variable is not that test: the port's usual
+# compiler is clang++ with the GNU-style driver targeting the MSVC ABI, which
+# leaves MSVC false and CMAKE_CXX_SIMULATE_ID set. Guarding on MSVC alone drops
+# the STL version override and the build stops in <yvals_core.h>.
+if(MSVC OR CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
+  set(BFBB_MSVC_ABI ON)
+else()
+  set(BFBB_MSVC_ABI OFF)
+endif()
+
 set(PC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/pc)
 
 # Not a style preference. The source is full of *(U32*)&someFloat, written that
@@ -69,6 +110,28 @@ set(PC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/pc)
 # -O2 are entitled to miscompile it. See "Other things that will bite" in
 # docs/PCPORT.md.
 add_compile_options(-fno-strict-aliasing)
+
+# SSE2, and the whole FPU with it. compat/intrin.h implements __frsqrte with
+# _mm_sqrt_sd, which needs SSE2: clang targeting i686-pc-windows-msvc has it on
+# by default, i686 GCC does not and fails to compile the header at all.
+# -mfpmath=sse rides along because the alternative is the 387 stack, which keeps
+# intermediates at 80 bits -- so a float comparison's answer depends on whether
+# the value was spilled, and the port's arithmetic stops being reproducible.
+if(BFBB_BUILD_32BIT AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  add_compile_options(-msse2 -mfpmath=sse)
+endif()
+
+# MinGW's own runtime, linked in rather than left as three DLLs to find.
+#
+# A GCC build depends on libstdc++-6.dll, libgcc_s_*.dll and libwinpthread-1.dll,
+# which live in the toolchain's bin/ and nowhere else. Without them the
+# executable does not start -- it exits with 0xC0000135 and no message, before
+# main -- so running the game meant having the compiler on PATH. The port
+# already stages the DLLs it depends on beside the executable for exactly this
+# reason; this is the same problem with a simpler answer.
+if(MINGW)
+  add_link_options(-static)
+endif()
 
 # Selects the port's own struct layouts in include/rwsdk -- the ones that mirror
 # librw so an RwFrame* is an rw::Frame*. It has to be a positive marker that
@@ -87,8 +150,12 @@ add_compile_definitions(PLATFORM_PC)
 # toolchain version check -- and it takes out librw as well as the game code,
 # which is why this is a global definition rather than a per-target one.
 # tools/pcprogress.py passes the same flag for the same reason; if you change
-# it here, change it there.
-add_compile_definitions(_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH)
+# it here, change it there. MinGW brings its own libstdc++ and has no such
+# check, so this is for the toolchains that link Microsoft's STL and nobody
+# else -- defining it unconditionally is harmless but says something untrue.
+if(BFBB_MSVC_ABI)
+  add_compile_definitions(_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH)
+endif()
 
 # The CRT marks fopen, getenv, strcpy, strncpy and strcat deprecated in favour
 # of its own _s variants. The game calls all five and will keep calling them --
@@ -158,7 +225,7 @@ elseif(BFBB_INPUT_BACKEND STREQUAL "sdl")
   # checks is the same either way, but "no controller on port 0" means an
   # unplugged pad under null and a keyboard here.
   set(INPUT_DEFINES BFBB_INPUT_BACKEND_SDL BFBB_INPUT_HAVE_KEYBOARD)
-  set(INPUT_LIBS SDL3::SDL3-static)
+  set(INPUT_LIBS bfbb_sdl)
 
   # Built by the SDL section below rather than here: the render backend wants
   # the same library and add_subdirectory may only run once.
@@ -227,7 +294,7 @@ endif()
 # see iFMVAudio.h. On the same SDL the mixer uses, and for the same reason: one
 # audio library, on every host.
 list(APPEND FMV_SOURCES ${PC_DIR}/iFMVAudioSDL.cpp)
-list(APPEND FMV_LIBRARIES SDL3::SDL3-static)
+list(APPEND FMV_LIBRARIES bfbb_sdl)
 set(BFBB_NEEDS_SDL ON)
 
 set(AUDIO_DEFINES)
@@ -237,7 +304,7 @@ if(BFBB_AUDIO_BACKEND STREQUAL "null")
 elseif(BFBB_AUDIO_BACKEND STREQUAL "sdl")
   set(AUDIO_SOURCES ${PC_DIR}/iSndHostSDL.cpp)
   set(AUDIO_DEFINES BFBB_AUDIO_BACKEND_SDL)
-  set(AUDIO_LIBS SDL3::SDL3-static)
+  set(AUDIO_LIBS bfbb_sdl)
 
   # Built by the SDL section below rather than here, for the same reason the
   # input backend defers: add_subdirectory may only run once.
@@ -282,7 +349,7 @@ endif()
 # HWND case. NULL is the only one that goes without.
 if(NOT BFBB_RENDER_BACKEND STREQUAL "NULL")
   set(WINDOW_SOURCES ${PC_DIR}/iWindowSDL.cpp)
-  set(WINDOW_LIBS SDL3::SDL3-static)
+  set(WINDOW_LIBS bfbb_sdl)
   set(BFBB_NEEDS_SDL ON)
 else()
   # NULL builds headless, so no window is needed and none is provided.
@@ -293,86 +360,192 @@ endif()
 # --- SDL ---------------------------------------------------------------------
 # One build of SDL for however many things asked for it. Both the input backend
 # and the GL3 window backend can, and CMake permits add_subdirectory once.
+#
+# Everything above links `bfbb_sdl`, an interface target created here that
+# forwards to whichever SDL this build ended up with. The real target's name is
+# not stable across the two: an installed SDL3 gives SDL3::SDL3, and the
+# vendored one, built static, gives SDL3::SDL3-static.
+
+# Where SDL3 comes from.
+#
+#   auto      an installed SDL3 if there is one, third_party/SDL otherwise
+#   system    an installed SDL3, and fail if there is none
+#   vendored  third_party/SDL, ignoring anything installed
+#
+# `auto` is the default because SDL is the longest thing in this build by far,
+# and there is a build directory per render backend and per configuration --
+# each of which was compiling its own copy. An installed SDL is compiled once
+# and every configure after that just links it.
+set(BFBB_SDL "auto" CACHE STRING "Where SDL3 comes from: auto, system, vendored")
+set_property(CACHE BFBB_SDL PROPERTY STRINGS auto system vendored)
+
 if(BFBB_NEEDS_SDL)
-  if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL/CMakeLists.txt)
-    message(FATAL_ERROR
-      "third_party/SDL is empty -- run: git submodule update --init --recursive\n"
-      "  (or configure with -DBFBB_INPUT_BACKEND=win32 -DBFBB_RENDER_BACKEND=D3D9)")
+  # vcpkg's sdl3:x86-windows, a distribution's package, or one built from this
+  # very submodule and installed -- anything carrying an SDL3Config.cmake
+  # answers here, and -DCMAKE_PREFIX_PATH or -DSDL3_DIR reaches one that is
+  # somewhere unusual.
+  if(NOT BFBB_SDL STREQUAL "vendored")
+    find_package(SDL3 CONFIG QUIET)
   endif()
 
-  # Video stays ON even for an input-only build, where no SDL window is ever
-  # created: SDL gates its DirectInput joystick driver on the video target, so
-  # turning video off silently drops support for exactly the older pads the SDL
-  # input backend exists to reach. Compiled in and never initialised costs a
-  # larger static library and nothing at run time. Under GL3 it is the window.
-  #
-  # SDL_RENDER stays off with it. That is SDL's own 2D drawing API, which
-  # neither the game nor librw uses -- librw talks to OpenGL directly and only
-  # wants SDL for the window, the context and the swap.
-  #
-  # SDL_AUDIO is what iSndHostSDL.cpp and iFMVAudioSDL.cpp open their streams
-  # on. Without it SDL_InitSubSystem(SDL_INIT_AUDIO) fails with "SDL not built
-  # with audio support" and the game runs silent, which is a configuration the
-  # audio backend tolerates -- so this going missing is not a build error and
-  # has to be kept on deliberately.
-  set(SDL_SHARED OFF CACHE BOOL "" FORCE)
-  set(SDL_STATIC ON CACHE BOOL "" FORCE)
-  set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
-  set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
-  set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
-  set(SDL_AUDIO ON CACHE BOOL "" FORCE)
-  set(SDL_CAMERA OFF CACHE BOOL "" FORCE)
-  set(SDL_RENDER OFF CACHE BOOL "" FORCE)
-  set(SDL_GPU OFF CACHE BOOL "" FORCE)
-  set(SDL_DIALOG OFF CACHE BOOL "" FORCE)
-  set(SDL_POWER OFF CACHE BOOL "" FORCE)
+  # A found SDL has to be the same word size and ABI as this build, and nothing
+  # in the package says which it is. An x86_64 or MSVC SDL picked up by a 32-bit
+  # MinGW configure would go unnoticed until the link, and report itself as an
+  # undefined symbol rather than as a mismatch -- so link one here, where the
+  # failure can say what actually happened and fall back to the submodule.
+  if(TARGET SDL3::SDL3)
+    include(CheckCXXSourceCompiles)
+    set(CMAKE_REQUIRED_LIBRARIES SDL3::SDL3)
+    set(CMAKE_REQUIRED_QUIET ON)
+    check_cxx_source_compiles(
+      "#include <SDL3/SDL.h>\nint main() { SDL_Quit(); return 0; }"
+      BFBB_SDL_LINKS)
+    unset(CMAKE_REQUIRED_LIBRARIES)
+    unset(CMAKE_REQUIRED_QUIET)
 
-  # libusb is not an optimisation. SDL routes five devices EXCLUSIVELY through
-  # it -- the Switch 2 Pro controller, both Switch 2 Joy-Cons, the Switch 2
-  # GameCube controller and the original GameCube adapter -- because they look
-  # like HID devices but are read over raw USB bulk endpoints, so SDL's Windows
-  # HID backend is told to skip them. Without libusb they enumerate as nameless
-  # joysticks with no layout and cannot be played on at all.
-  #
-  # It needs nothing installed on the player's machine. Those controllers are
-  # composite devices whose bulk interface already carries Microsoft OS
-  # descriptors, so Windows binds it to WinUSB by itself; the HID interface is
-  # separate and stays where it is, which is why the pad goes on working
-  # everywhere else at the same time.
-  #
-  # Linked rather than opened by name. SDL's SHARED mode reads the DLL's name
-  # out of the import library with dlltool or dumpbin, and this toolchain is
-  # clang with neither: the detection falls back to writing the IMPORT LIBRARY's
-  # name into SDL_LIBUSB_DYNAMIC, which SDL_LoadObject can never open. That
-  # fails at run time and silently, which is the worst of both. Linking makes
-  # the DLL a load-time dependency instead -- the same deal the movie decoder's
-  # DLLs are already on, and staged beside the executable the same way.
-  set(SDL_HIDAPI_LIBUSB ON CACHE BOOL "" FORCE)
-  set(SDL_HIDAPI_LIBUSB_SHARED OFF CACHE BOOL "" FORCE)
+    if(NOT BFBB_SDL_LINKS)
+      if(BFBB_SDL STREQUAL "system")
+        message(FATAL_ERROR
+          "The SDL3 at ${SDL3_DIR} does not link with this compiler.\n"
+          "  Usually the wrong word size -- this build is 32-bit -- or an SDL"
+          " built for a different ABI.")
+      endif()
+      message(STATUS
+        "SDL3: ${SDL3_DIR} does not link with this compiler (wrong word size"
+        " or ABI?); building third_party/SDL instead")
+      set(_bfbb_sdl_unusable ON)
+    endif()
+  endif()
 
-  add_subdirectory(third_party/SDL EXCLUDE_FROM_ALL)
+  add_library(bfbb_sdl INTERFACE)
 
-  # SDL is not warning-clean under this compiler and it is not this project's
-  # code to fix. Same treatment librw gets.
-  target_compile_options(SDL3-static PRIVATE -Wno-everything)
+  if(TARGET SDL3::SDL3 AND NOT _bfbb_sdl_unusable)
+    message(STATUS "SDL3: installed (${SDL3_DIR})")
+    target_link_libraries(bfbb_sdl INTERFACE SDL3::SDL3)
 
-  # **Make librw's find_package(SDL3) find the SDL that is already here.**
-  #
-  # librw's GL3/SDL3 arm calls find_package(SDL3 CONFIG REQUIRED) with no
-  # `if(NOT TARGET SDL3::SDL3)` guard around it -- unlike its SDL2 arm, which
-  # has one -- so it goes looking for an INSTALLED SDL and fails on a machine
-  # that has none, even though SDL3::SDL3 is a live target by this line.
-  #
-  # An empty config file on SDL3_DIR satisfies the search and defines nothing,
-  # leaving the target above as the one everything links. This is the same
-  # redirect FetchContent writes for the same reason, and it is done here rather
-  # than by patching the submodule: the librw fork is shared with the GameCube
-  # side of this repository and should not carry a workaround for this build's
-  # directory layout.
-  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/sdl3-redirect/SDL3Config.cmake
-       "# SDL3 is already a target in this build; see the SDL section of the\n"
-       "# top-level CMakeLists.txt. Written by CMake -- do not edit.\n")
-  set(SDL3_DIR ${CMAKE_CURRENT_BINARY_DIR}/sdl3-redirect CACHE PATH "" FORCE)
+    # An installed SDL is usually the shared one, and then SDL3.dll has to sit
+    # beside the executable for the same reason the movie decoder's DLLs do --
+    # the port is run out of its build directory far more often than it is
+    # installed, and a missing DLL fails when someone starts the game rather
+    # than when it is built. TYPE is read through ALIASED_TARGET because
+    # SDL3::SDL3 is an alias and an alias carries no properties of its own.
+    get_target_property(_sdl_aliased SDL3::SDL3 ALIASED_TARGET)
+    if(NOT _sdl_aliased)
+      set(_sdl_aliased SDL3::SDL3)
+    endif()
+    get_target_property(_sdl_type ${_sdl_aliased} TYPE)
+    if(WIN32 AND _sdl_type STREQUAL "SHARED_LIBRARY")
+      set(BFBB_SDL_RUNTIME_DLL $<TARGET_FILE:${_sdl_aliased}>)
+    endif()
+  elseif(BFBB_SDL STREQUAL "system")
+    message(FATAL_ERROR
+      "BFBB_SDL=system, and no installed SDL3 was found.\n"
+      "  Point -DCMAKE_PREFIX_PATH or -DSDL3_DIR at one, or configure with\n"
+      "  -DBFBB_SDL=vendored to build third_party/SDL instead.")
+  else()
+    message(STATUS "SDL3: building third_party/SDL")
+    if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL/CMakeLists.txt)
+      message(FATAL_ERROR
+        "third_party/SDL is empty -- run: git submodule update --init --recursive\n"
+        "  (or configure with -DBFBB_INPUT_BACKEND=win32 -DBFBB_RENDER_BACKEND=D3D9)")
+    endif()
+
+    # Video stays ON even for an input-only build, where no SDL window is ever
+    # created: SDL gates its DirectInput joystick driver on the video target, so
+    # turning video off silently drops support for exactly the older pads the SDL
+    # input backend exists to reach. Compiled in and never initialised costs a
+    # larger static library and nothing at run time. Under GL3 it is the window.
+    #
+    # SDL_RENDER stays off with it. That is SDL's own 2D drawing API, which
+    # neither the game nor librw uses -- librw talks to OpenGL directly and only
+    # wants SDL for the window, the context and the swap.
+    #
+    # SDL_AUDIO is what iSndHostSDL.cpp and iFMVAudioSDL.cpp open their streams
+    # on. Without it SDL_InitSubSystem(SDL_INIT_AUDIO) fails with "SDL not built
+    # with audio support" and the game runs silent, which is a configuration the
+    # audio backend tolerates -- so this going missing is not a build error and
+    # has to be kept on deliberately.
+    set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+    set(SDL_STATIC ON CACHE BOOL "" FORCE)
+    set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
+    set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
+    set(SDL_AUDIO ON CACHE BOOL "" FORCE)
+    set(SDL_CAMERA OFF CACHE BOOL "" FORCE)
+    set(SDL_RENDER OFF CACHE BOOL "" FORCE)
+    set(SDL_GPU OFF CACHE BOOL "" FORCE)
+    set(SDL_DIALOG OFF CACHE BOOL "" FORCE)
+    set(SDL_POWER OFF CACHE BOOL "" FORCE)
+
+    # libusb is not an optimisation. SDL routes five devices EXCLUSIVELY through
+    # it -- the Switch 2 Pro controller, both Switch 2 Joy-Cons, the Switch 2
+    # GameCube controller and the original GameCube adapter -- because they look
+    # like HID devices but are read over raw USB bulk endpoints, so SDL's Windows
+    # HID backend is told to skip them. Without libusb they enumerate as nameless
+    # joysticks with no layout and cannot be played on at all.
+    #
+    # It needs nothing installed on the player's machine. Those controllers are
+    # composite devices whose bulk interface already carries Microsoft OS
+    # descriptors, so Windows binds it to WinUSB by itself; the HID interface is
+    # separate and stays where it is, which is why the pad goes on working
+    # everywhere else at the same time.
+    #
+    # Linked rather than opened by name. SDL's SHARED mode reads the DLL's name
+    # out of the import library with dlltool or dumpbin, and a clang build has
+    # neither: the detection falls back to writing the IMPORT LIBRARY's
+    # name into SDL_LIBUSB_DYNAMIC, which SDL_LoadObject can never open. That
+    # fails at run time and silently, which is the worst of both. Linking makes
+    # the DLL a load-time dependency instead -- the same deal the movie decoder's
+    # DLLs are already on, and staged beside the executable the same way.
+    set(SDL_HIDAPI_LIBUSB ON CACHE BOOL "" FORCE)
+    set(SDL_HIDAPI_LIBUSB_SHARED OFF CACHE BOOL "" FORCE)
+
+    add_subdirectory(third_party/SDL EXCLUDE_FROM_ALL)
+
+    # SDL is not warning-clean under this compiler and it is not this project's
+    # code to fix. Same treatment librw gets.
+    target_compile_options(SDL3-static PRIVATE ${BFBB_NO_WARNINGS})
+
+    # SDL builds through a precompiled header, and GCC on Windows cannot always
+    # load one: the PCH records the address it was written at and the compiler
+    # has to map it back there, which fails under ASLR and takes the whole
+    # translation unit with it --
+    #
+    #     internal error in mingw32_gt_pch_use_address: MapViewOfFileEx:
+    #     Attempt to access invalid address
+    #     sorry, unimplemented: PCH allocation failure
+    #
+    # It depends on what else is mapped, so it is intermittent rather than a
+    # clean failure, which is the worst way for it to be left on. The PCH is
+    # only a build-time optimisation; SDL compiles the same without it.
+    #
+    # Keyed on the C++ compiler even though SDL is C: SDL enables C inside its
+    # own project() call, in its own directory scope, so CMAKE_C_COMPILER_ID is
+    # not set out here. The two are the same toolchain in every configuration
+    # this build has.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      set_target_properties(SDL3-static PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
+    endif()
+
+    # **Make librw's find_package(SDL3) find the SDL that is already here.**
+    #
+    # librw's GL3/SDL3 arm calls find_package(SDL3 CONFIG REQUIRED) with no
+    # `if(NOT TARGET SDL3::SDL3)` guard around it -- unlike its SDL2 arm, which
+    # has one -- so it goes looking for an INSTALLED SDL and fails on a machine
+    # that has none, even though SDL3::SDL3 is a live target by this line.
+    #
+    # An empty config file on SDL3_DIR satisfies the search and defines nothing,
+    # leaving the target above as the one everything links. This is the same
+    # redirect FetchContent writes for the same reason, and it is done here rather
+    # than by patching the submodule: the librw fork is shared with the GameCube
+    # side of this repository and should not carry a workaround for this build's
+    # directory layout.
+    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/sdl3-redirect/SDL3Config.cmake
+         "# SDL3 is already a target in this build; see the SDL section of the\n"
+         "# top-level CMakeLists.txt. Written by CMake -- do not edit.\n")
+    set(SDL3_DIR ${CMAKE_CURRENT_BINARY_DIR}/sdl3-redirect CACHE PATH "" FORCE)
+    target_link_libraries(bfbb_sdl INTERFACE SDL3::SDL3-static)
+  endif()
 endif()
 
 # --- librw -------------------------------------------------------------------
@@ -411,7 +584,7 @@ add_subdirectory(third_party/librw)
 # and silently dropped by the others -- which is what happened to COLORWRITEMASK
 # and left every depth-priming pass painting under GL3. A backend that cannot
 # support a state now has to say so with an empty case.
-target_compile_options(librw PRIVATE -Wno-everything -Werror=switch)
+target_compile_options(librw PRIVATE ${BFBB_NO_WARNINGS} -Werror=switch)
 
 # librw links libm whenever the compiler ID is GNU or Clang
 # (third_party/librw/src/CMakeLists.txt:114). Targeting the MSVC ABI, clang
@@ -424,7 +597,10 @@ target_compile_options(librw PRIVATE -Wno-everything -Werror=switch)
 # consumers as $<LINK_ONLY:...>, so it cannot be ignored. Stripped here rather
 # than patched in the submodule: the submodule is a pinned upstream checkout
 # and a local edit to it would not survive `git submodule update`.
-if(WIN32)
+#
+# MSVC-ABI only. MinGW ships a libm -- empty, because the maths is in the CRT
+# there too, but present -- so -lm resolves and there is nothing to strip.
+if(BFBB_MSVC_ABI)
   get_target_property(_librw_link_interface librw INTERFACE_LINK_LIBRARIES)
   if(_librw_link_interface)
     list(REMOVE_ITEM _librw_link_interface "$<LINK_ONLY:m>")
@@ -464,7 +640,7 @@ endif()
 # WINDOW_LIBS is SDL. Under GL3 librw already drags it in; under D3D9 it does
 # not, and iWindowSDL.cpp is in this target rather than in bfbb_platform.
 target_link_libraries(bfbb_rw PUBLIC librw ${WINDOW_LIBS})
-target_compile_options(bfbb_rw PRIVATE -Wno-everything)
+target_compile_options(bfbb_rw PRIVATE ${BFBB_NO_WARNINGS})
 
 # --- the platform layer ------------------------------------------------------
 # Only the interfaces that are implemented. The rest of the i* set is listed in
@@ -681,7 +857,7 @@ file(GLOB_RECURSE BFBB_GAME_SOURCES
 )
 add_library(bfbb_game STATIC ${BFBB_GAME_SOURCES})
 target_link_libraries(bfbb_game PUBLIC bfbb_platform bfbb_rw)
-target_compile_options(bfbb_game PRIVATE -Wno-everything)
+target_compile_options(bfbb_game PRIVATE ${BFBB_NO_WARNINGS})
 
 # --- the frame-rate independence test ----------------------------------------
 # The rate helpers in xMath.cpp, checked as PROPERTIES rather than values: that
@@ -709,7 +885,7 @@ target_include_directories(fps_selftest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x
 )
-target_compile_options(fps_selftest PRIVATE -Wno-everything)
+target_compile_options(fps_selftest PRIVATE ${BFBB_NO_WARNINGS})
 add_test(NAME fps_selftest COMMAND fps_selftest)
 
 # --- the font fitter -------------------------------------------------------
@@ -728,7 +904,7 @@ target_include_directories(fontfit PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb
 )
-target_compile_options(fontfit PRIVATE -Wno-everything)
+target_compile_options(fontfit PRIVATE ${BFBB_NO_WARNINGS})
 
 # The other half of the same guarantee. Almost none of the sixty-odd rebased
 # game sites can be reached from a unit test -- they want a scene, a model, a
@@ -752,7 +928,7 @@ endif()
 # reads are stood up by the test itself.
 add_executable(rw_selftest ${PC_DIR}/rw/tests/selftest.cpp ${PC_DIR}/iFX.cpp ${PC_DIR}/iFixes.cpp)
 target_link_libraries(rw_selftest PRIVATE bfbb_rw)
-target_compile_options(rw_selftest PRIVATE -Wno-everything)
+target_compile_options(rw_selftest PRIVATE ${BFBB_NO_WARNINGS})
 add_test(NAME rw_selftest COMMAND rw_selftest)
 
 # --- the game --------------------------------------------------------------
@@ -777,6 +953,11 @@ if(WIN32)
   if(CMAKE_RC_COMPILER)
     list(APPEND BFBB_EXE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/pc/res/bfbb.rc)
     message(STATUS "bfbb: icon resource via ${CMAKE_RC_COMPILER}")
+
+    # bfbb.rc names bfbb.ico beside it. rc.exe looks in the script's own
+    # directory for that; windres looks only where it is told, so tell it.
+    # CMake passes a target's include directories to the resource compiler.
+    set(BFBB_EXE_RES_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/pc/res)
   else()
     message(STATUS "bfbb: no resource compiler found, executable will have no icon")
   endif()
@@ -784,6 +965,9 @@ endif()
 
 add_executable(bfbb ${BFBB_EXE_SOURCES})
 target_link_libraries(bfbb PRIVATE bfbb_game bfbb_platform bfbb_rw)
+if(BFBB_EXE_RES_DIR)
+  target_include_directories(bfbb PRIVATE ${BFBB_EXE_RES_DIR})
+endif()
 
 # The movie decoder's DLLs, beside the executable.
 #
@@ -799,6 +983,16 @@ if(WIN32 AND FMV_INCLUDES)
       COMMENT "Staging the movie decoder's DLLs"
     )
   endif()
+endif()
+
+# SDL's, when this build found an installed one and it is the shared build.
+# The vendored SDL is static and there is nothing to stage; see the SDL section.
+if(BFBB_SDL_RUNTIME_DLL)
+  add_custom_command(TARGET bfbb POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${BFBB_SDL_RUNTIME_DLL}
+            $<TARGET_FILE_DIR:bfbb>
+    COMMENT "Staging SDL"
+  )
 endif()
 
 # And libusb's, for the same reason. Keyed on LibUSB_LIBRARY rather than
@@ -828,14 +1022,22 @@ add_custom_command(TARGET bfbb POST_BUILD
   COMMENT "Staging the button glyphs"
 )
 
-target_compile_options(bfbb PRIVATE -Wno-everything)
+target_compile_options(bfbb PRIVATE ${BFBB_NO_WARNINGS})
 
 if(WIN32)
   # dbghelp is the crash handler in bfbb_main.cpp; see the comment there.
   target_link_libraries(bfbb PRIVATE user32 gdi32 dbghelp)
 
   # EXPERIMENT: 64MB stack, to test whether the boot fault is stack depth.
-  target_link_options(bfbb PRIVATE -Xlinker /STACK:67108864)
+  #
+  # The reserve is written into the PE header by the linker, so it is spelled by
+  # whichever one the driver runs: /STACK for link.exe and lld-link, --stack for
+  # the BFD linker MinGW drives.
+  if(MINGW)
+    target_link_options(bfbb PRIVATE -Wl,--stack,67108864)
+  else()
+    target_link_options(bfbb PRIVATE -Xlinker /STACK:67108864)
+  endif()
 endif()
 
 # --- self-test ---------------------------------------------------------------
@@ -938,6 +1140,17 @@ if(WIN32)
   # game will actually do. dbghelp is iHostPrintCallers, in the host backend
   # this target links whole.
   target_link_libraries(pc_selftest PRIVATE ole32 dbghelp)
+endif()
+
+# pc_selftest links the real audio and input backends, so it needs SDL beside
+# it too -- and it is run by ctest from the build directory, where nothing else
+# would put it there.
+if(BFBB_SDL_RUNTIME_DLL)
+  add_custom_command(TARGET pc_selftest POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${BFBB_SDL_RUNTIME_DLL}
+            $<TARGET_FILE_DIR:pc_selftest>
+    COMMENT "Staging SDL"
+  )
 endif()
 
 add_test(NAME pc_selftest COMMAND pc_selftest)

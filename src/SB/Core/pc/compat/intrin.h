@@ -10,6 +10,12 @@
 // The rest are declared, exactly as the GameCube header declares them, so that
 // anything reaching for one fails to link rather than silently doing nothing.
 
+// Outside the extern "C" below, and it has to stay there. The SSE intrinsics
+// are the host's own header, and giving its declarations C linkage is a
+// language change the header was not written for -- clang tolerates it and GCC
+// is under no obligation to.
+#include <emmintrin.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -50,8 +56,6 @@ float __fnabsf(float);
 // are in src/SB/Core/pc/intrin.cpp.
 double __fabs(double);
 float __fabsf(float);
-
-#include <emmintrin.h>
 
 // PowerPC's reciprocal-square-root estimate is specified to roughly 12 bits of
 // mantissa. The exact value is more accurate, not less -- but it is a different

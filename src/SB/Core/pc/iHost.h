@@ -4,6 +4,7 @@
 #include <types.h>
 
 #include <stddef.h>
+#include <stdio.h>
 
 // PC-only. There is no GameCube counterpart to this file, for the same reason
 // there is none for iPadHost.h: the console has exactly one implementation of
@@ -95,6 +96,17 @@ bool iHostStat(const char* path, iHostFileInfo* out);
 bool iHostMakeDir(const char* path);
 
 bool iHostRemoveFile(const char* path);
+
+// Opens `path` for writing and FAILS if anything is already there, rather than
+// truncating it. NULL if the file exists or could not be made.
+//
+// fopen's "wx" mode is the same thing and is not usable here: it is C11, and
+// the msvcrt.dll that a MinGW build links has no such mode -- fopen returns
+// NULL for every path, so the port silently could not write its first
+// config.ini. Creating the file is the exclusivity test, so a caller cannot
+// substitute a check that it exists first: two launches at once would both
+// pass that and the second would erase the first's file.
+FILE* iHostCreateNewFile(const char* path);
 
 // Removes an empty directory.
 bool iHostRemoveDir(const char* path);

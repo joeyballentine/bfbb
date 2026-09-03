@@ -92,8 +92,24 @@ typedef double F64;
 // GCC and Clang spell it __attribute__((weak)), which they support on COFF as
 // a weak external -- the same semantics CodeWarrior gives __declspec(weak),
 // and what the definitions are asking for.
+//
+// MinGW is the exception and needs a different spelling. GCC has no weak
+// externals on PE/COFF, so it emulates them: the body is emitted under a
+// mangled alias and the real name is left UNDEFINED with a fallback --
+//
+//     T .weak.__Z11xMat3x3SMulP7xMat3x3PKS_f.__ZN5xVec36createEfff
+//     w __Z11xMat3x3SMulP7xMat3x3PKS_f
+//
+// -- so every caller in another object is an undefined reference at link, and
+// the fallback is whatever unrelated symbol the compiler picked. `inline` is
+// the spelling that does work there: a COMDAT, which is what weak_odr is on
+// this file format and what several objects defining one function need.
+// `used` because the body has to be emitted even when the defining unit never
+// calls it, which is the whole reason WEAK is here.
 #if defined(__MWERKS__)
 #define WEAK __declspec(weak)
+#elif defined(__MINGW32__)
+#define WEAK inline __attribute__((used))
 #elif defined(__GNUC__) || defined(__clang__)
 #define WEAK __attribute__((weak))
 #else
@@ -123,7 +139,11 @@ typedef double F64;
 // Templates cannot use this -- a unit that cannot see the definition cannot
 // instantiate it either -- and take an explicit instantiation next to the
 // definition instead.
-#ifdef PLATFORM_PC
+#if defined(PLATFORM_PC) && defined(__MINGW32__)
+// WEAK already carries the `inline`, for the reason above, and repeating it
+// here is "duplicate 'inline'".
+#define SHARED_INLINE WEAK
+#elif defined(PLATFORM_PC)
 #define SHARED_INLINE WEAK inline
 #else
 #define SHARED_INLINE inline

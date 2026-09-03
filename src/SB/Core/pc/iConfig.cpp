@@ -693,10 +693,10 @@ namespace
 
 bool iConfigWriteDefaults(const char* path)
 {
-    // "wx" rather than "w": exclusive, so this can never overwrite a file --
-    // including one that appeared between the load's read and here. The
-    // argument for writing one at all is in iConfig.h.
-    FILE* f = fopen(path, "wxb");
+    // Exclusive, so this can never overwrite a file -- including one that
+    // appeared between the load's read and here. The argument for writing one
+    // at all is in iConfig.h; why it is not fopen's "wx" is in iHost.h.
+    FILE* f = iHostCreateNewFile(path);
     if (f == NULL)
     {
         return false;

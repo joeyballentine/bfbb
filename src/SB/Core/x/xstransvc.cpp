@@ -630,6 +630,16 @@ static st_STRAN_SCENE* XST_find_bySID(U32 sid, S32 findTheHOP)
     return da_sdata;
 }
 
+// PORT: retail's one copy of iFileAsyncService lives here, and WEAK reproduces
+// that linkage so the console keeps it. The port implements the real one in
+// iFile.cpp, where it services the load queue, so this empty body would be a
+// second definition of it and is left out.
+//
+// It cannot be left in and outranked. Weak-beats-strong is an ELF rule; MinGW
+// has no weak symbols on PE and spells WEAK as a COMDAT, which does not yield
+// to anything -- so the two definitions are simply a link error there.
+#ifdef __MWERKS__
 WEAK void iFileAsyncService()
 {
 }
+#endif
