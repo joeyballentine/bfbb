@@ -344,16 +344,18 @@ endif()
 # pacer and the close button are the same either way and used to be written
 # twice.
 #
-# Every backend that draws gets one, rather than a list to keep in step with
-# iWindowSDL.cpp -- which splits on RW_GL3 and treats everything else as the
-# HWND case. NULL is the only one that goes without.
+# Every backend that draws gets the SDL one, rather than a list to keep in step
+# with iWindowSDL.cpp -- which splits on RW_GL3 and treats everything else as
+# the HWND case. NULL takes the stub instead.
 if(NOT BFBB_RENDER_BACKEND STREQUAL "NULL")
   set(WINDOW_SOURCES ${PC_DIR}/iWindowSDL.cpp)
   set(WINDOW_LIBS bfbb_sdl)
   set(BFBB_NEEDS_SDL ON)
 else()
-  # NULL builds headless, so no window is needed and none is provided.
-  set(WINDOW_SOURCES)
+  # NULL builds headless, so there is no window -- but the interface is still
+  # linked. rw/camera.cpp pumps and paces from RwCameraShowRaster whatever the
+  # backend is, so a build with no implementation at all does not link.
+  set(WINDOW_SOURCES ${PC_DIR}/iWindowNull.cpp)
   set(WINDOW_LIBS)
 endif()
 
