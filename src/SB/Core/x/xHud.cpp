@@ -785,14 +785,6 @@ namespace xhud
         return xModelInstanceAlloc((RpAtomic*)info, NULL, 0, 0, NULL);
     }
 
-// NOTE: this belongs in xHud.h, as the body of the class declaration. It is
-// inline, so the compiler emits a weak out-of-line copy into every translation
-// unit that calls it.
-inline void widget::dispatch(xBase* b1, U32 event, const F32* toParam, xBase* b2)
-{
-    dispatcher(b1, event, toParam, b2);
-}
-
 } // namespace xhud
 
 // NOTE: this belongs in <new.h>. It is inline, so the compiler emits a weak
