@@ -1,10 +1,13 @@
 // TrueType glyphs for the game's fonts. The argument for it is in iFont.h.
+//
+// Rasterising only: nothing here knows what a texture is, which is what lets
+// tools/fontfit link it without a renderer. iFontMakeTexture, the one part
+// that does, is in iFontTexture.cpp.
 
 #include "iFont.h"
 
+#include "iHost.h"
 #include "iScreen.h"
-
-#include <rwcore.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,17 +22,28 @@
 
 namespace
 {
-    // The file, kept for the life of the process. stb_truetype does not copy it
-    // -- stbtt_fontinfo points into these bytes and every glyph is read from
-    // them on demand -- so freeing this would invalidate the font.
-    U8* sFile;
-    S32 sFileSize;
+    // One per face, because the game's atlases are not all the same typeface.
+    struct face_state
+    {
+        // The file, kept for the life of the process. stb_truetype does not
+        // copy it -- stbtt_fontinfo points into these bytes and every glyph is
+        // read from them on demand -- so freeing this would invalidate the
+        // font.
+        U8* file;
+        S32 fileSize;
 
-    stbtt_fontinfo sFont;
-    S32 sLoaded;
+        stbtt_fontinfo font;
+        S32 loaded;
+        S32 failed;
+        F32 weight;
+    };
+
+    face_state sFaces[IFONT_FACE_COUNT];
+
+    // Sizing, which is about the atlas cell rather than the typeface, and so is
+    // the same for every face.
     S32 sUpscale;   // 0 is automatic; see iFontUpscale
     F32 sPadding = 0.5f;
-    S32 sFailed;
 
     // The atlas. One allocation, reused: the game builds four fonts at startup
     // and never again, so this is only ever grown to the largest of them.
@@ -37,6 +51,140 @@ namespace
     S32 sAtlasCapacity;
     S32 sAtlasWidth;
     S32 sAtlasHeight;
+
+    // The same again, holding the atlas being replaced. Only allocated when the
+    // debug overlay is on, so the normal path costs nothing.
+    U8* sOverlay;
+    S32 sOverlayCapacity;
+    S32 sOverlayOn;
+    F32 sAgreement;
+    F32 sInk;
+
+    // One glyph's worth of workspace, for the thickening pass -- a max filter
+    // cannot read and write the same pixels.
+    U8* sScratch;
+    S32 sScratchCapacity;
+
+    // Where BFBB_FONTDUMP points, if anywhere.
+    char sDumpPath[512];
+
+    // Copy a rect of coverage into another, scaled to fit. Nearest neighbour:
+    // both callers are magnifying an atlas several times over, and a filter
+    // would only soften the edges being compared or substituted.
+    void blitScaled(const U8* src, S32 srcStride, S32 sx, S32 sy, S32 sw, S32 sh, U8* dst,
+                    S32 dstStride, S32 dx, S32 dy, S32 dw, S32 dh)
+    {
+        if (sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0)
+        {
+            return;
+        }
+
+        for (S32 y = 0; y < dh; y++)
+        {
+            const U8* srcRow = src + (size_t)(sy + y * sh / dh) * srcStride;
+            U8* dstRow = dst + (size_t)(dy + y) * dstStride + dx;
+
+            for (S32 x = 0; x < dw; x++)
+            {
+                dstRow[x] = srcRow[sx + x * sw / dw];
+            }
+        }
+    }
+
+    // Grow the ink in `w` by `h` coverage bytes outward by `distance` pixels,
+    // 0 to 1. Called once per whole pixel of weight and once more for the
+    // remainder.
+    //
+    // **Why this adds rather than taking a maximum.** The obvious thickening is
+    // to give every pixel the largest of itself and its neighbours, faded by
+    // the distance wanted. That grows the ink by exactly ONE pixel however
+    // faint the fade is, because a neighbour is a whole pixel away -- so the
+    // real distance is one buffer pixel, which is 1/upscale of an ATLAS pixel,
+    // and a weight that reads correctly at one render height is wrong at
+    // another. The setting is in atlas pixels so that it does not depend on the
+    // resolution, and that made it depend on the resolution.
+    //
+    // A glyph edge is not a step, though: it is a ramp about a pixel wide, from
+    // nothing to solid, and the letterform's true edge is where that ramp
+    // passes half. Adding a fraction of full coverage to the ramp slides the
+    // half-way point out by that fraction of a pixel -- which is a real
+    // sub-pixel distance, and the same distance at any upscale.
+    //
+    // Scaled by the neighbourhood rather than added flat: away from any ink
+    // there is no ramp to move and no neighbour to take it from, so nothing
+    // happens. A flat addition would raise the empty space around the letters
+    // into a grey haze over every glyph box.
+    void dilate(U8* pixels, S32 w, S32 h, S32 stride, F32 distance)
+    {
+        if (distance <= 0.0f || w <= 0 || h <= 0)
+        {
+            return;
+        }
+
+        const S32 needed = w * h;
+
+        if (needed > sScratchCapacity)
+        {
+            free(sScratch);
+            sScratch = (U8*)malloc((size_t)needed);
+            if (sScratch == NULL)
+            {
+                sScratchCapacity = 0;
+                return;
+            }
+            sScratchCapacity = needed;
+        }
+
+        for (S32 y = 0; y < h; y++)
+        {
+            memcpy(sScratch + (size_t)y * w, pixels + (size_t)y * stride, (size_t)w);
+        }
+
+        for (S32 y = 0; y < h; y++)
+        {
+            for (S32 x = 0; x < w; x++)
+            {
+                U8 neighbour = 0;
+
+                for (S32 dy = -1; dy <= 1; dy++)
+                {
+                    const S32 sy = y + dy;
+                    if (sy < 0 || sy >= h)
+                    {
+                        continue;
+                    }
+
+                    for (S32 dx = -1; dx <= 1; dx++)
+                    {
+                        const S32 sx = x + dx;
+                        if (sx < 0 || sx >= w || (dx == 0 && dy == 0))
+                        {
+                            continue;
+                        }
+
+                        const U8 v = sScratch[(size_t)sy * w + sx];
+                        if (v > neighbour)
+                        {
+                            neighbour = v;
+                        }
+                    }
+                }
+
+                U8* p = pixels + (size_t)y * stride + x;
+
+                // The brightest coverage anywhere around this pixel, itself
+                // included: how much ink there is locally to move.
+                if (*p > neighbour)
+                {
+                    neighbour = *p;
+                }
+
+                const F32 grown = (F32)*p + distance * (F32)neighbour;
+
+                *p = grown > 255.0f ? (U8)255 : (U8)grown;
+            }
+        }
+    }
 
     // A gap between glyphs, so that the linear filter the game draws text with
     // cannot pull a neighbour's ink into the edge of a character. One pixel is
@@ -46,20 +194,41 @@ namespace
     // The framebuffer the game's font atlases were authored against.
     const S32 kRetailHeight = 480;
 
-    void fontFail(const char* what, const char* detail)
+    const char* faceName(iFontFace face)
     {
-        sFailed = 1;
-        printf("bfbb: the TrueType font is off -- %s%s%s\n", what, detail != NULL ? ": " : "",
-               detail != NULL ? detail : "");
+        return face == IFONT_FACE_SANS ? "the sans serif" : "the SpongeBob font";
+    }
+
+    S32 validFace(iFontFace face)
+    {
+        return face >= 0 && face < IFONT_FACE_COUNT;
+    }
+
+    void fontFail(iFontFace face, const char* what, const char* detail)
+    {
+        if (validFace(face))
+        {
+            sFaces[face].failed = 1;
+        }
+
+        printf("bfbb: %s is off -- %s%s%s\n", faceName(face), what,
+               detail != NULL ? ": " : "", detail != NULL ? detail : "");
         fflush(stdout);
     }
 }
 
-S32 iFontLoad(const char* path)
+S32 iFontLoad(iFontFace face, const char* path)
 {
-    if (sLoaded || sFailed)
+    if (!validFace(face))
     {
-        return sLoaded;
+        return FALSE;
+    }
+
+    face_state& fs = sFaces[face];
+
+    if (fs.loaded || fs.failed)
+    {
+        return fs.loaded;
     }
 
     if (path == NULL || path[0] == '\0')
@@ -72,7 +241,7 @@ S32 iFontLoad(const char* path)
     FILE* f = fopen(path, "rb");
     if (f == NULL)
     {
-        fontFail("no such file", path);
+        fontFail(face, "no such file", path);
         return FALSE;
     }
 
@@ -83,55 +252,105 @@ S32 iFontLoad(const char* path)
     if (size <= 0)
     {
         fclose(f);
-        fontFail("the file is empty", path);
+        fontFail(face, "the file is empty", path);
         return FALSE;
     }
 
-    sFile = (U8*)malloc((size_t)size);
-    if (sFile == NULL)
+    fs.file = (U8*)malloc((size_t)size);
+    if (fs.file == NULL)
     {
         fclose(f);
-        fontFail("out of memory reading", path);
+        fontFail(face, "out of memory reading", path);
         return FALSE;
     }
 
-    size_t got = fread(sFile, 1, (size_t)size, f);
+    size_t got = fread(fs.file, 1, (size_t)size, f);
     fclose(f);
 
     if (got != (size_t)size)
     {
-        free(sFile);
-        sFile = NULL;
-        fontFail("the file could not be read", path);
+        free(fs.file);
+        fs.file = NULL;
+        fontFail(face, "the file could not be read", path);
         return FALSE;
     }
 
-    sFileSize = (S32)size;
+    fs.fileSize = (S32)size;
 
     // Offset 0: the first font of a collection, which for a plain .ttf is the
     // only one. A .ttc would need a choice, and nothing asks for one.
-    if (!stbtt_InitFont(&sFont, sFile, stbtt_GetFontOffsetForIndex(sFile, 0)))
+    if (!stbtt_InitFont(&fs.font, fs.file, stbtt_GetFontOffsetForIndex(fs.file, 0)))
     {
-        free(sFile);
-        sFile = NULL;
-        fontFail("not a TrueType font", path);
+        free(fs.file);
+        fs.file = NULL;
+        fontFail(face, "not a TrueType font", path);
         return FALSE;
     }
 
-    sLoaded = 1;
+    fs.loaded = 1;
     // The settings as well as the path. A setting that is read but never
     // reaches the pixels looks exactly like one that works, and this port has
     // already shipped one of those -- text.font_spacing was missing from the
     // settings table, so every value anyone tried was silently the default.
-    printf("bfbb: text rendered from %s (upscale %d, padding %.3f, inset %d px)\n", path,
-           (int)iFontUpscale(), (double)sPadding, (int)((F32)iFontUpscale() * sPadding + 0.5f));
+    printf("bfbb: %s rendered from %s (upscale %d, padding %.3f, inset %d px, weight %.2f)%s\n",
+           faceName(face), path, (int)iFontUpscale(), (double)sPadding,
+           (int)((F32)iFontUpscale() * sPadding + 0.5f), (double)fs.weight,
+           sOverlayOn ? ", BFBB_FONTDIFF overlay on" : "");
     fflush(stdout);
     return TRUE;
 }
 
-S32 iFontAvailable()
+S32 iFontAvailable(iFontFace face)
 {
-    return sLoaded;
+    return validFace(face) ? sFaces[face].loaded : FALSE;
+}
+
+S32 iFontSystemSans(char* out, S32 outsize)
+{
+    if (out == NULL || outsize <= 0)
+    {
+        return FALSE;
+    }
+
+    out[0] = '\0';
+
+    // Arial where Windows keeps it, asked for rather than assumed -- the drive
+    // is not always C.
+    const char* root = getenv("SystemRoot");
+    if (root == NULL)
+    {
+        root = getenv("WINDIR");
+    }
+
+    if (root != NULL && root[0] != '\0')
+    {
+        snprintf(out, (size_t)outsize, "%s/Fonts/arial.ttf", root);
+        if (iHostPathExists(out))
+        {
+            return TRUE;
+        }
+    }
+
+    // Elsewhere: Microsoft's own font if someone installed it, then Liberation
+    // Sans, which was drawn to Arial's metrics.
+    static const char* const kElsewhere[] = {
+        "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf",
+        "/Library/Fonts/Arial.ttf",
+    };
+
+    for (size_t i = 0; i < sizeof(kElsewhere) / sizeof(kElsewhere[0]); i++)
+    {
+        if (iHostPathExists(kElsewhere[i]))
+        {
+            snprintf(out, (size_t)outsize, "%s", kElsewhere[i]);
+            return TRUE;
+        }
+    }
+
+    out[0] = '\0';
+    return FALSE;
 }
 
 void iFontSetUpscale(S32 upscale)
@@ -206,14 +425,121 @@ F32 iFontPadding()
     return sPadding;
 }
 
-S32 iFontRasterize(const char* charset, S32 count, S32 cellW, S32 cellH, const iFontCell* cells,
-                   S32 upscale, F32 padding, const U8** pixels, S32* width, S32* height,
-                   S32* slotStride, S32* perRow)
+void iFontSetWeight(iFontFace face, F32 weight)
 {
-    if (!sLoaded || charset == NULL || cells == NULL || count <= 0 || cellW <= 0 || cellH <= 0)
+    if (!validFace(face))
+    {
+        return;
+    }
+
+    // Clamped rather than refused, like the upscale: too much is a fat blob and
+    // is obvious on sight, not something worth stopping the game for.
+    if (weight < 0.0f)
+    {
+        weight = 0.0f;
+    }
+    if (weight > 4.0f)
+    {
+        weight = 4.0f;
+    }
+
+    sFaces[face].weight = weight;
+}
+
+F32 iFontWeight(iFontFace face)
+{
+    return validFace(face) ? sFaces[face].weight : 0.0f;
+}
+
+void iFontSetOverlay(S32 on)
+{
+    sOverlayOn = on;
+}
+
+S32 iFontOverlay()
+{
+    return sOverlayOn;
+}
+
+F32 iFontOverlayAgreement()
+{
+    return sAgreement;
+}
+
+F32 iFontOverlayInk()
+{
+    return sInk;
+}
+
+void iFontSetDumpPath(const char* path)
+{
+    if (path == NULL || path[0] == '\0')
+    {
+        sDumpPath[0] = '\0';
+        return;
+    }
+
+    snprintf(sDumpPath, sizeof(sDumpPath), "%s", path);
+}
+
+S32 iFontDumpWanted()
+{
+    return sDumpPath[0] != 0;
+}
+
+S32 iFontDump(const char* name, const char* charset, S32 count, S32 cellW, S32 cellH,
+              const iFontCell* cells, const iFontAtlas* atlas)
+{
+    if (sDumpPath[0] == '\0' || name == NULL || charset == NULL || cells == NULL ||
+        atlas == NULL || atlas->coverage == NULL || count <= 0)
     {
         return FALSE;
     }
+
+    FILE* f = fopen(sDumpPath, "ab");
+    if (f == NULL)
+    {
+        printf("bfbb: the font dump could not be written: %s\n", sDumpPath);
+        fflush(stdout);
+        return FALSE;
+    }
+
+    // A flat record, little-endian by being written as it sits in memory: this
+    // is read back by a tool built from this same tree, on this same machine,
+    // and a format with a version and an endianness would be pretending
+    // otherwise.
+    char label[32];
+    memset(label, 0, sizeof(label));
+    snprintf(label, sizeof(label), "%s", name);
+
+    const S32 header[5] = { count, cellW, cellH, atlas->width, atlas->height };
+
+    fwrite("BFFD", 1, 4, f);
+    fwrite(label, 1, sizeof(label), f);
+    fwrite(header, sizeof(S32), 5, f);
+    fwrite(charset, 1, (size_t)count, f);
+    fwrite(cells, sizeof(iFontCell), (size_t)count, f);
+    fwrite(atlas->coverage, 1, (size_t)(atlas->width * atlas->height), f);
+    fclose(f);
+
+    printf("bfbb: dumped the %s atlas (%d glyphs, %dx%d cell) to %s\n", name, (int)count,
+           (int)cellW, (int)cellH, sDumpPath);
+    fflush(stdout);
+    return TRUE;
+}
+
+S32 iFontRasterize(iFontFace face, const char* charset, S32 count, S32 cellW, S32 cellH,
+                   const iFontCell* cells, S32 upscale, F32 padding, const iFontAtlas* source,
+                   const U8** pixels, const U8** overlay, S32* width, S32* height, S32* slotStride,
+                   S32* perRow)
+{
+    if (!iFontAvailable(face) || charset == NULL || cells == NULL || count <= 0 || cellW <= 0 ||
+        cellH <= 0)
+    {
+        return FALSE;
+    }
+
+    const stbtt_fontinfo& font = sFaces[face].font;
 
     if (upscale < 1)
     {
@@ -253,7 +579,7 @@ S32 iFontRasterize(const char* charset, S32 count, S32 cellW, S32 cellH, const i
         if (sAtlas == NULL)
         {
             sAtlasCapacity = 0;
-            fontFail("out of memory for the glyph atlas", NULL);
+            fontFail(face, "out of memory for the glyph atlas", NULL);
             return FALSE;
         }
         sAtlasCapacity = needed;
@@ -261,7 +587,38 @@ S32 iFontRasterize(const char* charset, S32 count, S32 cellW, S32 cellH, const i
 
     memset(sAtlas, 0, (size_t)needed);
 
+    // The second plane, when there is something to draw over.
+    const S32 wantOverlay = sOverlayOn && source != NULL && source->coverage != NULL &&
+                            source->width > 0 && source->height > 0;
+
+    if (wantOverlay)
+    {
+        if (needed > sOverlayCapacity)
+        {
+            free(sOverlay);
+            sOverlay = (U8*)malloc((size_t)needed);
+            if (sOverlay == NULL)
+            {
+                sOverlayCapacity = 0;
+                fontFail(face, "out of memory for the debug overlay", NULL);
+                return FALSE;
+            }
+            sOverlayCapacity = needed;
+        }
+
+        memset(sOverlay, 0, (size_t)needed);
+    }
+
     S32 drawn = 0;
+
+    // Characters the face does not have, which are drawn from the atlas
+    // instead. Worth saying out loud: it is the difference between a font that
+    // fits and one that fits except for the character the save screen counts
+    // completion in.
+    S32 fellBack = 0;
+    S32 fellBackLen = 0;
+    char fellBackChars[160];
+    fellBackChars[0] = '\0';
 
     for (S32 i = 0; i < count; i++)
     {
@@ -279,16 +636,54 @@ S32 iFontRasterize(const char* charset, S32 count, S32 cellW, S32 cellH, const i
         // Unicode too.
         const S32 codepoint = (S32)(U8)charset[i];
 
+        const S32 slotX = (i % columns) * slotW;
+        const S32 slotY = (i / columns) * slotH;
+
+        // Whether the FACE HAS this character, which is a different question
+        // from whether its glyph has ink. A font answers for a character it
+        // does not have with .notdef, and .notdef is usually a hollow
+        // rectangle -- so testing the bitmap for ink says "yes, a glyph" and
+        // puts a box on screen where the game had a letter. SpongeBoyTT1 has no
+        // %, and the save screen counts in them.
+        if (stbtt_FindGlyphIndex(&font, codepoint) == 0)
+        {
+            // Fall back to the glyph being replaced, at the magnification the
+            // atlas would have been drawn at anyway. The alternative is a hole
+            // in the text; this way a face missing a few characters costs their
+            // sharpness and nothing else.
+            if (source != NULL)
+            {
+                blitScaled(source->coverage, source->width, cell.cellX + cell.x,
+                           cell.cellY + cell.y, cell.w, cell.h, sAtlas, w,
+                           slotX + cell.x * upscale, slotY + cell.y * upscale, cell.w * upscale,
+                           cell.h * upscale);
+            }
+
+            // Escaped, because more than half of this charset is Latin-1
+            // accents: printing those raw puts whatever the console makes of a
+            // high byte in the middle of the list and the readable ones are
+            // lost in it.
+            if (fellBackLen + 5 < (S32)sizeof(fellBackChars))
+            {
+                fellBackLen += snprintf(fellBackChars + fellBackLen,
+                                        sizeof(fellBackChars) - (size_t)fellBackLen,
+                                        (codepoint >= 0x20 && codepoint < 0x7F) ? "%c" : "\\x%02X",
+                                        codepoint);
+            }
+
+            fellBack++;
+            continue;
+        }
+
         // The outline's own ink box at unit scale, so it can be stretched to
         // exactly the box the atlas glyph occupied.
         int ux0, uy0, ux1, uy1;
-        stbtt_GetCodepointBitmapBox(&sFont, codepoint, 1.0f, 1.0f, &ux0, &uy0, &ux1, &uy1);
+        stbtt_GetCodepointBitmapBox(&font, codepoint, 1.0f, 1.0f, &ux0, &uy0, &ux1, &uy1);
 
         if (ux1 <= ux0 || uy1 <= uy0)
         {
-            // The font has no such glyph. The cell stays empty, which draws
-            // nothing -- better than a wrong letter, and the layout is
-            // unaffected because the metrics are still the atlas's.
+            // A glyph with no ink -- a space. Nothing to draw, and the game's
+            // metrics already say how wide it is.
             continue;
         }
 
@@ -315,9 +710,6 @@ S32 iFontRasterize(const char* charset, S32 count, S32 cellW, S32 cellH, const i
         const F32 scaleX = (F32)targetW / (F32)(ux1 - ux0);
         const F32 scaleY = (F32)targetH / (F32)(uy1 - uy0);
 
-        const S32 slotX = (i % columns) * slotW;
-        const S32 slotY = (i / columns) * slotH;
-
         const S32 dstX = slotX + cell.x * upscale + pad;
         const S32 dstY = slotY + cell.y * upscale + pad;
 
@@ -326,80 +718,80 @@ S32 iFontRasterize(const char* charset, S32 count, S32 cellW, S32 cellH, const i
             continue;
         }
 
-        stbtt_MakeCodepointBitmap(&sFont, sAtlas + (size_t)dstY * w + dstX, targetW, targetH, w,
+        stbtt_MakeCodepointBitmap(&font, sAtlas + (size_t)dstY * w + dstX, targetW, targetH, w,
                                   scaleX, scaleY, codepoint);
+
+        // Weight, in the atlas pixels the setting is written in, at the
+        // resolution this is being drawn at.
+        F32 remaining = sFaces[face].weight * (F32)upscale;
+
+        while (remaining > 0.0f)
+        {
+            dilate(sAtlas + (size_t)dstY * w + dstX, targetW, targetH, w,
+                   remaining < 1.0f ? remaining : 1.0f);
+            remaining -= 1.0f;
+        }
+
+
         drawn++;
+
+        if (wantOverlay)
+        {
+            // The glyph this one replaces, stretched into the same box by the
+            // same two factors. Nearest neighbour: this is drawn magnified
+            // several times over and a filter would only soften the edge that
+            // is being compared.
+            blitScaled(source->coverage, source->width, cell.cellX + cell.x, cell.cellY + cell.y,
+                       cell.w, cell.h, sOverlay, w, dstX, dstY, targetW, targetH);
+        }
     }
 
     if (drawn == 0)
     {
-        fontFail("the font has none of the characters the game asks for", NULL);
+        fontFail(face, "the font has none of the characters the game asks for", NULL);
         return FALSE;
     }
 
+    if (fellBack > 0)
+    {
+        printf("bfbb: %s has no %s%s -- %d of %d drawn from the game's own atlas\n",
+               faceName(face), fellBackChars,
+               fellBackLen + 5 >= (S32)sizeof(fellBackChars) ? "..." : "", (int)fellBack,
+               (int)count);
+        fflush(stdout);
+    }
+
+    if (wantOverlay)
+    {
+        // How much of the two letterforms lands on the same pixels; see
+        // iFontOverlayAgreement.
+        double both = 0.0;
+        double either = 0.0;
+        double mine = 0.0;
+        double theirs = 0.0;
+
+        for (S32 j = 0; j < needed; j++)
+        {
+            const U8 a = sAtlas[j];
+            const U8 b = sOverlay[j];
+            both += a < b ? a : b;
+            either += a > b ? a : b;
+            mine += a;
+            theirs += b;
+        }
+
+        sAgreement = (F32)(either > 0.0 ? 100.0 * both / either : 0.0);
+        sInk = (F32)(theirs > 0.0 ? mine / theirs : 0.0);
+    }
+
     *pixels = sAtlas;
+    if (overlay != NULL)
+    {
+        *overlay = wantOverlay ? sOverlay : NULL;
+    }
     *width = w;
     *height = h;
     *slotStride = slotW;
     *perRow = columns;
     return TRUE;
-}
-
-RwTexture* iFontMakeTexture(const U8* coverage, S32 width, S32 height)
-{
-    if (coverage == NULL || width <= 0 || height <= 0)
-    {
-        return NULL;
-    }
-
-    RwRaster* raster = RwRasterCreate(width, height, 32, rwRASTERTYPETEXTURE | rwRASTERFORMAT8888);
-    if (raster == NULL)
-    {
-        fontFail("a texture could not be made for the glyph atlas", NULL);
-        return NULL;
-    }
-
-    RwUInt8* dst = RwRasterLock(raster, 0, rwRASTERLOCKWRITE | rwRASTERLOCKNOFETCH);
-    if (dst == NULL)
-    {
-        RwRasterDestroy(raster);
-        fontFail("the glyph atlas could not be locked", NULL);
-        return NULL;
-    }
-
-    const S32 stride = raster->stride;
-
-    for (S32 y = 0; y < height; y++)
-    {
-        RwUInt8* row = dst + (size_t)y * stride;
-        const U8* src = coverage + (size_t)y * width;
-
-        for (S32 x = 0; x < width; x++)
-        {
-            // BGRA, which is what an 8888 raster is on D3D9. White everywhere,
-            // so the game's vertex colour is the only thing that tints a glyph,
-            // and the shape lives entirely in alpha.
-            row[x * 4 + 0] = 0xFF;
-            row[x * 4 + 1] = 0xFF;
-            row[x * 4 + 2] = 0xFF;
-            row[x * 4 + 3] = src[x];
-        }
-    }
-
-    RwRasterUnlock(raster);
-
-    RwTexture* texture = RwTextureCreate(raster);
-    if (texture == NULL)
-    {
-        RwRasterDestroy(raster);
-        fontFail("a texture could not be made for the glyph atlas", NULL);
-        return NULL;
-    }
-
-    // Linear, and clamped. The game sets the filter on its own font textures
-    // too (init_font_data does it right after the asset lookup); clamping is
-    // what stops the padding row at the edge of the atlas wrapping around.
-    texture->filterAddressing = (texture->filterAddressing & 0xFFFFFF00) | rwFILTERLINEAR;
-
-    return texture;
 }

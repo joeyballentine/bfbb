@@ -17,8 +17,16 @@
 // sharpness fix; the game keeps its own layout, spacing and colours.
 //
 // **No font ships with the port.** iFontLoad takes a path, and config.ini's
-// [text] font names it -- empty by default, which is the game's own atlas and
-// exactly what the console draws. tools/getfont.py fetches one.
+// [text] font and font_sans name them -- empty by default, which is the game's
+// own atlas and exactly what the console draws. tools/getfont.py fetches one.
+//
+// **The game has more than one face.** Four atlases, and they are not the same
+// typeface: font1_sb is the SpongeBob face and font_numbers its numerals, but
+// font_sb is a plain sans serif -- the copyright screen and xTRC's memory card
+// and controller messages are drawn in it -- and the fourth is a 6x8 system
+// font. So there is a font per face rather than one for the game, and the
+// system font keeps its own pixels: at that size an outline is not what it is.
+// font_source in xFont.cpp maps the four onto these.
 //
 // **What it replaces, and what it does not.** Only the glyph atlas and the
 // per-glyph metrics. Everything above -- where a line breaks, how a textbox is
@@ -36,16 +44,44 @@ struct iFontCell
     S32 y;
     S32 w;
     S32 h;
+
+    // The cell itself, in the atlas the rect above was measured in. Only the
+    // debug overlay uses it, to find the glyph it is drawing over.
+    S32 cellX;
+    S32 cellY;
+};
+
+// The atlas being replaced, as coverage bytes. iFontRasterize takes one only
+// for the debug overlay; NULL is the normal path.
+struct iFontAtlas
+{
+    const U8* coverage;
+    S32 width;
+    S32 height;
+};
+
+// Which face a call is about.
+enum iFontFace
+{
+    IFONT_FACE_SB, // font1_sb and font_numbers -- the SpongeBob face
+    IFONT_FACE_SANS, // font_sb -- the copyright screen, the TRC messages
+    IFONT_FACE_COUNT
 };
 
 // Read a TrueType file. FALSE if it is not there or is not a font, reported
 // once -- the caller carries on with the game's own atlas either way.
 //
 // Idempotent per path. Called by iSystem before the first font is built.
-S32 iFontLoad(const char* path);
+S32 iFontLoad(iFontFace face, const char* path);
 
-// Whether a font was loaded and glyphs can be asked for.
-S32 iFontAvailable();
+// Whether a font was loaded for that face and glyphs can be asked for.
+S32 iFontAvailable(iFontFace face);
+
+// Where the host keeps a sans serif to stand in for font_sb, which is what
+// [text] font_sans = auto resolves to. Arial, because that is the face the
+// atlas is, falling back to the metric-compatible Liberation Sans off Windows.
+// FALSE if the host has none, and the game's own atlas is then used.
+S32 iFontSystemSans(char* out, S32 outsize);
 
 // config.ini's [text] font_upscale: how many times the atlas cell's own
 // resolution to draw at. 4 unless set.
@@ -69,6 +105,73 @@ S32 iFontUpscale();
 void iFontSetPadding(F32 padding);
 F32 iFontPadding();
 
+// config.ini's [text] font_weight: how much to thicken a glyph's strokes, in
+// ATLAS pixels. 0 unless set, which is the outline as the face draws it.
+//
+// The game's atlases are hand-drawn and heavier than most text faces at the
+// same size, so an outline substituted for one can land the right size and
+// still read as too light. This grows the ink by a fraction of a pixel in every
+// direction, which is weight rather than size: a stroke gains it on both sides
+// and a letter only on its outside.
+//
+// It does make a glyph fractionally larger -- the growth has to go somewhere --
+// so a heavy setting wants a little more font_padding to sit back in its box.
+// Per face, because the two are different typefaces and the atlases they stand
+// in for are drawn at different weights: measured against the game's own, the
+// SpongeBob face wants a little and the sans wants none at all.
+void iFontSetWeight(iFontFace face, F32 weight);
+F32 iFontWeight(iFontFace face);
+
+// BFBB_FONTDIFF: draw each glyph of the atlas being replaced over the outline
+// that replaces it, so the two can be compared where the game actually draws
+// them. The outline goes in green and the game's own glyph in red, so they are
+// yellow where they agree and a coloured fringe is a glyph the substitute sizes
+// differently.
+//
+// A diagnostic, and it looks like one: the game multiplies a glyph by the text
+// colour, so the two channels only survive on text drawn light. Off by default.
+void iFontSetOverlay(S32 on);
+S32 iFontOverlay();
+
+// How much of the two letterforms landed on the same pixels, as a percentage:
+// the ink they share over the ink either of them has. Set by the last
+// iFontRasterize that was given an atlas to draw over, and the number
+// tools/fontfit sweeps -- 100 would be the same glyph twice, and what moves it
+// is font_padding and font_weight.
+//
+// Alignment is what it measures first: two glyphs drawn in the same box agree
+// substantially, two drawn in different boxes agree almost nowhere.
+F32 iFontOverlayAgreement();
+
+// The substitute's total ink over the original's, from the same pass. 1.0 is a
+// face laying down as much ink as the atlas it replaces, which is what "as bold
+// as the game's own font" means measured rather than judged.
+//
+// It answers a question agreement cannot. Agreement stops discriminating once a
+// glyph is thick enough to fill the box it is drawn in: past that, everything
+// the original has is covered, the union is the box, and the ratio settles at
+// whatever fraction of its box the original filled -- a number that can look
+// like a good fit while the letters have gone to blobs. Ink says outright that
+// there is too much of it.
+F32 iFontOverlayInk();
+
+// BFBB_FONTDUMP: write one font's atlas and glyph boxes to a file, so the fit
+// can be measured without the game.
+//
+// Everything the substitution reads about the font it replaces, in one blob:
+// the character set, the cell, the ink boxes and the atlas coverage itself.
+// tools/fontfit replays iFontRasterize against it and sweeps padding and weight
+// offline, which is the whole reason this exists -- those two are tuned by
+// their effect on the fit, and launching the game to see one number is a slow
+// way to ask.
+//
+// Appends, so one launch captures every font. Named by iSystem from the
+// environment; empty writes nothing.
+void iFontSetDumpPath(const char* path);
+S32 iFontDumpWanted();
+S32 iFontDump(const char* name, const char* charset, S32 count, S32 cellW, S32 cellH,
+              const iFontCell* cells, const iFontAtlas* atlas);
+
 // Draw `count` glyphs of `charset` into a grid of cells, each one stretched to
 // fill the rect `cells[i]` gives it.
 //
@@ -79,9 +182,14 @@ F32 iFontPadding();
 // Nothing about the game's metrics is returned, because nothing about them
 // changes: the glyph lands exactly where the atlas had it, so the advance, the
 // baseline and the letter spacing are all still the game's own.
-S32 iFontRasterize(const char* charset, S32 count, S32 cellW, S32 cellH, const iFontCell* cells,
-                   S32 upscale, F32 padding, const U8** pixels, S32* width, S32* height,
-                   S32* slotStride, S32* perRow);
+//
+// `original` is the atlas being replaced and is only read when the overlay is
+// on, in which case `overlay` comes back holding the game's own glyphs scaled
+// into the same boxes. Pass both as NULL otherwise.
+S32 iFontRasterize(iFontFace face, const char* charset, S32 count, S32 cellW, S32 cellH,
+                   const iFontCell* cells, S32 upscale, F32 padding, const iFontAtlas* original,
+                   const U8** pixels, const U8** overlay, S32* width, S32* height, S32* slotStride,
+                   S32* perRow);
 
 // The atlas as a texture the game can draw with.
 //
@@ -89,9 +197,13 @@ S32 iFontRasterize(const char* charset, S32 count, S32 cellW, S32 cellH, const i
 // textures are: every glyph is drawn multiplied by a vertex colour, so the ink
 // has to carry its shape in alpha and nothing in RGB.
 //
+// `overlay`, when the debug overlay is on, is the second coverage plane
+// iFontRasterize returned: it goes in red and the substitute in green, so the
+// ink is no longer white and the two letterforms can be told apart.
+//
 // Declared here rather than left to the caller because xFont is shared code and
 // has no business knowing how a raster is made. NULL if it could not be.
 struct RwTexture;
-RwTexture* iFontMakeTexture(const U8* coverage, S32 width, S32 height);
+RwTexture* iFontMakeTexture(const U8* coverage, const U8* overlay, S32 width, S32 height);
 
 #endif

@@ -205,6 +205,20 @@ namespace
     };
     // clang-format on
 
+#ifdef PLATFORM_PC
+    // Which TrueType file stands in for each of the four atlases above, in the
+    // same order. They are not one typeface: font1_sb is the SpongeBob face and
+    // font_numbers its numerals, but font_sb is a plain sans serif -- the
+    // copyright screen and xTRC's memory card and controller messages are drawn
+    // in it -- so one file drawn into both would change what the second is.
+    //
+    // The 6x8 system font takes neither. Its glyphs are hand-pixelled at a size
+    // where an outline is not the same object, and the cruise bubble's timer is
+    // drawn in it.
+    const iFontFace font_source[4] = { IFONT_FACE_SB, IFONT_FACE_SANS, IFONT_FACE_COUNT,
+                                       IFONT_FACE_SB };
+#endif
+
     font_data active_fonts[4];
     U32 active_fonts_size = 0;
 
@@ -384,7 +398,10 @@ namespace
     // horizontally, and throws the vertical away. This keeps both, because a
     // substituted font is drawn INTO these rects rather than measured against
     // them -- see substitute_truetype_font.
-    bool measure_atlas_glyphs(const font_data& fd, basic_rect<S32>* out, S32 count)
+    // `coverage`, when asked for, comes back as one byte per pixel of the whole
+    // atlas -- what the debug overlay draws over the substitute. RwFree it.
+    bool measure_atlas_glyphs(const font_data& fd, basic_rect<S32>* out, basic_rect<S32>* out_cells,
+                              S32 count, U8** coverage, S32* coverage_w, S32* coverage_h)
     {
         const font_asset& a = *fd.asset;
 
@@ -450,7 +467,37 @@ namespace
             out[i].y = r.y - cell.y;
             out[i].w = r.w;
             out[i].h = r.h;
+
+            // And the cell itself, which is where the overlay reads the glyph
+            // being replaced from.
+            out_cells[i].x = cell.x;
+            out_cells[i].y = cell.y;
+            out_cells[i].w = cell.w;
+            out_cells[i].h = cell.h;
             any = true;
+        }
+
+        if (any && coverage != NULL)
+        {
+            *coverage = (U8*)RwMalloc(width * height);
+
+            if (*coverage != NULL)
+            {
+                // Which channel carries the ink, by find_bounds' own test on the
+                // first cell: these atlases are either white with the shape in
+                // alpha, or the shape in red. One atlas is one or the other.
+                const iColor_tag* first = bits + width * a.v + a.u;
+                const bool alpha_mode = (first->r == first->g && first->g == first->b &&
+                                         first->r >= 240);
+
+                for (S32 j = 0; j < width * height; j++)
+                {
+                    (*coverage)[j] = alpha_mode ? bits[j].a : bits[j].r;
+                }
+
+                *coverage_w = width;
+                *coverage_h = height;
+            }
         }
 
         RwImageDestroy(image);
@@ -476,9 +523,9 @@ namespace
     // So this is a sharpness fix and nothing else, which is what it was for: the
     // atlas is an 18x22 grid magnified sixfold at 4K, and this draws the same
     // letters at four times the cell resolution instead.
-    void substitute_truetype_font(font_data& fd)
+    void substitute_truetype_font(font_data& fd, iFontFace face)
     {
-        if (!iFontAvailable())
+        if (!iFontAvailable(face))
         {
             return;
         }
@@ -496,10 +543,18 @@ namespace
             return;
         }
 
-        // Where each glyph's ink sits in the atlas being replaced. Without this
-        // there is nothing to draw into.
+        // Where each glyph's ink sits in the atlas being replaced, and where its
+        // cell is. Without the first there is nothing to draw into.
         static basic_rect<S32> cells[127];
-        if (!measure_atlas_glyphs(fd, cells, count))
+        static basic_rect<S32> boxes[127];
+
+        U8* original = NULL;
+        S32 original_w = 0;
+        S32 original_h = 0;
+
+        // Always: the substitution reads it for any character the face does not
+        // have, not only for the debug overlay and the dump.
+        if (!measure_atlas_glyphs(fd, cells, boxes, count, &original, &original_w, &original_h))
         {
             return;
         }
@@ -511,9 +566,23 @@ namespace
             targets[i].y = cells[i].y;
             targets[i].w = cells[i].w;
             targets[i].h = cells[i].h;
+            targets[i].cellX = boxes[i].x;
+            targets[i].cellY = boxes[i].y;
+        }
+
+        iFontAtlas source;
+        source.coverage = original;
+        source.width = original_w;
+        source.height = original_h;
+
+        if (original != NULL)
+        {
+            iFontDump(face == IFONT_FACE_SANS ? "sans" : "sb", (const char*)a.char_set, count, a.du,
+                      a.dv, targets, &source);
         }
 
         const U8* pixels = NULL;
+        const U8* overlay = NULL;
         S32 width = 0;
         S32 height = 0;
         S32 slotStride = 0;
@@ -521,13 +590,21 @@ namespace
 
         const S32 upscale = iFontUpscale();
 
-        if (!iFontRasterize((const char*)a.char_set, count, a.du, a.dv, targets, upscale,
-                            iFontPadding(), &pixels, &width, &height, &slotStride, &columns))
+        const bool rasterized =
+            iFontRasterize(face, (const char*)a.char_set, count, a.du, a.dv, targets, upscale,
+                           iFontPadding(), original != NULL ? &source : NULL, &pixels, &overlay,
+                           &width, &height, &slotStride, &columns);
+
+        if (rasterized && overlay != NULL)
         {
-            return;
+            printf("bfbb: the overlay says the two letterforms agree over %.0f%% of their ink\n",
+                   (double)iFontOverlayAgreement());
         }
 
-        RwTexture* texture = iFontMakeTexture(pixels, width, height);
+        RwTexture* texture = rasterized ? iFontMakeTexture(pixels, overlay, width, height) : NULL;
+
+        RwFree(original);
+
         if (texture == NULL)
         {
             return;
@@ -630,15 +707,6 @@ namespace
             fd.tex_bounds[tail_index].assign(0, 0, 0, 0);
             fd.bounds[tail_index].assign(0.0f, (F32)-a.baseline / a.dv, 0.0f, 1.0f);
         }
-
-#ifdef PLATFORM_PC
-        // Everything above built the glyph tables from the atlas in the HIP.
-        // If a TrueType file was configured, the same tables are rebuilt from
-        // outlines instead -- see iFont.h for why, and note that it is a LAST
-        // step rather than a branch: the retail path runs in full first, so a
-        // font that fails to load leaves exactly what the console would have.
-        substitute_truetype_font(fd);
-#endif
 
         return true;
     }
@@ -818,6 +886,16 @@ void xfont::init()
 
             if (init_font_data(fd))
             {
+#ifdef PLATFORM_PC
+                // The tables above are built from the atlas in the HIP. If a
+                // TrueType file was configured for this atlas's face, the same
+                // tables are rebuilt from outlines -- see iFont.h for why, and
+                // note that it is a LAST step rather than a branch: the retail
+                // path runs in full first, so a font that fails to load leaves
+                // exactly what the console would have.
+                substitute_truetype_font(fd, font_source[i]);
+#endif
+
                 active_fonts_size++;
             }
         }

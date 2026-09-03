@@ -575,13 +575,50 @@ static void ApplyConfig()
     iLoadScreenSetMinTime(loadSeconds);
     iLoadTransitionSetFancy(fancyLoad);
 
-    // The TrueType font, before RenderWareInit -- xFont builds its glyph
+    // The TrueType fonts, before RenderWareInit -- xFont builds its glyph
     // tables during startup and asks iFont once per font as it goes.
-    // Loading it is only reading the file; nothing is rasterised until the
+    // Loading one is only reading the file; nothing is rasterised until the
     // game says which characters it wants.
     iFontSetUpscale(iConfigGetInt("text.font_upscale", 0));
     iFontSetPadding(iConfigGetFloat("text.font_padding", 0.5f));
-    iFontLoad(iConfigGetString("text.font", ""));
+    iFontSetWeight(IFONT_FACE_SB, iConfigGetFloat("text.font_weight", 0.0f));
+    iFontSetWeight(IFONT_FACE_SANS, iConfigGetFloat("text.font_sans_weight", 0.0f));
+
+    // BFBB_FONTDIFF draws the atlas being replaced over the outline replacing
+    // it, which is how font_padding gets tuned by eye. An environment variable
+    // rather than a setting: it makes the text unreadable on purpose.
+    iFontSetOverlay(getenv("BFBB_FONTDIFF") != NULL);
+
+    // BFBB_FONTDUMP writes each atlas out for tools/fontfit, which sweeps
+    // font_padding and font_weight against it without the game.
+    iFontSetDumpPath(getenv("BFBB_FONTDUMP"));
+
+    const char* sbFont = iConfigGetString("text.font", "");
+    iFontLoad(IFONT_FACE_SB, sbFont);
+
+    // The sans serif is a second file because it is a second typeface. auto
+    // follows the setting above and takes the system's Arial, which is what
+    // that atlas is: the copyright screen and the memory card messages get
+    // sharper without being restyled. With no font above, the port draws what
+    // the console draws.
+    const char* sansFont = iConfigGetString("text.font_sans", "auto");
+    char systemSans[512];
+
+    if (iHostStrCaseCmp(sansFont, "auto") == 0)
+    {
+        sansFont = "";
+
+        if (sbFont[0] != '\0' && iFontSystemSans(systemSans, (S32)sizeof(systemSans)))
+        {
+            sansFont = systemSans;
+        }
+    }
+    else if (iHostStrCaseCmp(sansFont, "off") == 0)
+    {
+        sansFont = "";
+    }
+
+    iFontLoad(IFONT_FACE_SANS, sansFont);
 
     S32 glow = iConfigGetBool("xbox.glow", TRUE);
     S32 distortion = iConfigGetBool("xbox.distortion", TRUE);

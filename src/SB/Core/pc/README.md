@@ -192,6 +192,13 @@ Each is off unless set, and each costs a load per frame when it is.
                         Sounds are read on first play and kept; the cache evicts
                         least-recently-used entries that no voice is playing.
 
+    BFBB_FONTDIFF       the glyph a substituted font replaces, drawn over the
+                        one replacing it: the outline in green, the game's own
+                        atlas in red, yellow where they agree. A coloured fringe
+                        is a letter the substitute sizes differently, which is
+                        what `[text] font_padding` moves. Needs `[text] font`
+                        set, and makes the text unreadable while it is on.
+
     BFBB_TEX            textures that did not convert, with the format that
                         defeated the conversion, and textures a material named
                         that the asset store does not have. A missing asset and

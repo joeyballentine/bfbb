@@ -129,9 +129,24 @@ namespace
           "; the same letterforms from an outline at the size they are actually\n"
           "; drawn at. Layout, spacing, colour and every tag stay the game's.\n"
           ";\n"
+          "; It draws the SpongeBob face and its numerals. The sans serif the\n"
+          "; copyright screen and the memory card messages are in is a different\n"
+          "; typeface and has its own setting below.\n"
+          ";\n"
           "; No font ships with the port. The face the game itself used is\n"
           "; SpongeBoyTT1; any .ttf works. tools/getfont.py fetches one and prints\n"
           "; the line to paste here." },
+        { "text", "font_sans", "auto",
+          "The same, for the sans serif the copyright screen, the memory card\n"
+          "; messages and the controller messages are drawn in.\n"
+          ";\n"
+          "; auto follows the setting above and uses the system's own Arial, which\n"
+          "; is the face that atlas is -- so it sharpens those screens without\n"
+          "; changing what they look like. off leaves them as the game has them,\n"
+          "; and a path names some other .ttf.\n"
+          ";\n"
+          "; The game's small system font is left alone either way: its glyphs are\n"
+          "; hand-pixelled at 6x8, where an outline is not the same thing." },
         { "text", "font_upscale", "0",
           "How many times the game's own cell resolution to draw that font at,\n"
           "; or 0 to match the render size.\n"
@@ -153,6 +168,21 @@ namespace
           "; the whole anti-aliased fringe and the original letter's solid body stops\n"
           "; short of it. An outline drawn to fill the box exactly reads as too\n"
           "; heavy. Larger is smaller letters; negative grows them past the box." },
+        { "text", "font_weight", "0",
+          "How much to thicken that font's strokes, in the game's own atlas\n"
+          "; pixels. 0 draws the face as it is.\n"
+          ";\n"
+          "; The game's atlases are hand-drawn and heavier than most text faces at\n"
+          "; the same size, so a substitute can land the right size and still read\n"
+          "; as too light beside the artwork around it. Try 0.15, and note that a\n"
+          "; heavy setting wants a little more font_padding to sit back in its box.\n"
+          ";\n"
+          "; tools/fontfit measures this against the atlas rather than guessing at\n"
+          "; it -- see src/SB/Core/pc/README.md." },
+        { "text", "font_sans_weight", "0",
+          "The same, for the font_sans face. Separate because the two atlases are\n"
+          "; drawn at different weights: the sans one is the lighter of the two, and\n"
+          "; a substitute for it usually needs nothing." },
         { "text", "platform_wording", "on",
           "Rewrite the Xbox wording in the game's text -- dashboard, memory card\n"
           "; slots -- as it loads. The files on disk are never touched." },

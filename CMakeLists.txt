@@ -460,6 +460,7 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iDrawDist.cpp
   ${PC_DIR}/iFile.cpp
   ${PC_DIR}/iFont.cpp
+  ${PC_DIR}/iFontTexture.cpp
   ${PC_DIR}/iLoadScreen.cpp
   ${PC_DIR}/iLoadTransition.cpp
   ${PC_DIR}/intrin.cpp
@@ -692,6 +693,24 @@ target_include_directories(fps_selftest PRIVATE
 )
 target_compile_options(fps_selftest PRIVATE -Wno-everything)
 add_test(NAME fps_selftest COMMAND fps_selftest)
+
+# --- the font fitter -------------------------------------------------------
+# Sweeps [text] font_padding and font_weight against the atlas a font stands in
+# for, offline. It links iFont.cpp itself rather than bfbb_platform: the point
+# is to run the game's own rasteriser, and only that -- bfbb_platform would
+# bring a renderer, a config file and an audio backend along to answer a
+# question about coverage in a buffer. iFontMakeTexture is the only part that
+# needed RenderWare and it lives in iFontTexture.cpp for this reason.
+add_executable(fontfit ${CMAKE_CURRENT_SOURCE_DIR}/tools/fontfit.cpp ${PC_DIR}/iFont.cpp)
+target_compile_definitions(fontfit PRIVATE PLATFORM_PC)
+target_include_directories(fontfit PRIVATE
+  ${PC_DIR}/compat
+  ${PC_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb
+)
+target_compile_options(fontfit PRIVATE -Wno-everything)
 
 # The other half of the same guarantee. Almost none of the sixty-odd rebased
 # game sites can be reached from a unit test -- they want a scene, a model, a
