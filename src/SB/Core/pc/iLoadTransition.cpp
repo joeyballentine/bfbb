@@ -6,6 +6,9 @@
 #include "iScreen.h"
 #include "iSnapshot.h"
 
+#include "xSnd.h"
+#include "xString.h"
+
 #include <rwcore.h>
 
 namespace
@@ -46,6 +49,15 @@ namespace
     // seconds, well past the end of the wipe.
     const F32 kBubbleInterval = 1.0f / 120.0f;
 
+    // The sound the wall comes in on. `teleport_snd` is one of the nine sounds
+    // in boot.HIP, which is what makes it playable here at all: the wipe runs
+    // between two scenes and a level's own sounds are unloaded with the level.
+    // Nothing else in the game plays it.
+    const char* const kBubbleSound = "teleport_snd";
+
+    // The volume every other game sound effect is played at.
+    const F32 kBubbleSoundVolume = 0.77f;
+
     S32 sFancy;
 
     // The wipe owns the still, and how far through it is.
@@ -61,6 +73,12 @@ namespace
     // And where this frame's bubbles go, in the same terms. The rising wall
     // while it is covering the screen, the still's own edge once it is.
     F32 sBubbleUp;
+
+    // The sound is due on the wipe's first frame rather than at
+    // iLoadTransitionStartWipe: the rest of zSceneInit runs between the two,
+    // and starting it there would put the sound ahead of the bubbles by all of
+    // that work.
+    S32 sSoundDue;
 
     void wipeFinish()
     {
@@ -223,6 +241,7 @@ S32 iLoadTransitionStartWipe()
 
     sWiping = TRUE;
     sWipeElapsed = 0.0f;
+    sSoundDue = TRUE;
 
     // Both below the screen, which is where they start.
     sEdgeUp = -kEdgeFraction;
@@ -252,6 +271,13 @@ S32 iLoadTransitionWipeFrame(F32 dt)
         // release below is what matters.
         wipeFinish();
         return FALSE;
+    }
+
+    if (sSoundDue)
+    {
+        sSoundDue = FALSE;
+        xSndPlay(xStrHash(kBubbleSound), kBubbleSoundVolume, 0.0f, 0x80, 0, 0, SND_CAT_GAME,
+                 0.0f);
     }
 
     sWipeElapsed += dt;
