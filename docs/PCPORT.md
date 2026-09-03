@@ -159,17 +159,19 @@ The pointer-width work splits five ways:
   against a sentinel. **Done for the fields that are dereferenced.**
 - *Asset structs that contain pointers.* Of the 28 types cast straight out of
   asset memory, 24 have no pointer members at all, so their layouts do not move.
-  ATBL, LKIT, CTOC, COLL and the JSP node list are copied at load into
-  allocations laid out for this build's structs -- LKIT and CTOC through
-  `readXForm`, so the asset system hands the transformed object to every caller.
-  **Open: `xCM` and `xMorph`**, which both rewrite pointers into the asset in
-  place; they run only on the credits and on morph sequences.
+  ATBL, LKIT, CTOC, CRDT, COLL, the JSP node list and a morph sequence inside an
+  ANIM asset are copied at load into allocations laid out for this build's
+  structs, all but ATBL and the JSP list through `readXForm`, so the asset
+  system hands the transformed object to every caller. **Done**, with the note
+  that no level in this asset set contains a morph sequence -- 290 ANIM assets
+  in JF01, no MPSQ magic among them -- so that one transform is written from the
+  layout rather than from a run.
 - *Struct declarations mirrored in two headers* -- `zTalkBox` keeps its own copy
   of `xtextbox::layout` and casts to the real one. Counting with `U32` where the
   original counts with `size_t` made the copy 2 KB short, and `refresh()` wrote
   past the end of the object into another translation unit's globals.
-  `static_assert`s hold those two together now. Any other such mirror fails the
-  same silent way. **One found, not swept for.**
+  `static_assert`s hold its five mirrors together now, and `tools/mirrors.py`
+  lists every struct in the tree declared in two places. **Done.**
 
 64-bit on its own buys no extra memory: the reserved-low arena keeps every game
 pointer in the low 4 GB, so the address-space ceiling is where it was. What it

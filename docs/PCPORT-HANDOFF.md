@@ -325,20 +325,20 @@ each found by running it rather than by reading:
   is only ever compared against a sentinel.
 - **Asset structs containing pointers change size.** An asset is laid out for
   the console, so reading it in place through the wider struct walks it at the
-  wrong stride and writes 8 bytes into 4-byte holes. ATBL, LKIT, CTOC, COLL and
-  the JSP node list are copied into allocations laid out for this build's
-  structs; LKIT and CTOC do it through `readXForm`, which is the tidiest place
-  for it -- the asset system hands the transformed object to every caller.
-  **Still unconverted: `xCM` (the credits asset relocates `char*` in place) and
-  `xMorph` (MPSQ rewrites `xMorphFrame`'s pointers in place).** Both only run on
-  the screens that use them.
+  wrong stride and writes 8 bytes into 4-byte holes. ATBL, LKIT, CTOC, CRDT,
+  COLL, the JSP node list and a morph sequence inside an ANIM asset are copied
+  into allocations laid out for this build's structs, most through `readXForm`,
+  which is the tidiest place for it -- the asset system hands the transformed
+  object to every caller. No level in this asset set has a morph sequence (290
+  ANIM assets in JF01, no MPSQ magic among them), so that one transform is
+  written from the layout rather than from a run.
 - **Struct declarations mirrored in two headers.** `zTalkBox` declares its own
   `jot_line` and `layout` and casts `shared.lt` to `xtextbox::layout`. The copy
   counted with `U32` where the real one counts with `size_t`, so it was 2 KB
   short and `refresh()` wrote past the end of `shared` into another translation
-  unit's globals. `static_assert`s now hold the two together. Any other mirror
-  of a struct with a `size_t` or a pointer in it has the same failure mode, and
-  it is silent.
+  unit's globals. `static_assert`s now hold its five mirrors together, and
+  `tools/mirrors.py` lists every struct in the tree declared in two places --
+  twelve, of which only zTalkBox's are cast across.
 
 **64-bit on its own buys no memory.** The reserved-low arena keeps game pointers
 in the low 4 GB, so the ceiling is where it was. What it buys is the toolchain.
