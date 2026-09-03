@@ -3246,8 +3246,27 @@ static void test_snd()
     // itself is tested above.
     iHostSetEnv("BFBB_AUDIO", "0");
 
-    check(sizeof(xSndVoiceInfo) == 100,
-          "xSndVoiceInfo is 100 bytes, as iSndPlay's offset/100 assumes");
+    // Retail turned a voice pointer into an index with offset/100, which is
+    // sizeof(xSndVoiceInfo) on a 32-bit build. The port does it with pointer
+    // arithmetic instead, so what has to hold is the round trip -- and that is
+    // what is checked here, at whatever the struct's size is. The 100 is still
+    // asserted where it is still true, because a 32-bit build that stops
+    // matching retail's layout has changed something it should not have.
+    if (sizeof(void*) == 4)
+    {
+        check(sizeof(xSndVoiceInfo) == 100, "xSndVoiceInfo is 100 bytes, the retail layout");
+    }
+    {
+        bool round_trip = true;
+        for (S32 i = 0; i < (S32)ARRAY_SIZE(gSnd.voice); i++)
+        {
+            if ((S32)(&gSnd.voice[i] - gSnd.voice) != i)
+            {
+                round_trip = false;
+            }
+        }
+        check(round_trip, "a voice pointer turns back into its own index, as iSndPlay needs");
+    }
     check(offsetof(test_lookup, ID) == 0x64, "the lookup id sits at 0x64, where xSnd.cpp reads it");
     check(sizeof(test_sndhdr) == 44, "an Xbox sound table entry is 44 bytes");
     check(offsetof(test_sndinfo, entry) == 12, "the Xbox sound table header is 12 bytes");
