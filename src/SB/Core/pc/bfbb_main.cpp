@@ -266,8 +266,18 @@ namespace
         if (code == EXCEPTION_ACCESS_VIOLATION || code == EXCEPTION_STACK_OVERFLOW ||
             code == EXCEPTION_ILLEGAL_INSTRUCTION || code == EXCEPTION_INT_DIVIDE_BY_ZERO)
         {
-            printf("\nbfbb: first-chance exception 0x%08lx at %p\n",
-                   (unsigned long)code, info->ExceptionRecord->ExceptionAddress);
+            // Module and offset as well as the raw address. The full report
+            // below allocates, and a corrupt heap takes the process down
+            // before it prints; this line is the one that always survives, so
+            // it carries the part a PDB can be pointed at.
+            // GetModuleHandle, not dbghelp: this runs before SymInitialize
+            // and has to work when the report below cannot run at all.
+            DWORD64 address = (DWORD64)(uintptr_t)info->ExceptionRecord->ExceptionAddress;
+            DWORD64 base = (DWORD64)(uintptr_t)GetModuleHandleW(NULL);
+
+            printf("\nbfbb: first-chance exception 0x%08lx at %p  [bfbb.exe+0x%llx]\n",
+                   (unsigned long)code, info->ExceptionRecord->ExceptionAddress,
+                   (unsigned long long)(address - base));
 
             if (code == EXCEPTION_STACK_OVERFLOW)
             {
