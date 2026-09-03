@@ -14,7 +14,18 @@ namespace
     // boundary and lose whichever vertices round the wrong way.
     const F32 kFarPlaneMargin = 0.98f;
 
+    S32 sMenuRope = TRUE;
     S32 sSkyClip = TRUE;
+}
+
+S32 iFixMenuRope()
+{
+    return sMenuRope;
+}
+
+void iFixSetMenuRope(S32 on)
+{
+    sMenuRope = on;
 }
 
 S32 iFixSkyClip()

@@ -70,7 +70,7 @@ were recovered from the `.xbe`.
 | Save sizes in bytes | none | Those screens measured a memory card in 8 KB blocks. There is no card here, so the figures were byte counts with "block(s)" printed after them, which is where "Available Free Block(s): 2147483647 block(s)" came from. Now shown as "348 KB" or "1.5 MB", with the stray label removed. |
 | Custom font | `[text] font`, `font_sans` | The game's fonts are texture atlases authored for 640x480, so above that they are magnified and go soft. Point these at TrueType files and the same text is drawn from outlines at the size it is actually drawn. Layout, spacing and colour stay the game's. No font ships with the port; `tools/getfont.py` fetches one and `tools/fontfit` sizes it against the atlas it replaces. |
 | PC wording | `[text] platform_wording` | The Xbox text is rewritten as it loads, so nothing offers to reboot to the dashboard or calls a save folder a memory card. The files on disc are never touched. |
-| Original-game bugs | `[fixes] sky_clip` | Can be disabled for a more console-accurate experience. |
+| Original-game bugs | `[fixes] menu_rope`, `sky_clip` | Can be disabled for a more console-accurate experience. |
 
 ### Fixed bugs
 

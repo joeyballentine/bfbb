@@ -18,6 +18,22 @@
 // corrected in the sound layer and has no switch: it is a defect with no look
 // to preserve, and nobody wants to hear a level backwards on purpose.
 
+// **The pause menu's bamboo frame has no rope at its corners.**
+//
+// The rope lashing is painted on the ends of the horizontal rails. The vertical
+// stiles sit on the nearer of the frame's two depth planes AND are drawn
+// second, so at each corner they cover the rail's end cap -- and the end cap is
+// the rope. It is not missing art, and it has nothing to do with the render
+// size: the rope was invisible at 640x480 as well.
+//
+// iMenuFrame.cpp rebuilds the mesh anyway, to widen the frame for a screen that
+// is not 4:3, so the fix costs nothing there: it hands each group the other's
+// depth plane and lays the stiles down first. Off restores the original order
+// and depths, and on a 4:3 or pillarboxed screen -- where there is no widening
+// to do either -- leaves the mesh alone entirely.
+S32 iFixMenuRope();
+void iFixSetMenuRope(S32 on);
+
 // **GL03's sky is clipped away whole by the camera's far plane.**
 //
 // A level with fog has its far clip plane at the fog stop, because RenderWare's

@@ -117,6 +117,9 @@ namespace
           "; curves, which hold an ambient near full volume out to its radius -- the\n"
           "; Kelp Forest waterfall is much louder that way -- and which put a centred\n"
           "; sound 3 dB down, which the Xbox does not." },
+        { "fixes", "menu_rope", "on",
+          "Draw the pause menu's bamboo frame so the rope shows at its corners.\n"
+          "; Off is the console's frame, with the corners bare." },
         { "fixes", "sky_clip", "on",
           "Shrink a skydome too big for its level's fog to fit inside the camera.\n"
           "; Off is the console's sky, which in Goo Lagoon's pier is clipped away." },

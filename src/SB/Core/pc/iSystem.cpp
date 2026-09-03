@@ -570,6 +570,7 @@ static void ApplyConfig()
 
     // The original game's bugs, on by default. iFixes.h says what each one is
     // and why it has a switch at all.
+    iFixSetMenuRope(iConfigGetBool("fixes.menu_rope", TRUE));
     iFixSetSkyClip(iConfigGetBool("fixes.sky_clip", TRUE));
 
     // How much slack a stick has. auto is the controller's own -- XInput

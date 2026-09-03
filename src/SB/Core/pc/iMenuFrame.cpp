@@ -3,6 +3,7 @@
 
 #include "iMenuFrame.h"
 
+#include "iFixes.h"
 #include "iScreen.h"
 
 #include <rwcore.h>
@@ -189,9 +190,15 @@ int iMenuFrameWiden(RpAtomic* atomic, float rectWidth)
         extra = 0;
     }
 
-    // Note that zero is not a reason to stop. A 4:3 or pillarboxed screen needs
-    // no extra segments, but it has the same missing rope as every other
-    // screen, and that is worth fixing wherever it shows.
+    // Zero extra segments is not a reason to stop while the corner lashings are
+    // being fixed: a 4:3 or pillarboxed screen needs no extra bamboo, but it has
+    // the same missing rope as every other screen. With that fix off there is
+    // nothing left for the rebuild to do, and the mesh is better left alone.
+    const bool ropeFix = iFixMenuRope() != 0;
+    if (extra == 0 && !ropeFix)
+    {
+        return 0;
+    }
 
     const int railTiles = kRailTiles + 2 * extra;
     const int quads = 2 * (2 + railTiles) + 2 * kStileTiles;
@@ -219,55 +226,70 @@ int iMenuFrameWiden(RpAtomic* atomic, float rectWidth)
 
     const float shift = extra * period;
 
-    // The two depths the frame is drawn on. The stiles are on the nearer one
-    // AND are drawn second, so they beat the rails twice over; the rebuild
-    // hands each plane to the other group so the rails come forward. These are
-    // the art's own numbers rather than an invented offset, and the shear at
-    // this scale moves a quad by well under a pixel for the difference between
-    // them.
+    // The two depths the frame is drawn on. Retail puts the stiles on the nearer
+    // one AND draws them second, so they beat the rails twice over: at each
+    // corner the stile covers the rail's end cap, and the end cap is where the
+    // rope lashing is painted. The fix hands each plane to the other group and
+    // lays the stiles down first, so the lashing lands on top, which is what the
+    // texture was drawn for. These are the art's own numbers rather than an
+    // invented offset, and the shear at this scale moves a quad by well under a
+    // pixel for the difference between them.
     const float nearZ = sp[kStileL + kBL].z;
     const float farZ = sp[kTopCapL + kBL].z;
 
-    // THE STILES FIRST, and this order is the point of it.
-    //
-    // Retail draws the rails before the stiles, so at each corner the stile
-    // covers the rail's end cap -- and the end cap is where the rope lashing is
-    // painted, which is why the corners of the frame have no rope on them. It
-    // is not missing art. Putting the stiles down first and the rails over them
-    // lets the lashing land on top, which is what the texture was drawn for.
-    for (int i = 0; i < kStileTiles; i++)
-    {
-        b.shifted(&sp[kStileL + i * 4], &su[kStileL + i * 4], -shift, farZ);
-    }
+    const float stileZ = ropeFix ? farZ : nearZ;
+    const float railZ = ropeFix ? nearZ : farZ;
 
-    for (int i = 0; i < kStileTiles; i++)
-    {
-        b.shifted(&sp[kStileR + i * 4], &su[kStileR + i * 4], shift, farZ);
-    }
-
-    // Then the two rails, each a cap, the tiles, and the other cap. The tiles
-    // are laid on the same grid the original ones were, so a widened rail is
-    // indistinguishable from the one the artist drew except for being longer.
-    const int caps[2][3] = { { kTopCapL, kTopTiles, kTopCapR }, { kBotCapL, kBotTiles, kBotCapR } };
-
-    for (int rail = 0; rail < 2; rail++)
-    {
-        const int capL = caps[rail][0];
-        const int tile = caps[rail][1];
-        const int capR = caps[rail][2];
-
-        const float left = sp[capL + kBL].x - shift;
-
-        b.quad(&sp[capL], &su[capL], left, nearZ);
-
-        for (int i = 0; i < railTiles; i++)
+    // Each stile moves outward without changing shape.
+    const auto stiles = [&]() {
+        for (int i = 0; i < kStileTiles; i++)
         {
-            const float x = left + (i + 1) * period;
-            b.quad(&sp[tile], &su[tile], x, nearZ);
+            b.shifted(&sp[kStileL + i * 4], &su[kStileL + i * 4], -shift, stileZ);
         }
 
-        const float right = left + (railTiles + 1) * period;
-        b.quad(&sp[capR], &su[capR], right, nearZ);
+        for (int i = 0; i < kStileTiles; i++)
+        {
+            b.shifted(&sp[kStileR + i * 4], &su[kStileR + i * 4], shift, stileZ);
+        }
+    };
+
+    // Each rail is a cap, the tiles, and the other cap. The tiles are laid on
+    // the same grid the original ones were, so a widened rail is
+    // indistinguishable from the one the artist drew except for being longer.
+    const auto rails = [&]() {
+        const int caps[2][3] = { { kTopCapL, kTopTiles, kTopCapR },
+                                 { kBotCapL, kBotTiles, kBotCapR } };
+
+        for (int rail = 0; rail < 2; rail++)
+        {
+            const int capL = caps[rail][0];
+            const int tile = caps[rail][1];
+            const int capR = caps[rail][2];
+
+            const float left = sp[capL + kBL].x - shift;
+
+            b.quad(&sp[capL], &su[capL], left, railZ);
+
+            for (int i = 0; i < railTiles; i++)
+            {
+                const float x = left + (i + 1) * period;
+                b.quad(&sp[tile], &su[tile], x, railZ);
+            }
+
+            const float right = left + (railTiles + 1) * period;
+            b.quad(&sp[capR], &su[capR], right, railZ);
+        }
+    };
+
+    if (ropeFix)
+    {
+        stiles();
+        rails();
+    }
+    else
+    {
+        rails();
+        stiles();
     }
 
     // Colours, if the format asked for them: white, because the frame is lit by
@@ -300,9 +322,8 @@ int iMenuFrameWiden(RpAtomic* atomic, float rectWidth)
     // sphere it is culled against has to know.
     RpAtomicSetGeometry(atomic, dst, 0);
 
-    printf("bfbb: menu frame rebuilt: %d extra segment(s) each side, %d quads, "
-           "corner lashings brought forward\n",
-           extra, quads);
+    printf("bfbb: menu frame rebuilt: %d extra segment(s) each side, %d quads%s\n", extra, quads,
+           ropeFix ? ", corner lashings brought forward" : "");
     fflush(stdout);
     return 1;
 }
