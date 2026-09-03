@@ -55,7 +55,7 @@ were recovered from the `.xbe`.
 | UI anchoring | `[video] ui` | The HUD either stays in a centred 4:3 box as the console drew it, or moves out to the real screen edges. |
 | Field of view | `[video] fov` | Widens or narrows the camera from the game's own 75 degrees. Applied as a difference, so the cutscene cameras and the Cruise Bubble's zoom keep their relative angles. |
 | Frame rate and vsync | `[video] framerate`, `vsync` | Any rate, the monitor's refresh rate, or uncapped. The port runs one simulation step per frame, so this is the speed of the game as well as the picture. `docs/UNCAPPED.md` lists what was converted off a per-frame rate and what has not been swept yet. |
-| Antialiasing | `[video] msaa`, `alpha_to_coverage` | MSAA, plus alpha-to-coverage for the alpha-tested edges MSAA cannot touch: foliage, fences, grates, cave walls. |
+| Antialiasing | `[video] msaa` | Multi-Sample Anti-Aliasing |
 | Per-pixel lighting | `[video] per_pixel_lighting` | Sums the lights per pixel instead of per vertex, so curved surfaces on low-polygon models stop shading in flat facets. Affects characters and objects; the level's lighting is baked into its vertex colours and does not change. |
 | Shadow resolution | `[video] shadow_resolution` | Character shadows scale with the render size instead of staying at the consoles' 256 pixels. |
 | Draw distance | `[video] draw_distance` | Drops the per-object cull distance, the low-detail swap and the 400-unit world clip. Affects what is drawn, not what is simulated, and not fog. |
@@ -83,11 +83,13 @@ Two bugs in the original game that the port fixes instead of copying:
   swaps the two depths and draws the vertical poles first. This has nothing to do
   with the render size. The rope was invisible at 640x480 as well.
 
-## You need your own copy
+## Getting the assets
 
 No assets are included. The port reads the **Xbox** release's files, which you
-extract yourself. Put the folder with `boot.HIP`, `fmv/`, `hb/` and so on in
-`config.ini`:
+extract yourself (i.e. out of a disc image with an Xbox
+ISO extractor such as [extract-xiso](https://github.com/XboxDev/extract-xiso)).
+The path has to name the folder that DIRECTLY contains `boot.HIP`, `font.HIP`,
+`fmv/`, `hb/`, etc, not a folder above it and not the image:
 
 ```ini
 [assets]
@@ -96,9 +98,9 @@ path = D:\path\to\extracted\xbox\game
 
 The game writes that file with the defaults the first time it runs, so start it
 once, fill the path in, and start it again. Backslashes or forward slashes both
-work, and a path with spaces in it needs no quotes.
+work, and a path with spaces in it does not need quotes.
 
-GameCube and PS2 assets do not work.
+As of right now, GameCube and PS2 assets do not work.
 
 If the folder is wrong or only partly extracted, the game prints an error and
 exits before the window opens. It tells you the path it looked in and whether
@@ -106,74 +108,145 @@ exits before the window opens. It tells you the path it looked in and whether
 
 ## Building
 
-Windows only right now. Two renderers build: D3D9, which is the default, and
-OpenGL 3.3 on SDL3 with `-DBFBB_RENDER_BACKEND=GL3`. The GL build is the one
-that can eventually run elsewhere; nothing else in the port is ported off
-Windows yet, so it does not today.
+Windows only (for now). The output is a 32-bit executable, which the game's data layouts
+require (see the comment above `BFBB_BUILD_32BIT` in `CMakeLists.txt`).
 
-You need:
+Start to finish: install the tools, clone with submodules, optionally install
+FFmpeg and libusb, run `build-release.bat`, point `bin\config.ini` at your Xbox
+files, run `bin\bfbb.exe`.
 
-- clang targeting `i386-pc-windows-msvc`, plus the MSVC toolchain and Windows SDK
-  it links against. The port is 32-bit and that isn't negotiable (see the comment
-  above `add_compile_options(-m32)` in `CMakeLists.txt`).
-- CMake 3.16+ and Ninja.
-- The submodules: `git submodule update --init --recursive`. That is librw,
-  which the renderer is, and SDL, which is the window, the controllers, the
-  keyboard and the audio device. Neither is optional.
+### 1. Install the tools
 
-Then:
+| Tool | Why | Where |
+| --- | --- | --- |
+| Visual Studio 2019+ with the "Desktop development with C++" workload | clang links against the MSVC libraries and the Windows SDK. The IDE is never used; [Build Tools](https://visualstudio.microsoft.com/downloads/) alone is enough. The workload must include the x86 (32-bit) toolchain, which it does by default. | Microsoft |
+| clang for Windows | The compiler. Put `clang++` on `PATH`. Built and tested with clang 16. | [LLVM releases](https://github.com/llvm/llvm-project/releases), or the "C++ Clang tools for Windows" component of the VS installer |
+| CMake 3.16 or newer | The build system. | [cmake.org](https://cmake.org/download/) |
+| Ninja | The generator. Put `ninja` on `PATH`. | [ninja-build releases](https://github.com/ninja-build/ninja/releases) |
+| Git | For the clone and the submodules. | [git-scm.com](https://git-scm.com/) |
+| Python 3 (optional) | `tools/*.py` and the `fpsdep` test. Nothing needs it to produce the executable. | [python.org](https://www.python.org/) |
 
-```sh
-cmake -S . -B build-pc -G Ninja -DCMAKE_CXX_COMPILER=clang++
-cmake --build build-pc
-```
+`clang++ --version`, `cmake --version` and `ninja --version` all have to answer
+before anything below works. You do not need to run `vcvarsall` yourself:
+`build-release.bat` finds Visual Studio with `vswhere` and enters the x86
+environment itself.
 
-Run it:
-
-```sh
-build-pc\bfbb.exe
-```
-
-The first run writes a `config.ini` beside the executable and stops, because
-there is nowhere to read the game's files from yet. Put your asset folder in it
-as shown above, then run it again. See **Settings** below for the rest.
-
-`BFBB_ASSETS` overrides `[assets] path` when it is set, which is how to run a
-build against a second extraction without editing anything.
-
-### Movies (optional)
-
-FMV needs FFmpeg, and it has to be a 32-bit build with headers and import libs.
-That's the annoying part: most prebuilt Windows FFmpeg is x64 only these days.
-[vcpkg](https://github.com/microsoft/vcpkg) will build one:
+### 2. Get the source
 
 ```sh
-vcpkg install "ffmpeg[core,avcodec,avformat,swresample,swscale]:x86-windows"
+git clone --recurse-submodules -b treedome https://github.com/joeyballentine/bfbb.git
+cd bfbb
 ```
 
-Then add `-DCMAKE_PREFIX_PATH=<vcpkg>/installed/x86-windows` to the cmake line.
-The DLLs get copied next to the exe automatically.
-
-Skip it if you don't care. CMake prints `FMV decoder: none` and the game just
-advances past movies as if they'd played.
-
-### Switch 2 controllers (optional)
-
-Five controllers are readable only over raw USB: the Switch 2 Pro controller,
-its two Joy-Cons, the Switch 2 GameCube controller and the original GameCube
-adapter. SDL drives those through libusb, which vcpkg will build:
+Already cloned without them:
 
 ```sh
-vcpkg install libusb:x86-windows
+git submodule update --init --recursive
 ```
 
-Same `-DCMAKE_PREFIX_PATH` as above, and `libusb-1.0.dll` is copied next to the
-exe automatically. Nothing is installed on the player's machine. Those pads are
+The submodules are librw, which is the renderer, and SDL, which is the window,
+the controllers, the keyboard and the audio device. Neither is optional and
+neither is vendored, so a setup without `third_party/librw` or `third_party/SDL`
+will not configure.
+
+### 3. Optional dependencies
+
+Both are found at configure time. Install them before the first build, or
+delete the build directory afterwards so CMake looks again.
+
+**FFmpeg** decodes the startup videos and any replacement soundtrack in a
+format other than WAVE. It has to be a 32-bit build with headers and import
+libraries, which most prebuilt Windows FFmpeg is not any more. vcpkg builds one:
+
+```sh
+git clone https://github.com/microsoft/vcpkg %USERPROFILE%\vcpkg
+%USERPROFILE%\vcpkg\bootstrap-vcpkg.bat
+%USERPROFILE%\vcpkg\vcpkg install "ffmpeg[core,avcodec,avformat,swresample,swscale]:x86-windows"
+```
+
+**libusb** is what SDL reads five controllers through: the Switch 2 Pro
+controller, its two Joy-Cons, the Switch 2 GameCube controller and the original
+GameCube adapter. Nothing is installed on the player's machine; those pads are
 composite devices whose USB interface already carries Microsoft OS descriptors,
 so Windows binds it itself and their HID interface is left alone.
 
-Skip it and every other controller still works. Those five report themselves as
-devices with no layout, which the game says at startup.
+```sh
+%USERPROFILE%\vcpkg\vcpkg install libusb:x86-windows
+```
+
+`build-release.bat` looks in `%USERPROFILE%\vcpkg\installed\x86-windows` and
+uses whatever is there. Set `BFBB_VCPKG` if your vcpkg is somewhere else. The
+DLLs are copied next to the executable automatically.
+
+Skipping FFmpeg is a supported configuration: CMake prints `FMV decoder: none`
+and the game advances past movies as if they had played. Skipping libusb leaves
+every other controller working; those five report themselves as devices with no
+layout, which the game says at startup.
+
+### 4. Build
+
+```sh
+build-release.bat
+```
+
+This is the main build script. It enters the 32-bit MSVC environment, configures
+`build-release\`, builds, and puts `bfbb.exe` and the DLLs it needs in `bin\`.
+`build-debug.bat` does the same into `build-debug\` and is unoptimised and slow.
+Both take a render backend as their one argument:
+
+| Backend | What it is |
+| --- | --- |
+| `D3D9` | Direct3D 9, on a Win32 window the port creates. The default, and the only one with the Xbox glow and the cruise-bubble effects. |
+| `GL3` | OpenGL 3.3 on an SDL3 window, falling back through 2.1, GLES 3.1 and GLES 2.0. The backend that can eventually run off Windows. It is missing many ported xbox features. |
+| `NULL` | No renderer. Headless, and what the self-tests run against. |
+
+```sh
+build-release.bat GL3
+```
+
+The build directory is per configuration, not per backend: `build-release.bat
+GL3` reconfigures `build-release\` and rebuilds it, because the backend is baked
+into the CMake cache and into librw's compile definitions. Every build writes
+into `bin\` and overwrites the previous files. `bin\BUILD-INFO.txt` says which config and
+backend is sitting there.
+
+To configure by hand instead, from an x86 developer command prompt:
+
+```sh
+cmake -S . -B build-pc -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++
+cmake --build build-pc
+```
+
+Add `-DBFBB_RENDER_BACKEND=GL3` for the OpenGL build and
+`-DCMAKE_PREFIX_PATH=%USERPROFILE%/vcpkg/installed/x86-windows` for FFmpeg and
+libusb. `-m32` is set by `CMakeLists.txt` before `project()` and is not
+something to pass yourself. This leaves the executable in `build-pc\`; add
+`-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=<repo>/bin` to put it where the scripts do.
+
+### 5. Run it
+
+```sh
+bin\bfbb.exe
+```
+
+The first run writes `bin\config.ini` with every setting at its default, then
+stops with an error box, because there is nowhere to read the game's files from
+yet. Put your Xbox asset folder in it as shown in **Getting the assets**
+above, and run it again. `BFBB_ASSETS` overrides `[assets] path` when it is set,
+which is how to run a build against a second extraction without editing
+anything.
+
+### When it fails
+
+| Symptom | Cause |
+| --- | --- |
+| `lld-link: error: <root>: undefined symbol: mainCRTStartup` at configure time | The MSVC environment is x64. Use `build-release.bat`, or open an x86 developer command prompt. |
+| `ERROR: clang++ is not on PATH` | clang is not installed, or its `bin` directory is not on `PATH`. |
+| `ERROR: no Visual Studio installation found` | No VS, or no `vswhere.exe`. Install the C++ Build Tools. |
+| `third_party/librw is empty` | The submodules were not cloned. `git submodule update --init --recursive`. |
+| `FMV decoder: none` when you installed FFmpeg | The build directory was configured before the install. Delete `build-release\` and build again. |
+| Switching `BFBB_BUILD_32BIT` does nothing | `CMAKE_CXX_FLAGS_INIT` is read once, when the language is enabled. Configure a fresh directory. |
+| The game starts and the window is blank | Almost always the asset path. The startup check catches a missing `FONT.HIP` or `boot.HIP`, but not a folder holding the wrong extraction. |
 
 ## Settings
 
@@ -202,46 +275,6 @@ Three things `config.ini` cannot tell you:
 `src/SB/Core/pc/README.md` documents the platform layer interface by interface
 and lists the `BFBB_*` build switches.
 
-## Checking a change
-
-The port shares source with the GameCube build, so first question is always
-whether you broke the decomp:
-
-```sh
-python tools/gcgate.py     # DOL sha1 and matched function count, both must PASS
-```
-
-Then the port's own checks:
-
-```sh
-ctest --test-dir build-pc --output-on-failure
-python tools/pclink.py
-python tools/pcprogress.py --drift --m32 --cc clang++
-```
-
-`ctest` runs four: `pc_selftest` over the platform layer, `rw_selftest` against
-a live librw engine, `fps_selftest` over the rate helpers, and `fpsdep`, a
-static sweep for code that measures time in frames. That last one fails on
-anything not in `tools/fpsdep.json`, so a new per-frame rate in shared code has
-to be read and either fixed or recorded.
-
-Edits to shared code go inside `#ifdef PLATFORM_PC` with the original expression
-kept in the `#else`, unless you've actually measured that the unguarded version
-still matches.
-
-## State of things
-
-Working: rendering, world, characters, animation, collision, audio, music,
-input, saves, HUD, menus, movies, loading screen. Widescreen works throughout,
-including the camera, the HUD and the menus.
-
-Not done: this is still Windows only -- the OpenGL renderer builds and runs,
-but the input, audio, movie and host layers underneath it are Win32. Two effects
-are D3D9-only and go quiet under GL3: the Xbox glow and the cruise-bubble screen
-warp, both for want of a way to sample the frame buffer. The frame rate is a setting rather than
-a cap now, but the sweep behind it is not finished -- `docs/UNCAPPED.md` says
-what is still keyed to a frame count. The rest is a lot of smaller things. Individual source files have their own
-notes on what is wrong and why, which are more useful than a list here.
 
 ## Credit
 
