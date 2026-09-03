@@ -14,6 +14,7 @@
 
 #include <types.h>
 
+#include "iBoot.h"
 #include "iConfig.h"
 #include "iDrawDist.h"
 #include "iFile.h"
@@ -672,6 +673,34 @@ static void test_drawdist()
     // than being left where a later test would find it surprising.
     iDrawDistSetUnlimited(FALSE);
     check(iDrawDistFarClip() == 400.0f, "and it can be set back");
+}
+
+static void test_boot()
+{
+    printf("iBoot\n");
+
+    check(iBootScene()[0] == '\0', "no boot scene until something sets one");
+    check(iBootIntroMovies() == TRUE, "and the logos play");
+
+    iBootSetScene("jf01");
+    check(strcmp(iBootScene(), "jf01") == 0, "a four-character id is taken");
+
+    // A scene id is four characters and nothing checks that again downstream:
+    // zMainReadINI copies it into globals.sceneStart and zMainLoop packs the
+    // first four bytes into a tag, so a short one would pack whatever follows
+    // it in the buffer and a long one would silently lose its tail. Both then
+    // reach xSTPreLoadScene, whose load loop has no exit and nobody to return
+    // a failure to.
+    iBootSetScene("jellyfish fields");
+    check(iBootScene()[0] == '\0', "a name that is not an id is refused, not truncated");
+    iBootSetScene("jf");
+    check(iBootScene()[0] == '\0', "and so is a short one");
+    iBootSetScene("");
+    check(iBootScene()[0] == '\0', "empty means the menu");
+
+    iBootSetIntroMovies(FALSE);
+    check(iBootIntroMovies() == FALSE, "the logos can be turned off");
+    iBootSetIntroMovies(TRUE);
 }
 
 // A TEXT asset, as the packer hands one to zAssetTypes.cpp: the string, in a
@@ -4131,6 +4160,7 @@ int main()
     test_config();
     test_screen();
     test_drawdist();
+    test_boot();
     test_textpatch();
 
     test_time();

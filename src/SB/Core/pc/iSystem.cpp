@@ -1,4 +1,5 @@
 #include "iSystem.h"
+#include "iBoot.h"
 #include "iConfig.h"
 #include "iDrawDist.h"
 #include "iFile.h"
@@ -541,6 +542,13 @@ static void ApplyConfig()
     S32 drawDistance = iConfigGetBool("video.draw_distance", TRUE);
     iDrawDistSetUnlimited(drawDistance);
     iCameraSetNearFarClip(0.0f, iDrawDistFarClip());
+
+    // Which scene the game starts in, and whether the logos play. Pushed here
+    // so that zMainReadINI can read SB.INI first and let this win: the port
+    // keeps retail's switch and adds a per-instance one beside it. iBoot.h
+    // says why one file cannot do both jobs.
+    iBootSetScene(iConfigGetString("game.boot", ""));
+    iBootSetIntroMovies(iConfigGetBool("game.intro_movies", TRUE));
 
     // Where the music may be replaced from. Pushed rather than read, like the
     // text patch: nothing under here knows what config.ini is. The folder is

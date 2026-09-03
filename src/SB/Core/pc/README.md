@@ -34,6 +34,31 @@ at load rather than ignored.
                         that never loads and used to look like a hang on a blank
                         window. iFileAssetRoot is where the answer is resolved.
 
+    [game]              Where the game starts.
+
+    boot                Empty by default, which is the main menu. A four-
+                        character scene id -- jf01, b302, hb01 -- starts the
+                        game in that scene with no input and nothing before it,
+                        so the player is whoever the level defaults to and the
+                        cutscene that would have led into it is skipped. A bug
+                        in a scene's own load, setup or reset is reproducible
+                        that way in about twenty seconds; a bug in the
+                        transition into it still needs the real route. soak
+                        leaves the game playing itself at the menu.
+
+                        SB.INI's `BOOT=` does the same job and still works.
+                        This one exists because SB.INI lives with the assets,
+                        so every copy of the game on the machine reads the one
+                        file; config.ini is chosen per instance with
+                        `BFBB_CONFIG`, so two instances can boot into two
+                        different levels. It is read after SB.INI and wins over
+                        it. iBoot.h has the account.
+
+    intro_movies        On by default. The Nickelodeon, THQ and RenderWare
+                        logos on the way to the title screen. They are
+                        skippable with a button on the console, but only once
+                        each has started.
+
     [video]             The size the game renders at, and how it is presented.
                         The two are independent: the picture is scaled onto
                         whatever surface it lands on at present time, so the
@@ -119,7 +144,8 @@ at load rather than ignored.
 `SB.INI` is a different file and stays retail's: `zMainReadINI` reads it for
 PATH and BOOT, through the game's own `xIni` parser, and that parser allocates
 through RenderWare -- so it cannot answer a question asked before the engine
-exists, which is most of these. `iConfig.h` has the long version.
+exists, which is most of these. `iConfig.h` has the long version. `[game] boot`
+is the one setting the two files both answer, and config.ini wins.
 
 Adding a setting means one entry in `iConfig.cpp`'s settings table. That table
 is the default, the list of names a typo is checked against, and what the

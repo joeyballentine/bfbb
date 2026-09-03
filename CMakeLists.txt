@@ -456,6 +456,7 @@ target_compile_options(bfbb_rw PRIVATE -Wno-everything)
 # before it exists would make this build fail rather than under-report, which
 # is the right way round.
 add_library(bfbb_platform STATIC
+  ${PC_DIR}/iBoot.cpp
   ${PC_DIR}/iConfig.cpp
   ${PC_DIR}/iDrawDist.cpp
   ${PC_DIR}/iFile.cpp
@@ -827,6 +828,7 @@ endif()
 enable_testing()
 
 add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
+  ${PC_DIR}/iBoot.cpp
   ${PC_DIR}/iConfig.cpp
   ${PC_DIR}/iDrawDist.cpp
   ${PC_DIR}/iFile.cpp

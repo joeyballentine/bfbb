@@ -63,6 +63,7 @@ void zAssetShutdown();
 #include "xstransvc.h"
 
 #ifdef PLATFORM_PC
+#include "iBoot.h"
 #include "iTextPatch.h"
 
 #include <string.h>
@@ -936,6 +937,32 @@ void zMainReadINI()
         zUI_ParseINI(ini);
         xIniDestroy(ini);
     }
+
+#ifdef PLATFORM_PC
+    // config.ini's [game] boot=, after SB.INI so that it wins, and outside the
+    // block above so that it works with no SB.INI at all. Already validated --
+    // iBoot.h.
+    {
+        const char* boot = iBootScene();
+
+        if (boot[0] != '\0')
+        {
+            if (xStricmp(boot, "soak") == 0)
+            {
+                // The soak test plays the game from the menu, so this one
+                // names a scene without skipping anything. SB.INI's BOOT=soak
+                // is the same three lines.
+                gSoak = 1;
+                strcpy(globals.sceneStart, "mnu3");
+            }
+            else
+            {
+                strcpy(globals.sceneStart, boot);
+                sShowMenuOnBoot = 0;
+            }
+        }
+    }
+#endif
 
     iTime tim = iTimeGet();
     __FUNCTION__; // stands in for the (NDEBUG'd) load-timing report; retail's object

@@ -30,6 +30,10 @@
 #include "zMusic.h"
 #include "zSaveLoad.h"
 
+#ifdef PLATFORM_PC
+#include "iBoot.h"
+#endif
+
 bool menu_fmv_played;
 
 // These three are declared here rather than beside time_elapsed and holdTmr
@@ -152,9 +156,17 @@ U32 zMenuLoop()
                 break;
             case 3:
                 draw_black = 1;
-                zFMVPlay(zFMVFileGetName(eFMVFile_LogoNick), 0x10000, 2.0f, 1, 0);
-                zFMVPlay(zFMVFileGetName(eFMVFile_LogoTHQ), 0x10000, 2.0f, 1, 0);
-                zFMVPlay(zFMVFileGetName(eFMVFile_LogoRW), 0x10000, 2.0f, 1, 0);
+#ifdef PLATFORM_PC
+                // config.ini's game.intro_movies. The screen is already black
+                // and the fade below still runs, so skipping them lands on the
+                // title exactly as playing them does.
+                if (iBootIntroMovies())
+#endif
+                {
+                    zFMVPlay(zFMVFileGetName(eFMVFile_LogoNick), 0x10000, 2.0f, 1, 0);
+                    zFMVPlay(zFMVFileGetName(eFMVFile_LogoTHQ), 0x10000, 2.0f, 1, 0);
+                    zFMVPlay(zFMVFileGetName(eFMVFile_LogoRW), 0x10000, 2.0f, 1, 0);
+                }
                 holdTmr = 10.0f;
                 zGameModeSwitch(eGameMode_Title);
                 zGameStateSwitch(1);

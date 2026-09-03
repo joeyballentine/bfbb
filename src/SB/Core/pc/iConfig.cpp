@@ -66,6 +66,11 @@ namespace
         { "assets", "path", "",
           "Folder holding boot.HIP, FONT.HIP and fmv/. Empty means the folder the\n"
           "; game was started from. BFBB_ASSETS overrides this." },
+        { "game", "boot", "",
+          "Start straight in this scene, skipping the menu: a four-character scene\n"
+          "; id, e.g. jf01. Empty starts at the menu. Overrides SB.INI's BOOT=." },
+        { "game", "intro_movies", "on",
+          "Play the Nickelodeon, THQ and RenderWare logos before the title screen." },
         { "video", "mode", "fullscreen",
           "How the picture is presented: fullscreen, borderless, windowed." },
         { "video", "width", "640", "Render width in pixels." },
