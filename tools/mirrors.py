@@ -92,7 +92,9 @@ def main():
 
     print('\n%d duplicated definition%s' % (reported, '' if reported == 1 else 's'))
     print('A DIFFERENT pair is only a bug if something casts one to the other.')
-    print('Where it does, hold the two together with a static_assert on sizeof.')
+    print('The fix is to use the one type; a static_assert on sizeof holds a')
+    print('pair that has to stay separate. Matching is on the bare name, so a')
+    print('name nested in two different structs shows up here and is fine.')
     return 0
 
 

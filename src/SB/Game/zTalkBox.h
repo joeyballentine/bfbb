@@ -9,6 +9,7 @@
 #include "xCamera.h"
 #include "zCutsceneMgr.h"
 #include "xSnd.h"
+#include "xTextAsset.h"
 
 struct ztalkbox : xBase
 {
@@ -183,6 +184,21 @@ namespace
         Q_YESNO
     };
 
+    // The text-box types themselves, not copies of them. zTextBox.h already
+    // pulls in xFont.h, and a second declaration of a struct is checked against
+    // nothing: zTalkBox's copy of layout counted with U32 where xtextbox counts
+    // with size_t, which made it 2 KB short at 64 bits and let refresh() write
+    // past the end of shared.
+    typedef xtextbox::callback callback;
+    typedef xtextbox::split_tag split_tag;
+    typedef xtextbox::tag_type tag_type;
+    typedef xtextbox::jot jot;
+    typedef xtextbox::jot_line jot_line;
+    typedef xtextbox::layout layout;
+    typedef xtextbox::tag_entry tag_entry;
+    typedef xtextbox::tag_entry_list tag_entry_list;
+    typedef ::xTextAsset xTextAsset;
+
     struct state_type
     {
         state_enum type;
@@ -227,96 +243,6 @@ namespace
         virtual void stop();
         virtual state_enum update(xScene& scn, F32 dt);
     };
-    struct jot;
-    struct callback
-    {
-        void (*render)(jot&, xtextbox&, F32, F32);
-        void (*layout_update)(jot&, xtextbox&, xtextbox&);
-        void (*render_update)(jot&, xtextbox&, xtextbox&);
-    };
-
-    struct split_tag
-    {
-        substr tag;
-        substr name;
-        substr action;
-        substr value;
-    };
-
-    struct tag_type
-    {
-        substr name;
-        void (*parse_tag)(jot&, xtextbox&, xtextbox&, split_tag&);
-        void (*reset_tag)(jot&, xtextbox&, xtextbox&, split_tag&);
-        void* context;
-    };
-
-    struct jot
-    {
-        substr s;
-
-        struct
-        {
-            // Offset: 0x8
-            bool invisible : 1; // bit 24
-            bool ethereal : 1; // bit 25
-            bool merge : 1; // bit 26
-            bool word_break : 1; // bit 27
-            bool word_end : 1; // bit 28
-            bool line_break : 1; // bit 29
-            bool stop : 1; // bit 30
-            bool tab : 1; // bit 31
-
-            // Offset: 0x9
-            bool insert : 1; // bit 24
-            bool dynamic : 1; // bit 25
-            bool page_break : 1; // bit 26
-            bool stateful : 1; // bit 27
-            U16 dummy : 4; // bits 28-31
-        } flag;
-        // Offset: 0xC
-        U16 context_size;
-
-        // Offset: 0x10
-        void* context;
-        basic_rect<F32> bounds;
-        basic_rect<F32> render_bounds;
-        callback* cb;
-        tag_type* tag;
-
-        void intersect_flags(const jot& other);
-        void reset_flags();
-    };
-
-    // This and the layout below stand in for xtextbox::jot_line and
-    // xtextbox::layout, and zTalkBox.cpp casts shared.lt to the real thing --
-    // so every member has to be the same width as the one it mirrors. The
-    // counts are size_t there, which is the same 4 bytes as a U32 only while a
-    // pointer is 4; where it is 8 the mirror was 2 KB short and refresh() wrote
-    // past the end of shared.
-    struct jot_line
-    {
-        basic_rect<F32> bounds;
-        F32 baseline;
-        size_t first;
-        size_t last;
-        U8 page_break;
-    };
-
-    struct layout
-    {
-        xtextbox tb;
-        jot _jots[512]; // 0x68
-        size_t _jots_size; // 0x7068
-        jot_line _lines[128]; // 0x706C
-        size_t _lines_size; // 0x806C
-        U8 context_buffer[1024]; // 0x8070
-        size_t context_buffer_size; // 0x8470
-        U16 dynamics[64]; // 0x8474
-        size_t dynamics_size; // 0x84F4
-        //refresh(d.tb, false)
-    };
-
     struct wait_context
     {
         struct
@@ -417,25 +343,6 @@ namespace
         xVec3 loc; // offset 0x4, size 0xC
         float yaw; // offset 0x10, size 0x4
     };
-    struct tag_entry
-    {
-        // total size: 0x14
-        substr name; // offset 0x0, size 0x8
-        char op; // offset 0x8, size 0x1
-        substr* args; // offset 0xC, size 0x4
-        size_t args_size; // offset 0x10, size 0x4
-    };
-    struct tag_entry_list
-    {
-        // total size: 0x8
-        tag_entry* entries; // offset 0x0, size 0x4
-        size_t size; // offset 0x4, size 0x4
-    };
-    struct xTextAsset
-    {
-        U32 len; // offset 0x0, size 0x4
-    };
-
     struct signal_context
     {
         // total size: 0x4
