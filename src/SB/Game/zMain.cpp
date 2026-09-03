@@ -62,6 +62,12 @@ void zAssetShutdown();
 #include "iTime.h"
 #include "xstransvc.h"
 
+#ifdef PLATFORM_PC
+#include "iTextPatch.h"
+
+#include <string.h>
+#endif
+
 static const basic_rect<F32> screen_bounds = { 0.0f, 0.0f, 1.0f, 1.0f };
 
 zGlobals globals;
@@ -945,7 +951,11 @@ void zMainFirstScreen(S32 mode)
     RwCamera* cam = iCameraCreate(xScreenWidth(), xScreenHeight(), 0);
     RwRGBA bg = {};
     S32 i;
+#ifndef GAMECUBE
+    iTime start;
+#else
     S32 vbl;
+#endif
 
     for (i = 0; i < 2; i++)
     {
@@ -954,7 +964,13 @@ void zMainFirstScreen(S32 mode)
 
         if (mode)
         {
+#ifdef PLATFORM_PC
+            // Longer than retail's, which is the notice exactly: the line the
+            // port swaps in below does not fit the one it replaces.
+            char text[632] =
+#else
             char text[617] =
+#endif
                 "Game and Software \xa9 2003 THQ Inc. \xa9 2003 Viacom International Inc. All "
                 "rights reserved.\n"
                 "\n"
@@ -970,6 +986,27 @@ void zMainFirstScreen(S32 mode)
                 "owners.\n"
                 "\n"
                 "Licensed by Nintendo";
+
+#ifdef PLATFORM_PC
+            // Nobody licensed this one. It belongs to the same rewrite that
+            // takes the console out of the game's text and answers to the same
+            // switch, but this string is code rather than a TEXT asset, so
+            // iTextPatch never sees it and the swap is done here.
+            //
+            // It is also the only replacement that GROWS. The asset rules may
+            // not -- they run in place over the archive's own bytes -- which is
+            // the other reason this one cannot be a rule.
+            if (iTextPatchEnabled())
+            {
+                char* licence = strstr(text, "Licensed by Nintendo");
+
+                if (licence != NULL)
+                {
+                    strcpy(licence, "Experimental and unofficial PC port");
+                }
+            }
+#endif
+
             iColor_tag color = { 255, 230, 0, 200 };
             xtextbox tb = xtextbox::create(
                 xfont::create(1, NSCREENX(19.0f), NSCREENY(22.0f), 0.0f, color, screen_bounds),
@@ -987,12 +1024,31 @@ void zMainFirstScreen(S32 mode)
         RwCameraShowRaster(cam, NULL, 1);
     }
 
+#ifndef GAMECUBE
+    // 180 fields, which is three seconds of a console's 60 Hz. The port's frame
+    // rate is a setting, so counting frames holds this for three quarters of a
+    // second at 240 and a fifth of one at 900 -- the screen a player is meant
+    // to be able to read goes by too fast to see. Wait for the time instead,
+    // and go on presenting while it passes.
+    //
+    // Both arguments: the one-argument iTimeDiffSec converts a DURATION to
+    // seconds, so passing a timestamp to it returns the same number every time
+    // round and the loop never ends.
+    start = iTimeGet();
+
+    while (iTimeDiffSec(start, iTimeGet()) < 3.0f)
+    {
+        iTRCDisk::CheckDVDAndResetState();
+        iVSync();
+    }
+#else
     vbl = 180;
     while (--vbl)
     {
         iTRCDisk::CheckDVDAndResetState();
         iVSync();
     }
+#endif
 
     iCameraDestroy(cam);
 }
