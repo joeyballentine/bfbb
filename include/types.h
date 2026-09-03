@@ -61,6 +61,16 @@ typedef uintptr_t UPtr;
 typedef intptr_t SPtr;
 #endif
 
+// Set when a pointer is 8 bytes. Only for code that cannot be written once for
+// both widths -- an asset whose on-disk layout has 4-byte slots where the
+// runtime wants pointers, which has to be walked differently rather than
+// adjusted. `sizeof(void*) == 8` says the same thing but is not a
+// preprocessor constant, and the point of the macro is that the 32-bit build
+// must not even see the other path.
+#if defined(_WIN64) || defined(__LP64__) || defined(_LP64)
+#define BFBB_PTR64 1
+#endif
+
 #ifdef NULL
 #undef NULL
 #endif

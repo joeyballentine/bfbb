@@ -506,11 +506,13 @@ xAnimFile* xAnimFileNewBilinear(void** rawData, const char* name, U32 flags, xAn
     xAnimFile* afile;
     if (gxAnimUseGrowAlloc)
     {
-        afile = (xAnimFile*)xMemGrowAlloc(gActiveHeap, numX * numY * 4 + sizeof(xAnimFile));
+        afile = (xAnimFile*)xMemGrowAlloc(gActiveHeap,
+                                          numX * numY * sizeof(void*) + sizeof(xAnimFile));
     }
     else
     {
-        afile = (xAnimFile*)xMemAlloc(gActiveHeap, numX * numY * 4 + sizeof(xAnimFile), 0);
+        afile = (xAnimFile*)xMemAlloc(gActiveHeap,
+                                      numX * numY * sizeof(void*) + sizeof(xAnimFile), 0);
     }
 
     if (numX > 1 || numY > 1)
@@ -2106,7 +2108,7 @@ void xAnimPoolInit(xMemPool* pool, U32 count, U32 singles, U32 blendFlags, U32 e
     play->NumSingle = singles;
 
     xAnimSingle* currsingle;
-    play->Single = currsingle = (xAnimSingle*)((U32)(UPtr)play + sizeof(xAnimPlay));
+    play->Single = currsingle = (xAnimSingle*)((UPtr)play + sizeof(xAnimPlay));
     currsingle += singles;
 
     for (i = 0; i < singles; ++i)

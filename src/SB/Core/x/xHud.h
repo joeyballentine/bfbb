@@ -16,7 +16,7 @@ namespace xhud
         // The free list is threaded through the free blocks themselves: each
         // one begins with a pointer to the next free block, and alloc() hands
         // back the memory just past that pointer. This is why _block_size is
-        // the caller's size rounded up, PLUS four.
+        // the caller's size rounded up to a pointer, PLUS one pointer.
         struct holder
         {
             holder* _next;

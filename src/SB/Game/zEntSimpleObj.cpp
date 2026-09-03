@@ -44,7 +44,7 @@ void zEntSimpleObj_MgrInit(zEntSimpleObj** entList, U32 entCount)
     sSimpleCustomList = NULL;
     if (entCount != 0)
     {
-        tempEntList = (zEntSimpleObj**)RwMalloc(entCount * 4);
+        tempEntList = (zEntSimpleObj**)RwMalloc(entCount * sizeof(zEntSimpleObj*));
         tempEntCount = 0;
         custEntCount = 0;
         trailerHash = xStrHash("trailer_hitch\0xEntAutoEventSimple");
@@ -93,7 +93,8 @@ void zEntSimpleObj_MgrInit(zEntSimpleObj** entList, U32 entCount)
         if (custEntCount != 0)
         {
             sSimpleCustomCount = custEntCount;
-            sSimpleCustomList = (xEnt**)xMemAlloc(gActiveHeap, custEntCount * 4, 0);
+            sSimpleCustomList =
+                (xEnt**)xMemAlloc(gActiveHeap, custEntCount * sizeof(xEnt*), 0);
             for (i = 0; i < custEntCount; i++)
             {
                 sSimpleCustomList[i] = (xEnt*)tempEntList[(entCount - 1) - i];

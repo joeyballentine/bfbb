@@ -979,7 +979,7 @@ void xEntMotionDebugInit(U16 num_xems)
     {
         xDebugModeAdd("DBG_XENTMOTION", xEntMotionDebugCB);
         dbg_num = 0;
-        dbg_xems = (xEntMotion**)xMemAlloc(gActiveHeap, num_xems << 2, 0);
+        dbg_xems = (xEntMotion**)xMemAlloc(gActiveHeap, num_xems * sizeof(xEntMotion*), 0);
         dbg_num_allocd = num_xems;
         dbg_idx = 0;
     }

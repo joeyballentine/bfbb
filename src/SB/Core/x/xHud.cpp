@@ -69,7 +69,7 @@ namespace xhud
 
     block_allocator::block_allocator(U32 a0, U32 a1)
     {
-        _block_size = ALIGN(a0, 4) + 4;
+        _block_size = ALIGN(a0, sizeof(holder)) + sizeof(holder);
         _top = NULL;
         _next_alloc = _head_alloc;
         _head_alloc = this;
@@ -84,8 +84,8 @@ namespace xhud
     void block_allocator::size_reserve(U32 size)
     {
         holder* block = (holder*)xMemAllocSize(size);
-        holder* end = (holder*)(UPtr)((U32)(UPtr)block + size);
-        for (; block < end; block = (holder*)(UPtr)((U32)(UPtr)block + _block_size))
+        holder* end = (holder*)((UPtr)block + size);
+        for (; block < end; block = (holder*)((UPtr)block + _block_size))
         {
             block->_next = _top;
             _top = block;
@@ -188,7 +188,7 @@ namespace xhud
         data.eventFunc = cb_dispatch;
         if (data.linkCount != 0)
         {
-            data.link = (xLinkAsset*)(UPtr)((U32)(UPtr)&asset + chunk_size);
+            data.link = (xLinkAsset*)((UPtr)&asset + chunk_size);
         }
     }
 

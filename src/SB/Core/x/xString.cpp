@@ -110,8 +110,12 @@ char* xStrTokBuffer(const char* string, const char* control, void* buffer)
     U8* str;
     U8* ctrl;
     U8 map[32];
+    // sizeof(char*), not 4: the head of the caller's buffer holds this
+    // tokeniser's saved cursor, written below through `*(char**)buffer`. Four
+    // bytes is exactly that pointer on the GameCube and half of it on a 64-bit
+    // host, where the other half lands on top of the token's first characters.
     char* dest = (char*)buffer;
-    dest += 4;
+    dest += sizeof(char*);
 
     for (S32 i = 0; i < 32; i++)
     {
@@ -156,7 +160,7 @@ char* xStrTokBuffer(const char* string, const char* control, void* buffer)
         return NULL;
     }
 
-    return (char*)buffer + 4;
+    return (char*)buffer + sizeof(char*);
 }
 
 #define XSTR_UPPER(c) ((c) >= 'a' && (c) <= 'z' ? (c)-32 : (c))
