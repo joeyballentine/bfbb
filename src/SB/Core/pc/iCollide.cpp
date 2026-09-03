@@ -458,10 +458,10 @@ static RpCollisionTriangle* sphereHitsEnv3CB(RpIntersection* isx, RpWorldSector*
     }
     else
     {
-        colls[idx].oid = tri->index;
+        colls[idx].oid = (U32)tri->index;
     }
 
-    colls[idx].tri.index = tri->index;
+    colls[idx].tri.index = (U32)tri->index;
     if (cbnumcs == cbmaxcs)
     {
         return NULL;
@@ -524,7 +524,7 @@ static RpCollisionTriangle* sphereHitsEnv4CB(RpIntersection* isx, RpWorldSector*
     c->norm.x = tri->normal.x;
     c->norm.y = tri->normal.y;
     c->norm.z = tri->normal.z;
-    c->tri.index = tri->index;
+    c->tri.index = (U32)tri->index;
     c->flags |= 1;
 
     if (sCollidingJSP != NULL && JSPTri(tri)->flags & 0x10)
@@ -542,7 +542,7 @@ static RpCollisionTriangle* sphereHitsEnv4CB(RpIntersection* isx, RpWorldSector*
     }
     else
     {
-        c->oid = tri->index;
+        c->oid = (U32)tri->index;
     }
 
     return tri;
@@ -582,12 +582,12 @@ static RpCollisionTriangle* rayHitsEnvCB(RpIntersection* isx, RpWorldSector* sec
     }
     else
     {
-        colls->oid = tri->index;
+        colls->oid = (U32)tri->index;
     }
 
     colls->dist = dist;
     colls->flags |= 1;
-    colls->tri.index = tri->index;
+    colls->tri.index = (U32)tri->index;
     if (colls->flags & 0x200)
     {
         colls->norm = *(xVec3*)&tri->normal;
@@ -617,12 +617,12 @@ RpCollisionTriangle* rayHitsEnvBackwardCB(RpIntersection* isx, RpWorldSector* se
     }
     else
     {
-        colls->oid = tri->index;
+        colls->oid = (U32)tri->index;
     }
 
     colls->dist = dist;
     colls->flags |= 1;
-    colls->tri.index = tri->index;
+    colls->tri.index = (U32)tri->index;
 
     return tri;
 }

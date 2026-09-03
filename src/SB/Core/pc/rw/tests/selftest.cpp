@@ -1864,7 +1864,7 @@ static void test_geometry()
 struct IsxLog
 {
     int calls;
-    RwInt32 lastIndex;
+    RwIntPtr lastIndex;
     RwReal lastDistance;
     RwV3d lastVertex0;
     RwV3d lastNormal;

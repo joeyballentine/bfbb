@@ -47,6 +47,42 @@ xClumpCollBSPTree* xClumpColl_StaticBufferInit(void* data, U32)
     U32* header = (U32*)data;
     U32 numBranchNodes = header[1];
     U32 numTriangles = header[2];
+#ifdef BFBB_PTR64
+    // A triangle is 8 bytes on disk -- a 4-byte union, then flags, platData and
+    // a U16 material index -- and 16 bytes here, because the union also holds an
+    // RwV3d*. The branch nodes are four 4-byte fields and do not move, so they
+    // are still read straight out of the asset; the triangles are widened into
+    // the tree's own allocation, once, rather than teaching every reader the
+    // on-disk stride. xJSP_Destroy's RwFree(colltree) frees both.
+    xClumpCollBSPTree* tree = (xClumpCollBSPTree*)RwMalloc(
+        sizeof(xClumpCollBSPTree) + numTriangles * sizeof(xClumpCollBSPTriangle));
+    xClumpCollBSPTriangle* triangles = (xClumpCollBSPTriangle*)(tree + 1);
+    const U8* diskTri;
+
+    if (numBranchNodes)
+    {
+        tree->branchNodes = (xClumpCollBSPBranchNode*)(header + 3);
+        diskTri = (const U8*)(tree->branchNodes + numBranchNodes);
+    }
+    else
+    {
+        tree->branchNodes = NULL;
+        diskTri = (const U8*)(header + 3);
+    }
+
+    for (U32 i = 0; i < numTriangles; i++)
+    {
+        const U8* rec = diskTri + i * 8;
+        triangles[i].v.p = NULL;
+        triangles[i].v.i.atomIndex = *(const U16*)(rec + 0);
+        triangles[i].v.i.meshVertIndex = *(const U16*)(rec + 2);
+        triangles[i].flags = rec[4];
+        triangles[i].platData = rec[5];
+        triangles[i].matIndex = *(const U16*)(rec + 6);
+    }
+
+    tree->triangles = triangles;
+#else
     xClumpCollBSPTree* tree = (xClumpCollBSPTree*)RwMalloc(sizeof(xClumpCollBSPTree));
 
     if (numBranchNodes)
@@ -59,6 +95,7 @@ xClumpCollBSPTree* xClumpColl_StaticBufferInit(void* data, U32)
         tree->branchNodes = NULL;
         tree->triangles = (xClumpCollBSPTriangle*)(header + 3);
     }
+#endif
 
     tree->numBranchNodes = numBranchNodes;
     tree->numTriangles = numTriangles;
@@ -690,7 +727,7 @@ static S32 LeafNodeLinePolyIntersect(xClumpCollBSPTriangle* triangles, void* dat
                 RwV3d vTmp, vTmp2;
                 F32 recipLength, lengthSq;
                 collisionTri.point = *v0;
-                collisionTri.index = (RwInt32)(UPtr)triangles;
+                collisionTri.index = (RwIntPtr)triangles;
                 collisionTri.vertices[0] = v0;
                 collisionTri.vertices[1] = v1;
                 collisionTri.vertices[2] = v2;
@@ -738,7 +775,7 @@ static S32 LeafNodeSpherePolyIntersect(xClumpCollBSPTriangle* triangles, void* d
                                              &distance))
             {
                 collisionTri.point = *v0;
-                collisionTri.index = (RwInt32)(UPtr)triangles;
+                collisionTri.index = (RwIntPtr)triangles;
                 collisionTri.vertices[0] = v0;
                 collisionTri.vertices[1] = v1;
                 collisionTri.vertices[2] = v2;
@@ -780,7 +817,7 @@ static S32 LeafNodeBoxPolyIntersect(xClumpCollBSPTriangle* triangles, void* data
                 RwV3d vTmp, vTmp2;
 
                 collisionTri.point = *v0;
-                collisionTri.index = (RwInt32)(UPtr)triangles;
+                collisionTri.index = (RwIntPtr)triangles;
                 RwV3dSubMacro(&vTmp, v1, v0);
                 RwV3dSubMacro(&vTmp2, v2, v0);
                 RwV3dCrossProductMacro(&collisionTri.normal, &vTmp, &vTmp2);

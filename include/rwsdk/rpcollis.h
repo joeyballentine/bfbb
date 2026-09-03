@@ -42,7 +42,10 @@ struct RpCollisionTriangle
 {
     RwV3d normal;
     RwV3d point;
-    RwInt32 index;
+    /* An index into the sector's polygons on the world path, and a pointer to
+       the triangle's xClumpCollBSPTriangle record on the JSP path -- see the
+       JSPTri macro in iCollide.cpp. RwIntPtr so the pointer survives. */
+    RwIntPtr index;
     RwV3d* vertices[3];
 };
 

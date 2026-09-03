@@ -69,6 +69,16 @@ typedef long RwFixed;
 typedef int RwInt32;
 typedef unsigned int RwUInt32;
 
+/* An integer wide enough to hold a pointer. RwInt32 on the console and on any
+   32-bit host, so nothing about the shipping build changes. The condition is
+   spelled out rather than taken from types.h because these headers are also
+   parsed on their own, without it. */
+#if defined(_WIN64) || defined(__LP64__) || defined(_LP64)
+typedef long long RwIntPtr;
+#else
+typedef RwInt32 RwIntPtr;
+#endif
+
 typedef short RwInt16;
 typedef unsigned short RwUInt16;
 typedef unsigned char RwUInt8;
