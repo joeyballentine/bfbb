@@ -170,8 +170,10 @@ The pointer-width work splits five ways:
   of `xtextbox::layout` and casts to the real one. Counting with `U32` where the
   original counts with `size_t` made the copy 2 KB short, and `refresh()` wrote
   past the end of the object into another translation unit's globals.
-  `static_assert`s hold its five mirrors together now, and `tools/mirrors.py`
-  lists every struct in the tree declared in two places. **Done.**
+  zTalkBox uses xtextbox's own types now -- zTextBox.h already includes xFont.h,
+  so the copies were never needed -- and `tools/mirrors.py` lists every struct
+  in the tree declared in two places. The seven that remain are each used only
+  in the file that declares them. **Done.**
 
 64-bit on its own buys no extra memory: the reserved-low arena keeps every game
 pointer in the low 4 GB, so the address-space ceiling is where it was. What it

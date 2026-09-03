@@ -332,13 +332,14 @@ each found by running it rather than by reading:
   object to every caller. No level in this asset set has a morph sequence (290
   ANIM assets in JF01, no MPSQ magic among them), so that one transform is
   written from the layout rather than from a run.
-- **Struct declarations mirrored in two headers.** `zTalkBox` declares its own
-  `jot_line` and `layout` and casts `shared.lt` to `xtextbox::layout`. The copy
+- **Struct declarations mirrored in two headers.** `zTalkBox` declared its own
+  `jot_line` and `layout` and cast `shared.lt` to `xtextbox::layout`. The copy
   counted with `U32` where the real one counts with `size_t`, so it was 2 KB
   short and `refresh()` wrote past the end of `shared` into another translation
-  unit's globals. `static_assert`s now hold its five mirrors together, and
-  `tools/mirrors.py` lists every struct in the tree declared in two places --
-  twelve, of which only zTalkBox's are cast across.
+  unit's globals. zTalkBox uses xtextbox's own types now: zTextBox.h already
+  includes xFont.h, so the copies bought nothing. `tools/mirrors.py` lists
+  every struct in the tree declared in two places -- seven left, each used
+  only in the file that declares it.
 
 **64-bit on its own buys no memory.** The reserved-low arena keeps game pointers
 in the low 4 GB, so the ceiling is where it was. What it buys is the toolchain.
