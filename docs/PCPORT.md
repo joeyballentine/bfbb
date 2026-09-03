@@ -134,31 +134,44 @@ Tooling exists — Industrial Park handles HIP/HOP across platforms.
 Recording these now so nobody rediscovers them at phase 4.
 
 **Pointer width.** Xbox is 32-bit x86, and asset-overlaid structs assume 4-byte
-pointers. 32-bit is still the default for that reason, but the tree now also
-compiles and links 64-bit (`-DBFBB_BUILD_32BIT=OFF`, or `build-release.bat D3D9
-x64`), 198/198 units either way.
+pointers. 32-bit is still the default for that reason, but the tree also builds
+64-bit (`-DBFBB_BUILD_32BIT=OFF`, or `build-release.bat D3D9 x64`), 198/198
+units either way, and the 64-bit build boots JF01 and plays.
 
-Measured 2026-09-02, the pointer-width work splits three ways:
+The pointer-width work splits five ways:
 
 - *Round-trip arithmetic*, about 140 sites: `(U32)ptr + n` cast back to a
   pointer inside one expression, and `RwRenderStateSet(state, (void*)value)`.
   These go through `UPtr` (include/types.h), which is `U32` on the GameCube, so
   nothing there changes. **Done.**
-- *Pointers parked in 32-bit fields that persist* -- `xSndVoiceInfo::parentID`,
-  `xModel::shadowID`, xMorph's asset list, `xClumpColl`'s triangle index, xCM's
-  text1/text2, zAssetTypes' RawData. These keep their value only while every
-  pointer stored that way is below 4 GB. `iMemMgr.cpp` reserves the game arena
-  there deliberately; **librw does not** -- `iSystem.cpp` hands `RwEngineInit` a
-  NULL memory-function table, so RenderWare allocates with `malloc` and can
-  return a high pointer. Giving it a low arena closes this class. **Open.**
-- *Asset structs that contain pointers* -- the invasive one, and it is small. Of
-  the 28 types cast straight out of asset memory, 24 have no pointer members at
-  all, so their layouts do not move. The ones that do are `xAnimTable`,
-  `xAnimAssetFile`, `xCurveAsset`, `xLightKit`, `zFragProjectileAsset` and
-  `zFragParticleAsset`, plus the in-place relocation in xCM and zAssetTypes.
-  Each needs a 32-bit on-disk mirror converted at load. **Open.**
+- *Allocation arithmetic that says 4 where it means `sizeof(void*)`* -- an array
+  of pointers sized `count << 2`, `xHud`'s block allocator adding 4 for its
+  header. Invisible to the compiler at either width. **Done.**
+- *Pointers parked in 32-bit fields that persist.* These keep their value only
+  while every pointer stored that way is below 4 GB. `iMemMgr.cpp` reserves the
+  game arena there deliberately; **librw does not** -- `iSystem.cpp` hands
+  `RwEngineInit` a NULL memory-function table, so RenderWare allocates with
+  `malloc` and can return a high pointer. The fields that hold a RenderWare
+  pointer are widened for that reason: `xShadowSimpleCache::raster`,
+  `xSndVoiceInfo::parentID` and `RpCollisionTriangle::index`, which is an index
+  into the sector's polygons on the world path and a triangle pointer on the
+  JSP path. `xModel::shadowID` still truncates one, and is only ever compared
+  against a sentinel. **Done for the fields that are dereferenced.**
+- *Asset structs that contain pointers.* Of the 28 types cast straight out of
+  asset memory, 24 have no pointer members at all, so their layouts do not move.
+  ATBL, LKIT, CTOC, COLL and the JSP node list are copied at load into
+  allocations laid out for this build's structs -- LKIT and CTOC through
+  `readXForm`, so the asset system hands the transformed object to every caller.
+  **Open: `xCM` and `xMorph`**, which both rewrite pointers into the asset in
+  place; they run only on the credits and on morph sequences.
+- *Struct declarations mirrored in two headers* -- `zTalkBox` keeps its own copy
+  of `xtextbox::layout` and casts to the real one. Counting with `U32` where the
+  original counts with `size_t` made the copy 2 KB short, and `refresh()` wrote
+  past the end of the object into another translation unit's globals.
+  `static_assert`s hold those two together now. Any other such mirror fails the
+  same silent way. **One found, not swept for.**
 
-64-bit on its own buys no extra memory: the first two classes keep every game
+64-bit on its own buys no extra memory: the reserved-low arena keeps every game
 pointer in the low 4 GB, so the address-space ceiling is where it was. What it
 buys is the toolchain -- x64 vcpkg and FFmpeg, x64 drivers, no x86 vcvars.
 

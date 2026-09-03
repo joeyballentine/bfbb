@@ -308,24 +308,40 @@ links at both widths: 198/198 units with and without `--m32`, and
 `build-release.bat D3D9 x64` produces a PE32+ executable. All three selftests
 pass 64-bit.
 
-That is a compile-and-link result, not a played-through one. Three things still
-tie the game to 32 bits:
+The 64-bit build boots JF01 and plays. Getting there took four classes of fix,
+each found by running it rather than by reading:
 
-- **Pointers stored in `U32` fields survive only below 4 GB.** `iMemInit`
-  reserving its arena there is the design rather than a hedge, and it covers
-  everything the game allocator hands out. It does not cover librw, which
-  `iSystem.cpp` starts with a NULL memory-function table, so RenderWare
-  allocates with `malloc` -- and `xShadowSimple` puts an `RwRaster*` in
-  `xModel::shadowID`. Giving `RwEngineInit` a low arena closes this; the shim's
-  own selftest already proves the hook works.
-- **Asset structs containing pointers change size.** Of the 28 types cast
-  straight out of asset memory, 24 have no pointer members and do not move. The
-  ones that do are `xAnimTable`, `xAnimAssetFile`, `xCurveAsset`, `xLightKit`,
-  `zFragProjectileAsset` and `zFragParticleAsset`, plus the in-place relocation
-  in `xCM` and `zAssetTypes`. Each needs a 32-bit on-disk mirror converted at
-  load.
-- **64-bit on its own buys no memory.** Both points above keep game pointers in
-  the low 4 GB, so the ceiling is where it was. What it buys is the toolchain.
+- **Allocation arithmetic that says 4 where it means `sizeof(void*)`.** No
+  compiler warns about `count << 2` for an array of pointers. `xHud`'s block
+  allocator had it in its header size, so its blocks overlapped each other.
+- **Pointers parked in 32-bit fields.** These survive only below 4 GB.
+  `iMemInit` reserves its arena there and that covers everything the game
+  allocator hands out, but not librw: `iSystem.cpp` starts it with a NULL
+  memory-function table, so RenderWare allocates with `malloc`. The fields that
+  hold a RenderWare pointer are widened instead --
+  `xShadowSimpleCache::raster`, `xSndVoiceInfo::parentID` and
+  `RpCollisionTriangle::index`, which is an index on the world path and a
+  triangle pointer on the JSP path. `xModel::shadowID` still truncates one; it
+  is only ever compared against a sentinel.
+- **Asset structs containing pointers change size.** An asset is laid out for
+  the console, so reading it in place through the wider struct walks it at the
+  wrong stride and writes 8 bytes into 4-byte holes. ATBL, LKIT, CTOC, COLL and
+  the JSP node list are copied into allocations laid out for this build's
+  structs; LKIT and CTOC do it through `readXForm`, which is the tidiest place
+  for it -- the asset system hands the transformed object to every caller.
+  **Still unconverted: `xCM` (the credits asset relocates `char*` in place) and
+  `xMorph` (MPSQ rewrites `xMorphFrame`'s pointers in place).** Both only run on
+  the screens that use them.
+- **Struct declarations mirrored in two headers.** `zTalkBox` declares its own
+  `jot_line` and `layout` and casts `shared.lt` to `xtextbox::layout`. The copy
+  counted with `U32` where the real one counts with `size_t`, so it was 2 KB
+  short and `refresh()` wrote past the end of `shared` into another translation
+  unit's globals. `static_assert`s now hold the two together. Any other mirror
+  of a struct with a `size_t` or a pointer in it has the same failure mode, and
+  it is silent.
+
+**64-bit on its own buys no memory.** The reserved-low arena keeps game pointers
+in the low 4 GB, so the ceiling is where it was. What it buys is the toolchain.
 
 `CMakeLists.txt` defaults to `-m32` and `pcprogress.py` measures with it. Keep
 the two in step -- they have disagreed before, and §3 says what that cost.
