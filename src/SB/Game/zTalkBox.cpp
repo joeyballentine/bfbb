@@ -49,6 +49,19 @@ static_assert(sizeof(ztalkbox::asset_type) == 0x48, "talk box asset layout");
 namespace
 {
     shared_type shared;
+
+#ifdef PLATFORM_PC
+    // shared.lt is cast to an xtextbox::layout below. The two are separate
+    // declarations of the same object, so a divergence is silent -- refresh()
+    // simply writes past the end of shared and into whatever the linker put
+    // there.
+    static_assert(sizeof(layout) == sizeof(xtextbox::layout),
+                  "zTalkBox's layout no longer matches xtextbox::layout");
+    static_assert(sizeof(jot_line) == sizeof(xtextbox::jot_line),
+                  "zTalkBox's jot_line no longer matches xtextbox::jot_line");
+    static_assert(sizeof(jot) == sizeof(xtextbox::jot),
+                  "zTalkBox's jot no longer matches xtextbox::jot");
+#endif
     static void update_prompt_status(F32 dt);
     static void update_quit_status(F32 dt);
     static void stop();

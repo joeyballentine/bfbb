@@ -288,12 +288,18 @@ namespace
         void reset_flags();
     };
 
+    // This and the layout below stand in for xtextbox::jot_line and
+    // xtextbox::layout, and zTalkBox.cpp casts shared.lt to the real thing --
+    // so every member has to be the same width as the one it mirrors. The
+    // counts are size_t there, which is the same 4 bytes as a U32 only while a
+    // pointer is 4; where it is 8 the mirror was 2 KB short and refresh() wrote
+    // past the end of shared.
     struct jot_line
     {
         basic_rect<F32> bounds;
         F32 baseline;
-        U32 first;
-        U32 last;
+        size_t first;
+        size_t last;
         U8 page_break;
     };
 
@@ -301,13 +307,13 @@ namespace
     {
         xtextbox tb;
         jot _jots[512]; // 0x68
-        U32 _jots_size; // 0x7068
+        size_t _jots_size; // 0x7068
         jot_line _lines[128]; // 0x706C
-        U32 _lines_size; // 0x806C
+        size_t _lines_size; // 0x806C
         U8 context_buffer[1024]; // 0x8070
-        U32 context_buffer_size; // 0x8470
+        size_t context_buffer_size; // 0x8470
         U16 dynamics[64]; // 0x8474
-        U32 dynamics_size; // 0x84F4
+        size_t dynamics_size; // 0x84F4
         //refresh(d.tb, false)
     };
 
