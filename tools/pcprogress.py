@@ -107,16 +107,24 @@ def compile_one(path, cc=None, extra=()):
     return path, r.returncode == 0, r.stderr
 
 
-# Casting a pointer to U32/S32. On the GameCube a pointer is 32 bits and this
-# is exact; on an LP64 host it truncates, and the game does it constantly --
-# every asset-overlaid struct addresses memory with U32. This is the open
-# question in docs/PCPORT.md's "Asset caveats", not a defect to fix unit by unit, so
-# it gets its own line rather than being mixed in with real porting work.
+# Casting between a pointer and U32/S32. On the GameCube a pointer is 32 bits
+# and this is exact; on an LP64 host it truncates, and the game does it
+# constantly. It gets its own line rather than being mixed in with real porting
+# work, because it is one decision (see docs/PCPORT.md, "Asset caveats") and not
+# a defect to fix unit by unit.
+#
+# BOTH directions, which is the correction: matching only pointer-to-int
+# reported 28 units as "needs other work" whose every error was in fact
+# int-to-pointer, and made the 64-bit build look far harder than it is.
 # g++:   cast from 'void*' to 'U32' loses precision
+#        cast to pointer from integer of different size
 # clang: cast to smaller integer type 'unsigned int' from 'void *'
+#        cast to 'void *' from smaller integer type 'U32'
 POINTER_WIDTH = re.compile(
     r"cast from .*[*].* to .* loses precision"
-    r"|cast to smaller integer type .* from .*[*]")
+    r"|cast to smaller integer type .* from .*[*]"
+    r"|cast to '[^']*[*]' from smaller integer type"
+    r"|cast to pointer from integer of different size")
 
 
 def all_errors(stderr):
