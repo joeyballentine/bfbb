@@ -272,10 +272,15 @@ endif()
 # window belongs to librw and iWindowSDL.cpp only holds the request until
 # RwEngineStart asks for it.
 #
-# One file serves both. It creates an SDL window under D3D9 and reads the HWND
-# out of it, and holds the request under GL3; the pump, the pacer and the close
-# button are the same either way and used to be written twice.
-if(BFBB_RENDER_BACKEND STREQUAL "GL3" OR BFBB_RENDER_BACKEND STREQUAL "D3D9")
+# One file serves both. It creates an SDL window under either D3D backend and
+# reads the HWND out of it, and holds the request under GL3; the pump, the
+# pacer and the close button are the same either way and used to be written
+# twice.
+#
+# Every backend that draws gets one, rather than a list to keep in step with
+# iWindowSDL.cpp -- which splits on RW_GL3 and treats everything else as the
+# HWND case. NULL is the only one that goes without.
+if(NOT BFBB_RENDER_BACKEND STREQUAL "NULL")
   set(WINDOW_SOURCES ${PC_DIR}/iWindowSDL.cpp)
   set(WINDOW_LIBS SDL3::SDL3-static)
   set(BFBB_NEEDS_SDL ON)
