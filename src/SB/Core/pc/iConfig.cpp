@@ -183,26 +183,30 @@ namespace
           ";\n"
           "; A sharpness setting, not a taste one: a glyph lands in exactly the box\n"
           "; the artwork had it in whatever this is, so it cannot move anything." },
-        { "text", "font_padding", "0.5",
+        { "text", "font_padding", "auto",
           "How far to inset a glyph inside that box, in the game's own atlas\n"
-          "; pixels.\n"
+          "; pixels, or auto to measure it.\n"
           ";\n"
           "; The box is measured by testing for any non-zero alpha, so it includes\n"
           "; the whole anti-aliased fringe and the original letter's solid body stops\n"
           "; short of it. An outline drawn to fill the box exactly reads as too\n"
-          "; heavy. Larger is smaller letters; negative grows them past the box." },
-        { "text", "font_weight", "0",
+          "; heavy. Larger is smaller letters; negative grows them past the box.\n"
+          ";\n"
+          "; auto tries every inset that is distinct at the size the text is being\n"
+          "; drawn at and keeps the one whose letters land on the most of the same\n"
+          "; pixels as the game's own." },
+        { "text", "font_weight", "auto",
           "How much to thicken that font's strokes, in the game's own atlas\n"
-          "; pixels. 0 draws the face as it is.\n"
+          "; pixels, or auto to measure it. 0 draws the face as it is.\n"
           ";\n"
           "; The game's atlases are hand-drawn and heavier than most text faces at\n"
           "; the same size, so a substitute can land the right size and still read\n"
-          "; as too light beside the artwork around it. Try 0.15, and note that a\n"
-          "; heavy setting wants a little more font_padding to sit back in its box.\n"
+          "; as too light beside the artwork around it.\n"
           ";\n"
-          "; tools/fontfit measures this against the atlas rather than guessing at\n"
-          "; it -- see src/SB/Core/pc/README.md." },
-        { "text", "font_sans_weight", "0",
+          "; auto sweeps it together with font_padding and prints what it picked,\n"
+          "; so a font drops in without being tuned by hand. tools/fontfit runs the\n"
+          "; same sweep outside the game -- see src/SB/Core/pc/README.md." },
+        { "text", "font_sans_weight", "auto",
           "The same, for the font_sans face. Separate because the two atlases are\n"
           "; drawn at different weights: the sans one is the lighter of the two, and\n"
           "; a substitute for it usually needs nothing." },

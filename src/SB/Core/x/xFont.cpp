@@ -525,7 +525,9 @@ namespace
     // letters at four times the cell resolution instead.
     void substitute_truetype_font(font_data& fd, iFontFace face)
     {
-        if (!iFontAvailable(face))
+        // The dump runs with no font configured: it is what tools/fontfit reads
+        // to fit one, so needing a fitted font to produce it would be circular.
+        if (!iFontAvailable(face) && !iFontDumpWanted())
         {
             return;
         }
@@ -581,6 +583,12 @@ namespace
                       a.dv, targets, &source);
         }
 
+        if (!iFontAvailable(face))
+        {
+            RwFree(original);
+            return;
+        }
+
         const U8* pixels = NULL;
         const U8* overlay = NULL;
         S32 width = 0;
@@ -590,10 +598,20 @@ namespace
 
         const S32 upscale = iFontUpscale();
 
+        // font_padding and font_weight, either as set or as measured against
+        // this very atlas at this very size. See iFontAutoFit.
+        F32 padding = iFontPadding();
+        F32 weight = iFontWeight(face);
+
+        iFontAutoFit(face, (const char*)a.char_set, count, a.du, a.dv, targets, upscale,
+                     original != NULL ? &source : NULL, &padding, &weight);
+
+        iFontSetWeight(face, weight);
+
         const bool rasterized =
             iFontRasterize(face, (const char*)a.char_set, count, a.du, a.dv, targets, upscale,
-                           iFontPadding(), original != NULL ? &source : NULL, &pixels, &overlay,
-                           &width, &height, &slotStride, &columns);
+                           padding, original != NULL ? &source : NULL, &pixels, &overlay, &width,
+                           &height, &slotStride, &columns);
 
         if (rasterized && overlay != NULL)
         {
