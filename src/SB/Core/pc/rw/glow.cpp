@@ -182,17 +182,26 @@ static void drawPass(RwRaster* src, void* shader, F32 w, F32 h, RwBlendFunction 
         F32 u = (i & 2) ? 1.0f : 0.0f;
         F32 v = (i & 1) ? 1.0f : 0.0f;
 
-        // Half a pixel left and up. D3D9 aligns a vertex at screen x with the
-        // CENTRE of pixel x, not its corner, so a screen-aligned quad drawn at
-        // 0..w samples half a texel off -- and it compounds down a chain like
-        // this one: measured at +0.5 texels per pass, which is half a screen
-        // pixel at the first and two at the composite, four or five all told.
+        // Half a pixel left and up, on the backends that need it. D3D9 aligns
+        // a vertex at screen x with the CENTRE of pixel x, not its corner, so
+        // a screen-aligned quad drawn at 0..w samples half a texel off -- and
+        // it compounds down a chain like this one: measured at +0.5 texels per
+        // pass, which is half a screen pixel at the first and two at the
+        // composite, four or five all told.
         //
         // The Xbox does this too, at the head of its blur helper (va 0x171336
         // pushes -0.5 twice). librw's im2d transform carries no half-pixel term
         // of its own, so it has to be here.
-        vx[i].x = u * w - 0.5f;
-        vx[i].y = v * h - 0.5f;
+        //
+        // RWHALFPIXEL is librw's own name for that rule and it is what decides:
+        // D3D10 and up put the pixel centre at 0.5 the way OpenGL does, and
+        // subtracting there moves the whole chain up and left instead.
+        vx[i].x = u * w;
+        vx[i].y = v * h;
+#ifdef RWHALFPIXEL
+        vx[i].x -= 0.5f;
+        vx[i].y -= 0.5f;
+#endif
         vx[i].z = z;
         vx[i].u = u;
         vx[i].v = v;

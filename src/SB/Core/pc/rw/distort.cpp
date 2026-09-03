@@ -254,8 +254,16 @@ void iDistortRender(RwCamera* cam, RwTexture* map, F32 amount, F32 width, F32 he
         // passing through untouched. Measured in the glow, which runs four of
         // these in a row and shows it plainly; this pass is 1:1 so it costs
         // sharpness rather than position, but it is the same mistake.
-        vx[i].x = u * width - 0.5f;
-        vx[i].y = v * height - 0.5f;
+        //
+        // Only where librw says the rule applies. D3D10 and up put the pixel
+        // centre at 0.5 the way OpenGL does, and subtracting there introduces
+        // the offset instead of removing it.
+        vx[i].x = u * width;
+        vx[i].y = v * height;
+#ifdef RWHALFPIXEL
+        vx[i].x -= 0.5f;
+        vx[i].y -= 0.5f;
+#endif
         vx[i].z = z;
         vx[i].u = u;
         vx[i].v = v;
