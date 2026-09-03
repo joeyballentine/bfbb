@@ -104,7 +104,26 @@ void zCollGeom_Init()
                 break;
             }
 
+#ifdef BFBB_PTR64
+            // A row is three 4-byte asset ids on disk and three pointers here,
+            // so the rows are copied into an allocation of their own rather
+            // than the asset being indexed as an array of the wider struct.
+            // The loop below then turns the ids into pointers exactly as it
+            // does on a 32-bit build.
+            {
+                const U32* row = (const U32*)data + 1;
+                sTableList[k] =
+                    (zCollGeomTable*)xMemAllocSize(sTableCount[k] * sizeof(zCollGeomTable));
+                for (i = 0; i < sTableCount[k]; i++)
+                {
+                    sTableList[k][i].baseModel = (RpAtomic*)(UPtr)row[i * 3 + 0];
+                    sTableList[k][i].colModel[0] = (RpAtomic*)(UPtr)row[i * 3 + 1];
+                    sTableList[k][i].camcolModel = (RpAtomic*)(UPtr)row[i * 3 + 2];
+                }
+            }
+#else
             sTableList[k] = (zCollGeomTable*)((U32*)data + 1);
+#endif
 
             for (i = 0; i < sTableCount[k]; i++)
             {

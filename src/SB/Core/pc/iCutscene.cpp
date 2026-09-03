@@ -32,7 +32,8 @@ void iCSSoundSetup(xCutscene* csn)
             csn->SndNumChannel++;
         }
 
-        data = (xCutsceneData*)((U8*)data + ALIGN(data->ChunkSize, 16) + sizeof(xCutsceneData));
+        data = (xCutsceneData*)((U8*)data + ALIGN(data->ChunkSize, 16) +
+                               XCUTSCENE_STREAM_RECORD_SIZE);
     }
 }
 
@@ -93,13 +94,13 @@ void* iCSSoundGetData(xSndVoiceInfo* vp, U32* size)
         {
             if (!retdata)
             {
-                retdata = (void*)(data + 1);
+                retdata = (void*)((U8*)data + XCUTSCENE_STREAM_RECORD_SIZE);
                 *size = data->ChunkSize;
             }
 
             if (sndChannelIndex == r4)
             {
-                retdata = (void*)(data + 1);
+                retdata = (void*)((U8*)data + XCUTSCENE_STREAM_RECORD_SIZE);
                 *size = data->ChunkSize;
 
                 break;
@@ -110,7 +111,8 @@ void* iCSSoundGetData(xSndVoiceInfo* vp, U32* size)
             }
         }
 
-        data = (xCutsceneData*)((U8*)data + ALIGN(data->ChunkSize, 16) + sizeof(xCutsceneData));
+        data = (xCutsceneData*)((U8*)data + ALIGN(data->ChunkSize, 16) +
+                               XCUTSCENE_STREAM_RECORD_SIZE);
     }
 
     if (!retdata)
@@ -118,7 +120,7 @@ void* iCSSoundGetData(xSndVoiceInfo* vp, U32* size)
         return NULL;
     }
 
-    while ((U32)retdata & 0x1F)
+    while ((UPtr)retdata & 0x1F)
     {
         retdata = (void*)((U8*)retdata + 16);
         *size -= 16;

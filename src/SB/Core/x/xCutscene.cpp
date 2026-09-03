@@ -120,9 +120,9 @@ xCutscene* xCutscene_Create(U32 id)
             csn->RawBuf = RwMalloc(maxload + 0x3c);
             csn->AlignBuf = csn->RawBuf;
 
-            while ((U32)(UPtr)csn->AlignBuf & 0x3f)
+            while ((UPtr)csn->AlignBuf & 0x3f)
             {
-                csn->AlignBuf = (void*)(UPtr)((U32)(UPtr)csn->AlignBuf + 4);
+                csn->AlignBuf = (void*)((UPtr)csn->AlignBuf + 4);
             }
 
             csn->Info = cnfo;
@@ -367,7 +367,8 @@ void xCutscene_SetCamera(xCutscene* csn, xCamera* cam)
         if (data->DataType == XCUTSCENEDATA_TYPE_CAMERA)
         {
             frame = (S32)std::floorf(30.0f * csn->CamTime);
-            xCutsceneCameraData* camData = (xCutsceneCameraData*)(data + 1);
+            xCutsceneCameraData* camData =
+                (xCutsceneCameraData*)((U8*)data + XCUTSCENE_STREAM_RECORD_SIZE);
             zFlyKey* keys = camData->Keys;
             dataIndex = camData->NumKeys;
 
@@ -415,7 +416,8 @@ void xCutscene_SetCamera(xCutscene* csn, xCamera* cam)
             xCameraSetFOV(&xglobals->camera, camFOV);
         }
 
-        data = (xCutsceneData*)((U8*)data + 0x10 + ((data->ChunkSize + 0xf) & 0xfffffff0));
+        data = (xCutsceneData*)((U8*)data + XCUTSCENE_STREAM_RECORD_SIZE +
+                               ((data->ChunkSize + 0xf) & 0xfffffff0));
     }
 }
 
@@ -791,7 +793,7 @@ void xCutscene_Render(xCutscene* csn, xEnt**, S32*, F32*)
                     }
                 }
 
-                xcsCalcAnimMatrices(animMat, model, (xCutsceneAnimHdr*)&data[1],
+                xcsCalcAnimMatrices(animMat, model, (xCutsceneAnimHdr*)((U8*)data + XCUTSCENE_STREAM_RECORD_SIZE),
                                     animTime - csn->Play->StartTime, tworoot);
 
                 if (nosey != NULL && (nosey->flg_nosey & 2))
@@ -842,8 +844,11 @@ void xCutscene_Render(xCutscene* csn, xEnt**, S32*, F32*)
                             {
                                 if (mphdata->DataType == XCUTSCENEDATA_TYPE_MORPHTARGET)
                                 {
-                                    numFrame = ((U32*)&mphdata[1])[0];
-                                    numRun = ((U32*)&mphdata[1])[1];
+                                    const U32* mphpayload =
+                                        (const U32*)((U8*)mphdata +
+                                                     XCUTSCENE_STREAM_RECORD_SIZE);
+                                    numFrame = mphpayload[0];
+                                    numRun = mphpayload[1];
                                     xCutsceneMphFrame* mphFrame = (xCutsceneMphFrame*)((U32*)&mphdata[1] + 2);
                                     xCutsceneMphRun* mphRun = (xCutsceneMphRun*)&mphFrame[numFrame];
                                     xMorphTargetFile* mphFile = (xMorphTargetFile*)((U8*)mphdata +
@@ -966,7 +971,8 @@ void xCutscene_Render(xCutscene* csn, xEnt**, S32*, F32*)
                                 goto nextmodel;
                             }
 
-                            mphdata = (xCutsceneData*)((U8*)mphdata + 0x10 +
+                            mphdata = (xCutsceneData*)((U8*)mphdata +
+                                                       XCUTSCENE_STREAM_RECORD_SIZE +
                                                        ((mphdata->ChunkSize + 0xf) & 0xfffffff0));
                         }
 
@@ -1029,7 +1035,8 @@ void xCutscene_Render(xCutscene* csn, xEnt**, S32*, F32*)
             animIndex++;
         }
 
-        data = (xCutsceneData*)((U8*)data + 0x10 + ((data->ChunkSize + 0xf) & 0xfffffff0));
+        data = (xCutsceneData*)((U8*)data + XCUTSCENE_STREAM_RECORD_SIZE +
+                               ((data->ChunkSize + 0xf) & 0xfffffff0));
     }
 
     if (nosey != NULL && (nosey->flg_nosey & 1))

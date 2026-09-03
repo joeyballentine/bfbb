@@ -15,8 +15,18 @@ xLightKit* gLastLightKit;
 xLightKit* xLightKit_Prepare(void* data)
 {
     xLightKit* lkit = (xLightKit*)data;
+#ifdef BFBB_PTR64
+    // 16 bytes into the asset is where the lights start on disc and where
+    // sizeof(xLightKit) puts them on a 32-bit build. Where the struct is wider
+    // the two part company, and every caller here hands over a real xLightKit
+    // with its lights behind it -- LKIT assets included, because LightKit_Read
+    // in zAssetTypes.cpp lays them out that way.
+    lkit->lightList = (xLightKitLight*)(lkit + 1);
+    xLightKitLight* currlight = (xLightKitLight*)(lkit + 1);
+#else
     lkit->lightList = (xLightKitLight*)((int*)data + 4);
     xLightKitLight* currlight = (xLightKitLight*)((int*)data + 4);
+#endif
 
     for (int i = 0; i < lkit->lightCount; currlight++, i++)
     {

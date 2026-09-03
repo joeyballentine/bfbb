@@ -89,7 +89,15 @@ void xJSP_MultiStreamRead(void* data, U32 size, xJSPHeader** jsp)
         hdr->version = tmphdr->version;
         hdr->jspNodeCount = tmphdr->jspNodeCount;
         hdr->colltree = colltree;
+#ifdef BFBB_PTR64
+        // xJSPHeader is 24 bytes on disk -- its three pointer fields are 4
+        // bytes each there and are dead weight anyway, since all three are
+        // filled in from elsewhere. sizeof(xJSPHeader) is 40 where a pointer
+        // is 8, so the node list has to be found at the on-disk stride.
+        hdr->jspNodeList = (xJSPNodeInfo*)((U8*)tmphdr + 24);
+#else
         hdr->jspNodeList = (xJSPNodeInfo*)(tmphdr + 1);
+#endif
 
         size -= mark.length + sizeof(__rwMark);
 

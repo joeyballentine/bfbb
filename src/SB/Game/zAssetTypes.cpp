@@ -2,6 +2,7 @@
 
 #include "xAnim.h"
 #include "xCurveAsset.h"
+#include "xCutscene.h"
 #include "xstransvc.h"
 #include "xDebug.h"
 #include "xEnv.h"
@@ -35,6 +36,15 @@ static void JSP_Unload(void*, U32);
 static void Anim_Unload(void*, U32);
 static void TextureRW3_Unload(void*, U32);
 static void LightKit_Unload(void*, U32);
+#ifdef BFBB_PTR64
+static void* LightKit_Read(void*, U32, void*, U32, U32*);
+static void* CutsceneTOC_Read(void*, U32, void*, U32, U32*);
+#define LKIT_READ LightKit_Read
+#define CTOC_READ CutsceneTOC_Read
+#else
+#define LKIT_READ NULL
+#define CTOC_READ NULL
+#endif
 static void MovePoint_Unload(void*, U32);
 
 // The GameCube build's dummy is a xJSPHeaderGC: the retail object reserves 32
@@ -57,7 +67,7 @@ static st_PACKER_ASSETTYPE assetTypeHandlers[78] = {
     { 'MODL', 0, 0, Model_Read, NULL, NULL, NULL, NULL, Model_Unload, NULL },
     { 'ANIM', 0, 0, NULL, NULL, NULL, NULL, NULL, Anim_Unload, NULL },
     { 'RWTX', 0, 0, RWTX_Read, NULL, NULL, NULL, NULL, TextureRW3_Unload, NULL },
-    { 'LKIT', 0, 0, NULL, NULL, NULL, NULL, NULL, LightKit_Unload, NULL },
+    { 'LKIT', 0, 0, LKIT_READ, NULL, NULL, NULL, NULL, LightKit_Unload, NULL },
     { 'CAM ' },
     { 'PLYR' },
     { 'NPC ' },
@@ -114,7 +124,7 @@ static st_PACKER_ASSETTYPE assetTypeHandlers[78] = {
     { 'PARE' },
     { 'PARS' },
     { 'CSN ' },
-    { 'CTOC' },
+    { 'CTOC', 0, 0, CTOC_READ, NULL, NULL, NULL, NULL, NULL, NULL },
     { 'CSNM' },
     { 'EGEN' },
     { 'ALST' },
@@ -672,8 +682,206 @@ static void* FindAssetCB(U32 ID, char*)
 }
 
 static xAnimTable* Anim_ATBL_getTable(xAnimTable* (*constructor)());
+
+#ifdef BFBB_PTR64
+// The same transform as ATBL_Read below, for a host where a pointer is 8 bytes.
+//
+// ATBL_Read works in place: the asset arrives holding asset ids, indices and
+// byte offsets, and it overwrites each of them with the pointer it resolves to.
+// That only works while a pointer is exactly as wide as the slot the file
+// reserved for it. Here it is not, so this walks the same bytes at their real
+// on-disk stride and keeps the pointers in arrays of its own. The asset is not
+// written to at all.
+//
+// The layout, in bytes from the start of the asset:
+//
+//     0                 xAnimAssetTable, 5 x U32
+//     20                NumRaw   x U32   asset id of each raw animation
+//     20 + 4 * NumRaw   NumFiles x 32    file records, below
+//     ...               NumStates x 28   xAnimAssetState
+//
+// and one file record is
+//
+//     0   U32  FileFlags      16  U32  RawData, a byte offset into the asset
+//     4   F32  Duration       20  S32  Physics
+//     8   F32  TimeOffset     24  S32  StartPose
+//     12  U16  NumAnims[2]    28  S32  EndPose
+//
+// where RawData points at NumAnims[0] * NumAnims[1] U32 indices into the raw
+// array. xAnimAssetState and xAnimAssetEffect hold no pointers, so those two
+// are the same size here as on disk and are still read through their structs.
+#define ATBL_DISK_FILE_SIZE 32
+
+static void* ATBL_Read64(void* indata, U32* outsize)
+{
+    U32 i;
+    U32 j;
+    U32 debugNum = 0;
+    U32 tmpsize;
+
+    xAnimTable* table;
+    xAnimState* astate;
+    xAnimTransition* atran;
+
+    U8* asset = (U8*)indata;
+    xAnimAssetTable* zaTbl = (xAnimAssetTable*)indata;
+    U32* rawID = (U32*)(zaTbl + 1);
+    U8* fileRec = (U8*)(rawID + zaTbl->NumRaw);
+    xAnimAssetState* zaState =
+        (xAnimAssetState*)(fileRec + zaTbl->NumFiles * ATBL_DISK_FILE_SIZE);
+
+    void** zaRaw = (void**)xMemPushTemp(zaTbl->NumRaw * sizeof(void*));
+    xAnimFile** fList = (xAnimFile**)xMemPushTemp(zaTbl->NumFiles * sizeof(xAnimFile*));
+
+    for (i = 0; i < zaTbl->NumRaw; ++i)
+    {
+        zaRaw[i] = xSTFindAsset(rawID[i], &tmpsize);
+    }
+
+    for (i = 0; i < zaTbl->NumRaw; ++i)
+    {
+        if (zaRaw[i] == NULL)
+        {
+            for (j = 0; j < zaTbl->NumRaw; ++j)
+            {
+                if (zaRaw[j] != NULL)
+                {
+                    zaRaw[i] = zaRaw[j];
+                    break;
+                }
+            }
+        }
+    }
+
+    for (i = 0; i < zaTbl->NumRaw; ++i)
+    {
+        if (*(U32*)zaRaw[i] == 'QSPM')
+        {
+            xMorphSeqSetup(zaRaw[i], FindAssetCB);
+        }
+    }
+
+    for (i = 0; i < zaTbl->NumFiles; ++i)
+    {
+        U8* rec = fileRec + i * ATBL_DISK_FILE_SIZE;
+        U32 fileFlags = *(U32*)(rec + 0);
+        F32 duration = *(F32*)(rec + 4);
+        F32 timeOffset = *(F32*)(rec + 8);
+        U32 numX = *(U16*)(rec + 12);
+        U32 numY = *(U16*)(rec + 14);
+        U32* rawIndex = (U32*)(asset + *(U32*)(rec + 16));
+        U32 numAnims = numX * numY;
+
+        void** rawData = (void**)xMemPushTemp(numAnims * sizeof(void*));
+        for (U32 k = 0; k < numAnims; ++k)
+        {
+            rawData[k] = zaRaw[rawIndex[k]];
+        }
+
+        fList[i] = xAnimFileNewBilinear(rawData, "", fileFlags, NULL, numX, numY);
+        if (timeOffset >= 0.0f)
+        {
+            xAnimFileSetTime(fList[i], duration, timeOffset);
+        }
+
+        xMemPopTemp(rawData);
+    }
+
+    xAnimTable* (*constructor)() = NULL;
+    if (zaTbl->ConstructFunc < sizeof(tableFuncList) / sizeof(xAnimTable * (*)()))
+    {
+        constructor = tableFuncList[zaTbl->ConstructFunc];
+    }
+    else
+    {
+        for (S32 k = 0; k < sizeof(animTable) / sizeof(AnimTableList); ++k)
+        {
+            if (zaTbl->ConstructFunc == animTable[k].id)
+            {
+                constructor = animTable[k].constructor;
+                break;
+            }
+        }
+    }
+
+    gxAnimUseGrowAlloc = true;
+
+    table = Anim_ATBL_getTable(constructor);
+
+    char tmpstr[32];
+    for (i = 0; i < zaTbl->NumStates; ++i)
+    {
+        astate = xAnimTableAddFileID(table, fList[zaState[i].FileIndex], zaState[i].StateID,
+                                     zaState[i].SubStateID, zaState[i].SubStateCount);
+
+        if (astate == NULL)
+        {
+            sprintf(tmpstr, "Debug%02d", debugNum++);
+            astate = xAnimTableNewState(table, tmpstr, 0x20, 0x80000000, 1.0f, NULL, NULL, 0.0f,
+                                        NULL, NULL, xAnimDefaultBeforeEnter, NULL, NULL);
+            atran = xAnimTableNewTransition(table, tmpstr, NULL, NULL, NULL, 0x10, 0, 0.0f, 0.0f, 0,
+                                            0, 0.2f, NULL);
+            atran->Dest = table->StateList;
+            xAnimTableAddFileID(table, fList[zaState[i].FileIndex], astate->ID, 0, 0);
+        }
+        astate->Speed = zaState[i].Speed;
+    }
+
+    xAnimFile* foundFile = NULL;
+    for (astate = table->StateList; astate != NULL; astate = astate->Next)
+    {
+        if (foundFile == NULL && astate->Data != NULL)
+        {
+            foundFile = astate->Data;
+        }
+    }
+    for (astate = table->StateList; astate != NULL; astate = astate->Next)
+    {
+        if (astate->Data == NULL)
+        {
+            astate->Data = foundFile;
+            astate->UserFlags |= 0x40000000;
+        }
+    }
+
+    for (i = 0; i < zaTbl->NumStates; ++i)
+    {
+        if (zaState[i].EffectCount != 0)
+        {
+            xAnimState* state = xAnimTableGetStateID(table, zaState[i].StateID);
+            xAnimAssetEffect* zaEffect = (xAnimAssetEffect*)(asset + zaState[i].EffectOffset);
+
+            if (state != NULL)
+            {
+                for (j = 0; j < zaState[i].EffectCount; ++j)
+                {
+                    xAnimEffect* effect =
+                        xAnimStateNewEffect(state, zaEffect->Flags, zaEffect->StartTime,
+                                            zaEffect->EndTime, effectFuncList[zaEffect->EffectType],
+                                            zaEffect->UserDataSize);
+                    memcpy(effect + 1, zaEffect + 1, zaEffect->UserDataSize);
+
+                    zaEffect = (xAnimAssetEffect*)((U8*)zaEffect + zaEffect->UserDataSize) + 1;
+                }
+            }
+        }
+    }
+
+    gxAnimUseGrowAlloc = false;
+
+    xMemPopTemp(fList);
+    xMemPopTemp(zaRaw);
+
+    *outsize = sizeof(xAnimTable);
+    return table;
+}
+#endif
+
 static void* ATBL_Read(void*, U32, void* indata, U32 param_4, U32* outsize)
 {
+#ifdef BFBB_PTR64
+    return ATBL_Read64(indata, outsize);
+#else
     U32 i;
     U32 j;
     U32 debugNum = 0;
@@ -821,6 +1029,7 @@ static void* ATBL_Read(void*, U32, void* indata, U32 param_4, U32* outsize)
     gxAnimUseGrowAlloc = false;
     *outsize = sizeof(xAnimTable);
     return table;
+#endif
 }
 
 static void Anim_Unload(void*, U32)
@@ -831,6 +1040,150 @@ static void LightKit_Unload(void* userdata, U32 b)
 {
     xLightKit_Destroy((xLightKit*)userdata);
 }
+
+#ifdef BFBB_PTR64
+// An LKIT asset is an xLightKit and then its lights, and both structs hold a
+// pointer, so both are wider here than on disc. The asset is copied into an
+// allocation laid out for this build's structs rather than read in place.
+//
+//     0   U32  tagID          12  u32  lightList, not written on disc
+//     4   U32  groupID        16  ...  lightCount x 96 light records
+//     8   U32  lightCount
+//
+// and one light record is
+//
+//     0   U32  type              84  F32  radius
+//     4   RwRGBAReal color       88  F32  angle
+//     20  F32  matrix[16]        92  u32  platLight, filled in by Prepare
+//
+// The lights follow the header directly, which is what xLightKit_Prepare
+// expects and also how zDiscoFloor and zNPCTypeBossSB2 build theirs by hand.
+#define LKIT_DISK_HEADER_SIZE 16
+#define LKIT_DISK_LIGHT_SIZE 96
+
+static void* LightKit_Read(void*, U32, void* indata, U32 insize, U32* outsize)
+{
+    const U8* asset = (const U8*)indata;
+
+    if (indata == NULL || insize < LKIT_DISK_HEADER_SIZE)
+    {
+        *outsize = 0;
+        return indata;
+    }
+
+    U32 lightCount = ((const U32*)asset)[2];
+    if (insize < LKIT_DISK_HEADER_SIZE + lightCount * LKIT_DISK_LIGHT_SIZE)
+    {
+        lightCount = (insize - LKIT_DISK_HEADER_SIZE) / LKIT_DISK_LIGHT_SIZE;
+    }
+
+    U32 size = sizeof(xLightKit) + lightCount * sizeof(xLightKitLight);
+    xLightKit* lkit = (xLightKit*)xMemPushTemp(size);
+    xLightKitLight* lights = (xLightKitLight*)(lkit + 1);
+
+    lkit->tagID = ((const U32*)asset)[0];
+    lkit->groupID = ((const U32*)asset)[1];
+    lkit->lightCount = lightCount;
+    lkit->lightList = lights;
+
+    for (U32 i = 0; i < lightCount; i++)
+    {
+        const U8* rec = asset + LKIT_DISK_HEADER_SIZE + i * LKIT_DISK_LIGHT_SIZE;
+
+        lights[i].type = *(const U32*)rec;
+        memcpy(&lights[i].color, rec + 4, sizeof(RwRGBAReal));
+        memcpy(lights[i].matrix, rec + 20, sizeof(lights[i].matrix));
+        lights[i].radius = *(const F32*)(rec + 84);
+        lights[i].angle = *(const F32*)(rec + 88);
+        lights[i].platLight = NULL;
+    }
+
+    *outsize = size;
+    return lkit;
+}
+
+// A CTOC asset is a count and then one record per cutscene:
+//
+//     0   U32  count
+//     4   ...  count records, each cnfo->HeaderSize bytes
+//
+// and one record is an xCutsceneInfo, NumData xCutsceneData, NumTime + 1 chunk
+// offsets, VisSize visibility words and BreakCount xCutsceneBreak.
+// xCutsceneInfo and everything after the data array are words and characters,
+// so only xCutsceneData changes width: its last member is a union of the file
+// offset on disc and the pointer xCutscene_Create writes over it. The records
+// are copied into an allocation with room for that, and HeaderSize is adjusted
+// so the walk over the copy still steps one record at a time.
+#define CTOC_DISK_DATA_SIZE 16
+
+static void* CutsceneTOC_Read(void*, U32, void* indata, U32 insize, U32* outsize)
+{
+    const U8* asset = (const U8*)indata;
+
+    if (indata == NULL || insize < sizeof(U32))
+    {
+        *outsize = 0;
+        return indata;
+    }
+
+    U32 count = *(const U32*)asset;
+    U32 grow = sizeof(xCutsceneData) - CTOC_DISK_DATA_SIZE;
+    U32 size = sizeof(U32);
+    U32 i;
+
+    const xCutsceneInfo* cnfo = (const xCutsceneInfo*)(asset + sizeof(U32));
+    for (i = 0; i < count; i++)
+    {
+        if (cnfo->HeaderSize < sizeof(xCutsceneInfo) + cnfo->NumData * CTOC_DISK_DATA_SIZE)
+        {
+            *outsize = insize;
+            return indata;
+        }
+
+        size += cnfo->HeaderSize + cnfo->NumData * grow;
+        cnfo = (const xCutsceneInfo*)((const U8*)cnfo + cnfo->HeaderSize);
+    }
+
+    U8* out = (U8*)xMemPushTemp(size);
+    *(U32*)out = count;
+
+    U8* dest = out + sizeof(U32);
+    cnfo = (const xCutsceneInfo*)(asset + sizeof(U32));
+
+    for (i = 0; i < count; i++)
+    {
+        const U8* src = (const U8*)cnfo;
+        U32 numData = cnfo->NumData;
+        U32 tail = cnfo->HeaderSize - sizeof(xCutsceneInfo) - numData * CTOC_DISK_DATA_SIZE;
+
+        memcpy(dest, src, sizeof(xCutsceneInfo));
+        ((xCutsceneInfo*)dest)->HeaderSize = cnfo->HeaderSize + numData * grow;
+
+        xCutsceneData* data = (xCutsceneData*)(dest + sizeof(xCutsceneInfo));
+        const U8* diskData = src + sizeof(xCutsceneInfo);
+
+        for (U32 j = 0; j < numData; j++)
+        {
+            const U32* rec = (const U32*)(diskData + j * CTOC_DISK_DATA_SIZE);
+
+            data[j].DataType = rec[0];
+            data[j].AssetID = rec[1];
+            data[j].ChunkSize = rec[2];
+            data[j].DataPtr = NULL;
+            data[j].FileOffset = rec[3];
+        }
+
+        memcpy(data + numData, diskData + numData * CTOC_DISK_DATA_SIZE, tail);
+
+        dest += sizeof(xCutsceneInfo) + numData * sizeof(xCutsceneData) + tail;
+        cnfo = (const xCutsceneInfo*)(src + cnfo->HeaderSize);
+    }
+
+    *outsize = size;
+    return out;
+}
+
+#endif
 
 static xAnimTable* Anim_ATBL_getTable(xAnimTable* (*constructor)())
 {

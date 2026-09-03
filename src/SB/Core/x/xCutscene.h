@@ -48,6 +48,12 @@ struct xCutsceneData
     };
 };
 
+// A streamed chunk is a 16-byte record laid out like an xCutsceneData, then its
+// payload. The record never holds a pointer -- the payload sits behind it -- so
+// the stride is written out: sizeof(xCutsceneData) is these same 16 bytes only
+// while a pointer is 4.
+#define XCUTSCENE_STREAM_RECORD_SIZE 16
+
 struct xCutsceneBreak
 {
     F32 Time;
