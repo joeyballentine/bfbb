@@ -3,19 +3,26 @@ name: Build
 # Upstream's. It exists to prove main links byte-identically and to feed
 # bfbbdecomp's progress website.
 #
-# It cannot run on a fork, and never could: the container below is private to
-# the bfbbdecomp organisation, and a fork's GITHUB_TOKEN has scope over its own
-# repository only, so the pull fails with a bare "denied" before anything is
-# compiled. Every run on this fork has been red for that reason alone, which is
-# noise rather than information.
+# It cannot run on a fork, and never could: the container the three build jobs
+# run in is private to the bfbbdecomp organisation, and a fork's GITHUB_TOKEN
+# has scope over its own repository only, so the pull fails with a bare "denied"
+# before anything is compiled. Every run on this fork has been red for that
+# reason alone, which is noise rather than information.
 #
 # So it runs only in the repository it was written for. Forks get
 # .github/workflows/duplotron.yml, which needs no private container -- see the
-# note at the top of that file. Keeping upstream's triggers untouched and
-# gating the job keeps this file close to upstream and easy to merge.
+# note at the top of that file.
+#
+# Two things say so, because they answer different questions. The job gate is
+# the general one: any fork, any branch, any event. branches-ignore is
+# duplotron's, ported here -- the gate still creates a run per push and reports
+# it as skipped, and the two branches this fork actually works on would collect
+# one apiece forever. Ignoring them at the trigger means no run at all.
 on:
   push:
+    branches-ignore: [duplotron, treedome]
   pull_request:
+    branches-ignore: [duplotron, treedome]
 
 jobs:
   build:
@@ -85,6 +92,8 @@ jobs:
             build/${{ matrix.version }}/progress-commit.json
 
   build-non-matching:
+    if: github.repository == 'bfbbdecomp/bfbb'
+
     # This is a *private* build container.
     # See docs/github_actions.md for more information.
     container: ghcr.io/bfbbdecomp/bfbb-build:main
@@ -131,6 +140,8 @@ jobs:
           ninja
 
   build-previous:
+    if: github.repository == 'bfbbdecomp/bfbb'
+
     # This is a *private* build container.
     # See docs/github_actions.md for more information.
     container: ghcr.io/bfbbdecomp/bfbb-build:main
