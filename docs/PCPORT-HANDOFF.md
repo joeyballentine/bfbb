@@ -190,9 +190,9 @@ pointer width only    0 / 198 units    0.00%
 needs other work      0 / 198 units
 ```
 
-**Always pass `--m32`.** 32-bit is the project's answer to the pointer-width
-question, not an experiment — see §5(a). Without it the same tree reads
-162/198, and the 33-unit gap is entirely pointers truncating on LP64.
+**`--m32` measures the shipping default**, which is 32-bit — see §5(a). Since
+the pointer casts went through `UPtr` the tree reads 198/198 either way, so the
+flag no longer changes the number; it changes which build you are measuring.
 
 - `--list` per-unit verdict, `--errors` first error per failing unit,
   `--drift` checks the 16 headers copied verbatim from `gc/` for divergence.
@@ -222,10 +222,12 @@ implemented interface that does not need a renderer, so "implemented" is a
 measurement rather than a claim. (Two further `check()` call sites are the
 could-not-make-a-temp-directory arms, which do not run when it works.)
 
-It also checks `sizeof(xSndVoiceInfo) == 100`, which is only true in a 32-bit
-build -- `iSndPlay` divides a byte offset by it. That check is what caught
-`CMakeLists.txt` still building 64-bit after 5(a) settled the question; the two
-now agree, and `BFBB_BUILD_32BIT` is on by default.
+It also checks `sizeof(xSndVoiceInfo) == 100`, which is retail's layout and
+only true in a 32-bit build -- `iSndPlay` divides a byte offset by it, and that
+check is what caught `CMakeLists.txt` still building 64-bit before 5(a) settled
+the default. The port derives the index by pointer arithmetic instead, so the
+size check now runs only when `sizeof(void*) == 4`, next to a round-trip check
+that holds at both widths.
 
 `--host` is the third: both `iHost` backends must implement everything
 `iHost.h` declares. Nothing else notices when they diverge, because the layer
@@ -294,19 +296,39 @@ copies of shipping code, so what is unproven is only that they build on a host.
 
 ## 5. Decisions already made, and what is still open
 
-### (a) 32-bit is the build
+### (a) 32-bit is the default; 64-bit builds
 
 The blocker was `(U32)somePointer`. `xMemInitHeap` does arithmetic on
 `gMemInfo.DRAM.addr`, a `U32`, and asset-overlaid structs address memory in 32
 bits throughout, so on LP64 every such cast truncates.
 
-Building 32-bit clears the whole class. Measured with one variable, same
-compiler and flags: 162/198 units compiled at 64-bit against 195/198 under
-`--m32`, 33 fixed and none broken. `iMemInit` reserving its arena below 4 GB is
-the design rather than a hedge.
+Every one of those casts now goes through `UPtr` (`include/types.h`), which is
+`U32` on the GameCube and pointer-sized on a host, so the tree compiles and
+links at both widths: 198/198 units with and without `--m32`, and
+`build-release.bat D3D9 x64` produces a PE32+ executable. All three selftests
+pass 64-bit.
 
-`CMakeLists.txt` passes `-m32` and `pcprogress.py` measures with it. Keep the
-two in step -- they have disagreed before, and §3 says what that cost.
+That is a compile-and-link result, not a played-through one. Three things still
+tie the game to 32 bits:
+
+- **Pointers stored in `U32` fields survive only below 4 GB.** `iMemInit`
+  reserving its arena there is the design rather than a hedge, and it covers
+  everything the game allocator hands out. It does not cover librw, which
+  `iSystem.cpp` starts with a NULL memory-function table, so RenderWare
+  allocates with `malloc` -- and `xShadowSimple` puts an `RwRaster*` in
+  `xModel::shadowID`. Giving `RwEngineInit` a low arena closes this; the shim's
+  own selftest already proves the hook works.
+- **Asset structs containing pointers change size.** Of the 28 types cast
+  straight out of asset memory, 24 have no pointer members and do not move. The
+  ones that do are `xAnimTable`, `xAnimAssetFile`, `xCurveAsset`, `xLightKit`,
+  `zFragProjectileAsset` and `zFragParticleAsset`, plus the in-place relocation
+  in `xCM` and `zAssetTypes`. Each needs a 32-bit on-disk mirror converted at
+  load.
+- **64-bit on its own buys no memory.** Both points above keep game pointers in
+  the low 4 GB, so the ceiling is where it was. What it buys is the toolchain.
+
+`CMakeLists.txt` defaults to `-m32` and `pcprogress.py` measures with it. Keep
+the two in step -- they have disagreed before, and §3 says what that cost.
 
 ### (b) `iSnd` and its backends
 

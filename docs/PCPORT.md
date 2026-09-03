@@ -133,12 +133,34 @@ Tooling exists — Industrial Park handles HIP/HOP across platforms.
 
 Recording these now so nobody rediscovers them at phase 4.
 
-**Pointer width is untouched.** Xbox is 32-bit x86. Asset-overlaid structs still
-assume 4-byte pointers. On x86-64 every such struct changes size and layout.
-Two options, and this is still open:
-- build 32-bit — cheap, layouts line up almost exactly with Xbox assets, but
-  caps the port's future;
-- separate on-disk formats from in-memory structs — correct and invasive.
+**Pointer width.** Xbox is 32-bit x86, and asset-overlaid structs assume 4-byte
+pointers. 32-bit is still the default for that reason, but the tree now also
+compiles and links 64-bit (`-DBFBB_BUILD_32BIT=OFF`, or `build-release.bat D3D9
+x64`), 198/198 units either way.
+
+Measured 2026-09-02, the pointer-width work splits three ways:
+
+- *Round-trip arithmetic*, about 140 sites: `(U32)ptr + n` cast back to a
+  pointer inside one expression, and `RwRenderStateSet(state, (void*)value)`.
+  These go through `UPtr` (include/types.h), which is `U32` on the GameCube, so
+  nothing there changes. **Done.**
+- *Pointers parked in 32-bit fields that persist* -- `xSndVoiceInfo::parentID`,
+  `xModel::shadowID`, xMorph's asset list, `xClumpColl`'s triangle index, xCM's
+  text1/text2, zAssetTypes' RawData. These keep their value only while every
+  pointer stored that way is below 4 GB. `iMemMgr.cpp` reserves the game arena
+  there deliberately; **librw does not** -- `iSystem.cpp` hands `RwEngineInit` a
+  NULL memory-function table, so RenderWare allocates with `malloc` and can
+  return a high pointer. Giving it a low arena closes this class. **Open.**
+- *Asset structs that contain pointers* -- the invasive one, and it is small. Of
+  the 28 types cast straight out of asset memory, 24 have no pointer members at
+  all, so their layouts do not move. The ones that do are `xAnimTable`,
+  `xAnimAssetFile`, `xCurveAsset`, `xLightKit`, `zFragProjectileAsset` and
+  `zFragParticleAsset`, plus the in-place relocation in xCM and zAssetTypes.
+  Each needs a 32-bit on-disk mirror converted at load. **Open.**
+
+64-bit on its own buys no extra memory: the first two classes keep every game
+pointer in the low 4 GB, so the address-space ceiling is where it was. What it
+buys is the toolchain -- x64 vcpkg and FFmpeg, x64 drivers, no x86 vcvars.
 
 **The code is GameCube-derived; the assets would be Xbox-derived.** This is the
 new risk the decision introduces, and it needs validating per asset type rather

@@ -113,8 +113,10 @@ exits before the window opens. It tells you the path it looked in and whether
 
 ## Building
 
-Windows only (for now). The output is a 32-bit executable, which the game's data layouts
-require (see the comment above `BFBB_BUILD_32BIT` in `CMakeLists.txt`).
+Windows only (for now). The output is a 32-bit executable by default, which the
+game's data layouts still require. A 64-bit build works too -- pass `x64` as the
+second argument to the build script -- but it is not yet correct at runtime; see
+the comment above `BFBB_BUILD_32BIT` in `CMakeLists.txt` for what is left.
 
 Start to finish: install the tools, clone with submodules, optionally install
 FFmpeg and libusb, run `build-release.bat`, point `bin\config.ini` at your Xbox
@@ -238,7 +240,7 @@ build-release.bat
 This is the main build script. It enters the 32-bit MSVC environment, configures
 `build-release\`, builds, and puts `bfbb.exe` and the DLLs it needs in `bin\`.
 `build-debug.bat` does the same into `build-debug\` and is unoptimised and slow.
-Both take a render backend as their one argument:
+Both take a render backend as their first argument:
 
 | Backend | What it is |
 | --- | --- |
@@ -253,8 +255,18 @@ build-release.bat GL3
 The build directory is per configuration, not per backend: `build-release.bat
 GL3` reconfigures `build-release\` and rebuilds it, because the backend is baked
 into the CMake cache and into librw's compile definitions. Every build writes
-into `bin\` and overwrites the previous files. `bin\BUILD-INFO.txt` says which config and
-backend is sitting there.
+into `bin\` and overwrites the previous files. `bin\BUILD-INFO.txt` says which config,
+backend and architecture is sitting there.
+
+The second argument is the architecture, `x86` (the default) or `x64`:
+
+```sh
+build-release.bat D3D9 x64
+```
+
+That one builds into `build-release-x64\`, which is a separate cache because the
+architecture cannot be flipped in an existing one. It needs the x64 vcpkg
+triplet for FFmpeg (`:x64-windows` below instead of `:x86-windows`).
 
 To configure by hand instead, from an x86 developer command prompt:
 
@@ -266,7 +278,9 @@ cmake --build build-pc
 Add `-DBFBB_RENDER_BACKEND=GL3` for the OpenGL build and
 `-DCMAKE_PREFIX_PATH=%USERPROFILE%/vcpkg/installed/x86-windows` for FFmpeg,
 libusb and SDL. `-m32` is set by `CMakeLists.txt` before `project()` and is not
-something to pass yourself. This leaves the executable in `build-pc\`; add
+something to pass yourself; for a 64-bit build, use an x64 developer command
+prompt, pass `-DBFBB_BUILD_32BIT=OFF`, and point the prefix path at the
+`x64-windows` triplet. This leaves the executable in `build-pc\`; add
 `-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=<repo>/bin` to put it where the scripts do.
 
 ### 5. Run it
@@ -286,7 +300,7 @@ anything.
 
 | Symptom | Cause |
 | --- | --- |
-| `lld-link: error: <root>: undefined symbol: mainCRTStartup` at configure time | The MSVC environment is x64. Use `build-release.bat`, or open an x86 developer command prompt. |
+| `lld-link: error: <root>: undefined symbol: mainCRTStartup` at configure time | The MSVC environment does not match the architecture being built -- an x64 prompt for the default 32-bit build, or the reverse. Use `build-release.bat`, which enters the right one. |
 | `ERROR: clang++ is not on PATH` | clang is not installed, or its `bin` directory is not on `PATH`. |
 | `ERROR: no Visual Studio installation found` | No VS, or no `vswhere.exe`. Install the C++ Build Tools. |
 | `third_party/librw is empty` | The submodules were not cloned. `git submodule update --init --recursive`. |
