@@ -36,6 +36,7 @@ namespace
         S32 loaded;
         S32 failed;
         F32 weight;
+        iFontFit fit;
     };
 
     face_state sFaces[IFONT_FACE_COUNT];
@@ -59,6 +60,8 @@ namespace
     S32 sOverlayOn;
     F32 sAgreement;
     F32 sInk;
+    S32 sSubstituted;
+    S32 sGlyphs;
 
     // One glyph's worth of workspace, for the thickening pass -- a max filter
     // cannot read and write the same pixels.
@@ -292,9 +295,12 @@ S32 iFontLoad(iFontFace face, const char* path)
     // reaches the pixels looks exactly like one that works, and this port has
     // already shipped one of those -- text.font_spacing was missing from the
     // settings table, so every value anyone tried was silently the default.
-    printf("bfbb: %s rendered from %s (upscale %d, padding %.3f, inset %d px, weight %.2f)%s\n",
+    printf("bfbb: %s rendered from %s (upscale %d, padding %.3f, inset %d px, weight %.2f, %s)%s\n",
            faceName(face), path, (int)iFontUpscale(), (double)sPadding,
            (int)((F32)iFontUpscale() * sPadding + 0.5f), (double)fs.weight,
+           fs.fit == IFONT_FIT_NATURAL ? "its own metrics"
+                                       : (fs.fit == IFONT_FIT_WIDTH ? "its own width"
+                                                                    : "stretched to the box"),
            sOverlayOn ? ", BFBB_FONTDIFF overlay on" : "");
     fflush(stdout);
     return TRUE;
@@ -451,6 +457,21 @@ F32 iFontWeight(iFontFace face)
     return validFace(face) ? sFaces[face].weight : 0.0f;
 }
 
+void iFontSetFit(iFontFace face, iFontFit fit)
+{
+    if (validFace(face))
+    {
+        sFaces[face].fit = fit;
+    }
+}
+
+iFontFit iFontFitOf(iFontFace face)
+{
+    // IFONT_FIT_BOX is zero, so a face nothing has set -- in a tool that only
+    // rasterises, say -- gets the behaviour the substitution has always had.
+    return validFace(face) ? sFaces[face].fit : IFONT_FIT_BOX;
+}
+
 void iFontSetOverlay(S32 on)
 {
     sOverlayOn = on;
@@ -469,6 +490,16 @@ F32 iFontOverlayAgreement()
 F32 iFontOverlayInk()
 {
     return sInk;
+}
+
+S32 iFontOverlaySubstituted()
+{
+    return sSubstituted;
+}
+
+S32 iFontOverlayGlyphs()
+{
+    return sGlyphs;
 }
 
 void iFontSetDumpPath(const char* path)
@@ -611,6 +642,65 @@ S32 iFontRasterize(iFontFace face, const char* charset, S32 count, S32 cellW, S3
 
     S32 drawn = 0;
 
+    // For the natural fit: the line every glyph sits on, and the one scale the
+    // whole face is drawn at.
+    //
+    // The baseline is the commonest ink bottom across the glyphs. Most letters
+    // of any alphabet rest on it, so the mode of that measurement IS it, and a
+    // handful of descenders cannot move a mode. The scale comes from the
+    // tallest glyph resting there, which is a capital, so matching its height
+    // matches the face's cap height to the artwork's.
+    S32 baseline = 0;
+    F32 faceScale = 0.0f;
+
+    if (sFaces[face].fit == IFONT_FIT_NATURAL)
+    {
+        S32 votes[256];
+        memset(votes, 0, sizeof(votes));
+
+        for (S32 i = 0; i < count; i++)
+        {
+            const S32 bottom = cells[i].y + cells[i].h;
+
+            if (cells[i].h > 0 && bottom >= 0 && bottom < 256 && ++votes[bottom] > votes[baseline])
+            {
+                baseline = bottom;
+            }
+        }
+
+        S32 tallest = 0;
+        S32 reference = -1;
+
+        for (S32 i = 0; i < count; i++)
+        {
+            if (cells[i].y + cells[i].h == baseline && cells[i].h > tallest &&
+                stbtt_FindGlyphIndex(&font, (S32)(U8)charset[i]) != 0)
+            {
+                tallest = cells[i].h;
+                reference = i;
+            }
+        }
+
+        if (reference >= 0)
+        {
+            int rx0, ry0, rx1, ry1;
+            stbtt_GetCodepointBitmapBox(&font, (S32)(U8)charset[reference], 1.0f, 1.0f, &rx0, &ry0,
+                                        &rx1, &ry1);
+
+            if (ry1 > ry0)
+            {
+                faceScale = (F32)(tallest * upscale) / (F32)(ry1 - ry0);
+            }
+        }
+
+        if (faceScale <= 0.0f)
+        {
+            // Nothing in the charset to measure against. Filling the boxes is
+            // not what was asked for, but it is never blank.
+            sFaces[face].fit = IFONT_FIT_BOX;
+        }
+    }
+
     // Characters the face does not have, which are drawn from the atlas
     // instead. Worth saying out loud: it is the difference between a font that
     // fits and one that fits except for the character the save screen counts
@@ -619,6 +709,8 @@ S32 iFontRasterize(iFontFace face, const char* charset, S32 count, S32 cellW, S3
     S32 fellBackLen = 0;
     char fellBackChars[160];
     fellBackChars[0] = '\0';
+    bool fromAtlas[127];
+    memset(fromAtlas, 0, sizeof(fromAtlas));
 
     for (S32 i = 0; i < count; i++)
     {
@@ -657,6 +749,18 @@ S32 iFontRasterize(iFontFace face, const char* charset, S32 count, S32 cellW, S3
                            cell.cellY + cell.y, cell.w, cell.h, sAtlas, w,
                            slotX + cell.x * upscale, slotY + cell.y * upscale, cell.w * upscale,
                            cell.h * upscale);
+
+                // And into the overlay, so that a glyph taken from the atlas is
+                // compared against the atlas rather than against nothing. Left
+                // out, every fallback counted as ink the original did not have
+                // and dragged the fit of any face missing a character.
+                if (wantOverlay)
+                {
+                    blitScaled(source->coverage, source->width, cell.cellX + cell.x,
+                               cell.cellY + cell.y, cell.w, cell.h, sOverlay, w,
+                               slotX + cell.x * upscale, slotY + cell.y * upscale,
+                               cell.w * upscale, cell.h * upscale);
+                }
             }
 
             // Escaped, because more than half of this charset is Latin-1
@@ -669,6 +773,11 @@ S32 iFontRasterize(iFontFace face, const char* charset, S32 count, S32 cellW, S3
                                         sizeof(fellBackChars) - (size_t)fellBackLen,
                                         (codepoint >= 0x20 && codepoint < 0x7F) ? "%c" : "\\x%02X",
                                         codepoint);
+            }
+
+            if (i < (S32)(sizeof(fromAtlas) / sizeof(fromAtlas[0])))
+            {
+                fromAtlas[i] = true;
             }
 
             fellBack++;
@@ -707,11 +816,95 @@ S32 iFontRasterize(iFontFace face, const char* charset, S32 count, S32 cellW, S3
         // proportions are. A face whose M is relatively wider than the atlas's
         // is squeezed by that difference rather than pushing everything after
         // it along the line.
-        const F32 scaleX = (F32)targetW / (F32)(ux1 - ux0);
+        F32 scaleX = (F32)targetW / (F32)(ux1 - ux0);
         const F32 scaleY = (F32)targetH / (F32)(uy1 - uy0);
 
-        const S32 dstX = slotX + cell.x * upscale + pad;
-        const S32 dstY = slotY + cell.y * upscale + pad;
+        // Unless the face is to keep its own proportions, in which case the
+        // height is what it is scaled by and only the width follows. Measured:
+        // this leaves every baseline-resting glyph exactly on the baseline,
+        // which is where a shared-baseline placement from the face's own
+        // metrics did NOT put them -- rounding and per-glyph overshoot moved
+        // each letter off the line by a few pixels.
+        S32 inset = 0;
+        F32 scale = scaleY;
+        S32 dstX;
+        S32 dstY;
+
+        if (sFaces[face].fit == IFONT_FIT_WIDTH)
+        {
+            S32 natural = (S32)((F32)(ux1 - ux0) * scaleY + 0.5f);
+
+            if (natural < 1)
+            {
+                natural = 1;
+            }
+
+            // Never wider than the box: the game samples exactly that rect out
+            // of the texture, so anything wider is simply cut off.
+            if (natural > targetW)
+            {
+                natural = targetW;
+            }
+
+            inset = (targetW - natural) / 2;
+            scaleX = (F32)natural / (F32)(ux1 - ux0);
+            targetW = natural;
+        }
+
+        if (sFaces[face].fit == IFONT_FIT_NATURAL)
+        {
+            // The glyph at the face's own scale, placed by its own metrics
+            // against the shared baseline. gy0 is measured from that line and
+            // is negative above it, so this is the letter's own rise and drop
+            // rather than the box's.
+            int gx0, gy0, gx1, gy1;
+            stbtt_GetCodepointBitmapBox(&font, codepoint, faceScale, faceScale, &gx0, &gy0, &gx1,
+                                        &gy1);
+
+            targetW = gx1 - gx0;
+            targetH = gy1 - gy0;
+            scaleX = faceScale;
+            scale = faceScale;
+
+            if (targetW < 1 || targetH < 1)
+            {
+                continue;
+            }
+
+            // Centred in the ink box the atlas had, because that rect is
+            // exactly what the game samples out of the texture.
+            dstX = slotX + cell.x * upscale + (cell.w * upscale - targetW) / 2;
+            dstY = slotY + baseline * upscale + gy0;
+
+            // Inside its own slot whatever the face does, so a tall or wide
+            // letter is clipped rather than written over its neighbour.
+            if (dstX < slotX)
+            {
+                dstX = slotX;
+            }
+            if (dstY < slotY)
+            {
+                dstY = slotY;
+            }
+            if (targetW > slotX + slotW - dstX)
+            {
+                targetW = slotX + slotW - dstX;
+            }
+            if (targetH > slotY + slotH - dstY)
+            {
+                targetH = slotY + slotH - dstY;
+            }
+
+            if (targetW < 1 || targetH < 1)
+            {
+                continue;
+            }
+        }
+        else
+        {
+            dstX = slotX + cell.x * upscale + pad + inset;
+            dstY = slotY + cell.y * upscale + pad;
+        }
 
         if (dstX < 0 || dstY < 0 || dstX + targetW > w || dstY + targetH > h)
         {
@@ -719,7 +912,7 @@ S32 iFontRasterize(iFontFace face, const char* charset, S32 count, S32 cellW, S3
         }
 
         stbtt_MakeCodepointBitmap(&font, sAtlas + (size_t)dstY * w + dstX, targetW, targetH, w,
-                                  scaleX, scaleY, codepoint);
+                                  scaleX, scale, codepoint);
 
         // Weight, in the atlas pixels the setting is written in, at the
         // resolution this is being drawn at.
@@ -741,8 +934,12 @@ S32 iFontRasterize(iFontFace face, const char* charset, S32 count, S32 cellW, S3
             // same two factors. Nearest neighbour: this is drawn magnified
             // several times over and a filter would only soften the edge that
             // is being compared.
+            // Into the box the atlas has it in, not into wherever the
+            // substitute landed: the question the overlay answers is whether
+            // the two coincide, so the original has to be drawn where it is.
             blitScaled(source->coverage, source->width, cell.cellX + cell.x, cell.cellY + cell.y,
-                       cell.w, cell.h, sOverlay, w, dstX, dstY, targetW, targetH);
+                       cell.w, cell.h, sOverlay, w, slotX + cell.x * upscale,
+                       slotY + cell.y * upscale, cell.w * upscale, cell.h * upscale);
         }
     }
 
@@ -765,24 +962,49 @@ S32 iFontRasterize(iFontFace face, const char* charset, S32 count, S32 cellW, S3
     {
         // How much of the two letterforms lands on the same pixels; see
         // iFontOverlayAgreement.
+        //
+        // Slot by slot, and only the slots the face supplied. A glyph taken
+        // from the atlas IS the atlas, so it agrees with itself perfectly and
+        // would score a face for every character it does not have -- which
+        // would rank a face with half the alphabet missing above one that has
+        // all of it.
         double both = 0.0;
         double either = 0.0;
         double mine = 0.0;
         double theirs = 0.0;
 
-        for (S32 j = 0; j < needed; j++)
+        for (S32 i = 0; i < count; i++)
         {
-            const U8 a = sAtlas[j];
-            const U8 b = sOverlay[j];
-            both += a < b ? a : b;
-            either += a > b ? a : b;
-            mine += a;
-            theirs += b;
+            if (i < (S32)(sizeof(fromAtlas) / sizeof(fromAtlas[0])) && fromAtlas[i])
+            {
+                continue;
+            }
+
+            const S32 slotX = (i % columns) * slotW;
+            const S32 slotY = (i / columns) * slotH;
+
+            for (S32 y = 0; y < slotH; y++)
+            {
+                const size_t row = (size_t)(slotY + y) * w + slotX;
+
+                for (S32 x = 0; x < slotW; x++)
+                {
+                    const U8 a = sAtlas[row + x];
+                    const U8 b = sOverlay[row + x];
+                    both += a < b ? a : b;
+                    either += a > b ? a : b;
+                    mine += a;
+                    theirs += b;
+                }
+            }
         }
 
         sAgreement = (F32)(either > 0.0 ? 100.0 * both / either : 0.0);
         sInk = (F32)(theirs > 0.0 ? mine / theirs : 0.0);
     }
+
+    sSubstituted = count - fellBack;
+    sGlyphs = count;
 
     *pixels = sAtlas;
     if (overlay != NULL)

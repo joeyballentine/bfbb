@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 // iFont asks for this to size a glyph against the screen. Offline there is no
 // screen, so every sweep is run at an upscale named on the command line.
@@ -163,6 +164,152 @@ namespace
     }
 }
 
+    // Where the ink actually ended up in one slot, in slot pixels.
+    bool inkBox(const U8* pixels, S32 stride, S32 slotX, S32 slotY, S32 slotW, S32 slotH, S32& bx,
+                S32& by, S32& bw, S32& bh)
+    {
+        S32 minx = slotW;
+        S32 miny = slotH;
+        S32 maxx = -1;
+        S32 maxy = -1;
+
+        for (S32 y = 0; y < slotH; y++)
+        {
+            const U8* row = pixels + (size_t)(slotY + y) * stride + slotX;
+
+            for (S32 x = 0; x < slotW; x++)
+            {
+                // Anything above the anti-aliased fringe, so that a glyph's
+                // edge ramp does not widen every box by a pixel.
+                if (row[x] > 32)
+                {
+                    if (x < minx) minx = x;
+                    if (x > maxx) maxx = x;
+                    if (y < miny) miny = y;
+                    if (y > maxy) maxy = y;
+                }
+            }
+        }
+
+        if (maxx < minx || maxy < miny)
+        {
+            return false;
+        }
+
+        bx = minx;
+        by = miny;
+        bw = maxx + 1 - minx;
+        bh = maxy + 1 - miny;
+        return true;
+    }
+
+    // Per glyph: where the substitute's ink landed against the box the atlas
+    // had it in. Both are measured the same way in the same slot, so a number
+    // here is a real displacement and not a difference of convention.
+    void reportGlyphs(const dumped_font& d, S32 upscale)
+    {
+        const U8* pixels = NULL;
+        const U8* overlay = NULL;
+        S32 width = 0, height = 0, slotStride = 0, columns = 0;
+
+        if (!iFontRasterize(IFONT_FACE_SB, d.charset, d.count, d.cellW, d.cellH, d.cells, upscale,
+                            iFontPadding(), &d.atlas, &pixels, &overlay, &width, &height,
+                            &slotStride, &columns))
+        {
+            return;
+        }
+
+        const S32 slotH = d.cellH * upscale;
+        double sumTop = 0.0, sumBottom = 0.0, sumLeft = 0.0, sumRight = 0.0;
+        double sumBottomAbs = 0.0;
+        double bottoms[127];
+        S32 measured = 0;
+        S32 onLine = 0;
+
+        // The atlas's own baseline, found the same way iFont finds it.
+        S32 votes[256];
+        S32 baseline = 0;
+        memset(votes, 0, sizeof(votes));
+        for (S32 i = 0; i < d.count; i++)
+        {
+            const S32 b = d.cells[i].y + d.cells[i].h;
+            if (d.cells[i].h > 0 && b >= 0 && b < 256 && ++votes[b] > votes[baseline])
+            {
+                baseline = b;
+            }
+        }
+
+        printf("\n  glyph   atlas box (x,y,w,h)      substitute        off\n");
+
+        for (S32 i = 0; i < d.count; i++)
+        {
+            const S32 slotX = (i % columns) * slotStride;
+            const S32 slotY = (i / columns) * slotH;
+
+            S32 bx, by, bw, bh;
+            if (!inkBox(pixels, width, slotX, slotY, slotStride, slotH, bx, by, bw, bh))
+            {
+                continue;
+            }
+
+            const S32 ax = d.cells[i].x * upscale;
+            const S32 ay = d.cells[i].y * upscale;
+            const S32 aw = d.cells[i].w * upscale;
+            const S32 ah = d.cells[i].h * upscale;
+
+            // Only the glyphs the ATLAS rests on the baseline. A descender
+            // belongs below it and a round letter overshoots it, so counting
+            // those measures the alphabet rather than the alignment.
+            if (onLine < 127 && d.cells[i].y + d.cells[i].h == baseline)
+            {
+                bottoms[onLine] = (by + bh) - baseline * upscale;
+                sumBottomAbs += bottoms[onLine];
+                onLine++;
+            }
+
+            sumLeft += bx - ax;
+            sumTop += by - ay;
+            sumRight += (bx + bw) - (ax + aw);
+            sumBottom += (by + bh) - (ay + ah);
+            measured++;
+
+            const int c = (unsigned char)d.charset[i];
+            char label[8];
+            if (c >= 0x20 && c < 0x7F) { label[0] = (char)c; label[1] = 0; }
+            else { snprintf(label, sizeof(label), "\\x%02X", c); }
+            const bool loud = (by - ay) * (by - ay) > upscale * upscale * 4 ||
+                              (by + bh - ay - ah) * (by + bh - ay - ah) > upscale * upscale * 4;
+
+            if (loud)
+            {
+                printf("  %-6s  %4d %4d %4d %4d      %4d %4d %4d %4d   dy %+d  dbot %+d\n",
+                       label, ax, ay, aw, ah, bx,
+                       by, bw, bh, by - ay, (by + bh) - (ay + ah));
+            }
+        }
+
+        if (measured > 0)
+        {
+            // Where the ink bottoms land relative to the atlas's baseline. A
+            // line of type has ONE baseline, so the spread here is the number
+            // that says whether the letters sit on it or bounce around it.
+            const double mean = onLine > 0 ? sumBottomAbs / onLine : 0.0;
+            double var = 0.0;
+
+            for (S32 k = 0; k < onLine; k++)
+            {
+                var += (bottoms[k] - mean) * (bottoms[k] - mean);
+            }
+
+            printf("\n  the %d glyphs that rest on the baseline: mean %+.2f from it, spread %.2f px\n",
+                   (int)onLine, mean, onLine > 0 ? sqrt(var / onLine) : 0.0);
+
+            printf("\n  mean offset over %d glyphs, in upscaled pixels:"
+                   "  left %+.2f  top %+.2f  right %+.2f  bottom %+.2f\n",
+                   (int)measured, sumLeft / measured, sumTop / measured, sumRight / measured,
+                   sumBottom / measured);
+        }
+    }
 int main(int argc, char** argv)
 {
     if (argc < 3)
@@ -178,6 +325,23 @@ int main(int argc, char** argv)
     }
 
     const S32 upscale = argc > 3 ? (S32)atoi(argv[3]) : 3;
+
+    bool glyphs = false;
+    for (int i = 1; i < argc; i++)
+    {
+        if (strcmp(argv[i], "--glyphs") == 0)
+        {
+            glyphs = true;
+        }
+        if (strcmp(argv[i], "--width") == 0)
+        {
+            iFontSetFit(IFONT_FACE_SB, IFONT_FIT_WIDTH);
+        }
+        if (strcmp(argv[i], "--natural") == 0)
+        {
+            iFontSetFit(IFONT_FACE_SB, IFONT_FIT_NATURAL);
+        }
+    }
 
     if (readFonts(argv[1]) == 0)
     {
@@ -206,6 +370,20 @@ int main(int argc, char** argv)
 
         printf("\n%s: %d glyphs in a %dx%d cell, drawn at upscale %d\n", d.name, (int)d.count,
                (int)d.cellW, (int)d.cellH, (int)upscale);
+
+        iFontSetPadding(0.25f);
+        iFontSetWeight(IFONT_FACE_SB, 0.0f);
+        measure(d, upscale);
+
+        printf("  the face supplies %d of them; the rest are drawn from the atlas and are not\n"
+               "  measured below\n",
+               (int)iFontOverlaySubstituted());
+
+        if (glyphs)
+        {
+            reportGlyphs(d, upscale);
+            continue;
+        }
 
         const size_t pads = sizeof(kPadding) / sizeof(kPadding[0]);
         const size_t weights = sizeof(kWeight) / sizeof(kWeight[0]);

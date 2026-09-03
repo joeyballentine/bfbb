@@ -60,6 +60,32 @@ struct iFontAtlas
     S32 height;
 };
 
+// How a substituted glyph is placed in the space the atlas gave it.
+//
+// IFONT_FIT_BOX stretches each glyph, per axis, to fill the ink box the atlas
+// letter occupied. That is what keeps the game's own text exact: every letter
+// lands where the artwork had it, and measured over the sans atlas, every
+// baseline-resting glyph comes out ON the baseline to the pixel. The cost is
+// that the face's proportions are the artwork's -- a 3-pixel stem box makes a
+// fat stem and a 3x3 box makes a square full stop.
+//
+// IFONT_FIT_WIDTH keeps the height fit and lets only the width be the face's
+// own, centred in the box. It fixes the fat stems and keeps the exact baseline.
+//
+// IFONT_FIT_NATURAL stops fitting: one scale for the whole face, and every
+// glyph placed by its OWN metrics against a baseline read off the atlas. The
+// letters are then the face's shape and the face's relative sizes, which is
+// what a font normally looks like -- and they no longer sit exactly where the
+// artwork's did, which is why it is not the default. For text where the game's
+// own layout is not worth preserving, such as the copyright notice, it is the
+// one that looks right.
+enum iFontFit
+{
+    IFONT_FIT_BOX,
+    IFONT_FIT_WIDTH,
+    IFONT_FIT_NATURAL
+};
+
 // Which face a call is about.
 enum iFontFace
 {
@@ -122,6 +148,11 @@ F32 iFontPadding();
 void iFontSetWeight(iFontFace face, F32 weight);
 F32 iFontWeight(iFontFace face);
 
+// config.ini's [text] font_fit: how a glyph is placed in the space the atlas
+// gave it. See iFontFit.
+void iFontSetFit(iFontFace face, iFontFit fit);
+iFontFit iFontFitOf(iFontFace face);
+
 // BFBB_FONTDIFF: draw each glyph of the atlas being replaced over the outline
 // that replaces it, so the two can be compared where the game actually draws
 // them. The outline goes in green and the game's own glyph in red, so they are
@@ -154,6 +185,16 @@ F32 iFontOverlayAgreement();
 // like a good fit while the letters have gone to blobs. Ink says outright that
 // there is too much of it.
 F32 iFontOverlayInk();
+
+// How many of the glyphs the last rasterisation was asked for the face actually
+// supplied, and how many were asked for. The rest came from the game's atlas.
+//
+// Both numbers are needed to read the two above: a glyph drawn from the atlas
+// matches the atlas exactly, so counting it would score a face for the
+// characters it does NOT have. They are measured over the substituted glyphs
+// only, and this says how much of the font that was.
+S32 iFontOverlaySubstituted();
+S32 iFontOverlayGlyphs();
 
 // BFBB_FONTDUMP: write one font's atlas and glyph boxes to a file, so the fit
 // can be measured without the game.

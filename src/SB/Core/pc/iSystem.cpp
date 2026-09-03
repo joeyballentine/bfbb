@@ -487,6 +487,24 @@ static const char* WindowModeName(iWindowMode mode)
     }
 }
 
+namespace
+{
+    iFontFit iSystemFontFit(const char* name)
+    {
+        if (iHostStrCaseCmp(name, "natural") == 0)
+        {
+            return IFONT_FIT_NATURAL;
+        }
+
+        if (iHostStrCaseCmp(name, "width") == 0)
+        {
+            return IFONT_FIT_WIDTH;
+        }
+
+        return IFONT_FIT_BOX;
+    }
+}
+
 static void ApplyConfig()
 {
     sWindowMode = WindowModeFromConfig();
@@ -583,6 +601,8 @@ static void ApplyConfig()
     iFontSetPadding(iConfigGetFloat("text.font_padding", 0.5f));
     iFontSetWeight(IFONT_FACE_SB, iConfigGetFloat("text.font_weight", 0.0f));
     iFontSetWeight(IFONT_FACE_SANS, iConfigGetFloat("text.font_sans_weight", 0.0f));
+    iFontSetFit(IFONT_FACE_SB, iSystemFontFit(iConfigGetString("text.font_fit", "box")));
+    iFontSetFit(IFONT_FACE_SANS, iSystemFontFit(iConfigGetString("text.font_sans_fit", "natural")));
 
     // BFBB_FONTDIFF draws the atlas being replaced over the outline replacing
     // it, which is how font_padding gets tuned by eye. An environment variable

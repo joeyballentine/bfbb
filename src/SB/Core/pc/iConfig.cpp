@@ -183,6 +183,21 @@ namespace
           "The same, for the font_sans face. Separate because the two atlases are\n"
           "; drawn at different weights: the sans one is the lighter of the two, and\n"
           "; a substitute for it usually needs nothing." },
+        { "text", "font_fit", "box",
+          "How each glyph of that font is placed in the space the game's own\n"
+          "; letter took up: box, width or natural.\n"
+          ";\n"
+          "; box stretches the glyph to fill it, which is exact -- every letter\n"
+          "; lands where the artwork had it -- at the price of the face's own\n"
+          "; proportions. width keeps the height and lets the width be the face's.\n"
+          "; natural stops fitting: one size for the whole font, every letter on\n"
+          "; one baseline, which is what a font normally looks like and no longer\n"
+          "; exactly where the game drew it." },
+        { "text", "font_sans_fit", "natural",
+          "The same, for the font_sans face. natural by default: that face draws\n"
+          "; the copyright notice and the memory card messages, where the game's\n"
+          "; own letter positions are not worth keeping and a stretched sans looks\n"
+          "; like it has been sat on." },
         { "text", "platform_wording", "on",
           "Rewrite the Xbox wording in the game's text -- dashboard, memory card\n"
           "; slots -- as it loads. The files on disk are never touched." },
