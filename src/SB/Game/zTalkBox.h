@@ -423,13 +423,13 @@ namespace
         substr name; // offset 0x0, size 0x8
         char op; // offset 0x8, size 0x1
         substr* args; // offset 0xC, size 0x4
-        U32 args_size; // offset 0x10, size 0x4
+        size_t args_size; // offset 0x10, size 0x4
     };
     struct tag_entry_list
     {
         // total size: 0x8
         tag_entry* entries; // offset 0x0, size 0x4
-        U32 size; // offset 0x4, size 0x4
+        size_t size; // offset 0x4, size 0x4
     };
     struct xTextAsset
     {

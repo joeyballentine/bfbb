@@ -168,6 +168,23 @@ templates in first-use order, so a never-called function's locals land at that
 function's position in the source. Six units were brought to a byte-identical
 `.rodata` with it in one pass.
 
+### `mirrors.py` — structs defined in more than one place
+
+```
+mirrors.py [--all]
+```
+
+A second declaration of a struct is invisible to the compiler, and the two only
+have to disagree about one member's width for code that casts between them to
+write past the end of an object. `zTalkBox` keeps its own copy of
+`xtextbox::layout` and counted with `U32` where `xtextbox` counts with
+`size_t`: 2 KB short at 64 bits, and `refresh()` scribbled on whatever the
+linker had put after it.
+
+Pairs that differ only by `Core/gc` vs `Core/pc` are the platform split and are
+skipped. A `DIFFERENT` row only matters where something actually casts one type
+to the other; hold those together with a `static_assert` on `sizeof`.
+
 ### `stridediff.py` — element strides ours emits and the target never does
 
 ```

@@ -61,6 +61,12 @@ namespace
                   "zTalkBox's jot_line no longer matches xtextbox::jot_line");
     static_assert(sizeof(jot) == sizeof(xtextbox::jot),
                   "zTalkBox's jot no longer matches xtextbox::jot");
+    static_assert(sizeof(tag_entry) == sizeof(xtextbox::tag_entry),
+                  "zTalkBox's tag_entry no longer matches xtextbox::tag_entry");
+    static_assert(sizeof(tag_entry_list) == sizeof(xtextbox::tag_entry_list),
+                  "zTalkBox's tag_entry_list no longer matches xtextbox::tag_entry_list");
+    static_assert(sizeof(tag_type) == sizeof(xtextbox::tag_type),
+                  "zTalkBox's tag_type no longer matches xtextbox::tag_type");
 #endif
     static void update_prompt_status(F32 dt);
     static void update_quit_status(F32 dt);
