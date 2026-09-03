@@ -37,34 +37,18 @@ at load rather than ignored.
     [game]              Where the game starts, and where it keeps its saves.
 
     boot                Empty by default, which is the main menu. A four-
-                        character scene id -- jf01, b302, hb01 -- starts the
-                        game in that scene with no input and nothing before it,
-                        so the player is whoever the level defaults to and the
-                        cutscene that would have led into it is skipped. A bug
-                        in a scene's own load, setup or reset is reproducible
-                        that way in about twenty seconds; a bug in the
-                        transition into it still needs the real route. soak
-                        leaves the game playing itself at the menu.
-
-                        SB.INI's `BOOT=` does the same job and still works.
-                        This one exists because SB.INI lives with the assets,
-                        so every copy of the game on the machine reads the one
-                        file; config.ini is chosen per instance with
-                        `BFBB_CONFIG`, so two instances can boot into two
-                        different levels. It is read after SB.INI and wins over
-                        it. iBoot.h has the account.
+                        character scene id starts the game in that scene,
+                        skipping the menu; soak leaves the game playing itself.
+                        Read after SB.INI's `BOOT=` and wins over it. See
+                        iBoot.h.
 
     intro_movies        On by default. The Nickelodeon, THQ and RenderWare
-                        logos on the way to the title screen. They are
-                        skippable with a button on the console, but only once
-                        each has started.
+                        logos before the title screen.
 
-    save_folder         Empty by default, which is this machine's own per-user
-                        data folder -- `%LOCALAPPDATA%/bfbb/saves` on Windows.
-                        The two memory card slots the console had become that
-                        folder and a `second` beside it. `BFBB_SAVE_DIR`
-                        overrides it. Worth setting alongside `boot` when two
-                        instances are running, for the same reason.
+    save_folder         Empty by default, which is this machine's per-user data
+                        folder -- `%LOCALAPPDATA%/bfbb/saves` on Windows. The
+                        console's two memory card slots become that folder and
+                        a `second` beside it. `BFBB_SAVE_DIR` overrides it.
 
     [video]             The size the game renders at, and how it is presented.
                         The two are independent: the picture is scaled onto
