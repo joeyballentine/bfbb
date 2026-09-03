@@ -906,7 +906,8 @@ U32 xFXanimUVCreate()
     {
         xFXanimUVPipeline = iFXanimUVCreatePipe();
     }
-    return (-(U32)(UPtr)xFXanimUVPipeline | (U32)(UPtr)xFXanimUVPipeline) >> 0x1f;
+    return (U32)((-(UPtr)xFXanimUVPipeline | (UPtr)xFXanimUVPipeline) >>
+                (8 * sizeof(UPtr) - 1));
 }
 
 namespace

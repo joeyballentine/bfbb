@@ -410,15 +410,15 @@ void xMemPoolAddElements(xMemPool* pool, void* buffer, U32 count)
     curr = buffer;
     for (i = 0; i < (S32)count - 1; i++)
     {
-        *(void**)(UPtr)((U32)(UPtr)curr + next) = (void*)(UPtr)((U32)(UPtr)curr + size);
+        *(void**)((UPtr)curr + next) = (void*)((UPtr)curr + size);
         if (initCB != NULL)
         {
             initCB(pool, curr);
         }
-        curr = (void*)(UPtr)((U32)(UPtr)curr + size);
+        curr = (void*)((UPtr)curr + size);
     }
 
-    *(void**)(UPtr)((U32)(UPtr)curr + next) = pool->FreeList;
+    *(void**)((UPtr)curr + next) = pool->FreeList;
     if (initCB != NULL)
     {
         initCB(pool, curr);
@@ -455,10 +455,10 @@ void* xMemPoolAlloc(xMemPool* pool)
         retval = pool->FreeList;
     }
 
-    pool->FreeList = *(void**)(UPtr)((U32)(UPtr)retval + next);
+    pool->FreeList = *(void**)((UPtr)retval + next);
     if (flags & 1)
     {
-        *(void**)(UPtr)((U32)(UPtr)retval + next) = pool->UsedList;
+        *(void**)((UPtr)retval + next) = pool->UsedList;
         pool->UsedList = retval;
     }
 
@@ -486,16 +486,16 @@ void xMemPoolFree(xMemPool* pool, void* data)
 
         while (curr != NULL && curr != data)
         {
-            prev = (void**)(UPtr)((U32)(UPtr)curr + next);
+            prev = (void**)((UPtr)curr + next);
             curr = *prev;
         }
 
         if (curr != NULL)
         {
-            *prev = *(void**)(UPtr)((U32)(UPtr)curr + next);
+            *prev = *(void**)((UPtr)curr + next);
         }
     }
 
-    *(void**)(UPtr)((U32)(UPtr)data + next) = freeList;
+    *(void**)((UPtr)data + next) = freeList;
     pool->FreeList = data;
 }

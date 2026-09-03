@@ -1212,10 +1212,10 @@ static void zGameUpdateMode()
         // byteswap.  The target's `or r31, r5, r3` / `or r3, r7, r0` pin it:
         // nextSceneID is the plain big-endian sceneID ([+0][+1][+2][+3]) and the
         // value compared against globals.sceneCur->sceneID is the full byteswap.
-        d = *(char *)(UPtr)(U32)((int)(UPtr)&passet->sceneID + 3);
-        c = *(char *)(UPtr)(U32)((int)(UPtr)&passet->sceneID + 0);
-        b = *(char *)(UPtr)(U32)((int)(UPtr)&passet->sceneID + 2);
-        a = *(char *)(UPtr)(U32)((int)(UPtr)&passet->sceneID + 1);
+        d = *(char *)((UPtr)&passet->sceneID + 3);
+        c = *(char *)((UPtr)&passet->sceneID + 0);
+        b = *(char *)((UPtr)&passet->sceneID + 2);
+        a = *(char *)((UPtr)&passet->sceneID + 1);
 
         U32 x = (((b << 8) & 0xff00) | (((c << 24) & 0xff000000) | ((a << 16) & 0x00ffffff)) & 0xffff00ff);
         U32 y = (((a << 8) & 0xff00) | (((d << 24) & 0xff000000) | ((b << 16) & 0x00ffffff)) & 0xffff00ff);

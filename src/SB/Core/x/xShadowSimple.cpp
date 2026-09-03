@@ -344,7 +344,7 @@ static void xShadowSimple_AddVerts(xShadowSimpleCache* cache)
     alpha = cache->alpha;
     RwIm3DVertexSetRGBA(&sShadVert[sShadVertCount + 5], 0, 0, 0, alpha);
 
-    sShadRasters[sShadVertCount / 6] = (RwRaster*)(UPtr)cache->raster;
+    sShadRasters[sShadVertCount / 6] = cache->raster;
 
     sShadVertCount += 6;
 }
@@ -447,7 +447,7 @@ void xShadowSimple_CacheInit(xShadowSimpleCache* cache, xEnt* ent, U8 alpha)
         raster = sShadRaster;
     }
 
-    cache->raster = (U32)(UPtr)raster;
+    cache->raster = raster;
     cache->flags |= (U16)flags;
     ent->model->shadowID = (U32)(UPtr)raster;
 }

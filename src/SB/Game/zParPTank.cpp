@@ -139,8 +139,8 @@ static void zParPTankSparkleUpdate(zParPTank* zp, float dt)
     RpPTankAtomicLock(zp->ptank, &plock, rpPTANKDFLAGPOSITION, rpPTANKLOCKWRITE);
     RpPTankAtomicLock(zp->ptank, &uvlock, rpPTANKDFLAGVTX2TEXCOORDS, rpPTANKLOCKWRITE);
 
-    U32 plock_base = (U32)(UPtr)plock.data;
-    U32 uvlock_base = (U32)(UPtr)uvlock.data;
+    UPtr plock_base = (UPtr)plock.data;
+    UPtr uvlock_base = (UPtr)uvlock.data;
 
     // RwTexCoords* uv = (RwTexCoords*)uvlock.data;
     for (S32 i = 0; i < zp->num_particles; i++)
@@ -207,8 +207,8 @@ void zParPTankSpawnSparkles(xVec3* pos, U32 count)
         return;
     }
 
-    U32 poslock_base = (U32)(UPtr)posLock.data;
-    U32 uvlock_base = (U32)(UPtr)vtx2TexCoordsLock.data;
+    UPtr poslock_base = (UPtr)posLock.data;
+    UPtr uvlock_base = (UPtr)vtx2TexCoordsLock.data;
     xVec3* ref_pos = pos;
     RwCamera* camera = RwCameraGetCurrentCamera();
     if (gGameState == eGameState_Play && camera)
@@ -363,10 +363,10 @@ static void zParPTankBubbleUpdate(zParPTank* zp, float dt)
     RpPTankAtomicLock(zp->ptank, &slock, rpPTANKDFLAGSIZE, rpPTANKLOCKWRITE);
     RpPTankAtomicLock(zp->ptank, &uvlock, rpPTANKDFLAGVTX2TEXCOORDS, rpPTANKLOCKWRITE);
 
-    U32 plock_base = (U32)(UPtr)plock.data;
-    U32 clock_base = (U32)(UPtr)clock.data;
-    U32 slock_base = (U32)(UPtr)slock.data;
-    U32 uvlock_base = (U32)(UPtr)uvlock.data;
+    UPtr plock_base = (UPtr)plock.data;
+    UPtr clock_base = (UPtr)clock.data;
+    UPtr slock_base = (UPtr)slock.data;
+    UPtr uvlock_base = (UPtr)uvlock.data;
 
     F32 damp = xpow(0.95f, 60.0f * dt);
 
@@ -548,10 +548,10 @@ static void zParPTankSpawnBubbles(xVec3* pos, xVec3* vel, U32 count, float scale
         return;
     }
 
-    U32 plock_base = (U32)(UPtr)plock.data;
-    U32 clock_base = (U32)(UPtr)clock.data;
-    U32 slock_base = (U32)(UPtr)slock.data;
-    U32 uvlock_base = (U32)(UPtr)uvlock.data;
+    UPtr plock_base = (UPtr)plock.data;
+    UPtr clock_base = (UPtr)clock.data;
+    UPtr slock_base = (UPtr)slock.data;
+    UPtr uvlock_base = (UPtr)uvlock.data;
     xVec3* ref_pos = pos;
     RwCamera* camera = RwCameraGetCurrentCamera();
     if (gGameState == eGameState_Play && camera)
@@ -814,8 +814,8 @@ static void zParPTankSteamUpdate(zParPTank* zp, float dt)
     RpPTankAtomicLock(zp->ptank, &plock, rpPTANKDFLAGPOSITION, rpPTANKLOCKWRITE);
     RpPTankAtomicLock(zp->ptank, &uvlock, rpPTANKDFLAGVTX2TEXCOORDS, rpPTANKLOCKWRITE);
 
-    U32 plock_base = (U32)(UPtr)plock.data;
-    U32 uvlock_base = (U32)(UPtr)uvlock.data;
+    UPtr plock_base = (UPtr)plock.data;
+    UPtr uvlock_base = (UPtr)uvlock.data;
 
     for (U32 i = 0; i < zp->num_particles; i++)
     {

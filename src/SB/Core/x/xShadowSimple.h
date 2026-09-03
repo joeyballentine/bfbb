@@ -37,7 +37,10 @@ struct xShadowSimpleCache
     xShadowSimplePoly poly;
     F32 envHeight;
     F32 shadowHeight;
-    U32 raster;
+    // The raster the shadow is drawn with. Retail declares it U32 and casts on
+    // the way in and out, which stops being the same thing once a pointer is
+    // wider than the field.
+    RwRaster* raster;
 
     // Offset: 0x60
     F32 dydx;

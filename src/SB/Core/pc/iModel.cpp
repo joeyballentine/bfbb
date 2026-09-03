@@ -284,13 +284,18 @@ void iModelUnload(RpAtomic* userdata)
 
 static RpAtomic* NextAtomicCallback(RpAtomic* atomic, void* data)
 {
-    if (*(U32*)data == (U32)atomic)
+    // Through RpAtomic**, not U32*: the cursor is a pointer, and reading or
+    // clearing only its low half leaves the high half behind, which is a
+    // plausible-looking address that faults on the first field access.
+    RpAtomic** cursor = (RpAtomic**)data;
+
+    if (*cursor == atomic)
     {
-        *(U32*)data = 0;
+        *cursor = NULL;
     }
-    else if (*(U32*)data == 0)
+    else if (*cursor == NULL)
     {
-        *(RpAtomic**)data = atomic;
+        *cursor = atomic;
     }
     return atomic;
 }
@@ -335,13 +340,18 @@ void iModelAnimMatrices(RpAtomic* model, xQuat* quat, xVec3* tran, RwMatrixTag* 
     RpHAnimNodeInfo* iVar1;
     RwMatrixTag matrixStack[33];
     U32 pCurrentFrameFlags;
-    RpHAnimNodeInfo* pCurrentFrame;
     S32 numFrames;
     RwMatrixTag* pMatrixStackTop;
 
-    pCurrentFrame = (RpHAnimNodeInfo*)GetHierarchy(model);
+    // Through RpHAnimHierarchy, not RpHAnimNodeInfo. The GameCube original
+    // reads the hierarchy through the node-info struct -- `hier->nodeIndex` for
+    // numNodes and `hier[1].nodeID` for pNodeInfo -- which lands on the right
+    // fields only because both structs start with 32-bit words and pNodeInfo
+    // happens to sit at offset 16. Where a pointer is 8 bytes it sits at 24,
+    // and reading it as an RwInt32 truncates it as well.
+    RpHAnimHierarchy* hierarchy = (RpHAnimHierarchy*)GetHierarchy(model);
 
-    if (pCurrentFrame != NULL)
+    if (hierarchy != NULL)
     {
         // float/sda scheduling
         pMatrixStackTop = &matrixStack[0];
@@ -363,9 +373,9 @@ void iModelAnimMatrices(RpAtomic* model, xQuat* quat, xVec3* tran, RwMatrixTag* 
         // non-volatile registers are acting up and their instructions
         // are being scheduled weirdly
         matrixStack[1] = matrixStack[0];
-        numFrames = pCurrentFrame->nodeIndex;
+        numFrames = hierarchy->numNodes;
         pMatrixArray = (&matrixStack[1]);
-        iVar1 = (RpHAnimNodeInfo*)pCurrentFrame[1].nodeID;
+        iVar1 = hierarchy->pNodeInfo;
 
         pMatrixArray++;
         for (S32 i = 0; i < numFrames; i++)
