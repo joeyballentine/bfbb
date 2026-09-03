@@ -12,6 +12,7 @@ namespace
     // of it. "soak" is four characters too and needs no room of its own.
     char sScene[8];
     S32 sIntroMovies = TRUE;
+    F32 sCameraSensitivity = 1.0f;
 }
 
 const char* iBootScene()
@@ -51,4 +52,23 @@ void iBootSetScene(const char* scene)
 void iBootSetIntroMovies(S32 play)
 {
     sIntroMovies = play;
+}
+
+F32 iBootCameraSensitivity()
+{
+    return sCameraSensitivity;
+}
+
+void iBootSetCameraSensitivity(F32 scale)
+{
+    // Zero is a camera that cannot be turned at all, which reads as a broken
+    // controller rather than as a setting.
+    if (scale <= 0.0f || scale > 10.0f)
+    {
+        printf("bfbb: config: input.camera_sensitivity is out of range, staying at %g: %g\n",
+               (double)sCameraSensitivity, (double)scale);
+        return;
+    }
+
+    sCameraSensitivity = scale;
 }

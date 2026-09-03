@@ -7,7 +7,9 @@
 #include "iHost.h"
 #include "iPad.h"
 #include "iPadHost.h"
+#include "iPadStick.h"
 #include "iScreen.h"
+#include "isavegame.h"
 #include "iTRC.h"
 #include "iSnapshot.h"
 #include "iPadGlyph.h"
@@ -279,6 +281,13 @@ static S32 RenderWareInit()
 
     printf("bfbb: rendering at %dx%d\n", (int)iScreenWidth(), (int)iScreenHeight());
 
+    // Only when it has been moved. A widened frustum looks like a bug in the
+    // camera rather than like a setting, and this is the line that says which.
+    if (iScreenFOVOffset() != 0.0f)
+    {
+        printf("bfbb: field of view %g degrees\n", (double)(75.0f + iScreenFOVOffset()));
+    }
+
     // NULL rather than psGetMemoryFunctions(): that is the console's hook for
     // handing RenderWare the game's own allocator, and the port has no
     // equivalent yet. librw falls back to malloc, so RenderWare's allocations
@@ -549,6 +558,35 @@ static void ApplyConfig()
     // says why one file cannot do both jobs.
     iBootSetScene(iConfigGetString("game.boot", ""));
     iBootSetIntroMovies(iConfigGetBool("game.intro_movies", TRUE));
+    iBootSetCameraSensitivity(iConfigGetFloat("input.camera_sensitivity", 1.0f));
+
+    // Where saves go, before xSaveGameInit resolves the root. Empty leaves the
+    // host's per-user folder in place, which is what the port has always used.
+    iSGSetSaveRoot(iConfigGetString("game.save_folder", ""));
+
+    // The field of view, before iCameraCreate builds the first frustum.
+    iScreenSetFOV(iConfigGetFloat("video.fov", 75.0f));
+
+    // How much slack a stick has. auto is the controller's own -- XInput
+    // publishes two different numbers for the two sticks, and a player who
+    // names one gets it on both.
+    const char* deadzone = iConfigGetString("input.deadzone", "auto");
+    if (iHostStrCaseCmp(deadzone, "auto") == 0)
+    {
+        iPadStickSetDeadzone(-1.0f);
+    }
+    else
+    {
+        F32 percent = iConfigGetFloat("input.deadzone", -1.0f);
+        if (percent < 0.0f || percent > 90.0f)
+        {
+            printf("bfbb: config: input.deadzone is not auto or a percentage 0 to 90, using "
+                   "the controller's own: %s\n",
+                   deadzone);
+            percent = -1.0f;
+        }
+        iPadStickSetDeadzone(percent);
+    }
 
     // Where the music may be replaced from. Pushed rather than read, like the
     // text patch: nothing under here knows what config.ini is. The folder is

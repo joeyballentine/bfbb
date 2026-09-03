@@ -287,6 +287,33 @@ void iScreenSetPerPixelLighting(S32 on)
     sPerPixelLighting = on ? 1 : 0;
 }
 
+// The field of view every camera in the game is built around. zCamera resets to
+// it, xCameraCreate starts at it, and the cutscene and Cruise Bubble values are
+// authored relative to it.
+static const F32 kGameFOV = 75.0f;
+
+static F32 sFOVOffset;
+
+F32 iScreenFOVOffset()
+{
+    return sFOVOffset;
+}
+
+void iScreenSetFOV(F32 degrees)
+{
+    // The far end is the frustum going flat: vw.x is a tangent, and it runs
+    // away at 180. The near end is arbitrary and generous.
+    if (degrees < 20.0f || degrees > 150.0f)
+    {
+        printf("bfbb: %g is not a field of view this can render at; staying at %g\n",
+               (double)degrees, (double)(kGameFOV + sFOVOffset));
+        fflush(stdout);
+        return;
+    }
+
+    sFOVOffset = degrees - kGameFOV;
+}
+
 void iScreenSetSize(S32 width, S32 height)
 {
     if (width <= 0 || height <= 0 || width > kMaxDimension || height > kMaxDimension)

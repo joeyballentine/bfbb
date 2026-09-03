@@ -557,10 +557,12 @@ void iPadHostPoll()
 
             iPadStickConvert(SDL_GetGamepadAxis(sGamepad[i], SDL_GAMEPAD_AXIS_LEFTX),
                              SDL_GetGamepadAxis(sGamepad[i], SDL_GAMEPAD_AXIS_LEFTY),
-                             IPAD_STICK_DEADZONE_LEFT, &s->stick_x, &s->stick_y);
+                             iPadStickDeadzone(IPAD_STICK_DEADZONE_LEFT), &s->stick_x,
+                             &s->stick_y);
             iPadStickConvert(SDL_GetGamepadAxis(sGamepad[i], SDL_GAMEPAD_AXIS_RIGHTX),
                              SDL_GetGamepadAxis(sGamepad[i], SDL_GAMEPAD_AXIS_RIGHTY),
-                             IPAD_STICK_DEADZONE_RIGHT, &s->substick_x, &s->substick_y);
+                             iPadStickDeadzone(IPAD_STICK_DEADZONE_RIGHT), &s->substick_x,
+                             &s->substick_y);
 
             // SDL reports Y down-positive, as a screen does. iPadHost.h asks for
             // up-positive, as the GameCube's stick reports it, and iPadUpdate

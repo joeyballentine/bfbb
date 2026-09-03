@@ -26,4 +26,15 @@
 // it is small instead of a jump straight to the deadzone fraction.
 void iPadStickConvert(S16 rawX, S16 rawY, S32 deadzone, F32* outX, F32* outY);
 
+// config.ini's input.deadzone, as a percentage of full deflection. Negative is
+// auto, which is what the two constants above already are. Set by iSystem.
+void iPadStickSetDeadzone(F32 percent);
+
+// The deadzone a backend should pass to iPadStickConvert: the configured one,
+// or `fallback` when the setting is auto. Both sticks get the same number when
+// one is set -- the constants differ only because XInput's do, which is a
+// statement about the hardware rather than about how much slack the player
+// wants.
+S32 iPadStickDeadzone(S32 fallback);
+
 #endif

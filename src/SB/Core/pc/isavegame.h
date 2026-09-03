@@ -140,6 +140,12 @@ enum en_NAMEGEN_TYPE
     ISG_NGTYP_ICONTHUM
 };
 
+// config.ini's game.save_folder, pushed by iSystem before xSaveGameInit calls
+// iSGStartup. Empty leaves the host's per-user data folder in place;
+// BFBB_SAVE_DIR still wins over both. PC-only -- there is no folder to choose
+// on a console, where this is a memory card slot.
+void iSGSetSaveRoot(const char* dir);
+
 S32 iSGStartup();
 S32 iSGShutdown();
 char* iSGMakeName(en_NAMEGEN_TYPE type, const char* base, S32 idx);

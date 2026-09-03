@@ -640,6 +640,18 @@ static void test_screen()
     check(iScreenWidth() == 640 && iScreenHeight() == 480, "and it can be set back");
     check(iScreenUIWidthF() == 640.0f && iScreenUIHeightF() == 480.0f,
           "with the UI box back at 640x480");
+
+    // config.ini's video.fov, which iCameraSetFOV adds to whatever the game
+    // asked for. Zero at the game's own 75, so a config.ini that names the
+    // default cannot move the camera.
+    check(iScreenFOVOffset() == 0.0f, "no FOV offset until something sets one");
+    iScreenSetFOV(75.0f);
+    check(iScreenFOVOffset() == 0.0f, "and naming the game's own 75 is still none");
+    iScreenSetFOV(90.0f);
+    check(iScreenFOVOffset() == 15.0f, "a wider one is the difference from 75");
+    iScreenSetFOV(0.0f);
+    check(iScreenFOVOffset() == 15.0f, "a frustum that would go flat is refused");
+    iScreenSetFOV(75.0f);
 }
 
 static void test_drawdist()
@@ -701,6 +713,16 @@ static void test_boot()
     iBootSetIntroMovies(FALSE);
     check(iBootIntroMovies() == FALSE, "the logos can be turned off");
     iBootSetIntroMovies(TRUE);
+
+    check(iBootCameraSensitivity() == 1.0f, "the camera runs at the game's own speed");
+    iBootSetCameraSensitivity(2.0f);
+    check(iBootCameraSensitivity() == 2.0f, "a multiplier is taken");
+
+    // Zero is a camera the right stick cannot turn at all, which reads as a
+    // dead controller rather than as a setting.
+    iBootSetCameraSensitivity(0.0f);
+    check(iBootCameraSensitivity() == 2.0f, "zero is refused");
+    iBootSetCameraSensitivity(1.0f);
 }
 
 // A TEXT asset, as the packer hands one to zAssetTypes.cpp: the string, in a
@@ -1616,6 +1638,28 @@ static void test_pad_stick_deadzone()
 
     iPadStickConvert(0, 32767, dz, &x, &y);
     check(y > 0.99f, "up is positive, as iPadHost.h specifies");
+
+    // config.ini's input.deadzone. Auto has to hand the backend back its own
+    // constant unchanged -- the two sticks have different ones, and a setting
+    // that quietly flattened them to one number would be a behaviour change
+    // for anyone who never touched it.
+    check(iPadStickDeadzone(IPAD_STICK_DEADZONE_LEFT) == IPAD_STICK_DEADZONE_LEFT,
+          "auto leaves each stick its own deadzone");
+    check(iPadStickDeadzone(IPAD_STICK_DEADZONE_RIGHT) == IPAD_STICK_DEADZONE_RIGHT, "both of them");
+
+    iPadStickSetDeadzone(50.0f);
+    check(iPadStickDeadzone(IPAD_STICK_DEADZONE_LEFT) ==
+              iPadStickDeadzone(IPAD_STICK_DEADZONE_RIGHT),
+          "a set deadzone is the same on both sticks");
+    check(abs(iPadStickDeadzone(0) - 16383) <= 1, "and half deflection is half of full scale");
+
+    iPadStickSetDeadzone(0.0f);
+    iPadStickConvert(1, 0, iPadStickDeadzone(IPAD_STICK_DEADZONE_LEFT), &x, &y);
+    check(x > 0.0f, "zero means the smallest movement registers");
+
+    iPadStickSetDeadzone(-1.0f);
+    check(iPadStickDeadzone(IPAD_STICK_DEADZONE_LEFT) == IPAD_STICK_DEADZONE_LEFT,
+          "and it goes back to auto");
 }
 
 // The button bits, restated rather than included from xPad.h -- the same

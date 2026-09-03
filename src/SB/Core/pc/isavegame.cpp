@@ -74,16 +74,30 @@ static bool iSG_mkdir_p(const char* path)
     return iHostMakeDir(tmp);
 }
 
-// BFBB_SAVE_DIR wins so a player can point saves anywhere; otherwise wherever
-// this host keeps per-user data, which is where its users expect to find it.
-// Which directory that is belongs to iHost; the "/bfbb/saves" under it is this
-// game's policy and belongs here.
+// config.ini's game.save_folder, empty until iSystem says otherwise.
+static char g_configroot[512];
+
+void iSGSetSaveRoot(const char* dir)
+{
+    snprintf(g_configroot, sizeof(g_configroot), "%s", dir != NULL ? dir : "");
+}
+
+// BFBB_SAVE_DIR wins so a player can point saves anywhere; otherwise the
+// setting, and otherwise wherever this host keeps per-user data, which is where
+// its users expect to find it. Which directory that is belongs to iHost; the
+// "/bfbb/saves" under it is this game's policy and belongs here.
 static void iSG_resolve_saveroot()
 {
     const char* explicit_dir = getenv("BFBB_SAVE_DIR");
     if (explicit_dir != NULL && explicit_dir[0] != '\0')
     {
         snprintf(g_saveroot, sizeof(g_saveroot), "%s", explicit_dir);
+        return;
+    }
+
+    if (g_configroot[0] != '\0')
+    {
+        snprintf(g_saveroot, sizeof(g_saveroot), "%s", g_configroot);
         return;
     }
 

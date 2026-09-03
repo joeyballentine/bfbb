@@ -61,6 +61,19 @@ F32 iScreenHeightF();
 // the constant retail's iCameraSetFOV has written into it.
 F32 iScreenAspectF();
 
+// Degrees to add to every field of view the game asks for, config.ini's
+// video.fov less the 75 the game is built around. Zero unless something says
+// otherwise.
+//
+// An offset rather than a value because the game varies the FOV constantly --
+// cutscene cameras carry their own, the Cruise Bubble zooms, zCamera lerps
+// between two -- and replacing the number would flatten all of that into one
+// angle. It is applied at iCameraSetFOV, the one place a frustum is built, so
+// xCameraGetFOV still reads back what the game asked for and the camera logic
+// that measures against it is unchanged.
+F32 iScreenFOVOffset();
+void iScreenSetFOV(F32 degrees);
+
 // The UI box: the largest 4:3 rectangle that fits in the render size, centred.
 // On a 4:3 screen it IS the screen -- width and height are the render size and
 // both origins are zero -- so nothing moves at the default.

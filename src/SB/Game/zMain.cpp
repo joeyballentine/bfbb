@@ -962,6 +962,11 @@ void zMainReadINI()
             }
         }
     }
+
+    // config.ini's input.camera_sensitivity, after SB.INI so that it scales
+    // whatever base that file left behind rather than replacing it.
+    zcam_pad_pyaw_scale *= iBootCameraSensitivity();
+    zcam_pad_pitch_scale *= iBootCameraSensitivity();
 #endif
 
     iTime tim = iTimeGet();

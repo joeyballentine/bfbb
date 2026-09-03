@@ -4,6 +4,24 @@
 
 #include <math.h>
 
+// Negative is auto: the backend's own constant stands.
+static F32 sDeadzonePercent = -1.0f;
+
+void iPadStickSetDeadzone(F32 percent)
+{
+    sDeadzonePercent = percent;
+}
+
+S32 iPadStickDeadzone(S32 fallback)
+{
+    if (sDeadzonePercent < 0.0f)
+    {
+        return fallback;
+    }
+
+    return (S32)(0.01f * sDeadzonePercent * 32767.0f);
+}
+
 void iPadStickConvert(S16 rawX, S16 rawY, S32 deadzone, F32* outX, F32* outY)
 {
     F32 x = (F32)rawX;

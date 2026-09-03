@@ -34,7 +34,7 @@ at load rather than ignored.
                         that never loads and used to look like a hang on a blank
                         window. iFileAssetRoot is where the answer is resolved.
 
-    [game]              Where the game starts.
+    [game]              Where the game starts, and where it keeps its saves.
 
     boot                Empty by default, which is the main menu. A four-
                         character scene id -- jf01, b302, hb01 -- starts the
@@ -58,6 +58,13 @@ at load rather than ignored.
                         logos on the way to the title screen. They are
                         skippable with a button on the console, but only once
                         each has started.
+
+    save_folder         Empty by default, which is this machine's own per-user
+                        data folder -- `%LOCALAPPDATA%/bfbb/saves` on Windows.
+                        The two memory card slots the console had become that
+                        folder and a `second` beside it. `BFBB_SAVE_DIR`
+                        overrides it. Worth setting alongside `boot` when two
+                        instances are running, for the same reason.
 
     [video]             The size the game renders at, and how it is presented.
                         The two are independent: the picture is scaled onto
@@ -87,6 +94,18 @@ at load rather than ignored.
                         the world. docs/RESOLUTION.md is the whole account,
                         including the rule that every full-screen camera in the
                         game has to be built at this size or it draws nothing.
+
+    fov                 75 by default, which is the number the game is built
+                        around: the horizontal field of view in degrees at 4:3.
+                        A wider render size already shows more to the left and
+                        right at the same number, so this is for wanting more
+                        or less than the game gives, not for widescreen. It is
+                        applied as a DIFFERENCE from 75 at iCameraSetFOV, the
+                        one place a frustum is built, so the cutscene cameras
+                        and the Cruise Bubble's zoom keep their relative angles
+                        and xCameraGetFOV still reads back what the game asked
+                        for. Nothing that measures against the FOV -- the
+                        camera's own yaw margins -- changes.
 
     draw_distance       on by default. Draw everything, however far away it is.
                         The consoles stop drawing an object past a distance the

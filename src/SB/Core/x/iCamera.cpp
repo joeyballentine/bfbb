@@ -225,6 +225,15 @@ void iCameraSetFOV(RwCamera* cam, F32 fov)
 {
     RwV2d vw;
 
+#ifdef PLATFORM_PC
+    // config.ini's video.fov, as a difference from the 75 the game is built
+    // around, so that the zooms and the cutscene cameras keep their relative
+    // angles. Here rather than at the callers because this is the one place a
+    // frustum is built: xCameraGetFOV reads back what the game asked for, and
+    // the camera logic that measures against it is untouched.
+    fov += iScreenFOVOffset();
+#endif
+
     vw.y = 0.75f * (vw.x = itan(PI * (0.5f * fov) / 180.0f));
 
 #ifdef PLATFORM_PC

@@ -30,8 +30,19 @@ const char* iBootScene();
 // port launched a hundred times an evening spends most of that on three logos.
 S32 iBootIntroMovies();
 
+// What to multiply the camera's two stick scales by, config.ini's
+// input.camera_sensitivity. 1.0 unless something says otherwise.
+//
+// Here rather than in an input module because the thing it scales is game code:
+// zcam_pad_pyaw_scale and zcam_pad_pitch_scale are zCamera's, SB.INI already
+// sets them, and zMainReadINI is where both files meet. The yaw scale is a turn
+// rate; the pitch one is a blend weight that clamps at 1, so raising it reaches
+// the same extremes with less stick rather than pitching further.
+F32 iBootCameraSensitivity();
+
 // Set by iSystem from config.ini, before zMainReadINI runs.
 void iBootSetScene(const char* scene);
 void iBootSetIntroMovies(S32 play);
+void iBootSetCameraSensitivity(F32 scale);
 
 #endif

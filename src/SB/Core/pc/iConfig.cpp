@@ -71,6 +71,9 @@ namespace
           "; id, e.g. jf01. Empty starts at the menu. Overrides SB.INI's BOOT=." },
         { "game", "intro_movies", "on",
           "Play the Nickelodeon, THQ and RenderWare logos before the title screen." },
+        { "game", "save_folder", "",
+          "Folder to keep saves in. Empty uses this machine's own per-user data\n"
+          "; folder. BFBB_SAVE_DIR overrides this." },
         { "video", "mode", "fullscreen",
           "How the picture is presented: fullscreen, borderless, windowed." },
         { "video", "width", "640", "Render width in pixels." },
@@ -92,6 +95,9 @@ namespace
         { "video", "msaa", "4",
           "Samples per pixel, for smoother edges: 1 (off), 2, 4, 8. A count the card\n"
           "; will not grant falls back to off." },
+        { "video", "fov", "75",
+          "Horizontal field of view in degrees, as the game measures it at 4:3.\n"
+          "; A wider screen already shows more to the sides at the same number." },
         { "video", "per_pixel_lighting", "on",
           "Light characters once per pixel instead of once per vertex." },
         { "video", "load_time", "1",
@@ -117,6 +123,12 @@ namespace
         { "input", "preset", "auto",
           "Which console's controls to start from: auto (follows the pad plugged\n"
           "; in), xbox, ps2, gamecube. A line in [pad] wins over this." },
+        { "input", "deadzone", "auto",
+          "How far a stick must move before the game sees it, as a percentage of\n"
+          "; full deflection: auto (the controller's own), or 0 to 90." },
+        { "input", "camera_sensitivity", "1.0",
+          "How fast the right stick turns and pitches the camera, as a multiple\n"
+          "; of the game's own speed." },
         { "input", "button_icons", "auto",
           "Which controller's buttons the prompts draw: auto, xbox, gamecube, ps2,\n"
           "; off (the ones on the disc), or a folder name under buttons/. The glyph\n"
