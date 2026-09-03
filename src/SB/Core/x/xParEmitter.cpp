@@ -800,19 +800,6 @@ void xParEmitterDestroy()
     xDebugRemoveTweak("Particle Emitters");
 }
 
-inline void xParInterp::order()
-{
-    F32 f1;
-    F32 f2;
-    f1 = this->val[1];
-    f2 = this->val[0];
-    if (f1 < f2)
-    {
-        this->val[1] = f2;
-        this->val[0] = f1;
-    }
-}
-
 inline xPar* xParEmitterEmit(xParEmitter* pe, F32 dt)
 {
     return xParEmitterEmit(pe, dt, dt);

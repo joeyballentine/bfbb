@@ -37,7 +37,19 @@ struct xParInterp
 
     void set(F32, F32, F32, U32);
     void set(F32); // Used in zNPCDutchman
-    void order();
+
+    void order()
+    {
+        F32 f1;
+        F32 f2;
+        f1 = this->val[1];
+        f2 = this->val[0];
+        if (f1 < f2)
+        {
+            this->val[1] = f2;
+            this->val[0] = f1;
+        }
+    }
 };
 
 // Size 0x138
