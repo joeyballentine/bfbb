@@ -404,7 +404,7 @@ void iCameraSetFogRenderStates()
 
         RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
         RwRenderStateSet(rwRENDERSTATEFOGTYPE, (void*)pFogParams->type);
-        RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)bite_me);
+        RwRenderStateSet(rwRENDERSTATEFOGCOLOR, (void*)(UPtr)bite_me);
         RwRenderStateSet(rwRENDERSTATEFOGDENSITY, (void*)&pFogParams->density);
 
         RwCameraSetFogDistance(pCamera, pFogParams->start);

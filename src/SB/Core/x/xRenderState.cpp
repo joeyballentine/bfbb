@@ -22,10 +22,10 @@ void xRenderStateSetTexture(RwTexture* texture)
 
 void xRenderStateSetSrcBlendMode(int xmode)
 {
-    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)sBlendTable[xmode]);
+    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)(UPtr)(U32)sBlendTable[xmode]);
 }
 
 void xRenderStateSetDstBlendMode(int xmode)
 {
-    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)sBlendTable[xmode]);
+    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)(UPtr)(U32)sBlendTable[xmode]);
 }

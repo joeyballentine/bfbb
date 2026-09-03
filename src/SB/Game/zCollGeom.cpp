@@ -108,16 +108,16 @@ void zCollGeom_Init()
 
             for (i = 0; i < sTableCount[k]; i++)
             {
-                if ((U32)sTableList[k][i].baseModel)
+                if ((U32)(UPtr)sTableList[k][i].baseModel)
                 {
                     sTableList[k][i].baseModel =
-                        (RpAtomic*)xSTFindAsset((U32)sTableList[k][i].baseModel, NULL);
+                        (RpAtomic*)xSTFindAsset((U32)(UPtr)sTableList[k][i].baseModel, NULL);
                 }
 
-                if ((U32)sTableList[k][i].colModel[0])
+                if ((U32)(UPtr)sTableList[k][i].colModel[0])
                 {
                     sTableList[k][i].colModel[0] =
-                        (RpAtomic*)xSTFindAsset((U32)sTableList[k][i].colModel[0], NULL);
+                        (RpAtomic*)xSTFindAsset((U32)(UPtr)sTableList[k][i].colModel[0], NULL);
                 }
 
                 if (!sTableList[k][i].colModel[0])
@@ -125,7 +125,7 @@ void zCollGeom_Init()
                     if (sTableList[k][i].camcolModel)
                     {
                         sTableList[k][i].camcolModel =
-                            (RpAtomic*)xSTFindAsset((U32)sTableList[k][i].camcolModel, NULL);
+                            (RpAtomic*)xSTFindAsset((U32)(UPtr)sTableList[k][i].camcolModel, NULL);
                     }
                 }
             }

@@ -404,12 +404,12 @@ static S32 xSER_ord_test(const void* key, void* elt)
 {
     S32 greater;
 
-    if ((U32)key < *(U32*)elt)
+    if ((U32)(UPtr)key < *(U32*)elt)
     {
         return -1;
     }
 
-    greater = ((U32)key > *(U32*)elt) ? 1 : 0;
+    greater = ((U32)(UPtr)key > *(U32*)elt) ? 1 : 0;
     if (greater)
     {
         return 1;
@@ -421,7 +421,7 @@ static st_SERIAL_CLIENTINFO* XSER_get_client(U32 idtag)
 {
     st_XSERIAL_DATA_PRIV* xsd = &g_xserdata;
     st_SERIAL_CLIENTINFO* clt;
-    S32 idx = XOrdLookup(&xsd->cltlist, (void*)idtag, xSER_ord_test);
+    S32 idx = XOrdLookup(&xsd->cltlist, (void*)(UPtr)idtag, xSER_ord_test);
 
     if (idx < 0)
     {

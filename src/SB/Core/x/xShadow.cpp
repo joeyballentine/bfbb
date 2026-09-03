@@ -596,7 +596,7 @@ void xShadowReceiveShadow(xEnt* ent, F32 shadowFactor, S32 shadowMode, RwMatrixT
 
         RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
         RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
-        RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)fogstate);
+        RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)(UPtr)(U32)fogstate);
         RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)1);
     }
 
@@ -844,7 +844,7 @@ static RwCamera* ShadowCameraUpdate(RwCamera* shadowCamera, void* model, void (*
     }
 
     GCRestoreFrameBuffer();
-    RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)fogstate);
+    RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)(UPtr)(U32)fogstate);
 
     return shadowCamera;
 }
@@ -1102,7 +1102,7 @@ static S32 ShadowRender(RwCamera* shadowCamera, RwRaster* shadowRast, RpIntersec
         Im3DBufferPos = 0;
     }
 
-    RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)fogstate);
+    RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)(UPtr)(U32)fogstate);
     RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
     RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
 
@@ -1219,7 +1219,7 @@ static RpCollisionTriangle* shadowCacheEnvCB(RpIntersection* isx, RpWorldSector*
         return collTriangle;
     }
 
-    if (sShadowCollJSP && !(((xClumpCollBSPTriangle*)collTriangle->index)->flags & 0x8))
+    if (sShadowCollJSP && !(((xClumpCollBSPTriangle*)(UPtr)(U32)collTriangle->index)->flags & 0x8))
     {
         return collTriangle;
     }
@@ -1787,7 +1787,7 @@ void xShadowVertical_DrawCache(xShadowCache* cache, F32 shadowFactor, F32 fadeDi
         Im3DBufferPos = 0;
     }
 
-    RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)fogstate);
+    RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)(UPtr)(U32)fogstate);
     RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
     RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
 #ifdef PLATFORM_PC

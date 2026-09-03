@@ -77,7 +77,7 @@ void zAnimListInit()
             }
 
             xAnimFile* afile = xAnimFileNew(buf, "", 0, NULL);
-            if ((S32)buf0)
+            if ((S32)(SPtr)buf0)
             {
                 xAnimTableNewState(atbl, astnames[0][j], 0x20, 0, 1.0f, NULL, NULL, 0.0f, NULL,
                                    NULL, xAnimDefaultBeforeEnter, NULL, NULL);

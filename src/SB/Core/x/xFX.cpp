@@ -906,7 +906,7 @@ U32 xFXanimUVCreate()
     {
         xFXanimUVPipeline = iFXanimUVCreatePipe();
     }
-    return (-(U32)xFXanimUVPipeline | (U32)xFXanimUVPipeline) >> 0x1f;
+    return (-(U32)(UPtr)xFXanimUVPipeline | (U32)(UPtr)xFXanimUVPipeline) >> 0x1f;
 }
 
 namespace
@@ -2563,8 +2563,8 @@ void xFXRibbon::update(F32 dt)
 
 void xFXRibbon::start_render()
 {
-    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)cfg.blend_src);
-    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)cfg.blend_dst);
+    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)(UPtr)cfg.blend_src);
+    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)(UPtr)cfg.blend_dst);
     RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)raster);
 }
 
@@ -3274,7 +3274,7 @@ void xFXAuraRender()
         RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)0x6);
         RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)0x1);
         RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)0x1);
-        RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)fogstate);
+        RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)(UPtr)(U32)fogstate);
 
         ap = sAura;
 

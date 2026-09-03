@@ -344,7 +344,7 @@ static void xShadowSimple_AddVerts(xShadowSimpleCache* cache)
     alpha = cache->alpha;
     RwIm3DVertexSetRGBA(&sShadVert[sShadVertCount + 5], 0, 0, 0, alpha);
 
-    sShadRasters[sShadVertCount / 6] = (RwRaster*)cache->raster;
+    sShadRasters[sShadVertCount / 6] = (RwRaster*)(UPtr)cache->raster;
 
     sShadVertCount += 6;
 }
@@ -447,9 +447,9 @@ void xShadowSimple_CacheInit(xShadowSimpleCache* cache, xEnt* ent, U8 alpha)
         raster = sShadRaster;
     }
 
-    cache->raster = (U32)raster;
+    cache->raster = (U32)(UPtr)raster;
     cache->flags |= (U16)flags;
-    ent->model->shadowID = (U32)raster;
+    ent->model->shadowID = (U32)(UPtr)raster;
 }
 
 void xShadowSimple_Add(xShadowSimpleCache* cache, xEnt* ent, F32 radius, F32 ecc)
@@ -688,8 +688,8 @@ void xShadowSimple_Render()
     RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)xrsv.SrcBlend);
     RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)xrsv.DestBlend);
     RwRenderStateSet(rwRENDERSTATESHADEMODE, (void*)xrsv.ShadeMode);
-    RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)((xrsv.Flags >> 2) & 1));
-    RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)((xrsv.Flags >> 3) & 1));
+    RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)(UPtr)((xrsv.Flags >> 2) & 1));
+    RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)(UPtr)((xrsv.Flags >> 3) & 1));
 
     sShadVertCount = 0;
 }

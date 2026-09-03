@@ -690,7 +690,7 @@ static S32 LeafNodeLinePolyIntersect(xClumpCollBSPTriangle* triangles, void* dat
                 RwV3d vTmp, vTmp2;
                 F32 recipLength, lengthSq;
                 collisionTri.point = *v0;
-                collisionTri.index = (RwInt32)triangles;
+                collisionTri.index = (RwInt32)(UPtr)triangles;
                 collisionTri.vertices[0] = v0;
                 collisionTri.vertices[1] = v1;
                 collisionTri.vertices[2] = v2;
@@ -738,7 +738,7 @@ static S32 LeafNodeSpherePolyIntersect(xClumpCollBSPTriangle* triangles, void* d
                                              &distance))
             {
                 collisionTri.point = *v0;
-                collisionTri.index = (RwInt32)triangles;
+                collisionTri.index = (RwInt32)(UPtr)triangles;
                 collisionTri.vertices[0] = v0;
                 collisionTri.vertices[1] = v1;
                 collisionTri.vertices[2] = v2;
@@ -780,7 +780,7 @@ static S32 LeafNodeBoxPolyIntersect(xClumpCollBSPTriangle* triangles, void* data
                 RwV3d vTmp, vTmp2;
 
                 collisionTri.point = *v0;
-                collisionTri.index = (RwInt32)triangles;
+                collisionTri.index = (RwInt32)(UPtr)triangles;
                 RwV3dSubMacro(&vTmp, v1, v0);
                 RwV3dSubMacro(&vTmp2, v2, v0);
                 RwV3dCrossProductMacro(&collisionTri.normal, &vTmp, &vTmp2);

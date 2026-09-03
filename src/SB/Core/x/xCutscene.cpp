@@ -120,9 +120,9 @@ xCutscene* xCutscene_Create(U32 id)
             csn->RawBuf = RwMalloc(maxload + 0x3c);
             csn->AlignBuf = csn->RawBuf;
 
-            while ((U32)csn->AlignBuf & 0x3f)
+            while ((U32)(UPtr)csn->AlignBuf & 0x3f)
             {
-                csn->AlignBuf = (void*)((U32)csn->AlignBuf + 4);
+                csn->AlignBuf = (void*)(UPtr)((U32)(UPtr)csn->AlignBuf + 4);
             }
 
             csn->Info = cnfo;

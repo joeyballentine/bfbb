@@ -487,7 +487,7 @@ namespace
     {
         if (bolt.context == NULL)
         {
-            bolt.context = (void*)play_sound(SOUND_BOLT_FLY, &bolt.loc, 1.0f);
+            bolt.context = (void*)(UPtr)play_sound(SOUND_BOLT_FLY, &bolt.loc, 1.0f);
         }
     }
 
@@ -495,7 +495,7 @@ namespace
     {
         if (bolt.context != NULL)
         {
-            kill_sound(3, (U32)bolt.context);
+            kill_sound(3, (U32)(UPtr)bolt.context);
             bolt.context = NULL;
         }
     }

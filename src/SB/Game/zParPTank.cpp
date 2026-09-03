@@ -139,8 +139,8 @@ static void zParPTankSparkleUpdate(zParPTank* zp, float dt)
     RpPTankAtomicLock(zp->ptank, &plock, rpPTANKDFLAGPOSITION, rpPTANKLOCKWRITE);
     RpPTankAtomicLock(zp->ptank, &uvlock, rpPTANKDFLAGVTX2TEXCOORDS, rpPTANKLOCKWRITE);
 
-    U32 plock_base = (U32)plock.data;
-    U32 uvlock_base = (U32)uvlock.data;
+    U32 plock_base = (U32)(UPtr)plock.data;
+    U32 uvlock_base = (U32)(UPtr)uvlock.data;
 
     // RwTexCoords* uv = (RwTexCoords*)uvlock.data;
     for (S32 i = 0; i < zp->num_particles; i++)
@@ -151,11 +151,11 @@ static void zParPTankSparkleUpdate(zParPTank* zp, float dt)
 
         if (uv[0].u >= 1.0f)
         {
-            *(RwV3d*)(plock_base + i * plock.stride) =
-                *(RwV3d*)(plock_base + (zp->num_particles - 1) * plock.stride);
+            *(RwV3d*)(UPtr)(plock_base + i * plock.stride) =
+                *(RwV3d*)(UPtr)(plock_base + (zp->num_particles - 1) * plock.stride);
 
             RwTexCoords* end_uv =
-                (RwTexCoords*)(uvlock_base + (zp->num_particles - 1) * uvlock.stride);
+                (RwTexCoords*)(UPtr)(uvlock_base + (zp->num_particles - 1) * uvlock.stride);
             uv[0] = end_uv[0];
             uv[1] = end_uv[1];
 
@@ -207,8 +207,8 @@ void zParPTankSpawnSparkles(xVec3* pos, U32 count)
         return;
     }
 
-    U32 poslock_base = (U32)posLock.data;
-    U32 uvlock_base = (U32)vtx2TexCoordsLock.data;
+    U32 poslock_base = (U32)(UPtr)posLock.data;
+    U32 uvlock_base = (U32)(UPtr)vtx2TexCoordsLock.data;
     xVec3* ref_pos = pos;
     RwCamera* camera = RwCameraGetCurrentCamera();
     if (gGameState == eGameState_Play && camera)
@@ -224,9 +224,9 @@ void zParPTankSpawnSparkles(xVec3* pos, U32 count)
             continue;
         }
 
-        *(xVec3*)(poslock_base + zp->num_particles * posLock.stride) = *posit;
+        *(xVec3*)(UPtr)(poslock_base + zp->num_particles * posLock.stride) = *posit;
         RwTexCoords* uv =
-            (RwTexCoords*)(uvlock_base + zp->num_particles * vtx2TexCoordsLock.stride);
+            (RwTexCoords*)(UPtr)(uvlock_base + zp->num_particles * vtx2TexCoordsLock.stride);
         uv[0].u = 0.0f;
         uv[0].v = 0.5f;
         uv[1].u = 0.125f + uv[0].u;
@@ -363,10 +363,10 @@ static void zParPTankBubbleUpdate(zParPTank* zp, float dt)
     RpPTankAtomicLock(zp->ptank, &slock, rpPTANKDFLAGSIZE, rpPTANKLOCKWRITE);
     RpPTankAtomicLock(zp->ptank, &uvlock, rpPTANKDFLAGVTX2TEXCOORDS, rpPTANKLOCKWRITE);
 
-    U32 plock_base = (U32)plock.data;
-    U32 clock_base = (U32)clock.data;
-    U32 slock_base = (U32)slock.data;
-    U32 uvlock_base = (U32)uvlock.data;
+    U32 plock_base = (U32)(UPtr)plock.data;
+    U32 clock_base = (U32)(UPtr)clock.data;
+    U32 slock_base = (U32)(UPtr)slock.data;
+    U32 uvlock_base = (U32)(UPtr)uvlock.data;
 
     F32 damp = xpow(0.95f, 60.0f * dt);
 
@@ -432,12 +432,12 @@ static void zParPTankBubbleUpdate(zParPTank* zp, float dt)
         if ((xp->life < 1.2f && xp->life > 0.5f && xurand() > 0.96f) != 0 || xp->life < 0.0f)
 #endif
         {
-            *pos = *(xVec3*)(plock_base + (zp->num_particles - 1) * plock.stride);
-            *color = *(RwRGBA*)(clock_base + (zp->num_particles - 1) * clock.stride);
-            *(RwV2d*)slock.data = *(RwV2d*)(slock_base + (zp->num_particles - 1) * slock.stride);
+            *pos = *(xVec3*)(UPtr)(plock_base + (zp->num_particles - 1) * plock.stride);
+            *color = *(RwRGBA*)(UPtr)(clock_base + (zp->num_particles - 1) * clock.stride);
+            *(RwV2d*)slock.data = *(RwV2d*)(UPtr)(slock_base + (zp->num_particles - 1) * slock.stride);
 
             RwTexCoords* end_uv =
-                (RwTexCoords*)(uvlock_base + (zp->num_particles - 1) * uvlock.stride);
+                (RwTexCoords*)(UPtr)(uvlock_base + (zp->num_particles - 1) * uvlock.stride);
             uv[0] = end_uv[0];
             uv[1] = end_uv[1];
 
@@ -548,10 +548,10 @@ static void zParPTankSpawnBubbles(xVec3* pos, xVec3* vel, U32 count, float scale
         return;
     }
 
-    U32 plock_base = (U32)plock.data;
-    U32 clock_base = (U32)clock.data;
-    U32 slock_base = (U32)slock.data;
-    U32 uvlock_base = (U32)uvlock.data;
+    U32 plock_base = (U32)(UPtr)plock.data;
+    U32 clock_base = (U32)(UPtr)clock.data;
+    U32 slock_base = (U32)(UPtr)slock.data;
+    U32 uvlock_base = (U32)(UPtr)uvlock.data;
     xVec3* ref_pos = pos;
     RwCamera* camera = RwCameraGetCurrentCamera();
     if (gGameState == eGameState_Play && camera)
@@ -569,21 +569,21 @@ static void zParPTankSpawnBubbles(xVec3* pos, xVec3* vel, U32 count, float scale
             continue;
         }
 
-        *(xVec3*)(plock_base + zp->num_particles * plock.stride) = *posit;
+        *(xVec3*)(UPtr)(plock_base + zp->num_particles * plock.stride) = *posit;
         base_xp[zp->num_particles].vel = *velit;
         base_xp[zp->num_particles].life = 1.75f;
 
-        RwTexCoords* uv = (RwTexCoords*)(uvlock_base + zp->num_particles * uvlock.stride);
+        RwTexCoords* uv = (RwTexCoords*)(UPtr)(uvlock_base + zp->num_particles * uvlock.stride);
         uv[0].u = 0.0f;
         uv[0].v = 0.625f;
         uv[1].u = 0.125f + uv[0].u;
         uv[1].v = 0.75f;
 
-        RwV2d* size = (RwV2d*)(slock_base + zp->num_particles * slock.stride);
+        RwV2d* size = (RwV2d*)(UPtr)(slock_base + zp->num_particles * slock.stride);
 
         size->x = size->y = scale * (xurand() * 0.15f + 0.1f);
 
-        *(RwRGBA*)(clock_base + zp->num_particles * clock.stride) = bubble_color;
+        *(RwRGBA*)(UPtr)(clock_base + zp->num_particles * clock.stride) = bubble_color;
         zp->num_particles++;
     }
 
@@ -814,8 +814,8 @@ static void zParPTankSteamUpdate(zParPTank* zp, float dt)
     RpPTankAtomicLock(zp->ptank, &plock, rpPTANKDFLAGPOSITION, rpPTANKLOCKWRITE);
     RpPTankAtomicLock(zp->ptank, &uvlock, rpPTANKDFLAGVTX2TEXCOORDS, rpPTANKLOCKWRITE);
 
-    U32 plock_base = (U32)plock.data;
-    U32 uvlock_base = (U32)uvlock.data;
+    U32 plock_base = (U32)(UPtr)plock.data;
+    U32 uvlock_base = (U32)(UPtr)uvlock.data;
 
     for (U32 i = 0; i < zp->num_particles; i++)
     {
@@ -825,11 +825,11 @@ static void zParPTankSteamUpdate(zParPTank* zp, float dt)
 
         if (uv[0].u >= 1.0f)
         {
-            *(RwV3d*)(plock_base + i * plock.stride) =
-                *(RwV3d*)(plock_base + (zp->num_particles - 1) * plock.stride);
+            *(RwV3d*)(UPtr)(plock_base + i * plock.stride) =
+                *(RwV3d*)(UPtr)(plock_base + (zp->num_particles - 1) * plock.stride);
 
             RwTexCoords* end_uv =
-                (RwTexCoords*)(uvlock_base + (zp->num_particles - 1) * uvlock.stride);
+                (RwTexCoords*)(UPtr)(uvlock_base + (zp->num_particles - 1) * uvlock.stride);
             uv[0] = end_uv[0];
             uv[1] = end_uv[1];
 

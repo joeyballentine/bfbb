@@ -688,7 +688,7 @@ static void* ATBL_Read(void*, U32, void* indata, U32 param_4, U32* outsize)
     void** zaRaw = (void**)(zaTbl + 1);
     xAnimAssetFile* zaFile = (xAnimAssetFile*)(zaRaw + zaTbl->NumRaw);
     xAnimAssetState* zaState =
-        (xAnimAssetState*)((U32)zaFile + zaTbl->NumFiles * sizeof(xAnimAssetFile));
+        (xAnimAssetState*)((U32)(UPtr)zaFile + zaTbl->NumFiles * sizeof(xAnimAssetFile));
 
     for (i = 0; i < zaTbl->NumRaw; ++i)
     {
@@ -720,10 +720,10 @@ static void* ATBL_Read(void*, U32, void* indata, U32 param_4, U32* outsize)
 
     for (i = 0; i < zaTbl->NumFiles; ++i)
     {
-        zaFile[i].RawData = (void**)((U32)zaFile[i].RawData + (U32)zaTbl);
+        zaFile[i].RawData = (void**)(UPtr)((U32)(UPtr)zaFile[i].RawData + (U32)(UPtr)zaTbl);
         for (S32 k = 0; k < zaFile[i].NumAnims[0] * zaFile[i].NumAnims[1]; ++k)
         {
-            zaFile[i].RawData[k] = zaRaw[(U32)zaFile[i].RawData[k]];
+            zaFile[i].RawData[k] = zaRaw[(U32)(UPtr)zaFile[i].RawData[k]];
         }
     }
 
@@ -800,7 +800,7 @@ static void* ATBL_Read(void*, U32, void* indata, U32 param_4, U32* outsize)
         if (zaState[i].EffectCount != 0)
         {
             xAnimState* state = xAnimTableGetStateID(table, zaState[i].StateID);
-            xAnimAssetEffect* zaEffect = (xAnimAssetEffect*)((U32)zaTbl + zaState[i].EffectOffset);
+            xAnimAssetEffect* zaEffect = (xAnimAssetEffect*)(UPtr)((U32)(UPtr)zaTbl + zaState[i].EffectOffset);
 
             if (state != NULL)
             {
@@ -812,7 +812,7 @@ static void* ATBL_Read(void*, U32, void* indata, U32 param_4, U32* outsize)
                                             zaEffect->UserDataSize);
                     memcpy(effect + 1, zaEffect + 1, zaEffect->UserDataSize);
 
-                    zaEffect = (xAnimAssetEffect*)(U32(zaEffect) + zaEffect->UserDataSize) + 1;
+                    zaEffect = (xAnimAssetEffect*)(UPtr)(U32(UPtr(zaEffect)) + zaEffect->UserDataSize) + 1;
                 }
             }
         }

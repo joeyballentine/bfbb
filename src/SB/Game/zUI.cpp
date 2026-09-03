@@ -949,9 +949,9 @@ void zUI_Render(xEnt* ent)
                 U32 srcblend = XMODELINSTANCE_GET_SRCBLEND(ui->model);
                 U32 destblend = XMODELINSTANCE_GET_DSTBLEND(ui->model);
                 RwRenderStateSet(rwRENDERSTATESRCBLEND,
-                                 (void*)(srcblend ? srcblend : rwBLENDSRCALPHA));
+                                 (void*)(UPtr)(srcblend ? srcblend : rwBLENDSRCALPHA));
                 RwRenderStateSet(rwRENDERSTATEDESTBLEND,
-                                 (void*)(destblend ? destblend : rwBLENDINVSRCALPHA));
+                                 (void*)(UPtr)(destblend ? destblend : rwBLENDINVSRCALPHA));
 
                 if ((ui->model->PipeFlags & 0b1100) == rwBLENDINVSRCCOLOR)
                 {

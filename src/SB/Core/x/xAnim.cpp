@@ -2106,7 +2106,7 @@ void xAnimPoolInit(xMemPool* pool, U32 count, U32 singles, U32 blendFlags, U32 e
     play->NumSingle = singles;
 
     xAnimSingle* currsingle;
-    play->Single = currsingle = (xAnimSingle*)((U32)play + sizeof(xAnimPlay));
+    play->Single = currsingle = (xAnimSingle*)((U32)(UPtr)play + sizeof(xAnimPlay));
     currsingle += singles;
 
     for (i = 0; i < singles; ++i)

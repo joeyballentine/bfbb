@@ -581,7 +581,7 @@ st_XORDEREDARRAY* zNPCSpawner::FillPending()
 {
     ClearPending();
     ReFillPending();
-    return (st_XORDEREDARRAY*)this->pendlist.cnt;
+    return (st_XORDEREDARRAY*)(UPtr)(U32)this->pendlist.cnt;
 }
 
 st_XORDEREDARRAY* zNPCSpawner::ReFillPending()
@@ -600,7 +600,7 @@ st_XORDEREDARRAY* zNPCSpawner::ReFillPending()
     }
 
     // NOTE: really returns pendlist.cnt; see FillPending.
-    return (st_XORDEREDARRAY*)pendlist.cnt;
+    return (st_XORDEREDARRAY*)(UPtr)(U32)pendlist.cnt;
 }
 
 S32 zNPCSpawner::IsSPLZClear(zMovePoint* sp)

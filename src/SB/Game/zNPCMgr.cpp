@@ -713,7 +713,7 @@ S32 zNPCMgr_OrdTest_npcid(const void* vkey, void* vitem)
 {
     S32 rc;
 #ifdef PLATFORM_PC
-    void* key = (void*)((zNPCCommon*)vitem)->id;
+    void* key = (void*)(UPtr)((zNPCCommon*)vitem)->id;
 #else
     void* key = *(void**)(vitem);
 #endif

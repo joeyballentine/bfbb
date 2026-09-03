@@ -716,10 +716,10 @@ void zNPCDutchman::RenderExtra()
         render_halo();
     }
 
-    RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)oldzwrite);
-    RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)oldztest);
-    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)oldsrcblend);
-    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)olddestblend);
+    RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)(UPtr)(U32)oldzwrite);
+    RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)(UPtr)(U32)oldztest);
+    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)(UPtr)oldsrcblend);
+    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)(UPtr)olddestblend);
 }
 
 void zNPCDutchman::ParseINI()

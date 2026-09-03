@@ -54,12 +54,12 @@ static void xCMprep(xCreditsData* data)
     }
 
     xCMcredits* cp = (xCMcredits*)(&hdr[1]);
-    while ((S32)cp - (S32)data < hdr->total_size)
+    while ((S32)(UPtr)cp - (S32)(UPtr)data < hdr->total_size)
     {
         xCMpreset* pp = (xCMpreset*)(&cp[1]);
         xCMhunk* hp = (xCMhunk*)(&pp[cp->num_presets]);
 
-        for (; (S32)hp - (S32)cp < cp->credits_size; hp = (xCMhunk*)((S32)hp + hp->hunk_size))
+        for (; (S32)(UPtr)hp - (S32)(UPtr)cp < cp->credits_size; hp = (xCMhunk*)(UPtr)((S32)(UPtr)hp + hp->hunk_size))
         {
             switch (pp[hp->preset].align)
             {
@@ -72,22 +72,22 @@ static void xCMprep(xCreditsData* data)
                 {
                     if (hp->text1 != NULL)
                     {
-                        hp->text1 -= (S32)data;
+                        hp->text1 -= (S32)(UPtr)data;
                     }
                     if (hp->text2 != NULL)
                     {
-                        hp->text2 -= (S32)data;
+                        hp->text2 -= (S32)(UPtr)data;
                     }
                 }
                 else
                 {
                     if (hp->text1 != NULL)
                     {
-                        hp->text1 += (S32)data;
+                        hp->text1 += (S32)(UPtr)data;
                     }
                     if (hp->text2 != NULL)
                     {
-                        hp->text2 += (S32)data;
+                        hp->text2 += (S32)(UPtr)data;
                     }
                 }
                 break;

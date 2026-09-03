@@ -963,14 +963,14 @@ void xfont::set_render_state(RwRaster* raster)
 
 void xfont::restore_render_state()
 {
-    RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)oldrs.fogenable);
-    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)oldrs.srcblend);
-    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)oldrs.destblend);
-    RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)oldrs.vertexalphaenable);
+    RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)(UPtr)(U32)oldrs.fogenable);
+    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)(UPtr)oldrs.srcblend);
+    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)(UPtr)oldrs.destblend);
+    RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)(UPtr)(U32)oldrs.vertexalphaenable);
     RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)oldrs.textureraster);
-    RwRenderStateSet(rwRENDERSTATESHADEMODE, (void*)oldrs.shademode);
-    RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)oldrs.zwriteenable);
-    RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)oldrs.ztestenable);
+    RwRenderStateSet(rwRENDERSTATESHADEMODE, (void*)(UPtr)oldrs.shademode);
+    RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)(UPtr)(U32)oldrs.zwriteenable);
+    RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)(UPtr)(U32)oldrs.ztestenable);
     RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)oldrs.filter);
 }
 

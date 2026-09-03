@@ -296,7 +296,7 @@ S32 HAZ_ord_sorttest(void* vkey, void* vitem)
     {
         return 1;
     }
-    else if ((S32)vkey < (S32)vitem)
+    else if ((S32)(UPtr)vkey < (S32)(UPtr)vitem)
     {
         return -1;
     }

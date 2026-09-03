@@ -851,11 +851,11 @@ static RpCollisionTriangle* nearestFloorCB(RpIntersection*, RpCollisionTriangle*
 
     if (sUseJSP)
     {
-        if (((xClumpCollBSPTriangle*)collTriangle->index)->flags & 0x10)
+        if (((xClumpCollBSPTriangle*)(UPtr)(U32)collTriangle->index)->flags & 0x10)
         {
             return collTriangle;
         }
-        potentialOID = ((xClumpCollBSPTriangle*)collTriangle->index)->matIndex;
+        potentialOID = ((xClumpCollBSPTriangle*)(UPtr)(U32)collTriangle->index)->matIndex;
     }
     else
     {

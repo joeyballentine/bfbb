@@ -39,9 +39,9 @@
 // So the port casts first and flattens second. The console keeps retail's
 // expression exactly, the way XFONT_CHARIDX does in xFont.cpp.
 #ifdef PLATFORM_PC
-#define NPC_SND_OWNER(_this) ((U32)(xEnt*)(_this))
+#define NPC_SND_OWNER(_this) ((U32)(UPtr)(xEnt*)(_this))
 #else
-#define NPC_SND_OWNER(_this) ((U32)(_this))
+#define NPC_SND_OWNER(_this) ((U32)(UPtr)(_this))
 #endif
 
 
@@ -3207,7 +3207,7 @@ U32 zNPCCommon::SndStart(U32 aid_toplay, NPCSndProp* sprop, F32 radius)
         }
         else
         {
-            xsid = xSndPlay3D(aid_toplay, vol * 0.77f, pvary, priority, xsndflags, (xEnt*)owner,
+            xsid = xSndPlay3D(aid_toplay, vol * 0.77f, pvary, priority, xsndflags, (xEnt*)(UPtr)owner,
                               2.0f, radius, SND_CAT_GAME, 0.0f);
         }
     }

@@ -36,7 +36,7 @@ xMorphSeqFile* xMorphSeqSetup(void* data, xMorphFindAssetCallback FindAssetCB)
     for (i = 0; i < (S32)header->ModelCount * 2; i++) {
         if (assetlist[i]) {
             assetPtr = FindAssetCB(assetlist[i], namelist);
-            assetlist[i] = (U32)assetPtr;
+            assetlist[i] = (U32)(UPtr)assetPtr;
         }
         if (namelist) {
             namelist = strlen(namelist) + 1 + namelist;
@@ -45,18 +45,18 @@ xMorphSeqFile* xMorphSeqSetup(void* data, xMorphFindAssetCallback FindAssetCB)
 
     for (i = 0; i < (S32)header->ModelCount; i++) {
         if (assetlist[i*2+1]) {
-            model = (RpAtomic*)assetlist[i*2];
-            mphtgt = (xMorphTargetFile*)assetlist[i*2+1];
+            model = (RpAtomic*)(UPtr)assetlist[i*2];
+            mphtgt = (xMorphTargetFile*)(UPtr)assetlist[i*2+1];
             iMorphOptimize(model, mphtgt->Flags & 0x1);
         }
     }
 
     for (i = 0; i < (S32)header->TimeCount; i++) {
-        model = (RpAtomic*)assetlist[(U32)framelist[i].Model*2];
-        mphtgt = (xMorphTargetFile*)assetlist[(U32)framelist[i].Model*2+1];
+        model = (RpAtomic*)(UPtr)assetlist[(U32)(UPtr)framelist[i].Model*2];
+        mphtgt = (xMorphTargetFile*)(UPtr)assetlist[(U32)(UPtr)framelist[i].Model*2+1];
         framelist[i].Model = model;
         for (j = 0; j < 4; j++) {
-            if ((U32)framelist[i].Targets[j] + 0x10000 == 0xFFFF) {
+            if ((U32)(UPtr)framelist[i].Targets[j] + 0x10000 == 0xFFFF) {
                 framelist[i].Targets[j] = NULL;
             } else {
                 skipsize = (mphtgt->NumVerts * 3 + 7) & ~7;
@@ -68,7 +68,7 @@ xMorphSeqFile* xMorphSeqSetup(void* data, xMorphFindAssetCallback FindAssetCB)
                     framelist[i].NumVerts = mphtgt->NumVerts;
                     framelist[i].Scale *= mphtgt->Scale;
                 }
-                framelist[i].Targets[j] = (S16*)((U8*)(mphtgt + 1) + skipsize * (U32)framelist[i].Targets[j] * 2);
+                framelist[i].Targets[j] = (S16*)((U8*)(mphtgt + 1) + skipsize * (U32)(UPtr)framelist[i].Targets[j] * 2);
             }
         }
     }

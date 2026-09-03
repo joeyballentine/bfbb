@@ -9,10 +9,10 @@
 
 #define ROUND_UP(x, align) (((x) + (align)-1) & (-(align)))
 #define ROUND_UP_PTR(x, align) \
-    ((void *)((((u32)(x)) + (align)-1) & (~((align)-1))))
+    ((void *)(UPtr)((((u32)(UPtr)(x)) + (align)-1) & (~((align)-1))))
 
 #define ROUND_DOWN(x, align) ((x) & (-(align)))
-#define ROUND_DOWN_PTR(x, align) ((void *)(((u32)(x)) & (~((align)-1))))
+#define ROUND_DOWN_PTR(x, align) ((void *)(UPtr)(((u32)(UPtr)(x)) & (~((align)-1))))
 
 #define ARRAY_SIZE(x) (sizeof((x)) / sizeof((x)[0]))
 #define STRING_SIZE(x) (sizeof(x) - 1) // for char arrays, subtract 1 to act as null terminator?

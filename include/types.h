@@ -39,6 +39,28 @@ typedef float F32;
 typedef double F64;
 #endif
 
+// An integer wide enough to hold a pointer. The game stores pointers in U32 in
+// about two hundred places, which is exact on the GameCube and truncates on a
+// 64-bit host; casting through UPtr makes the round trip value-preserving on
+// both. It is 32 bits on the GameCube, so nothing there changes.
+//
+// Truncating to U32 on the way in is still what the code does -- see
+// iMemMgr.cpp, which reserves the game arena below 4 GB so that a game pointer
+// survives it.
+//
+// Spelled out rather than written U32/S32 because this header is also parsed as
+// C, by src/dolphin, where those typedefs are not in scope. It has to be `int`
+// and not `long`: both are 32 bits on the PowerPC EABI, but they are distinct
+// types to CodeWarrior, and `(S32)(unsigned long)p` does not compile to what
+// `(S32)p` did in three functions.
+#if defined(GAMECUBE) || defined(__MWERKS__)
+typedef unsigned int UPtr;
+typedef int SPtr;
+#else
+typedef uintptr_t UPtr;
+typedef intptr_t SPtr;
+#endif
+
 #ifdef NULL
 #undef NULL
 #endif

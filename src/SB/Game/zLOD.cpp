@@ -142,7 +142,7 @@ void zLOD_Setup(void)
 
         if (sTableList[i].baseBucket)
         {
-            RpAtomic* model = (RpAtomic*)xSTFindAsset((U32)sTableList[i].baseBucket, NULL);
+            RpAtomic* model = (RpAtomic*)xSTFindAsset((U32)(UPtr)sTableList[i].baseBucket, NULL);
             if (model)
             {
                 sTableList[i].baseBucket = xModelBucket_GetBuckets(model);
@@ -157,7 +157,7 @@ void zLOD_Setup(void)
         {
             if (sTableList[i].lodBucket[j])
             {
-                RpAtomic* model = (RpAtomic*)xSTFindAsset((U32)sTableList[i].lodBucket[j], NULL);
+                RpAtomic* model = (RpAtomic*)xSTFindAsset((U32)(UPtr)sTableList[i].lodBucket[j], NULL);
                 if (model)
                 {
                     sTableList[i].lodBucket[j] = xModelBucket_GetBuckets(model);

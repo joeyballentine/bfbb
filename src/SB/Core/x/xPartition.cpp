@@ -153,7 +153,7 @@ S32 xPartitionUpdate(_tagPartition* part, void* data, S32 old_idx, xVec3* curren
         return cur_idx;
 
     _tagPartSpace* src = old_idx == -1 ? &part->global : &part->space[old_idx];
-    xPartitionSpaceMove(src, cur_idx == -1 ? &part->global : &part->space[cur_idx], (U32)data);
+    xPartitionSpaceMove(src, cur_idx == -1 ? &part->global : &part->space[cur_idx], (U32)(UPtr)data);
     return cur_idx;
 }
 
@@ -171,7 +171,7 @@ void xPartitionSpaceMove(_tagPartSpace* src, _tagPartSpace* dest, U32 data)
     src_lnk = &src->head;
     src_pre = &src->head;
 
-    while (src_lnk->data != (void*)data)
+    while (src_lnk->data != (void*)(UPtr)data)
     {
         src_pre = src_lnk;
         src_lnk = src_lnk->next;

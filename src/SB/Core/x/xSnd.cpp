@@ -276,7 +276,7 @@ void xSndInternalUpdateVoicePos(xSndVoiceInfo* pVoice)
             }
             else if (pVoice->parentID != 0)
             {
-                xEnt* ent = (xEnt*)(pVoice->parentID & 0xfffffffc); // uhh...
+                xEnt* ent = (xEnt*)(UPtr)(pVoice->parentID & 0xfffffffc); // uhh...
                 if (pVoice->flags & 0x800)
                 {
                     pVoice->actualPos = *(xVec3*)(ent);
@@ -409,7 +409,7 @@ U32 xSndPlayInternal(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, U32 pa
             {
                 if (gSnd.voice[i].assetID == id &&
                     (gSnd.voice[i].parentID == parentID ||
-                     gSnd.voice[i].parentID == (U32)parentEnt) &&
+                     gSnd.voice[i].parentID == (U32)(UPtr)parentEnt) &&
                     (gSnd.voice[i].flags & 1))
                 {
                     return 0;
@@ -504,18 +504,18 @@ U32 xSndPlayInternal(U32 id, F32 vol, F32 pitch, U32 priority, U32 flags, U32 pa
     if (parentEnt != NULL)
     {
         vp->flags |= 0x18;
-        vp->parentID = (U32)parentEnt;
+        vp->parentID = (U32)(UPtr)parentEnt;
         vp->parentPos = NULL;
         vp->innerRadius2 = innerRadius * innerRadius;
         vp->outerRadius2 = (outerRadius <= 0.0f) ? 1000000.0f : outerRadius * outerRadius;
 
         if (flags & 0x800)
         {
-            vp->actualPos = *(xVec3*)((U32)parentEnt & 0xfffffffc);
+            vp->actualPos = *(xVec3*)(UPtr)((U32)(UPtr)parentEnt & 0xfffffffc);
         }
         else
         {
-            vp->actualPos = *xEntGetPos((xEnt*)((U32)parentEnt & 0xfffffffc));
+            vp->actualPos = *xEntGetPos((xEnt*)(UPtr)((U32)(UPtr)parentEnt & 0xfffffffc));
         }
     }
     else if (pos != NULL)

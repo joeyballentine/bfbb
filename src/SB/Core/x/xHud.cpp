@@ -84,8 +84,8 @@ namespace xhud
     void block_allocator::size_reserve(U32 size)
     {
         holder* block = (holder*)xMemAllocSize(size);
-        holder* end = (holder*)((U32)block + size);
-        for (; block < end; block = (holder*)((U32)block + _block_size))
+        holder* end = (holder*)(UPtr)((U32)(UPtr)block + size);
+        for (; block < end; block = (holder*)(UPtr)((U32)(UPtr)block + _block_size))
         {
             block->_next = _top;
             _top = block;
@@ -188,7 +188,7 @@ namespace xhud
         data.eventFunc = cb_dispatch;
         if (data.linkCount != 0)
         {
-            data.link = (xLinkAsset*)((U32)&asset + chunk_size);
+            data.link = (xLinkAsset*)(UPtr)((U32)(UPtr)&asset + chunk_size);
         }
     }
 

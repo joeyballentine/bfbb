@@ -617,7 +617,7 @@ namespace
         F32 vol = MAX(c.volume.left, c.volume.right);
 
         shared.sounds.play(c.id, shared.volume * vol, 0.0f, 0x80, 0,
-                           (U32)&shared.stream_locked[shared.next_stream], SND_CAT_DIALOG);
+                           (U32)(UPtr)&shared.stream_locked[shared.next_stream], SND_CAT_DIALOG);
 
         shared.next_stream ^= 1;
 
@@ -1031,14 +1031,14 @@ namespace
     static void lock_stream()
     {
         shared.stream_locked[0] =
-            xSndStreamLock((U32)&shared.stream_locked[0], SND_CAT_DIALOG, true);
+            xSndStreamLock((U32)(UPtr)&shared.stream_locked[0], SND_CAT_DIALOG, true);
         shared.stream_locked[1] =
-            xSndStreamLock((U32)&shared.stream_locked[1], SND_CAT_DIALOG, true);
+            xSndStreamLock((U32)(UPtr)&shared.stream_locked[1], SND_CAT_DIALOG, true);
     }
     static void unlock_stream()
     {
-        xSndStreamUnlock((U32)&shared.stream_locked[0]);
-        xSndStreamUnlock((U32)&shared.stream_locked[1]);
+        xSndStreamUnlock((U32)(UPtr)&shared.stream_locked[0]);
+        xSndStreamUnlock((U32)(UPtr)&shared.stream_locked[1]);
         shared.stream_locked[0] = 0;
         shared.stream_locked[1] = 0;
     }
@@ -1124,7 +1124,7 @@ namespace
         }
 
         if (!shared.stream_locked[shared.next_stream] ||
-            xSndStreamReady((U32)&shared.stream_locked[shared.next_stream]))
+            xSndStreamReady((U32)(UPtr)&shared.stream_locked[shared.next_stream]))
         {
             shared.prompt_ready = true;
             refresh_prompts();

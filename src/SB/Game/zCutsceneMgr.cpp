@@ -179,7 +179,7 @@ RpAtomic* HackBoundCB(RpAtomic* atomic, void* data)
 RpMaterial* HackAlphaSetMaterialAlphaCB(RpMaterial* material, void* data)
 {
     RwRGBA color = material->color;
-    color.alpha = (U32)data;
+    color.alpha = (U32)(UPtr)data;
     material->color = color;
     return material;
 }
@@ -187,7 +187,7 @@ RpMaterial* HackAlphaSetMaterialAlphaCB(RpMaterial* material, void* data)
 RpAtomic* HackAlphaCB(RpAtomic* atomic, void* data)
 {
     RpGeometry* pGeom = atomic->geometry;
-    if ((U32)data & (1 << s_atomicNumber))
+    if ((U32)(UPtr)data & (1 << s_atomicNumber))
     {
         RpGeometryForAllMaterials(pGeom, HackAlphaSetMaterialAlphaCB, (void*)0xfe);
     }
@@ -251,7 +251,7 @@ void zCutsceneMgrPlayStart(zCutsceneMgr* t)
             {
                 s_atomicNumber = 0;
                 RpClumpForAllAtomics(((RpAtomic*)t->csn->Data[j].DataPtr)->clump, HackAlphaCB,
-                                     (void*)cutsceneHackTable[i].alphaBits);
+                                     (void*)(UPtr)cutsceneHackTable[i].alphaBits);
             }
             if (cutsceneHackTable[i].renderCB != NULL)
             {

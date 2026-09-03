@@ -109,8 +109,8 @@ void zNPCMsg_SendMsg(NPCMsg* inmsg, F32 delay, zNPCCommon* npc_sendto)
         S32 grabMsg = NPCPS_grabMsg();
         if (grabMsg != NULL)
         {
-            NPCPS_copyMsgInfo((NPCMsg*)grabMsg, inmsg, delay);
-            NPCPS_queMessage((NPCMsg*)grabMsg);
+            NPCPS_copyMsgInfo((NPCMsg*)(SPtr)grabMsg, inmsg, delay);
+            NPCPS_queMessage((NPCMsg*)(SPtr)grabMsg);
         }
         else
         {
@@ -122,7 +122,7 @@ void zNPCMsg_SendMsg(NPCMsg* inmsg, F32 delay, zNPCCommon* npc_sendto)
         if (npc_sendto == NULL)
         {
             st_XORDEREDARRAY* npclist = zNPCMgr_GetNPCList();
-            S32 idx = XOrdLookup(npclist, (const void*)inmsg->sendto, zNPCMgr_OrdTest_npcid);
+            S32 idx = XOrdLookup(npclist, (const void*)(UPtr)inmsg->sendto, zNPCMgr_OrdTest_npcid);
             if (idx >= 0)
             {
                 npc_sendto = (zNPCCommon*)npclist->list[idx];
@@ -225,7 +225,7 @@ static S32 NPCPS_grabMsg()
     }
     npc->msgfree = grabbed_msg->next;
     grabbed_msg->next = NULL;
-    return (S32)grabbed_msg;
+    return (S32)(UPtr)grabbed_msg;
 }
 
 static void NPCPS_freeMsg(NPCMsg* inmsg)
