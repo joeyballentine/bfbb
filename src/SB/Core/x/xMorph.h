@@ -1,6 +1,8 @@
 #ifndef XMORPH_H
 #define XMORPH_H
 
+#include <types.h>
+
 #include "iMorph.h"
 #include "xMath3.h"
 
@@ -37,6 +39,16 @@ struct xMorphTargetFile
     xVec3 Center;
     F32 Radius;
 };
+
+// The asset ids behind the frames, replaced by the pointers they resolve to
+// while the sequence is set up. A word on disc, so a word wide enough to hold
+// the pointer that goes back into it. Anim_Read in zAssetTypes.cpp widens the
+// slots along with the frames.
+#ifdef BFBB_PTR64
+typedef void* xMorphAssetSlot;
+#else
+typedef U32 xMorphAssetSlot;
+#endif
 
 typedef void*(*xMorphFindAssetCallback)(U32, char*);
 

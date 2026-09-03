@@ -1,6 +1,7 @@
 #include "zAssetTypes.h"
 
 #include "xAnim.h"
+#include "xCM.h"
 #include "xCurveAsset.h"
 #include "xCutscene.h"
 #include "xstransvc.h"
@@ -39,11 +40,17 @@ static void LightKit_Unload(void*, U32);
 #ifdef BFBB_PTR64
 static void* LightKit_Read(void*, U32, void*, U32, U32*);
 static void* CutsceneTOC_Read(void*, U32, void*, U32, U32*);
+static void* Anim_Read(void*, U32, void*, U32, U32*);
+static void* Credits_Read(void*, U32, void*, U32, U32*);
 #define LKIT_READ LightKit_Read
 #define CTOC_READ CutsceneTOC_Read
+#define ANIM_READ Anim_Read
+#define CRDT_READ Credits_Read
 #else
 #define LKIT_READ NULL
 #define CTOC_READ NULL
+#define ANIM_READ NULL
+#define CRDT_READ NULL
 #endif
 static void MovePoint_Unload(void*, U32);
 
@@ -65,7 +72,7 @@ static st_PACKER_ASSETTYPE assetTypeHandlers[78] = {
     { 'JSP ', 0, 0, JSP_Read, NULL, NULL, NULL, NULL, JSP_Unload, NULL },
     { 'TXD ' },
     { 'MODL', 0, 0, Model_Read, NULL, NULL, NULL, NULL, Model_Unload, NULL },
-    { 'ANIM', 0, 0, NULL, NULL, NULL, NULL, NULL, Anim_Unload, NULL },
+    { 'ANIM', 0, 0, ANIM_READ, NULL, NULL, NULL, NULL, Anim_Unload, NULL },
     { 'RWTX', 0, 0, RWTX_Read, NULL, NULL, NULL, NULL, TextureRW3_Unload, NULL },
     { 'LKIT', 0, 0, LKIT_READ, NULL, NULL, NULL, NULL, LightKit_Unload, NULL },
     { 'CAM ' },
@@ -146,7 +153,7 @@ static st_PACKER_ASSETTYPE assetTypeHandlers[78] = {
     { 'ZLIN' },
     { 'DUPC' },
     { 'SLID' },
-    { 'CRDT' },
+    { 'CRDT', 0, 0, CRDT_READ, NULL, NULL, NULL, NULL, NULL, NULL },
 };
 
 void zAssetStartup()
@@ -1177,6 +1184,230 @@ static void* CutsceneTOC_Read(void*, U32, void* indata, U32 insize, U32* outsize
 
         dest += sizeof(xCutsceneInfo) + numData * sizeof(xCutsceneData) + tail;
         cnfo = (const xCutsceneInfo*)(src + cnfo->HeaderSize);
+    }
+
+    *outsize = size;
+    return out;
+}
+
+// Most ANIM assets are raw animation data and pass straight through. A morph
+// sequence is the exception: it is
+//
+//     0   xMorphSeqFile         TimeCount x 48   frame records, below
+//     16  TimeCount x F32       ModelCount x 2   asset ids, one word each
+//                               ...              the names behind them
+//
+// and one frame record is
+//
+//     0   u32  Model, an index into the asset ids
+//     4   F32  RecipTime            16  u32  Targets[4], indices or -1
+//     8   F32  Scale                32  S16  WeightStart[4]
+//     12  U16  Flags, NumVerts      40  S16  WeightEnd[4]
+//
+// xMorphSeqSetup replaces Model, the targets and the asset ids in place with
+// the pointers they resolve to, so all three are wider here than on disc.
+#define MPSQ_MAGIC 'QSPM'
+#define MPSQ_DISK_FRAME_SIZE 48
+#define MPSQ_DISK_SLOT_SIZE 4
+
+static void* Anim_Read(void*, U32, void* indata, U32 insize, U32* outsize)
+{
+    const U8* asset = (const U8*)indata;
+
+    *outsize = insize;
+
+    if (indata == NULL || insize < sizeof(xMorphSeqFile) || *(const U32*)asset != MPSQ_MAGIC)
+    {
+        return indata;
+    }
+
+    const xMorphSeqFile* hdr = (const xMorphSeqFile*)indata;
+    U32 timeCount = hdr->TimeCount;
+    U32 slotCount = hdr->ModelCount * 2;
+
+    U32 fixed = sizeof(xMorphSeqFile) + timeCount * sizeof(F32);
+    U32 diskBody = timeCount * MPSQ_DISK_FRAME_SIZE + slotCount * MPSQ_DISK_SLOT_SIZE;
+
+    if (insize < fixed + diskBody)
+    {
+        return indata;
+    }
+
+    U32 nameBytes = insize - fixed - diskBody;
+    U32 size = fixed + timeCount * sizeof(xMorphFrame) +
+               slotCount * sizeof(xMorphAssetSlot) + nameBytes;
+
+    U8* out = (U8*)xMemPushTemp(size);
+    memcpy(out, asset, fixed);
+
+    const U8* diskFrame = asset + fixed;
+    xMorphFrame* frames = (xMorphFrame*)(out + fixed);
+
+    for (U32 i = 0; i < timeCount; i++)
+    {
+        const U8* rec = diskFrame + i * MPSQ_DISK_FRAME_SIZE;
+        const U32* words = (const U32*)rec;
+
+        frames[i].Model = (RpAtomic*)(UPtr)words[0];
+        frames[i].RecipTime = *(const F32*)(rec + 4);
+        frames[i].Scale = *(const F32*)(rec + 8);
+        frames[i].Flags = *(const U16*)(rec + 12);
+        frames[i].NumVerts = *(const U16*)(rec + 14);
+
+        for (U32 j = 0; j < 4; j++)
+        {
+            frames[i].Targets[j] = (S16*)(UPtr)words[4 + j];
+            frames[i].WeightStart[j] = *(const S16*)(rec + 32 + j * 2);
+            frames[i].WeightEnd[j] = *(const S16*)(rec + 40 + j * 2);
+        }
+    }
+
+    const U32* diskSlot = (const U32*)(diskFrame + timeCount * MPSQ_DISK_FRAME_SIZE);
+    xMorphAssetSlot* slots = (xMorphAssetSlot*)(frames + timeCount);
+
+    for (U32 i = 0; i < slotCount; i++)
+    {
+        slots[i] = (xMorphAssetSlot)(UPtr)diskSlot[i];
+    }
+
+    memcpy(slots + slotCount, diskSlot + slotCount, nameBytes);
+
+    *outsize = size;
+    return out;
+}
+
+// A credits asset is an xCMheader and then credits blocks, each an xCMcredits,
+// its presets, and the hunks that reference them:
+//
+//     0   xCMheader, total_size bytes to the end of the last block
+//     24  xCMcredits, credits_size bytes to the end of its hunks
+//         num_presets x xCMpreset
+//         hunks, each hunk_size bytes: a 24-byte record and its text
+//
+// and one hunk record is
+//
+//     0   U32  hunk_size        8   F32  t0, t1
+//     4   U32  preset           16  u32  text1, text2, offsets into the asset
+//
+// xCMprep turns those two offsets into pointers in place, so a hunk is wider
+// here than on disc and the three sizes that walk the asset move with it. The
+// copy is written with the pointers already resolved and state left at 0,
+// which is the state that means "resolved" -- xCMprep never runs.
+//
+// xCMtexture is aliased over an xCMpreset's first textbox and caches an
+// RwTexture* at offset 24. That still lands inside the 32-byte textbox at
+// either width, so presets are copied as they are.
+#define CRDT_MAGIC 0xBEEEEEEF
+#define CRDT_DISK_HUNK_SIZE 24
+
+static void* Credits_Read(void*, U32, void* indata, U32 insize, U32* outsize)
+{
+    const U8* asset = (const U8*)indata;
+
+    *outsize = insize;
+
+    if (indata == NULL || insize < sizeof(xCMheader))
+    {
+        return indata;
+    }
+
+    const xCMheader* hdr = (const xCMheader*)indata;
+    U32 total = hdr->total_size;
+
+    if (hdr->magic != CRDT_MAGIC || total > insize || total < sizeof(xCMheader))
+    {
+        return indata;
+    }
+
+    U32 grow = sizeof(xCMhunk) - CRDT_DISK_HUNK_SIZE;
+    U32 hunks = 0;
+    const U8* cp = asset + sizeof(xCMheader);
+
+    while ((U32)(cp - asset) < total)
+    {
+        const xCMcredits* credits = (const xCMcredits*)cp;
+        const U8* hp = cp + sizeof(xCMcredits) + credits->num_presets * sizeof(xCMpreset);
+
+        while ((U32)(hp - cp) < credits->credits_size)
+        {
+            U32 hunkSize = *(const U32*)hp;
+
+            if (hunkSize < CRDT_DISK_HUNK_SIZE || hp + hunkSize > asset + total)
+            {
+                return indata;
+            }
+
+            // Both texts have to live in the hunk that names them, or their
+            // offsets cannot be moved with it.
+            for (U32 j = 0; j < 2; j++)
+            {
+                U32 off = ((const U32*)hp)[4 + j];
+
+                if (off != 0 && (off < (U32)(hp - asset) + CRDT_DISK_HUNK_SIZE ||
+                                 off >= (U32)(hp - asset) + hunkSize))
+                {
+                    return indata;
+                }
+            }
+
+            hunks++;
+            hp += hunkSize;
+        }
+
+        cp = hp;
+    }
+
+    U32 size = total + hunks * grow;
+    U8* out = (U8*)xMemPushTemp(size);
+
+    memcpy(out, asset, sizeof(xCMheader));
+    ((xCMheader*)out)->total_size = size;
+    ((xCMheader*)out)->state = 0;
+
+    cp = asset + sizeof(xCMheader);
+    U8* dest = out + sizeof(xCMheader);
+
+    while ((U32)(cp - asset) < total)
+    {
+        const xCMcredits* credits = (const xCMcredits*)cp;
+        U32 presetBytes = credits->num_presets * sizeof(xCMpreset);
+        U32 blockHunks = 0;
+
+        memcpy(dest, cp, sizeof(xCMcredits) + presetBytes);
+
+        const U8* hp = cp + sizeof(xCMcredits) + presetBytes;
+        U8* destHunk = dest + sizeof(xCMcredits) + presetBytes;
+
+        while ((U32)(hp - cp) < credits->credits_size)
+        {
+            U32 hunkSize = *(const U32*)hp;
+            U32 textBytes = hunkSize - CRDT_DISK_HUNK_SIZE;
+            xCMhunk* hunk = (xCMhunk*)destHunk;
+            const U32* rec = (const U32*)hp;
+
+            hunk->hunk_size = hunkSize + grow;
+            hunk->preset = rec[1];
+            hunk->t0 = *(const F32*)(hp + 8);
+            hunk->t1 = *(const F32*)(hp + 12);
+
+            memcpy(hunk + 1, hp + CRDT_DISK_HUNK_SIZE, textBytes);
+
+            hunk->text1 = rec[4] != 0 ? (char*)(hunk + 1) + (rec[4] - ((U32)(hp - asset) +
+                                                                      CRDT_DISK_HUNK_SIZE))
+                                      : NULL;
+            hunk->text2 = rec[5] != 0 ? (char*)(hunk + 1) + (rec[5] - ((U32)(hp - asset) +
+                                                                      CRDT_DISK_HUNK_SIZE))
+                                      : NULL;
+
+            blockHunks++;
+            hp += hunkSize;
+            destHunk += hunkSize + grow;
+        }
+
+        ((xCMcredits*)dest)->credits_size = credits->credits_size + blockHunks * grow;
+
+        dest = destHunk;
+        cp = hp;
     }
 
     *outsize = size;

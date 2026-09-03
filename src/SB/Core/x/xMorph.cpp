@@ -13,7 +13,7 @@ xMorphSeqFile* xMorphSeqSetup(void* data, xMorphFindAssetCallback FindAssetCB)
     xMorphSeqFile* header;
     F32* timelist;
     xMorphFrame* framelist;
-    U32* assetlist;
+    xMorphAssetSlot* assetlist;
     char* namelist;
     void* assetPtr;
     U32 skipsize;
@@ -21,7 +21,7 @@ xMorphSeqFile* xMorphSeqSetup(void* data, xMorphFindAssetCallback FindAssetCB)
     header = (xMorphSeqFile*)data;
     timelist = (F32*)(header + 1);
     framelist = (xMorphFrame*)(timelist + header->TimeCount);
-    assetlist = (U32*)(framelist + header->TimeCount);
+    assetlist = (xMorphAssetSlot*)(framelist + header->TimeCount);
     namelist = (char*)(assetlist + header->ModelCount * 2);
 
     if (header->Flags & 0x80000000) {
@@ -35,8 +35,8 @@ xMorphSeqFile* xMorphSeqSetup(void* data, xMorphFindAssetCallback FindAssetCB)
 
     for (i = 0; i < (S32)header->ModelCount * 2; i++) {
         if (assetlist[i]) {
-            assetPtr = FindAssetCB(assetlist[i], namelist);
-            assetlist[i] = (U32)(UPtr)assetPtr;
+            assetPtr = FindAssetCB((U32)(UPtr)assetlist[i], namelist);
+            assetlist[i] = (xMorphAssetSlot)(UPtr)assetPtr;
         }
         if (namelist) {
             namelist = strlen(namelist) + 1 + namelist;
