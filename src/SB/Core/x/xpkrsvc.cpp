@@ -1721,7 +1721,7 @@ void* PKR_getmem(U32 id, S32 amount, U32, S32 align, S32 isTemp, char** memtrue)
         if (align != 0)
         {
             // TODO: wtf is this
-            memptr = (void*)(UPtr)(-align & (U32)((S32)(UPtr)memptr + align - 1));
+            memptr = (void*)(-(SPtr)align & (UPtr)((SPtr)memptr + align - 1));
         }
     }
     else
