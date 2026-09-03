@@ -98,7 +98,7 @@ namespace
         { "video", "fov", "75",
           "Horizontal field of view in degrees, as the game measures it at 4:3.\n"
           "; A wider screen already shows more to the sides at the same number." },
-        { "video", "per_pixel_lighting", "on",
+        { "video", "per_pixel_lighting", "off",
           "Light characters once per pixel instead of once per vertex." },
         { "video", "load_time", "1",
           "What to do about loads too fast to see: seconds to hold the loading\n"
