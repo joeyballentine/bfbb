@@ -78,9 +78,12 @@ build-ci/
 build-pc-rel/
 #   build-debug/ and build-release/ are what build-debug.bat and
 #   build-release.bat configure, and bin/ is where they put the exe, the DLLs
-#   it needs and your config.ini.
+#   it needs and your config.ini. The -x64 pair is the same two with the arch
+#   argument, which cannot share a cache either.
 build-debug/
 build-release/
+build-debug-x64/
+build-release-x64/
 /bin/
 
 # Out-of-tree librw builds. Configuring a backend on its own is the quickest

@@ -21,21 +21,31 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-# 32-bit is a project-wide constraint, not a preference. gMemInfo.DRAM.addr is
-# a U32 and xMemInitHeap does pointer arithmetic on it as an integer; every
-# asset-overlaid struct addresses memory in 32 bits; and sizeof(xSndVoiceInfo)
-# is 100, which iSndPlay divides a byte offset by. On LP64 all of that is
-# wrong. See docs/PCPORT-HANDOFF.md 5(a): 162/198 units compile 64-bit against these
-# headers and 195/198 under -m32.
+# 32-bit is the default, and BFBB_BUILD_32BIT=OFF is a real configuration: the
+# whole tree compiles and links both ways, 198/198 units at either width
+# (tools/pcprogress.py, with and without --m32).
 #
-# tools/pcprogress.py measures with the same flag. If you change it here, change
-# it there -- the two disagreeing is how the metric lied once before.
+# What is NOT yet true of the 64-bit build is that it is correct at runtime.
+# The game stores pointers in U32 fields -- gMemInfo.DRAM.addr, xSndVoiceInfo's
+# parentID, xModel's shadowID, xMorph's asset list -- and those casts now go
+# through UPtr (include/types.h), which keeps the value only while every
+# pointer stored that way is below 4 GB. iMemMgr.cpp reserves the game arena
+# there on purpose, but librw still allocates with malloc and can hand back a
+# high pointer; and the handful of asset structs that contain pointers
+# (xAnimTable, xAnimAssetFile, xCurveAsset, xLightKit, zFragProjectileAsset,
+# zFragParticleAsset) change size at 64 bits, so the asset bytes no longer line
+# up under them. Both are open. See docs/PCPORT.md, "Asset caveats".
+#
+# tools/pcprogress.py measures with the same flag. If you change the default
+# here, change it there -- the two disagreeing is how the metric lied once
+# before.
 #
 # THIS HAS TO COME BEFORE project(). project() runs CMake's compiler detection,
-# which compiles and then LINKS a test program. This build runs with the 32-bit
-# MSVC libraries on LIB (vcvarsall x86, or ilammy/msvc-dev-cmd with arch: x86),
-# but clang++ still targets x86-64 unless told otherwise -- so without the flag
-# the probe links a 64-bit object against 32-bit import libraries and dies with
+# which compiles and then LINKS a test program. The 32-bit configuration runs
+# with the 32-bit MSVC libraries on LIB (vcvarsall x86, or ilammy/msvc-dev-cmd
+# with arch: x86), but clang++ still targets x86-64 unless told otherwise -- so
+# without the flag the probe links a 64-bit object against 32-bit import
+# libraries and dies with
 #
 #     lld-link: error: <root>: undefined symbol: mainCRTStartup
 #
@@ -48,7 +58,7 @@ cmake_minimum_required(VERSION 3.16)
 # enables C there. The one cost of _INIT over add_compile_options: it is read
 # once, when the language is enabled, so flipping BFBB_BUILD_32BIT in an
 # existing build directory does nothing. Configure a fresh one.
-option(BFBB_BUILD_32BIT "Build 32-bit, which the asset layouts require" ON)
+option(BFBB_BUILD_32BIT "Build 32-bit, which the asset layouts still require" ON)
 if(BFBB_BUILD_32BIT)
   set(CMAKE_C_FLAGS_INIT "-m32")
   set(CMAKE_CXX_FLAGS_INIT "-m32")

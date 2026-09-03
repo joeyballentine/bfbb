@@ -88,6 +88,12 @@ namespace
         return base != 0 ? address - base : 0;
     }
 
+#ifdef _M_X64
+    const DWORD kStackWalkMachine = IMAGE_FILE_MACHINE_AMD64;
+#else
+    const DWORD kStackWalkMachine = IMAGE_FILE_MACHINE_I386;
+#endif
+
     // Walks one thread's stack and prints it, symbolised. Shared by the crash
     // handler and the watchdog: a crash and a hang want the same answer --
     // "where is it" -- and differ only in how they come by a CONTEXT.
@@ -99,12 +105,21 @@ namespace
 
                 STACKFRAME64 frame;
         memset(&frame, 0, sizeof(frame));
+#ifdef _M_X64
+        frame.AddrPC.Offset = context->Rip;
+        frame.AddrPC.Mode = AddrModeFlat;
+        frame.AddrFrame.Offset = context->Rbp;
+        frame.AddrFrame.Mode = AddrModeFlat;
+        frame.AddrStack.Offset = context->Rsp;
+        frame.AddrStack.Mode = AddrModeFlat;
+#else
         frame.AddrPC.Offset = context->Eip;
         frame.AddrPC.Mode = AddrModeFlat;
         frame.AddrFrame.Offset = context->Ebp;
         frame.AddrFrame.Mode = AddrModeFlat;
         frame.AddrStack.Offset = context->Esp;
         frame.AddrStack.Mode = AddrModeFlat;
+#endif
 
         char symbolBuffer[sizeof(SYMBOL_INFO) + 512];
         SYMBOL_INFO* symbol = (SYMBOL_INFO*)symbolBuffer;
@@ -114,7 +129,7 @@ namespace
 
         for (int depth = 0; depth < 32; depth++)
         {
-            if (!StackWalk64(IMAGE_FILE_MACHINE_I386, process, thread, &frame,
+            if (!StackWalk64(kStackWalkMachine, process, thread, &frame,
                              context, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL))
             {
                 break;
