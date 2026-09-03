@@ -54,6 +54,7 @@
 // matrix can be exercised, which is the part of that path a headless check can
 // actually reach.
 #include "iFX.h"
+#include "iFixes.h"
 #include "iSnapshot.h"
 
 // WITH_D3D above drags in d3d9.h and windows.h behind it, and windows.h still
@@ -69,6 +70,12 @@ static int failures;
 // test_engine_startup dereferences an open engine, so the run stops rather than
 // segfaulting in whichever test touches one first.
 static bool sEngineUnusable;
+
+static bool near(float a, float b)
+{
+    float d = a - b;
+    return d > -0.0005f && d < 0.0005f;
+}
 
 static void check(bool ok, const char* what)
 {
@@ -755,6 +762,73 @@ static void test_cameras()
           "frustumPlanes[1] is the near plane, facing the other way");
     check(camera->frustumBoundBox.sup.z == 100.0f && camera->frustumBoundBox.inf.z == 1.0f,
           "frustumBoundBox spans near to far");
+
+    // ---- refitting a skydome inside the far plane ----
+    //
+    // iFixes.h has the bug and the argument. What matters here is the property
+    // the fix rests on: shrinking about the eye must not move anything on
+    // screen, so every point has to keep its DIRECTION from the eye and only
+    // its distance may change.
+    {
+        RwCameraBeginUpdate(camera);
+
+        RwV3d eye = { 0.0f, 0.0f, 0.0f };
+
+        RwMatrix mat;
+        RwMatrixSetIdentity(&mat);
+        mat.pos.x = 3.0f;
+        mat.pos.y = 20.0f;
+        mat.pos.z = -7.0f;
+
+        RwMatrix before = mat;
+        RwMatrix saved;
+
+        // Well inside a 100-unit far plane, which is every level but GL03.
+        RwSphere fits = { { 0.0f, 0.0f, 0.0f }, 50.0f };
+        check(iFixSkyDomeToFarPlane(&mat, &eye, &fits, &saved) == FALSE,
+              "a dome already inside the far plane is not refitted");
+        check(mat.pos.y == before.pos.y && mat.right.x == before.right.x,
+              "and its matrix is not touched");
+
+        // GL03's shape: a shell far enough out that not one vertex of it is
+        // inside the frustum.
+        RwSphere tooBig = { { 0.0f, 20.0f, 0.0f }, 400.0f };
+        check(iFixSkyDomeToFarPlane(&mat, &eye, &tooBig, &saved) == TRUE,
+              "a dome past the far plane is refitted");
+        check(saved.pos.y == before.pos.y && saved.right.x == before.right.x,
+              "the caller gets the matrix it had back to restore");
+
+        // 0.98 of the far plane over the sphere's own reach from the eye.
+        F32 k = (0.98f * 100.0f) / (20.0f + 400.0f);
+        check(near(mat.right.x, k) && near(mat.up.y, k) && near(mat.at.z, k),
+              "the basis shrinks by the far plane over the dome's reach");
+
+        // The property itself, on a point that is not the origin of anything:
+        // the same corner of the model, placed by each matrix, has to sit on
+        // one ray out of the eye.
+        RwV3d corner = { 11.0f, -5.0f, 2.0f };
+        RwV3d was, now;
+        RwV3dTransformPoints(&was, &corner, 1, &before);
+        RwV3dTransformPoints(&now, &corner, 1, &mat);
+        check(near(now.x - eye.x, k * (was.x - eye.x)) &&
+                  near(now.y - eye.y, k * (was.y - eye.y)) &&
+                  near(now.z - eye.z, k * (was.z - eye.z)),
+              "and every point keeps its direction from the eye, so the picture does not move");
+
+        RwV3d d = { now.x - eye.x, now.y - eye.y, now.z - eye.z };
+        check(sqrtf(d.x * d.x + d.y * d.y + d.z * d.z) < 100.0f,
+              "the refitted dome is inside the far plane it was clipped by");
+
+        mat = before;
+        iFixSetSkyClip(FALSE);
+        check(iFixSkyDomeToFarPlane(&mat, &eye, &tooBig, &saved) == FALSE,
+              "fixes.sky_clip off leaves the dome where the game put it");
+        check(mat.pos.y == before.pos.y && mat.right.x == before.right.x,
+              "and the matrix with it");
+        iFixSetSkyClip(TRUE);
+
+        RwCameraEndUpdate(camera);
+    }
 
     reinterpret_cast<rw::Camera*>(camera)->setFrame(NULL);
     RwFrameDestroy(frame);
@@ -1642,12 +1716,6 @@ static RpGeometry* makeQuad()
     RpGeometryTriangleSetVertexIndices(geometry, &geometry->triangles[0], 0, 1, 2);
     RpGeometryTriangleSetVertexIndices(geometry, &geometry->triangles[1], 0, 2, 3);
     return geometry;
-}
-
-static bool near(float a, float b)
-{
-    float d = a - b;
-    return d > -0.0005f && d < 0.0005f;
 }
 
 static RpMaterial* countMaterialsCB(RpMaterial* material, void* data)

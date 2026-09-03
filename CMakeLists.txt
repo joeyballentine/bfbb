@@ -460,6 +460,7 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iConfig.cpp
   ${PC_DIR}/iDrawDist.cpp
   ${PC_DIR}/iFile.cpp
+  ${PC_DIR}/iFixes.cpp
   ${PC_DIR}/iFont.cpp
   ${PC_DIR}/iFontTexture.cpp
   ${PC_DIR}/iLoadScreen.cpp
@@ -733,7 +734,7 @@ endif()
 # is the one whose behaviour needs a live engine to check, and bfbb_platform
 # would drag in the rest of the layer to get it. The four xFXanimUV globals it
 # reads are stood up by the test itself.
-add_executable(rw_selftest ${PC_DIR}/rw/tests/selftest.cpp ${PC_DIR}/iFX.cpp)
+add_executable(rw_selftest ${PC_DIR}/rw/tests/selftest.cpp ${PC_DIR}/iFX.cpp ${PC_DIR}/iFixes.cpp)
 target_link_libraries(rw_selftest PRIVATE bfbb_rw)
 target_compile_options(rw_selftest PRIVATE -Wno-everything)
 add_test(NAME rw_selftest COMMAND rw_selftest)

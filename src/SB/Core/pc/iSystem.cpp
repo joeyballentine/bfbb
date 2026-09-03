@@ -3,6 +3,7 @@
 #include "iConfig.h"
 #include "iDrawDist.h"
 #include "iFile.h"
+#include "iFixes.h"
 #include "iFont.h"
 #include "iHost.h"
 #include "iPad.h"
@@ -566,6 +567,10 @@ static void ApplyConfig()
 
     // The field of view, before iCameraCreate builds the first frustum.
     iScreenSetFOV(iConfigGetFloat("video.fov", 75.0f));
+
+    // The original game's bugs, on by default. iFixes.h says what each one is
+    // and why it has a switch at all.
+    iFixSetSkyClip(iConfigGetBool("fixes.sky_clip", TRUE));
 
     // How much slack a stick has. auto is the controller's own -- XInput
     // publishes two different numbers for the two sticks, and a player who

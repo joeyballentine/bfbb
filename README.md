@@ -70,10 +70,11 @@ were recovered from the `.xbe`.
 | Save sizes in bytes | none | Those screens measured a memory card in 8 KB blocks. There is no card here, so the figures were byte counts with "block(s)" printed after them, which is where "Available Free Block(s): 2147483647 block(s)" came from. Now shown as "348 KB" or "1.5 MB", with the stray label removed. |
 | Custom font | `[text] font`, `font_sans` | The game's fonts are texture atlases authored for 640x480, so above that they are magnified and go soft. Point these at TrueType files and the same text is drawn from outlines at the size it is actually drawn. Layout, spacing and colour stay the game's. No font ships with the port; `tools/getfont.py` fetches one and `tools/fontfit` sizes it against the atlas it replaces. |
 | PC wording | `[text] platform_wording` | The Xbox text is rewritten as it loads, so nothing offers to reboot to the dashboard or calls a save folder a memory card. The files on disc are never touched. |
+| Original-game bugs | `[fixes] sky_clip` | Can be disabled for a more console-accurate experience. |
 
 ### Fixed bugs
 
-Two bugs in the original game that the port fixes instead of copying:
+Three bugs in the original game that the port fixes instead of copying:
 
 - **3D sound panned the wrong way.** L and R were flipped on GameCube. The
   community's Action Replay fix for the disc was ported here.
@@ -82,6 +83,10 @@ Two bugs in the original game that the port fixes instead of copying:
   closer to the camera and are drawn afterwards, so they cover it up. The port
   swaps the two depths and draws the vertical poles first. This has nothing to do
   with the render size. The rope was invisible at 640x480 as well.
+- **Goo Lagoon's pier has no sky.** A level with fog puts its far clip plane at
+  the fog stop, and GL03's skydome is scaled past its own, so all of it is
+  clipped. The port shrinks the dome about the camera until it fits, which does
+  not move it on screen.
 
 ## Getting the assets
 

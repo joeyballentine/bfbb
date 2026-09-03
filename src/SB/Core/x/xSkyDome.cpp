@@ -1,6 +1,7 @@
 #include "xSkyDome.h"
 
 #include "xEvent.h"
+#include "xFixes.h"
 #include "iModel.h"
 
 struct SkyDomeInfo
@@ -91,7 +92,25 @@ void xSkyDome_Render()
 
             if (!iModelCull(ent->model->Data, ent->model->Mat))
             {
+#ifdef PLATFORM_PC
+                // A dome bigger than the level's fog stop is clipped away
+                // whole, which is what happens to GL03's. Shrinking it about
+                // the camera puts it back without moving a pixel of it; the
+                // argument is in iFixes.h.
+                RwMatrix skySave;
+                S32 skyRefit = iFixSkyDomeToFarPlane(ent->model->Mat, &cammat->pos,
+                                                     &ent->model->Data->worldBoundingSphere,
+                                                     &skySave);
+#endif
+
                 iModelRender(ent->model->Data, ent->model->Mat);
+
+#ifdef PLATFORM_PC
+                if (skyRefit)
+                {
+                    *ent->model->Mat = skySave;
+                }
+#endif
             }
 
             ent->model->Mat->pos = pos;
