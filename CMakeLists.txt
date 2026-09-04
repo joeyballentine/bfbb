@@ -25,16 +25,13 @@ cmake_minimum_required(VERSION 3.16)
 # whole tree compiles and links both ways, 198/198 units at either width
 # (tools/pcprogress.py, with and without --m32).
 #
-# What is NOT yet true of the 64-bit build is that it is correct at runtime.
-# The game stores pointers in U32 fields -- gMemInfo.DRAM.addr, xSndVoiceInfo's
-# parentID, xModel's shadowID, xMorph's asset list -- and those casts now go
-# through UPtr (include/types.h), which keeps the value only while every
-# pointer stored that way is below 4 GB. iMemMgr.cpp reserves the game arena
-# there on purpose, but librw still allocates with malloc and can hand back a
-# high pointer; and the handful of asset structs that contain pointers
-# (xAnimTable, xAnimAssetFile, xCurveAsset, xLightKit, zFragProjectileAsset,
-# zFragParticleAsset) change size at 64 bits, so the asset bytes no longer line
-# up under them. Both are open. See docs/PCPORT.md, "Asset caveats".
+# The 64-bit build boots and plays. Pointers the game keeps in 32-bit fields
+# cast through UPtr (include/types.h), which holds the value only while every
+# pointer stored that way is below 4 GB: iMemMgr.cpp reserves the game arena
+# there, and the fields that hold a librw pointer are widened instead, because
+# librw allocates with malloc and can return a high one. Asset structs that
+# contain pointers are rebuilt at load, all but two through readXForm. See
+# docs/PCPORT.md, "Asset caveats", for the five classes and where each stands.
 #
 # tools/pcprogress.py measures with the same flag. If you change the default
 # here, change it there -- the two disagreeing is how the metric lied once
@@ -58,7 +55,7 @@ cmake_minimum_required(VERSION 3.16)
 # enables C there. The one cost of _INIT over add_compile_options: it is read
 # once, when the language is enabled, so flipping BFBB_BUILD_32BIT in an
 # existing build directory does nothing. Configure a fresh one.
-option(BFBB_BUILD_32BIT "Build 32-bit, which the asset layouts still require" ON)
+option(BFBB_BUILD_32BIT "Build 32-bit, the configuration that gets played" ON)
 if(BFBB_BUILD_32BIT)
   set(CMAKE_C_FLAGS_INIT "-m32")
   set(CMAKE_CXX_FLAGS_INIT "-m32")

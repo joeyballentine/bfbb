@@ -510,7 +510,8 @@ hands out must fit in 32 bits and survive the round trip back to a pointer.
 `iMemInit` therefore reserves its arena with `mmap(MAP_32BIT)` and refuses to
 start if the result is above 4 GB, rather than truncating and corrupting later.
 That is not a decision about asset layouts — it only buys the allocator. The
-choice in **Asset caveats** is still open.
+structs overlaid on asset bytes are handled separately, per type; see
+**Asset caveats**.
 
 While doing it: `xMemInit` places `gxHeap[1]` and `gxHeap[2]` at
 `DRAM.addr + DRAM.size`, *past* the block retail allocated for DRAM. On the

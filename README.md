@@ -113,10 +113,10 @@ exits before the window opens. It tells you the path it looked in and whether
 
 ## Building
 
-Windows only (for now). The output is a 32-bit executable by default, which the
-game's data layouts still require. A 64-bit build works too -- pass `x64` as the
-second argument to the build script -- but it is not yet correct at runtime; see
-the comment above `BFBB_BUILD_32BIT` in `CMakeLists.txt` for what is left.
+Windows only (for now). The output is a 32-bit executable by default. A 64-bit
+build works too and plays -- pass `x64` as the second argument to the build
+script. 32-bit stays the default because it is the configuration that gets
+played; see the comment above `BFBB_BUILD_32BIT` in `CMakeLists.txt`.
 
 Start to finish: install the tools, clone with submodules, optionally install
 FFmpeg and libusb, run `build-release.bat`, point `bin\config.ini` at your Xbox
