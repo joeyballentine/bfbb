@@ -185,6 +185,35 @@ Pairs that differ only by `Core/gc` vs `Core/pc` are the platform split and are
 skipped. A `DIFFERENT` row only matters where something actually casts one type
 to the other; hold those together with a `static_assert` on `sizeof`.
 
+### `assetwidth.py` — structs that change size between 32- and 64-bit
+
+```
+assetwidth.py [--all] [--jobs N]
+```
+
+An asset file is a struct written to disc. Read it back through a struct that
+holds a pointer and the 64-bit build walks it at the wrong stride: the LOD
+table copied 56-byte records out of 32-byte ones, the shrapnel walk ran off the
+end of its second record and then wrote resolved pointers into whatever was
+there, and the curve points were read one float early.
+
+Sizes come from clang rather than from parsing headers. Every unit in
+`build-debug-x64/compile_commands.json` under `Core/x` or `Game` is re-parsed
+with `-fdump-record-layouts`, once as configured and once with `-m32`, and the
+two sets of `sizeof=` are compared. Needs the 64-bit build configured
+(`build-debug.bat D3D9 x64`); takes a couple of minutes.
+
+Rows marked `ASSET, NO TRANSFORM` are the bugs, and the exit status is 1 while
+any remain. A type is called an asset type if it is cast near an
+`xSTFindAsset*` call or its name ends in `Asset`; `NOT_OVERLAID` lists the
+runtime objects that look like one and are not, and `TRANSFORMED` the types
+`zAssetTypes.cpp` already rebuilds at load. Keep both in step when you add a
+transform.
+
+`review: placed after a header` is the `(T*)(header + 1)` shape over a runtime
+allocation. Same arithmetic, but the code that reads it also sized it, so it
+holds at either width -- a bug only if that buffer came from an asset.
+
 ### `stridediff.py` — element strides ours emits and the target never does
 
 ```
