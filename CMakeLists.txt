@@ -179,8 +179,8 @@ add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 #          keeping this working is what lets the RenderWare layer be tested on
 #          a machine with no display at all.
 #   D3D9   Direct3D 9, on a Win32 window the port creates itself.
-#   D3D11  Direct3D 11, on the same window. Under construction -- it opens a
-#          device and clears, and draws nothing yet.
+#   D3D11  Direct3D 11, on the same window. Draws levels and characters; the
+#          Xbox effects are D3D9 only.
 #   GL3    OpenGL 3.3 (falling back through 2.1, GLES 3.1 and GLES 2.0), on an
 #          SDL3 window librw creates. Portable, and the only backend that can
 #          ever run off Windows.

@@ -169,12 +169,18 @@ will not configure.
 
 ### 3. Optional dependencies
 
-Both are found at configure time. Install them before the first build, or
+All three are found at configure time. Install them before the first build, or
 delete the build directory afterwards so CMake looks again.
 
+Every vcpkg triplet below follows the architecture you are building: use
+`:x86-windows` for the default 32-bit build and `:x64-windows` for `x64`. The
+build script looks in `installed\<arch>-windows` for the architecture it was
+asked for, so both sets can be installed side by side.
+
 **FFmpeg** decodes the startup videos and any replacement soundtrack in a
-format other than WAVE. It has to be a 32-bit build with headers and import
-libraries, which most prebuilt Windows FFmpeg is not any more. vcpkg builds one:
+format other than WAVE. It has to match the architecture being built and to
+carry headers and import libraries, which most prebuilt Windows FFmpeg does not
+any more. vcpkg builds one:
 
 ```sh
 git clone https://github.com/microsoft/vcpkg %USERPROFILE%\vcpkg
@@ -215,16 +221,18 @@ Add `-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON` under MinGW: SDL builds through a
 precompiled header and GCC on Windows cannot always load one back. The port's
 own build turns it off already.
 
-It has to be 32-bit and match this build's ABI. CMake links a test program
+It has to match this build's architecture and ABI. CMake links a test program
 against whatever it finds and quietly falls back to the submodule when that
-fails, so a 64-bit SDL on the prefix path costs a few seconds and nothing else.
+fails, so an SDL of the wrong architecture on the prefix path costs a few
+seconds and nothing else.
 `-DBFBB_SDL=vendored` skips the search; `-DBFBB_SDL=system` fails instead of
 falling back, which is what to use when an installed SDL is meant to be found
 and is not.
 
-`build-release.bat` looks in `%USERPROFILE%\vcpkg\installed\x86-windows` and
-uses whatever is there. Set `BFBB_VCPKG` if your vcpkg is somewhere else. The
-DLLs are copied next to the executable automatically.
+`build-release.bat` looks in `%USERPROFILE%\vcpkg\installed\<arch>-windows`
+for the architecture it is building and uses whatever is there. Set
+`BFBB_VCPKG` if your vcpkg is somewhere else. The DLLs are copied next to the
+executable automatically.
 
 Skipping FFmpeg is a supported configuration: CMake prints `FMV decoder: none`
 and the game advances past movies as if they had played. Skipping libusb leaves
@@ -245,6 +253,7 @@ Both take a render backend as their first argument:
 | Backend | What it is |
 | --- | --- |
 | `D3D9` | Direct3D 9, on a Win32 window the port creates. The default, and the only one with the Xbox glow and the cruise-bubble effects. |
+| `D3D11` | Direct3D 11, on the same window. Draws levels and characters; it does not have the Xbox effects. |
 | `GL3` | OpenGL 3.3 on an SDL3 window, falling back through 2.1, GLES 3.1 and GLES 2.0. The backend that can eventually run off Windows. It is missing many ported xbox features. |
 | `NULL` | No renderer. Headless, and what the self-tests run against. |
 
@@ -264,9 +273,10 @@ The second argument is the architecture, `x86` (the default) or `x64`:
 build-release.bat D3D9 x64
 ```
 
-That one builds into `build-release-x64\`, which is a separate cache because the
-architecture cannot be flipped in an existing one. It needs the x64 vcpkg
-triplet for FFmpeg (`:x64-windows` below instead of `:x86-windows`).
+That one builds into `build-release-x64\`, which is a separate cache because
+the architecture cannot be flipped in an existing one. It enters the x64 MSVC
+environment itself and reads the `x64-windows` vcpkg triplet, so the only thing
+to do first is install the optional dependencies for that triplet.
 
 To configure by hand instead, from an x86 developer command prompt:
 
