@@ -16,6 +16,34 @@ static U32 sManagerIndex;
 static U32 sManagerCount;
 static zLODManager sManagerList[2048];
 
+#ifdef BFBB_PTR64
+// A LODT record is 32 bytes on disc: four asset ids and four floats, every one
+// of them 4 bytes. zLODTable holds those ids in pointer fields until
+// zLOD_Setup resolves them, so the struct is wider here and the asset cannot be
+// memcpy'd into it -- that reads 56 bytes per record out of a 32-byte one and
+// lands every field of every record after the first on the wrong bytes.
+#define LODT_DISK_RECORD_SIZE 32
+
+static void zLOD_ReadTable(zLODTable* dst, const void* src, U32 count)
+{
+    const U8* rec = (const U8*)src;
+
+    for (U32 i = 0; i < count; i++, rec += LODT_DISK_RECORD_SIZE)
+    {
+        dst[i].baseBucket = (xModelBucket**)(UPtr)(*(const U32*)(rec + 0));
+        dst[i].noRenderDist = *(const F32*)(rec + 4);
+
+        for (U32 j = 0; j < 3; j++)
+        {
+            dst[i].lodBucket[j] = (xModelBucket**)(UPtr)(*(const U32*)(rec + 8 + 4 * j));
+            dst[i].lodDist[j] = *(const F32*)(rec + 20 + 4 * j);
+        }
+    }
+}
+#else
+static_assert(sizeof(zLODTable) == 32, "the LODT record is the 32-bit struct");
+#endif
+
 // Float memes
 void AddToLODList(xModelInstance* model)
 {
@@ -132,7 +160,11 @@ void zLOD_Setup(void)
     for (i = 0; i < assetCount; i++)
     {
         data = xSTFindAssetByType('LODT', i, &tmpSize);
+#ifdef BFBB_PTR64
+        zLOD_ReadTable(tableCurr, (S32*)data + 1, *(S32*)data);
+#else
         memcpy(tableCurr, (S32*)data + 1, (*(S32*)data) * sizeof(zLODTable));
+#endif
         tableCurr += *(S32*)data;
     }
 
