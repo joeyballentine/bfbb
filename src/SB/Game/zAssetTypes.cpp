@@ -9,6 +9,8 @@
 #include "xEnv.h"
 #include "xJSP.h"
 #include "xMorph.h"
+#include "zShrapnel.h"
+#include "xVolume.h"
 
 #include <types.h>
 #include <stdio.h>
@@ -42,15 +44,21 @@ static void* LightKit_Read(void*, U32, void*, U32, U32*);
 static void* CutsceneTOC_Read(void*, U32, void*, U32, U32*);
 static void* Anim_Read(void*, U32, void*, U32, U32*);
 static void* Credits_Read(void*, U32, void*, U32, U32*);
+static void* Shrapnel_Read(void*, U32, void*, U32, U32*);
+static void* Volume_Read(void*, U32, void*, U32, U32*);
 #define LKIT_READ LightKit_Read
 #define CTOC_READ CutsceneTOC_Read
 #define ANIM_READ Anim_Read
 #define CRDT_READ Credits_Read
+#define SHRP_READ Shrapnel_Read
+#define VOLU_READ Volume_Read
 #else
 #define LKIT_READ NULL
 #define CTOC_READ NULL
 #define ANIM_READ NULL
 #define CRDT_READ NULL
+#define SHRP_READ NULL
+#define VOLU_READ NULL
 #endif
 static void MovePoint_Unload(void*, U32);
 
@@ -109,7 +117,7 @@ static st_PACKER_ASSETTYPE assetTypeHandlers[78] = {
     { 'BOUL' },
     { 'MAPR' },
     { 'GUST' },
-    { 'VOLU' },
+    { 'VOLU', 0, 0, VOLU_READ, NULL, NULL, NULL, NULL, NULL, NULL },
     { 'UI  ' },
     { 'UIFT' },
 #ifdef PLATFORM_PC
@@ -146,7 +154,7 @@ static st_PACKER_ASSETTYPE assetTypeHandlers[78] = {
     { 'PIPT' },
     { 'DSCO' },
     { 'JAW ' },
-    { 'SHRP' },
+    { 'SHRP', 0, 0, SHRP_READ, NULL, NULL, NULL, NULL, NULL, NULL },
     { 'FLY ' },
     { 'TRCK' },
     { 'CRV ', 0, 0, Curve_Read, NULL, NULL, NULL, NULL, NULL, NULL },
@@ -211,8 +219,298 @@ static void* Model_Read(void* param_1, U32 param_2, void* indata, U32 insize, U3
 
     return model;
 }
+#ifdef BFBB_PTR64
+// VOLU: one xVolumeAsset. The pointer is xBound::mat, at the end of the bound
+// and NULL on disc -- xVolumeAsset sets it up at runtime -- but it still pushes
+// rot, xpivot and zpivot along and forces the bound itself to 8-byte alignment,
+// so the struct is 112 bytes here against the file's 100. zVolumeSetup writes
+// the quick-cull data back into the asset through this struct, so reading it in
+// place puts that write 4 bytes into the neighbouring field.
+#define VOLU_DISK_SIZE 100
+#define VOLU_DISK_BOUND_OFFSET 12
+#define VOLU_DISK_ROT_OFFSET 88
+
+// The bound's own fields, from the start of the bound.
+#define BOUND_DISK_TYPE_OFFSET 32
+#define BOUND_DISK_SHAPE_OFFSET 36
+#define BOUND_DISK_SHAPE_SIZE 36
+
+static_assert(sizeof(xQCData) == BOUND_DISK_TYPE_OFFSET, "xQCData moved");
+static_assert(sizeof(xBBox) == BOUND_DISK_SHAPE_SIZE, "the bound union moved");
+
+static void* Volume_Read(void* param_1, U32 param_2, void* indata, U32 insize,
+                         U32* outsize)
+{
+    U32 count = insize / VOLU_DISK_SIZE;
+
+    *outsize = count * sizeof(xVolumeAsset);
+
+    xVolumeAsset* out = (xVolumeAsset*)RWSRCGLOBAL(memoryFuncs.rwmalloc(*outsize));
+    const U8* in = (const U8*)indata;
+
+    for (U32 i = 0; i < count; i++, in += VOLU_DISK_SIZE)
+    {
+        xVolumeAsset* v = &out[i];
+        const U8* b = in + VOLU_DISK_BOUND_OFFSET;
+
+        memcpy((xBaseAsset*)v, in, sizeof(xBaseAsset));
+        v->flags = *(const U32*)(in + 8);
+
+        memcpy(&v->bound.qcd, b, sizeof(xQCData));
+        v->bound.type = b[BOUND_DISK_TYPE_OFFSET];
+        v->bound.pad[0] = b[BOUND_DISK_TYPE_OFFSET + 1];
+        v->bound.pad[1] = b[BOUND_DISK_TYPE_OFFSET + 2];
+        v->bound.pad[2] = b[BOUND_DISK_TYPE_OFFSET + 3];
+        memcpy(&v->bound.box, b + BOUND_DISK_SHAPE_OFFSET, BOUND_DISK_SHAPE_SIZE);
+        v->bound.mat = NULL;
+
+        v->rot = *(const F32*)(in + VOLU_DISK_ROT_OFFSET + 0);
+        v->xpivot = *(const F32*)(in + VOLU_DISK_ROT_OFFSET + 4);
+        v->zpivot = *(const F32*)(in + VOLU_DISK_ROT_OFFSET + 8);
+    }
+
+    return out;
+}
+#else
+static_assert(sizeof(xVolumeAsset) == 100, "the VOLU record is the 32-bit struct");
+#endif
+
+#ifdef BFBB_PTR64
+// SHRP: a zShrapnelAsset header followed by fassetCount fragment records, each
+// one a zFragAsset base plus a body picked by its type. Six fields in there are
+// pointers -- the header's initCB, a projectile's modelFile, child and
+// scaleCurve, a particle's parEmitter and its emit.emit_volume -- and every one
+// of them is filled in after the load, by zShrapnel_SetShrapnelAssetInitCB and
+// the two SceneInits. On disc they are 4-byte holes. So this walks the records
+// at their real stride, widens each one, and leaves the pointers NULL; nothing
+// reads a pointer value out of the file.
+//
+// Read in place instead, the walk in zShrapnel_SceneInit strides by the 64-bit
+// sizeof and runs off the end of the second record, and the SceneInits write
+// 8-byte pointers into 4-byte holes on top of the next field.
+#define SHRP_DISK_HEADER_SIZE 12
+#define SHRP_DISK_FRAG_BASE_SIZE 24
+#define SHRP_DISK_PROJECTILE_SIZE 144
+#define SHRP_DISK_PARTICLE_SIZE 468
+#define SHRP_DISK_SOUND_SIZE 76
+#define SHRP_DISK_LIGHTNING_SIZE 104
+#define SHRP_DISK_EMITTER_SIZE 364
+#define SHRP_DISK_EMITTER_PROPS_SIZE 312
+
+// These two hold no pointers, so the disc record and the struct agree at either
+// width and the copies below are plain.
+static_assert(sizeof(zFragAsset) == SHRP_DISK_FRAG_BASE_SIZE, "zFragAsset moved");
+static_assert(sizeof(zFragLocation) == 36, "zFragLocation moved");
+static_assert(sizeof(xParEmitterPropsAsset) == SHRP_DISK_EMITTER_PROPS_SIZE,
+              "xParEmitterPropsAsset moved");
+
+static U32 SHRP_disk_frag_size(U32 type)
+{
+    switch (type)
+    {
+    case eFragProjectile:
+        return SHRP_DISK_PROJECTILE_SIZE;
+    case eFragParticle:
+        return SHRP_DISK_PARTICLE_SIZE;
+    case eFragSound:
+        return SHRP_DISK_SOUND_SIZE;
+    case eFragLightning:
+        return SHRP_DISK_LIGHTNING_SIZE;
+    default:
+        return 0;
+    }
+}
+
+static U32 SHRP_frag_size(U32 type)
+{
+    switch (type)
+    {
+    case eFragProjectile:
+        return sizeof(zFragProjectileAsset);
+    case eFragParticle:
+        return sizeof(zFragParticleAsset);
+    case eFragSound:
+        return sizeof(zFragSoundAsset);
+    case eFragLightning:
+        return sizeof(zFragLightningAsset);
+    default:
+        return 0;
+    }
+}
+
+static void SHRP_read_base(zFragAsset* dst, const U8* rec)
+{
+    memcpy(dst, rec, SHRP_DISK_FRAG_BASE_SIZE);
+}
+
+static void SHRP_read_emitter(xParEmitterCustomSettings* dst, const U8* rec)
+{
+    memcpy((xParEmitterPropsAsset*)dst, rec, SHRP_DISK_EMITTER_PROPS_SIZE);
+
+    const U8* s = rec + SHRP_DISK_EMITTER_PROPS_SIZE;
+
+    dst->custom_flags = *(const U32*)(s + 0);
+    dst->attachToID = *(const U32*)(s + 4);
+    memcpy(&dst->pos, s + 8, sizeof(xVec3));
+    memcpy(&dst->vel, s + 20, sizeof(xVec3));
+    dst->vel_angle_variation = *(const F32*)(s + 32);
+    dst->rot[0] = s[36];
+    dst->rot[1] = s[37];
+    dst->rot[2] = s[38];
+    dst->padding = s[39];
+    dst->radius = *(const F32*)(s + 40);
+    dst->emit_interval_current = *(const F32*)(s + 44);
+    dst->emit_volume = NULL;
+}
+
+static void SHRP_read_frag(void* dst, const U8* rec)
+{
+    SHRP_read_base((zFragAsset*)dst, rec);
+
+    switch (*(const U32*)rec)
+    {
+    case eFragProjectile:
+    {
+        zFragProjectileAsset* f = (zFragProjectileAsset*)dst;
+        const U8* s = rec + SHRP_DISK_FRAG_BASE_SIZE;
+
+        f->modelInfoID = *(const U32*)(s + 0);
+        f->modelFile = NULL;
+        memcpy(&f->launch, s + 8, sizeof(zFragLocation));
+        memcpy(&f->vel, s + 44, sizeof(zFragLocation));
+        f->bounce = *(const F32*)(s + 80);
+        f->maxBounces = *(const S32*)(s + 84);
+        f->flags = *(const U32*)(s + 88);
+        f->childID = *(const U32*)(s + 92);
+        f->child = NULL;
+        f->minScale = *(const F32*)(s + 100);
+        f->maxScale = *(const F32*)(s + 104);
+        f->scaleCurveID = *(const U32*)(s + 108);
+        f->scaleCurve = NULL;
+        f->gravity = *(const F32*)(s + 116);
+        break;
+    }
+    case eFragParticle:
+    {
+        zFragParticleAsset* f = (zFragParticleAsset*)dst;
+        const U8* s = rec + SHRP_DISK_FRAG_BASE_SIZE;
+
+        memcpy(&f->source, s + 0, sizeof(zFragLocation));
+        memcpy(&f->vel, s + 36, sizeof(zFragLocation));
+        SHRP_read_emitter(&f->emit, s + 72);
+        f->parEmitterID = *(const U32*)(s + 436);
+        f->parEmitter = NULL;
+        break;
+    }
+    case eFragSound:
+    {
+        zFragSoundAsset* f = (zFragSoundAsset*)dst;
+        const U8* s = rec + SHRP_DISK_FRAG_BASE_SIZE;
+
+        f->assetID = *(const U32*)(s + 0);
+        memcpy(&f->source, s + 4, sizeof(zFragLocation));
+        f->volume = *(const F32*)(s + 40);
+        f->innerRadius = *(const F32*)(s + 44);
+        f->outerRadius = *(const F32*)(s + 48);
+        break;
+    }
+    case eFragLightning:
+    {
+        zFragLightningAsset* f = (zFragLightningAsset*)dst;
+        const U8* s = rec + SHRP_DISK_FRAG_BASE_SIZE;
+
+        memcpy(&f->start, s + 0, sizeof(zFragLocation));
+        memcpy(&f->end, s + 36, sizeof(zFragLocation));
+        f->startParentID = *(const U32*)(s + 72);
+        f->endParentID = *(const U32*)(s + 76);
+        break;
+    }
+    }
+}
+
+static void* Shrapnel_Read(void* param_1, U32 param_2, void* indata, U32 insize,
+                           U32* outsize)
+{
+    const U8* in = (const U8*)indata;
+    S32 count = *(const S32*)in;
+
+    // Size the copy, and stop on a record whose type is not one of the four --
+    // reading on from there would be walking at a guessed stride.
+    U32 diskUsed = SHRP_DISK_HEADER_SIZE;
+    U32 need = sizeof(zShrapnelAsset);
+    S32 usable = 0;
+
+    for (S32 i = 0; i < count; i++)
+    {
+        U32 type = *(const U32*)(in + diskUsed);
+        U32 diskSize = SHRP_disk_frag_size(type);
+
+        if (diskSize == 0 || diskUsed + diskSize > insize)
+        {
+            break;
+        }
+
+        diskUsed += diskSize;
+        need += SHRP_frag_size(type);
+        usable++;
+    }
+
+    *outsize = need;
+
+    U8* out = (U8*)RWSRCGLOBAL(memoryFuncs.rwmalloc(need));
+    zShrapnelAsset* head = (zShrapnelAsset*)out;
+
+    head->fassetCount = usable;
+    head->shrapnelID = *(const U32*)(in + 4);
+    head->initCB = NULL;
+
+    const U8* rec = in + SHRP_DISK_HEADER_SIZE;
+    U8* dst = out + sizeof(zShrapnelAsset);
+
+    for (S32 i = 0; i < usable; i++)
+    {
+        U32 type = *(const U32*)rec;
+
+        SHRP_read_frag(dst, rec);
+
+        rec += SHRP_disk_frag_size(type);
+        dst += SHRP_frag_size(type);
+    }
+
+    return out;
+}
+#endif
+
+// The header is five 4-byte fields on disc, the last of them the points
+// pointer's slot. xCurveAsset is wider at 64 bits, so the point array has to be
+// placed after the struct's real end rather than 20 bytes in -- copied verbatim
+// it lands the pointer on top of the first two points and reads every point one
+// float early.
+#define CRV_DISK_HEADER_SIZE 20
+
 static void* Curve_Read(void* param_1, U32 param_2, void* indata, U32 insize, U32* outsize)
 {
+#ifdef BFBB_PTR64
+    U32 pointBytes = insize - CRV_DISK_HEADER_SIZE;
+
+    *outsize = sizeof(xCurveAsset) + pointBytes;
+
+    xCurveAsset* out = (xCurveAsset*)RWSRCGLOBAL(memoryFuncs.rwmalloc(*outsize));
+    const U8* in = (const U8*)indata;
+
+    out->type = (xCurveType) * (const U32*)(in + 0);
+    out->clamp = (xCurveClamp) * (const U32*)(in + 4);
+    out->delta = *(const F32*)(in + 8);
+    out->numPoints = *(const S32*)(in + 12);
+    out->points = (F32*)(out + 1);
+
+    memcpy(out->points, in + CRV_DISK_HEADER_SIZE, pointBytes);
+
+    return out;
+#else
+    static_assert(sizeof(xCurveAsset) == CRV_DISK_HEADER_SIZE,
+                  "the CRV header is the 32-bit struct");
+
     *outsize = insize;
 
     void* __dest = RWSRCGLOBAL(memoryFuncs.rwmalloc(insize));
@@ -223,6 +521,7 @@ static void* Curve_Read(void* param_1, U32 param_2, void* indata, U32 insize, U3
     ((xCurveAsset*)__dest)->points = (F32*)((xCurveAsset*)__dest + 1);
 
     return __dest;
+#endif
 }
 
 #ifdef PLATFORM_PC
