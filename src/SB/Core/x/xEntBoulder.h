@@ -45,6 +45,20 @@ struct xEntBoulder : xEnt
     U8 collis_chk;
     U8 collis_pen;
     U8 pad1[2];
+#ifdef PLATFORM_PC
+    // Boulder physics runs at a fixed 1/60, not at the frame rate. See the
+    // comment on xEntBoulder_FixedStep in xEntBoulder.cpp for why. These carry
+    // the accumulator and the two states the rendered transform interpolates
+    // between, and they sit at the end of the struct behind the guard so
+    // sizeof(xEntBoulder) -- which zScene.cpp puts in a table the GameCube
+    // objects contain -- does not move.
+    F32 fixedAcc;
+    xMat4x3 fixedMat;        // the simulated transform, after the last whole step
+    xMat4x3 fixedRenderMat;  // what was last written to model->Mat to be drawn
+    xVec3 fixedPrevPos;      // the position the last step started from
+    U8 fixedInit;
+    U8 pad2[3];
+#endif
 };
 
 struct xBoulderGeneratorAsset : xDynAsset

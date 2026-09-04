@@ -8,6 +8,7 @@
  "src/SB/Core/x/xEnt.cpp\tcounter\tent->num_updates++;": 1,
  "src/SB/Core/x/xEntBoulder.cpp\tcounter\tent->hitpoints--;": 1,
  "src/SB/Core/x/xEntBoulder.cpp\thistory\txFXStreakUpdate(sBubbleStreakID, &a, &b);": 1,
+ "src/SB/Core/x/xEntBoulder.cpp\ttimestep\tstatic const F32 kBoulderStep = 1.0f / 60.0f;": 1,
  "src/SB/Core/x/xFX.cpp\tgate\tif (xurand() < 0.75f)": 1,
  "src/SB/Core/x/xFX.cpp\ttimestep\tF32 frequency = s->frequency > 0.0f ? s->frequency : 1.0f / 60.0f;": 1,
  "src/SB/Core/x/xFX.cpp\ttimestep\txParEmitterEmitCustom(femit, 1.0f / 60.0f, &xplo_info);": 1,

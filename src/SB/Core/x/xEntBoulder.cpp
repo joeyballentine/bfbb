@@ -238,8 +238,183 @@ void xEntBoulder_RealBUpdate(xEnt* ent, xVec3* pos)
     zGridUpdateEnt(boul);
 }
 
+#ifdef PLATFORM_PC
+// Boulder physics is not frame-rate independent, and cannot be made so.
+//
+// xEntBoulder_Update depenetrates by moving the sphere and then recomputes the
+// whole velocity from the position change, `vel = (newCenter - oldCenter)/dt`.
+// That is exactly the right thing when this frame's motion CAUSED the
+// penetration -- a boulder resting, rolling or bouncing sinks by |vel|*dt into
+// the surface, the depenetration cancels exactly that, and the quotient is the
+// velocity with its into-surface component removed, at any frame time. It is
+// not the right thing for an overlap the motion did not cause, which arrives
+// as a push of overlap/dt with nothing to bound it as dt falls.
+//
+// JF01's cannon is the case that matters. BOULDERGEN_01 spawns its
+// cannon_puffer 0.59 units inside CANNON_DESTR_01's own mesh, and what saves
+// the shot on console is that one 1/60 step carries the boulder 0.24 units --
+// far enough that only 0.025 of overlap is left to resolve. Below 1/60 the
+// step is too short to clear the barrel, the boulder scrapes along its inside
+// for several frames instead, and it leaves going UP: 57 degrees off the
+// barrel at 240 fps, missing its own aim point by 7.1 units.
+//
+// That is tunnelling, and tunnelling is not something a smaller step can
+// reproduce. No clamp on the depenetration fixes it -- an excess-depenetration
+// guard and a full contact projection were both measured, and both leave the
+// shot wrong above 120 fps, because the boulder really is in contact with
+// geometry that the console's longer step skipped over.
+//
+// So the boulder is stepped at the rate its behaviour was authored for. The
+// leftover frame time accumulates, whole 1/60 steps run, and the transform the
+// renderer sees is interpolated between the last two stepped states so the
+// motion stays smooth however fast the display runs. At 60 fps this is one
+// step per frame with a zero remainder and the arithmetic below is retail's,
+// untouched; above 60 the trajectory is the console's, identically, at every
+// frame rate measured from 30 to 1000.
+//
+// Returns TRUE when it has done the stepping itself and the caller should not
+// fall through into the update body.
+static const F32 kBoulderStep = 1.0f / 60.0f;
+static S32 sBoulderStepping;
+
+static S32 xEntBoulder_FixedStep(xEntBoulder* ent, xScene* sc, F32 dt)
+{
+    if (sBoulderStepping)
+    {
+        // Re-entered from the loop below. Run the body.
+        return FALSE;
+    }
+
+    if (ent->collis != NULL)
+    {
+        // Somebody outside handed this boulder its own collision buffer to
+        // fill, which means they are going to read this update's contacts back
+        // out of it -- the spongeball does, at zEntPlayer.cpp:6524, to find the
+        // boulder that hurt the player. A caller like that is driving the
+        // boulder itself, every frame, at the frame's own dt: it also places
+        // the player at the sphere centre this update leaves behind and writes
+        // the steering lean straight into the model matrix. An update that only
+        // ran every fourth frame would hand it an unwritten buffer and a half
+        // interpolated matrix.
+        //
+        // Nothing is lost by leaving it alone. The spongeball is in continuous
+        // rolling contact, and rolling contact is depenetrated correctly at any
+        // frame time; only an overlap the frame's motion did not cause is not,
+        // and the player is never launched into one.
+        return FALSE;
+    }
+
+    if (ent->model == NULL)
+    {
+        return FALSE;
+    }
+
+    if (!ent->fixedInit)
+    {
+        ent->fixedInit = TRUE;
+
+        // Seeded so that this very frame takes one whole step and keeps no
+        // remainder, which is the console's phase: a boulder is launched and
+        // then updated, not launched and left at the muzzle for three frames
+        // until the accumulator fills.
+        ent->fixedAcc = kBoulderStep - dt;
+        if (ent->fixedAcc < 0.0f)
+        {
+            ent->fixedAcc = 0.0f;
+        }
+
+        xMat4x3Copy(&ent->fixedMat, (xMat4x3*)ent->model->Mat);
+        xVec3Copy(&ent->fixedPrevPos, &ent->fixedMat.pos);
+    }
+    else if (memcmp(ent->model->Mat, &ent->fixedRenderMat, sizeof(xMat4x3)) != 0)
+    {
+        // Somebody else authored the transform since the last frame, and their
+        // write is the truth. A launch is not this case -- it goes through
+        // xEntBoulder_Reset and is caught above -- this is a reposition that
+        // does not. Re-anchor to what they wrote, but keep the accumulator, or
+        // a boulder written to every frame would never reach a whole step and
+        // never simulate at all.
+        xMat4x3Copy(&ent->fixedMat, (xMat4x3*)ent->model->Mat);
+        xVec3Copy(&ent->fixedPrevPos, &ent->fixedMat.pos);
+    }
+    else
+    {
+        // Undo the render interpolation, so the step starts from the state the
+        // last step left and the sequence stays what it is on console.
+        xMat4x3Copy((xMat4x3*)ent->model->Mat, &ent->fixedMat);
+    }
+
+    ent->fixedAcc += dt;
+
+    // zGame clamps a frame to a tenth of a second, so this is six steps at
+    // worst. The cap is here for the frame a level finishes loading on.
+    if (ent->fixedAcc > 8.0f * kBoulderStep)
+    {
+        ent->fixedAcc = 8.0f * kBoulderStep;
+    }
+
+    while (ent->fixedAcc >= kBoulderStep)
+    {
+        ent->fixedAcc -= kBoulderStep;
+
+        xVec3Copy(&ent->fixedPrevPos, (xVec3*)&ent->model->Mat->pos);
+
+        sBoulderStepping = TRUE;
+        xEntBoulder_Update(ent, sc, kBoulderStep);
+        sBoulderStepping = FALSE;
+
+        // xEntBoulder_Kill clears the callback, and a killed boulder must not
+        // be stepped again this frame.
+        if (ent->update == NULL)
+        {
+            ent->fixedAcc = 0.0f;
+            xMat4x3Copy(&ent->fixedMat, (xMat4x3*)ent->model->Mat);
+            xVec3Copy(&ent->fixedPrevPos, &ent->fixedMat.pos);
+            return TRUE;
+        }
+    }
+
+    xMat4x3Copy(&ent->fixedMat, (xMat4x3*)ent->model->Mat);
+
+    // The transform to draw: between the state the last step started from and
+    // the one it produced. Position lerps. Orientation does not have to be
+    // reconstructed at all -- the step applied exactly one rotation, by
+    // angVel * kBoulderStep about rotVec, under the threshold the body uses,
+    // and both are still sitting in the entity. Turning back by the part of
+    // that angle which has not elapsed yet gives the intermediate orientation
+    // exactly, because rotations about one axis compose.
+    F32 alpha = ent->fixedAcc * (1.0f / kBoulderStep);
+
+    xVec3 rpos;
+    xVec3Copy(&rpos, &ent->fixedPrevPos);
+    xVec3AddScaled(&rpos, &ent->fixedMat.pos, alpha);
+    xVec3AddScaled(&rpos, &ent->fixedPrevPos, -alpha);
+    xVec3Copy((xVec3*)&ent->model->Mat->pos, &rpos);
+
+    if ((ent->angVel > 0.075f) || (ent->angVel < -0.075f))
+    {
+        xMat3x3 rotM;
+        xMat3x3Rot(&rotM, &ent->rotVec, -ent->angVel * kBoulderStep * (1.0f - alpha));
+        xMat3x3Mul((xMat3x3*)ent->model->Mat, (xMat3x3*)ent->model->Mat, &rotM);
+    }
+
+    // Remembered so the next frame can tell this transform apart from one
+    // somebody else wrote.
+    xMat4x3Copy(&ent->fixedRenderMat, (xMat4x3*)ent->model->Mat);
+
+    return TRUE;
+}
+#endif
+
 void xEntBoulder_Update(xEntBoulder* ent, xScene* sc, F32 dt)
 {
+#ifdef PLATFORM_PC
+    if (xEntBoulder_FixedStep(ent, sc, dt))
+    {
+        return;
+    }
+#endif
+
     // Names come from dwarf/SB/Core/x/xEntBoulder.cpp. These declarations used to
     // sit in one 26-line block at the top; they are spread through the function
     // now, and two rules govern where they may go.
@@ -930,6 +1105,12 @@ void xEntBoulder_Reset(xEntBoulder* boul, xScene* sc)
     }
 
     boul->hitpoints = boul->basset->hitpoints;
+#ifdef PLATFORM_PC
+    // A boulder is repositioned after this runs -- xBoulderGenerator_Launch
+    // writes the muzzle into model->Mat->pos -- so the fixed-step state has to
+    // reseed from wherever it ends up rather than from here.
+    boul->fixedInit = FALSE;
+#endif
     xEntBoulder_RealBUpdate(boul, (xVec3*)&boul->model->Mat->pos);
 
     if ((globals.sceneCur->sceneID == 'BC04') && (boul->id == xStrHash("BALL_BOULDER")))
