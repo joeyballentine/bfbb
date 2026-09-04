@@ -125,7 +125,12 @@ static void test_mem()
     iMemInit();
 
     check(gMemInfo.DRAM.addr != 0, "iMemInit reserved a DRAM arena");
-    check(gMemInfo.DRAM.size == 0x384000, "DRAM is retail's 0x384000 bytes");
+
+    // Retail's size, doubled where a pointer is 8 bytes: every game object with
+    // a pointer in it is larger there and JF01 runs the heap out without the
+    // extra. iMemMgr.cpp sizes it; this checks the value that reaches the game.
+    U32 expect_dram = (sizeof(void*) == 4) ? 0x384000 : 0x384000 * 2;
+    check(gMemInfo.DRAM.size == expect_dram, "DRAM is retail's 0x384000 bytes at 32 bits, twice that at 64");
 
     // xMemInitHeap does its arithmetic on gMemInfo.DRAM.addr as a U32, so the
     // arena has to be addressable in 32 bits and survive the round trip.
@@ -136,7 +141,7 @@ static void test_mem()
     // xMemInit puts gxHeap[1] and gxHeap[2] at DRAM.addr + DRAM.size. Retail
     // leaves those past its own allocation; iMemInit reserves twice the size
     // so they are backed. Write to the far end to prove it.
-    volatile U8* top = (volatile U8*)p + (2 * 0x384000) - 1;
+    volatile U8* top = (volatile U8*)p + (2 * gMemInfo.DRAM.size) - 1;
     *top = 0xA5;
     check(*top == 0xA5, "the second heap's range is backed memory");
 
