@@ -7,10 +7,13 @@
 #include "iEnvNormals.h"
 
 #include "iEnv.h"
+#include "iScreen.h"
+#include "xClumpColl.h"
 #include "xMath3.h"
 #include "xMathInlines.h"
 
 #include <math.h>
+#include <time.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -134,6 +137,15 @@ static void DirToObject(xVec3* out, const xVec3* v, const RwMatrix* m)
     out->x = v->x * m->right.x + v->y * m->right.y + v->z * m->right.z;
     out->y = v->x * m->up.x + v->y * m->up.y + v->z * m->up.z;
     out->z = v->x * m->at.x + v->y * m->at.y + v->z * m->at.z;
+}
+
+// The transpose of DirToObject: an object-space direction into world space.
+// Correct for a rotation, which is all a JSP atomic's frame carries.
+static void DirToWorld(xVec3* out, const xVec3* v, const RwMatrix* m)
+{
+    out->x = v->x * m->right.x + v->y * m->up.x + v->z * m->at.x;
+    out->y = v->x * m->right.y + v->y * m->up.y + v->z * m->at.y;
+    out->z = v->x * m->right.z + v->y * m->up.z + v->z * m->at.z;
 }
 
 static S32 Normalize(xVec3* out, const xVec3* v)
@@ -565,6 +577,7 @@ static const S32 kFitSample = 12000;
 // systems are five unknowns at most, so this is cheap and well past converged.
 static const S32 kFitIters = 200;
 
+
 // Fibonacci sphere: the cheapest even spread that needs no tables.
 static void FitBasis(xVec3* b)
 {
@@ -727,6 +740,7 @@ static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
         double bestErr = 0.0;
         double bestSol[iENV_BAKED_LIGHTS + 1][3];
 
+
         for (S32 j = 0; j < kFitBasis; j++)
         {
             if (taken[j])
@@ -780,6 +794,7 @@ static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
                 for (S32 r = 0; r < n; r++)
                     for (S32 ch = 0; ch < 3; ch++) bestSol[r][ch] = trial[r][ch];
             }
+
         }
 
         // A round that buys less than a thousandth of what is left is noise,
@@ -933,6 +948,315 @@ static S32 TakeShippedRig(RpClump* clump, iEnvBakedRig* out)
     *out = sShippedRig;
     sShippedClump = NULL;
     return TRUE;
+}
+
+// How high a light has to sit before it may cast a shadow, as the sine of its
+// elevation. 30 degrees.
+//
+// **A grazing light fits a bake nearly as well as a high one and casts nothing
+// like the same shadow.** hb01 is the case: its rig explains only 15% of the
+// level's colour variation and its ambient is stronger than its key light, so
+// the fit's brightest direction is barely determined and lands anywhere from 19
+// to 38 degrees up depending on which vertices are sampled. Traced from 19
+// degrees the shadow covers two thirds of the level.
+//
+// A shading term is forgiving about this and an occlusion test is not, which is
+// why the floor lives here and not in the fit. The fit is left exactly as
+// measured, so nothing about the level's shading changes.
+static const F32 kSunFloor = 0.5f;
+
+// Which of the rig's lights may cast, or -1 for none.
+//
+// The brightest one high enough to be a sun. Not simply the first: the rig is
+// ordered by brightness, and on a level whose light is mostly ambient the
+// brightest direction can be a grazing one. A level with nothing above the floor
+// gets no traced shadows, which is the right answer for an interior.
+static S32 SunLight(const iEnvBakedRig* rig)
+{
+    S32 best = -1;
+    F32 bestLum = 0.0f;
+
+    for (S32 k = 0; k < rig->count; k++)
+    {
+        // dir is where the light travels, so a light from above points down.
+        if (-rig->dir[k].y < kSunFloor)
+        {
+            continue;
+        }
+
+        F32 lum = rig->color[k][0] + rig->color[k][1] + rig->color[k][2];
+
+        if (best < 0 || lum > bestLum)
+        {
+            best = k;
+            bestLum = lum;
+        }
+    }
+
+    return best;
+}
+
+// The rig at a contrast, shared with zScene so the kit and the bake agree.
+void iEnvRigAtContrast(const iEnvBakedRig* rig, F32 contrast, F32 ambient[3],
+                       F32 color[iENV_BAKED_LIGHTS][3])
+{
+    for (S32 i = 0; i < 3; i++)
+    {
+        F32 a = rig->ambient[i] + rig->dirMean[i] * (1.0f - contrast);
+
+        ambient[i] = a > 0.0f ? a : 0.0f;
+    }
+
+    for (S32 k = 0; k < iENV_BAKED_LIGHTS; k++)
+    {
+        for (S32 i = 0; i < 3; i++)
+        {
+            color[k][i] = (k < rig->count) ? rig->color[k][i] * contrast : 0.0f;
+        }
+
+        // xLightKit_Prepare scales any light whose brightest channel exceeds 1
+        // back down to 1, so the kit path saturates a light's COLOUR rather than
+        // its result. Matched here, or the two paths would part company at any
+        // contrast above about 1.3 and the shadows would arrive with a
+        // brightness change stapled to them.
+        F32 peak = color[k][0];
+
+        if (color[k][1] > peak) peak = color[k][1];
+        if (color[k][2] > peak) peak = color[k][2];
+
+        if (peak > 1.0f)
+        {
+            for (S32 i = 0; i < 3; i++) color[k][i] /= peak;
+        }
+    }
+}
+
+// One shadow ray, through the tree the game already collides against.
+static S32 sHitAnything;
+
+static RpCollisionTriangle* ShadowRayCB(RpIntersection*, RpWorldSector*, RpCollisionTriangle* tri,
+                                        F32, void*)
+{
+    sHitAnything = TRUE;
+
+    // NULL ends the walk. Any hit at all is the whole answer, so there is no
+    // reason to keep looking for a nearer one.
+    return NULL;
+}
+
+static S32 Occluded(xClumpCollBSPTree* tree, const xVec3* from, const xVec3* toward, F32 reach)
+{
+    RpIntersection isx;
+
+    isx.type = rpINTERSECTLINE;
+    isx.t.line.start.x = from->x;
+    isx.t.line.start.y = from->y;
+    isx.t.line.start.z = from->z;
+    isx.t.line.end.x = from->x + toward->x * reach;
+    isx.t.line.end.y = from->y + toward->y * reach;
+    isx.t.line.end.z = from->z + toward->z * reach;
+
+    sHitAnything = FALSE;
+    xClumpColl_ForAllIntersections(tree, &isx, ShadowRayCB, NULL);
+
+    return sHitAnything;
+}
+
+void iEnvBakeShadowedLight(iEnv* env)
+{
+    if (env == NULL || env->jsp == NULL || env->jsp->clump == NULL ||
+        env->jsp->colltree == NULL || !env->baked.valid)
+    {
+        return;
+    }
+
+    NormalWork w;
+
+    if (!WorkBuild(&w, env->jsp->clump))
+    {
+        return;
+    }
+
+    F32 ambient[3];
+    F32 color[iENV_BAKED_LIGHTS][3];
+
+    iEnvRigAtContrast(&env->baked, iScreenWorldLightContrast(), ambient, color);
+
+    // Toward each light, and how far a ray has to travel to leave the level.
+    // The reach is the world's own diagonal: shorter misses an occluder across
+    // a wide level, and longer only costs tree walking.
+    xVec3 toward[iENV_BAKED_LIGHTS];
+
+    for (S32 k = 0; k < iENV_BAKED_LIGHTS; k++)
+    {
+        toward[k].assign(-env->baked.dir[k].x, -env->baked.dir[k].y, -env->baked.dir[k].z);
+    }
+
+    xVec3 lo = w.pos[0];
+    xVec3 hi = w.pos[0];
+
+    for (S32 i = 1; i < w.totalVerts; i++)
+    {
+        if (w.pos[i].x < lo.x) lo.x = w.pos[i].x;
+        if (w.pos[i].y < lo.y) lo.y = w.pos[i].y;
+        if (w.pos[i].z < lo.z) lo.z = w.pos[i].z;
+        if (w.pos[i].x > hi.x) hi.x = w.pos[i].x;
+        if (w.pos[i].y > hi.y) hi.y = w.pos[i].y;
+        if (w.pos[i].z > hi.z) hi.z = w.pos[i].z;
+    }
+
+    F32 dx = hi.x - lo.x;
+    F32 dy = hi.y - lo.y;
+    F32 dz = hi.z - lo.z;
+    F32 reach = sqrtf(dx * dx + dy * dy + dz * dz);
+
+    if (reach < 1.0f)
+    {
+        reach = 1.0f;
+    }
+
+    // Off the surface before tracing, or a vertex shadows itself on the
+    // triangles it belongs to. 0.1 of a unit is around 14 cm of BFBB.
+    const F32 kLift = 0.1f;
+
+    // **Exactly one light casts, and the rest never do.**
+    //
+    // Only one of the fit's lights is a sun. The others come back pointing
+    // sideways and from below -- bb01 fits (-0.44, -0.08, 0.90) and
+    // (-0.83, -0.23, 0.51) -- because what they stand in for is bounce, not a
+    // second source. The ground occludes a light arriving from under it almost
+    // everywhere, so tracing them darkened two thirds of the level for no
+    // physical reason. It is also four times fewer rays.
+    S32 sun = SunLight(&env->baked);
+
+    if (sun < 0)
+    {
+        printf("bfbb: world shadows skipped -- no light in the fit is above %.0f degrees\n",
+               (double)(asinf(kSunFloor) * 180.0f / 3.14159265f));
+        WorkFree(&w);
+        return;
+    }
+
+    S32 done = 0;
+    S32 shadowed = 0;
+    S32 traced = 0;
+    S32 rays = 0;
+    clock_t began = clock();
+
+    for (S32 a = 0; a < w.numAtomics; a++)
+    {
+        RpAtomic* atomic = w.atomics[a];
+        RpGeometry* geo = RpAtomicGetGeometry(atomic);
+
+        if (geo == NULL || geo->preLitLum == NULL || PrelightIsArtwork(geo))
+        {
+            continue;
+        }
+
+        // **This geometry's OWN normals, wherever it has any.**
+        //
+        // hipoly leaves the smoothed surface's normals behind, and they are the
+        // ones that surface wants: they are what its Bezier patches were built
+        // from. Normals generated afterwards over the finer mesh agree with the
+        // shipped ones only 27% to 57% of the time inside 5 degrees, against 62%
+        // to 78% on the mesh as shipped, and that error goes straight into n.s
+        // and comes out as smeared shading.
+        //
+        // w.out is the fallback for a level that shipped without normals and is
+        // not being smoothed, which is the only case left.
+        RwFrame* frame = RpAtomicGetFrame(atomic);
+        RwMatrix* ltm = frame ? RwFrameGetLTM(frame) : NULL;
+        const xVec3* own = NULL;
+
+        if ((geo->flags & rpGEOMETRYNORMALS) && geo->morphTarget[0].normals != NULL)
+        {
+            own = (const xVec3*)geo->morphTarget[0].normals;
+        }
+
+        for (S32 i = 0; i < geo->numVertices; i++)
+        {
+            S32 v = w.base[a] + i;
+            xVec3 n;
+
+            if (own != NULL)
+            {
+                xVec3 world;
+
+                if (ltm)
+                {
+                    DirToWorld(&world, &own[i], ltm);
+                }
+                else
+                {
+                    world = own[i];
+                }
+
+                Normalize(&n, &world);
+            }
+            else
+            {
+                Normalize(&n, &w.out[v]);
+            }
+
+            xVec3 from;
+
+            from.assign(w.pos[v].x + n.x * kLift, w.pos[v].y + n.y * kLift,
+                        w.pos[v].z + n.z * kLift);
+
+            F32 lit[3] = { ambient[0], ambient[1], ambient[2] };
+
+            for (S32 k = 0; k < env->baked.count; k++)
+            {
+                F32 ndl = n.x * toward[k].x + n.y * toward[k].y + n.z * toward[k].z;
+
+                // A surface facing away is already dark, so there is nothing to
+                // trace and nothing to add.
+                if (ndl <= 0.0f)
+                {
+                    continue;
+                }
+
+                if (k == sun)
+                {
+                    traced++;
+                    rays++;
+
+                    if (Occluded(env->jsp->colltree, &from, &toward[sun], reach))
+                    {
+                        shadowed++;
+                        continue;
+                    }
+                }
+
+                for (S32 c = 0; c < 3; c++) lit[c] += ndl * color[k][c];
+            }
+
+            RwRGBA* out = &geo->preLitLum[i];
+            F32* src = lit;
+            U8* dst = &out->red;
+
+            for (S32 c = 0; c < 3; c++)
+            {
+                F32 f = src[c] < 0.0f ? 0.0f : (src[c] > 1.0f ? 1.0f : src[c]);
+
+                dst[c] = (U8)(f * 255.0f + 0.5f);
+            }
+
+            out->alpha = 255;
+        }
+
+        // The colour above IS the lighting, so nothing may light it again.
+        geo->flags &= ~rpGEOMETRYLIGHT;
+        done++;
+    }
+
+    printf("bfbb: world shadows traced from light %d (%.0f degrees up) -- %d of %d vertices "
+           "facing it are in its shadow, %d rays over %d pieces; %.1fs\n",
+           (int)sun, (double)(asinf(-env->baked.dir[sun].y) * 180.0f / 3.14159265f),
+           (int)shadowed, (int)traced, (int)rays, (int)done,
+           (double)(clock() - began) / CLOCKS_PER_SEC);
+
+    WorkFree(&w);
 }
 
 void iEnvDropPrelight(iEnv* env)

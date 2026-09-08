@@ -87,8 +87,18 @@ void iEnvLoad(iEnv* env, const void* data, U32, S32 dataType)
             // -- would otherwise leave the level with no colour and no light.
             if (iScreenWorldLighting() != IWORLDLIGHT_OFF && env->baked.valid)
             {
-                iEnvDropPrelight(env);
-                env->prelightDropped = TRUE;
+                if (iScreenWorldLightShadows())
+                {
+                    // Keeps the prelight and puts the finished lighting in it,
+                    // so prelightDropped stays FALSE and zScene leaves the
+                    // world alone. See iScreenWorldLightShadows.
+                    iEnvBakeShadowedLight(env);
+                }
+                else
+                {
+                    iEnvDropPrelight(env);
+                    env->prelightDropped = TRUE;
+                }
             }
 
             RpClumpForAllAtomics(env->jsp->clump, SetPipelineCB, NULL);

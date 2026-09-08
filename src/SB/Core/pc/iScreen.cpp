@@ -278,6 +278,7 @@ void iScreenSetMultiSample(S32 samples)
 static S32 sPerPixelLighting = 1;
 static S32 sWorldLighting = 0;
 static F32 sWorldLightContrast = 1.0f;
+static S32 sWorldLightShadows = 1;
 
 S32 iScreenPerPixelLighting()
 {
@@ -356,6 +357,16 @@ void iScreenSetWorldLightContrast(F32 contrast)
     // A negative swing would put the lit side in shadow. Zero is flat, which is
     // a thing somebody might want to look at.
     sWorldLightContrast = contrast < 0.0f ? 0.0f : contrast;
+}
+
+S32 iScreenWorldLightShadows()
+{
+    return sWorldLightShadows;
+}
+
+void iScreenSetWorldLightShadows(S32 on)
+{
+    sWorldLightShadows = on ? 1 : 0;
 }
 
 // The field of view every camera in the game is built around. zCamera resets to

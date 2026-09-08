@@ -237,6 +237,10 @@ const iConfigSetting kConfigSettings[] = {
       "Spread between the lit and shaded sides of a level lit by bake. 1 is the\n"
       "; rig as fitted, which is nearly flat. The default saturates the lit end.",
       ICONFIG_FLOAT, NULL, 0.0f, 4.0f, "world_lighting" },
+    { "experimental", "world_light_shadows", "on",
+      "Darken the parts of a level its own geometry hides from the light. Traced\n"
+      "; at load, so the light cannot move afterwards.",
+      ICONFIG_BOOL, NULL, kNone, kNone, "world_lighting" },
 };
 
 const S32 kConfigSettingCount = (S32)(sizeof(kConfigSettings) / sizeof(kConfigSettings[0]));

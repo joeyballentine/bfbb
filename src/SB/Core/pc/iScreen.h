@@ -342,4 +342,20 @@ void iScreenSetWorldLighting(S32 mode);
 F32 iScreenWorldLightContrast();
 void iScreenSetWorldLightContrast(F32 contrast);
 
+// Trace the level against itself at load and darken the vertices its own
+// geometry hides from the light.
+//
+// The rays go out through the collision tree the game already collides against,
+// one per vertex per light, so this costs load time and nothing per frame.
+//
+// **It makes the world's lighting static, and it overrides AUTO.** The result
+// has to live somewhere, and the only per-vertex channel the world has is the
+// prelight. So iEnvBakeShadowedLight writes the finished colour there and clears
+// rpGEOMETRYLIGHT, which means the sun cannot move afterwards and a level's own
+// bspLightKit is not used even in AUTO. The rig is always the fit.
+//
+// Off keeps the run-time rig, which can move and be occluded by nothing.
+S32 iScreenWorldLightShadows();
+void iScreenSetWorldLightShadows(S32 on);
+
 #endif

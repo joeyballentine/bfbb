@@ -9,6 +9,7 @@
 // experimental.world_lighting and experimental.world_light_contrast, read by
 // zWorldLightBuild.
 #include "iScreen.h"
+#include "iEnvNormals.h"
 #endif
 
 #include "zEntTrigger.h"
@@ -3191,7 +3192,10 @@ static void zWorldLightBuild(iEnv* env)
     // at a swing of 2.5 while jf01 reaches 1.13. What clips is lost, so the
     // level comes out under the brightness this was supposed to hold. Around
     // 1.5 is the most these levels take without it.
-    F32 swing = contrast;
+    F32 ambient[3];
+    F32 color[iENV_BAKED_LIGHTS][3];
+
+    iEnvRigAtContrast(&env->baked, contrast, ambient, color);
 
     xLightKitLight* amb = &sWorldKit.lights[0];
 
@@ -3202,9 +3206,7 @@ static void zWorldLightBuild(iEnv* env)
 
     for (S32 i = 0; i < 3; i++)
     {
-        F32 a = env->baked.ambient[i] + env->baked.dirMean[i] * (1.0f - swing);
-
-        ambOut[i] = a > 0.0f ? a : 0.0f;
+        ambOut[i] = ambient[i];
     }
 
     for (S32 k = 0; k < env->baked.count; k++)
@@ -3217,7 +3219,7 @@ static void zWorldLightBuild(iEnv* env)
 
         for (S32 i = 0; i < 3; i++)
         {
-            dirOut[i] = env->baked.color[k][i] * swing;
+            dirOut[i] = color[k][i];
         }
 
         zWorldLightAim(dir, &env->baked.dir[k]);

@@ -3,8 +3,8 @@
 
 #include <types.h>
 
-struct iEnv;
-struct RpClump;
+// iEnvBakedRig and iENV_BAKED_LIGHTS are part of two signatures below.
+#include "iEnv.h"
 
 // Give a level's world geometry the normals it was shipped without.
 //
@@ -53,5 +53,21 @@ void iEnvFreeNormals(iEnv* env);
 // not move; a clump that never reaches iEnvLoad is simply overwritten by the
 // next one.
 void iEnvFitShippedRig(RpClump* clump);
+
+// The rig's ambient and per-light colours at a contrast setting.
+//
+// Shared so the two consumers cannot drift: zScene builds a light kit out of
+// this, and iEnvBakeShadowedLight evaluates it per vertex. Lights past
+// rig->count come back black.
+void iEnvRigAtContrast(const iEnvBakedRig* rig, F32 contrast, F32 ambient[3],
+                       F32 color[iENV_BAKED_LIGHTS][3]);
+
+// Light the world once, at load, with the parts its own geometry hides from each
+// light left dark, and write the answer into the prelight.
+//
+// The world keeps rpGEOMETRYPRELIT and loses rpGEOMETRYLIGHT, so it draws the
+// colour computed here and nothing lights it again. iScreenWorldLightShadows
+// says what that costs.
+void iEnvBakeShadowedLight(iEnv* env);
 
 #endif
