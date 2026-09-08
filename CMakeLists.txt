@@ -55,7 +55,39 @@ cmake_minimum_required(VERSION 3.16)
 # enables C there. The one cost of _INIT over add_compile_options: it is read
 # once, when the language is enabled, so flipping BFBB_BUILD_32BIT in an
 # existing build directory does nothing. Configure a fresh one.
-option(BFBB_BUILD_32BIT "Build 32-bit, the configuration that gets played" ON)
+#
+# The default is 32-bit on Windows and 64-bit everywhere else, and that is about
+# what a machine HAS rather than which configuration is preferred:
+#
+#   * macOS has no 32-bit anything. Apple removed the runtime with Catalina, so
+#     there is no i386 target to ask for and -m32 does not get as far as the
+#     compiler probe.
+#   * a 32-bit build on Linux needs a multilib toolchain AND a 32-bit copy of
+#     every library it links -- X11, OpenGL, ALSA, udev. A stock distribution
+#     has none of them, and what it reports is SDL quietly configuring with no
+#     video driver rather than anything naming the word size.
+#
+# So off Windows this builds 64-bit, which means it carries the caveats in
+# docs/PCPORT.md under "Asset caveats". -DBFBB_BUILD_32BIT=ON still works on a
+# Linux box that has the multilib libraries.
+#
+# CMAKE_HOST_SYSTEM_NAME rather than WIN32: this has to be decided before
+# project(), and WIN32 is not set until after it.
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+  set(BFBB_32BIT_DEFAULT ON)
+else()
+  set(BFBB_32BIT_DEFAULT OFF)
+endif()
+
+option(BFBB_BUILD_32BIT "Build 32-bit, the configuration that gets played"
+       ${BFBB_32BIT_DEFAULT})
+
+if(BFBB_BUILD_32BIT AND CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
+  message(FATAL_ERROR
+    "BFBB_BUILD_32BIT is on and this is macOS, which has no 32-bit runtime.\n"
+    "  Configure with -DBFBB_BUILD_32BIT=OFF.")
+endif()
+
 if(BFBB_BUILD_32BIT)
   set(CMAKE_C_FLAGS_INIT "-m32")
   set(CMAKE_CXX_FLAGS_INIT "-m32")
@@ -195,8 +227,28 @@ add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 # rwplcore.h declares RwIm2DVertex per backend, and rw/layout_im2d.cpp asserts
 # it against the backend's own struct -- which is what stops a mismatched vertex
 # reaching a vertex declaration built from offsetof.
-set(BFBB_RENDER_BACKEND "D3D9" CACHE STRING "Render backend: D3D9, D3D11, GL3 or NULL")
+#
+# The default is D3D9 on Windows and GL3 everywhere else, because two of the
+# four are Direct3D and only one of the remaining two draws anything.
+if(WIN32)
+  set(BFBB_RENDER_BACKEND_DEFAULT "D3D9")
+else()
+  set(BFBB_RENDER_BACKEND_DEFAULT "GL3")
+endif()
+
+set(BFBB_RENDER_BACKEND "${BFBB_RENDER_BACKEND_DEFAULT}"
+    CACHE STRING "Render backend: D3D9, D3D11, GL3 or NULL")
 set_property(CACHE BFBB_RENDER_BACKEND PROPERTY STRINGS D3D9 D3D11 GL3 NULL)
+
+# Asked for by hand off Windows. librw refuses a D3D platform there as well, but
+# it does so from inside third_party with a message about LIBRW_PLATFORM, which
+# names a variable this build set rather than the one that was typed.
+if(NOT WIN32 AND (BFBB_RENDER_BACKEND STREQUAL "D3D9" OR BFBB_RENDER_BACKEND STREQUAL "D3D11"))
+  message(FATAL_ERROR
+    "BFBB_RENDER_BACKEND=${BFBB_RENDER_BACKEND} needs Direct3D, and this is "
+    "${CMAKE_SYSTEM_NAME}.\n"
+    "  GL3 is the backend that draws off Windows; NULL is the headless one.")
+endif()
 
 # Set by any section that needs SDL built. Both the input backend and the GL3
 # window backend can ask for it, independently, and add_subdirectory may only
@@ -941,6 +993,41 @@ target_link_libraries(rw_selftest PRIVATE bfbb_rw)
 target_compile_options(rw_selftest PRIVATE ${BFBB_NO_WARNINGS})
 add_test(NAME rw_selftest COMMAND rw_selftest)
 
+# --- what an executable that runs the game needs from the linker -------------
+# Applied to `bfbb` and to `pc_selftest`, which are the two targets that call
+# iMemInit and the two that print a backtrace. Nothing here is optional on the
+# host it names.
+function(bfbb_host_link_options target)
+  if(APPLE)
+    # __PAGEZERO, the unmapped guard region at the bottom of the address space,
+    # is 4 GB wide by default on a 64-bit Mach-O -- which is EXACTLY the range
+    # gMemInfo.DRAM.addr can hold. Left at its default, every low address
+    # iHostReserveLow asks for is inside it, the game arena lands above 4 GB,
+    # and iMemInit refuses to start. This is the only way to make that range
+    # mappable, and it is a property of the executable, not of the code.
+    #
+    # 0x4000 rather than 0: one page still guards address zero, so a null
+    # dereference still faults instead of quietly reading mapped memory. It is
+    # 16 KB because that is the page size on Apple Silicon, and the linker
+    # requires a multiple of it.
+    target_link_options(${target} PRIVATE -Wl,-pagezero_size,0x4000)
+  endif()
+
+  if(NOT WIN32)
+    # -rdynamic, which is what ENABLE_EXPORTS means for an executable on ELF.
+    # backtrace_symbols reads the DYNAMIC symbol table, so without it every
+    # frame in the game prints as the module plus an offset and the backtraces
+    # in iHostPosix.cpp are worth nothing. Mach-O keeps the symbols either way
+    # and this costs it nothing.
+    set_target_properties(${target} PROPERTIES ENABLE_EXPORTS ON)
+
+    # The watchdog thread in bfbb_main.cpp. SDL links pthreads as well, but
+    # through a target this one does not necessarily see.
+    find_package(Threads REQUIRED)
+    target_link_libraries(${target} PRIVATE Threads::Threads)
+  endif()
+endfunction()
+
 # --- the game --------------------------------------------------------------
 # It links. Whether it RUNS is the next question, and the reason this target
 # exists: eleven of its platform modules are stubs (see bfbb_platform above),
@@ -1033,6 +1120,7 @@ add_custom_command(TARGET bfbb POST_BUILD
 )
 
 target_compile_options(bfbb PRIVATE ${BFBB_NO_WARNINGS})
+bfbb_host_link_options(bfbb)
 
 if(WIN32)
   # dbghelp is the crash handler in bfbb_main.cpp; see the comment there.
@@ -1194,6 +1282,7 @@ target_compile_definitions(pc_selftest PRIVATE ${INPUT_DEFINES} ${AUDIO_DEFINES}
 # pc_selftest compiles the backend sources itself rather than linking
 # bfbb_platform, so the backends' libraries are its own to ask for.
 target_link_libraries(pc_selftest PRIVATE ${INPUT_LIBS} ${AUDIO_LIBS})
+bfbb_host_link_options(pc_selftest)
 target_include_directories(pc_selftest PRIVATE
   ${PC_DIR}/compat
   ${PC_DIR}
