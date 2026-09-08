@@ -39,7 +39,7 @@ namespace
     // The world: edges are cut to this length, up to this many segments.
     const F64 kWorldTarget = 1.0;
     const S32 kWorldMaxLevel = 6;
-    const F64 kWorldCrease = 90.0;       // degrees of turn; sharper folds stay sharp
+    const F64 kWorldCrease = 60.0;       // degrees of turn; sharper folds stay sharp
     const F64 kWorldMaxBulge = 0.3;      // units an edge midpoint may move
     const F64 kWorldRelBulge = 0.3;
     // And never more than the surface turns across the edge, times this: a
@@ -48,7 +48,7 @@ namespace
     // Rock, sand, kelp and the like round past folds a building must keep.
     // The wider bulge is for walls and boulders; a floor the player walks on
     // keeps the tight one, or the sand humps.
-    const F64 kNaturalCrease = 140.0;
+    const F64 kNaturalCrease = 100.0;
     const F64 kNaturalMaxBulge = 1.0;
     const F64 kNaturalRelBulge = 0.75;
     const F64 kSteepNy = 0.7;
@@ -93,7 +93,7 @@ namespace
     // this far out; a vertex may move this much, a floor or cap vertex this
     // much and only down.
     const F64 kFilletAngle = 35.0;
-    const F64 kFilletRadius = 1.5;
+    const F64 kFilletRadius = 0.0;
     const U32 kFilletIters = 12;
     const F64 kFilletMove = 0.6;
     const F64 kFilletFloorMove = 0.25;
@@ -102,8 +102,8 @@ namespace
 
     // Read once. `factor` scales how far everything rounds -- the bulge caps
     // and the fillet -- so a stronger or weaker version is one number. The
-    // offline suite shipped factor 1 with creases of 60 and 100 degrees;
-    // the defaults here round more, which is what looked right in play.
+    // defaults are the offline suite's: factor 1, creases of 60 and 100
+    // degrees, no fillet.
     struct Settings
     {
         S32 enabled;
@@ -116,7 +116,7 @@ namespace
         F64 modelTarget;
         U32 budget;
     };
-    const F64 kFactor = 2.0;
+    const F64 kFactor = 1.0;
     Settings sCfg = { -1, kFactor, kWorldTarget, kWorldMaxLevel, kWorldCrease, kNaturalCrease,
                       kFilletRadius, kModelTarget, kWorldBudget };
 
