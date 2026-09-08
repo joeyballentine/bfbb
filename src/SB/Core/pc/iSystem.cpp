@@ -9,6 +9,7 @@
 #include "iPad.h"
 #include "iPadHost.h"
 #include "iPadStick.h"
+#include "iDayNight.h"
 #include "iScreen.h"
 #include "isavegame.h"
 #include "iTRC.h"
@@ -553,6 +554,7 @@ static void ApplyConfig()
     iScreenSetWorldLighting(WorldLightingFromConfig());
     iScreenSetWorldLightContrast(iConfigGetFloat("experimental.world_light_contrast", 2.5f));
     iScreenSetWorldLightShadows(iConfigGetBool("experimental.world_light_shadows", FALSE));
+    iDayNightSetLength(iConfigGetFloat("experimental.day_night_cycle", 0.0f));
 
     // Which backend draws. AUTO is resolved in RenderWareInit, which is where
     // the RW_* defines are; a name this build was not compiled with is reported

@@ -1,4 +1,8 @@
 #include "xLightKit.h"
+
+#ifdef PLATFORM_PC
+#include "iDayNight.h"
+#endif
 #include "xMath.h"
 
 #include <types.h>
@@ -103,8 +107,51 @@ xLightKit* xLightKit_Prepare(void* data)
     return (xLightKit*)data;
 }
 
+#ifdef PLATFORM_PC
+void xLightKit_DayNight(xLightKit* lkit)
+{
+    if (lkit == NULL || !iDayNightActive())
+    {
+        return;
+    }
+
+    F32 amb[3];
+    F32 dir[3];
+
+    iDayNightTint(amb, dir);
+
+    for (U32 i = 0; i < lkit->lightCount; i++)
+    {
+        xLightKitLight* l = &lkit->lightList[i];
+
+        if (l->platLight == NULL)
+        {
+            continue;
+        }
+
+        // Type 1 is the ambient; everything else is a light with a direction.
+        // xLightKit_Prepare switches on the same numbers.
+        const F32* mul = (l->type == 1) ? amb : dir;
+        RwRGBAReal c;
+
+        c.red = l->color.red * mul[0];
+        c.green = l->color.green * mul[1];
+        c.blue = l->color.blue * mul[2];
+        c.alpha = l->color.alpha;
+
+        RpLightSetColor(l->platLight, &c);
+    }
+}
+#endif
+
 void xLightKit_Enable(xLightKit* lkit, RpWorld* world)
 {
+#ifdef PLATFORM_PC
+    // Every kit gets the time of day on its way in, world and characters alike.
+    // One place, so a character and the ground it stands on cannot disagree.
+    xLightKit_DayNight(lkit);
+#endif
+
     if (lkit != gLastLightKit)
     {
         int i;

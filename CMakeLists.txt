@@ -799,6 +799,8 @@ add_library(bfbb_platform STATIC
   # clump rendering with nothing GameCube-specific in it. The render-state
   # enumerations it passes through (cull mode, blend, z-write) are asserted
   # against librw's in rw/layout_camera.cpp.
+  # No gc/ counterpart: nothing on a console moves a level's sun.
+  ${PC_DIR}/iDayNight.cpp
   ${PC_DIR}/iEnv.cpp
 
   # Normals for a world that shipped without them. No gc/ counterpart: nothing

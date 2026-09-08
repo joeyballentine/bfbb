@@ -1299,6 +1299,30 @@ void iEnvBakeShadowedLight(iEnv* env)
     WorkFree(&w);
 }
 
+void iEnvTintKeptPaint(iEnv* env, const F32 rgb[3])
+{
+    if (env == NULL || env->keptMaterial == NULL)
+    {
+        return;
+    }
+
+    RwRGBA c;
+
+    for (S32 i = 0; i < 3; i++)
+    {
+        F32 f = rgb[i] < 0.0f ? 0.0f : (rgb[i] > 1.0f ? 1.0f : rgb[i]);
+
+        (&c.red)[i] = (U8)(f * 255.0f + 0.5f);
+    }
+
+    c.alpha = 255;
+
+    for (S32 i = 0; i < env->keptMaterialCount; i++)
+    {
+        RpMaterialSetColor(env->keptMaterial[i], &c);
+    }
+}
+
 void iEnvDropPrelight(iEnv* env)
 {
     if (env == NULL || env->jsp == NULL || env->jsp->clump == NULL)
@@ -1313,7 +1337,13 @@ void iEnvDropPrelight(iEnv* env)
         return;
     }
 
+    // One slot per material of every kept piece. bb01 keeps 86 pieces of 405 and
+    // hb01 64 of 296, so this is generous; a level past it simply keeps fewer
+    // materials tintable, which is a dull decal rather than a broken level.
+    const S32 kKeptMaterialMax = 512;
+    RpMaterial* keptMat[kKeptMaterialMax];
     S32 kept = 0;
+    S32 keptMats = 0;
     S32 keptVerts = 0;
 
     for (S32 a = 0; a < w.numAtomics; a++)
@@ -1327,6 +1357,14 @@ void iEnvDropPrelight(iEnv* env)
 
         if (PrelightIsArtwork(geo))
         {
+            for (S32 m = 0; m < geo->matList.numMaterials; m++)
+            {
+                if (geo->matList.materials[m] != NULL && keptMats < kKeptMaterialMax)
+                {
+                    keptMat[keptMats++] = geo->matList.materials[m];
+                }
+            }
+
             // Left exactly as the console drew it. The world's geometry
             // arrives with LIGHT already set and only NORMALS missing, so
             // clearing LIGHT is what keeps a piece out of the run-time rig --
@@ -1343,8 +1381,23 @@ void iEnvDropPrelight(iEnv* env)
 
     if (kept != 0)
     {
-        printf("bfbb: world painting kept on %d of %d pieces, %d vertices\n", (int)kept,
-               (int)w.numAtomics, (int)keptVerts);
+        printf("bfbb: world painting kept on %d of %d pieces, %d vertices, %d materials\n",
+               (int)kept, (int)w.numAtomics, (int)keptVerts, (int)keptMats);
+    }
+
+    RwFree(env->keptMaterial);
+    env->keptMaterial = NULL;
+    env->keptMaterialCount = 0;
+
+    if (keptMats != 0)
+    {
+        env->keptMaterial = (RpMaterial**)RwMalloc(keptMats * sizeof(RpMaterial*));
+
+        if (env->keptMaterial != NULL)
+        {
+            memcpy(env->keptMaterial, keptMat, keptMats * sizeof(RpMaterial*));
+            env->keptMaterialCount = keptMats;
+        }
     }
 
     WorkFree(&w);
@@ -1501,9 +1554,21 @@ void iEnvNormalsCompare(iEnv* env)
 
 void iEnvFreeNormals(iEnv* env)
 {
-    if (env != NULL && env->genNormals != NULL)
+    if (env == NULL)
+    {
+        return;
+    }
+
+    if (env->genNormals != NULL)
     {
         RwFree(env->genNormals);
         env->genNormals = NULL;
+    }
+
+    if (env->keptMaterial != NULL)
+    {
+        RwFree(env->keptMaterial);
+        env->keptMaterial = NULL;
+        env->keptMaterialCount = 0;
     }
 }

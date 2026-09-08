@@ -242,6 +242,10 @@ const iConfigSetting kConfigSettings[] = {
       "; at load, so the light cannot move afterwards. Coarse: the shadow can\n"
       "; only land on a vertex, and a level has few.",
       ICONFIG_BOOL, NULL, kNone, kNone, "world_lighting" },
+    { "experimental", "day_night_cycle", "off",
+      "Seconds for the sun to go all the way round, or off. Needs world\n"
+      "; lighting on and world_light_shadows off.",
+      ICONFIG_FLOAT, "off", 5.0f, 3600.0f, "world_lighting" },
 };
 
 const S32 kConfigSettingCount = (S32)(sizeof(kConfigSettings) / sizeof(kConfigSettings[0]));

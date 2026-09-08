@@ -9,6 +9,7 @@
 // experimental.world_lighting and experimental.world_light_contrast, read by
 // zWorldLightBuild.
 #include "iScreen.h"
+#include "iDayNight.h"
 #include "iEnvNormals.h"
 #endif
 
@@ -2843,6 +2844,31 @@ void zSceneUpdate(F32 elapsedSec)
     }
 
     isPaused = zGameIsPaused();
+
+#ifdef PLATFORM_PC
+    if (!isPaused)
+    {
+        iDayNightAdvance(elapsedSec);
+    }
+
+    // xLightKit_Enable tints a kit as it goes in and then early-returns for as
+    // long as that kit stays current, which on a quiet frame is every frame. The
+    // one standing therefore has to be told again.
+    xLightKit_DayNight(gLastLightKit);
+
+    // The kept paint has no light to reach it, so it is moved through its
+    // material instead. The ambient tint and not the directional: a decal lying
+    // on the ground is not facing anything.
+    if (iDayNightActive() && globals.sceneCur != NULL && globals.sceneCur->env != NULL &&
+        globals.sceneCur->env->geom != NULL)
+    {
+        F32 amb[3];
+        F32 dir[3];
+
+        iDayNightTint(amb, dir);
+        iEnvTintKeptPaint(globals.sceneCur->env->geom, amb);
+    }
+#endif
     gSceneUpdateTime = elapsedSec;
 
     if (!isPaused)
@@ -3164,8 +3190,28 @@ static void zWorldLightBuild(iEnv* env)
 {
     F32 contrast = iScreenWorldLightContrast();
 
+    // The level's rig is noon. iDayNightRig swings it to wherever the sun is
+    // now, and hands back the rig unchanged while the cycle is off.
+    iEnvBakedRig rig;
+
+    iDayNightRig(&env->baked, &rig);
+
+    // **Quantized, so the kit is not torn down sixty times a second.**
+    //
+    // Rebuilding means xLightKit_Destroy and _Prepare, which is an RpLight and a
+    // frame per light through the game's own allocator. Rounding the sun to a
+    // fifth of a degree gives 1800 rebuilds over a full turn -- about four a
+    // second on a five-minute day -- and the colour still moves every frame,
+    // because that is the tint in xLightKit_DayNight and not this.
+    for (S32 k = 0; k < rig.count; k++)
+    {
+        rig.dir[k].x = (F32)((S32)(rig.dir[k].x * 300.0f)) / 300.0f;
+        rig.dir[k].y = (F32)((S32)(rig.dir[k].y * 300.0f)) / 300.0f;
+        rig.dir[k].z = (F32)((S32)(rig.dir[k].z * 300.0f)) / 300.0f;
+    }
+
     if (sWorldKitFrom.valid && sWorldKitSwing == contrast &&
-        memcmp(&sWorldKitFrom, &env->baked, sizeof(sWorldKitFrom)) == 0)
+        memcmp(&sWorldKitFrom, &rig, sizeof(sWorldKitFrom)) == 0)
     {
         return;
     }
@@ -3175,11 +3221,11 @@ static void zWorldLightBuild(iEnv* env)
         xLightKit_Destroy(&sWorldKit.kit);
     }
 
-    sWorldKitFrom = env->baked;
+    sWorldKitFrom = rig;
     sWorldKitSwing = contrast;
 
     memset(&sWorldKit, 0, sizeof(sWorldKit));
-    sWorldKit.kit.lightCount = env->baked.count + 1;
+    sWorldKit.kit.lightCount = rig.count + 1;
     sWorldKit.kit.lightList = sWorldKit.lights;
 
     // Scale the directionals by the swing and take the difference back out of
@@ -3195,7 +3241,7 @@ static void zWorldLightBuild(iEnv* env)
     F32 ambient[3];
     F32 color[iENV_BAKED_LIGHTS][3];
 
-    iEnvRigAtContrast(&env->baked, contrast, ambient, color);
+    iEnvRigAtContrast(&rig, contrast, ambient, color);
 
     xLightKitLight* amb = &sWorldKit.lights[0];
 
@@ -3209,7 +3255,7 @@ static void zWorldLightBuild(iEnv* env)
         ambOut[i] = ambient[i];
     }
 
-    for (S32 k = 0; k < env->baked.count; k++)
+    for (S32 k = 0; k < rig.count; k++)
     {
         xLightKitLight* dir = &sWorldKit.lights[1 + k];
         F32* dirOut = &dir->color.red;
@@ -3222,7 +3268,7 @@ static void zWorldLightBuild(iEnv* env)
             dirOut[i] = color[k][i];
         }
 
-        zWorldLightAim(dir, &env->baked.dir[k]);
+        zWorldLightAim(dir, &rig.dir[k]);
     }
 
     xLightKit_Prepare(&sWorldKit.kit);

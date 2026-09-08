@@ -55,6 +55,12 @@ struct iEnv
     // and if load keeps it and render lights anyway the two are added. One
     // decision, made at load, read at render.
     S32 prelightDropped;
+    // The materials of the pieces whose paint was kept, so something can still
+    // reach them. They draw from the prelight with rpGEOMETRYLIGHT clear, which
+    // is what protects them from being lit and also what stops a day/night cycle
+    // ever touching them. See iEnvTintKeptPaint.
+    RpMaterial** keptMaterial;
+    S32 keptMaterialCount;
 };
 
 struct xEnvAsset;
