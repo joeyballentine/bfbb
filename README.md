@@ -295,10 +295,10 @@ cmake --build build-pc
 
 Add `-DBFBB_RENDER_BACKENDS=GL3` for an OpenGL-only build and
 `-DCMAKE_PREFIX_PATH=%USERPROFILE%/vcpkg/installed/x86-windows` for FFmpeg,
-libusb and SDL. `-DBFBB_CONFIG_UI=wx -DBFBB_WX=vendored` draws the settings
-program in wxWidgets rather than Win32 controls, which is what the Linux and
-macOS builds use; it is a long first build, and `src/SB/Core/pc/configurator/`
-says what the two front ends are. `-m32` is set by `CMakeLists.txt` before `project()` and is not
+libusb and SDL. The settings program is drawn in wxWidgets, and with none
+installed the first build of a directory compiles `third_party/wxWidgets`,
+which is a long one: `-DBFBB_BUILD_CONFIGURATOR=OFF` skips it for a build that
+only wants the game. `-m32` is set by `CMakeLists.txt` before `project()` and is not
 something to pass yourself; for a 64-bit build, use an x64 developer command
 prompt, pass `-DBFBB_BUILD_32BIT=OFF`, and point the prefix path at the
 `x64-windows` triplet. This leaves the executable in `build-pc\`; add

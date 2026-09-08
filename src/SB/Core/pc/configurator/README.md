@@ -6,7 +6,7 @@ Every setting the port has, grouped by section, each with the description the
 generated file carries and the values it accepts. A value that is not the
 default says what the default was. Save writes the file; Cancel writes nothing.
 
-## A model and two windows
+## A model and a window
 
 `config_model.cpp` is the program without a window on it: the settings as
 editable values, what the file said about each, and the reading and writing of
@@ -15,17 +15,15 @@ that can fail fills in a sentence saying why and the caller decides how to show
 it. `pc_selftest` links it and checks it, which nothing could do while it lived
 inside a window ctest cannot run.
 
-`main_wx.cpp` draws it in wxWidgets, which is the front end on every host. wx
-wraps the platform's own controls rather than imitating them: Win32 common
-controls on Windows, GTK on Linux, Cocoa on macOS.
+`main_wx.cpp` draws it in wxWidgets, on every host. wx wraps the platform's own
+controls rather than imitating them: Win32 common controls on Windows, GTK on
+Linux, Cocoa on macOS.
 
-`main_win32.cpp` draws it in Win32 controls directly. It predates the wx one
-and is kept because it needs no dependency at all: `-DBFBB_CONFIG_UI=win32`
-builds a configurator on a Windows machine with no wxWidgets anywhere, and that
-is one `add_executable` with four sources.
-
-The two are interchangeable and neither knows anything the other does not.
-Adding a setting to `kConfigSettings` gives it a row in both.
+There was a second front end written directly in Win32 controls, so a Windows
+machine could build a configurator with no dependency at all. It is gone.
+Keeping two windows in step to save one host a dependency meant reading both
+every time a setting changed shape, and one of them was always the one nobody
+had opened.
 
 ## Why a separate program
 
@@ -76,28 +74,23 @@ does it.
 
 ## Building
 
-Part of the normal PC build; `build-release.bat` and `build-debug.bat` put it
-in `bin/` beside the game, and the script says at the end which front end it
-built. The CI package carries it on every host.
-
-`BFBB_CONFIG_UI` picks the front end: `auto`, `wx`, `win32` or `off`. The build
-scripts read it and `BFBB_WX` from the environment:
-
-```
-set BFBB_CONFIG_UI=wx
-set BFBB_WX=vendored
-build-release.bat
-```
-
-`auto` takes wx wherever wxWidgets can be found, Win32 controls on a Windows
-host where it cannot, and builds nothing anywhere else.
+Part of the normal PC build, with nothing to pass: `build-release.bat` and
+`build-debug.bat` put it in `bin/` beside the game, and the CI package carries
+it on every host.
 
 `BFBB_WX` says where wxWidgets comes from, on the same three words SDL uses:
-`auto`, `system`, `vendored`. Off Windows an installed `libwxgtk` or a `brew
-install wxwidgets` answers `auto` and `third_party/wxWidgets` is the fallback.
-On Windows `auto` usually finds nothing and falls back to the Win32 front end
-rather than starting a long compile nobody asked for; `-DBFBB_WX=vendored`
-asks for the submodule.
+`auto`, `system`, `vendored`. Off Windows a distribution's `libwxgtk` or a
+`brew install wxwidgets` answers `auto`; a Windows machine usually has none, so
+`auto` falls back to `third_party/wxWidgets` and compiles it. That is a long
+first build and it happens once per build directory, which is what
+`-DBFBB_BUILD_CONFIGURATOR=OFF` is for: a build that only wants the game skips
+it entirely.
+
+Building this needs a toolchain that can include the C++ standard library,
+which the rest of the tree never does. On Windows that means Microsoft's STL,
+and it refuses any clang older than the version it shipped against -- a clang
+that compiles the whole game will not necessarily compile `main_wx.cpp`, and
+says so in `yvals_core.h` rather than anywhere useful.
 
 Two Windows gotchas, both pre-dating the wx front end. `bfbb_config.rc` lives
 in `../res/` next to the icon it names: `rc.exe` resolves a resource's file
@@ -106,10 +99,3 @@ naming an icon in `res/` compiles to nothing and reports nothing. The manifest
 is a CMake source rather than a line in the `.rc`, because CMake embeds a
 manifest of its own into every executable and a second `RT_MANIFEST` in the
 resources is a duplicate-resource link error.
-
-One more, specific to wx. wx includes the C++ standard library and the game's
-own sources never do, so building the wx front end holds the toolchain to a
-standard the rest of this tree does not: on Windows, Microsoft's STL refuses
-any Clang older than the version it shipped against, and a clang that compiles
-the whole game will not compile `main_wx.cpp`. MSVC, MinGW, or a new enough
-clang all work.

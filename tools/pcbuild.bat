@@ -10,10 +10,15 @@ rem                 build only that: D3D9, D3D11, GL3 or NULL. D3D11 cannot
 rem                 share a build with D3D9.
 rem       arch:     x86 (default), x64
 rem
+rem The first build of a fresh directory also compiles wxWidgets, which the
+rem settings program is drawn in, unless one is installed for CMake to find.
+rem It is a long compile and it happens once per directory; -DBFBB_BUILD_
+rem CONFIGURATOR=OFF skips it for a build that only wants the game.
+rem
 rem Every configuration builds into its own directory -- the backend set is
 rem baked into the CMake cache and into librw's compile definitions, so two of
-rem them cannot share one -- but they all put bfbb.exe and the DLLs it needs
-rem into bin\. One place to run from, one config.ini, and no hunting for which
+rem them cannot share one -- but they all put bfbb.exe, bfbb_config.exe and the
+rem DLLs the game needs into bin\. One place to run from, one config.ini, and no hunting for which
 rem directory the last build went to. The last build wins, which is why the
 rem script says at the end what is now sitting there.
 rem
@@ -79,25 +84,6 @@ call "%VSPATH%\VC\Auxiliary\Build\vcvarsall.bat" %ARCH% >nul
 if errorlevel 1 (echo ERROR: vcvarsall %ARCH% failed. & popd & exit /b 1)
 :have_env
 
-rem ---- the configurator ------------------------------------------------------
-rem bfbb_config is built with everything else and lands in bin\ beside the game.
-rem Which front end it gets is BFBB_CONFIG_UI: unset leaves it to CMakeLists.txt,
-rem which on Windows is Win32 controls and needs nothing installed. `wx` builds
-rem the wxWidgets one, which wants a wxWidgets to build against -- set BFBB_WX to
-rem `vendored` for third_party\wxWidgets, which is a long first build.
-rem
-rem     set BFBB_CONFIG_UI=wx
-rem     set BFBB_WX=vendored
-rem     build-release.bat
-rem
-rem -U when they are unset, for the same reason BACKENDARG uses it: a cache entry
-rem outlives the argument that set it, so leaving the option off a directory that
-rem was configured with it before would silently keep the old answer.
-set "UIARG=-UBFBB_CONFIG_UI"
-if defined BFBB_CONFIG_UI set "UIARG=-DBFBB_CONFIG_UI=%BFBB_CONFIG_UI%"
-set "WXARG=-UBFBB_WX"
-if defined BFBB_WX set "WXARG=-DBFBB_WX=%BFBB_WX%"
-
 rem ---- FFmpeg ----------------------------------------------------------------
 rem Optional. Without it the movie decoder and the soundtrack override build as
 rem stubs -- a configuration the port supports, but not the one to playtest.
@@ -120,8 +106,6 @@ cmake -S . -B "%BUILDDIR%" -G Ninja ^
   -DCMAKE_BUILD_TYPE=%CONFIG% ^
   -DCMAKE_CXX_COMPILER=clang++ ^
   %BACKENDARG% ^
-  %UIARG% ^
-  %WXARG% ^
   -DBFBB_BUILD_32BIT=%M32% ^
   -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="%ROOT:\=/%/bin" ^
   %PREFIX%
@@ -136,17 +120,12 @@ rem thing worth reporting.
 set "BACKENDNAME=?"
 for /f "tokens=2 delims==" %%i in ('findstr /b "BFBB_RENDER_BACKENDS:" "%BUILDDIR%\CMakeCache.txt"') do set "BACKENDNAME=%%i"
 
-set "CONFIGUI=none"
-for /f "tokens=2 delims==" %%i in ('findstr /b "BFBB_CONFIG_FRONTEND:" "%BUILDDIR%\CMakeCache.txt"') do set "CONFIGUI=%%i"
-
 rem What is in bin\ now, so a slow Release-looking build is never a mystery.
 > "%ROOT%\bin\BUILD-INFO.txt" echo %CONFIG% / %BACKENDNAME% / %ARCH%, built from %BUILDDIR%
 echo.
 echo === bin\bfbb.exe is now %CONFIG% / %BACKENDNAME% / %ARCH% ===
-if not "%CONFIGUI%"=="none" (
-  echo     bin\bfbb_config.exe edits config.ini with controls on it ^(%CONFIGUI%^).
-) else (
-  echo     No configurator in this build. Unset BFBB_CONFIG_UI for the default.
+if exist "%ROOT%\bin\bfbb_config.exe" (
+  echo     bin\bfbb_config.exe edits config.ini with controls on it.
 )
 if not exist "%ROOT%\bin\config.ini" (
   echo     No bin\config.ini yet. The game writes one with the defaults on
