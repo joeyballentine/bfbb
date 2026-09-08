@@ -232,13 +232,19 @@ namespace
         snprintf(out, outSize, "%s  (default: %s)", summary, def[0] != '\0' ? def : "empty");
     }
 
+    // The flags an SS_LEFT | SS_NOPREFIX static draws its text with. The
+    // measurement below and the control itself have to agree exactly, or a
+    // description is given the height of one wrap and drawn at another --
+    // which loses whichever line does not fit.
+    const UINT kDescFlags = DT_WORDBREAK | DT_EXPANDTABS | DT_NOPREFIX;
+
     int measureText(HWND parent, const char* text, int width)
     {
         HDC dc = GetDC(parent);
         HFONT old = (HFONT)SelectObject(dc, gApp.font);
 
         RECT r = { 0, 0, width, 0 };
-        DrawTextA(dc, text, -1, &r, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
+        DrawTextA(dc, text, -1, &r, DT_CALCRECT | kDescFlags);
 
         SelectObject(dc, old);
         ReleaseDC(parent, dc);
@@ -578,7 +584,11 @@ namespace
             // Created off-screen at a nominal size. layoutRows below is what
             // puts them where they belong, and it is the only code that knows
             // the geometry.
-            row->label = make("STATIC", s->name, SS_LEFT, 0, 0, px(150), px(18), 0);
+            // SS_NOPREFIX on both statics. Without it a '&' is a mnemonic
+            // marker: the character after it is underlined and the '&' itself
+            // does not draw, so a path like D:\Rock & Roll loses it -- and the
+            // measurement above, which passes DT_NOPREFIX, would not agree.
+            row->label = make("STATIC", s->name, SS_LEFT | SS_NOPREFIX, 0, 0, px(150), px(18), 0);
 
             if (s->kind == ICONFIG_BOOL)
             {
@@ -633,7 +643,7 @@ namespace
                                    px(23), id + kIdRowBrowse);
             }
 
-            row->desc = make("STATIC", "", SS_LEFT, 0, 0, px(200), px(18), 0);
+            row->desc = make("STATIC", "", SS_LEFT | SS_NOPREFIX, 0, 0, px(200), px(18), 0);
 
             gApp.rowCount++;
         }
@@ -1081,9 +1091,17 @@ namespace
             break;
         }
 
+        // OPAQUE, and that is the whole point of this handler.
+        //
+        // The pane is WS_CLIPCHILDREN, so its own erase skips every rectangle a
+        // child occupies. A child drawing with a transparent background
+        // therefore erases nothing either, and the text under a description
+        // that changed -- or a row that moved -- stays on screen with the new
+        // text drawn over it. It reads as text that is cut off, because half
+        // the letters on the line belong to the string before it.
         case WM_CTLCOLORSTATIC:
         case WM_CTLCOLORBTN:
-            SetBkMode((HDC)wp, TRANSPARENT);
+            SetBkColor((HDC)wp, GetSysColor(COLOR_WINDOW));
             return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
 
         default: break;
