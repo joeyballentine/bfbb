@@ -14,7 +14,16 @@
 // are the host's own header, and giving its declarations C linkage is a
 // language change the header was not written for -- clang tolerates it and GCC
 // is under no obligation to.
+//
+// x86 only. __frsqrte below takes a square root without going through a symbol
+// the game could override, and each architecture spells that its own way; on
+// AArch64 it is one instruction and needs no header at all.
+#if defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64)
+#define BFBB_FRSQRTE_SSE 1
 #include <emmintrin.h>
+#elif defined(__aarch64__) || defined(_M_ARM64)
+#define BFBB_FRSQRTE_AARCH64 1
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -62,16 +71,27 @@ float __fabsf(float);
 // value, so anything tuned against the estimate's error drifts slightly. See
 // "Floating point divergence" in docs/PCPORT.md.
 //
-// The square root is taken with an SSE intrinsic rather than __builtin_sqrt or
-// a call to sqrt, and that is deliberate. At -O0 clang lowers __builtin_sqrt to
-// a CALL to sqrt, so anything that overrides sqrt captures this function too --
+// The square root is taken as an INSTRUCTION rather than __builtin_sqrt or a
+// call to sqrt, and that is deliberate. At -O0 clang lowers __builtin_sqrt to a
+// CALL to sqrt, so anything that overrides sqrt captures this function too --
 // and src/SB/Core/x/xSpline.cpp used to define a global sqrt implemented in
 // terms of __frsqrte. sqrt called __frsqrte called sqrt, and the boot recursed
-// until the stack died. sqrtsd cannot route back through a symbol the game
-// might define.
+// until the stack died. sqrtsd and fsqrt cannot route back through a symbol the
+// game might define.
 static inline double __frsqrte(double x)
 {
+#if defined(BFBB_FRSQRTE_SSE)
     return 1.0 / _mm_cvtsd_f64(_mm_sqrt_sd(_mm_setzero_pd(), _mm_set_sd(x)));
+#elif defined(BFBB_FRSQRTE_AARCH64)
+    double r;
+    __asm__("fsqrt %d0, %d1" : "=w"(r) : "w"(x));
+    return 1.0 / r;
+#else
+    // Everywhere else, and it carries the recursion hazard above: an
+    // architecture that lands here needs its own square-root instruction
+    // spelled out before the game is run on it.
+    return 1.0 / __builtin_sqrt(x);
+#endif
 }
 
 #ifdef __cplusplus
