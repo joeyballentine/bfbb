@@ -10,7 +10,7 @@ paste. Nothing is redistributed with this repository.
 
 **Why bother.** The game's fonts are texture atlases authored for a 640x480
 framebuffer, so above that they are magnified and text is the first thing to go
-soft. `[text] font` points at an outline to draw the same letterforms from
+soft. `[font] font` points at an outline to draw the same letterforms from
 instead, at whatever size they are actually drawn. Everything else -- layout,
 spacing, colour, the inline tags -- stays the game's. See
 src/SB/Core/pc/iFont.h.
@@ -18,7 +18,7 @@ src/SB/Core/pc/iFont.h.
 **Which font.** SpongeBoyTT1 is the face the game itself used. The default here
 is FontSpace's copy, whose archive states `license: Freeware`; check that for
 yourself if it matters to you, and use --file if you would rather bring your
-own. Any .ttf works, and a wrong one costs nothing -- set [text] font back to
+own. Any .ttf works, and a wrong one costs nothing -- set [font] font back to
 empty and the game's own atlas is used again, exactly as the console draws it.
 """
 
@@ -143,7 +143,7 @@ def main():
     print()
     print("Put this in config.ini:")
     print()
-    print("    [text]")
+    print("    [font]")
     print("    font = {}".format(path.replace("\\", "/")))
     return 0
 

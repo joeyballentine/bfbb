@@ -41,6 +41,10 @@ const iConfigSetting kConfigSettings[] = {
       "Folder holding boot.HIP, FONT.HIP and fmv/. Empty means the folder you\n"
       "; started the game from. BFBB_ASSETS overrides this.",
       ICONFIG_FOLDER, NULL, kNone, kNone },
+    { "assets", "platform_wording", "on",
+      "Rewrite the Xbox wording in the game's text as it loads: dashboard,\n"
+      "; memory card slots. The port never changes the files on disk.",
+      ICONFIG_BOOL, NULL, kNone, kNone },
     { "game", "boot", "",
       "Start straight in this scene, skipping the menu: a four-character scene\n"
       "; id like jf01. Empty starts at the menu. Overrides SB.INI's BOOT=.",
@@ -141,44 +145,40 @@ const iConfigSetting kConfigSettings[] = {
       "; game's. The port matches a file to a track by asset name, or by a\n"
       "; soundtrack.txt beside them holding one 'asset name = file' per line.",
       ICONFIG_FOLDER, NULL, kNone, kNone },
-    { "text", "font", "",
+    { "font", "font", "",
       "A .ttf to draw the game's text with, or empty for the game's own font.\n"
       "; Sharper than the game's atlas above 640x480. No font ships with the\n"
       "; port. tools/getfont.py fetches one and prints the line to paste here.",
       ICONFIG_FONT, NULL, kNone, kNone },
-    { "text", "font_sans", "auto",
+    { "font", "font_sans", "auto",
       "The same, for the sans serif on the copyright, memory card and\n"
       "; controller screens. auto uses the system's Arial, which is the face\n"
       "; that atlas is. off leaves those screens as the game has them.",
       ICONFIG_FONT, "auto|off", kNone, kNone },
-    { "text", "font_upscale", "0",
+    { "font", "font_upscale", "0",
       "How many times the game's own cell resolution to draw that font at, or\n"
       "; 0 to match the render size. Higher is sharper, and the glyph lands in\n"
       "; the same box either way.",
       ICONFIG_INT, NULL, 0.0f, 8.0f },
-    { "text", "font_padding", "auto",
+    { "font", "font_padding", "auto",
       "How far to inset a glyph inside that box, in the game's own atlas\n"
       "; pixels, or auto to measure it. Larger is smaller letters. Negative\n"
       "; grows them past the box.",
       ICONFIG_FLOAT, "auto", -8.0f, 8.0f },
-    { "text", "font_weight", "auto",
+    { "font", "font_weight", "auto",
       "How much to thicken that font's strokes, in the game's own atlas\n"
       "; pixels, or auto to measure it. 0 draws the face as it is.\n"
       "; tools/fontfit runs the same measurement outside the game.",
       ICONFIG_FLOAT, "auto", -8.0f, 8.0f },
-    { "text", "font_sans_weight", "auto",
+    { "font", "font_sans_weight", "auto",
       "The same, for the font_sans face.", ICONFIG_FLOAT, "auto", -8.0f, 8.0f },
-    { "text", "font_fit", "box",
+    { "font", "font_fit", "box",
       "How each glyph fills the space the game's own letter took: box (stretch\n"
       "; it to fit), width (keep the height, let the width be the face's),\n"
       "; natural (no fitting at all).",
       ICONFIG_ENUM, "box|width|natural", kNone, kNone },
-    { "text", "font_sans_fit", "natural",
+    { "font", "font_sans_fit", "natural",
       "The same, for the font_sans face.", ICONFIG_ENUM, "box|width|natural", kNone, kNone },
-    { "text", "platform_wording", "on",
-      "Rewrite the Xbox wording in the game's text -- dashboard, memory card\n"
-      "; slots -- as it loads. The files on disk are never touched.",
-      ICONFIG_BOOL, NULL, kNone, kNone },
 };
 
 const S32 kConfigSettingCount = (S32)(sizeof(kConfigSettings) / sizeof(kConfigSettings[0]));

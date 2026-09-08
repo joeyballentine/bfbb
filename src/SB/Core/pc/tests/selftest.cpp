@@ -458,7 +458,8 @@ static void test_config()
         check(strstr(buf, "snapshot = on") != NULL, "and snapshot");
         check(strstr(buf, "reverb = on") != NULL, "and reverb");
         check(strstr(buf, "sound_rolloff = on") != NULL, "and the sound rolloff");
-        check(strstr(buf, "[text]") != NULL, "it has the [text] section header");
+        check(strstr(buf, "[font]") != NULL, "it has the [font] section header");
+        check(strstr(buf, "font_fit = box") != NULL, "and the glyph fit at its default");
         check(strstr(buf, "platform_wording = on") != NULL, "and the text rewrite at its default");
     }
 

@@ -17,7 +17,7 @@
 // sharpness fix; the game keeps its own layout, spacing and colours.
 //
 // **No font ships with the port.** iFontLoad takes a path, and config.ini's
-// [text] font and font_sans name them -- empty by default, which is the game's
+// [font] font and font_sans name them -- empty by default, which is the game's
 // own atlas and exactly what the console draws. tools/getfont.py fetches one.
 //
 // **The game has more than one face.** Four atlases, and they are not the same
@@ -104,12 +104,12 @@ S32 iFontLoad(iFontFace face, const char* path);
 S32 iFontAvailable(iFontFace face);
 
 // Where the host keeps a sans serif to stand in for font_sb, which is what
-// [text] font_sans = auto resolves to. Arial, because that is the face the
+// [font] font_sans = auto resolves to. Arial, because that is the face the
 // atlas is, falling back to the metric-compatible Liberation Sans off Windows.
 // FALSE if the host has none, and the game's own atlas is then used.
 S32 iFontSystemSans(char* out, S32 outsize);
 
-// config.ini's [text] font_upscale: how many times the atlas cell's own
+// config.ini's [font] font_upscale: how many times the atlas cell's own
 // resolution to draw at. 4 unless set.
 //
 // This is the ONLY knob a substituted font needs, and it is a sharpness setting
@@ -120,7 +120,7 @@ S32 iFontSystemSans(char* out, S32 outsize);
 void iFontSetUpscale(S32 upscale);
 S32 iFontUpscale();
 
-// config.ini's [text] font_padding: how far to inset a glyph inside the box
+// config.ini's [font] font_padding: how far to inset a glyph inside the box
 // the artwork had it in, in ATLAS pixels. Half a pixel unless set.
 //
 // find_bounds measures that box by testing for any non-zero alpha at all, so
@@ -131,7 +131,7 @@ S32 iFontUpscale();
 void iFontSetPadding(F32 padding);
 F32 iFontPadding();
 
-// config.ini's [text] font_weight: how much to thicken a glyph's strokes, in
+// config.ini's [font] font_weight: how much to thicken a glyph's strokes, in
 // ATLAS pixels. 0 unless set, which is the outline as the face draws it.
 //
 // The game's atlases are hand-drawn and heavier than most text faces at the
@@ -148,12 +148,12 @@ F32 iFontPadding();
 void iFontSetWeight(iFontFace face, F32 weight);
 F32 iFontWeight(iFontFace face);
 
-// config.ini's [text] font_fit: how a glyph is placed in the space the atlas
+// config.ini's [font] font_fit: how a glyph is placed in the space the atlas
 // gave it. See iFontFit.
 void iFontSetFit(iFontFace face, iFontFit fit);
 iFontFit iFontFitOf(iFontFace face);
 
-// config.ini's [text] font_padding = auto and font_weight = auto, which are
+// config.ini's [font] font_padding = auto and font_weight = auto, which are
 // both the default: choose the two by measuring, instead of by being told.
 //
 // They are the only settings a substituted font has that depend on the FACE and

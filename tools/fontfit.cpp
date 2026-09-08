@@ -1,6 +1,6 @@
 // Fit a TrueType face to the atlas it stands in for, without the game.
 //
-// `[text] font_padding` and `[text] font_weight` are tuned by their effect on
+// `[font] font_padding` and `[font] font_weight` are tuned by their effect on
 // one thing: how much of the substituted letterform lands on the ink of the
 // glyph it replaces. That is a number, and asking the game for it means a
 // launch, a load and a look per value. This reads the atlas out of a
@@ -318,7 +318,7 @@ int main(int argc, char** argv)
                "\n"
                "  <dump>      a file written by running the game with BFBB_FONTDUMP set\n"
                "  <font.ttf>  the face to fit\n"
-               "  [upscale]   what [text] font_upscale resolves to at the resolution you\n"
+               "  [upscale]   what [font] font_upscale resolves to at the resolution you\n"
                "              play at -- the render height over 480, rounded. 3 for 1440p,\n"
                "              4 for 4K. Default 3.\n");
         return 2;
@@ -471,7 +471,7 @@ int main(int argc, char** argv)
         }
 
         printf("\n  best fit %.2f%% at %.2fx the atlas's ink:\n\n"
-               "    [text]\n    font_padding = %g\n    font_weight = %g\n",
+               "    [font]\n    font_padding = %g\n    font_weight = %g\n",
                best, best == any ? anyInk : bestInk, (double)bestPadding, (double)bestWeight);
     }
 

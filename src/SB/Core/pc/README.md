@@ -19,8 +19,9 @@ then `config.ini` beside the executable. Booleans take on/off, true/false,
 yes/no or 1/0, and a key that is not one of the ones below is reported by name
 at load rather than ignored.
 
-    [assets]            Where your copy of the game's files is. The one setting
-                        the port cannot guess and cannot do without.
+    [assets]            Where your copy of the game's files is, and how the
+                        port reads them. `path` is the one setting the port
+                        cannot guess and cannot do without.
 
     path                Empty by default, which means the folder the game was
                         started from. It has to name the directory that DIRECTLY
@@ -33,6 +34,14 @@ at load rather than ignored.
                         reach zMainLoadFontHIP, which spins forever on a font
                         that never loads and used to look like a hang on a blank
                         window. iFileAssetRoot is where the answer is resolved.
+
+    platform_wording    On by default. Rewrites the console out of the game's
+                        text as it loads: "your Xbox console" becomes "your
+                        computer", "Reboot to Xbox Dashboard" becomes "Quit to
+                        Desktop", and the save location stops being a memory
+                        card slot. The archives on disk are never touched, so
+                        off is exactly what the disc says. iTextPatch.h is the
+                        account of how it works and why it happens at load.
 
     [game]              Where the game starts, and where it keeps its saves.
 
@@ -116,17 +125,7 @@ at load rather than ignored.
                         speakers the way the Xbox does, not the way the
                         GameCube does
 
-    [text]              The game's own words, which are the Xbox release's.
-
-    platform_wording    On by default. Rewrites the console out of the game's
-                        text as it loads: "your Xbox console" becomes "your
-                        computer", "Reboot to Xbox Dashboard" becomes "Quit to
-                        Desktop", and the save location stops being a memory
-                        card slot. The archives on disk are never touched, so
-                        off is exactly what the disc says. iTextPatch.h is the
-                        account of how it works and why it happens at load.
-
-    [text]              Text.
+    [font]              The faces the game's text is drawn with.
 
     font                a TrueType file to draw the game's text with, empty for
                         the game's own. Its fonts are texture atlases authored
@@ -232,7 +231,7 @@ Each is off unless set, and each costs a load per frame when it is.
                         one replacing it: the outline in green, the game's own
                         atlas in red, yellow where they agree. A coloured fringe
                         is a letter the substitute sizes differently, which is
-                        what `[text] font_padding` moves. Needs `[text] font`
+                        what `[font] font_padding` moves. Needs `[font] font`
                         set, and makes the text unreadable while it is on.
 
     BFBB_FONTDUMP=<f>   write each font's atlas, character set and glyph boxes
@@ -246,7 +245,7 @@ Each is off unless set, and each costs a load per frame when it is.
                             bin\bfbb.exe                       (BFBB_FONTDUMP set)
                             bin\fontfit fonts.bin face.ttf 3
 
-                        The last argument is `[text] font_upscale` as it
+                        The last argument is `[font] font_upscale` as it
                         resolves at the resolution being played: the render
                         height over 480, so 3 for 1440p and 4 for 4K. It matters
                         -- padding is applied as a whole number of raster

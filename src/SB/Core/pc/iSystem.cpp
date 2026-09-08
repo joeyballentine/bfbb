@@ -649,15 +649,15 @@ static void ApplyConfig()
     // tables during startup and asks iFont once per font as it goes.
     // Loading one is only reading the file; nothing is rasterised until the
     // game says which characters it wants.
-    iFontSetUpscale(iConfigGetInt("text.font_upscale", 0));
+    iFontSetUpscale(iConfigGetInt("font.font_upscale", 0));
 
     // font_padding and font_weight take a number or auto, and auto is the
     // default: the two depend on the face and on how large it is being drawn,
     // which is a measurement rather than a preference. iFontAutoFit runs it
     // once the atlas being replaced is in hand.
-    const char* padding = iConfigGetString("text.font_padding", "auto");
-    const char* sbWeight = iConfigGetString("text.font_weight", "auto");
-    const char* sansWeight = iConfigGetString("text.font_sans_weight", "auto");
+    const char* padding = iConfigGetString("font.font_padding", "auto");
+    const char* sbWeight = iConfigGetString("font.font_weight", "auto");
+    const char* sansWeight = iConfigGetString("font.font_sans_weight", "auto");
 
     const S32 paddingAuto = iHostStrCaseCmp(padding, "auto") == 0;
     const S32 sbWeightAuto = iHostStrCaseCmp(sbWeight, "auto") == 0;
@@ -671,18 +671,18 @@ static void ApplyConfig()
     // zero would become the setting on the paths where the search cannot run.
     if (!paddingAuto)
     {
-        iFontSetPadding(iConfigGetFloat("text.font_padding", 0.5f));
+        iFontSetPadding(iConfigGetFloat("font.font_padding", 0.5f));
     }
     if (!sbWeightAuto)
     {
-        iFontSetWeight(IFONT_FACE_SB, iConfigGetFloat("text.font_weight", 0.0f));
+        iFontSetWeight(IFONT_FACE_SB, iConfigGetFloat("font.font_weight", 0.0f));
     }
     if (!sansWeightAuto)
     {
-        iFontSetWeight(IFONT_FACE_SANS, iConfigGetFloat("text.font_sans_weight", 0.0f));
+        iFontSetWeight(IFONT_FACE_SANS, iConfigGetFloat("font.font_sans_weight", 0.0f));
     }
-    iFontSetFit(IFONT_FACE_SB, iSystemFontFit(iConfigGetString("text.font_fit", "box")));
-    iFontSetFit(IFONT_FACE_SANS, iSystemFontFit(iConfigGetString("text.font_sans_fit", "natural")));
+    iFontSetFit(IFONT_FACE_SB, iSystemFontFit(iConfigGetString("font.font_fit", "box")));
+    iFontSetFit(IFONT_FACE_SANS, iSystemFontFit(iConfigGetString("font.font_sans_fit", "natural")));
 
     // BFBB_FONTDIFF draws the atlas being replaced over the outline replacing
     // it, which is how font_padding gets tuned by eye. An environment variable
@@ -693,7 +693,7 @@ static void ApplyConfig()
     // font_padding and font_weight against it without the game.
     iFontSetDumpPath(getenv("BFBB_FONTDUMP"));
 
-    const char* sbFont = iConfigGetString("text.font", "");
+    const char* sbFont = iConfigGetString("font.font", "");
     iFontLoad(IFONT_FACE_SB, sbFont);
 
     // The sans serif is a second file because it is a second typeface. auto
@@ -701,7 +701,7 @@ static void ApplyConfig()
     // that atlas is: the copyright screen and the memory card messages get
     // sharper without being restyled. With no font above, the port draws what
     // the console draws.
-    const char* sansFont = iConfigGetString("text.font_sans", "auto");
+    const char* sansFont = iConfigGetString("font.font_sans", "auto");
     char systemSans[512];
 
     if (iHostStrCaseCmp(sansFont, "auto") == 0)
@@ -733,7 +733,7 @@ static void ApplyConfig()
     // Pushed for the same reason, one library further out: zAssetTypes.cpp
     // calls the patcher from the game code, and game code must not learn what
     // config.ini is.
-    S32 wording = iConfigGetBool("text.platform_wording", TRUE);
+    S32 wording = iConfigGetBool("assets.platform_wording", TRUE);
     iTextPatchSetEnabled(wording);
 
     // Said out loud, and always, because these change what the game looks and
