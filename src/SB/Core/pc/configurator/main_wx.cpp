@@ -791,7 +791,15 @@ bool ConfigApp::OnInit()
     // Nothing else here has to follow: every colour this file sets comes from
     // wxSystemSettings, and wx answers those with dark values once the mode is
     // on.
+    //
+    // wx 3.3 added it, and a distribution's package is still 3.2 -- Ubuntu's
+    // libwxgtk3.2-dev is the name of the version. Skipping it there costs
+    // nothing that shows: this call is what WINDOWS needs, and Windows builds
+    // the 3.3 submodule because it has no packaged wx to find. GTK reads the
+    // desktop's theme on its own with or without it.
+#if wxCHECK_VERSION(3, 3, 0)
     SetAppearance(Appearance::System);
+#endif
 
     // An argument overrides the file search, for editing one config while a
     // different one is in place. Anything past the first is ignored rather

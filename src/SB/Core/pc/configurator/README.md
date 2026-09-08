@@ -101,6 +101,13 @@ first build and it happens once per build directory, which is what
 `-DBFBB_BUILD_CONFIGURATOR=OFF` is for: a build that only wants the game skips
 it entirely.
 
+3.2 is a supported version, and it is what a distribution packages -- Ubuntu's
+is literally called `libwxgtk3.2-dev`. The submodule is 3.3. Anything written
+here that 3.2 does not have goes behind `wxCHECK_VERSION`, and there is one
+such thing today: `SetAppearance`, which is what asks Windows for dark mode.
+GTK reads the desktop's theme without being asked, so 3.2 loses nothing that
+shows.
+
 Building this needs a toolchain that can include the C++ standard library,
 which the rest of the tree never does. On Windows that means Microsoft's STL,
 and it refuses any clang older than the version it shipped against -- a clang
