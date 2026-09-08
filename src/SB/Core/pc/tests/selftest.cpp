@@ -612,6 +612,63 @@ static void test_config_edit()
               "a round trip with no edits changes no bytes");
     }
 
+    // The same promise for a file that ends its lines with LF. A writer that
+    // always put CRLF back would rewrite every line of it, so a save that
+    // changed one value came out as a diff touching the whole file.
+    {
+        char lfPath[512];
+        snprintf(lfPath, sizeof(lfPath), "%s/lf.ini", dir);
+
+        static const char kLf[] = "[video]\nmode = fullscreen\nwidth = 640\n";
+
+        FILE* w = fopen(lfPath, "wb");
+        if (w != NULL)
+        {
+            fwrite(kLf, 1, sizeof(kLf) - 1, w);
+            fclose(w);
+        }
+
+        iConfigEditFile* file = iConfigEditOpen(lfPath);
+        if (file != NULL)
+        {
+            iConfigEditSave(file, lfPath);
+            iConfigEditClose(file);
+        }
+
+        char buf[256];
+        FILE* r = fopen(lfPath, "rb");
+        size_t n = (r != NULL) ? fread(buf, 1, sizeof(buf) - 1, r) : 0;
+        if (r != NULL)
+        {
+            fclose(r);
+        }
+
+        check(n == sizeof(kLf) - 1 && memcmp(buf, kLf, n) == 0,
+              "and an LF file keeps its LF endings");
+
+        // And a value written into one does not drag CRLF in behind it.
+        file = iConfigEditOpen(lfPath);
+        if (file != NULL)
+        {
+            iConfigEditSet(file, "video", "width", "1920");
+            iConfigEditSave(file, lfPath);
+            iConfigEditClose(file);
+        }
+
+        r = fopen(lfPath, "rb");
+        n = (r != NULL) ? fread(buf, 1, sizeof(buf) - 1, r) : 0;
+        if (r != NULL)
+        {
+            fclose(r);
+        }
+        buf[n] = '\0';
+
+        check(strstr(buf, "\r") == NULL, "and gains none when a value is written");
+        check(strstr(buf, "width = 1920") != NULL, "with the value written");
+
+        iHostRemoveFile(lfPath);
+    }
+
     {
         iConfigEditFile* file = iConfigEditOpen(path);
         if (file == NULL)

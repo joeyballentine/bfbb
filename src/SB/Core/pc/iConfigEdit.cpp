@@ -33,6 +33,12 @@ struct iConfigEditFile
     Line lines[kMaxLines];
     S32 count;
     bool changed;
+
+    // How the file ends its lines, so a save puts back what it read. Writing
+    // CRLF into a file that used LF rewrites every line in it, which breaks
+    // the one promise this module makes -- and turns a no-op save into a diff
+    // touching the whole file.
+    bool crlf;
 };
 
 namespace
@@ -211,6 +217,12 @@ namespace
 iConfigEditFile* iConfigEditNew()
 {
     iConfigEditFile* file = (iConfigEditFile*)calloc(1, sizeof(iConfigEditFile));
+    if (file != NULL)
+    {
+        // What a file written from nothing gets. A config.ini is read and
+        // edited in Notepad as often as anywhere else.
+        file->crlf = true;
+    }
     return file;
 }
 
@@ -232,10 +244,22 @@ iConfigEditFile* iConfigEditOpen(const char* path)
     char section[kMaxName];
     section[0] = '\0';
 
+    bool sawEnding = false;
+
     char buffer[kMaxLine];
     while (file->count < kMaxLines && fgets(buffer, sizeof(buffer), f) != NULL)
     {
         size_t n = strlen(buffer);
+
+        // The FIRST line ending decides, rather than a vote: a file with both
+        // was written by two things, and following the one it opens with is at
+        // least a rule someone can predict.
+        if (!sawEnding && n > 0 && buffer[n - 1] == '\n')
+        {
+            file->crlf = (n > 1 && buffer[n - 2] == '\r');
+            sawEnding = true;
+        }
+
         while (n > 0 && (buffer[n - 1] == '\n' || buffer[n - 1] == '\r'))
         {
             buffer[--n] = '\0';
@@ -431,11 +455,13 @@ bool iConfigEditSave(const iConfigEditFile* file, const char* path)
         return false;
     }
 
-    // CRLF, because this file is read and edited in Notepad as often as
-    // anywhere else and the parser trims both endings either way.
+    // Whatever the file already used. The parser trims both either way, so
+    // this is not about being read back -- it is that rewriting every line of
+    // someone's file to change one value is not an edit anybody asked for.
+    const char* ending = file->crlf ? "\r\n" : "\n";
     for (S32 i = 0; i < file->count; i++)
     {
-        fprintf(f, "%s\r\n", file->lines[i].text);
+        fprintf(f, "%s%s", file->lines[i].text, ending);
     }
 
     if (fclose(f) != 0)
