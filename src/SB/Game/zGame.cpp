@@ -1582,6 +1582,13 @@ void zGameScreenTransitionUpdate(F32 percentComplete, char* msg, U8* rgba)
         bgu2 = (tex != NULL) ? kBgu2Snapshot : kBgu2Asset;
         bgr = bgg = bgb = (tex != NULL) ? kBgTintSnapshot : kBgTintAsset;
         bga = (tex != NULL) ? kBgAlphaSnapshot : kBgAlphaAsset;
+
+        // Half a pixel left and up for the still, and nothing for the asset.
+        // See iSnapshotHalfPixel: the still is a texture of exactly the quad's
+        // size and has to land on it one texel to one pixel, where the asset is
+        // a backdrop being stretched over the screen and does not care.
+        const F32 bgOff = (tex != NULL) ? iSnapshotHalfPixel() : 0.0f;
+
         if (tex == NULL)
 #endif
         tex = (RwTexture*)xSTFindAsset(bgID, NULL);
@@ -1635,6 +1642,14 @@ void zGameScreenTransitionUpdate(F32 percentComplete, char* msg, U8* rgba)
             vx[3].emissiveColor.alpha = bga;
             vx[3].u = bgu2;
             vx[3].v = bgv2;
+
+#ifdef PLATFORM_PC
+            for (S32 i = 0; i < 4; i++)
+            {
+                vx[i].x += bgOff;
+                vx[i].y += bgOff;
+            }
+#endif
 
             RwIm2DRenderPrimitive(rwPRIMTYPETRISTRIP, &vx[0], 4);
             RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)1);

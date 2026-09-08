@@ -359,3 +359,15 @@ void iSnapshotSetEnabled(S32 enabled)
 {
     sEnabled = enabled ? TRUE : FALSE;
 }
+
+F32 iSnapshotHalfPixel()
+{
+    // RWHALFPIXEL is librw's own name for the D3D9 rule, and it is what
+    // decides: D3D10 and up put the pixel centre at 0.5 the way OpenGL does,
+    // and shifting there would introduce the offset instead of removing it.
+#ifdef RWHALFPIXEL
+    return -0.5f;
+#else
+    return 0.0f;
+#endif
+}

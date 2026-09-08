@@ -124,6 +124,14 @@ namespace
 
             vx[i].u = px[i] / w;
             vx[i].v = py[i] / h;
+
+            // After the UVs, which are the band's own geometry: the shift is
+            // where the quad LANDS, not what it reads. See iSnapshotHalfPixel
+            // -- the wipe is drawing the same still at the same one-to-one
+            // size the loading screen does, and softens it the same way
+            // without this.
+            vx[i].x += iSnapshotHalfPixel();
+            vx[i].y += iSnapshotHalfPixel();
         }
 
         RwIm2DRenderPrimitive(rwPRIMTYPETRISTRIP, &vx[0], 4);

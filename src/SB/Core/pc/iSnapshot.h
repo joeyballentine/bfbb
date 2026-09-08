@@ -88,4 +88,18 @@ struct RwTexture* iSnapshotBackgroundTexture();
 // The default is on.
 void iSnapshotSetEnabled(S32 enabled);
 
+// What to add to a screen-space x and y to make a quad sample the still one for
+// one. Zero on every backend but D3D9, where a vertex at screen x lines up with
+// the CENTRE of pixel x rather than its corner: a quad drawn at 0..w then reads
+// every texel half way between two of its own, and bilinear filtering turns the
+// whole picture into a two-by-two average of itself. The still is the only
+// thing the game draws at exactly its own size, so it is the only thing where
+// that shows -- as a screenshot that looks softer than the frame it was taken
+// from.
+//
+// A call rather than an #ifdef at the call sites, because they are game code
+// and outside the shim; glow.cpp and distort.cpp are inside it and test
+// RWHALFPIXEL directly for the same reason in reverse.
+F32 iSnapshotHalfPixel();
+
 #endif
