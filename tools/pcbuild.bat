@@ -3,23 +3,36 @@ setlocal enabledelayedexpansion
 rem Build the PC port. Called by build-debug.bat and build-release.bat at the
 rem repository root; run those rather than this.
 rem
-rem   tools\pcbuild.bat <Debug|Release> [backend] [arch]
+rem   tools\pcbuild.bat <Debug|Release> [backends] [arch]
 rem
-rem       backend: D3D9 (default), GL3, NULL
-rem       arch:    x86 (default), x64
+rem       backends: D3D9 and GL3 in one executable by default. Name one to
+rem                 build only that: D3D9, D3D11, GL3 or NULL. D3D11 cannot
+rem                 share a build with D3D9.
+rem       arch:     x86 (default), x64
 rem
-rem Every configuration builds into its own directory -- the render backend is
-rem baked into the CMake cache and into librw's compile definitions, so they
-rem cannot share one -- but they all put bfbb.exe and the DLLs it needs into
-rem bin\. One place to run from, one config.ini, and no hunting for which
+rem Every configuration builds into its own directory -- the backend set is
+rem baked into the CMake cache and into librw's compile definitions, so two of
+rem them cannot share one -- but they all put bfbb.exe and the DLLs it needs
+rem into bin\. One place to run from, one config.ini, and no hunting for which
 rem directory the last build went to. The last build wins, which is why the
 rem script says at the end what is now sitting there.
+rem
+rem Which of the backends in an executable actually draws is video.backend in
+rem config.ini, not this.
 
 set "CONFIG=%~1"
 set "BACKEND=%~2"
 set "ARCH=%~3"
 if "%CONFIG%"=="" set "CONFIG=Debug"
-if "%BACKEND%"=="" set "BACKEND=D3D9"
+rem Empty means whatever CMakeLists.txt picks for this host, which on Windows is
+rem D3D9 and GL3 together.
+rem
+rem -U rather than nothing at all: a directory configured with a backend before
+rem has it in its cache, and a cache entry outlives the argument that set it --
+rem so leaving the option off would silently keep building the old set. Both
+rem spellings, because the old singular one is still honoured.
+set "BACKENDARG=-UBFBB_RENDER_BACKEND -UBFBB_RENDER_BACKENDS"
+if not "%BACKEND%"=="" set "BACKENDARG=-DBFBB_RENDER_BACKENDS=%BACKEND%"
 if "%ARCH%"=="" set "ARCH=x86"
 if /i not "%ARCH%"=="x86" if /i not "%ARCH%"=="x64" (
   echo ERROR: arch must be x86 or x64, not %ARCH%.
@@ -83,11 +96,11 @@ rem ---- configure and build ---------------------------------------------------
 where clang++ >nul 2>&1 || (echo ERROR: clang++ is not on PATH. & popd & exit /b 1)
 where ninja   >nul 2>&1 || (echo ERROR: ninja is not on PATH. & popd & exit /b 1)
 
-echo === %CONFIG% / %BACKEND% / %ARCH% -^> %BUILDDIR%, exe into bin\ ===
+echo === %CONFIG% / %ARCH% -^> %BUILDDIR%, exe into bin\ ===
 cmake -S . -B "%BUILDDIR%" -G Ninja ^
   -DCMAKE_BUILD_TYPE=%CONFIG% ^
   -DCMAKE_CXX_COMPILER=clang++ ^
-  -DBFBB_RENDER_BACKEND=%BACKEND% ^
+  %BACKENDARG% ^
   -DBFBB_BUILD_32BIT=%M32% ^
   -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="%ROOT:\=/%/bin" ^
   %PREFIX%
@@ -96,10 +109,16 @@ if errorlevel 1 (echo. & echo CONFIGURE FAILED & popd & exit /b 1)
 cmake --build "%BUILDDIR%"
 if errorlevel 1 (echo. & echo BUILD FAILED & popd & exit /b 1)
 
+rem What the configure settled on, read back rather than echoed from the
+rem argument: with no argument the answer is CMakeLists.txt's, and it is the
+rem thing worth reporting.
+set "BACKENDNAME=?"
+for /f "tokens=2 delims==" %%i in ('findstr /b "BFBB_RENDER_BACKENDS:" "%BUILDDIR%\CMakeCache.txt"') do set "BACKENDNAME=%%i"
+
 rem What is in bin\ now, so a slow Release-looking build is never a mystery.
-> "%ROOT%\bin\BUILD-INFO.txt" echo %CONFIG% / %BACKEND% / %ARCH%, built from %BUILDDIR%
+> "%ROOT%\bin\BUILD-INFO.txt" echo %CONFIG% / %BACKENDNAME% / %ARCH%, built from %BUILDDIR%
 echo.
-echo === bin\bfbb.exe is now %CONFIG% / %BACKEND% / %ARCH% ===
+echo === bin\bfbb.exe is now %CONFIG% / %BACKENDNAME% / %ARCH% ===
 if not exist "%ROOT%\bin\config.ini" (
   echo     No bin\config.ini yet. The game writes one with the defaults on
   echo     first run; set [assets] path in it to your Xbox game files.

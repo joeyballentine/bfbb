@@ -1,7 +1,10 @@
 @echo off
 rem Release build of the PC port. Optional arguments: the render
-rem backend (D3D9 is the default, GL3 and NULL are the others) and the
-rem architecture (x86 is the default, x64 the other).
+rem backends and the architecture (x86 is the default, x64 the other).
+rem
+rem With no backend argument the executable carries D3D9 and GL3, and
+rem video.backend in config.ini picks between them. Name one -- D3D9, D3D11,
+rem GL3 or NULL -- to build only that.
 rem
 rem     build-release.bat
 rem     build-release.bat GL3
