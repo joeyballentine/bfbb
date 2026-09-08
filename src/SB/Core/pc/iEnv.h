@@ -12,6 +12,27 @@
 // world kits use.
 #define iENV_BAKED_LIGHTS 4
 
+// The rig recovered from a level's baked vertex colour: an ambient and up to
+// iENV_BAKED_LIGHTS directionals, fitted per channel by iEnvNormals.
+//
+// Directions are where the light TRAVELS, like RpLight's, not where it comes
+// from. Lights are ordered brightest first, so dir[0] is the one a
+// single-direction consumer -- a shadow -- should follow.
+struct iEnvBakedRig
+{
+    S32 valid;
+    S32 count;
+    xVec3 dir[iENV_BAKED_LIGHTS];
+    F32 color[iENV_BAKED_LIGHTS][3];
+    F32 ambient[3];
+    // What the directionals contribute to the AVERAGE vertex: the sum over
+    // lights of the light's colour times the mean of max(0, n.s) over the
+    // world. The contrast setting holds ambient + this constant while it scales
+    // the directionals, so a level keeps its brightness as it gains contrast.
+    // See iScreenWorldLightContrast.
+    F32 dirMean[3];
+};
+
 struct iEnv
 {
     RpWorld* world;
@@ -26,24 +47,7 @@ struct iEnv
     // block sliced across the clump's geometries. NULL when the level brought
     // its own, which 21 of the 55 did. See iEnvNormals.h.
     void* genNormals;
-    // The rig recovered from the level's baked vertex colour: an ambient and
-    // up to iENV_BAKED_LIGHTS directionals, fitted by iEnvNormals.
-    //
-    // Directions are where the light TRAVELS, like RpLight's, not where it
-    // comes from. Lights are ordered brightest first, so bakedLight is the one
-    // a single-direction consumer -- a shadow -- should follow.
-    xVec3 bakedLight;
-    S32 bakedLightCount;
-    xVec3 bakedLightDir[iENV_BAKED_LIGHTS];
-    F32 bakedLightColor[iENV_BAKED_LIGHTS][3];
-    F32 bakedAmbient[3];
-    // What the directionals contribute to the AVERAGE vertex: the sum over
-    // lights of the light's colour times the mean of max(0, n.s) over the
-    // world. The contrast setting holds ambient + this constant while it
-    // scales the directionals, so a level keeps its brightness as it gains
-    // contrast. See iScreenWorldLightContrast.
-    F32 bakedDirMean[3];
-    S32 bakedLightValid;
+    iEnvBakedRig baked;
     // Whether iEnvLoad took the baked colour off this world's lit geometry.
     //
     // The render side must not ask the question a second time: if load drops

@@ -620,7 +620,7 @@ static void FitSolveNN(const double* A, const double* rhs, S32 n, double* x)
     }
 }
 
-static void RecoverBakedLight(NormalWork* w, iEnv* env)
+static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
 {
     const S32 nc = kFitBasis + 1; // column 0 is the ambient, then one per direction
 
@@ -816,7 +816,7 @@ static void RecoverBakedLight(NormalWork* w, iEnv* env)
         return;
     }
 
-    // Brightest first, so bakedLight is the one a shadow should follow.
+    // Brightest first, so dir[0] is the one a shadow should follow.
     for (S32 i = 0; i < count; i++)
     {
         for (S32 j = i + 1; j < count; j++)
@@ -840,12 +840,12 @@ static void RecoverBakedLight(NormalWork* w, iEnv* env)
         }
     }
 
-    env->bakedLightCount = count;
+    rig->count = count;
 
     for (S32 ch = 0; ch < 3; ch++)
     {
-        env->bakedAmbient[ch] = (F32)sol[0][ch];
-        env->bakedDirMean[ch] = 0.0f;
+        rig->ambient[ch] = (F32)sol[0][ch];
+        rig->dirMean[ch] = 0.0f;
     }
 
     for (S32 i = 0; i < count; i++)
@@ -854,7 +854,7 @@ static void RecoverBakedLight(NormalWork* w, iEnv* env)
 
         // Negated on the way out: the fit points TOWARDS the light and
         // everything downstream of here means the direction it travels.
-        env->bakedLightDir[i].assign(-s->x, -s->y, -s->z);
+        rig->dir[i].assign(-s->x, -s->y, -s->z);
 
         // G[0][col] is the sum of max(0, n.s) over the sampled world, so the
         // mean the contrast setting needs is already in the matrix.
@@ -862,24 +862,23 @@ static void RecoverBakedLight(NormalWork* w, iEnv* env)
 
         for (S32 ch = 0; ch < 3; ch++)
         {
-            env->bakedLightColor[i][ch] = (F32)sol[1 + i][ch];
-            env->bakedDirMean[ch] += (F32)(sol[1 + i][ch] * mean);
+            rig->color[i][ch] = (F32)sol[1 + i][ch];
+            rig->dirMean[ch] += (F32)(sol[1 + i][ch] * mean);
         }
     }
 
-    env->bakedLight = env->bakedLightDir[0];
-    env->bakedLightValid = TRUE;
+    rig->valid = TRUE;
 
     printf("bfbb: world lit by %d light(s), ambient %.2f %.2f %.2f, over %d of %d vertices\n",
-           (int)count, env->bakedAmbient[0], env->bakedAmbient[1], env->bakedAmbient[2],
+           (int)count, rig->ambient[0], rig->ambient[1], rig->ambient[2],
            (int)used, (int)w->totalVerts);
 
     for (S32 i = 0; i < count; i++)
     {
         printf("bfbb:   light %d from %.3f %.3f %.3f, colour %.2f %.2f %.2f\n", (int)i,
-               -env->bakedLightDir[i].x, -env->bakedLightDir[i].y, -env->bakedLightDir[i].z,
-               env->bakedLightColor[i][0], env->bakedLightColor[i][1],
-               env->bakedLightColor[i][2]);
+               -rig->dir[i].x, -rig->dir[i].y, -rig->dir[i].z,
+               rig->color[i][0], rig->color[i][1],
+               rig->color[i][2]);
     }
 
     RwFree(G);
@@ -896,6 +895,46 @@ static void RecoverBakedLight(NormalWork* w, iEnv* env)
 // Not iModelHack_DisablePrelight, which does the same job for models. The world
 // is drawn by Jsp_ClumpRender straight through RpAtomicRender, and that hack is
 // read by iModelRender, which the world never reaches.
+// The rig fitted from a clump before anything rebuilt it, and the clump it came
+// from. One slot: worlds load one at a time, and a slot that is not claimed is
+// simply overwritten.
+static RpClump* sShippedClump;
+static iEnvBakedRig sShippedRig;
+
+void iEnvFitShippedRig(RpClump* clump)
+{
+    NormalWork w;
+
+    sShippedClump = NULL;
+    memset(&sShippedRig, 0, sizeof(sShippedRig));
+
+    if (clump == NULL || !WorkBuild(&w, clump))
+    {
+        return;
+    }
+
+    RecoverBakedLight(&w, &sShippedRig);
+    WorkFree(&w);
+
+    if (sShippedRig.valid)
+    {
+        sShippedClump = clump;
+    }
+}
+
+// The rig for this clump, if one was fitted before its geometry was rebuilt.
+static S32 TakeShippedRig(RpClump* clump, iEnvBakedRig* out)
+{
+    if (clump == NULL || sShippedClump != clump || !sShippedRig.valid)
+    {
+        return FALSE;
+    }
+
+    *out = sShippedRig;
+    sShippedClump = NULL;
+    return TRUE;
+}
+
 void iEnvDropPrelight(iEnv* env)
 {
     if (env == NULL || env->jsp == NULL || env->jsp->clump == NULL)
@@ -961,7 +1000,14 @@ void iEnvGenerateNormals(iEnv* env)
         return;
     }
 
-    RecoverBakedLight(&w, env);
+    // The rig fitted before the geometry was rebuilt wins, because it was
+    // fitted from the paint and the topology the artists authored together.
+    // Without hipoly there is no rebuild and the two are the same work on the
+    // same mesh, so this is simply the one that already ran.
+    if (!TakeShippedRig(env->jsp->clump, &env->baked))
+    {
+        RecoverBakedLight(&w, &env->baked);
+    }
 
     if (HasNormals(&w))
     {

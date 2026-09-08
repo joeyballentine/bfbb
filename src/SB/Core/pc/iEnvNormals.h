@@ -4,6 +4,7 @@
 #include <types.h>
 
 struct iEnv;
+struct RpClump;
 
 // Give a level's world geometry the normals it was shipped without.
 //
@@ -35,5 +36,22 @@ void iEnvDropPrelight(iEnv* env);
 
 // Release what iEnvGenerateNormals allocated. Called from iEnvFree.
 void iEnvFreeNormals(iEnv* env);
+
+// Fit the rig NOW, from the world's geometry as it shipped.
+//
+// experimental.hipoly_assets rebuilds that geometry before iEnvLoad ever sees
+// it, and the fit comes out much worse on the result. The prelight is
+// interpolated onto vertices no artist painted, and normals generated over the
+// finer mesh agree with the shipped ones only 27% to 57% of the time against
+// 62% to 78% on the shipped mesh. Both push the rig flat: bb01 fits an ambient
+// of 0.37 against a key light of 0.49 after smoothing, where the shipped mesh
+// gives 0.27 against 0.77.
+//
+// So the rig is taken here, where the paint and the topology are still the pair
+// the artists authored together, and iEnvLoad applies it to whatever geometry it
+// ends up with. Keyed on the clump, which hipoly rebuilds in place and so does
+// not move; a clump that never reaches iEnvLoad is simply overwritten by the
+// next one.
+void iEnvFitShippedRig(RpClump* clump);
 
 #endif

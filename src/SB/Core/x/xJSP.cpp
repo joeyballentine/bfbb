@@ -6,6 +6,9 @@
 
 #ifdef PLATFORM_PC
 #include "iHipoly.h"
+// The bake fit reads the world's geometry before iHipolyWorld replaces it.
+#include "iEnvNormals.h"
+#include "iScreen.h"
 #endif
 
 static RwV3d* sCurrVert;
@@ -82,6 +85,13 @@ void xJSP_MultiStreamRead(void* data, U32 size, xJSPHeader** jsp)
         // with the whole world in hand, and the tree read below is the one it
         // builds over the new triangles. The walk over the asset's marks
         // continues on the shipped buffer either way.
+        // Before iHipolyWorld, which replaces the geometry the rig is read
+        // from. iEnvNormals.h says why the shipped mesh is the one to read.
+        if (iScreenWorldLighting() != IWORLDLIGHT_OFF)
+        {
+            iEnvFitShippedRig(hdr->clump);
+        }
+
         U32 hipolySize = 0;
         void* hipolyTree = iHipolyWorld(hdr->clump, data, mark.length, &hipolySize);
         colltree = xClumpColl_StaticBufferInit(hipolyTree ? hipolyTree : data,

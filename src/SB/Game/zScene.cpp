@@ -3116,16 +3116,8 @@ static struct
 // address, and the new world is lit by the old level's sun. Comparing the
 // numbers instead cannot collide, because two levels that fit to identical
 // values want an identical kit.
-static struct
-{
-    S32 valid;
-    S32 count;
-    xVec3 dir[iENV_BAKED_LIGHTS];
-    F32 color[iENV_BAKED_LIGHTS][3];
-    F32 ambient[3];
-    F32 dirMean[3];
-    F32 swing;
-} sWorldKitFrom;
+static iEnvBakedRig sWorldKitFrom;
+static F32 sWorldKitSwing;
 
 // xLightKit.cpp switches on these and nothing names them.
 static const U32 kLightKitAmbient = 1;
@@ -3171,12 +3163,8 @@ static void zWorldLightBuild(iEnv* env)
 {
     F32 contrast = iScreenWorldLightContrast();
 
-    if (sWorldKitFrom.valid && sWorldKitFrom.swing == contrast &&
-        sWorldKitFrom.count == env->bakedLightCount &&
-        memcmp(sWorldKitFrom.dir, env->bakedLightDir, sizeof(sWorldKitFrom.dir)) == 0 &&
-        memcmp(sWorldKitFrom.color, env->bakedLightColor, sizeof(sWorldKitFrom.color)) == 0 &&
-        memcmp(sWorldKitFrom.ambient, env->bakedAmbient, sizeof(sWorldKitFrom.ambient)) == 0 &&
-        memcmp(sWorldKitFrom.dirMean, env->bakedDirMean, sizeof(sWorldKitFrom.dirMean)) == 0)
+    if (sWorldKitFrom.valid && sWorldKitSwing == contrast &&
+        memcmp(&sWorldKitFrom, &env->baked, sizeof(sWorldKitFrom)) == 0)
     {
         return;
     }
@@ -3186,21 +3174,16 @@ static void zWorldLightBuild(iEnv* env)
         xLightKit_Destroy(&sWorldKit.kit);
     }
 
-    sWorldKitFrom.valid = 1;
-    sWorldKitFrom.swing = contrast;
-    sWorldKitFrom.count = env->bakedLightCount;
-    memcpy(sWorldKitFrom.dir, env->bakedLightDir, sizeof(sWorldKitFrom.dir));
-    memcpy(sWorldKitFrom.color, env->bakedLightColor, sizeof(sWorldKitFrom.color));
-    memcpy(sWorldKitFrom.ambient, env->bakedAmbient, sizeof(sWorldKitFrom.ambient));
-    memcpy(sWorldKitFrom.dirMean, env->bakedDirMean, sizeof(sWorldKitFrom.dirMean));
+    sWorldKitFrom = env->baked;
+    sWorldKitSwing = contrast;
 
     memset(&sWorldKit, 0, sizeof(sWorldKit));
-    sWorldKit.kit.lightCount = env->bakedLightCount + 1;
+    sWorldKit.kit.lightCount = env->baked.count + 1;
     sWorldKit.kit.lightList = sWorldKit.lights;
 
     // Scale the directionals by the swing and take the difference back out of
     // the ambient, so the AVERAGE vertex keeps the brightness the bake gave it
-    // however far the two ends are pulled apart. iEnv::bakedDirMean is what the
+    // however far the two ends are pulled apart. iEnvBakedRig::dirMean is what the
     // directionals contribute to that average at a swing of 1.
     //
     // **The top end still clips, and that is the real cost of a high swing.**
@@ -3219,12 +3202,12 @@ static void zWorldLightBuild(iEnv* env)
 
     for (S32 i = 0; i < 3; i++)
     {
-        F32 a = env->bakedAmbient[i] + env->bakedDirMean[i] * (1.0f - swing);
+        F32 a = env->baked.ambient[i] + env->baked.dirMean[i] * (1.0f - swing);
 
         ambOut[i] = a > 0.0f ? a : 0.0f;
     }
 
-    for (S32 k = 0; k < env->bakedLightCount; k++)
+    for (S32 k = 0; k < env->baked.count; k++)
     {
         xLightKitLight* dir = &sWorldKit.lights[1 + k];
         F32* dirOut = &dir->color.red;
@@ -3234,10 +3217,10 @@ static void zWorldLightBuild(iEnv* env)
 
         for (S32 i = 0; i < 3; i++)
         {
-            dirOut[i] = env->bakedLightColor[k][i] * swing;
+            dirOut[i] = env->baked.color[k][i] * swing;
         }
 
-        zWorldLightAim(dir, &env->bakedLightDir[k]);
+        zWorldLightAim(dir, &env->baked.dir[k]);
     }
 
     xLightKit_Prepare(&sWorldKit.kit);

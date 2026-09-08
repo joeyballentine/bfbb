@@ -85,7 +85,7 @@ void iEnvLoad(iEnv* env, const void* data, U32, S32 dataType)
             // Only once there is a rig to put in its place. A fit that
             // failed -- a world with no prelight to read, or too little of it
             // -- would otherwise leave the level with no colour and no light.
-            if (iScreenWorldLighting() != IWORLDLIGHT_OFF && env->bakedLightValid)
+            if (iScreenWorldLighting() != IWORLDLIGHT_OFF && env->baked.valid)
             {
                 iEnvDropPrelight(env);
                 env->prelightDropped = TRUE;
