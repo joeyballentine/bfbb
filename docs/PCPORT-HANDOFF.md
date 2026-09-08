@@ -449,12 +449,20 @@ at all.
 macOS is COMPILED but not yet RUN. The differences from Linux are four, all
 inside `iHostPosix.cpp` behind `__APPLE__`: no `clock_nanosleep`, no
 `MAP_32BIT`, no `/proc/self/exe`, and `~/Library/Application Support` rather
-than XDG. The one to distrust is the second. `iHostReserveLow` gets its low
-arena by asking `mmap` for specific low addresses, and on macOS that only works
-because the executable is linked with `-pagezero_size 0x4000` -- the default
-`__PAGEZERO` is 4 GB wide, which is exactly the range `gMemInfo.DRAM.addr` can
-hold. See `bfbb_host_link_options` in `CMakeLists.txt`. If the port starts and
-dies in `iMemInit` on a Mac, that link option is the first thing to check.
+than XDG.
+
+**Apple Silicon builds and cannot run, and that is not a bug to be fixed
+here.** `iHostReserveLow` gets its low arena by asking `mmap` for specific low
+addresses, which on macOS needs the executable's `__PAGEZERO` shrunk -- the
+default one is 4 GB wide, exactly the range `gMemInfo.DRAM.addr` can hold.
+arm64 does not allow that: the main executable must be a position-independent
+image with a full-size `__PAGEZERO`, and a smaller one is a SIGKILL at exec
+with nothing printed, not a link error. So there is no low 4 GB on that
+hardware, and the port dies in `iMemInit` saying so. Closing it means the game
+allocator no longer addressing memory with a `U32`, which is a much larger
+change than the port has needed so far. The x86_64 build under Rosetta is what
+runs on an Apple Silicon Mac today, and `bfbb_host_link_options` in
+`CMakeLists.txt` says all of this at the point it decides.
 
 Off Windows the build is 64-bit and there is no choice about it: macOS has no
 32-bit runtime, and a 32-bit Linux build would need a multilib copy of every

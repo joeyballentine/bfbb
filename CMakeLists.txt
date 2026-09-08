@@ -997,19 +997,47 @@ add_test(NAME rw_selftest COMMAND rw_selftest)
 # Applied to `bfbb` and to `pc_selftest`, which are the two targets that call
 # iMemInit and the two that print a backtrace. Nothing here is optional on the
 # host it names.
+#
+# __PAGEZERO, the unmapped guard region at the bottom of the address space, is
+# 4 GB wide by default on a 64-bit Mach-O -- which is EXACTLY the range
+# gMemInfo.DRAM.addr can hold. Left at its default, every low address
+# iHostReserveLow asks for is inside it, the game arena lands above 4 GB, and
+# iMemInit refuses to start. Shrinking it is a property of the executable, not
+# of the code, so it is a link option.
+#
+# **x86_64 only, and Apple Silicon is not a configuration issue to be solved.**
+# arm64 requires the main executable to be a position-independent image with a
+# full-size __PAGEZERO, and the kernel enforces it: a smaller one is not a
+# warning or a malformed-binary error at link time but a SIGKILL at exec, with
+# nothing printed. So there is no low 4 GB on Apple Silicon and the game
+# allocator cannot address memory there -- the port builds, and dies in
+# iMemInit saying so. The x86_64 build under Rosetta is what runs on that
+# hardware today.
+#
+# CMAKE_OSX_ARCHITECTURES first: a cross build sets it and leaves
+# CMAKE_SYSTEM_PROCESSOR naming the machine doing the building.
+if(APPLE)
+  set(BFBB_APPLE_ARCH "${CMAKE_OSX_ARCHITECTURES}")
+  if(NOT BFBB_APPLE_ARCH)
+    set(BFBB_APPLE_ARCH "${CMAKE_SYSTEM_PROCESSOR}")
+  endif()
+
+  if(BFBB_APPLE_ARCH MATCHES "x86_64")
+    set(BFBB_APPLE_LOW_ARENA ON)
+    message(STATUS "macOS: shrinking __PAGEZERO so the game arena can live below 4 GB")
+  else()
+    set(BFBB_APPLE_LOW_ARENA OFF)
+    message(STATUS
+      "macOS on ${BFBB_APPLE_ARCH}: no low 4 GB, so this build will not run --"
+      " it links, and iMemInit refuses to start. Build x86_64 for Rosetta.")
+  endif()
+endif()
+
 function(bfbb_host_link_options target)
-  if(APPLE)
-    # __PAGEZERO, the unmapped guard region at the bottom of the address space,
-    # is 4 GB wide by default on a 64-bit Mach-O -- which is EXACTLY the range
-    # gMemInfo.DRAM.addr can hold. Left at its default, every low address
-    # iHostReserveLow asks for is inside it, the game arena lands above 4 GB,
-    # and iMemInit refuses to start. This is the only way to make that range
-    # mappable, and it is a property of the executable, not of the code.
-    #
+  if(BFBB_APPLE_LOW_ARENA)
     # 0x4000 rather than 0: one page still guards address zero, so a null
-    # dereference still faults instead of quietly reading mapped memory. It is
-    # 16 KB because that is the page size on Apple Silicon, and the linker
-    # requires a multiple of it.
+    # dereference still faults instead of quietly reading mapped memory. The
+    # linker wants a multiple of the page size and 16 KB satisfies both Macs.
     target_link_options(${target} PRIVATE -Wl,-pagezero_size,0x4000)
   endif()
 

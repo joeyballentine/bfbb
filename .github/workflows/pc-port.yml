@@ -247,6 +247,16 @@ jobs:
         env:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
-        run: |
-          ./build-ci/rw_selftest
-          ./build-ci/pc_selftest
+        run: ./build-ci/rw_selftest
+
+      # pc_selftest calls iMemInit, and Apple Silicon has no low 4 GB for the
+      # game arena to live in -- see bfbb_host_link_options in CMakeLists.txt.
+      # So arm64 macOS builds and does not run, here and on a real Mac, until
+      # the game allocator stops addressing memory with a U32. macos-15-intel
+      # runs it and is what keeps macOS honest in the meantime.
+      - name: Self-tests (game allocator)
+        if: matrix.backend == 'NULL' && matrix.os != 'macos-latest'
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: ./build-ci/pc_selftest
