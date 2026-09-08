@@ -144,11 +144,11 @@ static void test_mem()
 
     check(gMemInfo.DRAM.addr != 0, "iMemInit reserved a DRAM arena");
 
-    // Retail's size, doubled where a pointer is 8 bytes: every game object with
-    // a pointer in it is larger there and JF01 runs the heap out without the
-    // extra. iMemMgr.cpp sizes it; this checks the value that reaches the game.
-    U32 expect_dram = (sizeof(void*) == 4) ? 0x384000 : 0x384000 * 2;
-    check(gMemInfo.DRAM.size == expect_dram, "DRAM is retail's 0x384000 bytes at 32 bits, twice that at 64");
+    // 64 MB: retail's 0x384000 ran out under a 64-bit build's larger objects
+    // and under the tessellated models experimental.hipoly_assets hands the
+    // goo effect. iMemMgr.cpp sizes it; this checks the value that reaches the
+    // game.
+    check(gMemInfo.DRAM.size == 0x4000000, "DRAM is 64 MB");
 
     // xMemInitHeap does its arithmetic on gMemInfo.DRAM.addr as a U32, so the
     // arena has to be addressable in 32 bits and survive the round trip.

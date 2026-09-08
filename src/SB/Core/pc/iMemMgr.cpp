@@ -16,21 +16,20 @@ U32 mem_top_alloc;
 static void* sArena;
 static U32 sArenaSize;
 
-// Retail's DRAM heap. xMemInit carves three heaps out of gMemInfo.DRAM, and
-// their sizes are load-bearing: raising this changes which allocations fail,
-// so it stays at the console's value until something is measured to need more.
+// The game heap. xMemInit carves three heaps out of gMemInfo.DRAM, and their
+// sizes are load-bearing: raising this changes which allocations fail, so it
+// stayed at the console's 0x384000 until something was measured to need more.
 //
-// A 64-bit build is that measurement. Every game object with a pointer in it
-// is larger there -- an xBase is a vtable pointer and a link pointer before it
-// is anything else -- and JF01 runs the heap out while spawning NPCs, which
-// surfaces as RyzMemData::operator new memsetting a NULL. Doubling covers the
-// growth with room to spare; the arena is reserved low either way and 7 MB is
-// as available as 3.7.
-#ifdef BFBB_PTR64
-#define IMEM_DRAM_SIZE (0x384000 * 2)
-#else
-#define IMEM_DRAM_SIZE 0x384000
-#endif
+// Two things were. A 64-bit build: every game object with a pointer in it is
+// larger there -- an xBase is a vtable pointer and a link pointer before it is
+// anything else -- and JF01 ran the heap out while spawning NPCs, which
+// surfaced as RyzMemData::operator new memsetting a NULL. And
+// experimental.hipoly_assets: the goo effect copies a model's vertices,
+// colours and texture coordinates into this heap, and a tessellated model has
+// tens of times as many, which surfaced as zFXGooEnable memcpying into a NULL.
+// 64 MB covers both with room to spare; the arena is reserved low either way,
+// and this much is a small part of a 32-bit process.
+#define IMEM_DRAM_SIZE 0x4000000
 
 // xMemInit places gxHeap[1] and gxHeap[2] at DRAM.addr + DRAM.size, each
 // IMEM_DRAM_SIZE long -- that is, entirely PAST the block retail allocated for

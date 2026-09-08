@@ -746,6 +746,8 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iFixes.cpp
   ${PC_DIR}/iFont.cpp
   ${PC_DIR}/iFontTexture.cpp
+  ${PC_DIR}/iHipoly.cpp
+  ${PC_DIR}/iHipolyTess.cpp
   ${PC_DIR}/iLoadScreen.cpp
   ${PC_DIR}/iLoadTransition.cpp
   ${PC_DIR}/intrin.cpp

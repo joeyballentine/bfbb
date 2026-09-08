@@ -4,6 +4,10 @@
 #include <types.h>
 #include <string.h>
 
+#ifdef PLATFORM_PC
+#include "iHipoly.h"
+#endif
+
 static RwV3d* sCurrVert;
 static volatile S32 sAtomicStartCount;
 static RwV3d** sAtomicStartVert;
@@ -73,7 +77,22 @@ void xJSP_MultiStreamRead(void* data, U32 size, xJSPHeader** jsp)
     if (mark.type == 0xBEEF01)
     {
         data = mp + 1;
+#ifdef PLATFORM_PC
+        // PORT: experimental.hipoly_assets rebuilds the clump's geometry here,
+        // with the whole world in hand, and the tree read below is the one it
+        // builds over the new triangles. The walk over the asset's marks
+        // continues on the shipped buffer either way.
+        U32 hipolySize = 0;
+        void* hipolyTree = iHipolyWorld(hdr->clump, data, mark.length, &hipolySize);
+        colltree = xClumpColl_StaticBufferInit(hipolyTree ? hipolyTree : data,
+                                               hipolyTree ? hipolySize : mark.length);
+        if (hipolyTree)
+        {
+            iHipolyWorldAttach(colltree, hipolyTree);
+        }
+#else
         colltree = xClumpColl_StaticBufferInit(data, mark.length);
+#endif
 
         size -= mark.length + sizeof(__rwMark);
         data = (U8*)data + mark.length;
@@ -116,7 +135,13 @@ void xJSP_MultiStreamRead(void* data, U32 size, xJSPHeader** jsp)
 
             data = mp + 1;
 
+#ifdef PLATFORM_PC
+            // Precalculated strip vertices describe the shipped geometry, not
+            // the rebuilt one.
+            if (mark.type == 0xBEEF03 && !hipolyTree)
+#else
             if (mark.type == 0xBEEF03)
+#endif
             {
                 hdr->stripVecCount = *(U32*)data;
                 data = (U32*)data + 1;
@@ -202,6 +227,9 @@ void xJSP_Destroy(xJSPHeader* jsp)
     }
 
     RpClumpDestroy(jsp->clump);
+#ifdef PLATFORM_PC
+    iHipolyWorldDetach(jsp->colltree);
+#endif
     RwFree(jsp->colltree);
 
     U32* tp = (U32*)((xJSPHeaderGC*)jsp)->stripVecList;

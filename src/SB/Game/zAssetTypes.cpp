@@ -1,4 +1,7 @@
 #include "zAssetTypes.h"
+#ifdef PLATFORM_PC
+#include "iHipoly.h"
+#endif
 
 #include "xAnim.h"
 #include "xCM.h"
@@ -182,6 +185,15 @@ static HackModelRadius hackRadiusTable[3] = { { 0xFA77E6FAU, 20.0f },
 static void* Model_Read(void* param_1, U32 param_2, void* indata, U32 insize, U32* outsize)
 {
     RpAtomic* model = (RpAtomic*)iModelFileNew(indata, insize);
+
+#ifdef PLATFORM_PC
+    // PORT: experimental.hipoly_assets. Here and not in iModelFileNew, which
+    // the cutscenes also load through.
+    if (model != NULL)
+    {
+        iHipolyModel(model->clump);
+    }
+#endif
 
     *outsize = 0x70;
 

@@ -192,6 +192,10 @@ const iConfigSetting kConfigSettings[] = {
       ICONFIG_ENUM, "box|width|natural", kNone, kNone },
     { "font", "sans_fit", "natural",
       "The same, for the sans face.", ICONFIG_ENUM, "box|width|natural", kNone, kNone },
+    { "experimental", "hipoly_assets", "off",
+      "Smooth the level and its models into curved surfaces as they load.\n"
+      "; Loads take a few seconds longer.",
+      ICONFIG_BOOL, NULL, kNone, kNone },
 };
 
 const S32 kConfigSettingCount = (S32)(sizeof(kConfigSettings) / sizeof(kConfigSettings[0]));
