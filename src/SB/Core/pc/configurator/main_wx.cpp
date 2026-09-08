@@ -764,6 +764,19 @@ public:
 
 bool ConfigApp::OnInit()
 {
+    // Dark mode where the system is in it, and light where it is not.
+    //
+    // FIRST, before anything that can put a window on screen -- the error box
+    // below included. Windows builds its controls differently in the two modes
+    // and wx will not change a window that already exists, so a message box
+    // opened ahead of this one call leaves the whole program light on a dark
+    // desktop and reports nothing.
+    //
+    // Nothing else here has to follow: every colour this file sets comes from
+    // wxSystemSettings, and wx answers those with dark values once the mode is
+    // on.
+    SetAppearance(Appearance::System);
+
     // An argument overrides the file search, for editing one config while a
     // different one is in place. Anything past the first is ignored rather
     // than refused: a shell that expanded a glob is not worth a dialog box.
