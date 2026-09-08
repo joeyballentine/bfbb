@@ -273,44 +273,41 @@ void iScreenSetBackend(iScreenBackend backend);
 // For the messages. "auto" before RenderWareInit has resolved it.
 const char* iScreenBackendName(iScreenBackend backend);
 
-// Light the world geometry at run time instead of reading the colour baked
-// into its vertices.
+// Light the world geometry at run time instead of reading the colour baked into
+// its vertices.
 //
-// **Groundwork, and off is still the better setting on the shipped levels.**
-// Their lighting was painted vertex by vertex, and a rig fitted to the average
-// cannot know about anything local: occlusion, bounce, and shadow put in by
-// hand. Most of a bake is exactly that -- 54% of the colour variation on bb01,
-// 80% on hb01 -- so lighting a level fresh loses it.
+// **Off is still the better setting on the shipped levels.** The artists painted
+// their lighting vertex by vertex. A rig fitted to the level average cannot
+// reproduce anything local: occlusion, bounce, or shadow put in by hand. Most of
+// a bake is exactly that. The share no normal-based rig can reach is 54% of the
+// colour variation on bb01 and 80% on hb01.
 //
-// The paint that is doing a JOB rather than recording light is kept, per piece
-// of geometry: the faked shadows, the blended ground decals, the invisible
-// collision walls. See PrelightIsArtwork in iEnvNormals.cpp for how those are
-// told apart, which is by the shape of the prelight and not by any name.
+// iEnvDropPrelight keeps the paint that does a job rather than records light,
+// per geometry. That covers the faked shadows, the blended ground decals and the
+// invisible collision walls. PrelightIsArtwork in iEnvNormals.cpp tells those
+// apart by the shape of the prelight, never by a name.
 //
-// This is here for levels authored to be lit, and for the work that needs a
-// world whose light can move -- a shadow the world casts on itself, a sun that
-// travels.
+// Two things want this. One is a level authored to be lit. The other is any
+// effect that needs the world's light to move: a shadow the world casts on
+// itself, a sun that travels.
 //
-// Off is what the consoles did and what the artists shipped. Otherwise
-// iEnvNormals generates the normals the level never stored -- two thirds of
-// them ship none -- and zScene enables a rig over the world, so its lighting is
-// computed rather than looked up, and so able to move and to be occluded.
+// OFF is what the consoles drew. The other two modes make iEnvNormals generate
+// the normals the level never stored, and zScene enable a rig over the world.
+// The world's lighting is then computed rather than looked up, so it can move
+// and be occluded. 34 of the 55 levels ship no world normals.
 //
-// Which rig is what the two modes choose between:
+// AUTO uses the level's own bspLightKit where there is one. The artists authored
+// that kit FOR THE WORLD. Nothing has ever rendered it: zScene loads it into
+// xEnv::lightKit and no code path enables it. 17 of the 55 levels carry one.
 //
-// AUTO takes the level's own bspLightKit where there is one. That is the kit
-// the artists authored FOR THE WORLD, and it has never been rendered by
-// anything: zScene loads it into xEnv::lightKit and no code path has ever
-// enabled it. 17 of the 55 levels carry one.
+// BAKE always uses the reconstruction instead: an ambient and four directionals
+// fitted to the baked vertex colour, per channel. It is the only option on the
+// other 38 levels. On the 17 it is what the authored kit is worth comparing
+// against.
 //
-// BAKE always uses the reconstruction instead -- an ambient and four
-// directionals fitted to the baked vertex colour, per channel. It is the only
-// option on the other 38 levels, and on the 17 it is what the authored kit is
-// worth comparing against.
-//
-// A level whose bake cannot be fit keeps its paint either way; the prelight is
-// only dropped where there is something to replace it with. See
-// iEnv::prelightDropped and iEnvNormals.h.
+// A level whose bake cannot be fit keeps its paint under every mode.
+// iEnvDropPrelight drops the prelight only where there is something to replace
+// it with. See iEnv::prelightDropped and iEnvNormals.h.
 enum iWorldLightMode
 {
     IWORLDLIGHT_OFF,
@@ -321,27 +318,27 @@ enum iWorldLightMode
 S32 iScreenWorldLighting();
 void iScreenSetWorldLighting(S32 mode);
 
-// How far apart to pull the two ends of the FIT, as a multiple.
+// How far apart to pull the two ends of the fit, as a multiplier. BAKE only.
 //
-// The authored kit is left alone -- its lights are the artists' numbers and
-// there is nothing in them to scale against.
+// Contrast does not touch the authored kit. Its lights are the artists' numbers,
+// and there is nothing in them to scale against.
 //
 // 1.0 is the rig exactly as measured, and it holds the level's average
-// brightness: bb01's bake averages 0.663 over the surfaces this lights, and the
-// rig renders 0.663. Above 1.0 the directionals are scaled and the ambient is
-// taken down by what they gain on the average vertex, which holds that average
-// until the ambient reaches zero -- swing 1.61 on bb01.
+// brightness. bb01's bake averages 0.663 over the surfaces this lights, and the
+// rig renders 0.663. Above 1.0 the setting scales the directionals and drops the
+// ambient by what they gain on the average vertex. That holds the average until
+// the ambient reaches zero, which on bb01 is a swing of 1.61.
 //
-// **The default is 2.5, which is past that deliberately.** It is a look and not
-// a reconstruction. On bb01 the lit end peaks at 2.15, 54% of the lit vertices
+// **The default of 2.5 is past that deliberately.** It is a look, not a
+// reconstruction. On bb01 the lit end peaks at 2.15, 54% of the lit vertices
 // saturate, and the level renders 0.135 brighter than the paint. Saturated
-// vertex colour is white, so the brightest ground stops being tinted by its
-// own texture and the Xbox glow carries it the rest of the way.
+// vertex colour is white, so the texture no longer tints the brightest ground,
+// and the Xbox glow carries it further.
 //
-// That is chosen over fidelity because a bake fitted honestly has very little
-// contrast in it -- bb01 comes out at an ambient of 0.27 against a key light of
-// 0.77, and at 1.0 the setting is nearly invisible. Use 1.0 to measure the fit
-// against the paint; the default is for playing.
+// The default trades fidelity for contrast because an honest fit has little
+// contrast in it. bb01 fits an ambient of 0.27 against a key light of 0.77, so at
+// 1.0 the setting is nearly invisible. Use 1.0 to measure the fit against the
+// paint. The default is for playing.
 F32 iScreenWorldLightContrast();
 void iScreenSetWorldLightContrast(F32 contrast);
 

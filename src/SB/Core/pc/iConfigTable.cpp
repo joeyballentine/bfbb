@@ -229,15 +229,13 @@ const iConfigSetting kConfigSettings[] = {
       "Most triangles a level's world may have; the cut coarsens past it.", ICONFIG_INT, NULL,
       10000.0f, 4000000.0f, "hipoly_assets" },
     { "experimental", "world_lighting", "off",
-      "Light the level as the game runs instead of using its painted colour: on\n"
-      "; (the level's own light kit where it has one), bake (the rig worked back\n"
-      "; out of the paint), or off. For levels authored to be lit -- a shipped\n"
-      "; level loses the occlusion and bounce its paint recorded.",
+      "Light the level as the game runs instead of using its painted colour: off,\n"
+      "; on (its own kit, where it has one), or bake (a rig fitted to the paint).\n"
+      "; A shipped level loses the occlusion and bounce its paint recorded.",
       ICONFIG_ENUM, "off|on|bake", kNone, kNone },
     { "experimental", "world_light_contrast", "2.5",
-      "How far apart to pull the lit and shaded sides of a level lit by bake.\n"
-      "; 1 reproduces the rig as fitted, which is flat; the default overdrives\n"
-      "; it, which saturates the lit end and looks better.",
+      "Spread between the lit and shaded sides of a level lit by bake. 1 is the\n"
+      "; rig as fitted, which is nearly flat. The default saturates the lit end.",
       ICONFIG_FLOAT, NULL, 0.0f, 4.0f, "world_lighting" },
 };
 
