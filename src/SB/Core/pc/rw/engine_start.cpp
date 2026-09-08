@@ -293,6 +293,9 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     // one, at d3d/d3ddevice.cpp:1533, actually means Direct3DCreate9 SUCCEEDED
     // and no adapter reported D3DDEVTYPE_HAL support -- a very different
     // problem, and usually an environmental one rather than a missing D3D9.
+    D3DCAPS9 caps;
+    memset(&caps, 0, sizeof(caps));
+
     {
         IDirect3D9* probe = Direct3DCreate9(D3D_SDK_VERSION);
 
@@ -304,7 +307,6 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
             return FALSE;
         }
 
-        D3DCAPS9 caps;
         bool haveHardwareAdapter = false;
 
         for (UINT adapter = 0; adapter < probe->GetAdapterCount(); adapter++)
@@ -369,6 +371,42 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     // samples they carry has to be decided before they exist.
     rw::d3d::setVirtualScreenSamples(iScreenMultiSample());
     rw::d3d::setPerPixelLightingEnabled(iScreenPerPixelLighting());
+
+    // Which of the two D3D9 paths draws, resolved out of AUTO now that the
+    // adapter caps have been read.
+    //
+    // driverOpen reads this to pick the pipelines' render callbacks AND to
+    // decide whether to compile a shader at all, so it has to be set before
+    // Engine::open and not changed afterwards. librw asserts on a shader it
+    // asked for and did not get, so a card below Shader Model 2.0 has to be
+    // sent down the fixed-function path here rather than after a failed
+    // compile.
+    //
+    // The version words are packed major.minor -- D3DVS_VERSION(2, 0) -- and
+    // both stages are checked, because the default shaders come as a pair and
+    // a card with one and not the other is no use to either path.
+    {
+        bool haveShaderModel2 = caps.VertexShaderVersion >= D3DVS_VERSION(2, 0) &&
+                                caps.PixelShaderVersion >= D3DPS_VERSION(2, 0);
+        iScreenPipeline pipeline = iScreenGetPipeline();
+
+        if (pipeline == iSCREENPIPE_SHADER && !haveShaderModel2)
+        {
+            // Asked for by name, so it stands -- but librw's assert is a poor
+            // way to find out why the game closed.
+            printf("bfbb: video.pipeline = shader, but this adapter reports no "
+                   "Shader Model 2.0 (vs %u.%u, ps %u.%u)\n",
+                   (unsigned)((caps.VertexShaderVersion >> 8) & 0xFF),
+                   (unsigned)(caps.VertexShaderVersion & 0xFF),
+                   (unsigned)((caps.PixelShaderVersion >> 8) & 0xFF),
+                   (unsigned)(caps.PixelShaderVersion & 0xFF));
+            fflush(stdout);
+        }
+
+        rw::d3d::setFixedFunctionEnabled(pipeline == iSCREENPIPE_FIXED ||
+                                         (pipeline == iSCREENPIPE_AUTO && !haveShaderModel2));
+    }
+
     rw::d3d::setVirtualScreen(iScreenWidth(), iScreenHeight());
     if (!rw::Engine::open(&params))
     {
@@ -685,7 +723,13 @@ RwBool RwEngineStart(void)
         S32 perPixel = rw::gl3::getPerPixelLighting();
 #endif
         S32 asked = iScreenMultiSample();
-        printf("bfbb: %dx MSAA%s; per-pixel lighting %s\n", (int)granted,
+#ifdef RW_D3D9
+        const char* path = rw::d3d::getFixedFunction() ? "fixed-function" : "shader";
+#else
+        const char* path = "shader";
+#endif
+        printf("bfbb: %s pipeline; %dx MSAA%s; per-pixel lighting %s\n", path,
+               (int)granted,
                granted >= asked ? "" : " (asked for more; the card refused)",
                perPixel ? "on" : "off");
         fflush(stdout);

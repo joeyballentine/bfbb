@@ -528,6 +528,27 @@ static void ApplyConfig()
     iScreenSetMultiSample(iConfigGetInt("video.msaa", 4));
     iScreenSetPerPixelLighting(iConfigGetBool("video.per_pixel_lighting", FALSE));
 
+    // Which D3D9 path draws. AUTO is resolved in RenderWareInit, where the
+    // adapter caps are; nothing here can know whether ps_2_0 exists.
+    const char* pipeline = iConfigGetString("video.pipeline", "auto");
+    if (iHostStrCaseCmp(pipeline, "fixed") == 0)
+    {
+        iScreenSetPipeline(iSCREENPIPE_FIXED);
+    }
+    else if (iHostStrCaseCmp(pipeline, "shader") == 0)
+    {
+        iScreenSetPipeline(iSCREENPIPE_SHADER);
+    }
+    else
+    {
+        if (iHostStrCaseCmp(pipeline, "auto") != 0)
+        {
+            printf("bfbb: config: video.pipeline is not auto, shader or fixed, "
+                   "using the default: %s\n", pipeline);
+        }
+        iScreenSetPipeline(iSCREENPIPE_AUTO);
+    }
+
     // How the interface sits on a screen that is not 4:3. Nothing to report
     // when it cannot matter, which is every 4:3 render size.
     const char* uiMode = iConfigGetString("video.ui", "pillarbox");

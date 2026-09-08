@@ -279,6 +279,17 @@ void iGlowRender(RwCamera* cam, F32 strength)
         return;
     }
 
+#ifdef RW_D3D9
+    // The bright pass and both blurs are ps_2_0. There is no pixel shader to
+    // run them in on the fixed-function path, and saying so once is better
+    // than a setting that is on and does nothing.
+    if (rw::d3d::getFixedFunction())
+    {
+        glowFail("the fixed-function pipeline has no pixel shader to run it in", 0);
+        return;
+    }
+#endif
+
     // Five scenes set this to zero, so an early return here is the effect
     // behaving, not a shortcut.
     if (strength <= 0.0f)

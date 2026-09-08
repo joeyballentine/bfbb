@@ -90,6 +90,10 @@ const iConfigSetting kConfigSettings[] = {
     { "video", "per_pixel_lighting", "off",
       "Light characters once per pixel instead of once per vertex.", ICONFIG_BOOL, NULL, kNone,
       kNone },
+    { "video", "pipeline", "auto",
+      "Which Direct3D 9 path draws: auto, shader, or fixed. fixed runs on cards\n"
+      "; from before 2002 and loses the glow, the distortion and per-pixel light.",
+      ICONFIG_ENUM, "auto|shader|fixed", kNone, kNone },
     { "video", "load_time", "1",
       "Seconds to hold the loading screen for, when a load is too fast to see.\n"
       "; fancy wipes the still off the loaded level instead. off does neither.",

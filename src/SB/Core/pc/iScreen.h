@@ -212,4 +212,29 @@ void iScreenSetMultiSample(S32 samples);
 S32 iScreenPerPixelLighting();
 void iScreenSetPerPixelLighting(S32 on);
 
+// Which of the two D3D9 paths draws.
+//
+//   SHADER  vertex and pixel shaders, Shader Model 2.0. Everything the port
+//           adds -- the glow, the distortion, per-pixel lighting, the shadow
+//           map -- is a shader and exists only here.
+//   FIXED   D3D9's own transform, lighting, texture stages and fog. The bar
+//           this lowers the port to is DX7-class hardware T&L, which is the
+//           generation the game shipped on. It is a look-alike, not a match;
+//           librw's d3d9ff.cpp lists where the two disagree.
+//   AUTO    fixed only where the adapter cannot run ps_2_0. Resolved to one of
+//           the two above before the device is made, so nothing downstream
+//           ever sees AUTO.
+//
+// D3D9 only. The GL3 and D3D11 backends have no fixed function to fall back
+// to, and asking for one there is reported and ignored.
+enum iScreenPipeline
+{
+    iSCREENPIPE_AUTO,
+    iSCREENPIPE_SHADER,
+    iSCREENPIPE_FIXED
+};
+
+iScreenPipeline iScreenGetPipeline();
+void iScreenSetPipeline(iScreenPipeline pipeline);
+
 #endif

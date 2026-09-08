@@ -17,6 +17,10 @@ Shipped from part one since: MSAA and alpha-to-coverage as `video.msaa` and
 `video.height`, and per-pixel lighting as `video.per_pixel_lighting`.
 Anisotropic filtering is still unexposed and still the best ratio on the list.
 
+Part two is built and unfinished: `video.pipeline = auto | shader | fixed`
+draws the world, the models, the characters and the interface without a shader.
+See [What is still missing](#what-is-still-missing).
+
 ## What the pipeline already is
 
 Three facts decide most of what follows, and all three are better than they
@@ -260,7 +264,14 @@ fight with the baked lighting, so it is a project rather than a setting.
 
 # Part two: a fixed-function mode
 
-## What it would lower the bar to
+**Built, and not finished.** `video.pipeline = auto | shader | fixed`, in
+`third_party/librw/src/d3d/d3d9ff.cpp`. The world, the models, the characters
+and the interface all draw through it. [What is still
+missing](#what-is-still-missing) is the list to work from; the rest of this
+section is the design it was built to, kept because it is still what the code
+does and why.
+
+## What it lowers the bar to
 
 From Shader Model 2.0 -- Radeon 9500 (2002), GeForce FX 5200 (2003) -- to
 DX7-class hardware T&L: GeForce 256/2/4MX, Radeon 7x00, 1999-2000. A real
@@ -273,6 +284,11 @@ GameCube and Xbox it shipped on, which is most of the appeal.
 not one. It is the `PLATFORM_D3D8` stream plugin -- the reader for D3D8-instanced
 geometry in RW files. There is no `IDirect3DDevice8` anywhere in librw. Nobody
 should start this work expecting a backend to already be sitting there.
+
+What was there and is now used: `lightingCB_Fix` and `setMaterial_fix` in
+`d3ddevice.cpp` and `d3drender.cpp`, and the commented-out `defaultRenderCB_Fix`
+in `d3d9render.cpp`, which is what `d3d9ff.cpp`'s render callback grew from.
+`setMaterial_fix` had both its alphas a factor of 255 out; nothing called it.
 
 ## The mapping is mostly one to one
 
@@ -310,7 +326,14 @@ matrices per draw. The characters have far more bones than that. Two ways out:
    days, and it is what games of that hardware generation actually did. On a
    GeForce 2 the CPU is frequently the better skinner anyway.
 
-Option 2, unless something argues otherwise.
+Option 2. `skinRenderCB_Fix` blends into a dynamic vertex buffer each frame and
+emits POSITION/NORMAL/COLOR/TEXCOORD with no blend data at all. It reads the
+geometry's PORTABLE arrays -- `skin->indices`, `skin->weights`, morph target 0 --
+rather than locking the instanced buffer, because that is the same data
+`skinInstanceCB` reads and it is already in system memory. The index buffer is
+the instance header's, unchanged: both writers put the vertices in geometry
+order, so a mesh's `baseIndex` and `startIndex` mean the same thing against
+either buffer.
 
 ## What is lost
 
@@ -324,24 +347,53 @@ normalisation and attenuation, and the tree already carries a local fix in that
 area (`94b867a3`, librw lighting an object in proportion to its scale) which
 would have to be replicated by hand. This is a look-alike mode, not a match.
 
+## What is still missing
+
+- **Environment mapping.** The matfx and skin+matfx pipelines fall back to the
+  plain fixed-function render, so a shiny material draws its base texture and
+  no shine. It needs a second texture stage with
+  `D3DTSS_TCI_CAMERASPACEREFLECTIONVECTOR`, which is the mapping described
+  above and which nothing has been written for.
+- **Vertex alpha on lit geometry.** Fixed function takes the vertex's alpha
+  from whatever the DIFFUSE term reads, and there is no way to take colour from
+  one source and alpha from another. A mesh with vertex alpha therefore reads
+  its diffuse from the vertices, which tints its dynamic light by the baked
+  one. It is the lesser of the two errors, not a correct answer.
+- **`MaxVertexBlendMatrixIndex` is still not a measured number.** It stopped
+  mattering the moment the skinning moved to the CPU, but the caps query has
+  never been run on any specific target.
+- **Nothing has been run on hardware without shaders.** Every check so far is
+  `video.pipeline = fixed` on a modern card, which proves the path draws and
+  proves nothing about the parts a DX7 driver would refuse: two texture stages
+  is a floor, `D3DRS_TEXTUREFACTOR` and `D3DTTFF_COUNT2` are assumed present,
+  and the stride-0 constant vertex stream is assumed to work.
+- **The picture has not been compared against the shader path.** That
+  comparison is most of the reason the mode is worth having -- see below -- and
+  it needs somebody to look at the same scene twice.
+
 ## Where it plugs in
 
 librw is our own fork (`joeyballentine/librw`, branch `bfbb-port`), so editing it
 is ordinary practice here rather than a vendor patch.
 
-The seam is clean. Drivers install their `defaultPipeline` at `driverOpen`, and
-the feature pipelines are already separate files -- `d3d9render.cpp`,
-`d3d9skin.cpp`, `d3d9matfx.cpp`, `d3d9skinmatfx.cpp`. Fixed-function siblings
-would be swapped in at open. The caps machinery for an `auto` mode also exists:
-`d3ddevice.cpp:1876` already calls `GetDeviceCaps`, and `:1909` already falls
-back to `D3DCREATE_SOFTWARE_VERTEXPROCESSING`.
+The seam turned out to be clean. `rw::d3d::setFixedFunctionEnabled` is set
+before `Engine::open` and never afterwards, and `driverOpen`, `skinOpen` and
+`matfxOpen` read it to pick each pipeline's render callback and to decide
+whether to compile a shader at all. Nothing switches per draw. `auto` is
+resolved in `engine_start.cpp`, from the `D3DCAPS9` the port already reads to
+check for a hardware adapter: below `D3DVS_VERSION(2, 0)` or
+`D3DPS_VERSION(2, 0)` it takes the fixed path, because librw asserts on a
+shader it asked for and did not get and a failed compile is a poor way to find
+out why the game closed.
 
-Config shape: `video.pipeline = auto | shader | fixed`.
+The rest of the seams are five: `beginUpdate` sets `D3DTS_VIEW`,
+`D3DTS_PROJECTION` and the fog range instead of uploading them as constants;
+`flushCache` skips the fog constants; `FOGENABLE` reaches the device instead of
+being swallowed; `d3dimmed.cpp` draws im2d through a `POSITIONT` declaration;
+and `glow.cpp` and `distort.cpp` report themselves off rather than silently
+doing nothing.
 
-## Cost, and the argument beyond nostalgia
-
-Roughly a weekend to get the world drawing with no characters in it, and one to
-two weeks for the whole thing.
+## The argument beyond nostalgia
 
 The better argument is not nostalgia. A fixed-function path is an independent
 second implementation of the same lighting, fog, alpha and blend semantics.
@@ -367,8 +419,6 @@ Stated plainly so nobody builds on it by accident:
   decides how SSAO has to be applied, so measure it before tuning anything.
 - **Whether the 17 unused `bspLightKit`s are still good data.** They parse and
   they name real light kits. Nobody has enabled one and looked.
-- **`MaxVertexBlendMatrixIndex` on any specific target.** Four is the typical
-  hardware value, not a number read off a device here.
 
 Answered since this list was written: world geometry normals (36.4% of world
 vertices, none at all in 34 of 55 levels) and the world prelight (100%). Both are

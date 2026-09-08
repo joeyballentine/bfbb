@@ -287,6 +287,21 @@ void iScreenSetPerPixelLighting(S32 on)
     sPerPixelLighting = on ? 1 : 0;
 }
 
+// Which D3D9 path draws. Held here with the three above for the same reason:
+// RenderWareInit pushes it into librw, and the code that does must not learn
+// what config.ini is. Resolved out of AUTO there, where the adapter caps are.
+static iScreenPipeline sPipeline = iSCREENPIPE_AUTO;
+
+iScreenPipeline iScreenGetPipeline()
+{
+    return sPipeline;
+}
+
+void iScreenSetPipeline(iScreenPipeline pipeline)
+{
+    sPipeline = pipeline;
+}
+
 // The field of view every camera in the game is built around. zCamera resets to
 // it, xCameraCreate starts at it, and the cutscene and Cruise Bubble values are
 // authored relative to it.

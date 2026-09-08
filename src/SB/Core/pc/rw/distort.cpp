@@ -164,6 +164,17 @@ void iDistortRender(RwCamera* cam, RwTexture* map, F32 amount, F32 width, F32 he
         return;
     }
 
+#ifdef RW_D3D9
+    // The warp is a ps_2_0 dependent read. There is no pixel shader to do it
+    // in on the fixed-function path, and saying so once is better than a
+    // setting that is on and does nothing.
+    if (rw::d3d::getFixedFunction())
+    {
+        distortFail("the fixed-function pipeline has no pixel shader to run it in", 0);
+        return;
+    }
+#endif
+
     if (width <= 0.0f || height <= 0.0f)
     {
         return;

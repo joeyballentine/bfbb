@@ -452,6 +452,7 @@ static void test_config()
         check(strstr(buf, "draw_distance = on") != NULL, "and the draw distance");
         check(strstr(buf, "msaa = 4") != NULL, "and the sample count");
         check(strstr(buf, "per_pixel_lighting = off") != NULL, "and per-pixel lighting");
+        check(strstr(buf, "pipeline = auto") != NULL, "and the render pipeline");
         check(strstr(buf, "[xbox]") != NULL, "it has the [xbox] section header");
         check(strstr(buf, "glow = on") != NULL, "and glow at its default");
         check(strstr(buf, "distortion = on") != NULL, "and distortion");
