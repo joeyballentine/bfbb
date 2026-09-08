@@ -82,7 +82,20 @@ static void test_time()
     check(t1 > t0, "iTimeGet advances");
 
     F32 dt = iTimeDiffSec(t0, t1);
-    check(dt > 0.10f && dt < 0.20f, "iTimeDiffSec reports ~0.12 s for a 0.12 s sleep");
+
+    // Two different claims, and only the first is about this code.
+    //
+    // The floor says the sleep actually slept -- an early return, or a tick
+    // rate wrong by a factor, lands well under it. It is what a change to
+    // iHostSleepUntilNs can break, so it stays tight.
+    //
+    // The ceiling only says the sleep finished, because how long AFTER its
+    // deadline a thread is rescheduled is the machine's business and not the
+    // port's. It was 0.20 s and failed intermittently on a shared CI runner,
+    // which is the check asserting something it cannot know. A second is still
+    // an order of magnitude clear of the mistakes worth catching -- a
+    // milliseconds-for-nanoseconds slip overshoots by a thousand.
+    check(dt > 0.10f && dt < 1.0f, "iTimeDiffSec reports ~0.12 s for a 0.12 s sleep");
 
     // The other spelling the game uses, on a raw tick count.
     check(fabsf(iTimeDiffSec((iTime)ITIME_TICKS_PER_SECOND) - 1.0f) < 0.0001f,
