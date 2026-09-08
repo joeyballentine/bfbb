@@ -37,6 +37,8 @@ namespace
     const int kIdSave = 101;
     const int kIdCancel = 102;
     const int kIdResetSection = 103;
+    const int kIdApply = 104;
+    const int kIdStartGame = 105;
 
     const int kIdRowBase = 1000;
     const int kIdsPerRow = 4;
@@ -113,6 +115,11 @@ namespace
         // changes how they wrap and so how tall each row is; a scroll does
         // not, and this is what tells the two apart.
         int measuredWidth;
+
+        // Whether a value has been changed since the last write. It greys out
+        // Apply, it decides whether Start Game has to write first, and it is
+        // what Cancel asks about.
+        bool dirty;
 
         int dpi;
     };
@@ -713,6 +720,20 @@ namespace
     // -------------------------------------------------------------------
     // Reading the controls back
 
+    // Apply is enabled only when there is something to apply, which is the
+    // only report this window makes that a write happened: after one, the
+    // button goes grey.
+    void setDirty(bool dirty)
+    {
+        gApp.dirty = dirty;
+
+        HWND apply = GetDlgItem(gApp.main, kIdApply);
+        if (apply != NULL)
+        {
+            EnableWindow(apply, dirty ? TRUE : FALSE);
+        }
+    }
+
     void harvestRow(const Row* row)
     {
         const iConfigSetting* s = &kConfigSettings[row->setting];
@@ -736,6 +757,7 @@ namespace
         if (strcmp(before, v->text) != 0)
         {
             v->present = true;
+            setDirty(true);
         }
     }
 
@@ -882,7 +904,34 @@ namespace
             return false;
         }
 
+        setDirty(false);
         return true;
+    }
+
+    // Everything unwritten, written -- or the window is not worth closing yet.
+    // Save & Exit, Start Game and the close box all go through here rather
+    // than each deciding for itself when a write is needed.
+    bool saveIfNeeded()
+    {
+        harvestVisible();
+        return !gApp.dirty || save();
+    }
+
+    // Whether it is all right to throw away what has been typed. Asked by
+    // Cancel and by the close box, and only when there is something to throw
+    // away.
+    bool mayDiscard()
+    {
+        harvestVisible();
+        if (!gApp.dirty)
+        {
+            return true;
+        }
+
+        return MessageBoxA(gApp.main,
+                           "Changed settings have not been written to config.ini.\n\n"
+                           "Close and lose them?",
+                           "Unsaved changes", MB_YESNO | MB_ICONWARNING) == IDYES;
     }
 
     void resetSection()
@@ -897,9 +946,81 @@ namespace
             {
                 snprintf(gApp.values[i].text, kMaxValue, "%s", kConfigSettings[i].value);
                 gApp.values[i].present = true;
+                setDirty(true);
             }
         }
         buildRows();
+    }
+
+    // -------------------------------------------------------------------
+    // Starting the game
+
+    // bfbb.exe, which the build puts in the same directory as this program.
+    bool gamePath(char* out, size_t outSize)
+    {
+        char dir[kMaxPath];
+        if (!iHostExeDir(dir, sizeof(dir)))
+        {
+            return false;
+        }
+
+        snprintf(out, outSize, "%s/bfbb.exe", dir);
+        return iHostPathExists(out);
+    }
+
+    // Run it, and say so if it will not run. The caller closes this window;
+    // nothing here waits for the game.
+    bool startGame()
+    {
+        char exe[kMaxPath];
+        if (!gamePath(exe, sizeof(exe)))
+        {
+            char dir[kMaxPath];
+            char text[kMaxPath + 160];
+            iHostExeDir(dir, sizeof(dir));
+            snprintf(text, sizeof(text), "There is no bfbb.exe in %s.", dir);
+            MessageBoxA(gApp.main, text, "Could not start the game", MB_OK | MB_ICONERROR);
+            return false;
+        }
+
+        // Point the game at the file this window just wrote, whichever of the
+        // three candidate paths it was. Without it the game runs its own
+        // search and can answer differently -- this program may have been
+        // started from somewhere else, or handed a path on its command line --
+        // and "I changed a setting and it did nothing" is the result.
+        //
+        // SetEnvironmentVariable, not iHostSetEnv: the child inherits the
+        // WIN32 environment block, and the CRT's _putenv_s behind iHostSetEnv
+        // is documented as writing the CRT's own table, which is not the same
+        // thing. gApp.path is absolute -- see findPath -- which matters here
+        // because the child is started in a different working directory.
+        SetEnvironmentVariableA("BFBB_CONFIG", gApp.path);
+
+        char dir[kMaxPath];
+        iHostExeDir(dir, sizeof(dir));
+
+        // Its own directory as the working directory, which is where it starts
+        // from when someone runs it themselves. `assets path` being empty
+        // means "the folder the game was started from", so this is not
+        // cosmetic.
+        STARTUPINFOA startup;
+        memset(&startup, 0, sizeof(startup));
+        startup.cb = sizeof(startup);
+
+        PROCESS_INFORMATION process;
+        memset(&process, 0, sizeof(process));
+
+        if (!CreateProcessA(exe, NULL, NULL, NULL, FALSE, 0, NULL, dir, &startup, &process))
+        {
+            char text[kMaxPath + 160];
+            snprintf(text, sizeof(text), "%s would not start.", exe);
+            MessageBoxA(gApp.main, text, "Could not start the game", MB_OK | MB_ICONERROR);
+            return false;
+        }
+
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+        return true;
     }
 
     // -------------------------------------------------------------------
@@ -912,35 +1033,46 @@ namespace
     //
     // Beside the executable is also where a missing one is created, again as
     // the game does it.
+    // The answer is made ABSOLUTE before it is stored, and not only so the
+    // status line names a file someone can go and find. Start Game hands this
+    // path to the game as BFBB_CONFIG and starts it in a different working
+    // directory, so a relative "config.ini" would name a different file there
+    // -- and the game creates one it cannot find, which would look like the
+    // settings being ignored.
     void findPath(const char* fromCommandLine)
     {
+        char picked[kMaxPath];
+
         if (fromCommandLine != NULL && fromCommandLine[0] != '\0')
         {
-            snprintf(gApp.path, sizeof(gApp.path), "%s", fromCommandLine);
-            return;
-        }
-
-        const char* named = getenv("BFBB_CONFIG");
-        if (named != NULL && named[0] != '\0')
-        {
-            snprintf(gApp.path, sizeof(gApp.path), "%s", named);
-            return;
-        }
-
-        if (iHostPathExists("config.ini"))
-        {
-            snprintf(gApp.path, sizeof(gApp.path), "config.ini");
-            return;
-        }
-
-        char dir[kMaxPath];
-        if (iHostExeDir(dir, sizeof(dir)))
-        {
-            snprintf(gApp.path, sizeof(gApp.path), "%s/config.ini", dir);
+            snprintf(picked, sizeof(picked), "%s", fromCommandLine);
         }
         else
         {
-            snprintf(gApp.path, sizeof(gApp.path), "config.ini");
+            const char* named = getenv("BFBB_CONFIG");
+            char dir[kMaxPath];
+
+            if (named != NULL && named[0] != '\0')
+            {
+                snprintf(picked, sizeof(picked), "%s", named);
+            }
+            else if (iHostPathExists("config.ini"))
+            {
+                snprintf(picked, sizeof(picked), "config.ini");
+            }
+            else if (iHostExeDir(dir, sizeof(dir)))
+            {
+                snprintf(picked, sizeof(picked), "%s/config.ini", dir);
+            }
+            else
+            {
+                snprintf(picked, sizeof(picked), "config.ini");
+            }
+        }
+
+        if (GetFullPathNameA(picked, (DWORD)sizeof(gApp.path), gApp.path, NULL) == 0)
+        {
+            snprintf(gApp.path, sizeof(gApp.path), "%s", picked);
         }
     }
 
@@ -1168,21 +1300,44 @@ namespace
         MoveWindow(gApp.sections, margin, margin, listW, height - barH - margin * 2, TRUE);
         MoveWindow(gApp.pane, margin + listW + px(10), margin,
                    width - listW - margin * 2 - px(10), height - barH - margin * 2, TRUE);
-        MoveWindow(gApp.status, margin, height - barH + px(12), width - px(300), px(20), TRUE);
-
         int buttonY = height - barH + px(6);
-        int buttonW = px(84);
         int buttonH = px(26);
-        int x = width - margin - buttonW;
 
-        SetWindowPos(GetDlgItem(gApp.main, kIdSave), NULL, x, buttonY, buttonW, buttonH,
-                     SWP_NOZORDER);
-        x -= buttonW + px(8);
-        SetWindowPos(GetDlgItem(gApp.main, kIdCancel), NULL, x, buttonY, buttonW, buttonH,
-                     SWP_NOZORDER);
-        x -= px(150) + px(8);
-        SetWindowPos(GetDlgItem(gApp.main, kIdResetSection), NULL, x, buttonY, px(150), buttonH,
-                     SWP_NOZORDER);
+        // Right to left, so the rightmost button is the one at the corner
+        // whatever the window is doing. Widths per button, because "Save &
+        // Exit" and "Start Game" do not fit what "Cancel" needs.
+        struct
+        {
+            int id;
+            int w;
+        } bar[] = {
+            { kIdSave, px(96) },  { kIdCancel, px(76) },
+            { kIdApply, px(76) }, { kIdStartGame, px(92) },
+        };
+
+        int x = width - margin;
+        for (size_t i = 0; i < sizeof(bar) / sizeof(bar[0]); i++)
+        {
+            x -= bar[i].w;
+            SetWindowPos(GetDlgItem(gApp.main, bar[i].id), NULL, x, buttonY, bar[i].w, buttonH,
+                         SWP_NOZORDER);
+            x -= px(8);
+        }
+
+        // Reset stays on the left with the file path, away from the four that
+        // decide what happens to the window. It is the only one that changes a
+        // value rather than acting on all of them.
+        SetWindowPos(GetDlgItem(gApp.main, kIdResetSection), NULL, margin, buttonY, px(140),
+                     buttonH, SWP_NOZORDER);
+
+        // The path fills whatever is left between the two groups.
+        int statusX = margin + px(140) + px(12);
+        int statusW = x - statusX;
+        if (statusW < 0)
+        {
+            statusW = 0;
+        }
+        MoveWindow(gApp.status, statusX, height - barH + px(11), statusW, px(20), TRUE);
     }
 
     LRESULT CALLBACK mainProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -1199,8 +1354,11 @@ namespace
 
         case WM_GETMINMAXINFO:
         {
+            // Wide enough for the whole button bar with the file path still
+            // readable between the two groups: the four on the right come to
+            // 364 with their gaps, and Reset takes 162 on the left.
             MINMAXINFO* mmi = (MINMAXINFO*)lp;
-            mmi->ptMinTrackSize.x = px(560);
+            mmi->ptMinTrackSize.x = px(720);
             mmi->ptMinTrackSize.y = px(400);
             return 0;
         }
@@ -1232,19 +1390,49 @@ namespace
                 return 0;
 
             case kIdSave:
-                if (save())
+                if (saveIfNeeded())
                 {
                     DestroyWindow(wnd);
                 }
                 return 0;
 
-            case kIdCancel: DestroyWindow(wnd); return 0;
+            // Writes and stays. harvestVisible is inside save, so a value
+            // still being typed is picked up without the box losing focus
+            // first.
+            case kIdApply: save(); return 0;
+
+            // Write first, because a setting the game has not read is a
+            // setting that did nothing, and pressing this means the settings
+            // are finished. Then the window goes: the game has the file now,
+            // and anything changed here after this point would not reach it.
+            case kIdStartGame:
+                if (saveIfNeeded() && startGame())
+                {
+                    DestroyWindow(wnd);
+                }
+                return 0;
+
+            case kIdCancel:
+                if (mayDiscard())
+                {
+                    DestroyWindow(wnd);
+                }
+                return 0;
 
             case kIdResetSection: resetSection(); return 0;
 
             default: break;
             }
             break;
+
+        // The close box asks the same question Cancel does. Closing a settings
+        // window is the commonest way to discard settings by accident.
+        case WM_CLOSE:
+            if (mayDiscard())
+            {
+                DestroyWindow(wnd);
+            }
+            return 0;
 
         case WM_DESTROY: PostQuitMessage(0); return 0;
 
@@ -1375,9 +1563,11 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int show)
         int id;
         DWORD style;
     } buttons[] = {
-        { "Reset this section", kIdResetSection, BS_PUSHBUTTON },
+        { "Reset section", kIdResetSection, BS_PUSHBUTTON },
+        { "Start Game", kIdStartGame, BS_PUSHBUTTON },
+        { "Apply", kIdApply, BS_PUSHBUTTON },
         { "Cancel", kIdCancel, BS_PUSHBUTTON },
-        { "Save", kIdSave, BS_DEFPUSHBUTTON },
+        { "Save && Exit", kIdSave, BS_DEFPUSHBUTTON },
     };
 
     for (size_t i = 0; i < sizeof(buttons) / sizeof(buttons[0]); i++)
@@ -1391,6 +1581,10 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int show)
 
     layoutMain();
     buildRows();
+
+    // Nothing has been changed yet, which is what greys Apply out. After the
+    // buttons exist, because that is what it acts on.
+    setDirty(false);
 
     ShowWindow(gApp.main, show);
     UpdateWindow(gApp.main);
