@@ -67,6 +67,7 @@ namespace
     const F64 kModelInset = 0.5;         // half the bow goes to cutting the corners in
 
     const F64 kMinBulge = 0.01;
+    const S32 kPasses = 2;               // over models: each pass smooths the last pass's mesh at half the edge length
     const U32 kMaxVerts = 60000;
     const U32 kMaxTris = 21000;         // a collision record addresses 3 * 21845 vertices
 
@@ -117,10 +118,11 @@ namespace
         F64 modelTarget;
         F64 inset;
         U32 budget;
+        S32 passes;
     };
     const F64 kFactor = 1.0;
     Settings sCfg = { -1, kFactor, kWorldTarget, kWorldMaxLevel, kWorldCrease, kNaturalCrease,
-                      kFilletRadius, kModelTarget, kModelInset, kWorldBudget };
+                      kFilletRadius, kModelTarget, kModelInset, kWorldBudget, kPasses };
 
     const Settings& settings()
     {
@@ -136,6 +138,7 @@ namespace
             sCfg.modelTarget = iConfigGetFloat("experimental.hipoly_model_target", (F32)kModelTarget);
             sCfg.inset = iConfigGetFloat("experimental.hipoly_inset", (F32)kModelInset);
             sCfg.budget = (U32)iConfigGetInt("experimental.hipoly_budget", (S32)kWorldBudget);
+            sCfg.passes = iConfigGetInt("experimental.hipoly_passes", kPasses);
             if (sCfg.maxLevel < 1) sCfg.maxLevel = 1;
             if (sCfg.maxLevel > 15) sCfg.maxLevel = 15;
             if (sCfg.target < 0.05) sCfg.target = 0.05;
@@ -143,8 +146,68 @@ namespace
             if (sCfg.factor < 0.0) sCfg.factor = 0.0;
             if (sCfg.inset < 0.0) sCfg.inset = 0.0;
             if (sCfg.inset > 1.0) sCfg.inset = 1.0;
+            if (sCfg.passes < 1) sCfg.passes = 1;
+            if (sCfg.passes > 4) sCfg.passes = 4;
         }
         return sCfg;
+    }
+
+    // --- passes ------------------------------------------------------------
+
+    // A pass smooths the pass before it: the results as the next input. The
+    // edge target halves each pass, so the last pass lands on the setting.
+    // Models only. A curved face splits at least four ways per pass, so a
+    // second pass over the world lands near a million triangles whatever
+    // the target, past its budget and past what a 32-bit process can hold
+    // while it works.
+    F64 passTarget(F64 target, S32 passes, S32 pass)
+    {
+        return target * (F64)(1 << (passes - 1 - pass));
+    }
+
+    void resultGeoms(const iHipolyResult* res, U32 n, iHipolyGeom* out)
+    {
+        for (U32 k = 0; k < n; k++)
+        {
+            const iHipolyResult& r = res[k];
+            iHipolyGeom& g = out[k];
+            memset(&g, 0, sizeof(g));
+            g.nv = r.nv;
+            g.nt = r.nt;
+            g.pos = r.pos.p;
+            g.normal = r.normal.n ? r.normal.p : NULL;
+            g.color = r.color.n ? r.color.p : NULL;
+            g.numUV = r.numUV;
+            for (U32 u = 0; u < r.numUV; u++)
+            {
+                g.uv[u] = r.uv[u].p;
+            }
+            g.skinIndex = r.skinIndex.n ? r.skinIndex.p : NULL;
+            g.skinWeight = r.skinWeight.n ? r.skinWeight.p : NULL;
+            g.tris = r.tris.p;
+        }
+    }
+
+    // A pass's parents and corner barycentrics, taken back through the pass
+    // before it, so they always name the shipped triangles.
+    void composeParents(const iHipolyResult& prev, iHipolyResult& cur)
+    {
+        for (U32 t = 0; t < cur.nt; t++)
+        {
+            U32 p = cur.parent[t];
+            const F32* R = prev.cbary.p + p * 9;
+            F32 out[9];
+            for (U32 c = 0; c < 3; c++)
+            {
+                const F32* b = cur.cbary.p + t * 9 + c * 3;
+                for (U32 j = 0; j < 3; j++)
+                {
+                    out[c * 3 + j] = b[0] * R[j] + b[1] * R[3 + j] + b[2] * R[6 + j];
+                }
+            }
+            memcpy(cur.cbary.p + t * 9, out, sizeof(out));
+            cur.parent[t] = prev.parent[p];
+        }
     }
 
     bool containsWord(const char* name, const char* const* words)
@@ -1154,7 +1217,6 @@ void iHipolyModel(RpClump* rpclump)
     iHipolyParams pr;
     memset(&pr, 0, sizeof(pr));
     const Settings& cfg = settings();
-    pr.target = cfg.modelTarget;
     pr.maxLevel = kModelMaxLevel;
     pr.minBulge = kMinBulge;
     pr.creaseDeg = cfg.crease;
@@ -1167,9 +1229,31 @@ void iHipolyModel(RpClump* rpclump)
     pr.inset = cfg.inset;
     pr.maxVerts = kMaxVerts;
     pr.maxTris = kMaxTris;
-    iHipolyResult* res = new iHipolyResult[n];
+    iHipolyResult* res = NULL;
+    iHipolyGeom* passIn = new iHipolyGeom[n];
     iHipolyStats stats;
-    iHipolyRefine(geoms, n, pr, res, &stats);
+    for (S32 pass = 0; pass < cfg.passes; pass++)
+    {
+        const iHipolyGeom* in = geoms;
+        if (pass > 0)
+        {
+            resultGeoms(res, n, passIn);
+            in = passIn;
+        }
+        pr.target = passTarget(cfg.modelTarget, cfg.passes, pass);
+        iHipolyResult* next = new iHipolyResult[n];
+        iHipolyRefine(in, n, pr, next, &stats);
+        if (pass > 0)
+        {
+            for (U32 k = 0; k < n; k++)
+            {
+                composeParents(res[k], next[k]);
+            }
+            delete[] res;
+        }
+        res = next;
+    }
+    delete[] passIn;
     bool changed = false;
     for (U32 k = 0; k < n; k++)
     {

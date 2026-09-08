@@ -8,6 +8,7 @@
 
 #include <types.h>
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -33,7 +34,14 @@ template <typename T> struct iHipolyArray
         {
             c *= 2;
         }
-        p = (T*)realloc(p, (size_t)c * sizeof(T));
+        T* q = (T*)realloc(p, (size_t)c * sizeof(T));
+        if (q == NULL)
+        {
+            printf("bfbb: hipoly: out of memory asking for %u bytes\n", (U32)((size_t)c * sizeof(T)));
+            fflush(stdout);
+            abort();
+        }
+        p = q;
         cap = c;
     }
 

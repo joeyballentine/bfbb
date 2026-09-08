@@ -205,6 +205,10 @@ const iConfigSetting kConfigSettings[] = {
       ICONFIG_FLOAT, NULL, 0.05f, 8.0f },
     { "experimental", "hipoly_max_level", "6", "Most segments an edge is cut into.",
       ICONFIG_INT, NULL, 1.0f, 15.0f },
+    { "experimental", "hipoly_passes", "2",
+      "Times the smoothing runs over a model, each pass over the last pass's\n"
+      "; mesh. More is smoother and slower to load. The level gets one pass.",
+      ICONFIG_INT, NULL, 1.0f, 4.0f },
     { "experimental", "hipoly_crease", "60",
       "Degrees. Built surfaces folded sharper than this keep the fold.",
       ICONFIG_FLOAT, NULL, 0.0f, 180.0f },
