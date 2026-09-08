@@ -125,10 +125,11 @@ namespace
         F64 inset;
         U32 budget;
         S32 passes;
+        bool flatFloors;
     };
     const F64 kFactor = 1.0;
     Settings sCfg = { -1, kFactor, kWorldTarget, kWorldMaxLevel, kWorldCrease, kNaturalCrease,
-                      kFilletRadius, kModelTarget, kModelInset, kWorldBudget, kPasses };
+                      kFilletRadius, kModelTarget, kModelInset, kWorldBudget, kPasses, true };
 
     const Settings& settings()
     {
@@ -145,6 +146,7 @@ namespace
             sCfg.inset = iConfigGetFloat("experimental.hipoly_inset", (F32)kModelInset);
             sCfg.budget = (U32)iConfigGetInt("experimental.hipoly_budget", (S32)kWorldBudget);
             sCfg.passes = iConfigGetInt("experimental.hipoly_passes", kPasses);
+            sCfg.flatFloors = iConfigGetBool("experimental.hipoly_flat_floors", TRUE) != 0;
             if (sCfg.maxLevel < 1) sCfg.maxLevel = 1;
             if (sCfg.maxLevel > 15) sCfg.maxLevel = 15;
             if (sCfg.target < 0.05) sCfg.target = 0.05;
@@ -985,6 +987,15 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
                 crease[f] = nat ? cfg.naturalCrease : cfg.crease;
                 bulge[f] = ((nat && steep) ? kNaturalMaxBulge : kWorldMaxBulge) * cfg.factor;
                 rel[f] = ((nat && steep) ? kNaturalRelBulge : kWorldRelBulge) * cfg.factor;
+                // A floor or ceiling keeps its shipped height: the levels
+                // are authored with decals lying just above the ground,
+                // and a floor that bows up comes through them. An edge it
+                // shares with a steep face stays straight with it.
+                if (cfg.flatFloors && !steep)
+                {
+                    bulge[f] = 0.0;
+                    rel[f] = 0.0;
+                }
                 if (nat)
                 {
                     naturalFaces++;

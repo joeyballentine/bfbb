@@ -226,6 +226,11 @@ const iConfigSetting kConfigSettings[] = {
       "How much of a model's rounding cuts its corners in rather than bowing\n"
       "; its faces out: 0 bows out only, 1 cuts in only, 0.5 is half of each.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f },
+    { "experimental", "hipoly_flat_floors", "on",
+      "Keep the level's floors and ceilings at their shipped height; only\n"
+      "; steep faces round. Off lets gentle ground bow too, through any\n"
+      "; decal lying on it.",
+      ICONFIG_BOOL, NULL, kNone, kNone },
     { "experimental", "hipoly_budget", "600000",
       "Most triangles a level's world may have; the cut coarsens past it.",
       ICONFIG_INT, NULL, 10000.0f, 4000000.0f },
