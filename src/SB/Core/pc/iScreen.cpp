@@ -278,7 +278,7 @@ void iScreenSetMultiSample(S32 samples)
 static S32 sPerPixelLighting = 1;
 static S32 sWorldLighting = 0;
 static F32 sWorldLightContrast = 1.0f;
-static S32 sWorldLightShadows = 1;
+static S32 sWorldLightShadows = 0;
 
 S32 iScreenPerPixelLighting()
 {

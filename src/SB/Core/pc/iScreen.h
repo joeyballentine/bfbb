@@ -345,6 +345,19 @@ void iScreenSetWorldLightContrast(F32 contrast);
 // Trace the level against itself at load and darken the vertices its own
 // geometry hides from the light.
 //
+// **Off, because per-vertex shadows are too coarse to look like shadows.**
+// Visibility is one bit per vertex and Gouraud interpolates between them, so a
+// triangle with one corner in shadow becomes a gradient, and the edge can only
+// land where a vertex happens to be -- bb01 has 39,647 for a whole town.
+// Smoothing the mesh makes it worse rather than better, by giving the bit more
+// places to flip. The artists faked bb01's building shadows with separate
+// alpha-blended decals instead of darkening the world's vertices, which is what
+// you do when this does not work.
+//
+// The rays themselves are sound and the machinery suits ambient occlusion, which
+// is smooth enough to survive vertex interpolation. Real shadows want a shadow
+// map.
+//
 // The rays go out through the collision tree the game already collides against,
 // one per vertex per light, so this costs load time and nothing per frame.
 //
