@@ -18,7 +18,7 @@
 #else
 #include <stdlib.h>
 #endif
-#include <rwsdk\driver\gcn\dlrendst.h>
+#include <rwsdk/driver/gcn/dlrendst.h>
 
 static RpWorld* sBucketDummyWorld;
 static RwCamera* sBucketDummyCamera;
