@@ -200,25 +200,6 @@ FXAA or SMAA 1x for when MSAA is not affordable, sharpening for when the render
 size is below the display, and a tonemap with an optional 3D LUT slot. All pure
 post, all fit in `ps_2_0`, all copies of the glow pass's structure.
 
-## Looking at the depth buffer -- shipped as `debug.view`
-
-`[debug] view` draws the depth buffer in the corner of the finished frame:
-`depth` for near-white-to-far-black, `bands` for the same distance in
-thirty-two contour bands, `both` for the pair side by side. The inset is the
-whole screen scaled down, so a surface in the wrong place in the picture is in
-the same place in the inset.
-
-It answers a question the finished picture cannot: whether a surface drawn in
-the wrong order is at the wrong depth, or at the right depth and failing the
-test for another reason. `bands` is the one to read for that -- a wrong depth
-lands in a visibly wrong band.
-
-OpenGL only. `rw::gl3::bindVirtualScreenDepth` blits the virtual screen's depth
-into a texture and binds it to a texture stage; the copy is what makes it
-sampleable at all, the depth buffer being attached to the framebuffer being
-drawn into and, under MSAA, a renderbuffer. The two D3D backends need the
-depth source below before they can have this.
-
 ## Needs a depth source
 
 D3D9 cannot read the depth buffer. Everything in this section is gated behind
@@ -227,6 +208,13 @@ parts from all three vendors, or an explicit depth prepass into an `R32F`
 target, which costs an extra pass over world and skinned geometry but depends on
 nothing. That choice should be made once, deliberately, before any of the
 following is started.
+
+GL3 already has its half. `rw::gl3::bindVirtualScreenDepth` blits the virtual
+screen's depth into a texture and binds it to a texture stage; the copy is what
+makes it sampleable at all, the depth buffer being attached to the framebuffer
+being drawn into and, under MSAA, a renderbuffer. Nothing calls it today -- a
+diagnostic inset used to -- so the first thing here to want depth on OpenGL has
+it already and should check that it still works.
 
 ### SSAO
 

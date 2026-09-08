@@ -52,7 +52,6 @@
 
 // After the RenderWare headers: both name RwCamera in their signatures and
 // neither includes rwcore.h itself, matching every other i* header here.
-#include "iDebugView.h"
 #include "iDistort.h"
 #include "iGlow.h"
 
@@ -789,27 +788,6 @@ static void ApplyConfig()
     iGlowSetEnabled(glow);
     iDistortSetEnabled(distortion);
     iSnapshotSetEnabled(snapshot);
-
-    // A name rather than a number, because the list will grow and a number in
-    // config.ini would stop meaning what it meant. Anything unrecognised is
-    // off, which is what a typo should get.
-    const char* view = iConfigGetString("debug.view", "off");
-    S32 viewMode = IDEBUGVIEW_OFF;
-
-    if (iHostStrCaseCmp(view, "depth") == 0)
-    {
-        viewMode = IDEBUGVIEW_DEPTH;
-    }
-    else if (iHostStrCaseCmp(view, "bands") == 0)
-    {
-        viewMode = IDEBUGVIEW_BANDS;
-    }
-    else if (iHostStrCaseCmp(view, "both") == 0)
-    {
-        viewMode = IDEBUGVIEW_BOTH;
-    }
-
-    iDebugViewSetMode(viewMode);
 
     // Pushed for the same reason, one library further out: zAssetTypes.cpp
     // calls the patcher from the game code, and game code must not learn what

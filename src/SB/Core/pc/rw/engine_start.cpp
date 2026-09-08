@@ -44,7 +44,6 @@
 #include "rw.h"
 
 #include "backend.h"
-#include "iDebugView.h"
 #include "iDistort.h"
 #include "iGlow.h"
 #include "iScreen.h"
@@ -584,7 +583,6 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     // The notes on the definitions have the rest.
     iGlowRegisterShaderUniforms();
     iDistortRegisterShaderUniforms();
-    iDebugViewRegisterShaderUniforms();
 
     // The backend. Already done by RenderWareInit before the window was
     // opened; repeated here because this is the call that has to have it, and

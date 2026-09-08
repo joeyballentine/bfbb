@@ -11,7 +11,6 @@
 #include <rpworld.h>
 
 #include "rw.h"
-#include "iDebugView.h"
 #include "iWindow.h"
 #include "iSnapshot.h"
 
@@ -195,11 +194,6 @@ RwCamera* RwCameraEndUpdate(RwCamera* camera)
     {
         return NULL;
     }
-
-    // With the camera still open, so the inset lands over everything the frame
-    // drew. Off unless config.ini asked for it, and never for a camera that
-    // renders into a texture. See iDebugView.h.
-    iDebugViewRender(camera);
 
     asCamera(camera)->endUpdate();
 
