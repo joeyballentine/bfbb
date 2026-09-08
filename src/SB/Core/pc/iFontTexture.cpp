@@ -4,6 +4,7 @@
 // graphics device to answer a question about pixels in a buffer.
 
 #include "iFont.h"
+#include "iRasterFill.h"
 
 #include <rwcore.h>
 
@@ -17,34 +18,6 @@ namespace
         fflush(stdout);
     }
 
-    // Which way up the rows go, and which way round the colour bytes are.
-    //
-    // A raster holds its rows the way librw's own rasterFromImage writes them,
-    // and the two backends disagree. d3d/d3d.cpp walks the image top-down;
-    // gl/gl3raster.cpp starts at the LAST row and walks backwards, because the
-    // GL3 fragment shaders sample 1.0 - v to put the picture the same way up
-    // D3D's texture space has it. Neither is wrong -- but anything that fills a
-    // raster by hand has to write the way the backend it is linked against
-    // reads, and there is nothing at the lock that says which that is.
-    //
-    // Written top-down on GL3, the atlas lands upside down under that flip. The
-    // glyphs are in the top half of a 512x512 atlas, so the game sampled the
-    // empty half and drew nothing at all on the menus.
-    //
-    // The colour order goes the same way: an 8888 raster is BGRA on D3D and
-    // RGBA on GL3. That does not show on a glyph, whose three colour channels
-    // are all 0xFF, but the overlay below writes real colours.
-#if defined(RW_GL3)
-    const bool kRowsBottomUp = true;
-    const S32 kRedByte = 0;
-    const S32 kBlueByte = 2;
-#else
-    const bool kRowsBottomUp = false;
-    const S32 kRedByte = 2;
-    const S32 kBlueByte = 0;
-#endif
-    const S32 kGreenByte = 1;
-    const S32 kAlphaByte = 3;
 }
 
 RwTexture* iFontMakeTexture(const U8* coverage, const U8* overlay, S32 width, S32 height)
@@ -73,9 +46,7 @@ RwTexture* iFontMakeTexture(const U8* coverage, const U8* overlay, S32 width, S3
 
     for (S32 y = 0; y < height; y++)
     {
-        const S32 dstY = kRowsBottomUp ? (height - 1 - y) : y;
-
-        RwUInt8* row = dst + (size_t)dstY * stride;
+        RwUInt8* row = dst + (size_t)IRASTERFILL_ROW(y, height) * stride;
         const U8* src = coverage + (size_t)y * width;
 
         const U8* old = overlay != NULL ? overlay + (size_t)y * width : NULL;
@@ -84,10 +55,10 @@ RwTexture* iFontMakeTexture(const U8* coverage, const U8* overlay, S32 width, S3
         {
             // White everywhere, so the game's vertex colour is the only thing
             // that tints a glyph, and the shape lives entirely in alpha.
-            row[x * 4 + kRedByte] = 0xFF;
-            row[x * 4 + kGreenByte] = 0xFF;
-            row[x * 4 + kBlueByte] = 0xFF;
-            row[x * 4 + kAlphaByte] = src[x];
+            row[x * 4 + IRASTERFILL_RED] = 0xFF;
+            row[x * 4 + IRASTERFILL_GREEN] = 0xFF;
+            row[x * 4 + IRASTERFILL_BLUE] = 0xFF;
+            row[x * 4 + IRASTERFILL_ALPHA] = src[x];
 
             if (old != NULL)
             {
@@ -109,10 +80,10 @@ RwTexture* iFontMakeTexture(const U8* coverage, const U8* overlay, S32 width, S3
                 // atlas is.
                 const S32 d = (S32)src[x] - (S32)old[x];
 
-                row[x * 4 + kBlueByte] = 0x20;
-                row[x * 4 + kGreenByte] = d > 0 ? 0xFF : 0x40;
-                row[x * 4 + kRedByte] = d > 0 ? 0x40 : 0xFF;
-                row[x * 4 + kAlphaByte] = (U8)(d < 0 ? -d : d);
+                row[x * 4 + IRASTERFILL_BLUE] = 0x20;
+                row[x * 4 + IRASTERFILL_GREEN] = d > 0 ? 0xFF : 0x40;
+                row[x * 4 + IRASTERFILL_RED] = d > 0 ? 0x40 : 0xFF;
+                row[x * 4 + IRASTERFILL_ALPHA] = (U8)(d < 0 ? -d : d);
             }
         }
     }

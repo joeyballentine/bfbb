@@ -3,6 +3,7 @@
 #include "iFile.h"
 #include "iFMVAudio.h"
 #include "iFMVDecoder.h"
+#include "iRasterFill.h"
 #include "iPadHost.h"
 #include "iTime.h"
 #include "iWindow.h"
@@ -218,7 +219,8 @@ namespace
     // Copy one decoded frame into the raster.
     //
     // Row by row rather than one memcpy: the decoder's pitch and the raster's
-    // stride are both padded, and by different amounts.
+    // stride are both padded, and by different amounts -- and the rows do not
+    // necessarily go in the order they arrive. See iRasterFill.h.
     void uploadFrame(RwRaster* raster, const void* pixels, U32 pitch, U32 w, U32 h)
     {
         RwUInt8* dst = RwRasterLock(raster, 0, rwRASTERLOCKWRITE | rwRASTERLOCKNOFETCH);
@@ -233,7 +235,8 @@ namespace
 
         for (U32 y = 0; y < h; y++)
         {
-            memcpy(dst + (size_t)y * stride, src + (size_t)y * pitch, rowbytes);
+            const size_t row = (size_t)IRASTERFILL_ROW((S32)y, (S32)h);
+            memcpy(dst + row * stride, src + (size_t)y * pitch, rowbytes);
         }
 
         RwRasterUnlock(raster);
@@ -301,8 +304,13 @@ U32 iFMVPlay(char* filename, U32 buttons, F32 time, bool skippable, bool lockCon
         cam = owned;
     }
 
+    // The format is named rather than left to the backend. librw's d3d fills a
+    // zero format in for you -- rasterSetFormat picks C8888 for a texture --
+    // and its gl3 does not: rasterCreateTexture switches on the format bits and
+    // rejects zero outright, so every movie frame failed to make a texture and
+    // GL3 played no movies at all.
     RwRaster* raster = RwRasterCreate((RwInt32)info.width, (RwInt32)info.height, 32,
-                                      rwRASTERTYPETEXTURE);
+                                      rwRASTERTYPETEXTURE | rwRASTERFORMAT8888);
 
     S32 audio = FALSE;
     if (info.sample_rate != 0 && info.channels != 0)

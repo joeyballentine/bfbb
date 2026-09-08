@@ -11,6 +11,7 @@
 // instead and movies are skipped, which is what the port did before any of this.
 
 #include "iFMVDecoder.h"
+#include "iRasterFill.h"
 
 extern "C"
 {
@@ -301,8 +302,12 @@ iFMVDecoder* iFMVDecoderOpen(const char* path, iFMVDecoderInfo* info)
     info->frame_time = 1.0f / fps;
     d->time_base = (F32)av_q2d(vs->time_base);
 
+    // The order the raster wants, which sws does for the same price as either
+    // one. See iRasterFill.h: an 8888 raster is BGRA on D3D and RGBA on GL3.
+    const AVPixelFormat out = IRASTERFILL_RED == 0 ? AV_PIX_FMT_RGBA : AV_PIX_FMT_BGRA;
+
     d->sws = sws_getContext(d->vdec->width, d->vdec->height, d->vdec->pix_fmt, d->vdec->width,
-                            d->vdec->height, AV_PIX_FMT_BGRA, SWS_BILINEAR, NULL, NULL, NULL);
+                            d->vdec->height, out, SWS_BILINEAR, NULL, NULL, NULL);
     d->rgb_pitch = d->vdec->width * 4;
     d->rgb = (U8*)av_malloc((size_t)d->rgb_pitch * d->vdec->height);
     if (d->sws == NULL || d->rgb == NULL)

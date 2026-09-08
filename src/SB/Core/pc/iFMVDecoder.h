@@ -49,8 +49,11 @@ struct iFMVDecoderInfo
 iFMVDecoder* iFMVDecoderOpen(const char* path, iFMVDecoderInfo* info);
 void iFMVDecoderClose(iFMVDecoder* dec);
 
-// The next video frame, as tightly packed BGRA8888 -- the order a D3D9 raster
-// wants, so the caller can hand the rows straight to a locked texture.
+// The next video frame, as tightly packed 8888 in the byte order a raster of
+// THIS build wants, so the caller can hand the rows straight to a locked
+// texture. That is BGRA on the D3D backends and RGBA on GL3; iRasterFill.h has
+// the rule and the reason. A backend that cannot choose its output order must
+// swap the two itself rather than hand back the wrong one.
 //
 // `pitch` is the stride in bytes, which is NOT width*4 in general. Returns
 // FALSE at the end of the movie, and the pixels belong to the decoder until the
