@@ -624,6 +624,7 @@ namespace
         iHipolyArray<S32> level;   // ne
         iHipolyArray<V3> ctrl;     // ne * 2: the inner Bezier points, lo to hi
         iHipolyArray<V3> ends;     // ne * 2: lo, hi
+        iHipolyArray<U8> pinned;   // ne: held straight for what lies along it
     };
 
     void edgeTable(const Domain& d, const Edges& E, const iHipolyParams& pr, EdgeTable& et,
@@ -745,12 +746,14 @@ namespace
                 open++;
             }
         }
+        et.pinned.resizeZero(E.ne);
         for (U32 i = 0; i < nfe; i++)
         {
             U32 e = E.eid[i];
             if ((pr.pinOpenEdges && E.count(e) == 1) || split[e])
             {
                 cap[i] = 0.0;
+                et.pinned[e] = 1;
             }
         }
         if (stats)
@@ -1069,14 +1072,16 @@ namespace
         }
     }
 
-    // A level-1 face: its three vertices as they are.
-    void emitFlat(Build& b, const iHipolyGeom& g, const U32* corners, U32 mat, U32 local)
+    // A level-1 face: its three vertices as they are, plus the inset.
+    void emitFlat(Build& b, const iHipolyGeom& g, const U32* corners, const V3* Dc, U32 mat, U32 local)
     {
         U32 n0 = b.nv();
         for (U32 c = 0; c < 3; c++)
         {
             U32 v = corners[c];
-            b.pos.push(g.pos[v * 3]); b.pos.push(g.pos[v * 3 + 1]); b.pos.push(g.pos[v * 3 + 2]);
+            b.pos.push((F32)(g.pos[v * 3] + Dc[c].x));
+            b.pos.push((F32)(g.pos[v * 3 + 1] + Dc[c].y));
+            b.pos.push((F32)(g.pos[v * 3 + 2] + Dc[c].z));
             if (b.hasN)
             {
                 V3 n = unit(v3(g.normal[v * 3], g.normal[v * 3 + 1], g.normal[v * 3 + 2]));
@@ -1439,6 +1444,43 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
         makeGrid(L, grids[L]);
     }
 
+    // The inset. A PN patch bows out from its faces, so a rounded shape
+    // comes out fatter than the mesh that described it. Pulling every
+    // welded vertex back by `inset` times the mean bow of its edges, and
+    // the surface with it linearly, puts the result between the bulge and
+    // the mesh: at 0.5 the corners go in by half the bow and the edge
+    // midpoints come out by the other half. A vertex on a pinned edge
+    // stays, or what lay along the edge would open.
+    iHipolyArray<V3> Dw;
+    Dw.resizeZero(d.nw);
+    if (pr.inset > 0.0)
+    {
+        iHipolyArray<U32> cnt;
+        iHipolyArray<U8> held;
+        cnt.resizeZero(d.nw);
+        held.resizeZero(d.nw);
+        for (U32 e = 0; e < E.ne; e++)
+        {
+            U32 lo = E.lo[e], hi = E.hi[e];
+            if (et.pinned[e])
+            {
+                held[lo] = held[hi] = 1;
+            }
+            // The cubic's midpoint less the chord's.
+            V3 mid = scale(add(add(et.ends[e * 2], et.ends[e * 2 + 1]),
+                               scale(add(et.ctrl[e * 2], et.ctrl[e * 2 + 1]), 3.0)), 0.125);
+            V3 bow = sub(mid, scale(add(et.ends[e * 2], et.ends[e * 2 + 1]), 0.5));
+            Dw[lo] = add(Dw[lo], bow);
+            Dw[hi] = add(Dw[hi], bow);
+            cnt[lo]++;
+            cnt[hi]++;
+        }
+        for (U32 w = 0; w < d.nw; w++)
+        {
+            Dw[w] = (held[w] || cnt[w] == 0) ? v3(0, 0, 0) : scale(Dw[w], -pr.inset / cnt[w]);
+        }
+    }
+
     Build* builds = new Build[numGeoms];
     for (U32 g = 0; g < numGeoms; g++)
     {
@@ -1456,9 +1498,10 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
         const iHipolyGeom& G = geoms[g];
         U32 corners[3] = { d.T[f * 3] - d.voff[g], d.T[f * 3 + 1] - d.voff[g], d.T[f * 3 + 2] - d.voff[g] };
         S32 L = flevel[f];
+        V3 Dc[3] = { Dw[d.W[d.T[f * 3]]], Dw[d.W[d.T[f * 3 + 1]]], Dw[d.W[d.T[f * 3 + 2]]] };
         if (L <= 1)
         {
-            emitFlat(b, G, corners, d.fmat[f], d.flocal[f]);
+            emitFlat(b, G, corners, Dc, d.fmat[f], d.flocal[f]);
             continue;
         }
         const Grid& gr = grids[L];
@@ -1486,13 +1529,14 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
         for (U32 m = 0; m < gr.npts; m++)
         {
             F64 bary[3];
-            V3 pos;
+            V3 pos, disp;
             if (gr.corner[m] >= 0)
             {
                 U32 c = (U32)gr.corner[m];
                 bary[0] = bary[1] = bary[2] = 0.0;
                 bary[c] = 1.0;
                 pos = Pc[c];
+                disp = Dc[c];
             }
             else if (gr.edge[m] >= 0)
             {
@@ -1528,6 +1572,13 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
                     pos = epts[eoff[e] + (U32)(sLoHi - 1)];
                 }
                 F64 t = (F64)sLoHi / lv;
+                // The inset along the edge, in lo->hi terms so both faces
+                // land on the same bits.
+                {
+                    V3 Dlo = fwd ? Dc[c] : Dc[(c + 1) % 3];
+                    V3 Dhi = fwd ? Dc[(c + 1) % 3] : Dc[c];
+                    disp = add(scale(Dlo, 1.0 - t), scale(Dhi, t));
+                }
                 if (!fwd)
                 {
                     t = 1.0 - t;
@@ -1550,7 +1601,9 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
                 pos = add(pos, scale(b102, 3.0 * u * w * w));
                 pos = add(pos, scale(b201, 3.0 * u * u * w));
                 pos = add(pos, scale(b111, 6.0 * u * v * w));
+                disp = add(add(scale(Dc[0], u), scale(Dc[1], v)), scale(Dc[2], w));
             }
+            pos = add(pos, disp);
             emitVertex(b, G, corners, bary, pos, CN, Pc);
             // Remember the barycentrics for the children's corners.
             b.cbary.push((F32)bary[0]); b.cbary.push((F32)bary[1]); b.cbary.push((F32)bary[2]);

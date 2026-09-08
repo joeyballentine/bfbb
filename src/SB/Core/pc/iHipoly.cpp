@@ -64,6 +64,7 @@ namespace
     const S32 kModelMaxLevel = 4;
     const F64 kModelMaxBulge = 0.1;
     const F64 kCharacterHard = 40.0;
+    const F64 kModelInset = 0.5;         // half the bow goes to cutting the corners in
 
     const F64 kMinBulge = 0.01;
     const U32 kMaxVerts = 60000;
@@ -114,11 +115,12 @@ namespace
         F64 naturalCrease;
         F64 fillet;
         F64 modelTarget;
+        F64 inset;
         U32 budget;
     };
     const F64 kFactor = 1.0;
     Settings sCfg = { -1, kFactor, kWorldTarget, kWorldMaxLevel, kWorldCrease, kNaturalCrease,
-                      kFilletRadius, kModelTarget, kWorldBudget };
+                      kFilletRadius, kModelTarget, kModelInset, kWorldBudget };
 
     const Settings& settings()
     {
@@ -132,12 +134,15 @@ namespace
             sCfg.naturalCrease = iConfigGetFloat("experimental.hipoly_natural_crease", (F32)kNaturalCrease);
             sCfg.fillet = iConfigGetFloat("experimental.hipoly_fillet", (F32)kFilletRadius);
             sCfg.modelTarget = iConfigGetFloat("experimental.hipoly_model_target", (F32)kModelTarget);
+            sCfg.inset = iConfigGetFloat("experimental.hipoly_inset", (F32)kModelInset);
             sCfg.budget = (U32)iConfigGetInt("experimental.hipoly_budget", (S32)kWorldBudget);
             if (sCfg.maxLevel < 1) sCfg.maxLevel = 1;
             if (sCfg.maxLevel > 15) sCfg.maxLevel = 15;
             if (sCfg.target < 0.05) sCfg.target = 0.05;
             if (sCfg.modelTarget < 0.02) sCfg.modelTarget = 0.02;
             if (sCfg.factor < 0.0) sCfg.factor = 0.0;
+            if (sCfg.inset < 0.0) sCfg.inset = 0.0;
+            if (sCfg.inset > 1.0) sCfg.inset = 1.0;
         }
         return sCfg;
     }
@@ -1159,6 +1164,7 @@ void iHipolyModel(RpClump* rpclump)
     pr.hardDeg = skinned ? kCharacterHard : -1.0;
     pr.noiseGuard = skinned;
     pr.pinOpenEdges = false;
+    pr.inset = cfg.inset;
     pr.maxVerts = kMaxVerts;
     pr.maxTris = kMaxTris;
     iHipolyResult* res = new iHipolyResult[n];

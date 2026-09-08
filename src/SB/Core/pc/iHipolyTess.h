@@ -209,6 +209,7 @@ struct iHipolyParams
     F64 hardDeg;           // an edge folded more than this stays straight; < 0 for none
     bool noiseGuard;       // pin vertices with both convex and concave edges
     bool pinOpenEdges;     // keep one-faced edges straight: the world's sheets lie along each other
+    F64 inset;             // pull the surface back along the normals by this fraction of its bow: 0 bulges out from the faces, 1 keeps the bows flat and cuts the corners in, 0.5 is half of each
     U32 maxVerts;          // per geometry: a 16-bit index buffer
     U32 maxTris;           // per geometry: what a JSP collision record can address
 };

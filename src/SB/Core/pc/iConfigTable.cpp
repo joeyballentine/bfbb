@@ -218,6 +218,10 @@ const iConfigSetting kConfigSettings[] = {
     { "experimental", "hipoly_model_target", "0.25",
       "Edge length models are cut to, in units.",
       ICONFIG_FLOAT, NULL, 0.02f, 4.0f },
+    { "experimental", "hipoly_inset", "0.5",
+      "How much of a model's rounding cuts its corners in rather than bowing\n"
+      "; its faces out: 0 bows out only, 1 cuts in only, 0.5 is half of each.",
+      ICONFIG_FLOAT, NULL, 0.0f, 1.0f },
     { "experimental", "hipoly_budget", "600000",
       "Most triangles a level's world may have; the cut coarsens past it.",
       ICONFIG_INT, NULL, 10000.0f, 4000000.0f },
