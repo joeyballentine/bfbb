@@ -452,7 +452,16 @@ namespace
 
     void ConfigFrame::OnSection(wxCommandEvent& event)
     {
-        ShowSection(event.GetSelection());
+        // A list box can report that nothing is selected -- GTK sends it when
+        // the selection is cleared -- and -1 would index the section table off
+        // its front.
+        const int which = event.GetSelection();
+        if (which < 0 || which >= ConfigModelSectionCount())
+        {
+            return;
+        }
+
+        ShowSection(which);
     }
 
     void ConfigFrame::OnValueChanged(wxCommandEvent& event)
@@ -636,50 +645,52 @@ namespace
         event.Skip();
     }
 
-    class ConfigApp : public wxApp
-    {
-    public:
-        bool OnInit() override;
-        int OnExit() override;
-    };
-
-    bool ConfigApp::OnInit()
-    {
-        // An argument overrides the file search, for editing one config while
-        // a different one is in place. Anything past the first is ignored
-        // rather than refused: a shell that expanded a glob is not worth a
-        // dialog box.
-        //
-        // The buffer is held in a named variable rather than passed straight
-        // through. utf8_str() returns one that owns its bytes and dies at the
-        // end of the full expression, so `argv[1].utf8_str().data()` as an
-        // argument is a pointer into freed memory by the time the callee reads
-        // it.
-        wxString named;
-        if (argc > 1)
-        {
-            named = argv[1];
-        }
-        const wxScopedCharBuffer path = named.utf8_str();
-
-        char why[kConfigModelMaxPath + 256];
-        why[0] = '\0';
-
-        if (!ConfigModelOpen(named.empty() ? NULL : path.data(), why, sizeof(why)))
-        {
-            wxMessageBox(why, "bfbb settings", wxOK | wxICON_ERROR);
-            return false;
-        }
-
-        (new ConfigFrame())->Show();
-        return true;
-    }
-
-    int ConfigApp::OnExit()
-    {
-        ConfigModelClose();
-        return wxApp::OnExit();
-    }
 } // namespace
+
+// Outside the anonymous namespace, unlike everything above it. wxIMPLEMENT_APP
+// defines wxGetApp() returning a reference to this type, and an application
+// class is the one thing here wx itself names.
+class ConfigApp : public wxApp
+{
+public:
+    bool OnInit() override;
+    int OnExit() override;
+};
+
+bool ConfigApp::OnInit()
+{
+    // An argument overrides the file search, for editing one config while a
+    // different one is in place. Anything past the first is ignored rather
+    // than refused: a shell that expanded a glob is not worth a dialog box.
+    //
+    // The buffer is held in a named variable rather than passed straight
+    // through. utf8_str() returns one that owns its bytes and dies at the end
+    // of the full expression, so `argv[1].utf8_str().data()` as an argument is
+    // a pointer into freed memory by the time the callee reads it.
+    wxString named;
+    if (argc > 1)
+    {
+        named = argv[1];
+    }
+    const wxScopedCharBuffer path = named.utf8_str();
+
+    char why[kConfigModelMaxPath + 256];
+    why[0] = '\0';
+
+    if (!ConfigModelOpen(named.empty() ? NULL : path.data(), why, sizeof(why)))
+    {
+        wxMessageBox(why, "bfbb settings", wxOK | wxICON_ERROR);
+        return false;
+    }
+
+    (new ConfigFrame())->Show();
+    return true;
+}
+
+int ConfigApp::OnExit()
+{
+    ConfigModelClose();
+    return wxApp::OnExit();
+}
 
 wxIMPLEMENT_APP(ConfigApp);
