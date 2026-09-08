@@ -1,12 +1,19 @@
-# The PC port, built once per render backend.
+# The PC port, built once per backend SET.
 #
-# The point is that all three backends compile from every commit. librw's device
+# The point is that every backend compiles from every commit. librw's device
 # backends are separate implementations of one interface with nothing shared
 # below it, so a change written against one of them can leave the others broken
 # -- or silently wrong -- and nothing local says so unless you happen to
 # configure that build. -Werror=switch on the librw target only reports a
 # missing render-state case in the configuration that compiles that file, which
 # is why this is a matrix rather than one build.
+#
+# BFBB_RENDER_BACKENDS is a list. The default -- "D3D9;GL3" on Windows, "GL3"
+# elsewhere -- puts several backends in ONE executable and video.backend picks
+# between them at startup, so the entry named `default` below is the build
+# people actually download. The single-backend entries are still here because
+# each has code the combined build compiles but never runs: NULL is the headless
+# configuration the self-tests want, and D3D11 cannot share a build with D3D9.
 #
 # No paths filter: bfbb.exe links the game code as well as the port, so a
 # change anywhere under src/ can break this and a filter would let it through.
@@ -24,8 +31,10 @@ jobs:
       fail-fast: false
       matrix:
         # Quoted: YAML reads a bare NULL as the null value, and the backend
-        # would reach cmake as an empty string.
-        backend: ["NULL", "D3D9", "GL3"]
+        # would reach cmake as an empty string. `default` is the empty string on
+        # purpose -- it means "do not pass the option", which is what tests the
+        # default set.
+        backend: ["default", "NULL", "D3D9", "D3D11", "GL3"]
 
     steps:
       - name: Checkout
@@ -53,11 +62,12 @@ jobs:
           arch: x86
 
       - name: Configure
+        shell: bash
         run: >
           cmake -S . -B build-ci -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
           -DCMAKE_CXX_COMPILER=clang++
-          -DBFBB_RENDER_BACKEND=${{ matrix.backend }}
+          ${{ matrix.backend != 'default' && format('-DBFBB_RENDER_BACKENDS={0}', matrix.backend) || '' }}
 
       - name: Build
         run: cmake --build build-ci
@@ -81,7 +91,7 @@ jobs:
           build-ci\rw_selftest.exe
           build-ci\pc_selftest.exe
 
-  # The same three backends under MinGW's GCC.
+  # The same backends under MinGW's GCC.
   #
   # A second toolchain is not redundancy. clang here targets the MSVC ABI and
   # Microsoft's STL, so it and MinGW disagree about which headers exist, what
@@ -100,7 +110,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        backend: ["NULL", "D3D9", "GL3"]
+        backend: ["default", "NULL", "D3D9", "D3D11", "GL3"]
 
     steps:
       - name: Checkout
@@ -138,13 +148,14 @@ jobs:
       # submodule. Naming it means a future image that ships one cannot quietly
       # change what this job tests.
       - name: Configure
+        shell: bash
         run: >
           cmake -S . -B build-mingw -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
           -DCMAKE_C_COMPILER=gcc
           -DCMAKE_CXX_COMPILER=g++
           -DBFBB_SDL=vendored
-          -DBFBB_RENDER_BACKEND=${{ matrix.backend }}
+          ${{ matrix.backend != 'default' && format('-DBFBB_RENDER_BACKENDS={0}', matrix.backend) || '' }}
 
       - name: Build
         run: cmake --build build-mingw
@@ -182,6 +193,8 @@ jobs:
         # `fsqrt` instruction on AArch64, and neither arm compiles the other.
         # GitHub retires the last x86_64 macOS image in August 2027.
         os: [ubuntu-latest, macos-latest, macos-15-intel]
+        # No `default` entry: off Windows the default IS GL3, so it would be the
+        # same build twice.
         backend: ["NULL", "GL3"]
 
     steps:
@@ -233,7 +246,7 @@ jobs:
           cmake -S . -B build-ci -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
           -DBFBB_SDL=vendored
-          -DBFBB_RENDER_BACKEND=${{ matrix.backend }}
+          -DBFBB_RENDER_BACKENDS=${{ matrix.backend }}
 
       - name: Build
         run: cmake --build build-ci
@@ -266,7 +279,13 @@ jobs:
   # Separate from the jobs above rather than an upload step bolted onto them.
   # Those build Debug, which is unoptimised and too slow to play; this is the
   # configuration someone would actually run, and it is the only one worth
-  # downloading. It also covers D3D11, which nothing else here builds.
+  # downloading.
+  #
+  # One artifact per HOST, not one per backend. The Windows build carries D3D9
+  # and GL3 together and video.backend in config.ini picks between them, so a
+  # machine whose Direct3D driver misbehaves has the OpenGL one in the same
+  # download. D3D11 is the exception and needs a second artifact: it and D3D9
+  # are two implementations of librw's rw::d3d and cannot be linked together.
   #
   # Each artifact is a folder to run the game out of: the executable, the
   # configurator on Windows, the button glyphs, and whatever DLLs the build
@@ -287,15 +306,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: windows-latest,  backend: D3D9, name: windows-x86-d3d9 }
-          - { os: windows-latest,  backend: D3D11, name: windows-x86-d3d11 }
-          - { os: windows-latest,  backend: GL3,  name: windows-x86-gl3 }
-          - { os: ubuntu-latest,   backend: GL3,  name: linux-x86_64-gl3 }
+          # An empty backend means the host default, which is D3D9 and GL3 on
+          # Windows and GL3 elsewhere.
+          - { os: windows-latest, backend: "",          name: windows-x86 }
+          - { os: windows-latest, backend: "D3D11;GL3", name: windows-x86-d3d11 }
+          - { os: ubuntu-latest,  backend: "",          name: linux-x86_64 }
           # macos-latest is absent on purpose. An arm64 build compiles and then
           # is SIGKILLed at exec, because the game arena needs a low 4 GB that
           # Apple Silicon will not give up -- see the unix job. Publishing a
           # binary that cannot start is worse than publishing none.
-          - { os: macos-15-intel,  backend: GL3,  name: macos-x86_64-gl3 }
+          - { os: macos-15-intel, backend: "",          name: macos-x86_64 }
 
     steps:
       - name: Checkout
@@ -330,6 +350,11 @@ jobs:
       # at dist/ brings them along and a new one added later needs no edit here.
       # The tools and self-tests land there too and are pruned after the build.
       #
+      # RELATIVE, so it lands in build-pkg/dist. Written absolute it would be
+      # ${{ github.workspace }}, which on a Windows runner is D:\a\bfbb\bfbb --
+      # and this step is bash, which eats the backslashes and once linked the
+      # executable to D:abfbbbfbb.
+      #
       # The word size is left to CMakeLists.txt for the same reason the unix job
       # leaves it: 32-bit on Windows, 64-bit off it.
       - name: Configure
@@ -338,8 +363,8 @@ jobs:
           cmake -S . -B build-pkg -G Ninja
           -DCMAKE_BUILD_TYPE=Release
           -DBFBB_SDL=vendored
-          -DBFBB_RENDER_BACKEND=${{ matrix.backend }}
-          -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=${{ github.workspace }}/dist
+          ${{ matrix.backend != '' && format('-DBFBB_RENDER_BACKENDS={0}', matrix.backend) || '' }}
+          -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=dist
           ${{ runner.os == 'Windows' && '-DCMAKE_CXX_COMPILER=clang++' || '' }}
 
       - name: Build
@@ -354,17 +379,23 @@ jobs:
       - name: Stage
         shell: bash
         run: |
+          cd build-pkg
           rm -f dist/*selftest* dist/fontfit*
+          backends=$(sed -n 's/^BFBB_RENDER_BACKENDS:STRING=//p' CMakeCache.txt)
           cat > dist/BUILD-INFO.txt <<EOF
           Battle for Bikini Bottom, PC port -- ${{ matrix.name }}
 
           Built from ${{ github.repository }} ${{ github.ref_name }} at ${{ github.sha }}
-          Render backend: ${{ matrix.backend }}   Configuration: Release
+          Render backends: ${backends}   Configuration: Release
 
           This folder is the program, not the game. It needs the data files from
           a copy of the Xbox release: start it once, then set [assets] path in
           the config.ini it writes beside itself and start it again. On Windows
           bfbb_config.exe edits that file with controls on it.
+
+          More than one renderer is built in. video.backend in config.ini picks:
+          auto takes the first of the ones listed above, and naming one is worth
+          trying if the picture is wrong or the game will not start.
 
           FFmpeg was not available on the build machine, so the movie decoder and
           the soundtrack override are stubs in this build: cutscenes do not play
@@ -376,6 +407,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bfbb-${{ matrix.name }}
-          path: dist/
+          path: build-pkg/dist/
           retention-days: 14
           if-no-files-found: error
