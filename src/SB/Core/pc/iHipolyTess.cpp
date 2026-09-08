@@ -625,6 +625,7 @@ namespace
         iHipolyArray<V3> ctrl;     // ne * 2: the inner Bezier points, lo to hi
         iHipolyArray<V3> ends;     // ne * 2: lo, hi
         iHipolyArray<U8> pinned;   // ne: held straight for what lies along it
+        iHipolyArray<F64> fract;   // ne: how much of the bow the normals asked for survived the caps, 0 to 1
     };
 
     void edgeTable(const Domain& d, const Edges& E, const iHipolyParams& pr, EdgeTable& et,
@@ -796,6 +797,17 @@ namespace
             }
             cap[i] = dmin(cap[i], 2.0 * ealt[e] / lvl0);
         }
+        // What the normals asked for at each edge's midpoint, before the
+        // caps: the normal field is blended back toward linear by however
+        // much of it the caps took away, so a face held flat shades flat.
+        iHipolyArray<F64> asked;
+        asked.resizeZero(E.ne);
+        for (U32 i = 0; i < nfe; i++)
+        {
+            U32 e = E.eid[i];
+            F64 a = len(add(scale(Nlo[i], wlo[i]), scale(Nhi[i], whi[i]))) * 0.125;
+            asked[e] = dmax(asked[e], a);
+        }
         iHipolyArray<F64> bulge;
         bulge.resize(nfe);
         for (U32 i = 0; i < nfe; i++)
@@ -809,6 +821,7 @@ namespace
         et.level.resize(E.ne);
         et.ctrl.resize(E.ne * 2);
         et.ends.resize(E.ne * 2);
+        et.fract.resize(E.ne);
         for (U32 e = 0; e < E.ne; e++)
         {
             U32 win = E.fe[E.start[e]];
@@ -824,6 +837,12 @@ namespace
             et.ctrl[e * 2 + 1] = scale(sub(add(scale(Phi[win], 2.0), Plo[win]), scale(Nhi[win], whi[win])), 1.0 / 3.0);
             et.ends[e * 2] = Plo[win];
             et.ends[e * 2 + 1] = Phi[win];
+            {
+                V3 mid = scale(add(add(et.ends[e * 2], et.ends[e * 2 + 1]),
+                                   scale(add(et.ctrl[e * 2], et.ctrl[e * 2 + 1]), 3.0)), 0.125);
+                F64 got = len(sub(mid, scale(add(et.ends[e * 2], et.ends[e * 2 + 1]), 0.5)));
+                et.fract[e] = asked[e] < 1e-9 ? 1.0 : dmin(1.0, got / asked[e]);
+            }
             et.level[e] = 1;
             if (bulge[win] >= pr.minBulge)
             {
@@ -1026,13 +1045,23 @@ namespace
         return unit(out);
     }
 
+    // `curved` is how much of the PN bow this sample's surface actually
+    // has, 0 to 1. The quadratic normal field is the curved patch's; a face
+    // whose bow the caps took away is still flat, and the normals the
+    // shipped mesh shaded it with are the linear ones.
     void emitVertex(Build& b, const iHipolyGeom& g, const U32* corners, const F64* bary, V3 pos,
-                    const V3* CN, const V3* Pc)
+                    const V3* CN, const V3* Pc, F64 curved)
     {
         b.pos.push((F32)pos.x); b.pos.push((F32)pos.y); b.pos.push((F32)pos.z);
         if (b.hasN)
         {
-            V3 n = pnNormal(CN, Pc, bary[0], bary[1], bary[2]);
+            V3 lin = unit(add(add(scale(CN[0], bary[0]), scale(CN[1], bary[1])), scale(CN[2], bary[2])));
+            V3 n = lin;
+            if (curved > 0.0)
+            {
+                V3 q = pnNormal(CN, Pc, bary[0], bary[1], bary[2]);
+                n = unit(add(scale(lin, 1.0 - curved), scale(q, curved)));
+            }
             b.normal.push((F32)n.x); b.normal.push((F32)n.y); b.normal.push((F32)n.z);
         }
         if (b.hasColor)
@@ -1524,11 +1553,14 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
         V3 Ec = scale(add(add(add(b210, b120), add(b021, b012)), add(b102, b201)), 1.0 / 6.0);
         V3 Vc = scale(add(add(Pc[0], Pc[1]), Pc[2]), 1.0 / 3.0);
         V3 b111 = add(Ec, scale(sub(Ec, Vc), 0.5));
+        F64 fe[3] = { et.fract[E.eid[f * 3]], et.fract[E.eid[f * 3 + 1]], et.fract[E.eid[f * 3 + 2]] };
+        F64 fface = (fe[0] + fe[1] + fe[2]) / 3.0;
 
         U32 n0 = b.nv();
         for (U32 m = 0; m < gr.npts; m++)
         {
             F64 bary[3];
+            F64 curved = fface;
             V3 pos, disp;
             if (gr.corner[m] >= 0)
             {
@@ -1537,11 +1569,13 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
                 bary[c] = 1.0;
                 pos = Pc[c];
                 disp = Dc[c];
+                curved = 1.0;
             }
             else if (gr.edge[m] >= 0)
             {
                 U32 c = (U32)gr.edge[m];
                 U32 e = E.eid[f * 3 + c];
+                curved = fe[c];
                 S32 lv = et.level[e];
                 bool fwd = E.forward[f * 3 + c];
                 // Parameter along corner c -> c+1 is par/L; snap to the
@@ -1604,7 +1638,7 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
                 disp = add(add(scale(Dc[0], u), scale(Dc[1], v)), scale(Dc[2], w));
             }
             pos = add(pos, disp);
-            emitVertex(b, G, corners, bary, pos, CN, Pc);
+            emitVertex(b, G, corners, bary, pos, CN, Pc, curved);
             // Remember the barycentrics for the children's corners.
             b.cbary.push((F32)bary[0]); b.cbary.push((F32)bary[1]); b.cbary.push((F32)bary[2]);
         }
