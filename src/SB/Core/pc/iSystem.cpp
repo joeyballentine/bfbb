@@ -551,7 +551,7 @@ static void ApplyConfig()
     iScreenSetMultiSample(iConfigGetInt("video.msaa", 4));
     iScreenSetPerPixelLighting(iConfigGetBool("video.per_pixel_lighting", FALSE));
     iScreenSetWorldLighting(WorldLightingFromConfig());
-    iScreenSetWorldLightContrast(iConfigGetFloat("experimental.world_light_contrast", 1.0f));
+    iScreenSetWorldLightContrast(iConfigGetFloat("experimental.world_light_contrast", 2.5f));
 
     // Which backend draws. AUTO is resolved in RenderWareInit, which is where
     // the RW_* defines are; a name this build was not compiled with is reported

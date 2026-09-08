@@ -231,12 +231,13 @@ const iConfigSetting kConfigSettings[] = {
     { "experimental", "world_lighting", "off",
       "Light the level as the game runs instead of using its painted colour: on\n"
       "; (the level's own light kit where it has one), bake (the rig worked back\n"
-      "; out of the paint), or off. For levels authored to be lit -- on the\n"
-      "; shipped ones it discards painted shadow and looks worse than off.",
+      "; out of the paint), or off. For levels authored to be lit -- a shipped\n"
+      "; level loses the occlusion and bounce its paint recorded.",
       ICONFIG_ENUM, "off|on|bake", kNone, kNone },
-    { "experimental", "world_light_contrast", "1",
+    { "experimental", "world_light_contrast", "2.5",
       "How far apart to pull the lit and shaded sides of a level lit by bake.\n"
-      "; 1 is the rig as fitted; past about 1.5 the lit end saturates.",
+      "; 1 reproduces the rig as fitted, which is flat; the default overdrives\n"
+      "; it, which saturates the lit end and looks better.",
       ICONFIG_FLOAT, NULL, 0.0f, 4.0f, "world_lighting" },
 };
 

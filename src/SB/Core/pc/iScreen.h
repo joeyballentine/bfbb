@@ -326,18 +326,22 @@ void iScreenSetWorldLighting(S32 mode);
 // The authored kit is left alone -- its lights are the artists' numbers and
 // there is nothing in them to scale against.
 //
-// 1.0 is the rig as measured, and it holds the level's average brightness to
-// within a thousandth: bb01's bake averages 0.643 and the rig renders 0.642.
-// Above 1.0 the directionals are scaled and the ambient is taken down by what
-// they gain on the average vertex, so the average stays put while the lit and
-// shaded ends separate.
+// 1.0 is the rig exactly as measured, and it holds the level's average
+// brightness: bb01's bake averages 0.663 over the surfaces this lights, and the
+// rig renders 0.663. Above 1.0 the directionals are scaled and the ambient is
+// taken down by what they gain on the average vertex, which holds that average
+// until the ambient reaches zero -- swing 1.61 on bb01.
 //
-// **The useful range ends around 1.5**, and both reasons are measured on bb01.
-// The ambient runs out at a swing of 1.54 and clamps at zero, after which
-// nothing is left to hold the average down and the level simply gets brighter.
-// The lit end saturates as well: 0.4% of the level's vertices clip at 1.0, 5%
-// at 1.5, and 45% at 2.0. Past that a level goes flatter and paler rather than
-// more contrasty.
+// **The default is 2.5, which is past that deliberately.** It is a look and not
+// a reconstruction. On bb01 the lit end peaks at 2.15, 54% of the lit vertices
+// saturate, and the level renders 0.135 brighter than the paint. Saturated
+// vertex colour is white, so the brightest ground stops being tinted by its
+// own texture and the Xbox glow carries it the rest of the way.
+//
+// That is chosen over fidelity because a bake fitted honestly has very little
+// contrast in it -- bb01 comes out at an ambient of 0.27 against a key light of
+// 0.77, and at 1.0 the setting is nearly invisible. Use 1.0 to measure the fit
+// against the paint; the default is for playing.
 F32 iScreenWorldLightContrast();
 void iScreenSetWorldLightContrast(F32 contrast);
 
