@@ -67,6 +67,12 @@ namespace
     const F64 kModelInset = 0.5;         // half the bow goes to cutting the corners in
 
     const F64 kMinBulge = 0.01;
+    // A model's authored normals have to ask for a real curve: below this
+    // -- the sine of twice the tilt, so about 8 degrees at each end -- an
+    // edge stays straight. A cube with normals leaning across its corners
+    // asks for a lot and gets, after the caps, a bow too small to see.
+    // Later passes smooth facets a quarter as deep each time.
+    const F64 kModelMinBulge = 0.28;
     const S32 kPasses = 2;               // over models: each pass smooths the last pass's mesh at half the edge length
     const U32 kMaxVerts = 60000;
     const U32 kMaxTris = 21000;         // a collision record addresses 3 * 21845 vertices
@@ -185,6 +191,7 @@ namespace
             g.skinIndex = r.skinIndex.n ? r.skinIndex.p : NULL;
             g.skinWeight = r.skinWeight.n ? r.skinWeight.p : NULL;
             g.tris = r.tris.p;
+            g.frozen = r.flat.n ? r.flat.p : NULL;
         }
     }
 
@@ -1218,7 +1225,6 @@ void iHipolyModel(RpClump* rpclump)
     memset(&pr, 0, sizeof(pr));
     const Settings& cfg = settings();
     pr.maxLevel = kModelMaxLevel;
-    pr.minBulge = kMinBulge;
     pr.creaseDeg = cfg.crease;
     pr.maxBulge = kModelMaxBulge * cfg.factor;
     pr.relBulge = kWorldRelBulge * cfg.factor;
@@ -1241,6 +1247,7 @@ void iHipolyModel(RpClump* rpclump)
             in = passIn;
         }
         pr.target = passTarget(cfg.modelTarget, cfg.passes, pass);
+        pr.minBulge = kModelMinBulge / pow(4.0, (F64)pass);
         iHipolyResult* next = new iHipolyResult[n];
         iHipolyRefine(in, n, pr, next, &stats);
         if (pass > 0)

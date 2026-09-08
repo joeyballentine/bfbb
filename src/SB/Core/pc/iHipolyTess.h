@@ -198,6 +198,7 @@ struct iHipolyGeom
     const U8* skinIndex;   // nv * 4, or NULL
     const F32* skinWeight; // nv * 4
     const U32* tris;       // nt * 4: three vertex indices and a material
+    const U8* frozen;      // nt, or NULL: faces the last pass left uncut, to stay so
 };
 
 // Per-face controls. Each array has one entry per face over the whole domain,
@@ -206,7 +207,7 @@ struct iHipolyParams
 {
     F64 target;            // edge length to aim for
     S32 maxLevel;
-    F64 minBulge;          // an edge bowing less than this fraction stays level 1
+    F64 minBulge;          // an edge whose midpoint bows less than this fraction of its length, times 8, stays level 1: the sine of twice the normals' tilt
     F64 creaseDeg;         // faces meeting sharper than this do not share a normal
     const F64* creaseDegPerFace;
     F64 maxBulge;          // units an edge midpoint may move
@@ -235,6 +236,7 @@ struct iHipolyResult
     iHipolyArray<F32> skinWeight; // nv * 4
     iHipolyArray<U32> tris;       // nt * 4
     iHipolyArray<U32> parent;     // nt: the input face each child was cut from
+    iHipolyArray<U8> flat;        // nt: 1 where the child is its parent, uncut
     iHipolyArray<F32> cbary;      // nt * 9: each corner's barycentrics in its parent
 };
 

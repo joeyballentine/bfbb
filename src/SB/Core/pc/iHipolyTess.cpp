@@ -211,6 +211,7 @@ namespace
         U32 nw;
         iHipolyArray<V3> un;       // unit face normals
         iHipolyArray<V3> CN;       // nt * 3 corner normals
+        iHipolyArray<U8> frozen;   // per face: left uncut by the last pass, kept so
     };
 
     F64 extentOf(const iHipolyArray<V3>& P)
@@ -762,6 +763,24 @@ namespace
             stats->openEdges = open;
             stats->tJunctions = tj;
         }
+        // A face the last pass left uncut stays uncut, and so does every
+        // edge it shares: a later pass smooths the facets the pass before
+        // it made, not the faces it chose to leave.
+        for (U32 e = 0; e < E.ne; e++)
+        {
+            bool hold = false;
+            for (U32 k = E.start[e]; k < E.start[e + 1]; k++)
+            {
+                hold = hold || d.frozen[E.fe[k] / 3];
+            }
+            if (hold)
+            {
+                for (U32 k = E.start[e]; k < E.start[e + 1]; k++)
+                {
+                    cap[E.fe[k]] = 0.0;
+                }
+            }
+        }
         // And never further than the thinnest triangle on the edge can take:
         // a bow deeper than the first interior row of samples folds that row
         // over, and a long sliver has its rows a fraction of a unit apart.
@@ -782,7 +801,8 @@ namespace
                 U32 i = f * 3 + cc, e = E.eid[i];
                 F64 Ls = dmax(L[i], 1e-9);
                 ealt[e] = dmin(ealt[e], area2 / Ls);
-                F64 pb = (fabs(clampd(wlo[i], -cap[i], cap[i])) + fabs(clampd(whi[i], -cap[i], cap[i]))) / Ls;
+                F64 pb = len(add(scale(Nlo[i], clampd(wlo[i], -cap[i], cap[i])),
+                                 scale(Nhi[i], clampd(whi[i], -cap[i], cap[i])))) / Ls;
                 ebulge0[e] = dmax(ebulge0[e], pb);
                 elen0[e] = dmax(elen0[e], L[i]);
             }
@@ -808,13 +828,18 @@ namespace
             F64 a = len(add(scale(Nlo[i], wlo[i]), scale(Nhi[i], whi[i]))) * 0.125;
             asked[e] = dmax(asked[e], a);
         }
+        // The bow that survives the caps, as eight times the midpoint's move
+        // over the edge's length: the sine of twice the normals' tilt for a
+        // symmetric arc. The tilt alone would cut a cube whose normals lean
+        // across its corners into a grid for a bow the caps had already
+        // shrunk to nothing visible.
         iHipolyArray<F64> bulge;
         bulge.resize(nfe);
         for (U32 i = 0; i < nfe; i++)
         {
             wlo[i] = clampd(wlo[i], -cap[i], cap[i]);
             whi[i] = clampd(whi[i], -cap[i], cap[i]);
-            bulge[i] = (fabs(wlo[i]) + fabs(whi[i])) / dmax(L[i], 1e-9);
+            bulge[i] = len(add(scale(Nlo[i], wlo[i]), scale(Nhi[i], whi[i]))) / dmax(L[i], 1e-9);
         }
         // The face-edge that bends each edge the most wins; the first in
         // face order on a tie.
@@ -953,6 +978,7 @@ namespace
         iHipolyArray<U8> skinI;
         iHipolyArray<U32> tris;     // *4
         iHipolyArray<U32> parent;
+        iHipolyArray<U8> flat;
         iHipolyArray<F32> cbary;    // *9
         U32 nv() const { return pos.n / 3; }
     };
@@ -1139,6 +1165,7 @@ namespace
         }
         b.tris.push(n0); b.tris.push(n0 + 1); b.tris.push(n0 + 2); b.tris.push(mat);
         b.parent.push(local);
+        b.flat.push(1);
         static const F32 eye[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
         for (U32 k = 0; k < 9; k++)
         {
@@ -1285,6 +1312,7 @@ namespace
         U32 ntIn = b.tris.n / 4;
         r.tris.clear();
         r.parent.clear();
+        r.flat.clear();
         r.cbary.clear();
         U32 folded = 0;
         for (U32 t = 0; t < ntIn; t++)
@@ -1315,6 +1343,7 @@ namespace
             }
             r.tris.push(a); r.tris.push(bb); r.tris.push(c); r.tris.push(b.tris[t * 4 + 3]);
             r.parent.push(pf);
+            r.flat.push(b.flat[t]);
             for (U32 k = 0; k < 9; k++)
             {
                 r.cbary.push(b.cbary[t * 9 + k]);
@@ -1352,6 +1381,7 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
     d.fgeom.resize(ntTot);
     d.fmat.resize(ntTot);
     d.flocal.resize(ntTot);
+    d.frozen.resizeZero(ntTot);
     d.nt = ntTot;
     {
         U32 f = 0;
@@ -1376,6 +1406,7 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
                 d.fgeom[f] = g;
                 d.fmat[f] = G.tris[t * 4 + 3];
                 d.flocal[f] = t;
+                d.frozen[f] = G.frozen ? G.frozen[t] : 0;
             }
         }
     }
@@ -1658,6 +1689,7 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
             }
             b.tris.push(d.fmat[f]);
             b.parent.push(d.flocal[f]);
+            b.flat.push(0);
             for (U32 c = 0; c < 3; c++)
             {
                 for (U32 k = 0; k < 3; k++)
