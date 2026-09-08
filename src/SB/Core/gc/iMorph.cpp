@@ -63,7 +63,7 @@ static void MorphCommon(RpAtomic* model, RwMatrixTag* mat, S16** v_array, S16* w
 
         s_vTemp = (F32*)((char*)dm + 32);
 
-        while ((U32)s_vTemp & 0xF)
+        while ((UPtr)s_vTemp & 0xF)
         {
             s_vTemp++;
         }
@@ -74,7 +74,7 @@ static void MorphCommon(RpAtomic* model, RwMatrixTag* mat, S16** v_array, S16* w
         {
             s_nTemp = (F32*)((char*)s_vTemp + s_numV * sizeof(RwV3d));
 
-            while ((U32)s_nTemp & 0xF)
+            while ((UPtr)s_nTemp & 0xF)
             {
                 s_nTemp++;
             }
@@ -135,7 +135,7 @@ static void MorphCommon(RpAtomic* model, RwMatrixTag* mat, S16** v_array, S16* w
 
             s_alloc = s_vTemp;
 
-            while ((U32)s_vTemp & 0xF)
+            while ((UPtr)s_vTemp & 0xF)
             {
                 s_vTemp++;
             }
@@ -156,7 +156,7 @@ static void MorphCommon(RpAtomic* model, RwMatrixTag* mat, S16** v_array, S16* w
                     s_alloc = s_nTemp;
                 }
 
-                while ((U32)s_nTemp & 0xF)
+                while ((UPtr)s_nTemp & 0xF)
                 {
                     s_nTemp++;
                 }
