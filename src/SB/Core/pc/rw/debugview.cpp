@@ -7,6 +7,8 @@
 
 #include "iDebugView.h"
 
+#include "backend.h"
+
 #include <stdio.h>
 
 // Pushed down by iSystem.cpp. Outside the backend arms because the setter is.
@@ -48,7 +50,7 @@ static void drawQuad(F32 x, F32 y, F32 w, F32 h, rw::gl3::Shader* shader, U8 gre
         F32 u = (i & 2) ? 1.0f : 0.0f;
         F32 v = (i & 1) ? 1.0f : 0.0f;
 
-        // No half-pixel shift: RWHALFPIXEL is a D3D9 rule and this arm is GL3.
+        // No half-pixel shift: that is a D3D9 rule and this arm is GL3.
         vx[i].x = x + u * w;
         vx[i].y = y + v * h;
         vx[i].z = z;
@@ -97,7 +99,10 @@ static void drawDepthInset(RwCamera* cam, F32 x, F32 y, F32 w, F32 h, F32 mode)
 
 void iDebugViewRender(RwCamera* cam)
 {
-    if (sMode == IDEBUGVIEW_OFF || sFailed || cam == NULL)
+    // GL3 only, and only when GL3 is the backend that opened: the inset is a
+    // GLSL shader sampling the virtual screen's depth attachment, and there is
+    // no D3D equivalent written.
+    if (!iBackendIsGL3() || sMode == IDEBUGVIEW_OFF || sFailed || cam == NULL)
     {
         return;
     }
@@ -113,10 +118,10 @@ void iDebugViewRender(RwCamera* cam)
 
     if (sShader == NULL)
     {
-        const char* vs[] = { rw::gl3::shaderDecl, rw::gl3::header_vert_src,
-                             rw::gl3::im2d_vert_src, NULL };
-        const char* fs[] = { rw::gl3::shaderDecl, rw::gl3::header_frag_src,
-                             debug_depth_frag_src, NULL };
+        const char* vs[] = { rw::gl3::shaderDecl, rw::gl3::header_vert_src, rw::gl3::im2d_vert_src,
+                             NULL };
+        const char* fs[] = { rw::gl3::shaderDecl, rw::gl3::header_frag_src, debug_depth_frag_src,
+                             NULL };
 
         sShader = rw::gl3::Shader::create(vs, fs);
         if (sShader == NULL)
@@ -185,7 +190,7 @@ void iDebugViewSetMode(S32 mode)
 
 void iDebugViewRegisterShaderUniforms(void)
 {
-#if defined(RW_GL3)
+#ifdef RW_GL3
     sDepthUniform = rw::gl3::registerUniform("u_debugDepth", rw::gl3::UNIFORM_VEC4);
 #endif
 }

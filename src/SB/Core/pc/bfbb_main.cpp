@@ -491,9 +491,17 @@ namespace
 
 namespace
 {
-    // librw exports exactly one of these as a public compile definition, and
-    // CMakeLists.txt explains why every target of the port has to see it.
-#if defined(RW_D3D9)
+    // What is BUILT IN, not what is running: this banner is printed from a
+    // static constructor, before config.ini has been read, so video.backend has
+    // not been answered yet. RwEngineStart prints the one that opened.
+    //
+    // librw exports these as public compile definitions, and CMakeLists.txt
+    // explains why every target of the port has to see them.
+#if defined(RW_D3D9) && defined(RW_GL3)
+    const char* const kRenderBackend = "D3D9 and OpenGL";
+#elif defined(RW_D3D11) && defined(RW_GL3)
+    const char* const kRenderBackend = "D3D11 and OpenGL";
+#elif defined(RW_D3D9)
     const char* const kRenderBackend = "D3D9";
 #elif defined(RW_D3D11)
     const char* const kRenderBackend = "D3D11";
