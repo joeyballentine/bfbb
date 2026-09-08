@@ -40,9 +40,15 @@ cmake -S . -B build-pc -G Ninja && cmake --build build-pc && ./build-pc/pc_selft
 python tools/pcprogress.py --m32
 ```
 
-Both build on Linux and on Windows. The OS half of the layer is behind
+Windows, Linux and macOS. The OS half of the layer is behind
 `src/SB/Core/pc/iHost.h`, with one backend per platform; `pcprogress.py --host`
 checks that the two stay in step.
+
+Off Windows the render backend defaults to GL3 and the build is 64-bit, both
+because there is nothing else available -- see section 5(f). Linux wants SDL's
+build dependencies installed first; the `unix` job in
+`.github/workflows/pc-port.yml` carries the list that a 24.04 runner actually
+needs.
 
 ---
 
@@ -434,9 +440,26 @@ semantics, which is the part worth reading and is identical everywhere. Run
 implement everything the header declares, and nothing else would notice a
 divergence, because only one backend is ever built.
 
-`iHostPosix.cpp` is the original code moved rather than rewritten, and has not
-been compiled since the move -- there is no Linux toolchain on the machine this
-was done on. Build it there once before trusting it.
+`iHostPosix.cpp` builds and runs on Linux, and the `unix` job in
+`.github/workflows/pc-port.yml` is what keeps it that way -- it compiles the
+POSIX backend on Linux and macOS, on the NULL and GL3 render backends, because
+neither Windows job touches that file and it went years without being compiled
+at all.
+
+macOS is COMPILED but not yet RUN. The differences from Linux are four, all
+inside `iHostPosix.cpp` behind `__APPLE__`: no `clock_nanosleep`, no
+`MAP_32BIT`, no `/proc/self/exe`, and `~/Library/Application Support` rather
+than XDG. The one to distrust is the second. `iHostReserveLow` gets its low
+arena by asking `mmap` for specific low addresses, and on macOS that only works
+because the executable is linked with `-pagezero_size 0x4000` -- the default
+`__PAGEZERO` is 4 GB wide, which is exactly the range `gMemInfo.DRAM.addr` can
+hold. See `bfbb_host_link_options` in `CMakeLists.txt`. If the port starts and
+dies in `iMemInit` on a Mac, that link option is the first thing to check.
+
+Off Windows the build is 64-bit and there is no choice about it: macOS has no
+32-bit runtime, and a 32-bit Linux build would need a multilib copy of every
+library SDL links. So everything in `docs/PCPORT.md` under "Asset caveats"
+applies to every Linux and macOS build.
 
 ## 6. Conventions that are not negotiable
 
