@@ -14,6 +14,7 @@ SHADERS = [
     ("glow_bright.frag", "glow_bright_frag_src", "glow_bright_gl.inc"),
     ("glow_blur.frag", "glow_blur_frag_src", "glow_blur_gl.inc"),
     ("distort.frag", "distort_frag_src", "distort_gl.inc"),
+    ("debug_depth.frag", "debug_depth_frag_src", "debug_depth_gl.inc"),
 ]
 
 

@@ -43,6 +43,7 @@
 
 #include "rw.h"
 
+#include "iDebugView.h"
 #include "iDistort.h"
 #include "iGlow.h"
 #include "iScreen.h"
@@ -273,6 +274,7 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     // The notes on the definitions have the rest.
     iGlowRegisterShaderUniforms();
     iDistortRegisterShaderUniforms();
+    iDebugViewRegisterShaderUniforms();
 
 #if defined(RW_D3D9) || defined(RW_D3D8)
     rw::EngineOpenParams params;

@@ -102,6 +102,11 @@ const iConfigSetting kConfigSettings[] = {
       "Character shadow texture size: auto (half the render height, rounded up\n"
       "; to a power of two), or a power of two from 64 to 4096.",
       ICONFIG_ENUM, "auto|64|128|256|512|1024|2048|4096", kNone, kNone },
+    { "debug", "view", "off",
+      "Draw a picture of the renderer's own buffers in the corner: depth (near\n"
+      "; white to far black), bands (the same distance in contour bands), both.\n"
+      "; OpenGL only.",
+      ICONFIG_ENUM, "off|depth|bands|both", kNone, kNone },
     { "xbox", "glow", "on", "The full-screen glow, the Xbox version's bloom.", ICONFIG_BOOL, NULL,
       kNone, kNone },
     { "xbox", "distortion", "on", "The Cruise Bubble's screen warp.", ICONFIG_BOOL, NULL, kNone,
