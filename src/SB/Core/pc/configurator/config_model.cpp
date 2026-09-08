@@ -32,6 +32,11 @@ namespace
 
         Value* values;
 
+        // Per setting, the index of the setting it is a detail of, or -1.
+        // Resolved once rather than searched per row, since a front end asks
+        // for it every time it lays out a section.
+        S32* groups;
+
         const char** sectionNames;
         S32 sectionCount;
 
@@ -62,6 +67,34 @@ namespace
             if (!seen)
             {
                 gModel.sectionNames[gModel.sectionCount++] = kConfigSettings[i].section;
+            }
+        }
+    }
+
+    // Turn each row's `group` name into the index it refers to. A name that
+    // does not resolve inside the same section leaves the setting ungrouped --
+    // a wrong table entry hides a setting otherwise, and a setting shown in
+    // the wrong place is easier to notice than one that is not shown at all.
+    void resolveGroups()
+    {
+        for (S32 i = 0; i < kConfigSettingCount; i++)
+        {
+            gModel.groups[i] = -1;
+
+            const char* group = kConfigSettings[i].group;
+            if (group == NULL)
+            {
+                continue;
+            }
+
+            for (S32 j = 0; j < kConfigSettingCount; j++)
+            {
+                if (j != i && strcmp(kConfigSettings[j].section, kConfigSettings[i].section) == 0 &&
+                    strcmp(kConfigSettings[j].name, group) == 0)
+                {
+                    gModel.groups[i] = j;
+                    break;
+                }
             }
         }
     }
@@ -161,8 +194,9 @@ bool ConfigModelOpen(const char* fromCommandLine, char* why, size_t whySize)
     // cannot walk off the end of either array. The section count is bounded by
     // the setting count, one section per setting being the worst case.
     gModel.values = (Value*)calloc((size_t)kConfigSettingCount, sizeof(Value));
+    gModel.groups = (S32*)calloc((size_t)kConfigSettingCount, sizeof(S32));
     gModel.sectionNames = (const char**)calloc((size_t)kConfigSettingCount, sizeof(const char*));
-    if (gModel.values == NULL || gModel.sectionNames == NULL)
+    if (gModel.values == NULL || gModel.groups == NULL || gModel.sectionNames == NULL)
     {
         snprintf(why, whySize, "Out of memory.");
         ConfigModelClose();
@@ -194,6 +228,7 @@ bool ConfigModelOpen(const char* fromCommandLine, char* why, size_t whySize)
     }
 
     collectSections();
+    resolveGroups();
     loadValues();
     return true;
 }
@@ -205,6 +240,7 @@ void ConfigModelClose()
         iConfigEditClose(gModel.file);
     }
     free(gModel.values);
+    free(gModel.groups);
     free((void*)gModel.sectionNames);
     memset(&gModel, 0, sizeof(gModel));
 }
@@ -232,6 +268,11 @@ S32 ConfigModelSectionCount()
 const char* ConfigModelSectionName(S32 section)
 {
     return gModel.sectionNames[section];
+}
+
+S32 ConfigModelGroupOf(S32 setting)
+{
+    return gModel.groups[setting];
 }
 
 S32 ConfigModelSectionOf(S32 setting)

@@ -17,6 +17,7 @@
 
 #include <wx/dirdlg.h>
 #include <wx/filedlg.h>
+#include <wx/collpane.h>
 #include <wx/gbsizer.h>
 #include <wx/listbox.h>
 #include <wx/scrolwin.h>
@@ -35,6 +36,9 @@ namespace
     const int kLabelWidth = 150;
     const int kValueWidth = 200;
     const int kPathWidth = 320;
+
+    // How far a group's settings sit in from the ones they hang off.
+    const int kIndent = 16;
 
     // Ids for the window's own controls. The rows are built at run time, so a
     // row's controls are numbered from a base and the row is recovered by
@@ -72,7 +76,13 @@ namespace
         wxStaticText* description;
         wxString descriptionText;
 
-        Row() : setting(0), check(NULL), choice(NULL), entry(NULL), description(NULL)
+        // How far in from the pane's left edge this row sits. Zero for a row
+        // in the section itself and one indent for a row inside a group's
+        // collapsible pane, and it is here because the description has to wrap
+        // to what is left of the width rather than all of it.
+        int indent;
+
+        Row() : setting(0), check(NULL), choice(NULL), entry(NULL), description(NULL), indent(0)
         {
         }
     };
@@ -83,9 +93,12 @@ namespace
         ConfigFrame();
 
     private:
+        void AddRow(wxWindow* parent, wxGridBagSizer* grid, int& line, S32 setting, int indent);
+        int GroupSize(S32 master) const;
         void BuildRows();
         void ShowSection(int which);
         bool RewrapDescriptions();
+        int WrapWidthOf(const Row& row) const;
         void RefreshRow(Row& row);
         void RefreshApply();
 
@@ -110,6 +123,7 @@ namespace
         void OnCancel(wxCommandEvent& event);
         void OnClose(wxCloseEvent& event);
         void OnPaneSize(wxSizeEvent& event);
+        void OnGroupToggled(wxCollapsiblePaneEvent& event);
 
         wxListBox* mSections;
         wxScrolled<wxPanel>* mPane;
@@ -212,14 +226,150 @@ namespace
         mPane->Bind(wxEVT_COMBOBOX, &ConfigFrame::OnValueChanged, this);
         mPane->Bind(wxEVT_TEXT, &ConfigFrame::OnValueChanged, this);
         mPane->Bind(wxEVT_BUTTON, &ConfigFrame::OnBrowse, this);
+        mPane->Bind(wxEVT_COLLAPSIBLEPANE_CHANGED, &ConfigFrame::OnGroupToggled, this);
 
         BuildRows();
         RefreshApply();
     }
 
+    // Build one setting's controls into `grid`, which belongs to `parent`, and
+    // advance `line` past the two grid rows it takes: the label and control,
+    // then the description under them.
+    //
+    // Shared by the section's own grid and by each group's, so a setting looks
+    // the same whether or not it is folded away under another.
+    void ConfigFrame::AddRow(wxWindow* parent, wxGridBagSizer* grid, int& line, S32 i, int indent)
+    {
+        const iConfigSetting* s = ConfigModelSetting(i);
+
+        Row row;
+        row.setting = i;
+        row.indent = indent;
+
+        const int id = kIdRowBase + (int)mRows.size() * kIdsPerRow;
+        const wxString value = ConfigModelText(i);
+
+        const bool wide =
+            (s->kind == ICONFIG_FOLDER || s->kind == ICONFIG_FONT || s->kind == ICONFIG_STRING);
+        const wxSize controlSize = FromDIP(wxSize(wide ? kPathWidth : kValueWidth, -1));
+
+        wxWindow* control = NULL;
+
+        if (s->kind == ICONFIG_BOOL)
+        {
+            row.check = new wxCheckBox(parent, id + kIdRowValue, "on");
+            row.check->SetValue(value.IsSameAs("on", false) || value.IsSameAs("true", false) ||
+                                value.IsSameAs("yes", false) || value.IsSameAs("1", false));
+            control = row.check;
+        }
+        else if (s->kind == ICONFIG_ENUM)
+        {
+            // An enum is a list and nothing else, so its control cannot be
+            // typed into.
+            wxArrayString words;
+            char word[64];
+            for (S32 c = 0; ConfigModelChoiceAt(s->choices, c, word, sizeof(word)); c++)
+            {
+                words.Add(word);
+            }
+
+            row.choice =
+                new wxChoice(parent, id + kIdRowValue, wxDefaultPosition, controlSize, words);
+            row.choice->SetStringSelection(value);
+
+            // A file holding a word this build does not know keeps it. The
+            // list has no entry to select, and quietly leaving the control on
+            // the first one would write that word over the file's on the next
+            // save without anybody asking for it.
+            if (row.choice->GetSelection() == wxNOT_FOUND)
+            {
+                row.choice->Append(value);
+                row.choice->SetStringSelection(value);
+            }
+
+            control = row.choice;
+        }
+        else if (ConfigModelWantsCombo(s))
+        {
+            // Every other kind with choices takes a value BESIDES them --
+            // `framerate` is a number or the word "display" -- so the box stays
+            // typable and the list is a shortcut to the words.
+            wxArrayString words;
+            char word[64];
+            for (S32 c = 0; ConfigModelChoiceAt(s->choices, c, word, sizeof(word)); c++)
+            {
+                words.Add(word);
+            }
+
+            wxComboBox* combo = new wxComboBox(parent, id + kIdRowValue, value, wxDefaultPosition,
+                                               controlSize, words);
+            row.entry = combo;
+            control = combo;
+        }
+        else
+        {
+            wxTextCtrl* text =
+                new wxTextCtrl(parent, id + kIdRowValue, value, wxDefaultPosition, controlSize);
+            row.entry = text;
+            control = text;
+        }
+
+        wxStaticText* label = new wxStaticText(parent, wxID_ANY, s->name);
+        label->SetMinSize(FromDIP(wxSize(kLabelWidth, -1)));
+
+        grid->Add(label, wxGBPosition(line, 0), wxGBSpan(1, 1), wxALIGN_CENTER_VERTICAL);
+
+        // wxEXPAND alone, and not with wxALIGN_CENTER_VERTICAL beside it: wx
+        // asserts on a sizer item that asks to fill its cell and to be aligned
+        // within it, because the two mean opposite things. The cell is one
+        // control tall, so filling it centres it anyway.
+        grid->Add(control, wxGBPosition(line, 1), wxGBSpan(1, 1), wxEXPAND);
+
+        if (ConfigModelWantsBrowse(s))
+        {
+            wxButton* browse = new wxButton(parent, id + kIdRowBrowse, "Browse...",
+                                            wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
+            grid->Add(browse, wxGBPosition(line, 2), wxGBSpan(1, 1), wxALIGN_CENTER_VERTICAL);
+        }
+
+        line++;
+
+        char text[768];
+        ConfigModelDescribe(i, text, sizeof(text));
+
+        row.descriptionText = text;
+        row.description = new wxStaticText(parent, wxID_ANY, row.descriptionText);
+        row.description->SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT));
+
+        grid->Add(row.description, wxGBPosition(line, 0), wxGBSpan(1, 3), wxEXPAND | wxBOTTOM,
+                  FromDIP(10));
+        line++;
+
+        mRows.push_back(row);
+    }
+
+    // How many settings in this section hang off `master`.
+    int ConfigFrame::GroupSize(S32 master) const
+    {
+        int n = 0;
+        for (S32 i = 0; i < ConfigModelSettingCount(); i++)
+        {
+            if (ConfigModelGroupOf(i) == master)
+            {
+                n++;
+            }
+        }
+        return n;
+    }
+
     // Create the current section's controls. Called on a section change and
     // nowhere else -- a resize is RewrapDescriptions and a sizer Layout, which
     // is the whole reason this is a sizer rather than arithmetic.
+    //
+    // A setting that other settings hang off gets a collapsible pane under it
+    // holding them, closed. They are the numbers that shape what the master
+    // turns on, and they are worth having without being worth reading past
+    // every time.
     void ConfigFrame::BuildRows()
     {
         mPane->Freeze();
@@ -239,110 +389,45 @@ namespace
                 continue;
             }
 
-            Row row;
-            row.setting = i;
-
-            const int id = kIdRowBase + (int)mRows.size() * kIdsPerRow;
-            const wxString value = ConfigModelText(i);
-
-            const bool wide =
-                (s->kind == ICONFIG_FOLDER || s->kind == ICONFIG_FONT || s->kind == ICONFIG_STRING);
-            const wxSize controlSize = FromDIP(wxSize(wide ? kPathWidth : kValueWidth, -1));
-
-            wxWindow* control = NULL;
-
-            if (s->kind == ICONFIG_BOOL)
+            // Details are drawn by the master they belong to, below.
+            if (ConfigModelGroupOf(i) >= 0)
             {
-                row.check = new wxCheckBox(mPane, id + kIdRowValue, "on");
-                row.check->SetValue(value.IsSameAs("on", false) || value.IsSameAs("true", false) ||
-                                    value.IsSameAs("yes", false) || value.IsSameAs("1", false));
-                control = row.check;
-            }
-            else if (s->kind == ICONFIG_ENUM)
-            {
-                // An enum is a list and nothing else, so its control cannot be
-                // typed into.
-                wxArrayString words;
-                char word[64];
-                for (S32 c = 0; ConfigModelChoiceAt(s->choices, c, word, sizeof(word)); c++)
-                {
-                    words.Add(word);
-                }
-
-                row.choice =
-                    new wxChoice(mPane, id + kIdRowValue, wxDefaultPosition, controlSize, words);
-                row.choice->SetStringSelection(value);
-
-                // A file holding a word this build does not know keeps it. The
-                // list has no entry to select, and quietly leaving the control
-                // on the first one would write that word over the file's on the
-                // next save without anybody asking for it.
-                if (row.choice->GetSelection() == wxNOT_FOUND)
-                {
-                    row.choice->Append(value);
-                    row.choice->SetStringSelection(value);
-                }
-
-                control = row.choice;
-            }
-            else if (ConfigModelWantsCombo(s))
-            {
-                // Every other kind with choices takes a value BESIDES them --
-                // `framerate` is a number or the word "display" -- so the box
-                // stays typable and the list is a shortcut to the words.
-                wxArrayString words;
-                char word[64];
-                for (S32 c = 0; ConfigModelChoiceAt(s->choices, c, word, sizeof(word)); c++)
-                {
-                    words.Add(word);
-                }
-
-                wxComboBox* combo = new wxComboBox(mPane, id + kIdRowValue, value,
-                                                   wxDefaultPosition, controlSize, words);
-                row.entry = combo;
-                control = combo;
-            }
-            else
-            {
-                wxTextCtrl* text =
-                    new wxTextCtrl(mPane, id + kIdRowValue, value, wxDefaultPosition, controlSize);
-                row.entry = text;
-                control = text;
+                continue;
             }
 
-            wxStaticText* label = new wxStaticText(mPane, wxID_ANY, s->name);
-            label->SetMinSize(FromDIP(wxSize(kLabelWidth, -1)));
+            AddRow(mPane, mGrid, line, i, 0);
 
-            mGrid->Add(label, wxGBPosition(line, 0), wxGBSpan(1, 1), wxALIGN_CENTER_VERTICAL);
-
-            // wxEXPAND alone, and not with wxALIGN_CENTER_VERTICAL beside it:
-            // wx asserts on a sizer item that asks to fill its cell and to be
-            // aligned within it, because the two mean opposite things. The
-            // cell is one control tall, so filling it centres it anyway.
-            mGrid->Add(control, wxGBPosition(line, 1), wxGBSpan(1, 1), wxEXPAND);
-
-            if (ConfigModelWantsBrowse(s))
+            const int children = GroupSize(i);
+            if (children == 0)
             {
-                wxButton* browse = new wxButton(mPane, id + kIdRowBrowse, "Browse...",
-                                                wxDefaultPosition, wxDefaultSize, wxBU_EXACTFIT);
-                mGrid->Add(browse, wxGBPosition(line, 2), wxGBSpan(1, 1), wxALIGN_CENTER_VERTICAL);
+                continue;
             }
 
+            wxCollapsiblePane* group =
+                new wxCollapsiblePane(mPane, wxID_ANY, wxString::Format("Details (%d)", children));
+            mGrid->Add(group, wxGBPosition(line, 0), wxGBSpan(1, 3), wxEXPAND | wxLEFT | wxBOTTOM,
+                       FromDIP(kIndent));
             line++;
 
-            char text[768];
-            ConfigModelDescribe(i, text, sizeof(text));
+            // GetPane() is the window the contents go in, not the pane itself.
+            // Adding them to the pane draws them over its own header.
+            wxWindow* inner = group->GetPane();
 
-            row.descriptionText = text;
-            row.description = new wxStaticText(mPane, wxID_ANY, row.descriptionText);
-            row.description->SetForegroundColour(
-                wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT));
+            wxGridBagSizer* innerGrid = new wxGridBagSizer(FromDIP(4), FromDIP(8));
+            innerGrid->AddGrowableCol(1, 1);
 
-            mGrid->Add(row.description, wxGBPosition(line, 0), wxGBSpan(1, 3), wxEXPAND | wxBOTTOM,
-                       FromDIP(10));
-            line++;
+            int innerLine = 0;
+            for (S32 j = 0; j < ConfigModelSettingCount(); j++)
+            {
+                if (ConfigModelGroupOf(j) == i)
+                {
+                    AddRow(inner, innerGrid, innerLine, j, FromDIP(kIndent));
+                }
+            }
 
-            mRows.push_back(row);
+            wxBoxSizer* innerBorder = new wxBoxSizer(wxVERTICAL);
+            innerBorder->Add(innerGrid, wxSizerFlags(1).Expand().Border(wxTOP, FromDIP(6)));
+            inner->SetSizer(innerBorder);
         }
 
         mPane->Scroll(0, 0);
@@ -370,10 +455,20 @@ namespace
         for (size_t i = 0; i < mRows.size(); i++)
         {
             mRows[i].description->SetLabel(mRows[i].descriptionText);
-            mRows[i].description->Wrap(width);
+            mRows[i].description->Wrap(WrapWidthOf(mRows[i]));
         }
 
         return true;
+    }
+
+    // The width one row's description wraps inside: what is left of the pane
+    // after its own indent. Measured off the pane rather than off the window
+    // the row lives in, because a row inside a closed group has no width at
+    // all and would wrap to one word per line the moment the group opened.
+    int ConfigFrame::WrapWidthOf(const Row& row) const
+    {
+        const int width = mWrappedAt - row.indent;
+        return width > FromDIP(120) ? width : FromDIP(120);
     }
 
     // The "(default: x)" line under a row follows what is in the control, so
@@ -395,7 +490,7 @@ namespace
         row.description->SetLabel(row.descriptionText);
         if (mWrappedAt > 0)
         {
-            row.description->Wrap(mWrappedAt);
+            row.description->Wrap(WrapWidthOf(row));
         }
 
         mPane->Layout();
@@ -642,6 +737,16 @@ namespace
             mPane->FitInside();
         }
 
+        event.Skip();
+    }
+
+    // Opening or closing a group changes how tall the contents are, and the
+    // scrolled pane's virtual size is what its scrollbar is drawn from -- so
+    // without this the pane opens a group it will not scroll down to.
+    void ConfigFrame::OnGroupToggled(wxCollapsiblePaneEvent& event)
+    {
+        mPane->Layout();
+        mPane->FitInside();
         event.Skip();
     }
 

@@ -199,39 +199,40 @@ const iConfigSetting kConfigSettings[] = {
     { "experimental", "hipoly_factor", "1.0",
       "How far the smoothing rounds things: scales every bulge and the\n"
       "; fillet. 2.0 rounds twice as far, 0 rounds nothing.",
-      ICONFIG_FLOAT, NULL, 0.0f, 8.0f },
+      ICONFIG_FLOAT, NULL, 0.0f, 8.0f, "hipoly_assets" },
     { "experimental", "hipoly_target", "1.0",
       "Edge length the level is cut to, in units. Smaller is finer and slower.", ICONFIG_FLOAT,
-      NULL, 0.05f, 8.0f },
+      NULL, 0.05f, 8.0f, "hipoly_assets" },
     { "experimental", "hipoly_max_level", "6", "Most segments an edge is cut into.", ICONFIG_INT,
-      NULL, 1.0f, 15.0f },
+      NULL, 1.0f, 15.0f, "hipoly_assets" },
     { "experimental", "hipoly_passes", "2",
       "Times the smoothing runs over a model, each pass over the last pass's\n"
       "; mesh. More is smoother and slower to load. The level gets one pass.",
-      ICONFIG_INT, NULL, 1.0f, 4.0f },
+      ICONFIG_INT, NULL, 1.0f, 4.0f, "hipoly_assets" },
     { "experimental", "hipoly_crease", "60",
       "Degrees. Built surfaces folded sharper than this keep the fold.", ICONFIG_FLOAT, NULL, 0.0f,
-      180.0f },
+      180.0f, "hipoly_assets" },
     { "experimental", "hipoly_natural_crease", "100",
-      "The same for rock, sand, kelp and other landscape.", ICONFIG_FLOAT, NULL, 0.0f, 180.0f },
+      "The same for rock, sand, kelp and other landscape.", ICONFIG_FLOAT, NULL, 0.0f, 180.0f,
+      "hipoly_assets" },
     { "experimental", "hipoly_fillet", "0",
       "Units. How far from a sharp landscape fold the rounding reaches; 0 is off.\n"
       "; 1.5 rounds the rock's folds over, at the cost of some flattened detail.",
-      ICONFIG_FLOAT, NULL, 0.0f, 10.0f },
+      ICONFIG_FLOAT, NULL, 0.0f, 10.0f, "hipoly_assets" },
     { "experimental", "hipoly_model_target", "0.25", "Edge length models are cut to, in units.",
-      ICONFIG_FLOAT, NULL, 0.02f, 4.0f },
+      ICONFIG_FLOAT, NULL, 0.02f, 4.0f, "hipoly_assets" },
     { "experimental", "hipoly_inset", "0.75",
       "How much of the rounding cuts corners in rather than bowing faces\n"
       "; out, on the level and its models: 0 bows out only, 1 cuts in only.",
-      ICONFIG_FLOAT, NULL, 0.0f, 1.0f },
+      ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "hipoly_assets" },
     { "experimental", "hipoly_flat_floors", "covered",
       "Which floors and ceilings keep their shipped height: covered (those\n"
       "; with a decal or another face lying on them), all, or off, which\n"
       "; lets every gentle face bow, through whatever lies on it.",
-      ICONFIG_ENUM, "covered|all|off", kNone, kNone },
+      ICONFIG_ENUM, "covered|all|off", kNone, kNone, "hipoly_assets" },
     { "experimental", "hipoly_budget", "600000",
       "Most triangles a level's world may have; the cut coarsens past it.", ICONFIG_INT, NULL,
-      10000.0f, 4000000.0f },
+      10000.0f, 4000000.0f, "hipoly_assets" },
 };
 
 const S32 kConfigSettingCount = (S32)(sizeof(kConfigSettings) / sizeof(kConfigSettings[0]));

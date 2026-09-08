@@ -38,6 +38,16 @@ S32 ConfigModelSectionCount();
 const char* ConfigModelSectionName(S32 section);
 S32 ConfigModelSectionOf(S32 setting);
 
+// The setting this one is a detail of, or -1 for one that stands on its own.
+// A front end folds a master's details away under it rather than listing them
+// beside it.
+//
+// Resolved once when the file is opened, so a front end laying out a section
+// does not search the table per row. A `group` naming a setting that is not in
+// the same section is treated as no group at all: the table is wrong, and the
+// setting is better shown in the wrong place than not shown.
+S32 ConfigModelGroupOf(S32 setting);
+
 // What the control should show: the file's value, or the table's default for a
 // setting the file does not mention -- which is what the game would run with.
 const char* ConfigModelText(S32 setting);

@@ -36,9 +36,24 @@ So it runs before the game does, not inside it.
 
 `kConfigSettings` in `../iConfigTable.cpp`, and nowhere else. That table already
 held each setting's default and its comment; it now also holds its kind, the
-words it accepts and its numeric range. Adding a row there gives it a control
-here, with its description and validation, and nothing in the front end has to
-be told about it.
+words it accepts, its numeric range, and the setting it is a detail of. Adding a
+row there gives it a control here, with its description and validation, and
+nothing in the front end has to be told about it.
+
+## Groups
+
+A row whose `group` names another setting in the same section is drawn inside a
+collapsible pane under it rather than beside it, closed. `[experimental]` is
+what this is for: `hipoly_assets` is a question someone answers, and the eleven
+numbers that shape the smoothing are worth having without being worth reading
+past every time.
+
+It groups and it does not gate. The details stay editable with the master
+turned off, because setting them up before switching it on is a reasonable
+thing to do.
+
+A group is one level deep. Nothing draws a group inside a group, and
+`pc_selftest` fails if the table ever asks for one.
 
 The table is split out of `iConfig.cpp` so this program does not link it.
 `iConfig.cpp` reaches `iPadBind.cpp` for the two binding sections, and that

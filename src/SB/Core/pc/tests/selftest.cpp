@@ -921,6 +921,61 @@ static void test_config_model()
         check(false, "the model reopens the file it wrote");
     }
 
+    // Grouping. Every `group` in the table has to name a setting that is
+    // really there, in the same section: one that does not resolves to -1 and
+    // the setting quietly stops being folded where it was meant to be, which
+    // is the kind of thing only a check notices.
+    if (ConfigModelOpen(path, why, sizeof(why)))
+    {
+        S32 grouped = 0;
+        S32 unresolved = 0;
+        S32 strays = 0;
+        S32 nested = 0;
+
+        for (S32 i = 0; i < ConfigModelSettingCount(); i++)
+        {
+            const iConfigSetting* s = ConfigModelSetting(i);
+            const S32 master = ConfigModelGroupOf(i);
+
+            if (s->group == NULL)
+            {
+                if (master >= 0)
+                {
+                    strays++;
+                }
+                continue;
+            }
+
+            grouped++;
+
+            if (master < 0)
+            {
+                printf("  ! %s.%s hangs off \"%s\", which is not in that section\n", s->section,
+                       s->name, s->group);
+                unresolved++;
+                continue;
+            }
+
+            // A master that is itself a detail would be a group inside a
+            // group, which nothing draws.
+            if (ConfigModelGroupOf(master) >= 0)
+            {
+                nested++;
+            }
+        }
+
+        check(grouped > 0, "some settings are grouped under another");
+        check(unresolved == 0, "and every group names a setting in its own section");
+        check(strays == 0, "an ungrouped setting reports no master");
+        check(nested == 0, "and no group hangs off another group");
+
+        ConfigModelClose();
+    }
+    else
+    {
+        check(false, "the model reopens for the grouping check");
+    }
+
     // A file that is not there is written at the defaults, as the game does
     // it, rather than being an error.
     {

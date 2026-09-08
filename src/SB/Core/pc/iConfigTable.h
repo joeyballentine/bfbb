@@ -80,6 +80,20 @@ struct iConfigSetting
     // into `fov` on purpose is entitled to it.
     F32 min;
     F32 max;
+
+    // The setting in this section that this one is a detail of, by name, or
+    // NULL for one that stands on its own. A front end folds these away under
+    // it rather than listing them beside it: `hipoly_assets` is a question
+    // someone answers, and the twelve numbers that shape the smoothing are not
+    // worth the space until they have.
+    //
+    // LAST in the struct on purpose. Every row that predates it leaves it out
+    // and gets NULL, so adding this cost twelve lines rather than fifty-three.
+    //
+    // It groups, and it does not gate: the details stay editable with the
+    // master turned off, because setting them up before switching it on is a
+    // reasonable thing to do.
+    const char* group;
 };
 
 extern const iConfigSetting kConfigSettings[];
