@@ -3775,12 +3775,20 @@ static void test_snd()
     // powf(2, pitch/12) everywhere it reaches AX. Checked through the clock
     // rather than by reading a number back, because the number the backend
     // holds is the ratio and the thing worth pinning down is that the
-    // conversion happened at all. +12 is an octave, so a 0.1 s sample must be
-    // finished by 0.08 s -- and the same voice at pitch 0 must not be.
+    // conversion happened at all. +12 is an octave, so the 0.1 s sample runs
+    // out at 0.05 s at that pitch and at 0.1 s without it.
     //
     // The commonest value is 0, which converts to 1.0 either way, so a port
     // that forgot the conversion looks correct until the HUD counter reaches
     // 6.5 semitones and plays six and a half times too fast.
+    //
+    // The two passes wait DIFFERENT amounts, and that is deliberate. Both used
+    // to wait 0.08 s, which put the pitch-0 check 20 ms from the end of its own
+    // sample -- less than a loaded CI runner takes to reschedule a sleeping
+    // thread, so it failed intermittently. A voice advances by the samples the
+    // mixer has consumed, so a longer sleep is a voice further along: waiting
+    // less is what gives that check room, and the octave check only wants to be
+    // past an end it is already well clear of.
     for (S32 pass = 0; pass < 2; pass++)
     {
         F32 semitones = (pass == 0) ? 12.0f : 0.0f;
@@ -3797,7 +3805,11 @@ static void test_snd()
         vp->category = (sound_category)0;
         iSndPlay(vp);
 
-        iHostSleepUntilNs(iHostMonotonicNs() + 80000000ULL); // 0.08 s
+        // 0.08 s for the octave, which ran out at 0.05 s; 0.04 s for pitch 0,
+        // which does not run out until 0.1 s.
+        const U64 waitNs = (pass == 0) ? 80000000ULL : 40000000ULL;
+
+        iHostSleepUntilNs(iHostMonotonicNs() + waitNs);
         iSndHostUpdate();
 
         if (pass == 0)
@@ -3808,7 +3820,7 @@ static void test_snd()
         else
         {
             check(iSndIsPlayingByHandle(vp->sndID),
-                  "and the same sample at pitch 0 is still playing then");
+                  "and the same sample at pitch 0 is still going at 0.04 s");
         }
 
         iSndStop(0x4400 + pass);
