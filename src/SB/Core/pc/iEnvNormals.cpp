@@ -177,6 +177,60 @@ struct NormalWork
     NormalHash hash;
 };
 
+// Where one atomic's normals come from, set up once per atomic.
+//
+// **Its own, wherever it has any.** 21 of the 55 levels shipped normals, and on
+// those the artists' set is what the surface was authored with;
+// iEnvNormalsCompare measures the generated ones at 62% to 78% inside 5 degrees
+// of them, so reading the authored set is free accuracy. The generated block is
+// the fallback for the other 34, and for anything hipoly rebuilt.
+//
+// Set up before the vertex loop rather than inside it: the geometry, the frame
+// and the LTM are per atomic, and looking them up per vertex is the same answer
+// forty thousand times.
+struct NormalRead
+{
+    const xVec3* own; // object space, NULL to use the generated block
+    const RwMatrix* ltm; // NULL for identity
+    const xVec3* gen;
+};
+
+static void NormalReadInit(NormalRead* r, const NormalWork* w, S32 a)
+{
+    RpGeometry* geo = RpAtomicGetGeometry(w->atomics[a]);
+    RwFrame* frame = RpAtomicGetFrame(w->atomics[a]);
+
+    r->own = NULL;
+    r->ltm = frame ? RwFrameGetLTM(frame) : NULL;
+    r->gen = &w->out[w->base[a]];
+
+    if (geo != NULL && (geo->flags & rpGEOMETRYNORMALS) && geo->morphTarget[0].normals != NULL)
+    {
+        r->own = (const xVec3*)geo->morphTarget[0].normals;
+    }
+}
+
+static void NormalReadAt(xVec3* n, const NormalRead* r, S32 i)
+{
+    if (r->own == NULL)
+    {
+        Normalize(n, &r->gen[i]);
+        return;
+    }
+
+    if (r->ltm != NULL)
+    {
+        xVec3 world;
+
+        DirToWorld(&world, &r->own[i], r->ltm);
+        Normalize(n, &world);
+        return;
+    }
+
+    Normalize(n, &r->own[i]);
+}
+
+
 static void WorkFree(NormalWork* w)
 {
     if (w->hash.slots) RwFree(w->hash.slots);
@@ -654,6 +708,7 @@ static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
     for (S32 i = 0; i < nc * 3; i++) R[i] = 0.0;
 
     double cc[3] = { 0.0, 0.0, 0.0 };
+    double csum[3] = { 0.0, 0.0, 0.0 };
     S32 used = 0;
     S32 stride = w->totalVerts / kFitSample;
 
@@ -679,11 +734,15 @@ static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
             continue;
         }
 
+        NormalRead nr;
+
+        NormalReadInit(&nr, w, a);
+
         for (S32 i = 0; i < geo->numVertices; i += stride)
         {
             xVec3 n;
 
-            Normalize(&n, &w->out[w->base[a] + i]);
+            NormalReadAt(&n, &nr, i);
 
             for (S32 j = 0; j < kFitBasis; j++)
             {
@@ -704,7 +763,11 @@ static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
                 for (S32 c = 0; c < 3; c++) R[r * 3 + c] += row[r] * lum[c];
             }
 
-            for (S32 c = 0; c < 3; c++) cc[c] += lum[c] * lum[c];
+            for (S32 c = 0; c < 3; c++)
+            {
+                cc[c] += lum[c] * lum[c];
+                csum[c] += lum[c];
+            }
 
             used++;
         }
@@ -884,9 +947,20 @@ static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
 
     rig->valid = TRUE;
 
-    printf("bfbb: world lit by %d light(s), ambient %.2f %.2f %.2f, over %d of %d vertices\n",
+    // How much of the level's colour the rig accounts for, against a level
+    // painted flat at its own mean. `have` is the residual the greedy stopped
+    // at, in the same sum-of-squares terms.
+    double spread = 0.0;
+
+    for (S32 c = 0; c < 3; c++)
+    {
+        spread += cc[c] - csum[c] * csum[c] / used;
+    }
+
+    printf("bfbb: world lit by %d light(s), ambient %.2f %.2f %.2f, explains %.0f%% of the "
+           "paint, over %d of %d vertices\n",
            (int)count, rig->ambient[0], rig->ambient[1], rig->ambient[2],
-           (int)used, (int)w->totalVerts);
+           spread > 0.0 ? 100.0 * (1.0 - have / spread) : 0.0, (int)used, (int)w->totalVerts);
 
     for (S32 i = 0; i < count; i++)
     {
@@ -1153,50 +1227,16 @@ void iEnvBakeShadowedLight(iEnv* env)
             continue;
         }
 
-        // **This geometry's OWN normals, wherever it has any.**
-        //
-        // hipoly leaves the smoothed surface's normals behind, and they are the
-        // ones that surface wants: they are what its Bezier patches were built
-        // from. Normals generated afterwards over the finer mesh agree with the
-        // shipped ones only 27% to 57% of the time inside 5 degrees, against 62%
-        // to 78% on the mesh as shipped, and that error goes straight into n.s
-        // and comes out as smeared shading.
-        //
-        // w.out is the fallback for a level that shipped without normals and is
-        // not being smoothed, which is the only case left.
-        RwFrame* frame = RpAtomicGetFrame(atomic);
-        RwMatrix* ltm = frame ? RwFrameGetLTM(frame) : NULL;
-        const xVec3* own = NULL;
+        NormalRead nr;
 
-        if ((geo->flags & rpGEOMETRYNORMALS) && geo->morphTarget[0].normals != NULL)
-        {
-            own = (const xVec3*)geo->morphTarget[0].normals;
-        }
+        NormalReadInit(&nr, &w, a);
 
         for (S32 i = 0; i < geo->numVertices; i++)
         {
             S32 v = w.base[a] + i;
             xVec3 n;
 
-            if (own != NULL)
-            {
-                xVec3 world;
-
-                if (ltm)
-                {
-                    DirToWorld(&world, &own[i], ltm);
-                }
-                else
-                {
-                    world = own[i];
-                }
-
-                Normalize(&n, &world);
-            }
-            else
-            {
-                Normalize(&n, &w.out[v]);
-            }
+            NormalReadAt(&n, &nr, i);
 
             xVec3 from;
 
