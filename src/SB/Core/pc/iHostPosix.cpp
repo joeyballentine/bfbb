@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -302,6 +303,71 @@ bool iHostSetEnv(const char* name, const char* value)
         return unsetenv(name) == 0;
     }
     return setenv(name, value, 1) == 0;
+}
+
+bool iHostSetChildEnv(const char* name, const char* value)
+{
+    // POSIX has one environment and a child gets a copy of it, so the
+    // distinction the Windows side has to make does not exist here.
+    return iHostSetEnv(name, value);
+}
+
+bool iHostRunDetached(const char* exe, const char* workingDir)
+{
+    // Forked twice. The first child exits immediately and is reaped below, so
+    // the game is an orphan by the time this returns -- it is reparented to
+    // init and nothing here has to wait for it or leave a zombie behind.
+    // posix_spawn would be shorter and cannot chdir portably.
+    pid_t first = fork();
+    if (first < 0)
+    {
+        return false;
+    }
+
+    if (first == 0)
+    {
+        if (fork() == 0)
+        {
+            if (chdir(workingDir) == 0)
+            {
+                char* argv[] = { (char*)exe, NULL };
+                execv(exe, argv);
+            }
+
+            // _exit, not exit: this is a forked copy of a process that has
+            // buffered output and atexit handlers of its own, and running
+            // either of them here would run them twice.
+            _exit(127);
+        }
+
+        _exit(0);
+    }
+
+    while (waitpid(first, NULL, 0) < 0 && errno == EINTR)
+    {
+    }
+
+    return true;
+}
+
+bool iHostAbsolutePath(const char* path, char* out, size_t outsize)
+{
+    // Not realpath(): it fails on a path that does not exist yet, and the
+    // caller is as likely to be naming a file it is about to write.
+    if (path[0] == '/')
+    {
+        snprintf(out, outsize, "%s", path);
+        return true;
+    }
+
+    char cwd[4096];
+    if (getcwd(cwd, sizeof(cwd)) == NULL)
+    {
+        return false;
+    }
+
+    snprintf(out, outsize, "%s/%s", cwd, path);
+    return true;
 }
 
 bool iHostRenameReplace(const char* from, const char* to)

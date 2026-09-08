@@ -158,6 +158,32 @@ bool iHostExeDir(char* out, size_t outsize);
 // Windows spells both _putenv_s.
 bool iHostSetEnv(const char* name, const char* value);
 
+// Sets an environment variable that a process started by iHostRunDetached
+// inherits.
+//
+// Not iHostSetEnv. Windows keeps two environments -- the CRT's, which
+// _putenv_s behind iHostSetEnv writes, and the Win32 block, which is the one a
+// child is given -- and writing the wrong one is silent. POSIX has only the
+// one and both calls do the same thing there.
+bool iHostSetChildEnv(const char* name, const char* value);
+
+// Start `exe` with `workingDir` as its working directory and return without
+// waiting for it. The child outlives this process.
+//
+// False means the child could not be started AT ALL. A child that starts and
+// then fails to run is not reported, because nothing here waits around to hear
+// about it -- the caller checks that `exe` exists first and that is the whole
+// of the check.
+bool iHostRunDetached(const char* exe, const char* workingDir);
+
+// `path` made absolute, without requiring it to exist -- it names a file that
+// is about to be written as often as one that is there. Separators in `out`
+// are '/', as iHostExeDir gives them.
+//
+// A relative path is resolved against the working directory. False leaves
+// `out` alone and means the caller should carry on with what it had.
+bool iHostAbsolutePath(const char* path, char* out, size_t outsize);
+
 // Print the calling stack, symbolised, prefixed with `why`.
 //
 // For DIAGNOSTICS, not for errors: the question it answers is "which game code

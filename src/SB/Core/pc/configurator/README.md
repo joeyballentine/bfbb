@@ -1,10 +1,26 @@
 # bfbb_config
 
-`config.ini` with controls on it. Windows only.
+`config.ini` with controls on it. Windows only for now.
 
 Every setting the port has, grouped by section, each with the description the
 generated file carries and the values it accepts. A value that is not the
 default says what the default was. Save writes the file; Cancel writes nothing.
+
+## The two halves
+
+`config_model.cpp` is the program without a window on it: the settings as
+editable values, what the file said about each, and the reading and writing of
+that file. Nothing in it draws, measures or asks the user anything -- a call
+that can fail fills in a sentence saying why and the caller decides how to show
+it.
+
+`main_win32.cpp` is the window. It asks the model what the settings are and
+draws a Win32 control for each, and it is the only source a second front end
+replaces.
+
+The split is what makes a second front end possible at all, and it is also
+where the program's own bugs are easiest to see: the model can be reasoned
+about without a message loop in the way.
 
 ## Why a separate program
 
@@ -18,8 +34,8 @@ So it runs before the game does, not inside it.
 `kConfigSettings` in `../iConfigTable.cpp`, and nowhere else. That table already
 held each setting's default and its comment; it now also holds its kind, the
 words it accepts and its numeric range. Adding a row there gives it a control
-here, with its description and validation, and nothing in `main.cpp` has to be
-told about it.
+here, with its description and validation, and nothing in the front end has to
+be told about it.
 
 The table is split out of `iConfig.cpp` so this program does not link it.
 `iConfig.cpp` reaches `iPadBind.cpp` for the two binding sections, and that
@@ -52,6 +68,9 @@ does it.
   rather than a row.
 - Live validation. A value is checked on Save, which reports the first one that
   will not do and shows it.
+- A front end for anything but Windows. The model is host-independent and the
+  POSIX side of `iHost` carries everything it needs; what is missing is the
+  window.
 
 ## Building
 

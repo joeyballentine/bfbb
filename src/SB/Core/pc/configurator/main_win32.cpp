@@ -1,13 +1,13 @@
-// bfbb_config -- the settings front end. What it edits and why it is a
-// separate program is in README.md beside this file.
+// bfbb_config -- the settings front end, drawn in Win32 controls. What it
+// edits and why it is a separate program is in README.md beside this file.
 //
-// Everything it knows about the settings comes from kConfigSettings, and every
-// byte it writes goes through iConfigEdit. It has no list of its own: adding a
-// setting to the table gives it a control here, with its default, its
-// description and the values it accepts, and nothing in this file has to be
-// told.
+// Everything it knows about the settings comes from config_model.h, which is
+// where the file, the values and the writing of them live. This file is the
+// window: it asks the model what the settings are and draws a control for
+// each, and it is the only part a port has to replace.
 
-#include "iConfigEdit.h"
+#include "config_model.h"
+
 #include "iConfigTable.h"
 #include "iHost.h"
 
@@ -28,8 +28,8 @@
 
 namespace
 {
-    const S32 kMaxValue = 512;
-    const S32 kMaxPath = 512;
+    const S32 kMaxValue = kConfigModelMaxValue;
+    const S32 kMaxPath = kConfigModelMaxPath;
 
     // Control ids. The rows are built at runtime, so a row's controls are
     // numbered from a base and the row is recovered by dividing.
@@ -44,19 +44,6 @@ namespace
     const int kIdsPerRow = 4;
     const int kIdRowValue = 0;
     const int kIdRowBrowse = 1;
-
-    // What the file said when it was opened, what the user has typed, and
-    // whether the file mentioned it at all.
-    //
-    // `present` is not decoration. A setting the file does not name is one the
-    // game answers from the table, and writing it out at its current value
-    // would pin it to today's default -- so a value that was never touched is
-    // left out of the file entirely, and one that was is written.
-    struct Value
-    {
-        char text[kMaxValue];
-        bool present;
-    };
 
     // One setting, laid out.
     //
@@ -93,14 +80,6 @@ namespace
         HWND status;
         HFONT font;
 
-        char path[kMaxPath];
-        iConfigEditFile* file;
-
-        Value values[128];
-
-        // The distinct sections of kConfigSettings, in table order.
-        const char* sectionNames[16];
-        S32 sectionCount;
         S32 section;
 
         Row rows[64];
@@ -116,11 +95,6 @@ namespace
         // not, and this is what tells the two apart.
         int measuredWidth;
 
-        // Whether a value has been changed since the last write. It greys out
-        // Apply, it decides whether Start Game has to write first, and it is
-        // what Cancel asks about.
-        bool dirty;
-
         int dpi;
     };
 
@@ -133,118 +107,7 @@ namespace
     }
 
     // -------------------------------------------------------------------
-    // The settings, as values
-
-    void collectSections()
-    {
-        gApp.sectionCount = 0;
-        for (S32 i = 0; i < kConfigSettingCount; i++)
-        {
-            bool seen = false;
-            for (S32 j = 0; j < gApp.sectionCount; j++)
-            {
-                if (strcmp(gApp.sectionNames[j], kConfigSettings[i].section) == 0)
-                {
-                    seen = true;
-                    break;
-                }
-            }
-            if (!seen &&
-                gApp.sectionCount < (S32)(sizeof(gApp.sectionNames) / sizeof(gApp.sectionNames[0])))
-            {
-                gApp.sectionNames[gApp.sectionCount++] = kConfigSettings[i].section;
-            }
-        }
-    }
-
-    // Fill `values` from the file, falling back to the table's default for a
-    // setting the file does not mention -- which is what the game would run
-    // with, so it is what the control should show.
-    void loadValues()
-    {
-        for (S32 i = 0; i < kConfigSettingCount; i++)
-        {
-            const iConfigSetting* s = &kConfigSettings[i];
-            const char* have = iConfigEditGet(gApp.file, s->section, s->name);
-
-            gApp.values[i].present = (have != NULL);
-            snprintf(gApp.values[i].text, kMaxValue, "%s", have != NULL ? have : s->value);
-        }
-    }
-
-    bool isDefault(S32 i)
-    {
-        return iHostStrCaseCmp(gApp.values[i].text, kConfigSettings[i].value) == 0;
-    }
-
-    // -------------------------------------------------------------------
-    // Reading the choices column
-
-    // The n'th '|'-separated word of `choices`, or false past the end.
-    bool choiceAt(const char* choices, S32 index, char* out, size_t outSize)
-    {
-        if (choices == NULL)
-        {
-            return false;
-        }
-
-        const char* p = choices;
-        for (S32 i = 0;; i++)
-        {
-            const char* bar = strchr(p, '|');
-            size_t n = (bar != NULL) ? (size_t)(bar - p) : strlen(p);
-
-            if (i == index)
-            {
-                if (n >= outSize)
-                {
-                    n = outSize - 1;
-                }
-                memcpy(out, p, n);
-                out[n] = '\0';
-                return true;
-            }
-
-            if (bar == NULL)
-            {
-                return false;
-            }
-            p = bar + 1;
-        }
-    }
-
-    // -------------------------------------------------------------------
-    // Building one row's control
-
-    bool wantsCombo(const iConfigSetting* s)
-    {
-        return s->kind == ICONFIG_ENUM || s->choices != NULL;
-    }
-
-    bool wantsBrowse(const iConfigSetting* s)
-    {
-        return s->kind == ICONFIG_FOLDER || s->kind == ICONFIG_FONT;
-    }
-
-    // Everything a row shows below its control: what the setting is for, and
-    // -- only when the value is not the default -- what the default was. That
-    // second line is the answer to "what did this used to say", which is the
-    // question someone has after changing four things and disliking the
-    // result.
-    void describe(S32 i, char* out, size_t outSize)
-    {
-        char summary[512];
-        iConfigTableSummary(&kConfigSettings[i], summary, sizeof(summary));
-
-        if (isDefault(i))
-        {
-            snprintf(out, outSize, "%s", summary);
-            return;
-        }
-
-        const char* def = kConfigSettings[i].value;
-        snprintf(out, outSize, "%s  (default: %s)", summary, def[0] != '\0' ? def : "empty");
-    }
+    // Drawing one row
 
     // The flags an SS_LEFT | SS_NOPREFIX static draws its text with. The
     // measurement below and the control itself have to agree exactly, or a
@@ -358,7 +221,7 @@ namespace
         if (s->kind == ICONFIG_FOLDER || s->kind == ICONFIG_FONT || s->kind == ICONFIG_STRING)
         {
             controlW = width - controlX - margin;
-            if (wantsBrowse(s))
+            if (ConfigModelWantsBrowse(s))
             {
                 controlW -= browseW + px(6);
             }
@@ -379,7 +242,7 @@ namespace
         {
             SetRect(&r.control, controlX, y + px(3), controlX + px(60), y + px(3) + px(18));
         }
-        else if (wantsCombo(s))
+        else if (ConfigModelWantsCombo(s))
         {
             // A combo box's height is how far the LIST drops, not how tall the
             // box is -- that follows the font. So it is given the drop height
@@ -392,7 +255,7 @@ namespace
             SetRect(&r.control, controlX, y, controlX + controlW, y + controlH);
         }
 
-        if (wantsBrowse(s))
+        if (ConfigModelWantsBrowse(s))
         {
             SetRect(&r.browse, controlX + controlW + px(6), y,
                     controlX + controlW + px(6) + browseW, y + controlH);
@@ -427,7 +290,7 @@ namespace
     void measureRow(Row* row, int width)
     {
         char text[768];
-        describe(row->setting, text, sizeof(text));
+        ConfigModelDescribe(row->setting, text, sizeof(text));
         row->descH = measureText(gApp.pane, text, descWidth(width));
     }
 
@@ -562,7 +425,7 @@ namespace
         for (S32 i = 0; i < kConfigSettingCount; i++)
         {
             const iConfigSetting* s = &kConfigSettings[i];
-            if (strcmp(s->section, gApp.sectionNames[gApp.section]) != 0)
+            if (strcmp(s->section, ConfigModelSectionName(gApp.section)) != 0)
             {
                 continue;
             }
@@ -586,13 +449,13 @@ namespace
                 row->control = make("BUTTON", "on", BS_AUTOCHECKBOX | BS_NOTIFY | WS_TABSTOP, 0, 0,
                                     px(60), px(18), id + kIdRowValue);
 
-                bool on = (iHostStrCaseCmp(gApp.values[i].text, "on") == 0 ||
-                           iHostStrCaseCmp(gApp.values[i].text, "true") == 0 ||
-                           iHostStrCaseCmp(gApp.values[i].text, "yes") == 0 ||
-                           iHostStrCaseCmp(gApp.values[i].text, "1") == 0);
+                bool on = (iHostStrCaseCmp(ConfigModelText(i), "on") == 0 ||
+                           iHostStrCaseCmp(ConfigModelText(i), "true") == 0 ||
+                           iHostStrCaseCmp(ConfigModelText(i), "yes") == 0 ||
+                           iHostStrCaseCmp(ConfigModelText(i), "1") == 0);
                 SendMessage(row->control, BM_SETCHECK, on ? BST_CHECKED : BST_UNCHECKED, 0);
             }
-            else if (wantsCombo(s))
+            else if (ConfigModelWantsCombo(s))
             {
                 // An enum is a list and nothing else. Every other kind with
                 // choices takes a value BESIDES them -- `framerate` is a
@@ -603,32 +466,32 @@ namespace
                                     px(220), id + kIdRowValue);
 
                 char word[64];
-                for (S32 c = 0; choiceAt(s->choices, c, word, sizeof(word)); c++)
+                for (S32 c = 0; ConfigModelChoiceAt(s->choices, c, word, sizeof(word)); c++)
                 {
                     SendMessageA(row->control, CB_ADDSTRING, 0, (LPARAM)word);
                 }
 
                 S32 at = (S32)SendMessageA(row->control, CB_FINDSTRINGEXACT, (WPARAM)-1,
-                                           (LPARAM)gApp.values[i].text);
+                                           (LPARAM)ConfigModelText(i));
                 if (at != CB_ERR)
                 {
                     SendMessage(row->control, CB_SETCURSEL, (WPARAM)at, 0);
                 }
                 else
                 {
-                    SetWindowTextA(row->control, gApp.values[i].text);
+                    SetWindowTextA(row->control, ConfigModelText(i));
                 }
 
                 SetWindowSubclass(row->control, comboWheelProc, 1, 0);
             }
             else
             {
-                row->control = make("EDIT", gApp.values[i].text,
+                row->control = make("EDIT", ConfigModelText(i),
                                     ES_LEFT | ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP, 0, 0,
                                     px(200), px(23), id + kIdRowValue);
             }
 
-            if (wantsBrowse(s))
+            if (ConfigModelWantsBrowse(s))
             {
                 row->browse = make("BUTTON", "Browse...", BS_PUSHBUTTON | WS_TABSTOP, 0, 0, px(78),
                                    px(23), id + kIdRowBrowse);
@@ -722,43 +585,35 @@ namespace
 
     // Apply is enabled only when there is something to apply, which is the
     // only report this window makes that a write happened: after one, the
-    // button goes grey.
-    void setDirty(bool dirty)
+    // button goes grey. Called after anything that can change the model's
+    // answer, since the model does not know about the button.
+    void refreshApply()
     {
-        gApp.dirty = dirty;
-
         HWND apply = GetDlgItem(gApp.main, kIdApply);
         if (apply != NULL)
         {
-            EnableWindow(apply, dirty ? TRUE : FALSE);
+            EnableWindow(apply, ConfigModelDirty() ? TRUE : FALSE);
         }
     }
 
     void harvestRow(const Row* row)
     {
         const iConfigSetting* s = &kConfigSettings[row->setting];
-        Value* v = &gApp.values[row->setting];
 
-        char before[kMaxValue];
-        snprintf(before, sizeof(before), "%s", v->text);
+        char text[kMaxValue];
 
         if (s->kind == ICONFIG_BOOL)
         {
             bool on = SendMessage(row->control, BM_GETCHECK, 0, 0) == BST_CHECKED;
-            snprintf(v->text, kMaxValue, "%s", on ? "on" : "off");
+            snprintf(text, sizeof(text), "%s", on ? "on" : "off");
         }
         else
         {
-            GetWindowTextA(row->control, v->text, kMaxValue);
+            GetWindowTextA(row->control, text, sizeof(text));
         }
 
-        // Only a change makes it a value the file has to carry. A setting the
-        // file never mentioned and that nobody touched stays out of it.
-        if (strcmp(before, v->text) != 0)
-        {
-            v->present = true;
-            setDirty(true);
-        }
+        ConfigModelSetText(row->setting, text);
+        refreshApply();
     }
 
     void harvestVisible()
@@ -833,27 +688,6 @@ namespace
     // -------------------------------------------------------------------
     // Save
 
-    // The first setting whose value the table will not accept, or -1.
-    S32 firstBadValue(char* why, size_t whySize, S32* sectionOut)
-    {
-        for (S32 i = 0; i < kConfigSettingCount; i++)
-        {
-            if (!iConfigTableValidate(&kConfigSettings[i], gApp.values[i].text, why, whySize))
-            {
-                for (S32 j = 0; j < gApp.sectionCount; j++)
-                {
-                    if (strcmp(gApp.sectionNames[j], kConfigSettings[i].section) == 0)
-                    {
-                        *sectionOut = j;
-                        break;
-                    }
-                }
-                return i;
-            }
-        }
-        return -1;
-    }
-
     void showSection(S32 which)
     {
         harvestVisible();
@@ -867,45 +701,27 @@ namespace
     {
         harvestVisible();
 
-        char why[256];
+        char why[kMaxPath + 256];
         why[0] = '\0';
         S32 section = 0;
-        S32 bad = firstBadValue(why, sizeof(why), &section);
-        if (bad >= 0)
+
+        ConfigModelResult result = ConfigModelSave(why, sizeof(why), NULL, &section);
+        refreshApply();
+
+        if (result == CONFIG_MODEL_OK)
         {
-            char text[512];
-            snprintf(text, sizeof(text), "%s.%s is \"%s\".\n\n%s", kConfigSettings[bad].section,
-                     kConfigSettings[bad].name, gApp.values[bad].text, why);
-            MessageBoxA(gApp.main, text, "That value will not do", MB_OK | MB_ICONWARNING);
+            return true;
+        }
+
+        if (result == CONFIG_MODEL_BAD_VALUE)
+        {
+            MessageBoxA(gApp.main, why, "That value will not do", MB_OK | MB_ICONWARNING);
             showSection(section);
             return false;
         }
 
-        for (S32 i = 0; i < kConfigSettingCount; i++)
-        {
-            const iConfigSetting* s = &kConfigSettings[i];
-            if (!gApp.values[i].present)
-            {
-                continue;
-            }
-            if (!iConfigEditSet(gApp.file, s->section, s->name, gApp.values[i].text))
-            {
-                MessageBoxA(gApp.main, "There is no room left in config.ini for another line.",
-                            "Could not save", MB_OK | MB_ICONERROR);
-                return false;
-            }
-        }
-
-        if (!iConfigEditSave(gApp.file, gApp.path))
-        {
-            char text[kMaxPath + 128];
-            snprintf(text, sizeof(text), "%s could not be written to.", gApp.path);
-            MessageBoxA(gApp.main, text, "Could not save", MB_OK | MB_ICONERROR);
-            return false;
-        }
-
-        setDirty(false);
-        return true;
+        MessageBoxA(gApp.main, why, "Could not save", MB_OK | MB_ICONERROR);
+        return false;
     }
 
     // Everything unwritten, written -- or the window is not worth closing yet.
@@ -914,7 +730,7 @@ namespace
     bool saveIfNeeded()
     {
         harvestVisible();
-        return !gApp.dirty || save();
+        return !ConfigModelDirty() || save();
     }
 
     // Whether it is all right to throw away what has been typed. Asked by
@@ -923,7 +739,7 @@ namespace
     bool mayDiscard()
     {
         harvestVisible();
-        if (!gApp.dirty)
+        if (!ConfigModelDirty())
         {
             return true;
         }
@@ -936,166 +752,28 @@ namespace
 
     void resetSection()
     {
-        for (S32 i = 0; i < kConfigSettingCount; i++)
-        {
-            if (strcmp(kConfigSettings[i].section, gApp.sectionNames[gApp.section]) != 0)
-            {
-                continue;
-            }
-            if (!isDefault(i))
-            {
-                snprintf(gApp.values[i].text, kMaxValue, "%s", kConfigSettings[i].value);
-                gApp.values[i].present = true;
-                setDirty(true);
-            }
-        }
+        ConfigModelResetSection(gApp.section);
+        refreshApply();
         buildRows();
     }
 
     // -------------------------------------------------------------------
     // Starting the game
 
-    // bfbb.exe, which the build puts in the same directory as this program.
-    bool gamePath(char* out, size_t outSize)
-    {
-        char dir[kMaxPath];
-        if (!iHostExeDir(dir, sizeof(dir)))
-        {
-            return false;
-        }
-
-        snprintf(out, outSize, "%s/bfbb.exe", dir);
-        return iHostPathExists(out);
-    }
-
     // Run it, and say so if it will not run. The caller closes this window;
     // nothing here waits for the game.
     bool startGame()
     {
-        char exe[kMaxPath];
-        if (!gamePath(exe, sizeof(exe)))
+        char why[kMaxPath + 160];
+        why[0] = '\0';
+
+        if (ConfigModelStartGame(why, sizeof(why)))
         {
-            char dir[kMaxPath];
-            char text[kMaxPath + 160];
-            iHostExeDir(dir, sizeof(dir));
-            snprintf(text, sizeof(text), "There is no bfbb.exe in %s.", dir);
-            MessageBoxA(gApp.main, text, "Could not start the game", MB_OK | MB_ICONERROR);
-            return false;
+            return true;
         }
 
-        // Point the game at the file this window just wrote, whichever of the
-        // three candidate paths it was. Without it the game runs its own
-        // search and can answer differently -- this program may have been
-        // started from somewhere else, or handed a path on its command line --
-        // and "I changed a setting and it did nothing" is the result.
-        //
-        // SetEnvironmentVariable, not iHostSetEnv: the child inherits the
-        // WIN32 environment block, and the CRT's _putenv_s behind iHostSetEnv
-        // is documented as writing the CRT's own table, which is not the same
-        // thing. gApp.path is absolute -- see findPath -- which matters here
-        // because the child is started in a different working directory.
-        SetEnvironmentVariableA("BFBB_CONFIG", gApp.path);
-
-        char dir[kMaxPath];
-        iHostExeDir(dir, sizeof(dir));
-
-        // Its own directory as the working directory, which is where it starts
-        // from when someone runs it themselves. `assets path` being empty
-        // means "the folder the game was started from", so this is not
-        // cosmetic.
-        STARTUPINFOA startup;
-        memset(&startup, 0, sizeof(startup));
-        startup.cb = sizeof(startup);
-
-        PROCESS_INFORMATION process;
-        memset(&process, 0, sizeof(process));
-
-        if (!CreateProcessA(exe, NULL, NULL, NULL, FALSE, 0, NULL, dir, &startup, &process))
-        {
-            char text[kMaxPath + 160];
-            snprintf(text, sizeof(text), "%s would not start.", exe);
-            MessageBoxA(gApp.main, text, "Could not start the game", MB_OK | MB_ICONERROR);
-            return false;
-        }
-
-        CloseHandle(process.hThread);
-        CloseHandle(process.hProcess);
-        return true;
-    }
-
-    // -------------------------------------------------------------------
-    // Finding the file
-
-    // The same order the game searches in, so the configurator edits the file
-    // the game will read: BFBB_CONFIG, then the working directory, then beside
-    // the executable. An argument overrides all three, for editing one config
-    // while a different one is in place.
-    //
-    // Beside the executable is also where a missing one is created, again as
-    // the game does it.
-    // The answer is made ABSOLUTE before it is stored, and not only so the
-    // status line names a file someone can go and find. Start Game hands this
-    // path to the game as BFBB_CONFIG and starts it in a different working
-    // directory, so a relative "config.ini" would name a different file there
-    // -- and the game creates one it cannot find, which would look like the
-    // settings being ignored.
-    void findPath(const char* fromCommandLine)
-    {
-        char picked[kMaxPath];
-
-        if (fromCommandLine != NULL && fromCommandLine[0] != '\0')
-        {
-            snprintf(picked, sizeof(picked), "%s", fromCommandLine);
-        }
-        else
-        {
-            const char* named = getenv("BFBB_CONFIG");
-            char dir[kMaxPath];
-
-            if (named != NULL && named[0] != '\0')
-            {
-                snprintf(picked, sizeof(picked), "%s", named);
-            }
-            else if (iHostPathExists("config.ini"))
-            {
-                snprintf(picked, sizeof(picked), "config.ini");
-            }
-            else if (iHostExeDir(dir, sizeof(dir)))
-            {
-                snprintf(picked, sizeof(picked), "%s/config.ini", dir);
-            }
-            else
-            {
-                snprintf(picked, sizeof(picked), "config.ini");
-            }
-        }
-
-        if (GetFullPathNameA(picked, (DWORD)sizeof(gApp.path), gApp.path, NULL) == 0)
-        {
-            snprintf(gApp.path, sizeof(gApp.path), "%s", picked);
-        }
-    }
-
-    // Write one at the defaults, for a first run where the game has not been
-    // started yet. The banner is the game's, so the two files read the same;
-    // the binding sections are not written, because those come from a table
-    // this program does not link and the game fills them in from the preset.
-    bool createFile(const char* path)
-    {
-        FILE* f = iHostCreateNewFile(path);
-        if (f == NULL)
-        {
-            return false;
-        }
-
-        fprintf(f, "; Battle for Bikini Bottom, PC port -- settings.\n");
-        fprintf(f, "; Every value here is the default, so deleting this file changes nothing.\n");
-        fprintf(f, "; Booleans take on/off, true/false, yes/no or 1/0.\n");
-
-        iConfigTableWriteDefaults(f);
-
-        fclose(f);
-        return true;
+        MessageBoxA(gApp.main, why, "Could not start the game", MB_OK | MB_ICONERROR);
+        return false;
     }
 
     // -------------------------------------------------------------------
@@ -1260,7 +938,7 @@ namespace
                           DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
 
                 char text[768];
-                describe(row->setting, text, sizeof(text));
+                ConfigModelDescribe(row->setting, text, sizeof(text));
 
                 SetTextColor(mem, GetSysColor(COLOR_GRAYTEXT));
                 DrawTextA(mem, text, -1, &desc, kDescFlags);
@@ -1472,33 +1150,14 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int show)
 
     gApp.dpi = 96;
 
-    findPath(commandLine);
+    char why[kMaxPath + 256];
+    why[0] = '\0';
 
-    gApp.file = iConfigEditOpen(gApp.path);
-    if (gApp.file == NULL)
+    if (!ConfigModelOpen(commandLine, why, sizeof(why)))
     {
-        // Not there, or not readable. Writing one is the same answer the game
-        // gives, and leaves the two agreeing about where the file lives.
-        if (!iHostPathExists(gApp.path) && createFile(gApp.path))
-        {
-            gApp.file = iConfigEditOpen(gApp.path);
-        }
-    }
-
-    if (gApp.file == NULL)
-    {
-        char text[kMaxPath + 200];
-        snprintf(text, sizeof(text),
-                 "%s could not be read, and one could not be written there either.\n\n"
-                 "Run the game once to have it write a config.ini, or start this with the "
-                 "path to one.",
-                 gApp.path);
-        MessageBoxA(NULL, text, "bfbb settings", MB_OK | MB_ICONERROR);
+        MessageBoxA(NULL, why, "bfbb settings", MB_OK | MB_ICONERROR);
         return 1;
     }
-
-    collectSections();
-    loadValues();
 
     WNDCLASSA cls;
     memset(&cls, 0, sizeof(cls));
@@ -1541,9 +1200,9 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int show)
                                     gApp.main, (HMENU)(INT_PTR)kIdSectionList, instance, NULL);
     SendMessage(gApp.sections, WM_SETFONT, (WPARAM)gApp.font, TRUE);
 
-    for (S32 i = 0; i < gApp.sectionCount; i++)
+    for (S32 i = 0; i < ConfigModelSectionCount(); i++)
     {
-        SendMessageA(gApp.sections, LB_ADDSTRING, 0, (LPARAM)gApp.sectionNames[i]);
+        SendMessageA(gApp.sections, LB_ADDSTRING, 0, (LPARAM)ConfigModelSectionName(i));
     }
     SendMessage(gApp.sections, LB_SETCURSEL, 0, 0);
 
@@ -1552,7 +1211,7 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int show)
                                 gApp.main, NULL, instance, NULL);
 
     char status[kMaxPath + 32];
-    snprintf(status, sizeof(status), "%s", gApp.path);
+    snprintf(status, sizeof(status), "%s", ConfigModelPath());
     gApp.status = CreateWindowExA(0, "STATIC", status, WS_CHILD | WS_VISIBLE | SS_PATHELLIPSIS, 0,
                                   0, 10, 10, gApp.main, NULL, instance, NULL);
     SendMessage(gApp.status, WM_SETFONT, (WPARAM)gApp.font, TRUE);
@@ -1584,7 +1243,7 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int show)
 
     // Nothing has been changed yet, which is what greys Apply out. After the
     // buttons exist, because that is what it acts on.
-    setDirty(false);
+    refreshApply();
 
     ShowWindow(gApp.main, show);
     UpdateWindow(gApp.main);
@@ -1599,7 +1258,7 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int show)
         }
     }
 
-    iConfigEditClose(gApp.file);
+    ConfigModelClose();
     CoUninitialize();
     return 0;
 }

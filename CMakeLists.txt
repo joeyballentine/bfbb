@@ -1200,9 +1200,9 @@ endif()
 
 # --- the configurator --------------------------------------------------------
 # bfbb_config.exe: config.ini with controls on it, so the settings are
-# discoverable without opening the file. Windows only, because it is Win32
-# controls and nothing else -- a host without them still has the file, which is
-# what it always was.
+# discoverable without opening the file. Windows only for now, because the only
+# front end written is Win32 controls -- a host without them still has the
+# file, which is what it always was.
 #
 # A separate executable rather than a screen inside the game. config.ini is
 # read before the window opens: assets.path says where the game's data is,
@@ -1210,15 +1210,21 @@ endif()
 # from inside a game that has already started on the old values. So it runs
 # before the game does.
 #
-# It links three files and no library. iConfigTable.cpp is the settings and
+# config_model.cpp is the program without a window on it -- the settings as
+# values, and the reading and writing of the file. main_win32.cpp is the
+# window, and the only source here a second front end would replace.
+#
+# It links four files and no library. iConfigTable.cpp is the settings and
 # their domains, iConfigEdit.cpp writes one back without disturbing the rest of
-# the file, and the host layer is there for the case-insensitive compare and
-# the exe directory. It does NOT link iConfig.cpp, which reaches iPadBind.cpp
-# for the two binding sections and from there into xPad.h and the pad backend
-# -- most of the game, to read a file this program reads itself.
+# the file, and the host layer is there for the case-insensitive compare, the
+# exe directory and starting the game. It does NOT link iConfig.cpp, which
+# reaches iPadBind.cpp for the two binding sections and from there into xPad.h
+# and the pad backend -- most of the game, to read a file this program reads
+# itself.
 if(WIN32)
   add_executable(bfbb_config WIN32
-    ${PC_DIR}/configurator/main.cpp
+    ${PC_DIR}/configurator/main_win32.cpp
+    ${PC_DIR}/configurator/config_model.cpp
     ${PC_DIR}/iConfigTable.cpp
     ${PC_DIR}/iConfigEdit.cpp
     ${HOST_SOURCES}
@@ -1266,6 +1272,12 @@ add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   ${PC_DIR}/iConfig.cpp
   ${PC_DIR}/iConfigTable.cpp
   ${PC_DIR}/iConfigEdit.cpp
+
+  # The configurator without its window. It links here rather than only into
+  # bfbb_config because that target is a window and ctest cannot run one --
+  # which left the rules about which settings reach the file untested.
+  ${PC_DIR}/configurator/config_model.cpp
+
   ${PC_DIR}/iDrawDist.cpp
   ${PC_DIR}/iFile.cpp
   ${PC_DIR}/iScreen.cpp
@@ -1346,6 +1358,7 @@ bfbb_host_link_options(pc_selftest)
 target_include_directories(pc_selftest PRIVATE
   ${PC_DIR}/compat
   ${PC_DIR}
+  ${PC_DIR}/configurator
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/include/rwsdk
   ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x

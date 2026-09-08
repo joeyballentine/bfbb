@@ -17,6 +17,7 @@
 
 #include <types.h>
 
+#include "config_model.h"
 #include "iBoot.h"
 #include "iConfig.h"
 #include "iConfigEdit.h"
@@ -783,6 +784,154 @@ static void test_config_edit()
                   "unsetting a value takes its line out");
             iConfigEditClose(file);
         }
+    }
+
+    iHostRemoveFile(path);
+    iHostRemoveDir(dir);
+}
+
+// The configurator's model: the settings as editable values, and the rules
+// about which of them reach the file. Here rather than in bfbb_config, which
+// is a window and cannot be run by ctest.
+static void test_config_model()
+{
+    printf("config_model\n");
+
+    char dir[512];
+    if (!scratch_dir("configmodel", dir, sizeof(dir)))
+    {
+        check(false, "could not make a temp directory");
+        return;
+    }
+
+    char path[512];
+    snprintf(path, sizeof(path), "%s/config.ini", dir);
+
+    static const char kFile[] = "[video]\nmode = windowed\n";
+
+    FILE* w = fopen(path, "wb");
+    if (w != NULL)
+    {
+        fwrite(kFile, 1, sizeof(kFile) - 1, w);
+        fclose(w);
+    }
+
+    char why[1024];
+    why[0] = '\0';
+
+    if (!ConfigModelOpen(path, why, sizeof(why)))
+    {
+        check(false, "the model opens a file");
+        iHostRemoveFile(path);
+        iHostRemoveDir(dir);
+        return;
+    }
+
+    check(ConfigModelSettingCount() == kConfigSettingCount, "it carries every setting");
+    check(ConfigModelSectionCount() > 0, "and the table's sections");
+    check(!ConfigModelDirty(), "and starts clean");
+
+    // Two settings to work with: one the file names, and one it does not.
+    S32 mode = -1;
+    S32 absent = -1;
+    for (S32 i = 0; i < ConfigModelSettingCount(); i++)
+    {
+        const iConfigSetting* s = ConfigModelSetting(i);
+        if (strcmp(s->section, "video") == 0 && strcmp(s->name, "mode") == 0)
+        {
+            mode = i;
+        }
+        else if (absent < 0 && strcmp(s->section, "video") == 0 && s->kind == ICONFIG_INT)
+        {
+            absent = i;
+        }
+    }
+
+    check(mode >= 0 && absent >= 0, "video.mode and an int beside it are both in the table");
+    if (mode < 0 || absent < 0)
+    {
+        ConfigModelClose();
+        iHostRemoveFile(path);
+        iHostRemoveDir(dir);
+        return;
+    }
+
+    check(strcmp(ConfigModelText(mode), "windowed") == 0, "a value the file names reads from it");
+    check(strcmp(ConfigModelText(absent), ConfigModelSetting(absent)->value) == 0,
+          "and one it does not reads the table's default");
+
+    // Writing the same text back is not a change. This is what keeps a front
+    // end that re-reads every control on every save from marking the whole
+    // file dirty.
+    ConfigModelSetText(mode, "windowed");
+    check(!ConfigModelDirty(), "setting a value to what it already was changes nothing");
+
+    ConfigModelSetText(mode, "fullscreen");
+    check(ConfigModelDirty(), "and setting it to something else marks it dirty");
+
+    check(ConfigModelSave(why, sizeof(why), NULL, NULL) == CONFIG_MODEL_OK, "it saves");
+    check(!ConfigModelDirty(), "and is clean afterwards");
+
+    ConfigModelClose();
+
+    {
+        char buf[8192];
+        FILE* r = fopen(path, "rb");
+        size_t n = (r != NULL) ? fread(buf, 1, sizeof(buf) - 1, r) : 0;
+        if (r != NULL)
+        {
+            fclose(r);
+        }
+        buf[n] = '\0';
+
+        check(strstr(buf, "mode = fullscreen") != NULL, "the changed value is in the file");
+
+        // The rule the window used to own. A setting the file never mentioned
+        // and that nobody touched is answered from the table, and writing it
+        // out would pin it to today's default -- so it stays out.
+        char key[128];
+        snprintf(key, sizeof(key), "%s ", ConfigModelSetting(absent)->name);
+        check(strstr(buf, key) == NULL, "and an untouched setting the file lacked is still absent");
+    }
+
+    // A value the table will not take stops the save and names itself.
+    if (ConfigModelOpen(path, why, sizeof(why)))
+    {
+        ConfigModelSetText(absent, "twelve");
+
+        S32 bad = -1;
+        S32 section = -1;
+        why[0] = '\0';
+
+        check(ConfigModelSave(why, sizeof(why), &bad, &section) == CONFIG_MODEL_BAD_VALUE,
+              "a value outside its domain refuses to save");
+        check(bad == absent, "and says which setting");
+        check(section == ConfigModelSectionOf(absent), "and which section it is in");
+        check(why[0] != '\0', "and why");
+
+        ConfigModelResetSection(section);
+        check(ConfigModelIsDefault(absent), "resetting the section puts it back to the default");
+        check(ConfigModelSave(why, sizeof(why), NULL, NULL) == CONFIG_MODEL_OK,
+              "and then it saves");
+
+        ConfigModelClose();
+    }
+    else
+    {
+        check(false, "the model reopens the file it wrote");
+    }
+
+    // A file that is not there is written at the defaults, as the game does
+    // it, rather than being an error.
+    {
+        char missing[512];
+        snprintf(missing, sizeof(missing), "%s/fresh.ini", dir);
+
+        why[0] = '\0';
+        check(ConfigModelOpen(missing, why, sizeof(why)), "a missing file is created");
+        check(iHostPathExists(missing), "and is on disk");
+        ConfigModelClose();
+        iHostRemoveFile(missing);
     }
 
     iHostRemoveFile(path);
@@ -4575,6 +4724,7 @@ int main()
     // file that one parse reads.
     test_config();
     test_config_edit();
+    test_config_model();
     test_screen();
     test_drawdist();
     test_boot();

@@ -301,6 +301,56 @@ bool iHostSetEnv(const char* name, const char* value)
     return _putenv_s(name, value != NULL ? value : "") == 0;
 }
 
+bool iHostSetChildEnv(const char* name, const char* value)
+{
+    // The Win32 block, which is what a child inherits. NULL removes it, which
+    // is what SetEnvironmentVariable already does with a NULL value.
+    return SetEnvironmentVariableA(name, value) != 0;
+}
+
+bool iHostRunDetached(const char* exe, const char* workingDir)
+{
+    STARTUPINFOA startup;
+    memset(&startup, 0, sizeof(startup));
+    startup.cb = sizeof(startup);
+
+    PROCESS_INFORMATION process;
+    memset(&process, 0, sizeof(process));
+
+    if (!CreateProcessA(exe, NULL, NULL, NULL, FALSE, 0, NULL, workingDir, &startup, &process))
+    {
+        return false;
+    }
+
+    // Closed, not waited on. The handles are this process's claim on the
+    // child, and holding them is what would keep a finished one around.
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    return true;
+}
+
+bool iHostAbsolutePath(const char* path, char* out, size_t outsize)
+{
+    char buf[MAX_PATH + 1];
+
+    DWORD n = GetFullPathNameA(path, (DWORD)sizeof(buf), buf, NULL);
+    if (n == 0 || n >= sizeof(buf))
+    {
+        return false;
+    }
+
+    for (DWORD i = 0; i < n; i++)
+    {
+        if (buf[i] == BS_CHAR)
+        {
+            buf[i] = '/';
+        }
+    }
+
+    snprintf(out, outsize, "%s", buf);
+    return true;
+}
+
 bool iHostRenameReplace(const char* from, const char* to)
 {
     // Not rename(): the CRT's fails when the destination exists. MOVEFILE_
