@@ -276,6 +276,8 @@ void iScreenSetMultiSample(S32 samples)
 // the other two for the same reason: RenderWareInit pushes it into librw, and
 // the code that does must not learn what config.ini is.
 static S32 sPerPixelLighting = 1;
+static S32 sWorldLighting = 0;
+static F32 sWorldLightContrast = 1.0f;
 
 S32 iScreenPerPixelLighting()
 {
@@ -332,6 +334,28 @@ const char* iScreenBackendName(iScreenBackend backend)
     default:
         return "auto";
     }
+}
+
+S32 iScreenWorldLighting()
+{
+    return sWorldLighting;
+}
+
+void iScreenSetWorldLighting(S32 mode)
+{
+    sWorldLighting = (mode < IWORLDLIGHT_OFF || mode > IWORLDLIGHT_BAKE) ? IWORLDLIGHT_OFF : mode;
+}
+
+F32 iScreenWorldLightContrast()
+{
+    return sWorldLightContrast;
+}
+
+void iScreenSetWorldLightContrast(F32 contrast)
+{
+    // A negative swing would put the lit side in shadow. Zero is flat, which is
+    // a thing somebody might want to look at.
+    sWorldLightContrast = contrast < 0.0f ? 0.0f : contrast;
 }
 
 // The field of view every camera in the game is built around. zCamera resets to

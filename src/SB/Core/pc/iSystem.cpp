@@ -522,6 +522,23 @@ namespace
     }
 }
 
+// experimental.world_lighting: off, on (the level's own kit where it has one) or bake
+// (always the rig worked back out of the paint). iScreen.h says what each is.
+//
+// Everything that is not the one extra word goes through iConfigGetBool, so
+// true, yes and 1 all mean on and anything else is reported there rather than
+// here.
+static S32 WorldLightingFromConfig()
+{
+    if (iHostStrCaseCmp(iConfigGetString("experimental.world_lighting", "off"), "bake") == 0)
+    {
+        return IWORLDLIGHT_BAKE;
+    }
+
+    return iConfigGetBool("experimental.world_lighting", FALSE) ? IWORLDLIGHT_AUTO
+                                                                 : IWORLDLIGHT_OFF;
+}
+
 static void ApplyConfig()
 {
     sWindowMode = WindowModeFromConfig();
@@ -533,6 +550,8 @@ static void ApplyConfig()
     iScreenSetSize(iConfigGetInt("video.width", 640), iConfigGetInt("video.height", 480));
     iScreenSetMultiSample(iConfigGetInt("video.msaa", 4));
     iScreenSetPerPixelLighting(iConfigGetBool("video.per_pixel_lighting", FALSE));
+    iScreenSetWorldLighting(WorldLightingFromConfig());
+    iScreenSetWorldLightContrast(iConfigGetFloat("experimental.world_light_contrast", 1.0f));
 
     // Which backend draws. AUTO is resolved in RenderWareInit, which is where
     // the RW_* defines are; a name this build was not compiled with is reported
@@ -812,6 +831,13 @@ static void ApplyConfig()
            distortion ? "on" : "off", snapshot ? "on" : "off", reverb ? "on" : "off",
            rolloff ? "on" : "off");
     printf("bfbb: text rewritten for a PC: %s\n", wording ? "on" : "off");
+    if (iScreenWorldLighting() != IWORLDLIGHT_OFF)
+    {
+        printf("bfbb: world lit at run time from %s, contrast %.2f\n",
+               iScreenWorldLighting() == IWORLDLIGHT_BAKE ? "the paint"
+                                                          : "the level's kit where it has one",
+               (double)iScreenWorldLightContrast());
+    }
     if (fancyLoad)
     {
         printf("bfbb: loading screen wipes off the level\n");

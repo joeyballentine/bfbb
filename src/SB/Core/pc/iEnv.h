@@ -2,9 +2,15 @@
 #define IENV_H
 
 #include "xJSP.h"
+#include "xMath3.h"
 
 #include <rwcore.h>
 #include <rpworld.h>
+
+// How many directionals the bake fit keeps. Four is where the gain stops --
+// see RecoverBakedLight in iEnvNormals.cpp -- and it is what the artists' own
+// world kits use.
+#define iENV_BAKED_LIGHTS 4
 
 struct iEnv
 {
@@ -16,6 +22,35 @@ struct iEnv
     RpLight* light[2];
     RwFrame* light_frame[2];
     S32 memlvl;
+    // Normals made at load time for a world that shipped without them, as one
+    // block sliced across the clump's geometries. NULL when the level brought
+    // its own, which 21 of the 55 did. See iEnvNormals.h.
+    void* genNormals;
+    // The rig recovered from the level's baked vertex colour: an ambient and
+    // up to iENV_BAKED_LIGHTS directionals, fitted by iEnvNormals.
+    //
+    // Directions are where the light TRAVELS, like RpLight's, not where it
+    // comes from. Lights are ordered brightest first, so bakedLight is the one
+    // a single-direction consumer -- a shadow -- should follow.
+    xVec3 bakedLight;
+    S32 bakedLightCount;
+    xVec3 bakedLightDir[iENV_BAKED_LIGHTS];
+    F32 bakedLightColor[iENV_BAKED_LIGHTS][3];
+    F32 bakedAmbient[3];
+    // What the directionals contribute to the AVERAGE vertex: the sum over
+    // lights of the light's colour times the mean of max(0, n.s) over the
+    // world. The contrast setting holds ambient + this constant while it
+    // scales the directionals, so a level keeps its brightness as it gains
+    // contrast. See iScreenWorldLightContrast.
+    F32 bakedDirMean[3];
+    S32 bakedLightValid;
+    // Whether iEnvLoad actually took the baked colour off this world.
+    //
+    // The render side must not ask the question a second time: if load drops
+    // the prelight and render then decides not to light, the level is black,
+    // and if load keeps it and render lights anyway the two are added. One
+    // decision, made at load, read at render.
+    S32 prelightDropped;
 };
 
 struct xEnvAsset;

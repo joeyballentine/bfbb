@@ -801,6 +801,10 @@ add_library(bfbb_platform STATIC
   # against librw's in rw/layout_camera.cpp.
   ${PC_DIR}/iEnv.cpp
 
+  # Normals for a world that shipped without them. No gc/ counterpart: nothing
+  # on the consoles ever asked the world which way it faced.
+  ${PC_DIR}/iEnvNormals.cpp
+
   # Also a verbatim copy, but three of its calls are RenderWare collision-world
   # functions (RpAtomicForAllIntersections, RpCollisionWorldForAllIntersections,
   # RwFrameTransform), so it cannot resolve until librw arrives. Fine in a static

@@ -228,6 +228,16 @@ const iConfigSetting kConfigSettings[] = {
     { "experimental", "hipoly_budget", "600000",
       "Most triangles a level's world may have; the cut coarsens past it.", ICONFIG_INT, NULL,
       10000.0f, 4000000.0f, "hipoly_assets" },
+    { "experimental", "world_lighting", "off",
+      "Light the level as the game runs instead of using its painted colour: on\n"
+      "; (the level's own light kit where it has one), bake (the rig worked back\n"
+      "; out of the paint), or off. For levels authored to be lit -- on the\n"
+      "; shipped ones it discards painted shadow and looks worse than off.",
+      ICONFIG_ENUM, "off|on|bake", kNone, kNone },
+    { "experimental", "world_light_contrast", "1",
+      "How far apart to pull the lit and shaded sides of a level lit by bake.\n"
+      "; 1 is the rig as fitted; past about 1.5 the lit end saturates.",
+      ICONFIG_FLOAT, NULL, 0.0f, 4.0f, "world_lighting" },
 };
 
 const S32 kConfigSettingCount = (S32)(sizeof(kConfigSettings) / sizeof(kConfigSettings[0]));

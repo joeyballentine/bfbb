@@ -273,4 +273,66 @@ void iScreenSetBackend(iScreenBackend backend);
 // For the messages. "auto" before RenderWareInit has resolved it.
 const char* iScreenBackendName(iScreenBackend backend);
 
+// Light the world geometry at run time instead of reading the colour baked
+// into its vertices.
+//
+// **Groundwork, and off is the better setting on the shipped levels.** Their
+// lighting was painted vertex by vertex, and some of it exists ONLY as paint:
+// bb01's building shadows are ordinary rock-textured ground darkened by hand,
+// so lighting that ground fresh turns its shadows back into bright rock. A rig
+// fitted to the average cannot know about anything local, and dropping the
+// prelight throws all of it away. This is here for levels authored to be lit,
+// and for the work that needs a world whose light can move -- a shadow the
+// world casts on itself, a sun that travels.
+//
+// Off is what the consoles did and what the artists shipped. Otherwise
+// iEnvNormals generates the normals the level never stored -- two thirds of
+// them ship none -- and zScene enables a rig over the world, so its lighting is
+// computed rather than looked up, and so able to move and to be occluded.
+//
+// Which rig is what the two modes choose between:
+//
+// AUTO takes the level's own bspLightKit where there is one. That is the kit
+// the artists authored FOR THE WORLD, and it has never been rendered by
+// anything: zScene loads it into xEnv::lightKit and no code path has ever
+// enabled it. 17 of the 55 levels carry one.
+//
+// BAKE always uses the reconstruction instead -- an ambient and four
+// directionals fitted to the baked vertex colour, per channel. It is the only
+// option on the other 38 levels, and on the 17 it is what the authored kit is
+// worth comparing against.
+//
+// A level whose bake cannot be fit keeps its paint either way; the prelight is
+// only dropped when there is something to replace it with. See
+// iEnv::prelightDropped and iEnvNormals.h.
+enum iWorldLightMode
+{
+    IWORLDLIGHT_OFF,
+    IWORLDLIGHT_AUTO,
+    IWORLDLIGHT_BAKE
+};
+
+S32 iScreenWorldLighting();
+void iScreenSetWorldLighting(S32 mode);
+
+// How far apart to pull the two ends of the FIT, as a multiple.
+//
+// The authored kit is left alone -- its lights are the artists' numbers and
+// there is nothing in them to scale against.
+//
+// 1.0 is the rig as measured, and it holds the level's average brightness to
+// within a thousandth: bb01's bake averages 0.643 and the rig renders 0.642.
+// Above 1.0 the directionals are scaled and the ambient is taken down by what
+// they gain on the average vertex, so the average stays put while the lit and
+// shaded ends separate.
+//
+// **The useful range ends around 1.5**, and both reasons are measured on bb01.
+// The ambient runs out at a swing of 1.54 and clamps at zero, after which
+// nothing is left to hold the average down and the level simply gets brighter.
+// The lit end saturates as well: 0.4% of the level's vertices clip at 1.0, 5%
+// at 1.5, and 45% at 2.0. Past that a level goes flatter and paler rather than
+// more contrasty.
+F32 iScreenWorldLightContrast();
+void iScreenSetWorldLightContrast(F32 contrast);
+
 #endif

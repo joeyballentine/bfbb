@@ -5,6 +5,10 @@
 
 // video.load_time, whose floor is held below. See iLoadScreen.h.
 #include "iLoadScreen.h"
+
+// experimental.world_lighting and experimental.world_light_contrast, read by
+// zWorldLightBuild.
+#include "iScreen.h"
 #endif
 
 #include "zEntTrigger.h"
@@ -2418,6 +2422,18 @@ void zSceneSetup()
         if (easset->bspLightKit)
         {
             globals.sceneCur->env->lightKit = (xLightKit*)xSTFindAsset(easset->bspLightKit, NULL);
+
+#ifdef PLATFORM_PC
+            // experimental.world_lighting is the first thing that ever enabled this
+            // kit, so it is also the first thing that needs it prepared.
+            // xLightKit_Prepare returns early once a kit has its lights, so
+            // this and zSceneInit's LKIT loop cannot fight whichever runs
+            // first.
+            if (globals.sceneCur->env->lightKit)
+            {
+                xLightKit_Prepare(globals.sceneCur->env->lightKit);
+            }
+#endif
         }
 
         if (easset->objectLightKit)
@@ -3070,6 +3086,194 @@ void zSceneUpdate(F32 elapsedSec)
     }
 }
 
+#ifdef PLATFORM_PC
+// A light rig standing in for the one that baked the level.
+//
+// **The world has no run-time lighting of its own to turn on.** Its colour was
+// baked into the vertices and the level ships no rig, so lighting it means
+// providing one -- and the only record of what lit it is the bake. iEnvNormals
+// fits an ambient and up to iENV_BAKED_LIGHTS directionals to it, per channel,
+// which is what these lights are.
+//
+// Not the level's own kit. A kit lights the objects that move through a level,
+// and in bb01 it points most of a half turn away from what actually lit the
+// world.
+//
+// The layout is not a style choice: xLightKit_Prepare finds the light list at
+// the sixteen bytes after the header rather than following lightList, so the
+// two have to be one allocation in this order.
+static struct
+{
+    xLightKit kit;
+    xLightKitLight lights[iENV_BAKED_LIGHTS + 1];
+} sWorldKit;
+
+// What the kit currently standing was built from.
+//
+// **Keyed on the fit and not on the iEnv.** The kit is rebuilt once a level and
+// then reused every frame, and the obvious key -- the env pointer -- goes wrong
+// exactly once: a level unloads, the next one allocates its iEnv at the same
+// address, and the new world is lit by the old level's sun. Comparing the
+// numbers instead cannot collide, because two levels that fit to identical
+// values want an identical kit.
+static struct
+{
+    S32 valid;
+    S32 count;
+    xVec3 dir[iENV_BAKED_LIGHTS];
+    F32 color[iENV_BAKED_LIGHTS][3];
+    F32 ambient[3];
+    F32 dirMean[3];
+    F32 swing;
+} sWorldKitFrom;
+
+// xLightKit.cpp switches on these and nothing names them.
+static const U32 kLightKitAmbient = 1;
+static const U32 kLightKitDirectional = 2;
+
+// Point a kit light along a direction of travel.
+//
+// xLightKit_Prepare negates the first and third rows on its way to the light's
+// frame, and a directional light shines along that frame's `at`. So the rows
+// written here are the negative of where the light travels.
+static void zWorldLightAim(xLightKitLight* light, const xVec3* travel)
+{
+    xVec3 at;
+    xVec3 right;
+    xVec3 up;
+    xVec3 hint = { 0.0f, 1.0f, 0.0f };
+
+    xVec3Normalize(&at, travel);
+
+    if (at.y > 0.99f || at.y < -0.99f)
+    {
+        hint.assign(0.0f, 0.0f, 1.0f);
+    }
+
+    xVec3Cross(&right, &hint, &at);
+    xVec3Normalize(&right, &right);
+    xVec3Cross(&up, &at, &right);
+    xVec3Normalize(&up, &up);
+
+    light->matrix[0] = -right.x;
+    light->matrix[1] = -right.y;
+    light->matrix[2] = -right.z;
+    light->matrix[4] = up.x;
+    light->matrix[5] = up.y;
+    light->matrix[6] = up.z;
+    light->matrix[8] = -at.x;
+    light->matrix[9] = -at.y;
+    light->matrix[10] = -at.z;
+    light->matrix[15] = 1.0f;
+}
+
+static void zWorldLightBuild(iEnv* env)
+{
+    F32 contrast = iScreenWorldLightContrast();
+
+    if (sWorldKitFrom.valid && sWorldKitFrom.swing == contrast &&
+        sWorldKitFrom.count == env->bakedLightCount &&
+        memcmp(sWorldKitFrom.dir, env->bakedLightDir, sizeof(sWorldKitFrom.dir)) == 0 &&
+        memcmp(sWorldKitFrom.color, env->bakedLightColor, sizeof(sWorldKitFrom.color)) == 0 &&
+        memcmp(sWorldKitFrom.ambient, env->bakedAmbient, sizeof(sWorldKitFrom.ambient)) == 0 &&
+        memcmp(sWorldKitFrom.dirMean, env->bakedDirMean, sizeof(sWorldKitFrom.dirMean)) == 0)
+    {
+        return;
+    }
+
+    if (sWorldKitFrom.valid)
+    {
+        xLightKit_Destroy(&sWorldKit.kit);
+    }
+
+    sWorldKitFrom.valid = 1;
+    sWorldKitFrom.swing = contrast;
+    sWorldKitFrom.count = env->bakedLightCount;
+    memcpy(sWorldKitFrom.dir, env->bakedLightDir, sizeof(sWorldKitFrom.dir));
+    memcpy(sWorldKitFrom.color, env->bakedLightColor, sizeof(sWorldKitFrom.color));
+    memcpy(sWorldKitFrom.ambient, env->bakedAmbient, sizeof(sWorldKitFrom.ambient));
+    memcpy(sWorldKitFrom.dirMean, env->bakedDirMean, sizeof(sWorldKitFrom.dirMean));
+
+    memset(&sWorldKit, 0, sizeof(sWorldKit));
+    sWorldKit.kit.lightCount = env->bakedLightCount + 1;
+    sWorldKit.kit.lightList = sWorldKit.lights;
+
+    // Scale the directionals by the swing and take the difference back out of
+    // the ambient, so the AVERAGE vertex keeps the brightness the bake gave it
+    // however far the two ends are pulled apart. iEnv::bakedDirMean is what the
+    // directionals contribute to that average at a swing of 1.
+    //
+    // **The top end still clips, and that is the real cost of a high swing.**
+    // This holds the mean only while nothing saturates, and bb01 reaches 1.03
+    // at a swing of 2.5 while jf01 reaches 1.13. What clips is lost, so the
+    // level comes out under the brightness this was supposed to hold. Around
+    // 1.5 is the most these levels take without it.
+    F32 swing = contrast;
+
+    xLightKitLight* amb = &sWorldKit.lights[0];
+
+    amb->type = kLightKitAmbient;
+    amb->color.alpha = 1.0f;
+
+    F32* ambOut = &amb->color.red;
+
+    for (S32 i = 0; i < 3; i++)
+    {
+        F32 a = env->bakedAmbient[i] + env->bakedDirMean[i] * (1.0f - swing);
+
+        ambOut[i] = a > 0.0f ? a : 0.0f;
+    }
+
+    for (S32 k = 0; k < env->bakedLightCount; k++)
+    {
+        xLightKitLight* dir = &sWorldKit.lights[1 + k];
+        F32* dirOut = &dir->color.red;
+
+        dir->type = kLightKitDirectional;
+        dir->color.alpha = 1.0f;
+
+        for (S32 i = 0; i < 3; i++)
+        {
+            dirOut[i] = env->bakedLightColor[k][i] * swing;
+        }
+
+        zWorldLightAim(dir, &env->bakedLightDir[k]);
+    }
+
+    xLightKit_Prepare(&sWorldKit.kit);
+}
+
+// Which rig lights the world, and whether there is one at all.
+//
+// **The level's own kit first, and it has never been rendered by anything.**
+// zSceneSetup reads easset->bspLightKit into xEnv::lightKit and every code path
+// then ignores it -- the assignment and xEnv's initialiser are the only two
+// mentions of the field in the game. It is the rig the artists authored for the
+// world, most likely the one the bake was made with, and 17 of the 55 levels
+// carry one.
+//
+// bake asks for the reconstruction instead, which is the only thing available
+// on the other 38 and the thing worth comparing the 17 against.
+static xLightKit* zWorldLightKit(zScene* s)
+{
+    // Decided at load, when the prelight was taken off. Asking again here could
+    // disagree with what load did and leave the level black or double-lit.
+    if (!s->env->geom->prelightDropped)
+    {
+        return NULL;
+    }
+
+    if (iScreenWorldLighting() == IWORLDLIGHT_AUTO && s->env->lightKit != NULL)
+    {
+        return s->env->lightKit;
+    }
+
+    zWorldLightBuild(s->env->geom);
+
+    return &sWorldKit.kit;
+}
+#endif
+
 static void zSceneRenderPreFX()
 {
     zScene* s = globals.sceneCur;
@@ -3083,7 +3287,34 @@ static void zSceneRenderPreFX()
 
     zRenderState(SDRS_Environment);
     zLightAddLocalEnv();
+
+#ifdef PLATFORM_PC
+    // The world lit at run time rather than out of its own vertices. The
+    // prelight was dropped at load, so this replaces it instead of adding to
+    // it -- see iEnvDropPrelight.
+    //
+    // The lights zLightAddLocalEnv just spliced into the world stay: those are
+    // the level's own LITE assets and they are additive on top of whichever rig
+    // this is. The entities' kits are not -- xLightKit_Enable swaps rather than
+    // stacks, so the first entity drawn takes the world's rig back out, which
+    // is why it goes back to NULL below.
+    xLightKit* worldKit = zWorldLightKit(s);
+
+    if (worldKit != NULL)
+    {
+        xLightKit_Enable(worldKit, globals.currWorld);
+    }
+#endif
+
     zEnvRender(s->env);
+
+#ifdef PLATFORM_PC
+    if (worldKit != NULL)
+    {
+        xLightKit_Enable(NULL, globals.currWorld);
+    }
+#endif
+
     zLightRemoveLocalEnv();
 
     zRenderState(SDRS_OpaqueModels);

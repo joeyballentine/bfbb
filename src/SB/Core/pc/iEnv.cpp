@@ -1,5 +1,6 @@
 #include "iEnv.h"
 
+#include "iEnvNormals.h"
 #include "iModel.h"
 
 #include "iCamera.h"
@@ -68,6 +69,28 @@ void iEnvLoad(iEnv* env, const void* data, U32, S32 dataType)
 
             env->jsp = jsp;
 
+            // All three before the instancing below, and that is the whole
+            // constraint: SetPipelineCB builds each atomic's vertex buffer from
+            // the flags the geometry has at that moment, so a normal added
+            // afterwards is one the buffer has no room for, and a prelight
+            // dropped afterwards is one the buffer still carries.
+            //
+            // Compare before generate, and that order matters too. Both read
+            // the same flag to decide whether the level has normals, so
+            // generating first would leave the check comparing the generated
+            // normals against themselves and reporting a perfect score.
+            iEnvNormalsCompare(env);
+            iEnvGenerateNormals(env);
+
+            // Only once there is a rig to put in its place. A fit that
+            // failed -- a world with no prelight to read, or too little of it
+            // -- would otherwise leave the level with no colour and no light.
+            if (iScreenWorldLighting() != IWORLDLIGHT_OFF && env->bakedLightValid)
+            {
+                iEnvDropPrelight(env);
+                env->prelightDropped = TRUE;
+            }
+
             RpClumpForAllAtomics(env->jsp->clump, SetPipelineCB, NULL);
             xClumpColl_InstancePointers(env->jsp->colltree, env->jsp->clump);
 
@@ -98,6 +121,8 @@ void iEnvLoad(iEnv* env, const void* data, U32, S32 dataType)
 void iEnvFree(iEnv* env)
 {
     _rwFrameSyncDirty();
+
+    iEnvFreeNormals(env);
 
     RpWorldDestroy(env->world);
     env->world = NULL;
