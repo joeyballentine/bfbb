@@ -295,7 +295,10 @@ cmake --build build-pc
 
 Add `-DBFBB_RENDER_BACKENDS=GL3` for an OpenGL-only build and
 `-DCMAKE_PREFIX_PATH=%USERPROFILE%/vcpkg/installed/x86-windows` for FFmpeg,
-libusb and SDL. `-m32` is set by `CMakeLists.txt` before `project()` and is not
+libusb and SDL. `-DBFBB_CONFIG_UI=wx -DBFBB_WX=vendored` draws the settings
+program in wxWidgets rather than Win32 controls, which is what the Linux and
+macOS builds use; it is a long first build, and `src/SB/Core/pc/configurator/`
+says what the two front ends are. `-m32` is set by `CMakeLists.txt` before `project()` and is not
 something to pass yourself; for a 64-bit build, use an x64 developer command
 prompt, pass `-DBFBB_BUILD_32BIT=OFF`, and point the prefix path at the
 `x64-windows` triplet. This leaves the executable in `build-pc\`; add
@@ -310,7 +313,8 @@ bin\bfbb.exe
 The first run writes `bin\config.ini` with every setting at its default, then
 stops with an error box, because there is nowhere to read the game's files from
 yet. Put your Xbox asset folder in it as shown in **Getting the assets**
-above, and run it again. `BFBB_ASSETS` overrides `[assets] path` when it is set,
+above, and run it again. `bin\bfbb_config.exe`, built beside the game, edits
+that file with controls on it and lists what every setting accepts. `BFBB_ASSETS` overrides `[assets] path` when it is set,
 which is how to run a build against a second extraction without editing
 anything.
 

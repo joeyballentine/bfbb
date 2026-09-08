@@ -10,5 +10,13 @@ rem     build-debug.bat
 rem     build-debug.bat GL3
 rem     build-debug.bat D3D9 x64
 rem
-rem Puts bfbb.exe and the DLLs it needs in bin\. See tools\pcbuild.bat.
+rem Puts bfbb.exe, the DLLs it needs and bfbb_config.exe in bin\.
+rem
+rem The configurator is drawn in Win32 controls by default. For the wxWidgets
+rem one instead, which is the same window on every host:
+rem
+rem     set BFBB_CONFIG_UI=wx
+rem     set BFBB_WX=vendored
+rem
+rem See tools\pcbuild.bat.
 call "%~dp0tools\pcbuild.bat" Debug %1 %2

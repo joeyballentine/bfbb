@@ -345,8 +345,8 @@ jobs:
   # out-of-memory bug that the real console would hit can hide in it.
   #
   # Each artifact is a folder to run the game out of: the executable, the
-  # configurator on Windows, the button glyphs, and whatever DLLs the build
-  # staged beside them. It does NOT contain the game's data. config.ini is not
+  # configurator, the button glyphs, and whatever DLLs the build staged beside
+  # them. It does NOT contain the game's data. config.ini is not
   # in it either -- the game writes one with the defaults on first run, and
   # shipping one would freeze today's defaults into every download.
   #

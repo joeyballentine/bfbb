@@ -76,11 +76,21 @@ does it.
 
 ## Building
 
-Part of the normal PC build; it lands in `bin/` beside the game.
+Part of the normal PC build; `build-release.bat` and `build-debug.bat` put it
+in `bin/` beside the game, and the script says at the end which front end it
+built. The CI package carries it on every host.
 
-`BFBB_CONFIG_UI` picks the front end: `auto`, `wx`, `win32` or `off`. `auto`
-takes wx wherever wxWidgets can be found, Win32 controls on a Windows host
-where it cannot, and builds nothing anywhere else.
+`BFBB_CONFIG_UI` picks the front end: `auto`, `wx`, `win32` or `off`. The build
+scripts read it and `BFBB_WX` from the environment:
+
+```
+set BFBB_CONFIG_UI=wx
+set BFBB_WX=vendored
+build-release.bat
+```
+
+`auto` takes wx wherever wxWidgets can be found, Win32 controls on a Windows
+host where it cannot, and builds nothing anywhere else.
 
 `BFBB_WX` says where wxWidgets comes from, on the same three words SDL uses:
 `auto`, `system`, `vendored`. Off Windows an installed `libwxgtk` or a `brew

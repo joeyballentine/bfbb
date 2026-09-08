@@ -1355,6 +1355,12 @@ if(NOT BFBB_CONFIG_UI STREQUAL "off")
   endif()
 endif()
 
+# Into the cache so a build script can read back what the configure settled on,
+# the way it reads BFBB_RENDER_BACKENDS. With no argument the answer is this
+# file's, which is the thing worth reporting.
+set(BFBB_CONFIG_FRONTEND "${BFBB_CONFIG_FRONTEND}" CACHE INTERNAL
+  "The configurator front end this build settled on")
+
 if(NOT BFBB_CONFIG_FRONTEND STREQUAL "none")
   message(STATUS "configurator: ${BFBB_CONFIG_FRONTEND}")
 
