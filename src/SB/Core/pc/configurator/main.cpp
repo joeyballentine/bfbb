@@ -57,6 +57,10 @@ namespace
     };
 
     // One setting, laid out.
+    //
+    // The four windows are created once, when the section is shown, and only
+    // MOVED after that. Scrolling a pane by destroying and rebuilding its
+    // contents flickers, loses the caret and throws away half-typed text.
     struct Row
     {
         S32 setting;
@@ -64,6 +68,12 @@ namespace
         HWND control;
         HWND browse;
         HWND desc;
+
+        // The description's height at the width it was last measured for. Kept
+        // rather than measured every time, because a scroll changes neither
+        // the text nor the width and re-measuring every row on every wheel
+        // notch is the other way to make scrolling feel wrong.
+        int descH;
     };
 
     struct App
@@ -91,6 +101,11 @@ namespace
         // scrolled. Both in pixels.
         int contentHeight;
         int scroll;
+
+        // The pane width the descriptions were last measured at. A resize
+        // changes how they wrap and so how tall each row is; a scroll does
+        // not, and this is what tells the two apart.
+        int measuredWidth;
 
         int dpi;
     };
@@ -230,6 +245,31 @@ namespace
         return r.bottom - r.top;
     }
 
+    // A closed combo box answers the wheel by CHANGING ITS SELECTION. Over a
+    // scrolling pane that means running the wheel down the window silently
+    // switches the window mode, the preset and the UI anchoring on the way
+    // past, and the file records every one of them.
+    //
+    // So a closed one hands the wheel to the pane instead. An open one keeps
+    // it, because then the wheel is picking from the list, which is what the
+    // pointer is over and what the user meant.
+    LRESULT CALLBACK comboWheelProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR id,
+                                    DWORD_PTR)
+    {
+        if (msg == WM_MOUSEWHEEL && SendMessage(wnd, CB_GETDROPPEDSTATE, 0, 0) == FALSE)
+        {
+            SendMessage(GetParent(wnd), WM_MOUSEWHEEL, wp, lp);
+            return 0;
+        }
+
+        if (msg == WM_NCDESTROY)
+        {
+            RemoveWindowSubclass(wnd, comboWheelProc, id);
+        }
+
+        return DefSubclassProc(wnd, msg, wp, lp);
+    }
+
     HWND make(const char* cls, const char* text, DWORD style, int x, int y, int w, int h, int id)
     {
         HWND h2 = CreateWindowExA(0, cls, text, WS_CHILD | WS_VISIBLE | style, x, y, w, h,
@@ -262,16 +302,25 @@ namespace
         gApp.rowCount = 0;
     }
 
-    // Lay the current section out from the top of the pane. Called on a
-    // section change and on a resize; it rebuilds rather than moving, because
-    // a row's height depends on how its description wraps and that changes
-    // with the width.
-    void buildRows()
+    // Where a row's four windows go, in CONTENT coordinates -- measured from
+    // the top of the whole section, not from the top of the pane. What is on
+    // screen is this shifted up by gApp.scroll, and that subtraction is the
+    // only thing scrolling does.
+    struct RowRects
     {
-        destroyRows();
+        RECT label;
+        RECT control;
+        RECT browse;
+        RECT desc;
+        int bottom;
+    };
 
-        RECT client;
-        GetClientRect(gApp.pane, &client);
+    // The geometry for one row at pane width `width`, starting at content y.
+    // Shared by the code that creates the windows and the code that moves
+    // them, so a row cannot be built at one size and positioned at another.
+    RowRects rowRects(const Row* row, int width, int y)
+    {
+        const iConfigSetting* s = &kConfigSettings[row->setting];
 
         const int margin = px(14);
         const int labelW = px(150);
@@ -280,16 +329,232 @@ namespace
         const int browseW = px(78);
         const int rowGap = px(16);
 
-        int width = client.right - client.left;
         int controlX = margin + labelW + gap;
+
+        // A path is worth all the width there is; everything else is a number
+        // or a word and a fixed box reads as a column.
         int controlW = px(200);
+        if (s->kind == ICONFIG_FOLDER || s->kind == ICONFIG_FONT || s->kind == ICONFIG_STRING)
+        {
+            controlW = width - controlX - margin;
+            if (wantsBrowse(s))
+            {
+                controlW -= browseW + px(6);
+            }
+            if (controlW < px(120))
+            {
+                controlW = px(120);
+            }
+        }
+
         int descW = width - margin * 2;
         if (descW < px(120))
         {
             descW = px(120);
         }
 
-        int y = margin - gApp.scroll;
+        RowRects r;
+        memset(&r, 0, sizeof(r));
+
+        SetRect(&r.label, margin, y + px(4), margin + labelW, y + px(4) + px(18));
+
+        if (s->kind == ICONFIG_BOOL)
+        {
+            SetRect(&r.control, controlX, y + px(3), controlX + px(60), y + px(3) + px(18));
+        }
+        else if (wantsCombo(s))
+        {
+            // A combo box's height is how far the LIST drops, not how tall the
+            // box is -- that follows the font. So it is given the drop height
+            // here and every time it is moved, or the list would open one item
+            // tall after the first scroll.
+            SetRect(&r.control, controlX, y, controlX + controlW, y + px(220));
+        }
+        else
+        {
+            SetRect(&r.control, controlX, y, controlX + controlW, y + controlH);
+        }
+
+        if (wantsBrowse(s))
+        {
+            SetRect(&r.browse, controlX + controlW + px(6), y,
+                    controlX + controlW + px(6) + browseW, y + controlH);
+        }
+
+        int below = y + controlH + px(3);
+        SetRect(&r.desc, margin, below, margin + descW, below + row->descH);
+
+        r.bottom = below + row->descH + rowGap;
+        return r;
+    }
+
+    int paneWidth()
+    {
+        RECT client;
+        GetClientRect(gApp.pane, &client);
+        return client.right - client.left;
+    }
+
+    int panePage()
+    {
+        RECT client;
+        GetClientRect(gApp.pane, &client);
+        return client.bottom - client.top;
+    }
+
+    // The description a row should be showing, set on the window and measured.
+    // Only when it has actually changed: SetWindowText repaints, and this runs
+    // for every row whenever any one value changes.
+    void refreshDescription(Row* row, int width)
+    {
+        char want[768];
+        describe(row->setting, want, sizeof(want));
+
+        char have[768];
+        GetWindowTextA(row->desc, have, sizeof(have));
+
+        int descW = width - px(14) * 2;
+        if (descW < px(120))
+        {
+            descW = px(120);
+        }
+
+        if (strcmp(want, have) != 0)
+        {
+            SetWindowTextA(row->desc, want);
+        }
+
+        row->descH = measureText(gApp.pane, want, descW);
+    }
+
+    void updateScrollBar()
+    {
+        int page = panePage();
+
+        int most = gApp.contentHeight - page;
+        if (most < 0)
+        {
+            most = 0;
+        }
+        if (gApp.scroll > most)
+        {
+            gApp.scroll = most;
+        }
+        if (gApp.scroll < 0)
+        {
+            gApp.scroll = 0;
+        }
+
+        SCROLLINFO si;
+        memset(&si, 0, sizeof(si));
+        si.cbSize = sizeof(si);
+        si.fMask = SIF_RANGE | SIF_PAGE | SIF_POS | SIF_DISABLENOSCROLL;
+        si.nMin = 0;
+        si.nMax = gApp.contentHeight > 0 ? gApp.contentHeight - 1 : 0;
+        si.nPage = (UINT)page;
+        si.nPos = gApp.scroll;
+        SetScrollInfo(gApp.pane, SB_VERT, &si, TRUE);
+    }
+
+    // Put every row's windows where the current width and scroll say they go.
+    // Nothing is created or destroyed here.
+    //
+    // `remeasure` re-reads each description and works out how tall it wraps to,
+    // which is needed when the text changed or the pane was resized and is
+    // wasted work on a scroll.
+    //
+    // The moves go through one DeferWindowPos batch so the whole pane arrives
+    // in a single frame. Moving forty windows one at a time is what a scroll
+    // that tears and flickers looks like.
+    void layoutRows(bool remeasure)
+    {
+        int width = paneWidth();
+
+        if (remeasure || width != gApp.measuredWidth)
+        {
+            for (S32 i = 0; i < gApp.rowCount; i++)
+            {
+                refreshDescription(&gApp.rows[i], width);
+            }
+            gApp.measuredWidth = width;
+        }
+
+        // The content height has to be known before anything is placed, so
+        // that updateScrollBar can clamp a scroll that is now past the end --
+        // otherwise a resize that makes the content shorter leaves the rows
+        // pushed off the top.
+        int y = px(14);
+        for (S32 i = 0; i < gApp.rowCount; i++)
+        {
+            y = rowRects(&gApp.rows[i], width, y).bottom;
+        }
+        gApp.contentHeight = y;
+
+        updateScrollBar();
+
+        HDWP dwp = BeginDeferWindowPos(gApp.rowCount * 4);
+
+        y = px(14);
+        for (S32 i = 0; i < gApp.rowCount; i++)
+        {
+            Row* row = &gApp.rows[i];
+            RowRects r = rowRects(row, width, y);
+
+            struct
+            {
+                HWND wnd;
+                const RECT* at;
+            } parts[] = {
+                { row->label, &r.label },
+                { row->control, &r.control },
+                { row->browse, &r.browse },
+                { row->desc, &r.desc },
+            };
+
+            for (size_t p = 0; p < sizeof(parts) / sizeof(parts[0]); p++)
+            {
+                if (parts[p].wnd == NULL)
+                {
+                    continue;
+                }
+
+                const RECT* at = parts[p].at;
+                if (dwp != NULL)
+                {
+                    dwp = DeferWindowPos(dwp, parts[p].wnd, NULL, at->left, at->top - gApp.scroll,
+                                         at->right - at->left, at->bottom - at->top,
+                                         SWP_NOZORDER | SWP_NOACTIVATE);
+                }
+                else
+                {
+                    // The batch could not be started, which is out of memory
+                    // and not worth a second code path beyond this one.
+                    SetWindowPos(parts[p].wnd, NULL, at->left, at->top - gApp.scroll,
+                                 at->right - at->left, at->bottom - at->top,
+                                 SWP_NOZORDER | SWP_NOACTIVATE);
+                }
+            }
+
+            y = r.bottom;
+        }
+
+        if (dwp != NULL)
+        {
+            EndDeferWindowPos(dwp);
+        }
+
+        // The gaps between rows belong to the pane, and moving a child does
+        // not repaint what it moved away from.
+        InvalidateRect(gApp.pane, NULL, TRUE);
+    }
+
+    // Create the current section's windows. Called on a section change and
+    // nowhere else -- everything after that is layoutRows.
+    void buildRows()
+    {
+        destroyRows();
+
+        int width = paneWidth();
 
         for (S32 i = 0; i < kConfigSettingCount; i++)
         {
@@ -310,28 +575,15 @@ namespace
 
             int id = kIdRowBase + gApp.rowCount * kIdsPerRow;
 
-            // A path is worth all the width there is; everything else is a
-            // number or a word and a fixed box reads as a column.
-            int thisW = controlW;
-            if (s->kind == ICONFIG_FOLDER || s->kind == ICONFIG_FONT || s->kind == ICONFIG_STRING)
-            {
-                thisW = width - controlX - margin;
-                if (wantsBrowse(s))
-                {
-                    thisW -= browseW + px(6);
-                }
-                if (thisW < px(120))
-                {
-                    thisW = px(120);
-                }
-            }
-
-            row->label = make("STATIC", s->name, SS_LEFT, margin, y + px(4), labelW, px(18), 0);
+            // Created off-screen at a nominal size. layoutRows below is what
+            // puts them where they belong, and it is the only code that knows
+            // the geometry.
+            row->label = make("STATIC", s->name, SS_LEFT, 0, 0, px(150), px(18), 0);
 
             if (s->kind == ICONFIG_BOOL)
             {
-                row->control = make("BUTTON", "on", BS_AUTOCHECKBOX | WS_TABSTOP, controlX,
-                                    y + px(3), px(60), px(18), id + kIdRowValue);
+                row->control = make("BUTTON", "on", BS_AUTOCHECKBOX | BS_NOTIFY | WS_TABSTOP, 0, 0,
+                                    px(60), px(18), id + kIdRowValue);
 
                 bool on = (iHostStrCaseCmp(gApp.values[i].text, "on") == 0 ||
                            iHostStrCaseCmp(gApp.values[i].text, "true") == 0 ||
@@ -346,8 +598,8 @@ namespace
                 // number or the word "display" -- so its box stays typable and
                 // the list is a shortcut to the words.
                 DWORD style = (s->kind == ICONFIG_ENUM) ? CBS_DROPDOWNLIST : CBS_DROPDOWN;
-                row->control = make("COMBOBOX", "", style | WS_TABSTOP | WS_VSCROLL, controlX, y,
-                                    thisW, px(220), id + kIdRowValue);
+                row->control = make("COMBOBOX", "", style | WS_TABSTOP | WS_VSCROLL, 0, 0, px(200),
+                                    px(220), id + kIdRowValue);
 
                 char word[64];
                 for (S32 c = 0; choiceAt(s->choices, c, word, sizeof(word)); c++)
@@ -365,77 +617,36 @@ namespace
                 {
                     SetWindowTextA(row->control, gApp.values[i].text);
                 }
+
+                SetWindowSubclass(row->control, comboWheelProc, 1, 0);
             }
             else
             {
                 row->control = make("EDIT", gApp.values[i].text,
-                                    ES_LEFT | ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP, controlX, y,
-                                    thisW, controlH, id + kIdRowValue);
+                                    ES_LEFT | ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP, 0, 0,
+                                    px(200), px(23), id + kIdRowValue);
             }
 
             if (wantsBrowse(s))
             {
-                row->browse = make("BUTTON", "Browse...", BS_PUSHBUTTON | WS_TABSTOP,
-                                   controlX + thisW + px(6), y, browseW, controlH,
-                                   id + kIdRowBrowse);
+                row->browse = make("BUTTON", "Browse...", BS_PUSHBUTTON | WS_TABSTOP, 0, 0, px(78),
+                                   px(23), id + kIdRowBrowse);
             }
 
-            int below = y + controlH + px(3);
+            row->desc = make("STATIC", "", SS_LEFT, 0, 0, px(200), px(18), 0);
 
-            char text[768];
-            describe(i, text, sizeof(text));
-            int descH = measureText(gApp.pane, text, descW);
-            row->desc = make("STATIC", text, SS_LEFT, margin, below, descW, descH, 0);
-
-            y = below + descH + rowGap;
             gApp.rowCount++;
         }
 
-        gApp.contentHeight = y + gApp.scroll;
-
-        InvalidateRect(gApp.pane, NULL, TRUE);
-    }
-
-    void updateScrollBar()
-    {
-        RECT client;
-        GetClientRect(gApp.pane, &client);
-        int page = client.bottom - client.top;
-
-        SCROLLINFO si;
-        memset(&si, 0, sizeof(si));
-        si.cbSize = sizeof(si);
-        si.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
-        si.nMin = 0;
-        si.nMax = gApp.contentHeight > 0 ? gApp.contentHeight - 1 : 0;
-        si.nPage = (UINT)page;
-        si.nPos = gApp.scroll;
-        SetScrollInfo(gApp.pane, SB_VERT, &si, TRUE);
-
-        int most = gApp.contentHeight - page;
-        if (most < 0)
-        {
-            most = 0;
-        }
-        if (gApp.scroll > most)
-        {
-            gApp.scroll = most;
-        }
-    }
-
-    void relayout()
-    {
-        buildRows();
-        updateScrollBar();
+        // Nothing has been measured at this width yet, whatever the last
+        // section was measured at.
+        gApp.measuredWidth = -1;
+        layoutRows(true);
     }
 
     void scrollTo(int pos)
     {
-        RECT client;
-        GetClientRect(gApp.pane, &client);
-        int page = client.bottom - client.top;
-
-        int most = gApp.contentHeight - page;
+        int most = gApp.contentHeight - panePage();
         if (most < 0)
         {
             most = 0;
@@ -455,8 +666,56 @@ namespace
         }
 
         gApp.scroll = pos;
-        buildRows();
-        updateScrollBar();
+        layoutRows(false);
+
+        SCROLLINFO si;
+        memset(&si, 0, sizeof(si));
+        si.cbSize = sizeof(si);
+        si.fMask = SIF_POS;
+        si.nPos = gApp.scroll;
+        SetScrollInfo(gApp.pane, SB_VERT, &si, TRUE);
+    }
+
+    // Scroll `rect`, in content coordinates, into view -- by the least that
+    // will do it. For tabbing: a control the pane has scrolled past still
+    // takes focus, and typing into something invisible is the other way this
+    // reads as broken.
+    void scrollIntoView(const RECT* rect)
+    {
+        int page = panePage();
+        int top = rect->top - px(14);
+        int bottom = rect->bottom + px(14);
+
+        if (top < gApp.scroll)
+        {
+            scrollTo(top);
+        }
+        else if (bottom > gApp.scroll + page)
+        {
+            scrollTo(bottom - page);
+        }
+    }
+
+    void scrollRowIntoView(S32 index)
+    {
+        int width = paneWidth();
+        int y = px(14);
+
+        for (S32 i = 0; i < gApp.rowCount; i++)
+        {
+            RowRects r = rowRects(&gApp.rows[i], width, y);
+            if (i == index)
+            {
+                // The control and its label, not the description under it: a
+                // row whose description is six lines long would otherwise
+                // scroll its own control off the top to fit.
+                RECT want = r.label;
+                want.bottom = r.control.top + px(23);
+                scrollIntoView(&want);
+                return;
+            }
+            y = r.bottom;
+        }
     }
 
     // -------------------------------------------------------------------
@@ -521,7 +780,7 @@ namespace
         {
             SetWindowTextA(row->control, path);
             harvestRow(row);
-            relayout();
+            layoutRows(true);
         }
 
         CoTaskMemFree(picked);
@@ -553,7 +812,7 @@ namespace
         {
             SetWindowTextA(row->control, path);
             harvestRow(row);
-            relayout();
+            layoutRows(true);
         }
     }
 
@@ -587,7 +846,7 @@ namespace
         gApp.section = which;
         gApp.scroll = 0;
         SendMessage(gApp.sections, LB_SETCURSEL, (WPARAM)which, 0);
-        relayout();
+        buildRows();
     }
 
     bool save()
@@ -648,7 +907,7 @@ namespace
                 gApp.values[i].present = true;
             }
         }
-        relayout();
+        buildRows();
     }
 
     // -------------------------------------------------------------------
@@ -764,8 +1023,17 @@ namespace
         }
 
         case WM_MOUSEWHEEL:
-            scrollTo(gApp.scroll - GET_WHEEL_DELTA_WPARAM(wp) * px(48) / WHEEL_DELTA);
+        {
+            // Three lines a notch, as the system is set, so this scrolls like
+            // everything else on the machine does. WHEEL_PAGESCROLL is what
+            // "one screen at a time" comes back as.
+            UINT lines = 3;
+            SystemParametersInfoA(SPI_GETWHEELSCROLLLINES, 0, &lines, 0);
+
+            int step = (lines == WHEEL_PAGESCROLL) ? panePage() : (int)lines * px(19);
+            scrollTo(gApp.scroll - GET_WHEEL_DELTA_WPARAM(wp) * step / WHEEL_DELTA);
             return 0;
+        }
 
         case WM_COMMAND:
         {
@@ -789,15 +1057,25 @@ namespace
                 return 0;
             }
 
+            // Tabbing reaches a control the pane has scrolled past, and
+            // typing into something off the top of the window is the other way
+            // this reads as broken.
+            if (HIWORD(wp) == EN_SETFOCUS || HIWORD(wp) == CBN_SETFOCUS ||
+                HIWORD(wp) == BN_SETFOCUS)
+            {
+                scrollRowIntoView((S32)(row - gApp.rows));
+                return 0;
+            }
+
             // The "(default: x)" line under a row follows what is in the
-            // control, so anything that finishes a change rebuilds. Not on
-            // every keystroke: EN_CHANGE while typing a path would rebuild the
-            // row out from under the caret.
+            // control, so anything that finishes a change re-reads it. Not on
+            // every keystroke: EN_CHANGE while typing a path would re-measure
+            // and shuffle the rows under the caret.
             if (HIWORD(wp) == BN_CLICKED || HIWORD(wp) == CBN_SELCHANGE ||
                 HIWORD(wp) == EN_KILLFOCUS || HIWORD(wp) == CBN_KILLFOCUS)
             {
                 harvestRow(row);
-                relayout();
+                layoutRows(true);
                 return 0;
             }
             break;
@@ -854,7 +1132,7 @@ namespace
             if (gApp.pane != NULL)
             {
                 layoutMain();
-                relayout();
+                layoutRows(true);
             }
             return 0;
 
@@ -864,6 +1142,22 @@ namespace
             mmi->ptMinTrackSize.x = px(560);
             mmi->ptMinTrackSize.y = px(400);
             return 0;
+        }
+
+        // The wheel goes to whatever has focus, which after clicking a section
+        // or a button is not the pane. Send it there when the pointer is over
+        // it, which is where the user is looking.
+        case WM_MOUSEWHEEL:
+        {
+            POINT pt = { (short)LOWORD(lp), (short)HIWORD(lp) };
+            RECT r;
+            GetWindowRect(gApp.pane, &r);
+            if (PtInRect(&r, pt))
+            {
+                SendMessage(gApp.pane, WM_MOUSEWHEEL, wp, lp);
+                return 0;
+            }
+            break;
         }
 
         case WM_COMMAND:
@@ -1035,7 +1329,7 @@ int APIENTRY WinMain(HINSTANCE instance, HINSTANCE, LPSTR commandLine, int show)
     }
 
     layoutMain();
-    relayout();
+    buildRows();
 
     ShowWindow(gApp.main, show);
     UpdateWindow(gApp.main);
