@@ -86,6 +86,96 @@ struct iHipolyV3
     F64 x, y, z;
 };
 
+// -----------------------------------------------------------------------
+// A hash map from three 64-bit keys to a 32-bit value. Open addressing;
+// never shrinks; sized for what the caller says it will hold.
+
+struct iHipolyKey3Map
+{
+    struct Slot
+    {
+        S64 a, b, c;
+        U32 v;
+        U32 used;
+    };
+    iHipolyArray<Slot> slots;
+    U32 mask;
+    U32 count;
+
+    void init(U32 expected)
+    {
+        U32 size = 64;
+        while (size < expected * 2)
+        {
+            size *= 2;
+        }
+        slots.resizeZero(size);
+        mask = size - 1;
+        count = 0;
+    }
+
+    static U64 mix(U64 h)
+    {
+        h ^= h >> 33;
+        h *= 0xff51afd7ed558ccdULL;
+        h ^= h >> 33;
+        h *= 0xc4ceb9fe1a85ec53ULL;
+        h ^= h >> 33;
+        return h;
+    }
+
+    static U64 hash(S64 a, S64 b, S64 c)
+    {
+        return mix((U64)a * 0x9E3779B97F4A7C15ULL ^ mix((U64)b) ^ (mix((U64)c) << 1));
+    }
+
+    // The value for the key, inserting `v` when it is new; `inserted`
+    // says which.
+    U32 findOrInsert(S64 a, S64 b, S64 c, U32 v, bool* inserted)
+    {
+        U32 i = (U32)hash(a, b, c) & mask;
+        for (;;)
+        {
+            Slot& s = slots[i];
+            if (!s.used)
+            {
+                s.used = 1;
+                s.a = a;
+                s.b = b;
+                s.c = c;
+                s.v = v;
+                count++;
+                *inserted = true;
+                return v;
+            }
+            if (s.a == a && s.b == b && s.c == c)
+            {
+                *inserted = false;
+                return s.v;
+            }
+            i = (i + 1) & mask;
+        }
+    }
+
+    S32 find(S64 a, S64 b, S64 c) const
+    {
+        U32 i = (U32)hash(a, b, c) & mask;
+        for (;;)
+        {
+            const Slot& s = slots[i];
+            if (!s.used)
+            {
+                return -1;
+            }
+            if (s.a == a && s.b == b && s.c == c)
+            {
+                return (S32)s.v;
+            }
+            i = (i + 1) & mask;
+        }
+    }
+};
+
 // One geometry of a domain, as the caller holds it. Attributes are optional;
 // a NULL pointer means the geometry has none of that kind.
 struct iHipolyGeom
@@ -115,8 +205,10 @@ struct iHipolyParams
     const F64* maxBulgePerFace;
     F64 relBulge;          // as a fraction of the edge's length
     const F64* relBulgePerFace;
+    F64 turnBulge;         // times what the surface turns across the edge; 1.5 trusts the normals
     F64 hardDeg;           // an edge folded more than this stays straight; < 0 for none
     bool noiseGuard;       // pin vertices with both convex and concave edges
+    bool pinOpenEdges;     // keep one-faced edges straight: the world's sheets lie along each other
     U32 maxVerts;          // per geometry: a 16-bit index buffer
     U32 maxTris;           // per geometry: what a JSP collision record can address
 };

@@ -24,6 +24,7 @@
 
 #include "iHipoly.h"
 #include "iHipolyTess.h"
+#include "iHipolyFillet.h"
 #include "iConfig.h"
 
 #include <math.h>
@@ -38,13 +39,16 @@ namespace
     // The world: edges are cut to this length, up to this many segments.
     const F64 kWorldTarget = 1.0;
     const S32 kWorldMaxLevel = 6;
-    const F64 kWorldCrease = 60.0;       // degrees; sharper folds stay sharp
+    const F64 kWorldCrease = 90.0;       // degrees of turn; sharper folds stay sharp
     const F64 kWorldMaxBulge = 0.3;      // units an edge midpoint may move
     const F64 kWorldRelBulge = 0.3;
+    // And never more than the surface turns across the edge, times this: a
+    // normal at an end can be trusted to about half the dihedral angle.
+    const F64 kTurnBulge = 1.5;
     // Rock, sand, kelp and the like round past folds a building must keep.
     // The wider bulge is for walls and boulders; a floor the player walks on
     // keeps the tight one, or the sand humps.
-    const F64 kNaturalCrease = 100.0;
+    const F64 kNaturalCrease = 140.0;
     const F64 kNaturalMaxBulge = 1.0;
     const F64 kNaturalRelBulge = 0.75;
     const F64 kSteepNy = 0.7;
@@ -85,9 +89,58 @@ namespace
     const U32 kLeafSize = 6;
     const U32 kMaxDepth = 30;
 
-    // --- the setting -------------------------------------------------------
+    // The fillet: folds sharper than this between landscape faces, rounded
+    // this far out; a vertex may move this much, a floor or cap vertex this
+    // much and only down.
+    const F64 kFilletAngle = 35.0;
+    const F64 kFilletRadius = 1.5;
+    const U32 kFilletIters = 12;
+    const F64 kFilletMove = 0.6;
+    const F64 kFilletFloorMove = 0.25;
 
-    S32 sEnabled = -1;
+    // --- the settings ------------------------------------------------------
+
+    // Read once. `factor` scales how far everything rounds -- the bulge caps
+    // and the fillet -- so a stronger or weaker version is one number. The
+    // offline suite shipped factor 1 with creases of 60 and 100 degrees;
+    // the defaults here round more, which is what looked right in play.
+    struct Settings
+    {
+        S32 enabled;
+        F64 factor;
+        F64 target;
+        S32 maxLevel;
+        F64 crease;
+        F64 naturalCrease;
+        F64 fillet;
+        F64 modelTarget;
+        U32 budget;
+    };
+    const F64 kFactor = 2.0;
+    Settings sCfg = { -1, kFactor, kWorldTarget, kWorldMaxLevel, kWorldCrease, kNaturalCrease,
+                      kFilletRadius, kModelTarget, kWorldBudget };
+
+    const Settings& settings()
+    {
+        if (sCfg.enabled < 0)
+        {
+            sCfg.enabled = iConfigGetBool("experimental.hipoly_assets", FALSE) ? 1 : 0;
+            sCfg.factor = iConfigGetFloat("experimental.hipoly_factor", (F32)kFactor);
+            sCfg.target = iConfigGetFloat("experimental.hipoly_target", (F32)kWorldTarget);
+            sCfg.maxLevel = iConfigGetInt("experimental.hipoly_max_level", kWorldMaxLevel);
+            sCfg.crease = iConfigGetFloat("experimental.hipoly_crease", (F32)kWorldCrease);
+            sCfg.naturalCrease = iConfigGetFloat("experimental.hipoly_natural_crease", (F32)kNaturalCrease);
+            sCfg.fillet = iConfigGetFloat("experimental.hipoly_fillet", (F32)kFilletRadius);
+            sCfg.modelTarget = iConfigGetFloat("experimental.hipoly_model_target", (F32)kModelTarget);
+            sCfg.budget = (U32)iConfigGetInt("experimental.hipoly_budget", (S32)kWorldBudget);
+            if (sCfg.maxLevel < 1) sCfg.maxLevel = 1;
+            if (sCfg.maxLevel > 15) sCfg.maxLevel = 15;
+            if (sCfg.target < 0.05) sCfg.target = 0.05;
+            if (sCfg.modelTarget < 0.02) sCfg.modelTarget = 0.02;
+            if (sCfg.factor < 0.0) sCfg.factor = 0.0;
+        }
+        return sCfg;
+    }
 
     bool containsWord(const char* name, const char* const* words)
     {
@@ -731,11 +784,7 @@ namespace
 
 S32 iHipolyEnabled()
 {
-    if (sEnabled < 0)
-    {
-        sEnabled = iConfigGetBool("experimental.hipoly_assets", FALSE) ? 1 : 0;
-    }
-    return sEnabled;
+    return settings().enabled;
 }
 
 void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSize)
@@ -745,6 +794,7 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
     {
         return NULL;
     }
+    const Settings& cfg = settings();
     rw::Clump* clump = reinterpret_cast<rw::Clump*>(rpclump);
     clock_t t0 = clock();
     iHipolyArray<rw::Atomic*> atoms;
@@ -793,9 +843,9 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
                 F64 l = sqrt(nx * nx + ny * ny + nz * nz);
                 F64 uy = l > 1e-12 ? ny / l : 0.0;
                 bool steep = (uy < 0 ? -uy : uy) < kSteepNy;
-                crease[f] = nat ? kNaturalCrease : kWorldCrease;
-                bulge[f] = (nat && steep) ? kNaturalMaxBulge : kWorldMaxBulge;
-                rel[f] = (nat && steep) ? kNaturalRelBulge : kWorldRelBulge;
+                crease[f] = nat ? cfg.naturalCrease : cfg.crease;
+                bulge[f] = ((nat && steep) ? kNaturalMaxBulge : kWorldMaxBulge) * cfg.factor;
+                rel[f] = ((nat && steep) ? kNaturalRelBulge : kWorldRelBulge) * cfg.factor;
                 if (nat)
                 {
                     naturalFaces++;
@@ -806,14 +856,16 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
 
     iHipolyParams pr;
     memset(&pr, 0, sizeof(pr));
-    pr.target = kWorldTarget;
-    pr.maxLevel = kWorldMaxLevel;
+    pr.target = cfg.target;
+    pr.maxLevel = cfg.maxLevel;
+    pr.turnBulge = kTurnBulge * cfg.factor;
     pr.minBulge = kMinBulge;
     pr.creaseDegPerFace = crease.p;
     pr.maxBulgePerFace = bulge.p;
     pr.relBulgePerFace = rel.p;
     pr.hardDeg = -1.0;
     pr.noiseGuard = false;
+    pr.pinOpenEdges = true;
     pr.maxVerts = kMaxVerts;
     pr.maxTris = kMaxTris;
 
@@ -828,11 +880,11 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
         {
             total += res[k].nt;
         }
-        if (total <= kWorldBudget || pr.target >= 8.0)
+        if (total <= cfg.budget || pr.target >= 8.0)
         {
             break;
         }
-        F64 grow = sqrt((F64)total / kWorldBudget);
+        F64 grow = sqrt((F64)total / cfg.budget);
         grow = grow < 1.15 ? 1.15 : (grow > 2.0 ? 2.0 : grow);
         pr.target *= grow;
     }
@@ -840,6 +892,45 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
     // The shipped tree's flags, before the geometries go.
     ParentFlags* pf = new ParentFlags[n];
     parentFlags(atoms.p, n, (const U8*)coll, collSize, pf);
+
+    // The fillet, over the tessellation: which triangles are landscape and
+    // which the shipped tree lets the player stand on come from the parents.
+    iHipolyFilletStats fs;
+    memset(&fs, 0, sizeof(fs));
+    if (cfg.fillet > 0.0 && cfg.factor > 0.0)
+    {
+        iHipolyArray<U8>* natural = new iHipolyArray<U8>[n];
+        iHipolyArray<U8>* landable = new iHipolyArray<U8>[n];
+        const U8** natp = new const U8*[n];
+        const U8** landp = new const U8*[n];
+        for (U32 k = 0; k < n; k++)
+        {
+            const rw::Geometry* geo = atoms[k]->geometry;
+            natural[k].resize(res[k].nt);
+            landable[k].resize(res[k].nt);
+            for (U32 t = 0; t < res[k].nt; t++)
+            {
+                U32 m = res[k].tris[t * 4 + 3];
+                natural[k][t] = m < (U32)geo->matList.numMaterials && isNatural(geo->matList.materials[m]);
+                U32 parent = res[k].parent[t];
+                S32 flags = parent < pf[k].flags.n ? pf[k].flags[parent] : -1;
+                landable[k][t] = flags >= 0 && !(flags & 0x10);
+            }
+            natp[k] = natural[k].p;
+            landp[k] = landable[k].p;
+        }
+        iHipolyFilletParams fp;
+        fp.angleDeg = kFilletAngle;
+        fp.radius = cfg.fillet * cfg.factor;
+        fp.iters = kFilletIters;
+        fp.maxMove = kFilletMove * cfg.factor;
+        fp.floorMove = kFilletFloorMove * cfg.factor;
+        iHipolyFillet(res, n, natp, landp, fp, &fs);
+        delete[] landp;
+        delete[] natp;
+        delete[] landable;
+        delete[] natural;
+    }
 
     // The new geometries, and the collision triangles over them, addressed
     // the way xJSP's expanded index buffer will number them: material by
@@ -901,6 +992,12 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
            "%u collision triangles, %u open edges, %u T-junctions, %u folds; %.1fs\n",
            before, total, n, naturalFaces, pr.target, ctris.n, stats.openEdges, stats.tJunctions,
            stats.folds, (double)(clock() - t0) / CLOCKS_PER_SEC);
+    if (fs.seeds)
+    {
+        printf("bfbb: hipoly fillet: %u crease vertices, %u in the band, %u moved up to %.2f "
+               "(%u held short of another sheet, %u sunk under a cap; %u left exposed, %u poking)\n",
+               fs.seeds, fs.band, fs.moved, fs.maxMove, fs.blocked, fs.sunk, fs.exposed, fs.poking);
+    }
     fflush(stdout);
 
     delete[] pf;
@@ -987,14 +1084,17 @@ void iHipolyModel(RpClump* rpclump)
     }
     iHipolyParams pr;
     memset(&pr, 0, sizeof(pr));
-    pr.target = kModelTarget;
+    const Settings& cfg = settings();
+    pr.target = cfg.modelTarget;
     pr.maxLevel = kModelMaxLevel;
     pr.minBulge = kMinBulge;
-    pr.creaseDeg = kWorldCrease;
-    pr.maxBulge = kModelMaxBulge;
-    pr.relBulge = kWorldRelBulge;
+    pr.creaseDeg = cfg.crease;
+    pr.maxBulge = kModelMaxBulge * cfg.factor;
+    pr.relBulge = kWorldRelBulge * cfg.factor;
+    pr.turnBulge = kTurnBulge * cfg.factor;
     pr.hardDeg = skinned ? kCharacterHard : -1.0;
     pr.noiseGuard = skinned;
+    pr.pinOpenEdges = false;
     pr.maxVerts = kMaxVerts;
     pr.maxTris = kMaxTris;
     iHipolyResult* res = new iHipolyResult[n];

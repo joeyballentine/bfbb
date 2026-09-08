@@ -67,95 +67,7 @@ namespace
     inline U32 umin(U32 a, U32 b) { return a < b ? a : b; }
     inline U32 umax(U32 a, U32 b) { return a > b ? a : b; }
 
-    // -----------------------------------------------------------------------
-    // A hash map from three 64-bit keys to a 32-bit value. Open addressing;
-    // never shrinks; sized for what the caller says it will hold.
-
-    struct Key3Map
-    {
-        struct Slot
-        {
-            S64 a, b, c;
-            U32 v;
-            U32 used;
-        };
-        iHipolyArray<Slot> slots;
-        U32 mask;
-        U32 count;
-
-        void init(U32 expected)
-        {
-            U32 size = 64;
-            while (size < expected * 2)
-            {
-                size *= 2;
-            }
-            slots.resizeZero(size);
-            mask = size - 1;
-            count = 0;
-        }
-
-        static U64 mix(U64 h)
-        {
-            h ^= h >> 33;
-            h *= 0xff51afd7ed558ccdULL;
-            h ^= h >> 33;
-            h *= 0xc4ceb9fe1a85ec53ULL;
-            h ^= h >> 33;
-            return h;
-        }
-
-        static U64 hash(S64 a, S64 b, S64 c)
-        {
-            return mix((U64)a * 0x9E3779B97F4A7C15ULL ^ mix((U64)b) ^ (mix((U64)c) << 1));
-        }
-
-        // The value for the key, inserting `v` when it is new; `inserted`
-        // says which.
-        U32 findOrInsert(S64 a, S64 b, S64 c, U32 v, bool* inserted)
-        {
-            U32 i = (U32)hash(a, b, c) & mask;
-            for (;;)
-            {
-                Slot& s = slots[i];
-                if (!s.used)
-                {
-                    s.used = 1;
-                    s.a = a;
-                    s.b = b;
-                    s.c = c;
-                    s.v = v;
-                    count++;
-                    *inserted = true;
-                    return v;
-                }
-                if (s.a == a && s.b == b && s.c == c)
-                {
-                    *inserted = false;
-                    return s.v;
-                }
-                i = (i + 1) & mask;
-            }
-        }
-
-        S32 find(S64 a, S64 b, S64 c) const
-        {
-            U32 i = (U32)hash(a, b, c) & mask;
-            for (;;)
-            {
-                const Slot& s = slots[i];
-                if (!s.used)
-                {
-                    return -1;
-                }
-                if (s.a == a && s.b == b && s.c == c)
-                {
-                    return (S32)s.v;
-                }
-                i = (i + 1) & mask;
-            }
-        }
-    };
+    typedef iHipolyKey3Map Key3Map;
 
     // -----------------------------------------------------------------------
     // Sorting indices by a 64-bit key. Heap sort: in place, no recursion,
@@ -781,7 +693,13 @@ namespace
         halfDihedral(d, E, half);
         for (U32 i = 0; i < nfe; i++)
         {
-            cap[i] = dmin(cap[i], 1.5 * L[i] * sin(half[E.eid[i]]));
+            // A free edge has no second face to measure against; on a
+            // model its authored normals are all there is to go on.
+            if (!pr.pinOpenEdges && E.count(E.eid[i]) == 1)
+            {
+                continue;
+            }
+            cap[i] = dmin(cap[i], pr.turnBulge * L[i] * sin(half[E.eid[i]]));
         }
         // A sharp feature stays sharp: past hard_deg the fold is authored
         // (the bumps of a sponge, the rim of a shoe), and rounding it reads
@@ -814,7 +732,9 @@ namespace
         }
         // An edge that only coincides with its neighbour -- one face, with
         // the other side's triangles merely lying along it, or a vertex
-        // sitting in its middle -- is held together by being straight.
+        // sitting in its middle -- is held together by being straight. The
+        // one-faced rule is the world's: a model's open edge is a petal's
+        // outline with nothing beside it, and it may curve.
         iHipolyArray<U8> split;
         U32 tj = splitEdges(d, E, split);
         U32 open = 0;
@@ -828,7 +748,7 @@ namespace
         for (U32 i = 0; i < nfe; i++)
         {
             U32 e = E.eid[i];
-            if (E.count(e) == 1 || split[e])
+            if ((pr.pinOpenEdges && E.count(e) == 1) || split[e])
             {
                 cap[i] = 0.0;
             }

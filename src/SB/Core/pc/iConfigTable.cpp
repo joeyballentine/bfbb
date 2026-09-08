@@ -196,6 +196,30 @@ const iConfigSetting kConfigSettings[] = {
       "Smooth the level and its models into curved surfaces as they load.\n"
       "; Loads take a few seconds longer.",
       ICONFIG_BOOL, NULL, kNone, kNone },
+    { "experimental", "hipoly_factor", "2.0",
+      "How far the smoothing rounds things: scales every bulge and the\n"
+      "; fillet. 1.0 is what the offline suite shipped, 0 rounds nothing.",
+      ICONFIG_FLOAT, NULL, 0.0f, 8.0f },
+    { "experimental", "hipoly_target", "1.0",
+      "Edge length the level is cut to, in units. Smaller is finer and slower.",
+      ICONFIG_FLOAT, NULL, 0.05f, 8.0f },
+    { "experimental", "hipoly_max_level", "6", "Most segments an edge is cut into.",
+      ICONFIG_INT, NULL, 1.0f, 15.0f },
+    { "experimental", "hipoly_crease", "90",
+      "Degrees. Built surfaces folded sharper than this keep the fold.",
+      ICONFIG_FLOAT, NULL, 0.0f, 180.0f },
+    { "experimental", "hipoly_natural_crease", "140",
+      "The same for rock, sand, kelp and other landscape.",
+      ICONFIG_FLOAT, NULL, 0.0f, 180.0f },
+    { "experimental", "hipoly_fillet", "1.5",
+      "Units. How far from a sharp landscape fold the rounding reaches; 0 is off.",
+      ICONFIG_FLOAT, NULL, 0.0f, 10.0f },
+    { "experimental", "hipoly_model_target", "0.25",
+      "Edge length models are cut to, in units.",
+      ICONFIG_FLOAT, NULL, 0.02f, 4.0f },
+    { "experimental", "hipoly_budget", "600000",
+      "Most triangles a level's world may have; the cut coarsens past it.",
+      ICONFIG_INT, NULL, 10000.0f, 4000000.0f },
 };
 
 const S32 kConfigSettingCount = (S32)(sizeof(kConfigSettings) / sizeof(kConfigSettings[0]));
