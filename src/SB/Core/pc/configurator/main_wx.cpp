@@ -207,6 +207,22 @@ namespace
         SetMinSize(FromDIP(wxSize(560, 360)));
         CenterOnScreen();
 
+#ifdef __WXMSW__
+        // The game's icon, out of this executable's own resources. Explorer
+        // finds it without being told; a window does not, and wx gives one the
+        // stock application icon until it is handed something else.
+        //
+        // "#1" is how FindResource spells the numeric id `../res/bfbb_config.rc`
+        // gives it. It stays a number rather than becoming a name because
+        // Explorer picks the LOWEST-NUMBERED icon group as the file's icon, and
+        // a named-only resource is a coin toss.
+        //
+        // A bundle rather than one icon, so each place Windows draws it takes
+        // the size it wants out of the .ico: 16 for the title bar, larger for
+        // Alt-Tab and the taskbar. One icon would be scaled into both.
+        SetIcons(wxIconBundle("#1", NULL));
+#endif
+
         // Bound ONCE, here, and not in BuildRows -- a Bind inside the function
         // that rebuilds the pane adds another handler on every section change,
         // and the fourth section visited would record each keystroke four
