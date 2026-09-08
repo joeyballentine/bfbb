@@ -8,12 +8,16 @@
 # missing render-state case in the configuration that compiles that file, which
 # is why this is a matrix rather than one build.
 #
-# BFBB_RENDER_BACKENDS is a list. The default -- "D3D9;GL3" on Windows, "GL3"
-# elsewhere -- puts several backends in ONE executable and video.backend picks
-# between them at startup, so the entry named `default` below is the build
-# people actually download. The single-backend entries are still here because
-# each has code the combined build compiles but never runs: NULL is the headless
-# configuration the self-tests want, and D3D11 cannot share a build with D3D9.
+# BFBB_RENDER_BACKENDS is a list. The default -- "D3D9;D3D11;GL3" on Windows,
+# "GL3" elsewhere -- puts every backend in ONE executable and video.backend
+# picks between them at startup, so the entry named `default` below is the build
+# people actually download.
+#
+# The single-backend entries are still here because each compiles code the
+# combined build does not. RWD3D_IS9 and RWD3D_IS11 are runtime tests only when
+# both are present; with one backend they are constants, and the arm behind the
+# other one is never compiled at all. NULL is the headless configuration the
+# self-tests want.
 #
 # No paths filter: bfbb.exe links the game code as well as the port, so a
 # change anywhere under src/ can break this and a filter would let it through.
@@ -281,11 +285,10 @@ jobs:
   # configuration someone would actually run, and it is the only one worth
   # downloading.
   #
-  # One artifact per HOST, not one per backend. The Windows build carries D3D9
-  # and GL3 together and video.backend in config.ini picks between them, so a
-  # machine whose Direct3D driver misbehaves has the OpenGL one in the same
-  # download. D3D11 is the exception and needs a second artifact: it and D3D9
-  # are two implementations of librw's rw::d3d and cannot be linked together.
+  # One artifact per HOST, not one per backend. The Windows build carries D3D9,
+  # D3D11 and GL3 together and video.backend in config.ini picks between them,
+  # so a machine whose Direct3D driver misbehaves has the OpenGL one in the same
+  # download.
   #
   # Each artifact is a folder to run the game out of: the executable, the
   # configurator on Windows, the button glyphs, and whatever DLLs the build
@@ -306,16 +309,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # An empty backend means the host default, which is D3D9 and GL3 on
-          # Windows and GL3 elsewhere.
-          - { os: windows-latest, backend: "",          name: windows-x86 }
-          - { os: windows-latest, backend: "D3D11;GL3", name: windows-x86-d3d11 }
-          - { os: ubuntu-latest,  backend: "",          name: linux-x86_64 }
+          # An empty backend means the host default, which is D3D9, D3D11 and
+          # GL3 on Windows and GL3 elsewhere.
+          - { os: windows-latest, backend: "", name: windows-x86 }
+          - { os: ubuntu-latest,  backend: "", name: linux-x86_64 }
           # macos-latest is absent on purpose. An arm64 build compiles and then
           # is SIGKILLed at exec, because the game arena needs a low 4 GB that
           # Apple Silicon will not give up -- see the unix job. Publishing a
           # binary that cannot start is worse than publishing none.
-          - { os: macos-15-intel, backend: "",          name: macos-x86_64 }
+          - { os: macos-15-intel, backend: "", name: macos-x86_64 }
 
     steps:
       - name: Checkout

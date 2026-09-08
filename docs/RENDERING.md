@@ -22,10 +22,8 @@ draws the world, the models, the characters and the interface without a shader.
 See [What is still missing](#what-is-still-missing).
 
 Which renderer draws is `video.backend`, not a build flag. One Windows
-executable carries Direct3D 9 and OpenGL 3.3; `auto` takes the first, and
-naming one is what a machine with a bad driver needs. D3D11 is the exception
-and is its own build -- it and D3D9 are two implementations of librw's
-`rw::d3d` and collide at link.
+executable carries Direct3D 9, Direct3D 11 and OpenGL 3.3; `auto` takes the
+first, and naming one is what a machine with a bad driver needs.
 
 ## What the pipeline already is
 

@@ -251,14 +251,14 @@ This is the main build script. It enters the 32-bit MSVC environment, configures
 `build-debug.bat` does the same into `build-debug\` and is unoptimised and slow.
 
 **The executable carries more than one renderer.** On Windows a default build
-has Direct3D 9 and OpenGL 3.3 in it, and `video.backend` in `config.ini` picks
-between them at startup -- so a machine whose Direct3D driver misbehaves needs a
-line in a settings file rather than a different build.
+has Direct3D 9, Direct3D 11 and OpenGL 3.3 in it, and `video.backend` in
+`config.ini` picks between them at startup -- so a machine whose Direct3D driver
+misbehaves needs a line in a settings file rather than a different build.
 
 | Backend | What it is |
 | --- | --- |
 | `D3D9` | Direct3D 9, on an SDL3 window. The one the port is playtested on, and the only one with the fixed-function path. |
-| `D3D11` | Direct3D 11, on the same window. Draws levels and characters, and the screen passes. **Cannot share a build with D3D9** -- the two are one namespace in librw. |
+| `D3D11` | Direct3D 11, on the same window. Draws levels and characters, and the screen passes. Still missing the fixed-function path. |
 | `GL3` | OpenGL 3.3, falling back through 2.1, GLES 3.1 and GLES 2.0. The only backend that runs off Windows. All three screen passes; still missing some of the ported Xbox features. |
 | `NULL` | No renderer at all. Headless, and what the self-tests are built against. Not something `video.backend` offers. |
 

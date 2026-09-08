@@ -45,10 +45,12 @@ Windows, Linux and macOS. The OS half of the layer is behind
 checks that the two stay in step.
 
 The executable carries several render backends and `video.backend` picks
-between them at startup: D3D9 and GL3 on Windows, GL3 alone off it. D3D11 is
-opt-in and exclusive -- it and D3D9 are two implementations of librw's
-`rw::d3d`. Off Windows the build is also 64-bit, because there is nothing else
-available -- see section 5(f). Linux wants SDL's
+between them at startup: D3D9, D3D11 and GL3 on Windows, GL3 alone off it. D3D9
+and D3D11 are two implementations of librw's `rw::d3d`, so each lives in its own
+namespace and a dispatch layer picks between them per call; see
+`third_party/librw/src/d3d/d3ddispatch.cpp`. Off Windows the build is also
+64-bit, because there is nothing else available -- see section 5(f). Linux wants
+SDL's
 build dependencies installed first; the `unix` job in
 `.github/workflows/pc-port.yml` carries the list that a 24.04 runner actually
 needs.
