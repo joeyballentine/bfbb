@@ -132,8 +132,9 @@ const char* iHostDirNext(iHostDir* d);
 void iHostDirClose(iHostDir* d);
 
 // The platform's per-user data directory, with no game-specific suffix --
-// $XDG_DATA_HOME or ~/.local/share on POSIX, %APPDATA% on Windows. Where the
-// saves go *within* that is the game's policy and lives in isavegame.cpp.
+// $XDG_DATA_HOME or ~/.local/share on Linux, ~/Library/Application Support on
+// macOS, %APPDATA% on Windows. Where the saves go *within* that is the game's
+// policy and lives in isavegame.cpp.
 // False if the host has no such concept, in which case the caller falls back
 // to a relative path.
 bool iHostUserDataDir(char* out, size_t outsize);
