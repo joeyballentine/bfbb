@@ -71,6 +71,28 @@ typedef intptr_t SPtr;
 #define BFBB_PTR64 1
 #endif
 
+// A compile-time assertion both compilers accept.
+//
+// The assertions that use it say that a struct is still the size the asset on
+// disc is, which is what stops a 64-bit build reading a record at the wrong
+// stride. C++11 spells that static_assert; CodeWarrior 2.0 predates C++11 by a
+// decade and does not parse the keyword at all, so a bare static_assert in
+// shared source is a `declaration syntax error` on the console -- with
+// -maxerrors 1, the only error the build reports.
+//
+// The typedef is the pre-C++11 spelling: a negative array bound is ill-formed,
+// so a false condition fails at the assertion's own line. __LINE__ has to go
+// through two macros to expand before it is pasted.
+#define BFBB_SA_PASTE2(a, b) a##b
+#define BFBB_SA_PASTE(a, b) BFBB_SA_PASTE2(a, b)
+
+#ifdef __MWERKS__
+#define BFBB_STATIC_ASSERT(cond, msg)                                                              \
+    typedef char BFBB_SA_PASTE(bfbb_static_assert_, __LINE__)[(cond) ? 1 : -1]
+#else
+#define BFBB_STATIC_ASSERT(cond, msg) static_assert(cond, msg)
+#endif
+
 #ifdef NULL
 #undef NULL
 #endif

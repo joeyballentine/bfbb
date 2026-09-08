@@ -235,8 +235,8 @@ static void* Model_Read(void* param_1, U32 param_2, void* indata, U32 insize, U3
 #define BOUND_DISK_SHAPE_OFFSET 36
 #define BOUND_DISK_SHAPE_SIZE 36
 
-static_assert(sizeof(xQCData) == BOUND_DISK_TYPE_OFFSET, "xQCData moved");
-static_assert(sizeof(xBBox) == BOUND_DISK_SHAPE_SIZE, "the bound union moved");
+BFBB_STATIC_ASSERT(sizeof(xQCData) == BOUND_DISK_TYPE_OFFSET, "xQCData moved");
+BFBB_STATIC_ASSERT(sizeof(xBBox) == BOUND_DISK_SHAPE_SIZE, "the bound union moved");
 
 static void* Volume_Read(void* param_1, U32 param_2, void* indata, U32 insize,
                          U32* outsize)
@@ -272,7 +272,7 @@ static void* Volume_Read(void* param_1, U32 param_2, void* indata, U32 insize,
     return out;
 }
 #else
-static_assert(sizeof(xVolumeAsset) == 100, "the VOLU record is the 32-bit struct");
+BFBB_STATIC_ASSERT(sizeof(xVolumeAsset) == 100, "the VOLU record is the 32-bit struct");
 #endif
 
 #ifdef BFBB_PTR64
@@ -299,9 +299,9 @@ static_assert(sizeof(xVolumeAsset) == 100, "the VOLU record is the 32-bit struct
 
 // These two hold no pointers, so the disc record and the struct agree at either
 // width and the copies below are plain.
-static_assert(sizeof(zFragAsset) == SHRP_DISK_FRAG_BASE_SIZE, "zFragAsset moved");
-static_assert(sizeof(zFragLocation) == 36, "zFragLocation moved");
-static_assert(sizeof(xParEmitterPropsAsset) == SHRP_DISK_EMITTER_PROPS_SIZE,
+BFBB_STATIC_ASSERT(sizeof(zFragAsset) == SHRP_DISK_FRAG_BASE_SIZE, "zFragAsset moved");
+BFBB_STATIC_ASSERT(sizeof(zFragLocation) == 36, "zFragLocation moved");
+BFBB_STATIC_ASSERT(sizeof(xParEmitterPropsAsset) == SHRP_DISK_EMITTER_PROPS_SIZE,
               "xParEmitterPropsAsset moved");
 
 static U32 SHRP_disk_frag_size(U32 type)
@@ -508,7 +508,7 @@ static void* Curve_Read(void* param_1, U32 param_2, void* indata, U32 insize, U3
 
     return out;
 #else
-    static_assert(sizeof(xCurveAsset) == CRV_DISK_HEADER_SIZE,
+    BFBB_STATIC_ASSERT(sizeof(xCurveAsset) == CRV_DISK_HEADER_SIZE,
                   "the CRV header is the 32-bit struct");
 
     *outsize = insize;

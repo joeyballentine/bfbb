@@ -41,7 +41,7 @@ static void zLOD_ReadTable(zLODTable* dst, const void* src, U32 count)
     }
 }
 #else
-static_assert(sizeof(zLODTable) == 32, "the LODT record is the 32-bit struct");
+BFBB_STATIC_ASSERT(sizeof(zLODTable) == 32, "the LODT record is the 32-bit struct");
 #endif
 
 // Float memes
