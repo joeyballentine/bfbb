@@ -159,7 +159,13 @@ static void makeFailuresHeadless(void)
 
     // abort -- which is where a failed assert and an uncaught exception both
     // end up -- writes its message and dies, rather than reporting the fault.
+    //
+    // MSVC's runtime only. MinGW's CRT does not export _set_abort_behavior,
+    // and its abort raises SIGABRT rather than reporting a fault, so there is
+    // nothing there to turn off.
+#ifndef __MINGW32__
     _set_abort_behavior(_WRITE_ABORT_MSG, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+#endif
 #endif
 
 #if defined(_WIN32) && defined(_DEBUG)
