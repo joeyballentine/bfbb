@@ -30,15 +30,28 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    name: build (${{ matrix.backend }}, ${{ matrix.msvc }})
 
     strategy:
       fail-fast: false
       matrix:
-        # Quoted: YAML reads a bare NULL as the null value, and the backend
-        # would reach cmake as an empty string. `default` is the empty string on
-        # purpose -- it means "do not pass the option", which is what tests the
-        # default set.
-        backend: ["default", "NULL", "D3D9", "D3D11", "GL3"]
+        # The backend is quoted because YAML reads a bare NULL as the null
+        # value, and it would reach cmake as an empty string. `default` is the
+        # empty string on purpose -- it means "do not pass the option", which is
+        # what tests the default set.
+        #
+        # 32-bit is the configuration that gets played, so it is what every
+        # backend is compiled at. NULL is also built at 64 bits because the
+        # self-tests are the only thing in this job that RUNS, and running them
+        # at both word sizes is what catches a 64-bit-only regression -- the
+        # package job proves the 64-bit build LINKS and nothing more.
+        include:
+          - { backend: "default", msvc: x86, bits: "" }
+          - { backend: "NULL",    msvc: x86, bits: "" }
+          - { backend: "D3D9",    msvc: x86, bits: "" }
+          - { backend: "D3D11",   msvc: x86, bits: "" }
+          - { backend: "GL3",     msvc: x86, bits: "" }
+          - { backend: "NULL",    msvc: x64, bits: "-DBFBB_BUILD_32BIT=OFF" }
 
     steps:
       - name: Checkout
@@ -59,11 +72,14 @@ jobs:
         uses: seanmiddleditch/gha-setup-ninja@v5
 
       # clang is on the image; the MSVC toolchain and Windows SDK it links
-      # against have to be on PATH, and -m32 means the x86 ones.
-      - name: MSVC environment (x86)
+      # against have to be on PATH. Which of them decides the word size as much
+      # as matrix.bits does: -m32 is a request clang can only honour with the
+      # x86 libraries on LIB, and CMakeLists.txt fails its own pointer-size
+      # check rather than build the wrong width.
+      - name: MSVC environment
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: x86
+          arch: ${{ matrix.msvc }}
 
       - name: Configure
         shell: bash
@@ -72,13 +88,15 @@ jobs:
           -DCMAKE_BUILD_TYPE=Debug
           -DCMAKE_CXX_COMPILER=clang++
           ${{ matrix.backend != 'default' && format('-DBFBB_RENDER_BACKENDS={0}', matrix.backend) || '' }}
+          ${{ matrix.bits }}
 
       - name: Build
         run: cmake --build build-ci
 
-      # **NULL runs the tests; D3D9 and GL3 are build-only.**
+      # **NULL runs the tests, at both word sizes; every other entry is
+      # build-only.**
       #
-      # Both of those need a device the runner does not have: GitHub's Windows
+      # The rest need a device the runner does not have: GitHub's Windows
       # images have no GPU, and no OpenGL past 1.1. Running them would mean
       # staging a software rasteriser next to the executable, which is a
       # dependency this does not take on. Everything that does not need a device
