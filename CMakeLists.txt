@@ -205,14 +205,14 @@ endif()
 add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 
 # --- render backend ----------------------------------------------------------
-# Which of librw's three the port is built against.
+# Which of librw's four the port is built against.
 #
 #   NULL   no renderer. Headless, and what the shim's selftest runs against --
 #          keeping this working is what lets the RenderWare layer be tested on
 #          a machine with no display at all.
 #   D3D9   Direct3D 9, on a Win32 window the port creates itself.
-#   D3D11  Direct3D 11, on the same window. Draws levels and characters; the
-#          Xbox effects are D3D9 only.
+#   D3D11  Direct3D 11, on the same window. Draws levels, characters and the
+#          screen passes; it has no fixed-function path.
 #   GL3    OpenGL 3.3 (falling back through 2.1, GLES 3.1 and GLES 2.0), on an
 #          SDL3 window librw creates. Portable, and the only backend that can
 #          ever run off Windows.
@@ -227,19 +227,15 @@ add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 # ahead of this declaration and so tested an empty variable, which meant a fresh
 # configure asking for GL3 silently took the D3D9 arm.
 #
-# The default is every backend that draws on the host: D3D9 and GL3 on Windows,
-# GL3 elsewhere.
-#
-# D3D11 is opt-in and EXCLUSIVE. It and D3D9 are two implementations of the same
-# rw::d3d namespace and share their translation units, so a build has one or the
-# other and asking for both stops the configure.
+# The default is every backend that draws on the host: D3D9, D3D11 and GL3 on
+# Windows, GL3 elsewhere.
 #
 # NULL alone is the headless configuration: it compiles everything and draws
 # nothing, which is what the self-tests are built in. It is not worth listing
 # BESIDE a real backend -- librw's null driver asserts the first time anything
 # asks it for a raster, so it is not a backend anyone can select at runtime.
 if(WIN32)
-  set(BFBB_RENDER_BACKENDS_DEFAULT "D3D9;GL3")
+  set(BFBB_RENDER_BACKENDS_DEFAULT "D3D9;D3D11;GL3")
 else()
   set(BFBB_RENDER_BACKENDS_DEFAULT "GL3")
 endif()
@@ -260,13 +256,6 @@ foreach(_backend IN LISTS BFBB_RENDER_BACKENDS)
   endif()
   set(BFBB_BACKEND_${_backend} ON)
 endforeach()
-
-if(BFBB_BACKEND_D3D9 AND BFBB_BACKEND_D3D11)
-  message(FATAL_ERROR
-    "D3D9 and D3D11 cannot be in one build: both are rw::d3d, and every "
-    "function they share is a duplicate symbol at link.\n"
-    "  Ask for one of them.")
-endif()
 
 # Asked for by hand off Windows. librw refuses a D3D platform there as well, but
 # it does so from inside third_party with a message about LIBRW_PLATFORM, which
@@ -734,18 +723,9 @@ target_include_directories(bfbb_rw PUBLIC
 # The screen passes' shaders. Three trees, as in librw: rw/shaders at ps_2_0 for
 # D3D9, rw/shaders11 at ps_4_0 for D3D11, rw/shadersgl in GLSL for GL3.
 #
-# The two D3D trees carry the same file names as each other, which is why they
-# are exclusive here as well as at link. The GL one does not -- its sources are
-# what gets compiled, and a .h of blob bytes is not -- so it goes on the path
-# alongside whichever D3D tree is there.
-if(BFBB_BACKEND_D3D11)
-  target_include_directories(bfbb_rw PRIVATE ${PC_DIR}/rw/shaders11)
-elseif(BFBB_BACKEND_D3D9)
-  target_include_directories(bfbb_rw PRIVATE ${PC_DIR}/rw/shaders)
-endif()
-if(BFBB_BACKEND_GL3)
-  target_include_directories(bfbb_rw PRIVATE ${PC_DIR}/rw/shadersgl)
-endif()
+# The two D3D trees carry the same file names as each other, so glow.cpp and its
+# neighbours include them by PATH and nothing goes on the include path for them.
+# The GL one is included by path too, for consistency.
 
 # WINDOW_LIBS is SDL. Under GL3 librw already drags it in; under D3D9 it does
 # not, and iWindowSDL.cpp is in this target rather than in bfbb_platform.

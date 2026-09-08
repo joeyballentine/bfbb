@@ -497,18 +497,23 @@ namespace
     //
     // librw exports these as public compile definitions, and CMakeLists.txt
     // explains why every target of the port has to see them.
-#if defined(RW_D3D9) && defined(RW_GL3)
-    const char* const kRenderBackend = "D3D9 and OpenGL";
+    const char* const kRenderBackend =
+#if defined(RW_D3D9) && defined(RW_D3D11) && defined(RW_GL3)
+        "D3D9, D3D11 and OpenGL";
+#elif defined(RW_D3D9) && defined(RW_D3D11)
+        "D3D9 and D3D11";
+#elif defined(RW_D3D9) && defined(RW_GL3)
+        "D3D9 and OpenGL";
 #elif defined(RW_D3D11) && defined(RW_GL3)
-    const char* const kRenderBackend = "D3D11 and OpenGL";
+        "D3D11 and OpenGL";
 #elif defined(RW_D3D9)
-    const char* const kRenderBackend = "D3D9";
+        "D3D9";
 #elif defined(RW_D3D11)
-    const char* const kRenderBackend = "D3D11";
+        "D3D11";
 #elif defined(RW_GL3)
-    const char* const kRenderBackend = "OpenGL";
+        "OpenGL";
 #else
-    const char* const kRenderBackend = "no renderer";
+        "no renderer";
 #endif
 
     struct StartupBanner

@@ -13,9 +13,10 @@
 #include <windows.h>
 #define WITH_D3D
 #endif
-#if defined(RW_D3D9)
+#ifdef RW_D3D9
 #include <d3d9.h>
-#elif defined(RW_D3D11)
+#endif
+#ifdef RW_D3D11
 #include <d3d11.h>
 #endif
 
@@ -47,16 +48,29 @@ static S32 sEnabled = TRUE;
 typedef void* GlowShader;
 
 #if defined(RW_D3D9) || defined(RW_D3D11)
-// fxc gives every blob the same name, so each gets its own namespace. PS_NAME
-// is what that name is, and librw's rwd3d.h picks it per shader model.
-namespace bright_ps
+// fxc gives every blob in a tree the same name, so each gets a namespace of its
+// own, and the tree is named in the include because a build can carry both
+// Direct3D backends and the two trees use the same file names.
+#ifdef RW_D3D9
+namespace bright_ps_sm2
 {
-#include "glow_bright_PS.h"
+#include "shaders/glow_bright_PS.h"
 }
-namespace blur_ps
+namespace blur_ps_sm2
 {
-#include "glow_blur_PS.h"
+#include "shaders/glow_blur_PS.h"
 }
+#endif
+#ifdef RW_D3D11
+namespace bright_ps_sm4
+{
+#include "shaders11/glow_bright_PS.h"
+}
+namespace blur_ps_sm4
+{
+#include "shaders11/glow_blur_PS.h"
+}
+#endif
 #endif
 
 #ifdef RW_GL3
@@ -65,8 +79,8 @@ namespace blur_ps
 // fxc's blobs do not.
 namespace
 {
-#include "glow_blur_gl.inc"
-#include "glow_bright_gl.inc"
+#include "shadersgl/glow_blur_gl.inc"
+#include "shadersgl/glow_bright_gl.inc"
 } // namespace
 #endif
 
@@ -136,11 +150,15 @@ namespace d3dglow
     static inline void* rasterTexture(RwRaster* raster)
     {
         rw::Raster* r = reinterpret_cast<rw::Raster*>(raster);
-#if defined(RW_D3D11)
-        return GETD3DRASTEREXT(r)->tex11;
-#else
-        return GETD3DRASTEREXT(r)->texture;
+#ifdef RW_D3D11
+        if (iBackendIsD3D11())
+        {
+            // D3D11 keeps the system-memory copy in `texture` and the GPU's
+            // own in `tex11`; D3D9 has only the one.
+            return GETD3DRASTEREXT(r)->tex11;
+        }
 #endif
+        return GETD3DRASTEREXT(r)->texture;
     }
 
     static bool glowDeviceReady()
@@ -172,8 +190,20 @@ namespace d3dglow
 
     static bool glowCreateShaders()
     {
-        sBrightShader = rw::d3d::createPixelShader((void*)bright_ps::PS_NAME);
-        sBlurShader = rw::d3d::createPixelShader((void*)blur_ps::PS_NAME);
+#ifdef RW_D3D9
+        if (iBackendIsD3D9())
+        {
+            sBrightShader = rw::d3d::createPixelShader((void*)bright_ps_sm2::g_ps20_main);
+            sBlurShader = rw::d3d::createPixelShader((void*)blur_ps_sm2::g_ps20_main);
+        }
+#endif
+#ifdef RW_D3D11
+        if (iBackendIsD3D11())
+        {
+            sBrightShader = rw::d3d::createPixelShader((void*)bright_ps_sm4::g_main);
+            sBlurShader = rw::d3d::createPixelShader((void*)blur_ps_sm4::g_main);
+        }
+#endif
         return sBrightShader != NULL && sBlurShader != NULL;
     }
 

@@ -12,9 +12,10 @@
 #include <windows.h>
 #define WITH_D3D
 #endif
-#if defined(RW_D3D9)
+#ifdef RW_D3D9
 #include <d3d9.h>
-#elif defined(RW_D3D11)
+#endif
+#ifdef RW_D3D11
 #include <d3d11.h>
 #endif
 
@@ -45,18 +46,25 @@ typedef void* DistortShader;
 
 #if defined(RW_D3D9) || defined(RW_D3D11)
 
-namespace
-{
 // The compiled pixel shader. Built the way librw builds its own, by the
-// make_shaders.cmd in each shaders directory. PS_NAME is the name fxc gave the
-// blob, which librw's rwd3d.h picks per shader model; it is the same name in
-// every blob, so this is kept in an anonymous namespace rather than at file
-// scope.
+// make_shaders.cmd in each shaders directory. fxc gives every blob in a tree
+// the same name, so each gets a namespace of its own, and the tree is named in
+// the include because a build can carry both Direct3D backends.
 //
 // What it computes is read off the Xbox's D3DPIXELSHADERDEF, not guessed; the
 // decode is in iDistort.h.
-#include "distort_PS.h"
-} // namespace
+#ifdef RW_D3D9
+namespace distort_ps_sm2
+{
+#include "shaders/distort_PS.h"
+} // namespace distort_ps_sm2
+#endif
+#ifdef RW_D3D11
+namespace distort_ps_sm4
+{
+#include "shaders11/distort_PS.h"
+} // namespace distort_ps_sm4
+#endif
 #endif
 
 #ifdef RW_GL3
@@ -65,7 +73,7 @@ namespace
 {
 // The same shader in GLSL, wrapped one string literal per line by
 // shadersgl/gen.py.
-#include "distort_gl.inc"
+#include "shadersgl/distort_gl.inc"
 } // namespace
 #endif
 
@@ -129,11 +137,15 @@ namespace d3ddistort
     static inline void* rasterTexture(RwRaster* raster)
     {
         rw::Raster* r = reinterpret_cast<rw::Raster*>(raster);
-#if defined(RW_D3D11)
-        return GETD3DRASTEREXT(r)->tex11;
-#else
-        return GETD3DRASTEREXT(r)->texture;
+#ifdef RW_D3D11
+        if (iBackendIsD3D11())
+        {
+            // D3D11 keeps the system-memory copy in `texture` and the GPU's
+            // own in `tex11`; D3D9 has only the one.
+            return GETD3DRASTEREXT(r)->tex11;
+        }
 #endif
+        return GETD3DRASTEREXT(r)->texture;
     }
 
     static bool distortDeviceReady()
@@ -164,7 +176,18 @@ namespace d3ddistort
 
     static bool distortCreateShader()
     {
-        sPixelShader = rw::d3d::createPixelShader((void*)PS_NAME);
+#ifdef RW_D3D9
+        if (iBackendIsD3D9())
+        {
+            sPixelShader = rw::d3d::createPixelShader((void*)distort_ps_sm2::g_ps20_main);
+        }
+#endif
+#ifdef RW_D3D11
+        if (iBackendIsD3D11())
+        {
+            sPixelShader = rw::d3d::createPixelShader((void*)distort_ps_sm4::g_main);
+        }
+#endif
         return sPixelShader != NULL;
     }
 

@@ -72,12 +72,20 @@ void iBackendResolve(void)
 
     iScreenSetBackend(want);
 
+    // librw has one PLATFORM_D3D9 for both Direct3D backends, so this is what
+    // tells it which of the two to open. It has to be set before Engine::open,
+    // which is where renderDevice() is first asked.
+#if defined(RW_D3D9) && defined(RW_D3D11)
+    rw::d3d::useD3D11 = (want == iSCREENBACKEND_D3D11);
+#endif
+
     switch (want)
     {
     case iSCREENBACKEND_D3D9:
     case iSCREENBACKEND_D3D11:
-        // Both, because librw has one PLATFORM_D3D9 and the two backends
-        // cannot be in a build together.
+        // Both, because librw has one PLATFORM_D3D9: D3D11 reads and writes
+        // the same native data and registers the same pipelines. Which of the
+        // two devices opens is rw::d3d::useD3D11, set above.
         rw::platform = rw::PLATFORM_D3D9;
         break;
     case iSCREENBACKEND_GL3:

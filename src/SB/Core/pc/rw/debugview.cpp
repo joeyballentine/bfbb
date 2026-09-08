@@ -18,7 +18,7 @@ static S32 sMode = IDEBUGVIEW_OFF;
 
 namespace
 {
-#include "debug_depth_gl.inc"
+#include "shadersgl/debug_depth_gl.inc"
 }
 
 // How much of the screen one inset takes, along its width.

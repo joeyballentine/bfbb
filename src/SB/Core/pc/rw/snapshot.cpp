@@ -23,9 +23,10 @@
 #include <windows.h>
 #define WITH_D3D
 #endif
-#if defined(RW_D3D9)
+#ifdef RW_D3D9
 #include <d3d9.h>
-#elif defined(RW_D3D11)
+#endif
+#ifdef RW_D3D11
 #include <d3d11.h>
 #endif
 
@@ -115,11 +116,15 @@ namespace d3dsnap
         // GETD3DRASTEREXT is a macro, so it is spelled unqualified and expands to
         // the qualified names itself.
         rw::Raster* r = reinterpret_cast<rw::Raster*>(raster);
-#if defined(RW_D3D11)
-        return GETD3DRASTEREXT(r)->tex11;
-#else
-        return GETD3DRASTEREXT(r)->texture;
+#ifdef RW_D3D11
+        if (iBackendIsD3D11())
+        {
+            // D3D11 keeps the system-memory copy in `texture` and the GPU's
+            // own in `tex11`; D3D9 has only the one.
+            return GETD3DRASTEREXT(r)->tex11;
+        }
 #endif
+        return GETD3DRASTEREXT(r)->texture;
     }
 
     // One report, and then off for good.
