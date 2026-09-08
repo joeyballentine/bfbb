@@ -331,6 +331,14 @@ static void test_engine_startup()
     // iSystem.cpp will. Under LIBRW_PLATFORM=NULL there is nothing to open and
     // the test stays headless, which is what lets it run on a build machine.
 #ifndef RW_NULL
+    // Which backend draws, before the window rather than before the device --
+    // the same order, and for the same reason, as iSystem.cpp's
+    // RenderWareInit. GL3 makes its own window inside librw and iWindowOpen
+    // only records the request, and it records nothing unless it already knows
+    // GL3 is the one running. Without this a build carrying GL3 alone opened
+    // an ordinary window and then had nothing to hand librw.
+    iBackendResolve();
+
     iWindowParams windowParams;
     windowParams.title = "bfbb rw_selftest";
     windowParams.width = 640;
