@@ -58,16 +58,23 @@ namespace
 
     // One setting, laid out.
     //
-    // The four windows are created once, when the section is shown, and only
+    // The two windows are created once, when the section is shown, and only
     // MOVED after that. Scrolling a pane by destroying and rebuilding its
     // contents flickers, loses the caret and throws away half-typed text.
+    //
+    // The name and the description are NOT windows. They were STATIC controls,
+    // and static controls in a scrolling pane are a stream of paint bugs: the
+    // pane is WS_CLIPCHILDREN so it never erases the rectangle a child sits
+    // in, which leaves each label responsible for erasing itself, and any
+    // disagreement between what a label repaints and what the pane repaints
+    // shows up as a line with somebody else's letters in it. The pane draws
+    // them itself in WM_PAINT now, off one back buffer, so there is one
+    // painter and nothing to disagree with.
     struct Row
     {
         S32 setting;
-        HWND label;
         HWND control;
         HWND browse;
-        HWND desc;
 
         // The description's height at the width it was last measured for. Kept
         // rather than measured every time, because a scroll changes neither
@@ -288,10 +295,6 @@ namespace
     {
         for (S32 i = 0; i < gApp.rowCount; i++)
         {
-            if (gApp.rows[i].label != NULL)
-            {
-                DestroyWindow(gApp.rows[i].label);
-            }
             if (gApp.rows[i].control != NULL)
             {
                 DestroyWindow(gApp.rows[i].control);
@@ -299,10 +302,6 @@ namespace
             if (gApp.rows[i].browse != NULL)
             {
                 DestroyWindow(gApp.rows[i].browse);
-            }
-            if (gApp.rows[i].desc != NULL)
-            {
-                DestroyWindow(gApp.rows[i].desc);
             }
         }
         gApp.rowCount = 0;
@@ -312,6 +311,15 @@ namespace
     // the top of the whole section, not from the top of the pane. What is on
     // screen is this shifted up by gApp.scroll, and that subtraction is the
     // only thing scrolling does.
+    // The width a description wraps inside, given the pane's width. Used by
+    // the layout and by the measurement, which have to agree or a row is given
+    // the height of one wrap and painted at another.
+    int descWidth(int paneW)
+    {
+        int descW = paneW - px(14) * 2;
+        return descW < px(120) ? px(120) : descW;
+    }
+
     struct RowRects
     {
         RECT label;
@@ -353,11 +361,7 @@ namespace
             }
         }
 
-        int descW = width - margin * 2;
-        if (descW < px(120))
-        {
-            descW = px(120);
-        }
+        int descW = descWidth(width);
 
         RowRects r;
         memset(&r, 0, sizeof(r));
@@ -408,29 +412,16 @@ namespace
         return client.bottom - client.top;
     }
 
-    // The description a row should be showing, set on the window and measured.
-    // Only when it has actually changed: SetWindowText repaints, and this runs
-    // for every row whenever any one value changes.
-    void refreshDescription(Row* row, int width)
+    // The width a description wraps inside. The same arithmetic rowRects does,
+    // and the two have to stay together.
+    // How tall this row's description wraps to at the current width. Called
+    // when the text or the width has changed; the answer is kept in the row so
+    // a scroll does not re-measure anything.
+    void measureRow(Row* row, int width)
     {
-        char want[768];
-        describe(row->setting, want, sizeof(want));
-
-        char have[768];
-        GetWindowTextA(row->desc, have, sizeof(have));
-
-        int descW = width - px(14) * 2;
-        if (descW < px(120))
-        {
-            descW = px(120);
-        }
-
-        if (strcmp(want, have) != 0)
-        {
-            SetWindowTextA(row->desc, want);
-        }
-
-        row->descH = measureText(gApp.pane, want, descW);
+        char text[768];
+        describe(row->setting, text, sizeof(text));
+        row->descH = measureText(gApp.pane, text, descWidth(width));
     }
 
     void updateScrollBar()
@@ -480,7 +471,7 @@ namespace
         {
             for (S32 i = 0; i < gApp.rowCount; i++)
             {
-                refreshDescription(&gApp.rows[i], width);
+                measureRow(&gApp.rows[i], width);
             }
             gApp.measuredWidth = width;
         }
@@ -498,7 +489,7 @@ namespace
 
         updateScrollBar();
 
-        HDWP dwp = BeginDeferWindowPos(gApp.rowCount * 4);
+        HDWP dwp = BeginDeferWindowPos(gApp.rowCount * 2);
 
         y = px(14);
         for (S32 i = 0; i < gApp.rowCount; i++)
@@ -511,10 +502,8 @@ namespace
                 HWND wnd;
                 const RECT* at;
             } parts[] = {
-                { row->label, &r.label },
                 { row->control, &r.control },
                 { row->browse, &r.browse },
-                { row->desc, &r.desc },
             };
 
             for (size_t p = 0; p < sizeof(parts) / sizeof(parts[0]); p++)
@@ -549,9 +538,10 @@ namespace
             EndDeferWindowPos(dwp);
         }
 
-        // The gaps between rows belong to the pane, and moving a child does
-        // not repaint what it moved away from.
-        InvalidateRect(gApp.pane, NULL, TRUE);
+        // Every name and description is painted by the pane, so all of them
+        // move when the scroll does. FALSE because WM_ERASEBKGND is refused --
+        // the back buffer in WM_PAINT is what clears.
+        InvalidateRect(gApp.pane, NULL, FALSE);
     }
 
     // Create the current section's windows. Called on a section change and
@@ -584,12 +574,6 @@ namespace
             // Created off-screen at a nominal size. layoutRows below is what
             // puts them where they belong, and it is the only code that knows
             // the geometry.
-            // SS_NOPREFIX on both statics. Without it a '&' is a mnemonic
-            // marker: the character after it is underlined and the '&' itself
-            // does not draw, so a path like D:\Rock & Roll loses it -- and the
-            // measurement above, which passes DT_NOPREFIX, would not agree.
-            row->label = make("STATIC", s->name, SS_LEFT | SS_NOPREFIX, 0, 0, px(150), px(18), 0);
-
             if (s->kind == ICONFIG_BOOL)
             {
                 row->control = make("BUTTON", "on", BS_AUTOCHECKBOX | BS_NOTIFY | WS_TABSTOP, 0, 0,
@@ -642,8 +626,6 @@ namespace
                 row->browse = make("BUTTON", "Browse...", BS_PUSHBUTTON | WS_TABSTOP, 0, 0, px(78),
                                    px(23), id + kIdRowBrowse);
             }
-
-            row->desc = make("STATIC", "", SS_LEFT | SS_NOPREFIX, 0, 0, px(200), px(18), 0);
 
             gApp.rowCount++;
         }
@@ -1091,18 +1073,79 @@ namespace
             break;
         }
 
-        // OPAQUE, and that is the whole point of this handler.
-        //
-        // The pane is WS_CLIPCHILDREN, so its own erase skips every rectangle a
-        // child occupies. A child drawing with a transparent background
-        // therefore erases nothing either, and the text under a description
-        // that changed -- or a row that moved -- stays on screen with the new
-        // text drawn over it. It reads as text that is cut off, because half
-        // the letters on the line belong to the string before it.
+        // The checkbox's own label, which is a real control and still asks.
+        // Opaque against the pane's background, so it erases what it covers.
         case WM_CTLCOLORSTATIC:
         case WM_CTLCOLORBTN:
             SetBkColor((HDC)wp, GetSysColor(COLOR_WINDOW));
             return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
+
+        // Refused, so the background is never painted twice: once here in the
+        // window's own DC and again a moment later in the back buffer. That
+        // double paint is what a flickering scroll is.
+        case WM_ERASEBKGND: return 1;
+
+        case WM_PAINT:
+        {
+            PAINTSTRUCT ps;
+            HDC dc = BeginPaint(wnd, &ps);
+
+            RECT client;
+            GetClientRect(wnd, &client);
+
+            // One back buffer for the whole pane. Drawing straight into `dc`
+            // works and tears: the reader sees the background go down and the
+            // text arrive after it, once per scrolled pixel.
+            HDC mem = CreateCompatibleDC(dc);
+            HBITMAP buffer = CreateCompatibleBitmap(dc, client.right, client.bottom);
+            HBITMAP wasBitmap = (HBITMAP)SelectObject(mem, buffer);
+            HFONT wasFont = (HFONT)SelectObject(mem, gApp.font);
+
+            FillRect(mem, &client, GetSysColorBrush(COLOR_WINDOW));
+            SetBkMode(mem, TRANSPARENT);
+
+            int width = client.right - client.left;
+            int y = px(14);
+
+            for (S32 i = 0; i < gApp.rowCount; i++)
+            {
+                Row* row = &gApp.rows[i];
+                RowRects r = rowRects(row, width, y);
+                y = r.bottom;
+
+                RECT label = r.label;
+                RECT desc = r.desc;
+                OffsetRect(&label, 0, -gApp.scroll);
+                OffsetRect(&desc, 0, -gApp.scroll);
+
+                if (desc.top > client.bottom || label.bottom < 0)
+                {
+                    continue;
+                }
+
+                SetTextColor(mem, GetSysColor(COLOR_WINDOWTEXT));
+                DrawTextA(mem, kConfigSettings[row->setting].name, -1, &label,
+                          DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+
+                char text[768];
+                describe(row->setting, text, sizeof(text));
+
+                SetTextColor(mem, GetSysColor(COLOR_GRAYTEXT));
+                DrawTextA(mem, text, -1, &desc, kDescFlags);
+            }
+
+            BitBlt(dc, ps.rcPaint.left, ps.rcPaint.top, ps.rcPaint.right - ps.rcPaint.left,
+                   ps.rcPaint.bottom - ps.rcPaint.top, mem, ps.rcPaint.left, ps.rcPaint.top,
+                   SRCCOPY);
+
+            SelectObject(mem, wasFont);
+            SelectObject(mem, wasBitmap);
+            DeleteObject(buffer);
+            DeleteDC(mem);
+
+            EndPaint(wnd, &ps);
+            return 0;
+        }
 
         default: break;
         }
