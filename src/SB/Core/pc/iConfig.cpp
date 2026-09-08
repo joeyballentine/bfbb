@@ -2,6 +2,7 @@
 
 #include "iConfig.h"
 
+#include "iConfigTable.h"
 #include "iHost.h"
 #include "iPadBind.h"
 
@@ -36,202 +37,6 @@ namespace
     char sPath[kMaxPath];
     S32 sHavePath;
 
-    // Every setting the port has, its default, and what it is for.
-    //
-    // This one table does three jobs, and that it does all three is the reason
-    // it exists rather than three lists that could disagree:
-    //
-    //   1. A key not in it is REPORTED at load rather than ignored. The
-    //      accessors all take a fallback, so an unknown key is otherwise
-    //      indistinguishable from an absent one at the point of use -- which
-    //      means `glwo = off` would read as "the glow is on" and nothing
-    //      anywhere would say why.
-    //   2. It is the default. An accessor whose key is missing from the file
-    //      answers from here, NOT from the fallback its caller passed, so a
-    //      default cannot be changed in one place and not the other.
-    //   3. It is what gets written when there is no config.ini, comments and
-    //      all, so the generated file documents itself.
-    //
-    // `section` is written as a [header] when it changes, so keep entries that
-    // share one together.
-    struct Setting
-    {
-        const char* section;
-        const char* name;
-        const char* value;
-        const char* comment;
-    };
-
-    const Setting kSettings[] = {
-        { "assets", "path", "",
-          "Folder holding boot.HIP, FONT.HIP and fmv/. Empty means the folder the\n"
-          "; game was started from. BFBB_ASSETS overrides this." },
-        { "game", "boot", "",
-          "Start straight in this scene, skipping the menu: a four-character scene\n"
-          "; id, e.g. jf01. Empty starts at the menu. Overrides SB.INI's BOOT=." },
-        { "game", "intro_movies", "on",
-          "Play the Nickelodeon, THQ and RenderWare logos before the title screen." },
-        { "game", "save_folder", "",
-          "Folder to keep saves in. Empty uses this machine's own per-user data\n"
-          "; folder. BFBB_SAVE_DIR overrides this." },
-        { "video", "mode", "fullscreen",
-          "How the picture is presented: fullscreen, borderless, windowed." },
-        { "video", "width", "640", "Render width in pixels." },
-        { "video", "height", "480",
-          "Render height in pixels. Anything other than 4:3 widens the view rather\n"
-          "; than stretching it." },
-        { "video", "ui", "pillarbox",
-          "Where the interface sits on a screen that is not 4:3: pillarbox (all of\n"
-          "; it in a centred 4:3 box), native (the HUD out at the screen edges)." },
-        { "video", "framerate", "60",
-          "Frames a second, simulation and picture both: 60, display (the monitor's\n"
-          "; rate), 0 or off for no cap, or any number." },
-        { "video", "vsync", "on",
-          "Wait for the display before showing a finished frame. Stops tearing, and\n"
-          "; caps the rate at the refresh rate." },
-        { "video", "draw_distance", "on",
-          "Draw everything however far away. Off restores the console's culling,\n"
-          "; detail swaps and 400-unit world clip." },
-        { "video", "msaa", "4",
-          "Samples per pixel, for smoother edges: 1 (off), 2, 4, 8. A count the card\n"
-          "; will not grant falls back to off." },
-        { "video", "fov", "75",
-          "Horizontal field of view in degrees, as the game measures it at 4:3.\n"
-          "; A wider screen already shows more to the sides at the same number." },
-        { "video", "per_pixel_lighting", "off",
-          "Light characters once per pixel instead of once per vertex." },
-        { "video", "load_time", "1",
-          "What to do about loads too fast to see: seconds to hold the loading\n"
-          "; screen for, fancy to wipe the still off the loaded level instead,\n"
-          "; or off for neither." },
-        { "video", "shadow_resolution", "auto",
-          "Character shadow texture size: auto (half the render height, rounded up\n"
-          "; to a power of two), or a power of two from 64 to 4096." },
-        { "xbox", "glow", "on", "The full-screen glow, the Xbox version's bloom." },
-        { "xbox", "distortion", "on", "The Cruise Bubble's screen warp." },
-        { "xbox", "snapshot", "on",
-          "Use a still of the level you just left as the loading screen." },
-        { "xbox", "reverb", "on", "Cave reverb, in the Mermalair and the caves." },
-        { "xbox", "sound_rolloff", "on",
-          "Fade and pan a sound the way the Xbox does. Off uses the GameCube's\n"
-          "; curves, which hold an ambient near full volume out to its radius -- the\n"
-          "; Kelp Forest waterfall is much louder that way -- and which put a centred\n"
-          "; sound 3 dB down, which the Xbox does not." },
-        { "fixes", "menu_rope", "on",
-          "Draw the pause menu's bamboo frame so the rope shows at its corners.\n"
-          "; Off is the console's frame, with the corners bare." },
-        { "fixes", "sky_clip", "on",
-          "Shrink a skydome too big for its level's fog to fit inside the camera.\n"
-          "; Off is the console's sky, which in Goo Lagoon's pier is clipped away." },
-        { "input", "controller", "auto",
-          "Which controller to play with: auto (the first one present), or 1 to 4 to\n"
-          "; pin it to that slot." },
-        { "input", "preset", "auto",
-          "Which console's controls to start from: auto (follows the pad plugged\n"
-          "; in), xbox, ps2, gamecube. A line in [pad] wins over this." },
-        { "input", "deadzone", "auto",
-          "How far a stick must move before the game sees it, as a percentage of\n"
-          "; full deflection: auto (the controller's own), or 0 to 90." },
-        { "input", "camera_sensitivity", "1.0",
-          "How fast the right stick turns and pitches the camera, as a multiple\n"
-          "; of the game's own speed." },
-        { "input", "button_icons", "auto",
-          "Which controller's buttons the prompts draw: auto, xbox, gamecube, ps2,\n"
-          "; off (the ones on the disc), or a folder name under buttons/. The glyph\n"
-          "; follows your binding, not the console named here." },
-        { "audio", "soundtrack", "",
-          "Folder of your own music to play instead of the game's; empty uses the\n"
-          "; game's. Files are matched to tracks by asset name, or by a\n"
-          "; soundtrack.txt beside them holding one 'asset name = file' per line." },
-        { "text", "font", "",
-          "A TrueType file to draw the game's text with, or empty for the game's\n"
-          "; own font.\n"
-          ";\n"
-          "; The game's fonts are texture atlases authored for 640x480, so above that\n"
-          "; they are magnified and text is the first thing to go soft. This draws\n"
-          "; the same letterforms from an outline at the size they are actually\n"
-          "; drawn at. Layout, spacing, colour and every tag stay the game's.\n"
-          ";\n"
-          "; It draws the SpongeBob face and its numerals. The sans serif the\n"
-          "; copyright screen and the memory card messages are in is a different\n"
-          "; typeface and has its own setting below.\n"
-          ";\n"
-          "; No font ships with the port. The face the game itself used is\n"
-          "; SpongeBoyTT1; any .ttf works. tools/getfont.py fetches one and prints\n"
-          "; the line to paste here." },
-        { "text", "font_sans", "auto",
-          "The same, for the sans serif the copyright screen, the memory card\n"
-          "; messages and the controller messages are drawn in.\n"
-          ";\n"
-          "; auto follows the setting above and uses the system's own Arial, which\n"
-          "; is the face that atlas is -- so it sharpens those screens without\n"
-          "; changing what they look like. off leaves them as the game has them,\n"
-          "; and a path names some other .ttf.\n"
-          ";\n"
-          "; The game's small system font is left alone either way: its glyphs are\n"
-          "; hand-pixelled at 6x8, where an outline is not the same thing." },
-        { "text", "font_upscale", "0",
-          "How many times the game's own cell resolution to draw that font at,\n"
-          "; or 0 to match the render size.\n"
-          ";\n"
-          "; The atlas was authored against a 480-line framebuffer and is drawn\n"
-          "; magnified by however much taller the render size is, so 0 uses that\n"
-          "; ratio -- one atlas pixel per screen pixel, which at 640x480 is 1 and\n"
-          "; so exactly the softness the game shipped with. Below it the text is\n"
-          "; blurrier than the display can show; above it the letters read as\n"
-          "; crisper than the art around them.\n"
-          ";\n"
-          "; A sharpness setting, not a taste one: a glyph lands in exactly the box\n"
-          "; the artwork had it in whatever this is, so it cannot move anything." },
-        { "text", "font_padding", "auto",
-          "How far to inset a glyph inside that box, in the game's own atlas\n"
-          "; pixels, or auto to measure it.\n"
-          ";\n"
-          "; The box is measured by testing for any non-zero alpha, so it includes\n"
-          "; the whole anti-aliased fringe and the original letter's solid body stops\n"
-          "; short of it. An outline drawn to fill the box exactly reads as too\n"
-          "; heavy. Larger is smaller letters; negative grows them past the box.\n"
-          ";\n"
-          "; auto tries every inset that is distinct at the size the text is being\n"
-          "; drawn at and keeps the one whose letters land on the most of the same\n"
-          "; pixels as the game's own." },
-        { "text", "font_weight", "auto",
-          "How much to thicken that font's strokes, in the game's own atlas\n"
-          "; pixels, or auto to measure it. 0 draws the face as it is.\n"
-          ";\n"
-          "; The game's atlases are hand-drawn and heavier than most text faces at\n"
-          "; the same size, so a substitute can land the right size and still read\n"
-          "; as too light beside the artwork around it.\n"
-          ";\n"
-          "; auto sweeps it together with font_padding and prints what it picked,\n"
-          "; so a font drops in without being tuned by hand. tools/fontfit runs the\n"
-          "; same sweep outside the game -- see src/SB/Core/pc/README.md." },
-        { "text", "font_sans_weight", "auto",
-          "The same, for the font_sans face. Separate because the two atlases are\n"
-          "; drawn at different weights: the sans one is the lighter of the two, and\n"
-          "; a substitute for it usually needs nothing." },
-        { "text", "font_fit", "box",
-          "How each glyph of that font is placed in the space the game's own\n"
-          "; letter took up: box, width or natural.\n"
-          ";\n"
-          "; box stretches the glyph to fill it, which is exact -- every letter\n"
-          "; lands where the artwork had it -- at the price of the face's own\n"
-          "; proportions. width keeps the height and lets the width be the face's.\n"
-          "; natural stops fitting: one size for the whole font, every letter on\n"
-          "; one baseline, which is what a font normally looks like and no longer\n"
-          "; exactly where the game drew it." },
-        { "text", "font_sans_fit", "natural",
-          "The same, for the font_sans face. natural by default: that face draws\n"
-          "; the copyright notice and the memory card messages, where the game's\n"
-          "; own letter positions are not worth keeping and a stretched sans looks\n"
-          "; like it has been sat on." },
-        { "text", "platform_wording", "on",
-          "Rewrite the Xbox wording in the game's text -- dashboard, memory card\n"
-          "; slots -- as it loads. The files on disk are never touched." },
-    };
-
-    const size_t kSettingCount = sizeof(kSettings) / sizeof(kSettings[0]);
-
     void lowerInPlace(char* s)
     {
         for (; *s != '\0'; s++)
@@ -265,22 +70,7 @@ namespace
         return s;
     }
 
-    // The table's entry for "section.name", or NULL.
-    const Setting* findSetting(const char* key)
-    {
-        for (size_t i = 0; i < kSettingCount; i++)
-        {
-            char full[kMaxKey];
-            snprintf(full, sizeof(full), "%s.%s", kSettings[i].section, kSettings[i].name);
-            if (iHostStrCaseCmp(full, key) == 0)
-            {
-                return &kSettings[i];
-            }
-        }
-        return NULL;
-    }
-
-    // The two binding sections are not in kSettings, because their contents
+    // The two binding sections are not in kConfigSettings, because their contents
     // are one row per game button and that list already exists in
     // iPadBind.cpp. Splitting it in two so the table could stay a literal
     // would be the one thing the table exists to prevent.
@@ -414,7 +204,7 @@ namespace
             return e->value;
         }
 
-        const Setting* s = findSetting(key);
+        const iConfigSetting* s = iConfigTableFind(key);
         if (s != NULL)
         {
             return s->value;
@@ -496,7 +286,7 @@ namespace
         lowerInPlace(e->key);
         snprintf(e->value, sizeof(e->value), "%s", value);
 
-        if (findSetting(e->key) == NULL && bindingDefault(e->key) == NULL)
+        if (iConfigTableFind(e->key) == NULL && bindingDefault(e->key) == NULL)
         {
             printf("bfbb: %s:%d: unknown setting '%s', ignored\n", path, (int)lineNo, e->key);
             return;
@@ -569,9 +359,9 @@ namespace
     void appendMissingSettings(const char* path)
     {
         S32 missing = 0;
-        for (size_t i = 0; i < kSettingCount; i++)
+        for (size_t i = 0; i < (size_t)kConfigSettingCount; i++)
         {
-            if (!fileHas(kSettings[i].section, kSettings[i].name))
+            if (!fileHas(kConfigSettings[i].section, kConfigSettings[i].name))
             {
                 missing++;
             }
@@ -612,19 +402,19 @@ namespace
         fprintf(f, "; its default, so this block changes nothing.\n");
 
         const char* section = NULL;
-        for (size_t i = 0; i < kSettingCount; i++)
+        for (size_t i = 0; i < (size_t)kConfigSettingCount; i++)
         {
-            if (fileHas(kSettings[i].section, kSettings[i].name))
+            if (fileHas(kConfigSettings[i].section, kConfigSettings[i].name))
             {
                 continue;
             }
-            if (section == NULL || strcmp(section, kSettings[i].section) != 0)
+            if (section == NULL || strcmp(section, kConfigSettings[i].section) != 0)
             {
-                section = kSettings[i].section;
+                section = kConfigSettings[i].section;
                 fprintf(f, "\n[%s]\n", section);
             }
-            fprintf(f, "\n; %s\n", kSettings[i].comment);
-            fprintf(f, "%s = %s\n", kSettings[i].name, kSettings[i].value);
+            fprintf(f, "\n; %s\n", kConfigSettings[i].comment);
+            fprintf(f, "%s = %s\n", kConfigSettings[i].name, kConfigSettings[i].value);
         }
 
         // The keyboard bindings, one line each, carrying their grammar in the
@@ -710,19 +500,7 @@ bool iConfigWriteDefaults(const char* path)
     fprintf(f, "; Every value here is the default, so deleting this file changes nothing.\n");
     fprintf(f, "; Booleans take on/off, true/false, yes/no or 1/0.\n");
 
-    const char* section = NULL;
-    for (size_t i = 0; i < kSettingCount; i++)
-    {
-        if (section == NULL || strcmp(section, kSettings[i].section) != 0)
-        {
-            section = kSettings[i].section;
-            fprintf(f, "\n[%s]\n", section);
-        }
-
-        fprintf(f, "\n; %s\n", kSettings[i].comment);
-        fprintf(f, "%s = %s\n", kSettings[i].name, kSettings[i].value);
-    }
-
+    iConfigTableWriteDefaults(f);
     writeBindings(f);
 
     fclose(f);

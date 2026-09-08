@@ -16,6 +16,8 @@
 
 #include "iBoot.h"
 #include "iConfig.h"
+#include "iConfigEdit.h"
+#include "iConfigTable.h"
 #include "iDrawDist.h"
 #include "iFile.h"
 #include "iHost.h"
@@ -461,6 +463,252 @@ static void test_config()
     }
 
     iHostRemoveFile(written);
+    iHostRemoveDir(dir);
+}
+
+// The settings table's domains, and the in-place writer the configurator saves
+// through. Both are checked here rather than in the configurator, which is a
+// window and cannot be run by ctest.
+static void test_config_edit()
+{
+    printf("iConfigTable, iConfigEdit\n");
+
+    // --- the domains ---------------------------------------------------
+    // Every default has to be a value its own domain admits. This is the one
+    // that catches a domain written wrong: a range that excludes the default,
+    // or a choices list that forgot the word the default is.
+    S32 badDefaults = 0;
+    for (S32 i = 0; i < kConfigSettingCount; i++)
+    {
+        if (!iConfigTableValidate(&kConfigSettings[i], kConfigSettings[i].value, NULL, 0))
+        {
+            printf("    %s.%s defaults to \"%s\", which its own domain rejects\n",
+                   kConfigSettings[i].section, kConfigSettings[i].name, kConfigSettings[i].value);
+            badDefaults++;
+        }
+    }
+    check(badDefaults == 0, "every setting's default is a value its domain admits");
+
+    // And every setting has a comment, since that comment is what the file and
+    // the configurator both show.
+    S32 noComment = 0;
+    for (S32 i = 0; i < kConfigSettingCount; i++)
+    {
+        char summary[512];
+        iConfigTableSummary(&kConfigSettings[i], summary, sizeof(summary));
+        if (summary[0] == '\0')
+        {
+            noComment++;
+        }
+    }
+    check(noComment == 0, "and a description that survives being unwrapped");
+
+    {
+        const iConfigSetting* fov = iConfigTableFind("video.fov");
+        check(fov != NULL, "video.fov is in the table");
+        if (fov != NULL)
+        {
+            check(iConfigTableValidate(fov, "90", NULL, 0), "and takes 90");
+            check(!iConfigTableValidate(fov, "wide", NULL, 0), "and not a word");
+            check(!iConfigTableValidate(fov, "500", NULL, 0), "and not 500");
+        }
+
+        // A number OR a word, which is the case the kind alone cannot express.
+        const iConfigSetting* rate = iConfigTableFind("VIDEO.FRAMERATE");
+        check(rate != NULL, "the lookup is case-insensitive");
+        if (rate != NULL)
+        {
+            check(iConfigTableValidate(rate, "144", NULL, 0), "framerate takes a number");
+            check(iConfigTableValidate(rate, "display", NULL, 0), "and the word display");
+            check(!iConfigTableValidate(rate, "fast", NULL, 0), "and not any other word");
+            check(!iConfigTableValidate(rate, "59.94", NULL, 0), "and not a fraction");
+        }
+
+        const iConfigSetting* mode = iConfigTableFind("video.mode");
+        if (mode != NULL)
+        {
+            check(iConfigTableValidate(mode, "WINDOWED", NULL, 0), "an enum ignores case");
+            check(!iConfigTableValidate(mode, "window", NULL, 0), "and takes only its words");
+        }
+
+        const iConfigSetting* glow = iConfigTableFind("xbox.glow");
+        if (glow != NULL)
+        {
+            check(iConfigTableValidate(glow, "yes", NULL, 0), "a switch takes yes");
+            check(!iConfigTableValidate(glow, "of", NULL, 0), "and not a near miss");
+        }
+
+        char why[128];
+        why[0] = '\0';
+        const iConfigSetting* width = iConfigTableFind("video.width");
+        if (width != NULL)
+        {
+            iConfigTableValidate(width, "twelve", why, sizeof(why));
+            check(why[0] != '\0', "a rejection says why");
+        }
+    }
+
+    // --- the writer ------------------------------------------------------
+    char dir[512];
+    if (!scratch_dir("configedit", dir, sizeof(dir)))
+    {
+        check(false, "could not make a temp directory");
+        return;
+    }
+
+    char path[512];
+    snprintf(path, sizeof(path), "%s/config.ini", dir);
+
+    // A file with everything the writer has to leave alone: comments in both
+    // spellings, a trailing comment on a value, ragged spacing, a blank line,
+    // a section this build does not know, and a commented-out binding.
+    static const char kFile[] = "; a settings file\r\n"
+                                "[video]\r\n"
+                                "mode = fullscreen   ; how the picture is presented\r\n"
+                                "width=640\r\n"
+                                "\r\n"
+                                "# a hash comment\r\n"
+                                "height  =  480\r\n"
+                                "[mystery]\r\n"
+                                "something = 3\r\n"
+                                "[pad]\r\n"
+                                "; a  = x\r\n";
+
+    FILE* f = fopen(path, "wb");
+    if (f == NULL)
+    {
+        check(false, "could not write a config.ini");
+        return;
+    }
+    fwrite(kFile, 1, sizeof(kFile) - 1, f);
+    fclose(f);
+
+    // A round trip that changes nothing must change no bytes. This is the
+    // whole promise of editing lines rather than key/value pairs, and it is
+    // the one a rewrite-from-scratch writer cannot keep.
+    {
+        iConfigEditFile* file = iConfigEditOpen(path);
+        check(file != NULL, "the file opens");
+        if (file != NULL)
+        {
+            check(!iConfigEditChanged(file), "and reads as unchanged");
+            check(iConfigEditSave(file, path), "and saves");
+            iConfigEditClose(file);
+        }
+
+        char buf[2048];
+        FILE* r = fopen(path, "rb");
+        size_t n = (r != NULL) ? fread(buf, 1, sizeof(buf) - 1, r) : 0;
+        if (r != NULL)
+        {
+            fclose(r);
+        }
+        buf[n] = '\0';
+
+        check(n == sizeof(kFile) - 1 && memcmp(buf, kFile, n) == 0,
+              "a round trip with no edits changes no bytes");
+    }
+
+    {
+        iConfigEditFile* file = iConfigEditOpen(path);
+        if (file == NULL)
+        {
+            check(false, "the file reopens");
+            iHostRemoveFile(path);
+            iHostRemoveDir(dir);
+            return;
+        }
+
+        check(strcmp(iConfigEditGet(file, "video", "width"), "640") == 0, "a value reads back");
+        check(strcmp(iConfigEditGet(file, "video", "height"), "480") == 0,
+              "and one written with ragged spacing");
+        check(strcmp(iConfigEditGet(file, "video", "mode"), "fullscreen") == 0,
+              "and one with a trailing comment, without the comment");
+        check(iConfigEditGet(file, "video", "fov") == NULL, "a key the file lacks reads as absent");
+        check(iConfigEditGet(file, "pad", "a") == NULL, "and a commented-out one is not a value");
+
+        iConfigEditSet(file, "video", "mode", "windowed");
+        iConfigEditSet(file, "video", "width", "1920");
+        iConfigEditSet(file, "video", "fov", "90");
+        check(iConfigEditChanged(file), "setting three values marks it changed");
+        check(iConfigEditSave(file, path), "and it saves");
+        iConfigEditClose(file);
+    }
+
+    {
+        char buf[2048];
+        FILE* r = fopen(path, "rb");
+        size_t n = (r != NULL) ? fread(buf, 1, sizeof(buf) - 1, r) : 0;
+        if (r != NULL)
+        {
+            fclose(r);
+        }
+        buf[n] = '\0';
+
+        check(strstr(buf, "mode = windowed") != NULL, "the changed value is in the file");
+        check(strstr(buf, "; how the picture is presented") != NULL,
+              "and its trailing comment survived");
+        check(strstr(buf, "width=1920") != NULL,
+              "and the one written without spaces, still without them");
+        check(strstr(buf, "fov = 90") != NULL, "and the one the file did not have");
+        check(strstr(buf, "; a settings file") != NULL, "the banner is untouched");
+        check(strstr(buf, "# a hash comment") != NULL, "and a hash comment");
+        check(strstr(buf, "[mystery]") != NULL, "and a section this build does not know");
+        check(strstr(buf, "something = 3") != NULL, "with its value");
+        check(strstr(buf, "; a  = x") != NULL, "and the commented-out binding, still commented");
+
+        // Inserted into [video], not appended past [mystery] and [pad] where
+        // it would read as a setting of theirs -- and where the game's parser
+        // would call it pad.fov and report it as unknown.
+        const char* fov = strstr(buf, "fov = 90");
+        const char* mystery = strstr(buf, "[mystery]");
+        check(fov != NULL && mystery != NULL && fov < mystery,
+              "a new key lands in its own section, not at the end of the file");
+    }
+
+    // A key set into a section the file has no header for gets one.
+    {
+        iConfigEditFile* file = iConfigEditOpen(path);
+        if (file != NULL)
+        {
+            iConfigEditSet(file, "audio", "soundtrack", "D:\\music");
+            iConfigEditSave(file, path);
+            iConfigEditClose(file);
+        }
+
+        char buf[2048];
+        FILE* r = fopen(path, "rb");
+        size_t n = (r != NULL) ? fread(buf, 1, sizeof(buf) - 1, r) : 0;
+        if (r != NULL)
+        {
+            fclose(r);
+        }
+        buf[n] = '\0';
+
+        const char* header = strstr(buf, "[audio]");
+        check(header != NULL, "a section the file lacked gets a header");
+        check(header != NULL && strstr(header, "soundtrack = D:\\music") != NULL,
+              "with the value under it");
+    }
+
+    // And unsetting one removes the line, so the setting goes back to being
+    // answered from the table.
+    {
+        iConfigEditFile* file = iConfigEditOpen(path);
+        if (file != NULL)
+        {
+            iConfigEditUnset(file, "video", "fov");
+            iConfigEditSave(file, path);
+            iConfigEditClose(file);
+
+            file = iConfigEditOpen(path);
+            check(file != NULL && iConfigEditGet(file, "video", "fov") == NULL,
+                  "unsetting a value takes its line out");
+            iConfigEditClose(file);
+        }
+    }
+
+    iHostRemoveFile(path);
     iHostRemoveDir(dir);
 }
 
@@ -4226,6 +4474,7 @@ int main()
     // First: iConfig parses once per process, and this is what decides which
     // file that one parse reads.
     test_config();
+    test_config_edit();
     test_screen();
     test_drawdist();
     test_boot();

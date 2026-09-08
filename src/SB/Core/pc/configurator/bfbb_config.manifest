@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <assemblyIdentity type="win32" name="bfbb.config" version="1.0.0.0" processorArchitecture="*"/>
+
+  <!-- Comctl32 v6. Without this the controls are drawn in the Windows 95
+       style, which is what an unmanifested Win32 program still gets. -->
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls"
+                        version="6.0.0.0" processorArchitecture="*"
+                        publicKeyToken="6595b64144ccf1df" language="*"/>
+    </dependentAssembly>
+  </dependency>
+
+  <!-- System DPI aware, which is what the layout is: every length is written
+       for 96 and scaled once by the DPI read at startup. Per-monitor would
+       mean rebuilding on WM_DPICHANGED, and this window is not one people
+       drag between monitors. -->
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware>
+    </windowsSettings>
+  </application>
+</assembly>

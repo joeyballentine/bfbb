@@ -1,0 +1,18 @@
+// The configurator's icon.
+//
+// The game's own rather than one of its own: this is the game's settings and
+// not a separate application, and two icons on one folder that mean the same
+// program is worse than one.
+//
+// In res/ and not beside main.cpp, because rc.exe resolves a resource's file
+// against the script's own directory and does not search the include path for
+// one. A script in configurator/ naming an icon in here compiles to nothing
+// and reports nothing.
+//
+// The manifest is NOT here. CMake embeds a manifest of its own into every
+// executable it links, and a second RT_MANIFEST in the resources is a
+// duplicate-resource error rather than a merge -- so bfbb_config.manifest is
+// listed as a source of the target instead, which is the input CMake merges
+// into the one it writes.
+
+1 ICON "bfbb.ico"

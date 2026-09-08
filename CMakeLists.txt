@@ -659,6 +659,7 @@ target_compile_options(bfbb_rw PRIVATE ${BFBB_NO_WARNINGS})
 add_library(bfbb_platform STATIC
   ${PC_DIR}/iBoot.cpp
   ${PC_DIR}/iConfig.cpp
+  ${PC_DIR}/iConfigTable.cpp
   ${PC_DIR}/iDrawDist.cpp
   ${PC_DIR}/iFile.cpp
   ${PC_DIR}/iFixes.cpp
@@ -1049,6 +1050,63 @@ if(WIN32)
   endif()
 endif()
 
+# --- the configurator --------------------------------------------------------
+# bfbb_config.exe: config.ini with controls on it, so the settings are
+# discoverable without opening the file. Windows only, because it is Win32
+# controls and nothing else -- a host without them still has the file, which is
+# what it always was.
+#
+# A separate executable rather than a screen inside the game. config.ini is
+# read before the window opens: assets.path says where the game's data is,
+# video.mode says how to open the window at all, and neither can be answered
+# from inside a game that has already started on the old values. So it runs
+# before the game does.
+#
+# It links three files and no library. iConfigTable.cpp is the settings and
+# their domains, iConfigEdit.cpp writes one back without disturbing the rest of
+# the file, and the host layer is there for the case-insensitive compare and
+# the exe directory. It does NOT link iConfig.cpp, which reaches iPadBind.cpp
+# for the two binding sections and from there into xPad.h and the pad backend
+# -- most of the game, to read a file this program reads itself.
+if(WIN32)
+  add_executable(bfbb_config WIN32
+    ${PC_DIR}/configurator/main.cpp
+    ${PC_DIR}/iConfigTable.cpp
+    ${PC_DIR}/iConfigEdit.cpp
+    ${HOST_SOURCES}
+
+    # A source rather than a resource. CMake writes and embeds a manifest for
+    # every executable, and a .manifest listed here is merged into that one --
+    # putting it in the .rc instead is a duplicate RT_MANIFEST and a link
+    # error. What it asks for is in the file: comctl32 v6 and DPI awareness.
+    ${PC_DIR}/configurator/bfbb_config.manifest
+  )
+
+  # The same resource-compiler check the game's icon gets, and for the same
+  # reason: no rc found is a program without an icon, not a failed build. What
+  # it costs here is also the manifest, so an unmanifested build gets the
+  # Windows 95 controls -- ugly, and not worth failing over.
+  if(CMAKE_RC_COMPILER)
+    target_sources(bfbb_config PRIVATE ${PC_DIR}/res/bfbb_config.rc)
+
+    # The same line the game's icon needs, for the same reason: rc.exe finds a
+    # resource's file through the include path, and CMake builds that from the
+    # target's include directories. Without it the script compiles to nothing
+    # and says nothing about why.
+    target_include_directories(bfbb_config PRIVATE ${PC_DIR}/res)
+  endif()
+
+  target_compile_definitions(bfbb_config PRIVATE PLATFORM_PC)
+  target_include_directories(bfbb_config PRIVATE
+    ${PC_DIR}/compat
+    ${PC_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x
+  )
+  target_link_libraries(bfbb_config PRIVATE user32 gdi32 comdlg32 comctl32 shell32 ole32 dbghelp)
+  target_compile_options(bfbb_config PRIVATE ${BFBB_NO_WARNINGS})
+endif()
+
 # --- self-test ---------------------------------------------------------------
 # Exercises the parts of the layer that do not need the renderer, so that
 # "implemented" means something ran and produced the right answer rather than
@@ -1058,6 +1116,8 @@ enable_testing()
 add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   ${PC_DIR}/iBoot.cpp
   ${PC_DIR}/iConfig.cpp
+  ${PC_DIR}/iConfigTable.cpp
+  ${PC_DIR}/iConfigEdit.cpp
   ${PC_DIR}/iDrawDist.cpp
   ${PC_DIR}/iFile.cpp
   ${PC_DIR}/iScreen.cpp

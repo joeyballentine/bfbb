@@ -150,9 +150,16 @@ through RenderWare -- so it cannot answer a question asked before the engine
 exists, which is most of these. `iConfig.h` has the long version. `[game] boot`
 is the one setting the two files both answer, and config.ini wins.
 
-Adding a setting means one entry in `iConfig.cpp`'s settings table. That table
-is the default, the list of names a typo is checked against, and what the
-generated file is written from, so the three cannot disagree.
+Adding a setting means one entry in `iConfigTable.cpp`'s settings table. That
+table is the default, the list of names a typo is checked against, what the
+generated file is written from, and the domain the configurator draws a control
+from and checks a typed value against, so the four cannot disagree.
+
+`bin\bfbb_config.exe` is that configurator: config.ini with controls on it, for
+anyone who would rather not open the file. It reads the same table and writes
+through `iConfigEdit.cpp`, which changes only the value on the one line it
+belongs to -- comments, ordering, spacing and hand edits all survive a save.
+See `configurator/README.md`.
 
 ## Running it, and the switches
 
