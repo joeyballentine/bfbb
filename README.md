@@ -249,24 +249,30 @@ build-release.bat
 This is the main build script. It enters the 32-bit MSVC environment, configures
 `build-release\`, builds, and puts `bfbb.exe` and the DLLs it needs in `bin\`.
 `build-debug.bat` does the same into `build-debug\` and is unoptimised and slow.
-Both take a render backend as their first argument:
+
+**The executable carries more than one renderer.** On Windows a default build
+has Direct3D 9 and OpenGL 3.3 in it, and `video.backend` in `config.ini` picks
+between them at startup -- so a machine whose Direct3D driver misbehaves needs a
+line in a settings file rather than a different build.
 
 | Backend | What it is |
 | --- | --- |
-| `D3D9` | Direct3D 9, on a Win32 window the port creates. The default, and the one the port is playtested on. |
-| `D3D11` | Direct3D 11, on the same window. Draws levels and characters, and the screen passes. |
-| `GL3` | OpenGL 3.3 on an SDL3 window, falling back through 2.1, GLES 3.1 and GLES 2.0. The backend that can eventually run off Windows. All three screen passes; still missing some of the ported Xbox features. |
-| `NULL` | No renderer. Headless, and what the self-tests run against. |
+| `D3D9` | Direct3D 9, on an SDL3 window. The one the port is playtested on, and the only one with the fixed-function path. |
+| `D3D11` | Direct3D 11, on the same window. Draws levels and characters, and the screen passes. **Cannot share a build with D3D9** -- the two are one namespace in librw. |
+| `GL3` | OpenGL 3.3, falling back through 2.1, GLES 3.1 and GLES 2.0. The only backend that runs off Windows. All three screen passes; still missing some of the ported Xbox features. |
+| `NULL` | No renderer at all. Headless, and what the self-tests are built against. Not something `video.backend` offers. |
+
+Both scripts take a backend as their first argument, which builds only that one:
 
 ```sh
 build-release.bat GL3
 ```
 
-The build directory is per configuration, not per backend: `build-release.bat
-GL3` reconfigures `build-release\` and rebuilds it, because the backend is baked
-into the CMake cache and into librw's compile definitions. Every build writes
-into `bin\` and overwrites the previous files. `bin\BUILD-INFO.txt` says which config,
-backend and architecture is sitting there.
+The build directory is per configuration, not per backend set: that reconfigures
+`build-release\` and rebuilds it, because the set is baked into the CMake cache
+and into librw's compile definitions. Every build writes into `bin\` and
+overwrites the previous files. `bin\BUILD-INFO.txt` says which config, backends
+and architecture is sitting there.
 
 The second argument is the architecture, `x86` (the default) or `x64`:
 
@@ -286,7 +292,7 @@ cmake -S . -B build-pc -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=
 cmake --build build-pc
 ```
 
-Add `-DBFBB_RENDER_BACKEND=GL3` for the OpenGL build and
+Add `-DBFBB_RENDER_BACKENDS=GL3` for an OpenGL-only build and
 `-DCMAKE_PREFIX_PATH=%USERPROFILE%/vcpkg/installed/x86-windows` for FFmpeg,
 libusb and SDL. `-m32` is set by `CMakeLists.txt` before `project()` and is not
 something to pass yourself; for a 64-bit build, use an x64 developer command

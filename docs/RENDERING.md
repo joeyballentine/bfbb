@@ -21,6 +21,12 @@ Part two is built and unfinished: `video.pipeline = auto | shader | fixed`
 draws the world, the models, the characters and the interface without a shader.
 See [What is still missing](#what-is-still-missing).
 
+Which renderer draws is `video.backend`, not a build flag. One Windows
+executable carries Direct3D 9 and OpenGL 3.3; `auto` takes the first, and
+naming one is what a machine with a bad driver needs. D3D11 is the exception
+and is its own build -- it and D3D9 are two implementations of librw's
+`rw::d3d` and collide at link.
+
 ## What the pipeline already is
 
 Three facts decide most of what follows, and all three are better than they

@@ -44,8 +44,11 @@ Windows, Linux and macOS. The OS half of the layer is behind
 `src/SB/Core/pc/iHost.h`, with one backend per platform; `pcprogress.py --host`
 checks that the two stay in step.
 
-Off Windows the render backend defaults to GL3 and the build is 64-bit, both
-because there is nothing else available -- see section 5(f). Linux wants SDL's
+The executable carries several render backends and `video.backend` picks
+between them at startup: D3D9 and GL3 on Windows, GL3 alone off it. D3D11 is
+opt-in and exclusive -- it and D3D9 are two implementations of librw's
+`rw::d3d`. Off Windows the build is also 64-bit, because there is nothing else
+available -- see section 5(f). Linux wants SDL's
 build dependencies installed first; the `unix` job in
 `.github/workflows/pc-port.yml` carries the list that a 24.04 runner actually
 needs.
