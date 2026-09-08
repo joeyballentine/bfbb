@@ -285,10 +285,15 @@ jobs:
   # configuration someone would actually run, and it is the only one worth
   # downloading.
   #
-  # One artifact per HOST, not one per backend. The Windows build carries D3D9,
-  # D3D11 and GL3 together and video.backend in config.ini picks between them,
-  # so a machine whose Direct3D driver misbehaves has the OpenGL one in the same
-  # download.
+  # One artifact per HOST and word size, not one per backend. The Windows build
+  # carries D3D9, D3D11 and GL3 together and video.backend in config.ini picks
+  # between them, so a machine whose Direct3D driver misbehaves has the OpenGL
+  # one in the same download.
+  #
+  # Windows gets both word sizes. 32-bit is the configuration that gets played
+  # and the one to take by default; 64-bit is what an x64 toolchain -- vcpkg,
+  # FFmpeg, drivers -- needs, and it carries a doubled game heap, so an
+  # out-of-memory bug that the real console would hit can hide in it.
   #
   # Each artifact is a folder to run the game out of: the executable, the
   # configurator on Windows, the button glyphs, and whatever DLLs the build
@@ -302,7 +307,8 @@ jobs:
   package:
     runs-on: ${{ matrix.os }}
     # Gating on Windows and reporting elsewhere, the same split the jobs above
-    # use: the Windows Release build is the one people download.
+    # use: the Windows Release builds are the ones people download. Both word
+    # sizes gate, so that the 64-bit one is not left to rot green.
     continue-on-error: ${{ matrix.os != 'windows-latest' }}
 
     strategy:
@@ -310,8 +316,10 @@ jobs:
       matrix:
         include:
           # An empty backend means the host default, which is D3D9, D3D11 and
-          # GL3 on Windows and GL3 elsewhere.
-          - { os: windows-latest, backend: "", name: windows-x86 }
+          # GL3 on Windows and GL3 elsewhere. `msvc` and `bits` are read only on
+          # Windows; off it the word size is the host's and there is no choice.
+          - { os: windows-latest, backend: "", name: windows-x86,    msvc: x86, bits: "" }
+          - { os: windows-latest, backend: "", name: windows-x86_64, msvc: x64, bits: "-DBFBB_BUILD_32BIT=OFF" }
           - { os: ubuntu-latest,  backend: "", name: linux-x86_64 }
           # macos-latest is absent on purpose. An arm64 build compiles and then
           # is SIGKILLed at exec, because the game arena needs a low 4 GB that
@@ -328,11 +336,15 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@v5
 
-      - name: MSVC environment (x86)
+      # The word size is chosen HERE as much as at the configure below: -m32 is
+      # a request, and clang can only honour it with the x86 MSVC libraries on
+      # LIB. Entering the wrong environment makes CMakeLists.txt fail its own
+      # pointer-size check rather than produce a binary of the wrong width.
+      - name: MSVC environment
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: x86
+          arch: ${{ matrix.msvc }}
 
       - name: Linux dependencies
         if: runner.os == 'Linux'
@@ -357,8 +369,9 @@ jobs:
       # and this step is bash, which eats the backslashes and once linked the
       # executable to D:abfbbbfbb.
       #
-      # The word size is left to CMakeLists.txt for the same reason the unix job
-      # leaves it: 32-bit on Windows, 64-bit off it.
+      # Off Windows the word size is left to CMakeLists.txt, which has no choice
+      # to make: macOS has no 32-bit runtime and a 32-bit Linux build needs a
+      # multilib toolchain. On Windows it is matrix.bits.
       - name: Configure
         shell: bash
         run: >
@@ -366,6 +379,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release
           -DBFBB_SDL=vendored
           ${{ matrix.backend != '' && format('-DBFBB_RENDER_BACKENDS={0}', matrix.backend) || '' }}
+          ${{ matrix.bits }}
           -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=dist
           ${{ runner.os == 'Windows' && '-DCMAKE_CXX_COMPILER=clang++' || '' }}
 
@@ -384,11 +398,16 @@ jobs:
           cd build-pkg
           rm -f dist/*selftest* dist/fontfit*
           backends=$(sed -n 's/^BFBB_RENDER_BACKENDS:STRING=//p' CMakeCache.txt)
+          case $(sed -n 's/^BFBB_BUILD_32BIT:BOOL=//p' CMakeCache.txt) in
+            ON) words=32-bit ;;
+            *)  words=64-bit ;;
+          esac
           cat > dist/BUILD-INFO.txt <<EOF
           Battle for Bikini Bottom, PC port -- ${{ matrix.name }}
 
           Built from ${{ github.repository }} ${{ github.ref_name }} at ${{ github.sha }}
-          Render backends: ${backends}   Configuration: Release
+          Render backends: ${backends}
+          Configuration: Release ${words}
 
           This folder is the program, not the game. It needs the data files from
           a copy of the Xbox release: start it once, then set [assets] path in
