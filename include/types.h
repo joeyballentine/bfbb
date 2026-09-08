@@ -165,7 +165,11 @@ typedef intptr_t SPtr;
 #elif defined(__MINGW32__)
 #define WEAK inline __attribute__((used))
 #elif defined(__GNUC__) || defined(__clang__)
-#define WEAK __attribute__((weak))
+// `used` here as well. clang treats `weak` on its own as a reason to emit the
+// body; GCC does not, so at -O2 an inline definition whose own unit inlines
+// every call to it is emitted nowhere and every other unit's call is undefined
+// at link -- the same failure MinGW has, in the same sixteen places.
+#define WEAK __attribute__((weak, used))
 #else
 #define WEAK
 #endif
