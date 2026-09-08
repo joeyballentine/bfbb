@@ -307,15 +307,58 @@ namespace
     // What every replaced atomic showed and shows, for the F8 swap. One
     // reference of ours on each geometry, so the one not on the atomic
     // survives.
+    //
+    // The atomic holds the smoothed geometry at all times. Game code keeps
+    // per-vertex arrays sized to whatever geometry an atomic had when it
+    // looked -- a hazard's UV animation, the goo, the ripple -- and writes
+    // them back through the atomic later, so a geometry with another vertex
+    // count under it overruns the heap. The shipped geometry is put in by the
+    // atomic's render callback for the draw alone.
     struct Swap
     {
         rw::Atomic* atomic;
         rw::Geometry* shipped;
         rw::Geometry* smooth;
+        rw::Atomic::RenderCB render;   // what the atomic drew with before
     };
     iHipolyArray<Swap> sSwaps;
     bool sShowSmooth = true;
     bool sHotkeyWasDown = false;
+
+    Swap* findSwap(rw::Atomic* atomic)
+    {
+        for (U32 i = 0; i < sSwaps.n; i++)
+        {
+            if (sSwaps[i].atomic == atomic)
+            {
+                return &sSwaps[i];
+            }
+        }
+        return NULL;
+    }
+
+    void swapRenderCB(rw::Atomic* atomic)
+    {
+        Swap* sw = findSwap(atomic);
+        if (sw == NULL)
+        {
+            rw::Atomic::defaultRenderCB(atomic);
+            return;
+        }
+        // Only while the atomic still holds our geometry: the goo gives an
+        // atomic one of its own.
+        rw::Geometry* held = atomic->geometry;
+        bool sub = !sShowSmooth && held == sw->smooth;
+        if (sub)
+        {
+            atomic->geometry = sw->shipped;
+        }
+        sw->render(atomic);
+        if (sub)
+        {
+            atomic->geometry = held;
+        }
+    }
 
     void replaceGeometry(rw::Atomic* atomic, rw::Geometry* geo, U32 flags)
     {
@@ -323,14 +366,12 @@ namespace
         sw.atomic = atomic;
         sw.shipped = atomic->geometry;
         sw.smooth = geo;
+        sw.render = atomic->renderCB;
         sw.shipped->addRef();
         // setGeometry takes its own reference; the one create() gave us is
         // the one the swap keeps.
         atomic->setGeometry(geo, flags);
-        if (!sShowSmooth)
-        {
-            atomic->setGeometry(sw.shipped, rw::Atomic::SAMEBOUNDINGSPHERE);
-        }
+        atomic->renderCB = swapRenderCB;
         sSwaps.push(sw);
     }
 
@@ -1158,11 +1199,6 @@ void iHipolyHotkey(S32 down)
         return;
     }
     sShowSmooth = !sShowSmooth;
-    for (U32 i = 0; i < sSwaps.n; i++)
-    {
-        Swap& sw = sSwaps[i];
-        sw.atomic->setGeometry(sShowSmooth ? sw.smooth : sw.shipped, rw::Atomic::SAMEBOUNDINGSPHERE);
-    }
     printf("bfbb: hipoly: showing the %s geometry (%u atomics)\n", sShowSmooth ? "smoothed" : "shipped", sSwaps.n);
     fflush(stdout);
 }
@@ -1189,6 +1225,10 @@ void iHipolyForget(RpClump* rpclump)
         }
         if (mine)
         {
+            if (sw.atomic->renderCB == swapRenderCB)
+            {
+                sw.atomic->renderCB = sw.render;
+            }
             sw.shipped->destroy();
             sw.smooth->destroy();
         }

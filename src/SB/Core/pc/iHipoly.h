@@ -34,9 +34,10 @@ void iHipolyWorldDetach(const void* colltree);
 // cutscene writes their vertices by index from its own streams.
 void iHipolyModel(RpClump* clump);
 
-// F8, for before-and-after shots: every replaced atomic swaps between its
-// shipped geometry and its smoothed one, both kept. `down` is the key's
-// state this frame; the swap is on the press. Collision stays smoothed.
+// F8, for before-and-after shots: every replaced atomic draws its shipped
+// geometry instead of its smoothed one, both kept. `down` is the key's
+// state this frame; the swap is on the press. Only the draw changes: the
+// atomic holds the smoothed geometry throughout, and collision stays on it.
 void iHipolyHotkey(S32 down);
 
 // A clump is about to be destroyed: forget what was kept for its atomics.
