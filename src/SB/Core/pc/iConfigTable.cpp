@@ -220,9 +220,9 @@ const iConfigSetting kConfigSettings[] = {
       ICONFIG_FLOAT, NULL, 0.0f, 10.0f },
     { "experimental", "hipoly_model_target", "0.25", "Edge length models are cut to, in units.",
       ICONFIG_FLOAT, NULL, 0.02f, 4.0f },
-    { "experimental", "hipoly_inset", "0.5",
-      "How much of a model's rounding cuts its corners in rather than bowing\n"
-      "; its faces out: 0 bows out only, 1 cuts in only, 0.5 is half of each.",
+    { "experimental", "hipoly_inset", "0.75",
+      "How much of the rounding cuts corners in rather than bowing faces\n"
+      "; out, on the level and its models: 0 bows out only, 1 cuts in only.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f },
     { "experimental", "hipoly_flat_floors", "covered",
       "Which floors and ceilings keep their shipped height: covered (those\n"

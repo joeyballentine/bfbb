@@ -1616,6 +1616,15 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
         iHipolyArray<U8> held;
         cnt.resizeZero(d.nw);
         held.resizeZero(d.nw);
+        // A frozen face's corners stay too: a floor held under a decal is
+        // held at its height, not just flat.
+        for (U32 f = 0; f < d.nt; f++)
+        {
+            if (d.frozen[f])
+            {
+                held[d.W[d.T[f * 3]]] = held[d.W[d.T[f * 3 + 1]]] = held[d.W[d.T[f * 3 + 2]]] = 1;
+            }
+        }
         for (U32 e = 0; e < E.ne; e++)
         {
             U32 lo = E.lo[e], hi = E.hi[e];

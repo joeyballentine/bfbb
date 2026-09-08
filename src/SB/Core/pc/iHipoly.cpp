@@ -64,7 +64,7 @@ namespace
     const S32 kModelMaxLevel = 4;
     const F64 kModelMaxBulge = 0.1;
     const F64 kCharacterHard = 40.0;
-    const F64 kModelInset = 0.5; // half the bow goes to cutting the corners in
+    const F64 kInset = 0.75; // three quarters of the bow goes to cutting the corners in
 
     const F64 kMinBulge = 0.01;
     // A model's authored normals have to ask for a real curve: below this
@@ -131,7 +131,7 @@ namespace
     const F64 kFactor = 1.0;
     Settings sCfg = { -1,           kFactor,        kWorldTarget,  kWorldMaxLevel,
                       kWorldCrease, kNaturalCrease, kFilletRadius, kModelTarget,
-                      kModelInset,  kWorldBudget,   kPasses,       1 };
+                      kInset,       kWorldBudget,   kPasses,       1 };
 
     const Settings& settings()
     {
@@ -147,7 +147,7 @@ namespace
             sCfg.fillet = iConfigGetFloat("experimental.hipoly_fillet", (F32)kFilletRadius);
             sCfg.modelTarget =
                 iConfigGetFloat("experimental.hipoly_model_target", (F32)kModelTarget);
-            sCfg.inset = iConfigGetFloat("experimental.hipoly_inset", (F32)kModelInset);
+            sCfg.inset = iConfigGetFloat("experimental.hipoly_inset", (F32)kInset);
             sCfg.budget = (U32)iConfigGetInt("experimental.hipoly_budget", (S32)kWorldBudget);
             sCfg.passes = iConfigGetInt("experimental.hipoly_passes", kPasses);
             {
@@ -1222,6 +1222,7 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
     // may bow, or every floor when the setting says so. An edge a held
     // floor shares with a steep face stays straight for both.
     U32 heldFloors = 0;
+    iHipolyArray<U8>* held = new iHipolyArray<U8>[n];
     if (cfg.floors)
     {
         iHipolyArray<U8> covered;
@@ -1229,15 +1230,18 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
         {
             coveredFloors(ntTot, fpos.p, fnrm.p, isFloor.p, covered);
         }
-        for (U32 f = 0; f < ntTot; f++)
+        U32 f = 0;
+        for (U32 k = 0; k < n; k++)
         {
-            bool hold = isFloor[f] && (cfg.floors == 2 || covered[f]);
-            if (hold)
+            held[k].resizeZero(geoms[k].nt);
+            bool any = false;
+            for (U32 t = 0; t < geoms[k].nt; t++, f++)
             {
-                bulge[f] = 0.0;
-                rel[f] = 0.0;
-                heldFloors++;
+                held[k][t] = isFloor[f] && (cfg.floors == 2 || covered[f]);
+                any = any || held[k][t];
+                heldFloors += held[k][t];
             }
+            geoms[k].frozen = any ? held[k].p : NULL;
         }
     }
 
@@ -1253,6 +1257,7 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
     pr.hardDeg = -1.0;
     pr.noiseGuard = false;
     pr.pinOpenEdges = true;
+    pr.inset = cfg.inset;
     pr.maxVerts = kMaxVerts;
     pr.maxTris = kMaxTris;
 
@@ -1392,6 +1397,7 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
 
     delete[] pf;
     delete[] res;
+    delete[] held;
     delete[] geoms;
     delete[] views;
     return tree;
