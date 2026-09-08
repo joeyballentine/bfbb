@@ -36,18 +36,23 @@ static_assert(offsetof(RwIm2DVertex, u) == 20, "RwIm2DVertex.u moved");
 static_assert(offsetof(RwIm2DVertex, v) == 24, "RwIm2DVertex.v moved");
 static_assert(sizeof(RwIm2DVertex) == 28, "RwIm2DVertex is not 28 bytes");
 
-// The colour bytes. This is the assertion that catches a swapped red and blue,
-// which is otherwise a bug you find by looking at the screen and guessing.
 static_assert(sizeof(RwIm2DVertexRGBA) == 4, "the vertex colour is not four bytes");
 
-#if defined(RW_D3D9) || defined(RW_D3D8) || defined(RW_D3D11)
+// The colour bytes, once, for every backend. This is the assertion that
+// catches a swapped red and blue, which is otherwise a bug you find by looking
+// at the screen and guessing. D3D packs the colour with COLOR_ARGB(a, r, g, b),
+// so the bytes run blue, green, red, alpha from the low address up, and librw's
+// GL3 backend declares the same order as a GL_BGRA attribute.
+static_assert(offsetof(RwIm2DVertexRGBA, blue) == 0, "the colour wants blue in the low byte");
+static_assert(offsetof(RwIm2DVertexRGBA, green) == 1, "the colour wants green second");
+static_assert(offsetof(RwIm2DVertexRGBA, red) == 2, "the colour wants red third");
+static_assert(offsetof(RwIm2DVertexRGBA, alpha) == 3, "the colour wants alpha in the high byte");
 
-// D3D packs the colour with COLOR_ARGB(a, r, g, b), so the bytes run
-// blue, green, red, alpha from the low address up.
-static_assert(offsetof(RwIm2DVertexRGBA, blue) == 0, "D3D wants blue in the low byte");
-static_assert(offsetof(RwIm2DVertexRGBA, green) == 1, "D3D wants green second");
-static_assert(offsetof(RwIm2DVertexRGBA, red) == 2, "D3D wants red third");
-static_assert(offsetof(RwIm2DVertexRGBA, alpha) == 3, "D3D wants alpha in the high byte");
+// One block per LINKED backend, and they are separate #ifs rather than arms of
+// one #if/#elif: a Windows build carries D3D9, D3D11 and GL3 at once and every
+// one of them has to agree with the same RwIm2DVertex.
+
+#if defined(RW_D3D9) || defined(RW_D3D8) || defined(RW_D3D11)
 
 SAME_SIZE(RwIm2DVertex, rw::d3d::Im2DVertex);
 SAME_OFFSET(RwIm2DVertex, x, rw::d3d::Im2DVertex, x);
@@ -64,9 +69,7 @@ SAME_OFFSET(RwIm2DVertex, v, rw::d3d::Im2DVertex, v);
 // librw packs the colour as one D3DCOLOR word; the port keeps four named bytes
 // so that RwIm3DVertexSetRGBA can write them by name. The two only agree if the
 // port's BLUE sits where librw's word starts, because D3DCOLOR is ARGB and this
-// host is little-endian. Get it wrong and red and blue trade places on every
-// Im3D primitive in the game -- which is invisible for the greyscale callers
-// and glaring on the coloured ones.
+// host is little-endian.
 SAME_SIZE(RwIm3DVertex, rw::d3d::Im3DVertex);
 SAME_OFFSET(RwIm3DVertex, x, rw::d3d::Im3DVertex, position.x);
 SAME_OFFSET(RwIm3DVertex, nx, rw::d3d::Im3DVertex, normal.x);
@@ -80,30 +83,22 @@ static_assert(offsetof(RwIm3DVertex, r) == offsetof(RwIm3DVertex, b) + 2,
 static_assert(offsetof(RwIm3DVertex, a) == offsetof(RwIm3DVertex, b) + 3,
               "D3DCOLOR wants alpha in the high byte");
 
-#elif defined(RW_GL3)
+#endif
 
-static_assert(offsetof(RwIm2DVertexRGBA, red) == 0, "GL3 wants red in the low byte");
-static_assert(offsetof(RwIm2DVertexRGBA, green) == 1, "GL3 wants green second");
-static_assert(offsetof(RwIm2DVertexRGBA, blue) == 2, "GL3 wants blue third");
-static_assert(offsetof(RwIm2DVertexRGBA, alpha) == 3, "GL3 wants alpha in the high byte");
+#ifdef RW_GL3
 
+// librw's GL3 vertices keep four named bytes rather than D3D's packed word, and
+// they are named in the same order: b, g, r, a. The attribute is declared
+// GL_BGRA, which is what lets one struct serve both backends.
 SAME_SIZE(RwIm2DVertex, rw::gl3::Im2DVertex);
 SAME_OFFSET(RwIm2DVertex, x, rw::gl3::Im2DVertex, x);
 SAME_OFFSET(RwIm2DVertex, y, rw::gl3::Im2DVertex, y);
 SAME_OFFSET(RwIm2DVertex, z, rw::gl3::Im2DVertex, z);
 SAME_OFFSET(RwIm2DVertex, w, rw::gl3::Im2DVertex, w);
-SAME_OFFSET(RwIm2DVertex, emissiveColor, rw::gl3::Im2DVertex, r);
+SAME_OFFSET(RwIm2DVertex, emissiveColor, rw::gl3::Im2DVertex, b);
 SAME_OFFSET(RwIm2DVertex, u, rw::gl3::Im2DVertex, u);
 SAME_OFFSET(RwIm2DVertex, v, rw::gl3::Im2DVertex, v);
 
-// The Im3D vertex, which the D3D9 arm above checks and this one did not.
-//
-// librw's gl3 Im3DVertex keeps four separate colour bytes in RGBA order rather
-// than D3D's packed ARGB word, so the port's declaration in rwcore.h follows the
-// backend -- and these are the assertions that say so. Without them a GL3 build
-// took the D3D byte order from an `#ifdef PLATFORM_PC` and crossed red and blue
-// on every Im3D primitive, which is invisible for the greyscale callers and
-// glaring on the melee streaks.
 SAME_SIZE(RwIm3DVertex, rw::gl3::Im3DVertex);
 SAME_OFFSET(RwIm3DVertex, x, rw::gl3::Im3DVertex, position.x);
 SAME_OFFSET(RwIm3DVertex, nx, rw::gl3::Im3DVertex, normal.x);

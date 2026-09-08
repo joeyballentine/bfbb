@@ -985,14 +985,16 @@ typedef struct rwGameCube2DVertex RwIm2DVertex;
 // every fade, every glyph and every HUD quad would silently vanish.
 //
 // The colour is the other half of the mirroring, and it is the usual bargain:
-// librw's field ORDER under RenderWare's field NAMES. D3D packs it as
-// COLOR_ARGB, so in memory the bytes run blue, green, red, alpha; GL3 keeps
-// four separate bytes in RGBA order. Game code writes ->emissiveColor.red by
-// name at zGame.cpp:853 and zEntPlayerOOBState.cpp:242, so the NAMES have to
-// stay put and the ORDER has to follow the backend. layout_im2d.cpp asserts
-// the result against the backend's own struct.
-
-#if defined(RW_D3D9) || defined(RW_D3D8) || defined(RW_D3D11)
+// librw's field ORDER under RenderWare's field NAMES. Game code writes
+// ->emissiveColor.red by name at zGame.cpp:853 and zEntPlayerOOBState.cpp:242,
+// so the NAMES stay put and the bytes move under them.
+//
+// Blue first, on every PC backend. D3D packs the colour as COLOR_ARGB, which
+// is BGRA from the low byte up, and the fixed-function pipeline can read a
+// colour no other way. librw's GL3 backend is built to match -- it declares
+// the attribute GL_BGRA -- so the order no longer follows the backend and one
+// executable can carry several. layout_im2d.cpp asserts it against whichever
+// backends are linked. The GameCube keeps RenderWare's own RGBA above.
 struct RwIm2DVertexRGBA
 {
     RwUInt8 blue;
@@ -1000,15 +1002,6 @@ struct RwIm2DVertexRGBA
     RwUInt8 red;
     RwUInt8 alpha;
 };
-#else
-struct RwIm2DVertexRGBA
-{
-    RwUInt8 red;
-    RwUInt8 green;
-    RwUInt8 blue;
-    RwUInt8 alpha;
-};
-#endif
 
 struct RwIm2DVertex
 {
