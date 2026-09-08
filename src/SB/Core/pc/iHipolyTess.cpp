@@ -47,25 +47,55 @@ namespace
         V3 r = { x, y, z };
         return r;
     }
-    inline V3 add(V3 a, V3 b) { return v3(a.x + b.x, a.y + b.y, a.z + b.z); }
-    inline V3 sub(V3 a, V3 b) { return v3(a.x - b.x, a.y - b.y, a.z - b.z); }
-    inline V3 scale(V3 a, F64 s) { return v3(a.x * s, a.y * s, a.z * s); }
-    inline F64 dot(V3 a, V3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+    inline V3 add(V3 a, V3 b)
+    {
+        return v3(a.x + b.x, a.y + b.y, a.z + b.z);
+    }
+    inline V3 sub(V3 a, V3 b)
+    {
+        return v3(a.x - b.x, a.y - b.y, a.z - b.z);
+    }
+    inline V3 scale(V3 a, F64 s)
+    {
+        return v3(a.x * s, a.y * s, a.z * s);
+    }
+    inline F64 dot(V3 a, V3 b)
+    {
+        return a.x * b.x + a.y * b.y + a.z * b.z;
+    }
     inline V3 cross(V3 a, V3 b)
     {
         return v3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
     }
-    inline F64 len(V3 a) { return sqrt(dot(a, a)); }
+    inline F64 len(V3 a)
+    {
+        return sqrt(dot(a, a));
+    }
     inline V3 unit(V3 a)
     {
         F64 l = len(a);
         return l > 0.0 ? scale(a, 1.0 / l) : a;
     }
-    inline F64 clampd(F64 v, F64 lo, F64 hi) { return v < lo ? lo : (v > hi ? hi : v); }
-    inline F64 dmin(F64 a, F64 b) { return a < b ? a : b; }
-    inline F64 dmax(F64 a, F64 b) { return a > b ? a : b; }
-    inline U32 umin(U32 a, U32 b) { return a < b ? a : b; }
-    inline U32 umax(U32 a, U32 b) { return a > b ? a : b; }
+    inline F64 clampd(F64 v, F64 lo, F64 hi)
+    {
+        return v < lo ? lo : (v > hi ? hi : v);
+    }
+    inline F64 dmin(F64 a, F64 b)
+    {
+        return a < b ? a : b;
+    }
+    inline F64 dmax(F64 a, F64 b)
+    {
+        return a > b ? a : b;
+    }
+    inline U32 umin(U32 a, U32 b)
+    {
+        return a < b ? a : b;
+    }
+    inline U32 umax(U32 a, U32 b)
+    {
+        return a > b ? a : b;
+    }
 
     typedef iHipolyKey3Map Key3Map;
 
@@ -74,7 +104,7 @@ namespace
     // and the order of equal keys does not matter where it is used.
 
     void sortIndicesU64(U32* idx, U32 n, const U64* key);
-}
+} // namespace
 
 void iHipolySortU64(U32* idx, U32 n, const U64* key)
 {
@@ -197,21 +227,21 @@ namespace
     struct Domain
     {
         U32 numGeoms;
-        iHipolyArray<U32> voff;    // numGeoms + 1: first vertex of each geometry
+        iHipolyArray<U32> voff; // numGeoms + 1: first vertex of each geometry
         iHipolyArray<V3> P;
-        iHipolyArray<V3> N;        // authored normals, where known
-        iHipolyArray<U8> hasN;     // per vertex
-        iHipolyArray<U32> T;       // nt * 3, global vertex ids
+        iHipolyArray<V3> N; // authored normals, where known
+        iHipolyArray<U8> hasN; // per vertex
+        iHipolyArray<U32> T; // nt * 3, global vertex ids
         iHipolyArray<U32> fgeom;
         iHipolyArray<U32> fmat;
         iHipolyArray<U32> flocal;
         U32 nt;
         F64 extent;
-        iHipolyArray<U32> W;       // welded id per vertex
+        iHipolyArray<U32> W; // welded id per vertex
         U32 nw;
-        iHipolyArray<V3> un;       // unit face normals
-        iHipolyArray<V3> CN;       // nt * 3 corner normals
-        iHipolyArray<U8> frozen;   // per face: left uncut by the last pass, kept so
+        iHipolyArray<V3> un; // unit face normals
+        iHipolyArray<V3> CN; // nt * 3 corner normals
+        iHipolyArray<U8> frozen; // per face: left uncut by the last pass, kept so
     };
 
     F64 extentOf(const iHipolyArray<V3>& P)
@@ -267,14 +297,17 @@ namespace
     struct Edges
     {
         U32 ne;
-        iHipolyArray<U32> eid;      // nt * 3
-        iHipolyArray<U8> forward;   // nt * 3: corner c is the edge's lo end
-        iHipolyArray<U32> start;    // ne + 1, into fe
-        iHipolyArray<U32> fe;       // face-edge indices f * 3 + c, grouped by edge
-        iHipolyArray<U32> lo;       // ne: welded ids
+        iHipolyArray<U32> eid; // nt * 3
+        iHipolyArray<U8> forward; // nt * 3: corner c is the edge's lo end
+        iHipolyArray<U32> start; // ne + 1, into fe
+        iHipolyArray<U32> fe; // face-edge indices f * 3 + c, grouped by edge
+        iHipolyArray<U32> lo; // ne: welded ids
         iHipolyArray<U32> hi;
 
-        U32 count(U32 e) const { return start[e + 1] - start[e]; }
+        U32 count(U32 e) const
+        {
+            return start[e + 1] - start[e];
+        }
     };
 
     void buildEdges(const Domain& d, Edges& E)
@@ -378,8 +411,10 @@ namespace
             }
             U32 fe1 = E.fe[E.start[e]], fe2 = E.fe[E.start[e] + 1];
             U32 f = fe1 / 3, g = fe2 / 3;
-            F64 cf = cos((pr.creaseDegPerFace ? pr.creaseDegPerFace[f] : pr.creaseDeg) * kPi / 180.0);
-            F64 cg = cos((pr.creaseDegPerFace ? pr.creaseDegPerFace[g] : pr.creaseDeg) * kPi / 180.0);
+            F64 cf =
+                cos((pr.creaseDegPerFace ? pr.creaseDegPerFace[f] : pr.creaseDeg) * kPi / 180.0);
+            F64 cg =
+                cos((pr.creaseDegPerFace ? pr.creaseDegPerFace[g] : pr.creaseDeg) * kPi / 180.0);
             if (dot(d.un[f], d.un[g]) < dmax(cf, cg))
             {
                 continue;
@@ -519,9 +554,12 @@ namespace
             S64 x0 = (S64)floor((blo.x - lo.x) / cell), x1 = (S64)floor((bhi.x - lo.x) / cell);
             S64 y0 = (S64)floor((blo.y - lo.y) / cell), y1 = (S64)floor((bhi.y - lo.y) / cell);
             S64 z0 = (S64)floor((blo.z - lo.z) / cell), z1 = (S64)floor((bhi.z - lo.z) / cell);
-            if (x0 < 0) x0 = 0;
-            if (y0 < 0) y0 = 0;
-            if (z0 < 0) z0 = 0;
+            if (x0 < 0)
+                x0 = 0;
+            if (y0 < 0)
+                y0 = 0;
+            if (z0 < 0)
+                z0 = 0;
             bool hit = false;
             for (S64 ix = x0; ix <= x1 && !hit; ix++)
             {
@@ -622,11 +660,12 @@ namespace
 
     struct EdgeTable
     {
-        iHipolyArray<S32> level;   // ne
-        iHipolyArray<V3> ctrl;     // ne * 2: the inner Bezier points, lo to hi
-        iHipolyArray<V3> ends;     // ne * 2: lo, hi
-        iHipolyArray<U8> pinned;   // ne: held straight for what lies along it
-        iHipolyArray<F64> fract;   // ne: how much of the bow the normals asked for survived the caps, 0 to 1
+        iHipolyArray<S32> level; // ne
+        iHipolyArray<V3> ctrl; // ne * 2: the inner Bezier points, lo to hi
+        iHipolyArray<V3> ends; // ne * 2: lo, hi
+        iHipolyArray<U8> pinned; // ne: held straight for what lies along it
+        iHipolyArray<F64>
+            fract; // ne: how much of the bow the normals asked for survived the caps, 0 to 1
     };
 
     void edgeTable(const Domain& d, const Edges& E, const iHipolyParams& pr, EdgeTable& et,
@@ -635,8 +674,14 @@ namespace
         U32 nfe = d.nt * 3;
         iHipolyArray<V3> Plo, Phi, Nlo, Nhi;
         iHipolyArray<F64> L, wlo, whi, cap;
-        Plo.resize(nfe); Phi.resize(nfe); Nlo.resize(nfe); Nhi.resize(nfe);
-        L.resize(nfe); wlo.resize(nfe); whi.resize(nfe); cap.resize(nfe);
+        Plo.resize(nfe);
+        Phi.resize(nfe);
+        Nlo.resize(nfe);
+        Nhi.resize(nfe);
+        L.resize(nfe);
+        wlo.resize(nfe);
+        whi.resize(nfe);
+        cap.resize(nfe);
         for (U32 f = 0; f < d.nt; f++)
         {
             for (U32 c = 0; c < 3; c++)
@@ -647,16 +692,22 @@ namespace
                 V3 Na = d.CN[f * 3 + c], Nb = d.CN[f * 3 + c1];
                 if (E.forward[i])
                 {
-                    Plo[i] = Pa; Phi[i] = Pb; Nlo[i] = Na; Nhi[i] = Nb;
+                    Plo[i] = Pa;
+                    Phi[i] = Pb;
+                    Nlo[i] = Na;
+                    Nhi[i] = Nb;
                 }
                 else
                 {
-                    Plo[i] = Pb; Phi[i] = Pa; Nlo[i] = Nb; Nhi[i] = Na;
+                    Plo[i] = Pb;
+                    Phi[i] = Pa;
+                    Nlo[i] = Nb;
+                    Nhi[i] = Na;
                 }
                 V3 dd = sub(Phi[i], Plo[i]);
                 L[i] = len(dd);
-                wlo[i] = dot(dd, Nlo[i]);     // (P1 - P0) . N0
-                whi[i] = -dot(dd, Nhi[i]);    // (P0 - P1) . N1
+                wlo[i] = dot(dd, Nlo[i]); // (P1 - P0) . N0
+                whi[i] = -dot(dd, Nhi[i]); // (P0 - P1) . N1
                 // An edge's midpoint moves by |w_lo N_lo + w_hi N_hi| / 8.
                 // Long, nearly flat triangles -- the sand -- would otherwise
                 // bow by whole units, and a floor that humps is a floor the
@@ -787,7 +838,9 @@ namespace
         // The midpoint moves by at most w/4; the row sits at altitude/level,
         // so decide the level from the bow so far, then cap by that level.
         iHipolyArray<F64> ealt, ebulge0, elen0;
-        ealt.resize(E.ne); ebulge0.resizeZero(E.ne); elen0.resizeZero(E.ne);
+        ealt.resize(E.ne);
+        ebulge0.resizeZero(E.ne);
+        elen0.resizeZero(E.ne);
         for (U32 e = 0; e < E.ne; e++)
         {
             ealt[e] = 1e300;
@@ -802,7 +855,8 @@ namespace
                 F64 Ls = dmax(L[i], 1e-9);
                 ealt[e] = dmin(ealt[e], area2 / Ls);
                 F64 pb = len(add(scale(Nlo[i], clampd(wlo[i], -cap[i], cap[i])),
-                                 scale(Nhi[i], clampd(whi[i], -cap[i], cap[i])))) / Ls;
+                                 scale(Nhi[i], clampd(whi[i], -cap[i], cap[i])))) /
+                         Ls;
                 ebulge0[e] = dmax(ebulge0[e], pb);
                 elen0[e] = dmax(elen0[e], L[i]);
             }
@@ -858,13 +912,16 @@ namespace
                     win = i;
                 }
             }
-            et.ctrl[e * 2] = scale(sub(add(scale(Plo[win], 2.0), Phi[win]), scale(Nlo[win], wlo[win])), 1.0 / 3.0);
-            et.ctrl[e * 2 + 1] = scale(sub(add(scale(Phi[win], 2.0), Plo[win]), scale(Nhi[win], whi[win])), 1.0 / 3.0);
+            et.ctrl[e * 2] = scale(
+                sub(add(scale(Plo[win], 2.0), Phi[win]), scale(Nlo[win], wlo[win])), 1.0 / 3.0);
+            et.ctrl[e * 2 + 1] = scale(
+                sub(add(scale(Phi[win], 2.0), Plo[win]), scale(Nhi[win], whi[win])), 1.0 / 3.0);
             et.ends[e * 2] = Plo[win];
             et.ends[e * 2 + 1] = Phi[win];
             {
                 V3 mid = scale(add(add(et.ends[e * 2], et.ends[e * 2 + 1]),
-                                   scale(add(et.ctrl[e * 2], et.ctrl[e * 2 + 1]), 3.0)), 0.125);
+                                   scale(add(et.ctrl[e * 2], et.ctrl[e * 2 + 1]), 3.0)),
+                               0.125);
                 F64 got = len(sub(mid, scale(add(et.ends[e * 2], et.ends[e * 2 + 1]), 0.5)));
                 et.fract[e] = asked[e] < 1e-9 ? 1.0 : dmin(1.0, got / asked[e]);
             }
@@ -884,12 +941,15 @@ namespace
     {
         S32 L;
         U32 npts;
-        iHipolyArray<S32> ijk;      // npts * 3
-        iHipolyArray<U32> tris;     // ntris * 3
-        iHipolyArray<S32> edge;     // npts: -1, or the face edge it lies on
-        iHipolyArray<S32> par;      // npts: the parameter along it, in L-ths
-        iHipolyArray<S32> corner;   // npts: -1, or the corner it is
-        U32 ntris() const { return tris.n / 3; }
+        iHipolyArray<S32> ijk; // npts * 3
+        iHipolyArray<U32> tris; // ntris * 3
+        iHipolyArray<S32> edge; // npts: -1, or the face edge it lies on
+        iHipolyArray<S32> par; // npts: the parameter along it, in L-ths
+        iHipolyArray<S32> corner; // npts: -1, or the corner it is
+        U32 ntris() const
+        {
+            return tris.n / 3;
+        }
     };
 
     void makeGrid(S32 L, Grid& g)
@@ -907,7 +967,9 @@ namespace
             {
                 S32 k = L - i - j;
                 index[i * (L + 1) + j] = n++;
-                g.ijk.push(i); g.ijk.push(j); g.ijk.push(k);
+                g.ijk.push(i);
+                g.ijk.push(j);
+                g.ijk.push(k);
             }
         }
         g.npts = n;
@@ -919,11 +981,15 @@ namespace
                 U32 a = index[(i + 1) * (L + 1) + j];
                 U32 b = index[i * (L + 1) + j + 1];
                 U32 c = index[i * (L + 1) + j];
-                g.tris.push(a); g.tris.push(b); g.tris.push(c);
+                g.tris.push(a);
+                g.tris.push(b);
+                g.tris.push(c);
                 if (k >= 2)
                 {
                     U32 dd = index[(i + 1) * (L + 1) + j + 1];
-                    g.tris.push(a); g.tris.push(dd); g.tris.push(b);
+                    g.tris.push(a);
+                    g.tris.push(dd);
+                    g.tris.push(b);
                 }
             }
         }
@@ -941,19 +1007,25 @@ namespace
             g.corner[m] = -1;
             if (k == 0 && i > 0 && j > 0)
             {
-                g.edge[m] = 0; g.par[m] = j;
+                g.edge[m] = 0;
+                g.par[m] = j;
             }
             else if (i == 0 && j > 0 && k > 0)
             {
-                g.edge[m] = 1; g.par[m] = k;
+                g.edge[m] = 1;
+                g.par[m] = k;
             }
             else if (j == 0 && k > 0 && i > 0)
             {
-                g.edge[m] = 2; g.par[m] = i;
+                g.edge[m] = 2;
+                g.par[m] = i;
             }
-            if (i == L) g.corner[m] = 0;
-            if (j == L) g.corner[m] = 1;
-            if (k == L) g.corner[m] = 2;
+            if (i == L)
+                g.corner[m] = 0;
+            if (j == L)
+                g.corner[m] = 1;
+            if (k == L)
+                g.corner[m] = 2;
         }
     }
 
@@ -976,11 +1048,14 @@ namespace
         bool hasSkin;
         iHipolyArray<F32> pos, normal, color, uv[8], skinW;
         iHipolyArray<U8> skinI;
-        iHipolyArray<U32> tris;     // *4
+        iHipolyArray<U32> tris; // *4
         iHipolyArray<U32> parent;
         iHipolyArray<U8> flat;
-        iHipolyArray<F32> cbary;    // *9
-        U32 nv() const { return pos.n / 3; }
+        iHipolyArray<F32> cbary; // *9
+        U32 nv() const
+        {
+            return pos.n / 3;
+        }
     };
 
     // Blend bone weights across a face; keep the four strongest.
@@ -1078,17 +1153,22 @@ namespace
     void emitVertex(Build& b, const iHipolyGeom& g, const U32* corners, const F64* bary, V3 pos,
                     const V3* CN, const V3* Pc, F64 curved)
     {
-        b.pos.push((F32)pos.x); b.pos.push((F32)pos.y); b.pos.push((F32)pos.z);
+        b.pos.push((F32)pos.x);
+        b.pos.push((F32)pos.y);
+        b.pos.push((F32)pos.z);
         if (b.hasN)
         {
-            V3 lin = unit(add(add(scale(CN[0], bary[0]), scale(CN[1], bary[1])), scale(CN[2], bary[2])));
+            V3 lin =
+                unit(add(add(scale(CN[0], bary[0]), scale(CN[1], bary[1])), scale(CN[2], bary[2])));
             V3 n = lin;
             if (curved > 0.0)
             {
                 V3 q = pnNormal(CN, Pc, bary[0], bary[1], bary[2]);
                 n = unit(add(scale(lin, 1.0 - curved), scale(q, curved)));
             }
-            b.normal.push((F32)n.x); b.normal.push((F32)n.y); b.normal.push((F32)n.z);
+            b.normal.push((F32)n.x);
+            b.normal.push((F32)n.y);
+            b.normal.push((F32)n.z);
         }
         if (b.hasColor)
         {
@@ -1128,7 +1208,8 @@ namespace
     }
 
     // A level-1 face: its three vertices as they are, plus the inset.
-    void emitFlat(Build& b, const iHipolyGeom& g, const U32* corners, const V3* Dc, U32 mat, U32 local)
+    void emitFlat(Build& b, const iHipolyGeom& g, const U32* corners, const V3* Dc, U32 mat,
+                  U32 local)
     {
         U32 n0 = b.nv();
         for (U32 c = 0; c < 3; c++)
@@ -1140,7 +1221,9 @@ namespace
             if (b.hasN)
             {
                 V3 n = unit(v3(g.normal[v * 3], g.normal[v * 3 + 1], g.normal[v * 3 + 2]));
-                b.normal.push((F32)n.x); b.normal.push((F32)n.y); b.normal.push((F32)n.z);
+                b.normal.push((F32)n.x);
+                b.normal.push((F32)n.y);
+                b.normal.push((F32)n.z);
             }
             if (b.hasColor)
             {
@@ -1163,7 +1246,10 @@ namespace
                 }
             }
         }
-        b.tris.push(n0); b.tris.push(n0 + 1); b.tris.push(n0 + 2); b.tris.push(mat);
+        b.tris.push(n0);
+        b.tris.push(n0 + 1);
+        b.tris.push(n0 + 2);
+        b.tris.push(mat);
         b.parent.push(local);
         b.flat.push(1);
         static const F32 eye[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
@@ -1180,7 +1266,8 @@ namespace
     void finish(Build& b, const iHipolyGeom& g, iHipolyResult& r, U32* folds)
     {
         U32 nv = b.nv();
-        U32 stride = 3 + (b.hasN ? 3 : 0) + (b.hasColor ? 1 : 0) + b.numUV * 2 + (b.hasSkin ? 5 : 0);
+        U32 stride =
+            3 + (b.hasN ? 3 : 0) + (b.hasColor ? 1 : 0) + b.numUV * 2 + (b.hasSkin ? 5 : 0);
         // The colour is rounded to what will be stored before welding, so two
         // samples that only differ past the eighth bit are one vertex.
         iHipolyArray<U32> key;
@@ -1189,10 +1276,12 @@ namespace
         {
             U32* k = key.p + v * stride;
             U32 o = 0;
-            memcpy(k + o, b.pos.p + v * 3, 12); o += 3;
+            memcpy(k + o, b.pos.p + v * 3, 12);
+            o += 3;
             if (b.hasN)
             {
-                memcpy(k + o, b.normal.p + v * 3, 12); o += 3;
+                memcpy(k + o, b.normal.p + v * 3, 12);
+                o += 3;
             }
             if (b.hasColor)
             {
@@ -1207,12 +1296,15 @@ namespace
             }
             for (U32 s = 0; s < b.numUV; s++)
             {
-                memcpy(k + o, b.uv[s].p + v * 2, 8); o += 2;
+                memcpy(k + o, b.uv[s].p + v * 2, 8);
+                o += 2;
             }
             if (b.hasSkin)
             {
-                memcpy(k + o, b.skinI.p + v * 4, 4); o += 1;
-                memcpy(k + o, b.skinW.p + v * 4, 16); o += 4;
+                memcpy(k + o, b.skinI.p + v * 4, 4);
+                o += 1;
+                memcpy(k + o, b.skinW.p + v * 4, 16);
+                o += 4;
             }
         }
         Key3Map map;
@@ -1317,7 +1409,8 @@ namespace
         U32 folded = 0;
         for (U32 t = 0; t < ntIn; t++)
         {
-            U32 a = remap[b.tris[t * 4]], bb = remap[b.tris[t * 4 + 1]], c = remap[b.tris[t * 4 + 2]];
+            U32 a = remap[b.tris[t * 4]], bb = remap[b.tris[t * 4 + 1]],
+                c = remap[b.tris[t * 4 + 2]];
             if (a == bb || bb == c || a == c)
             {
                 continue;
@@ -1341,7 +1434,10 @@ namespace
             {
                 folded++;
             }
-            r.tris.push(a); r.tris.push(bb); r.tris.push(c); r.tris.push(b.tris[t * 4 + 3]);
+            r.tris.push(a);
+            r.tris.push(bb);
+            r.tris.push(c);
+            r.tris.push(b.tris[t * 4 + 3]);
             r.parent.push(pf);
             r.flat.push(b.flat[t]);
             for (U32 k = 0; k < 9; k++)
@@ -1352,7 +1448,7 @@ namespace
         r.nt = r.tris.n / 4;
         *folds += folded;
     }
-}
+} // namespace
 
 // ---------------------------------------------------------------------------
 
@@ -1493,8 +1589,9 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
         S32 lv = et.level[e];
         for (S32 k = 1; k < lv; k++)
         {
-            epts[eoff[e] + (U32)(k - 1)] = bezier3(et.ends[e * 2], et.ctrl[e * 2], et.ctrl[e * 2 + 1],
-                                                    et.ends[e * 2 + 1], (F64)k / lv);
+            epts[eoff[e] + (U32)(k - 1)] =
+                bezier3(et.ends[e * 2], et.ctrl[e * 2], et.ctrl[e * 2 + 1], et.ends[e * 2 + 1],
+                        (F64)k / lv);
         }
     }
 
@@ -1528,7 +1625,8 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
             }
             // The cubic's midpoint less the chord's.
             V3 mid = scale(add(add(et.ends[e * 2], et.ends[e * 2 + 1]),
-                               scale(add(et.ctrl[e * 2], et.ctrl[e * 2 + 1]), 3.0)), 0.125);
+                               scale(add(et.ctrl[e * 2], et.ctrl[e * 2 + 1]), 3.0)),
+                           0.125);
             V3 bow = sub(mid, scale(add(et.ends[e * 2], et.ends[e * 2 + 1]), 0.5));
             Dw[lo] = add(Dw[lo], bow);
             Dw[hi] = add(Dw[hi], bow);
@@ -1556,7 +1654,8 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
         U32 g = d.fgeom[f];
         Build& b = builds[g];
         const iHipolyGeom& G = geoms[g];
-        U32 corners[3] = { d.T[f * 3] - d.voff[g], d.T[f * 3 + 1] - d.voff[g], d.T[f * 3 + 2] - d.voff[g] };
+        U32 corners[3] = { d.T[f * 3] - d.voff[g], d.T[f * 3 + 1] - d.voff[g],
+                           d.T[f * 3 + 2] - d.voff[g] };
         S32 L = flevel[f];
         V3 Dc[3] = { Dw[d.W[d.T[f * 3]]], Dw[d.W[d.T[f * 3 + 1]]], Dw[d.W[d.T[f * 3 + 2]]] };
         if (L <= 1)
@@ -1584,7 +1683,8 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
         V3 Ec = scale(add(add(add(b210, b120), add(b021, b012)), add(b102, b201)), 1.0 / 6.0);
         V3 Vc = scale(add(add(Pc[0], Pc[1]), Pc[2]), 1.0 / 3.0);
         V3 b111 = add(Ec, scale(sub(Ec, Vc), 0.5));
-        F64 fe[3] = { et.fract[E.eid[f * 3]], et.fract[E.eid[f * 3 + 1]], et.fract[E.eid[f * 3 + 2]] };
+        F64 fe[3] = { et.fract[E.eid[f * 3]], et.fract[E.eid[f * 3 + 1]],
+                      et.fract[E.eid[f * 3 + 2]] };
         F64 fface = (fe[0] + fe[1] + fe[2]) / 3.0;
 
         U32 n0 = b.nv();
@@ -1654,8 +1754,11 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
             }
             else
             {
-                F64 u = (F64)gr.ijk[m * 3] / L, v = (F64)gr.ijk[m * 3 + 1] / L, w = (F64)gr.ijk[m * 3 + 2] / L;
-                bary[0] = u; bary[1] = v; bary[2] = w;
+                F64 u = (F64)gr.ijk[m * 3] / L, v = (F64)gr.ijk[m * 3 + 1] / L,
+                    w = (F64)gr.ijk[m * 3 + 2] / L;
+                bary[0] = u;
+                bary[1] = v;
+                bary[2] = w;
                 pos = scale(b300, u * u * u);
                 pos = add(pos, scale(b030, v * v * v));
                 pos = add(pos, scale(b003, w * w * w));
@@ -1671,7 +1774,9 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
             pos = add(pos, disp);
             emitVertex(b, G, corners, bary, pos, CN, Pc, curved);
             // Remember the barycentrics for the children's corners.
-            b.cbary.push((F32)bary[0]); b.cbary.push((F32)bary[1]); b.cbary.push((F32)bary[2]);
+            b.cbary.push((F32)bary[0]);
+            b.cbary.push((F32)bary[1]);
+            b.cbary.push((F32)bary[2]);
         }
         // The barycentrics were pushed per point; the children take theirs
         // per corner, so rewrite that tail into per-triangle form.

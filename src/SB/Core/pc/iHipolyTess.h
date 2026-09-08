@@ -20,8 +20,13 @@ template <typename T> struct iHipolyArray
     U32 n;
     U32 cap;
 
-    iHipolyArray() : p(NULL), n(0), cap(0) {}
-    ~iHipolyArray() { free(p); }
+    iHipolyArray() : p(NULL), n(0), cap(0)
+    {
+    }
+    ~iHipolyArray()
+    {
+        free(p);
+    }
 
     void reserve(U32 want)
     {
@@ -37,7 +42,8 @@ template <typename T> struct iHipolyArray
         T* q = (T*)realloc(p, (size_t)c * sizeof(T));
         if (q == NULL)
         {
-            printf("bfbb: hipoly: out of memory asking for %u bytes\n", (U32)((size_t)c * sizeof(T)));
+            printf("bfbb: hipoly: out of memory asking for %u bytes\n",
+                   (U32)((size_t)c * sizeof(T)));
             fflush(stdout);
             abort();
         }
@@ -68,10 +74,19 @@ template <typename T> struct iHipolyArray
         p[n++] = v;
     }
 
-    void clear() { n = 0; }
+    void clear()
+    {
+        n = 0;
+    }
 
-    T& operator[](U32 i) { return p[i]; }
-    const T& operator[](U32 i) const { return p[i]; }
+    T& operator[](U32 i)
+    {
+        return p[i];
+    }
+    const T& operator[](U32 i) const
+    {
+        return p[i];
+    }
 
     // Take another array's storage; the other is left empty.
     void take(iHipolyArray<T>& o)
@@ -190,54 +205,54 @@ struct iHipolyGeom
 {
     U32 nv;
     U32 nt;
-    const F32* pos;        // nv * 3
-    const F32* normal;     // nv * 3, or NULL: the world ships none
-    const U8* color;       // nv * 4 RGBA, or NULL
-    U32 numUV;             // texture coordinate sets, 0 to 8
-    const F32* uv[8];      // nv * 2 each
-    const U8* skinIndex;   // nv * 4, or NULL
+    const F32* pos; // nv * 3
+    const F32* normal; // nv * 3, or NULL: the world ships none
+    const U8* color; // nv * 4 RGBA, or NULL
+    U32 numUV; // texture coordinate sets, 0 to 8
+    const F32* uv[8]; // nv * 2 each
+    const U8* skinIndex; // nv * 4, or NULL
     const F32* skinWeight; // nv * 4
-    const U32* tris;       // nt * 4: three vertex indices and a material
-    const U8* frozen;      // nt, or NULL: faces the last pass left uncut, to stay so
+    const U32* tris; // nt * 4: three vertex indices and a material
+    const U8* frozen; // nt, or NULL: faces the last pass left uncut, to stay so
 };
 
 // Per-face controls. Each array has one entry per face over the whole domain,
 // in geometry order, or is NULL to use the scalar beside it.
 struct iHipolyParams
 {
-    F64 target;            // edge length to aim for
+    F64 target; // edge length to aim for
     S32 maxLevel;
-    F64 minBulge;          // an edge whose midpoint bows less than this fraction of its length, times 8, stays level 1: the sine of twice the normals' tilt
-    F64 creaseDeg;         // faces meeting sharper than this do not share a normal
+    F64 minBulge; // an edge whose midpoint bows less than this fraction of its length, times 8, stays level 1: the sine of twice the normals' tilt
+    F64 creaseDeg; // faces meeting sharper than this do not share a normal
     const F64* creaseDegPerFace;
-    F64 maxBulge;          // units an edge midpoint may move
+    F64 maxBulge; // units an edge midpoint may move
     const F64* maxBulgePerFace;
-    F64 relBulge;          // as a fraction of the edge's length
+    F64 relBulge; // as a fraction of the edge's length
     const F64* relBulgePerFace;
-    F64 turnBulge;         // times what the surface turns across the edge; 1.5 trusts the normals
-    F64 hardDeg;           // an edge folded more than this stays straight; < 0 for none
-    bool noiseGuard;       // pin vertices with both convex and concave edges
-    bool pinOpenEdges;     // keep one-faced edges straight: the world's sheets lie along each other
-    F64 inset;             // pull the surface back along the normals by this fraction of its bow: 0 bulges out from the faces, 1 keeps the bows flat and cuts the corners in, 0.5 is half of each
-    U32 maxVerts;          // per geometry: a 16-bit index buffer
-    U32 maxTris;           // per geometry: what a JSP collision record can address
+    F64 turnBulge; // times what the surface turns across the edge; 1.5 trusts the normals
+    F64 hardDeg; // an edge folded more than this stays straight; < 0 for none
+    bool noiseGuard; // pin vertices with both convex and concave edges
+    bool pinOpenEdges; // keep one-faced edges straight: the world's sheets lie along each other
+    F64 inset; // pull the surface back along the normals by this fraction of its bow: 0 bulges out from the faces, 1 keeps the bows flat and cuts the corners in, 0.5 is half of each
+    U32 maxVerts; // per geometry: a 16-bit index buffer
+    U32 maxTris; // per geometry: what a JSP collision record can address
 };
 
 struct iHipolyResult
 {
     U32 nv;
     U32 nt;
-    iHipolyArray<F32> pos;        // nv * 3
-    iHipolyArray<F32> normal;     // nv * 3, empty when the input had none
-    iHipolyArray<U8> color;       // nv * 4
+    iHipolyArray<F32> pos; // nv * 3
+    iHipolyArray<F32> normal; // nv * 3, empty when the input had none
+    iHipolyArray<U8> color; // nv * 4
     U32 numUV;
-    iHipolyArray<F32> uv[8];      // nv * 2
-    iHipolyArray<U8> skinIndex;   // nv * 4
+    iHipolyArray<F32> uv[8]; // nv * 2
+    iHipolyArray<U8> skinIndex; // nv * 4
     iHipolyArray<F32> skinWeight; // nv * 4
-    iHipolyArray<U32> tris;       // nt * 4
-    iHipolyArray<U32> parent;     // nt: the input face each child was cut from
-    iHipolyArray<U8> flat;        // nt: 1 where the child is its parent, uncut
-    iHipolyArray<F32> cbary;      // nt * 9: each corner's barycentrics in its parent
+    iHipolyArray<U32> tris; // nt * 4
+    iHipolyArray<U32> parent; // nt: the input face each child was cut from
+    iHipolyArray<U8> flat; // nt: 1 where the child is its parent, uncut
+    iHipolyArray<F32> cbary; // nt * 9: each corner's barycentrics in its parent
 };
 
 struct iHipolyStats

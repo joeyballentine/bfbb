@@ -8,11 +8,11 @@
 
 struct iHipolyFilletParams
 {
-    F64 angleDeg;    // a fold between two landscape faces sharper than this is a crease
-    F64 radius;      // units from a crease the rounding reaches
-    U32 iters;       // Taubin passes
-    F64 maxMove;     // units a vertex may move
-    F64 floorMove;   // units a floor or cap vertex may move, and only down
+    F64 angleDeg; // a fold between two landscape faces sharper than this is a crease
+    F64 radius; // units from a crease the rounding reaches
+    U32 iters; // Taubin passes
+    F64 maxMove; // units a vertex may move
+    F64 floorMove; // units a floor or cap vertex may move, and only down
 };
 
 struct iHipolyFilletStats

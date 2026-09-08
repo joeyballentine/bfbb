@@ -50,14 +50,14 @@ const iConfigSetting kConfigSettings[] = {
       "; id like jf01. Empty starts at the menu. Overrides SB.INI's BOOT=.",
       ICONFIG_STRING, NULL, kNone, kNone },
     { "game", "intro_movies", "on",
-      "Play the Nickelodeon, THQ and RenderWare logos before the title screen.",
-      ICONFIG_BOOL, NULL, kNone, kNone },
+      "Play the Nickelodeon, THQ and RenderWare logos before the title screen.", ICONFIG_BOOL, NULL,
+      kNone, kNone },
     { "game", "save_folder", "",
       "Folder to keep saves in. Empty uses this machine's own per-user data\n"
       "; folder. BFBB_SAVE_DIR overrides this.",
       ICONFIG_FOLDER, NULL, kNone, kNone },
-    { "video", "mode", "fullscreen", "Window mode: fullscreen, borderless, windowed.",
-      ICONFIG_ENUM, "fullscreen|borderless|windowed", kNone, kNone },
+    { "video", "mode", "fullscreen", "Window mode: fullscreen, borderless, windowed.", ICONFIG_ENUM,
+      "fullscreen|borderless|windowed", kNone, kNone },
     { "video", "width", "640", "Render width in pixels.", ICONFIG_INT, NULL, 320.0f, 15360.0f },
     { "video", "height", "480",
       "Render height in pixels. A shape other than 4:3 widens the view rather\n"
@@ -183,15 +183,15 @@ const iConfigSetting kConfigSettings[] = {
       "; pixels, or auto to measure it. 0 draws the face as it is.\n"
       "; tools/fontfit runs the same measurement outside the game.",
       ICONFIG_FLOAT, "auto", -8.0f, 8.0f },
-    { "font", "sans_weight", "auto",
-      "The same, for the sans face.", ICONFIG_FLOAT, "auto", -8.0f, 8.0f },
+    { "font", "sans_weight", "auto", "The same, for the sans face.", ICONFIG_FLOAT, "auto", -8.0f,
+      8.0f },
     { "font", "fit", "box",
       "How each glyph fills the space the game's own letter took: box (stretch\n"
       "; it to fit), width (keep the height, let the width be the face's),\n"
       "; natural (no fitting at all).",
       ICONFIG_ENUM, "box|width|natural", kNone, kNone },
-    { "font", "sans_fit", "natural",
-      "The same, for the sans face.", ICONFIG_ENUM, "box|width|natural", kNone, kNone },
+    { "font", "sans_fit", "natural", "The same, for the sans face.", ICONFIG_ENUM,
+      "box|width|natural", kNone, kNone },
     { "experimental", "hipoly_assets", "off",
       "Smooth the level and its models into curved surfaces as they load.\n"
       "; Loads take a few seconds longer.",
@@ -201,26 +201,24 @@ const iConfigSetting kConfigSettings[] = {
       "; fillet. 2.0 rounds twice as far, 0 rounds nothing.",
       ICONFIG_FLOAT, NULL, 0.0f, 8.0f },
     { "experimental", "hipoly_target", "1.0",
-      "Edge length the level is cut to, in units. Smaller is finer and slower.",
-      ICONFIG_FLOAT, NULL, 0.05f, 8.0f },
-    { "experimental", "hipoly_max_level", "6", "Most segments an edge is cut into.",
-      ICONFIG_INT, NULL, 1.0f, 15.0f },
+      "Edge length the level is cut to, in units. Smaller is finer and slower.", ICONFIG_FLOAT,
+      NULL, 0.05f, 8.0f },
+    { "experimental", "hipoly_max_level", "6", "Most segments an edge is cut into.", ICONFIG_INT,
+      NULL, 1.0f, 15.0f },
     { "experimental", "hipoly_passes", "2",
       "Times the smoothing runs over a model, each pass over the last pass's\n"
       "; mesh. More is smoother and slower to load. The level gets one pass.",
       ICONFIG_INT, NULL, 1.0f, 4.0f },
     { "experimental", "hipoly_crease", "60",
-      "Degrees. Built surfaces folded sharper than this keep the fold.",
-      ICONFIG_FLOAT, NULL, 0.0f, 180.0f },
+      "Degrees. Built surfaces folded sharper than this keep the fold.", ICONFIG_FLOAT, NULL, 0.0f,
+      180.0f },
     { "experimental", "hipoly_natural_crease", "100",
-      "The same for rock, sand, kelp and other landscape.",
-      ICONFIG_FLOAT, NULL, 0.0f, 180.0f },
+      "The same for rock, sand, kelp and other landscape.", ICONFIG_FLOAT, NULL, 0.0f, 180.0f },
     { "experimental", "hipoly_fillet", "0",
       "Units. How far from a sharp landscape fold the rounding reaches; 0 is off.\n"
       "; 1.5 rounds the rock's folds over, at the cost of some flattened detail.",
       ICONFIG_FLOAT, NULL, 0.0f, 10.0f },
-    { "experimental", "hipoly_model_target", "0.25",
-      "Edge length models are cut to, in units.",
+    { "experimental", "hipoly_model_target", "0.25", "Edge length models are cut to, in units.",
       ICONFIG_FLOAT, NULL, 0.02f, 4.0f },
     { "experimental", "hipoly_inset", "0.5",
       "How much of a model's rounding cuts its corners in rather than bowing\n"
@@ -232,8 +230,8 @@ const iConfigSetting kConfigSettings[] = {
       "; lets every gentle face bow, through whatever lies on it.",
       ICONFIG_ENUM, "covered|all|off", kNone, kNone },
     { "experimental", "hipoly_budget", "600000",
-      "Most triangles a level's world may have; the cut coarsens past it.",
-      ICONFIG_INT, NULL, 10000.0f, 4000000.0f },
+      "Most triangles a level's world may have; the cut coarsens past it.", ICONFIG_INT, NULL,
+      10000.0f, 4000000.0f },
 };
 
 const S32 kConfigSettingCount = (S32)(sizeof(kConfigSettings) / sizeof(kConfigSettings[0]));
@@ -291,8 +289,7 @@ namespace
 
     bool isBool(const char* value)
     {
-        static const char* const kWords[] = { "1",  "true", "yes", "on",
-                                              "0",  "false", "no", "off" };
+        static const char* const kWords[] = { "1", "true", "yes", "on", "0", "false", "no", "off" };
         for (size_t i = 0; i < sizeof(kWords) / sizeof(kWords[0]); i++)
         {
             if (iHostStrCaseCmp(value, kWords[i]) == 0)

@@ -39,8 +39,8 @@ namespace
     // The world: edges are cut to this length, up to this many segments.
     const F64 kWorldTarget = 1.0;
     const S32 kWorldMaxLevel = 6;
-    const F64 kWorldCrease = 60.0;       // degrees of turn; sharper folds stay sharp
-    const F64 kWorldMaxBulge = 0.3;      // units an edge midpoint may move
+    const F64 kWorldCrease = 60.0; // degrees of turn; sharper folds stay sharp
+    const F64 kWorldMaxBulge = 0.3; // units an edge midpoint may move
     const F64 kWorldRelBulge = 0.3;
     // And never more than the surface turns across the edge, times this: a
     // normal at an end can be trusted to about half the dihedral angle.
@@ -64,7 +64,7 @@ namespace
     const S32 kModelMaxLevel = 4;
     const F64 kModelMaxBulge = 0.1;
     const F64 kCharacterHard = 40.0;
-    const F64 kModelInset = 0.5;         // half the bow goes to cutting the corners in
+    const F64 kModelInset = 0.5; // half the bow goes to cutting the corners in
 
     const F64 kMinBulge = 0.01;
     // A model's authored normals have to ask for a real curve: below this
@@ -73,19 +73,20 @@ namespace
     // asks for a lot and gets, after the caps, a bow too small to see.
     // Later passes smooth facets a quarter as deep each time.
     const F64 kModelMinBulge = 0.28;
-    const S32 kPasses = 2;               // over models: each pass smooths the last pass's mesh at half the edge length
+    const S32 kPasses =
+        2; // over models: each pass smooths the last pass's mesh at half the edge length
     const U32 kMaxVerts = 60000;
-    const U32 kMaxTris = 21000;         // a collision record addresses 3 * 21845 vertices
+    const U32 kMaxTris = 21000; // a collision record addresses 3 * 21845 vertices
 
     // Surfaces that are landscape rather than something built.
-    const char* const kNatural[] = { "rock", "cliff", "stone", "mountain", "kelp", "grass",
-                                     "sand", "ground", "coral", "plant", "tree", "dirt",
-                                     "moss", "seaweed", NULL };
+    const char* const kNatural[] = { "rock",  "cliff", "stone",  "mountain", "kelp",
+                                     "grass", "sand",  "ground", "coral",    "plant",
+                                     "tree",  "dirt",  "moss",   "seaweed",  NULL };
     // A slide track, a jump lip, a rocket ship, a planter barrel and the road
     // lines all carry a landscape word in their texture name and are not
     // landscape.
-    const char* const kNaturalVeto[] = { "sign", "shadow", "crater", "wood", "building",
-                                         "street", "path", "window", "tonguebrd", "slide",
+    const char* const kNaturalVeto[] = { "sign",   "shadow",  "crater", "wood",      "building",
+                                         "street", "path",    "window", "tonguebrd", "slide",
                                          "rocket", "planter", "streel", NULL };
 
     // Collision record bits. 0x01 continues a leaf's run, 0x02 flips the
@@ -125,11 +126,12 @@ namespace
         F64 inset;
         U32 budget;
         S32 passes;
-        S32 floors;    // 0 off, 1 those with something lying on them, 2 all
+        S32 floors; // 0 off, 1 those with something lying on them, 2 all
     };
     const F64 kFactor = 1.0;
-    Settings sCfg = { -1, kFactor, kWorldTarget, kWorldMaxLevel, kWorldCrease, kNaturalCrease,
-                      kFilletRadius, kModelTarget, kModelInset, kWorldBudget, kPasses, 1 };
+    Settings sCfg = { -1,           kFactor,        kWorldTarget,  kWorldMaxLevel,
+                      kWorldCrease, kNaturalCrease, kFilletRadius, kModelTarget,
+                      kModelInset,  kWorldBudget,   kPasses,       1 };
 
     const Settings& settings()
     {
@@ -140,9 +142,11 @@ namespace
             sCfg.target = iConfigGetFloat("experimental.hipoly_target", (F32)kWorldTarget);
             sCfg.maxLevel = iConfigGetInt("experimental.hipoly_max_level", kWorldMaxLevel);
             sCfg.crease = iConfigGetFloat("experimental.hipoly_crease", (F32)kWorldCrease);
-            sCfg.naturalCrease = iConfigGetFloat("experimental.hipoly_natural_crease", (F32)kNaturalCrease);
+            sCfg.naturalCrease =
+                iConfigGetFloat("experimental.hipoly_natural_crease", (F32)kNaturalCrease);
             sCfg.fillet = iConfigGetFloat("experimental.hipoly_fillet", (F32)kFilletRadius);
-            sCfg.modelTarget = iConfigGetFloat("experimental.hipoly_model_target", (F32)kModelTarget);
+            sCfg.modelTarget =
+                iConfigGetFloat("experimental.hipoly_model_target", (F32)kModelTarget);
             sCfg.inset = iConfigGetFloat("experimental.hipoly_inset", (F32)kModelInset);
             sCfg.budget = (U32)iConfigGetInt("experimental.hipoly_budget", (S32)kWorldBudget);
             sCfg.passes = iConfigGetInt("experimental.hipoly_passes", kPasses);
@@ -150,15 +154,24 @@ namespace
                 const char* fl = iConfigGetString("experimental.hipoly_flat_floors", "covered");
                 sCfg.floors = strcmp(fl, "all") == 0 ? 2 : (strcmp(fl, "off") == 0 ? 0 : 1);
             }
-            if (sCfg.maxLevel < 1) sCfg.maxLevel = 1;
-            if (sCfg.maxLevel > 15) sCfg.maxLevel = 15;
-            if (sCfg.target < 0.05) sCfg.target = 0.05;
-            if (sCfg.modelTarget < 0.02) sCfg.modelTarget = 0.02;
-            if (sCfg.factor < 0.0) sCfg.factor = 0.0;
-            if (sCfg.inset < 0.0) sCfg.inset = 0.0;
-            if (sCfg.inset > 1.0) sCfg.inset = 1.0;
-            if (sCfg.passes < 1) sCfg.passes = 1;
-            if (sCfg.passes > 4) sCfg.passes = 4;
+            if (sCfg.maxLevel < 1)
+                sCfg.maxLevel = 1;
+            if (sCfg.maxLevel > 15)
+                sCfg.maxLevel = 15;
+            if (sCfg.target < 0.05)
+                sCfg.target = 0.05;
+            if (sCfg.modelTarget < 0.02)
+                sCfg.modelTarget = 0.02;
+            if (sCfg.factor < 0.0)
+                sCfg.factor = 0.0;
+            if (sCfg.inset < 0.0)
+                sCfg.inset = 0.0;
+            if (sCfg.inset > 1.0)
+                sCfg.inset = 1.0;
+            if (sCfg.passes < 1)
+                sCfg.passes = 1;
+            if (sCfg.passes > 4)
+                sCfg.passes = 4;
         }
         return sCfg;
     }
@@ -292,7 +305,8 @@ namespace
         F64 lo = 1e300, hi = -1e300;
         for (U32 i = 0; i < 3; i++)
         {
-            F64 d = (b[i * 3] - a[0]) * na[0] + (b[i * 3 + 1] - a[1]) * na[1] + (b[i * 3 + 2] - a[2]) * na[2];
+            F64 d = (b[i * 3] - a[0]) * na[0] + (b[i * 3 + 1] - a[1]) * na[1] +
+                    (b[i * 3 + 2] - a[2]) * na[2];
             lo = d < lo ? d : lo;
             hi = d > hi ? d : hi;
         }
@@ -307,7 +321,8 @@ namespace
     // decal on the ground, a duplicate of the floor. `fpos` is nt * 9,
     // `fnrm` nt * 3, `isFloor` per face. Pairs are found through a grid
     // over the ground plane.
-    U32 coveredFloors(U32 nt, const F64* fpos, const F64* fnrm, const U8* isFloor, iHipolyArray<U8>& covered)
+    U32 coveredFloors(U32 nt, const F64* fpos, const F64* fnrm, const U8* isFloor,
+                      iHipolyArray<U8>& covered)
     {
         covered.resizeZero(nt);
         iHipolyArray<U64> key;
@@ -555,7 +570,7 @@ namespace
         rw::Atomic* atomic;
         rw::Geometry* shipped;
         rw::Geometry* smooth;
-        rw::Atomic::RenderCB render;   // what the atomic drew with before
+        rw::Atomic::RenderCB render; // what the atomic drew with before
     };
     iHipolyArray<Swap> sSwaps;
     bool sShowSmooth = true;
@@ -626,11 +641,11 @@ namespace
     struct CollBuild
     {
         const CollTri* tris;
-        iHipolyArray<F64> lo;      // n * 3
+        iHipolyArray<F64> lo; // n * 3
         iHipolyArray<F64> hi;
-        iHipolyArray<U64> key[3];  // n per axis: the centre, as a sortable integer
-        iHipolyArray<U32> order;   // leaf triangles in emission order
-        iHipolyArray<U32> nodes;   // 4 words each: leftInfo, rightInfo, leftValue, rightValue
+        iHipolyArray<U64> key[3]; // n per axis: the centre, as a sortable integer
+        iHipolyArray<U32> order; // leaf triangles in emission order
+        iHipolyArray<U32> nodes; // 4 words each: leftInfo, rightInfo, leftValue, rightValue
     };
 
     U64 sortableDouble(F64 d)
@@ -661,8 +676,10 @@ namespace
             for (U32 a = 0; a < 3; a++)
             {
                 F64 l = b.lo[idx[i] * 3 + a], h = b.hi[idx[i] * 3 + a];
-                if (l < blo[a]) blo[a] = l;
-                if (h > bhi[a]) bhi[a] = h;
+                if (l < blo[a])
+                    blo[a] = l;
+                if (h > bhi[a])
+                    bhi[a] = h;
             }
         }
         U32 axis = 0;
@@ -688,15 +705,20 @@ namespace
         for (U32 i = 0; i < half; i++)
         {
             F64 h = b.hi[idx[i] * 3 + axis];
-            if (h > leftMax) leftMax = h;
+            if (h > leftMax)
+                leftMax = h;
         }
         for (U32 i = half; i < n; i++)
         {
             F64 l = b.lo[idx[i] * 3 + axis];
-            if (l < rightMin) rightMin = l;
+            if (l < rightMin)
+                rightMin = l;
         }
         U32 slot = b.nodes.n / 4;
-        b.nodes.push(0); b.nodes.push(0); b.nodes.push(0); b.nodes.push(0);
+        b.nodes.push(0);
+        b.nodes.push(0);
+        b.nodes.push(0);
+        b.nodes.push(0);
         U32 li, ri;
         U32 lt = collRec(b, idx, half, depth + 1, &li);
         U32 rt = collRec(b, idx + half, n - half, depth + 1, &ri);
@@ -857,16 +879,20 @@ namespace
                 U32 l, r;
                 memcpy(&l, nodes + index * 16, 4);
                 memcpy(&r, nodes + index * 16 + 4, 4);
-                stack.push(l & 3); stack.push(l >> 12);
-                stack.push(r & 3); stack.push(r >> 12);
+                stack.push(l & 3);
+                stack.push(l >> 12);
+                stack.push(r & 3);
+                stack.push(r >> 12);
                 depth = stack.n / 2;
-                if (depth > maxDepth) maxDepth = depth;
+                if (depth > maxDepth)
+                    maxDepth = depth;
             }
         }
         U32 unreachable = 0, badVert = 0;
         for (U32 i = 0; i < numTris; i++)
         {
-            if (!seen[i]) unreachable++;
+            if (!seen[i])
+                unreachable++;
             U16 atom, vert;
             memcpy(&atom, recs + i * 8, 2);
             memcpy(&vert, recs + i * 8 + 2, 2);
@@ -883,9 +909,10 @@ namespace
                 memcpy(&l0, nodes, 4);
                 memcpy(&r0, nodes + 4, 4);
             }
-            printf("bfbb: hipoly collision tree is WRONG: %u bad links, %u unreachable, %u bad vertex refs "
-                   "(stack %u); %u nodes, %u tris, root %08x %08x\n",
-                   bad, unreachable, badVert, maxDepth, numNodes, numTris, l0, r0);
+            printf(
+                "bfbb: hipoly collision tree is WRONG: %u bad links, %u unreachable, %u bad vertex refs "
+                "(stack %u); %u nodes, %u tris, root %08x %08x\n",
+                bad, unreachable, badVert, maxDepth, numNodes, numTris, l0, r0);
         }
         return bad + unreachable + badVert;
     }
@@ -929,9 +956,24 @@ namespace
     inline void sort3(U32& a, U32& b, U32& c)
     {
         U32 t;
-        if (a > b) { t = a; a = b; b = t; }
-        if (b > c) { t = b; b = c; c = t; }
-        if (a > b) { t = a; a = b; b = t; }
+        if (a > b)
+        {
+            t = a;
+            a = b;
+            b = t;
+        }
+        if (b > c)
+        {
+            t = b;
+            b = c;
+            c = t;
+        }
+        if (a > b)
+        {
+            t = a;
+            a = b;
+            b = t;
+        }
     }
 
     // Which (atomic, struct triangle) carried which collision flags. The
@@ -961,7 +1003,7 @@ namespace
         iHipolyArray<U32>* expanded = new iHipolyArray<U32>[numAtoms];
         struct Map3
         {
-            iHipolyArray<U64> key;   // (a << 42 | b << 21 | c) sorted, then value
+            iHipolyArray<U64> key; // (a << 42 | b << 21 | c) sorted, then value
             iHipolyArray<U32> value;
             iHipolyArray<U32> order;
         };
@@ -979,7 +1021,8 @@ namespace
             for (U32 t = 0; t < nt; t++)
             {
                 out[k].flags[t] = -1;
-                U32 a = geo->triangles[t].v[0], b = geo->triangles[t].v[1], c = geo->triangles[t].v[2];
+                U32 a = geo->triangles[t].v[0], b = geo->triangles[t].v[1],
+                    c = geo->triangles[t].v[2];
                 sort3(a, b, c);
                 maps[k].key[t] = ((U64)a << 42) | ((U64)b << 21) | (U64)c;
                 maps[k].order[t] = t;
@@ -1006,7 +1049,9 @@ namespace
             U32 a = ex[vert], b = ex[vert + 1], c = ex[vert + 2];
             if (flags & kFlagFlip)
             {
-                U32 t = b; b = c; c = t;
+                U32 t = b;
+                b = c;
+                c = t;
             }
             U32 sa = a, sb = b, sc = c;
             sort3(sa, sb, sc);
@@ -1042,7 +1087,8 @@ namespace
                 U32 t = m.order[lo];
                 const rw::Triangle& st = geo->triangles[t];
                 rw::V3d nColl = cross3(rw::sub(P[b], P[a]), rw::sub(P[c], P[a]));
-                rw::V3d nStruct = cross3(rw::sub(P[st.v[1]], P[st.v[0]]), rw::sub(P[st.v[2]], P[st.v[0]]));
+                rw::V3d nStruct =
+                    cross3(rw::sub(P[st.v[1]], P[st.v[0]]), rw::sub(P[st.v[2]], P[st.v[0]]));
                 flip = rw::dot(nColl, nStruct) < 0.0f ? kFlagFlip : 0;
                 out[k].flags[t] = (S32)((flags & ~3u) | flip);
                 out[k].plat[t] = plat;
@@ -1078,7 +1124,7 @@ namespace
         }
         return true;
     }
-}
+} // namespace
 
 // ---------------------------------------------------------------------------
 
@@ -1135,7 +1181,8 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
             for (U32 t = 0; t < g.nt; t++, f++)
             {
                 U32 m = g.tris[t * 4 + 3];
-                bool nat = m < (U32)geo->matList.numMaterials && isNatural(geo->matList.materials[m]);
+                bool nat =
+                    m < (U32)geo->matList.numMaterials && isNatural(geo->matList.materials[m]);
                 const F32* p0 = g.pos + g.tris[t * 4] * 3;
                 const F32* p1 = g.pos + g.tris[t * 4 + 1] * 3;
                 const F32* p2 = g.pos + g.tris[t * 4 + 2] * 3;
@@ -1251,7 +1298,8 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
             for (U32 t = 0; t < res[k].nt; t++)
             {
                 U32 m = res[k].tris[t * 4 + 3];
-                natural[k][t] = m < (U32)geo->matList.numMaterials && isNatural(geo->matList.materials[m]);
+                natural[k][t] =
+                    m < (U32)geo->matList.numMaterials && isNatural(geo->matList.materials[m]);
                 U32 parent = res[k].parent[t];
                 S32 flags = parent < pf[k].flags.n ? pf[k].flags[parent] : -1;
                 landable[k][t] = flags >= 0 && !(flags & 0x10);
@@ -1328,15 +1376,17 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
         checkTree((const U8*)tree, *outSize, expandedCount.p, n);
     }
 
-    printf("bfbb: hipoly world: %u -> %u triangles in %u atomics (%u natural faces, %u floors held, "
-           "target %.2f), %u collision triangles, %u open edges, %u T-junctions, %u folds; %.1fs\n",
-           before, total, n, naturalFaces, heldFloors, pr.target, ctris.n, stats.openEdges,
-           stats.tJunctions, stats.folds, (double)(clock() - t0) / CLOCKS_PER_SEC);
+    printf(
+        "bfbb: hipoly world: %u -> %u triangles in %u atomics (%u natural faces, %u floors held, "
+        "target %.2f), %u collision triangles, %u open edges, %u T-junctions, %u folds; %.1fs\n",
+        before, total, n, naturalFaces, heldFloors, pr.target, ctris.n, stats.openEdges,
+        stats.tJunctions, stats.folds, (double)(clock() - t0) / CLOCKS_PER_SEC);
     if (fs.seeds)
     {
-        printf("bfbb: hipoly fillet: %u crease vertices, %u in the band, %u moved up to %.2f "
-               "(%u held short of another sheet, %u sunk under a cap; %u left exposed, %u poking)\n",
-               fs.seeds, fs.band, fs.moved, fs.maxMove, fs.blocked, fs.sunk, fs.exposed, fs.poking);
+        printf(
+            "bfbb: hipoly fillet: %u crease vertices, %u in the band, %u moved up to %.2f "
+            "(%u held short of another sheet, %u sunk under a cap; %u left exposed, %u poking)\n",
+            fs.seeds, fs.band, fs.moved, fs.maxMove, fs.blocked, fs.sunk, fs.exposed, fs.poking);
     }
     fflush(stdout);
 
@@ -1355,7 +1405,7 @@ namespace
         void* buffer;
     };
     Attached sAttached[16];
-}
+} // namespace
 
 void iHipolyWorldAttach(const void* colltree, void* buffer)
 {
@@ -1497,7 +1547,8 @@ void iHipolyHotkey(S32 down)
         return;
     }
     sShowSmooth = !sShowSmooth;
-    printf("bfbb: hipoly: showing the %s geometry (%u atomics)\n", sShowSmooth ? "smoothed" : "shipped", sSwaps.n);
+    printf("bfbb: hipoly: showing the %s geometry (%u atomics)\n",
+           sShowSmooth ? "smoothed" : "shipped", sSwaps.n);
     fflush(stdout);
 }
 

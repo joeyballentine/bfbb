@@ -42,21 +42,42 @@ namespace
         V3 r = { x, y, z };
         return r;
     }
-    inline V3 add(V3 a, V3 b) { return v3(a.x + b.x, a.y + b.y, a.z + b.z); }
-    inline V3 sub(V3 a, V3 b) { return v3(a.x - b.x, a.y - b.y, a.z - b.z); }
-    inline V3 scale(V3 a, F64 s) { return v3(a.x * s, a.y * s, a.z * s); }
-    inline F64 dot(V3 a, V3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+    inline V3 add(V3 a, V3 b)
+    {
+        return v3(a.x + b.x, a.y + b.y, a.z + b.z);
+    }
+    inline V3 sub(V3 a, V3 b)
+    {
+        return v3(a.x - b.x, a.y - b.y, a.z - b.z);
+    }
+    inline V3 scale(V3 a, F64 s)
+    {
+        return v3(a.x * s, a.y * s, a.z * s);
+    }
+    inline F64 dot(V3 a, V3 b)
+    {
+        return a.x * b.x + a.y * b.y + a.z * b.z;
+    }
     inline V3 cross(V3 a, V3 b)
     {
         return v3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
     }
-    inline F64 len(V3 a) { return sqrt(dot(a, a)); }
-    inline F64 dmin(F64 a, F64 b) { return a < b ? a : b; }
-    inline F64 dmax(F64 a, F64 b) { return a > b ? a : b; }
+    inline F64 len(V3 a)
+    {
+        return sqrt(dot(a, a));
+    }
+    inline F64 dmin(F64 a, F64 b)
+    {
+        return a < b ? a : b;
+    }
+    inline F64 dmax(F64 a, F64 b)
+    {
+        return a > b ? a : b;
+    }
 
-    const F64 kCoverNy = 0.75;      // a landscape face this upright is a cap or floor
-    const F64 kCurtain = 3.0;       // units; how tall the curtain on an open wall edge is
-    const F64 kProbe = 3.0;         // units; how far up a wall vertex looks for its cap
+    const F64 kCoverNy = 0.75; // a landscape face this upright is a cap or floor
+    const F64 kCurtain = 3.0; // units; how tall the curtain on an open wall edge is
+    const F64 kProbe = 3.0; // units; how far up a wall vertex looks for its cap
 
     // A grid cell key with room for negative coordinates.
     inline U64 cellKey(S64 x, S64 y, S64 z)
@@ -70,11 +91,11 @@ namespace
     // is one vertex.
     struct Mesh
     {
-        iHipolyArray<U32> offs;    // per result, into P
+        iHipolyArray<U32> offs; // per result, into P
         iHipolyArray<V3> P;
-        iHipolyArray<U32> T;       // nt * 3, into P
-        iHipolyArray<U32> W;       // per P: welded id
-        iHipolyArray<U32> WT;      // nt * 3, welded
+        iHipolyArray<U32> T; // nt * 3, into P
+        iHipolyArray<U32> W; // per P: welded id
+        iHipolyArray<U32> WT; // nt * 3, welded
         U32 nw;
         U32 nt;
     };
@@ -97,7 +118,8 @@ namespace
         {
             for (U32 v = 0; v < res[k].nv; v++)
             {
-                m.P[m.offs[k] + v] = v3(res[k].pos[v * 3], res[k].pos[v * 3 + 1], res[k].pos[v * 3 + 2]);
+                m.P[m.offs[k] + v] =
+                    v3(res[k].pos[v * 3], res[k].pos[v * 3 + 1], res[k].pos[v * 3 + 2]);
             }
             for (U32 i = 0; i < res[k].nt; i++, t++)
             {
@@ -284,7 +306,8 @@ namespace
                             V3 q = cross(s, e1);
                             F64 vv = dot(d, q) * inv;
                             F64 tt = dot(e2, q) * inv;
-                            if (u >= -1e-6 && vv >= -1e-6 && u + vv <= 1.0 + 1e-6 && tt > 1e-6 && tt <= 1.0)
+                            if (u >= -1e-6 && vv >= -1e-6 && u + vv <= 1.0 + 1e-6 && tt > 1e-6 &&
+                                tt <= 1.0)
                             {
                                 tHit[v] = dmin(tHit[v], tt);
                             }
@@ -296,7 +319,8 @@ namespace
     }
 
     // Hold the vertices of any triangle the move turned over, until none is.
-    void unfold(const Mesh& m, const V3* fn, iHipolyArray<V3>& mv, const V3* V0, iHipolyArray<V3>& V)
+    void unfold(const Mesh& m, const V3* fn, iHipolyArray<V3>& mv, const V3* V0,
+                iHipolyArray<V3>& V)
     {
         for (U32 pass = 0; pass < 8; pass++)
         {
@@ -321,7 +345,7 @@ namespace
             }
         }
     }
-}
+} // namespace
 
 void iHipolyFillet(iHipolyResult* res, U32 n, const U8* const* natural, const U8* const* landable,
                    const iHipolyFilletParams& pr, iHipolyFilletStats* st)
@@ -412,8 +436,16 @@ void iHipolyFillet(iHipolyResult* res, U32 n, const U8* const* natural, const U8
         c = c < -1.0 ? -1.0 : (c > 1.0 ? 1.0 : c);
         if (c < cosAngle && nat[fa] && nat[fb])
         {
-            if (!seed[elo[e]]) { seed[elo[e]] = 1; seedList.push(elo[e]); }
-            if (!seed[ehi[e]]) { seed[ehi[e]] = 1; seedList.push(ehi[e]); }
+            if (!seed[elo[e]])
+            {
+                seed[elo[e]] = 1;
+                seedList.push(elo[e]);
+            }
+            if (!seed[ehi[e]])
+            {
+                seed[ehi[e]] = 1;
+                seedList.push(ehi[e]);
+            }
         }
     }
     st->seeds = seedList.n;
@@ -445,15 +477,20 @@ void iHipolyFillet(iHipolyResult* res, U32 n, const U8* const* natural, const U8
         for (U32 c = 0; c < 3; c++)
         {
             U32 w = m.WT[t * 3 + c];
-            if (!nat[t]) pinned[w] = 1;
-            if (isFloor[t]) onFloor[w] = 1;
-            if (cover[t]) onCover[w] = 1;
-            if (steep[t]) wallv[w] = 1;
+            if (!nat[t])
+                pinned[w] = 1;
+            if (isFloor[t])
+                onFloor[w] = 1;
+            if (cover[t])
+                onCover[w] = 1;
+            if (steep[t])
+                wallv[w] = 1;
         }
     }
     for (U32 w = 0; w < m.nw; w++)
     {
-        if (onFloor[w]) onCover[w] = 1;
+        if (onFloor[w])
+            onCover[w] = 1;
     }
 
     // One position per welded vertex.
@@ -478,7 +515,8 @@ void iHipolyFillet(iHipolyResult* res, U32 n, const U8* const* natural, const U8
         for (U32 i = 0; i < seedList.n; i++)
         {
             V3 p = V0[seedList[i]];
-            keys[i] = cellKey((S64)floor(p.x / cell), (S64)floor(p.y / cell), (S64)floor(p.z / cell));
+            keys[i] =
+                cellKey((S64)floor(p.x / cell), (S64)floor(p.y / cell), (S64)floor(p.z / cell));
             order[i] = i;
         }
         iHipolySortU64(order.p, order.n, keys.p);
@@ -499,7 +537,8 @@ void iHipolyFillet(iHipolyResult* res, U32 n, const U8* const* natural, const U8
                 continue;
             }
             V3 p = V0[w];
-            S64 cx = (S64)floor(p.x / cell), cy = (S64)floor(p.y / cell), cz = (S64)floor(p.z / cell);
+            S64 cx = (S64)floor(p.x / cell), cy = (S64)floor(p.y / cell),
+                cz = (S64)floor(p.z / cell);
             F64 best = 1e300;
             for (S64 dx = -1; dx <= 1; dx++)
             {
@@ -512,7 +551,10 @@ void iHipolyFillet(iHipolyResult* res, U32 n, const U8* const* natural, const U8
                         while (a < b)
                         {
                             U32 mid = (a + b) / 2;
-                            if (skey[mid] < key) a = mid + 1; else b = mid;
+                            if (skey[mid] < key)
+                                a = mid + 1;
+                            else
+                                b = mid;
                         }
                         for (; a < skey.n && skey[a] == key; a++)
                         {
@@ -628,8 +670,12 @@ void iHipolyFillet(iHipolyResult* res, U32 n, const U8* const* natural, const U8
         {
             U32 a = elo[be[i]], b = ehi[be[i]], ca = m.nw + i, cb = m.nw + nb + i;
             U32 t1 = m.nt + i, t2 = m.nt + nb + i;
-            WTc[t1 * 3] = a; WTc[t1 * 3 + 1] = b; WTc[t1 * 3 + 2] = cb;
-            WTc[t2 * 3] = a; WTc[t2 * 3 + 1] = cb; WTc[t2 * 3 + 2] = ca;
+            WTc[t1 * 3] = a;
+            WTc[t1 * 3 + 1] = b;
+            WTc[t1 * 3 + 2] = cb;
+            WTc[t2 * 3] = a;
+            WTc[t2 * 3 + 1] = cb;
+            WTc[t2 * 3 + 2] = ca;
             candc[t1] = candc[t2] = 1;
         }
         // The segment is from the shipped position; the triangles sit where
