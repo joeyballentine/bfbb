@@ -6,3 +6,6 @@
 	path = third_party/SDL
 	url = https://github.com/libsdl-org/SDL.git
 	branch = release-3.4.14
+[submodule "third_party/wxWidgets"]
+	path = third_party/wxWidgets
+	url = https://github.com/wxWidgets/wxWidgets

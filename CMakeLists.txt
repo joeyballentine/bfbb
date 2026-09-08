@@ -1199,10 +1199,8 @@ if(WIN32)
 endif()
 
 # --- the configurator --------------------------------------------------------
-# bfbb_config.exe: config.ini with controls on it, so the settings are
-# discoverable without opening the file. Windows only for now, because the only
-# front end written is Win32 controls -- a host without them still has the
-# file, which is what it always was.
+# bfbb_config: config.ini with controls on it, so the settings are discoverable
+# without opening the file.
 #
 # A separate executable rather than a screen inside the game. config.ini is
 # read before the window opens: assets.path says where the game's data is,
@@ -1211,43 +1209,198 @@ endif()
 # before the game does.
 #
 # config_model.cpp is the program without a window on it -- the settings as
-# values, and the reading and writing of the file. main_win32.cpp is the
-# window, and the only source here a second front end would replace.
+# values, and the reading and writing of the file. main_win32.cpp and
+# main_wx.cpp are two windows over that one model, and BFBB_CONFIG_UI picks
+# between them.
 #
-# It links four files and no library. iConfigTable.cpp is the settings and
+# It links four files and no game library. iConfigTable.cpp is the settings and
 # their domains, iConfigEdit.cpp writes one back without disturbing the rest of
 # the file, and the host layer is there for the case-insensitive compare, the
 # exe directory and starting the game. It does NOT link iConfig.cpp, which
 # reaches iPadBind.cpp for the two binding sections and from there into xPad.h
 # and the pad backend -- most of the game, to read a file this program reads
 # itself.
-if(WIN32)
+
+# Which front end is built.
+#
+#   auto    wx wherever wxWidgets is available, Win32 controls on Windows where
+#           it is not, and nothing anywhere else
+#   wx      wxWidgets, and fail if it cannot be found or built
+#   win32   Win32 controls, Windows only
+#   off     no configurator
+set(BFBB_CONFIG_UI "auto" CACHE STRING "Configurator front end: auto, wx, win32, off")
+set_property(CACHE BFBB_CONFIG_UI PROPERTY STRINGS auto wx win32 off)
+
+# Where wxWidgets comes from, on the same three words SDL uses.
+#
+# `auto` here means an INSTALLED wx or none -- unlike SDL, it never falls back
+# to the submodule. wxWidgets is a long compile, and a configure that quietly
+# starts one because a package happened to be missing is the kind of surprise
+# that gets blamed on the game. A distribution's libwxgtk or a brew install
+# answers `auto` without being asked; -DBFBB_WX=vendored asks for the submodule
+# and is the only thing that builds it.
+set(BFBB_WX "auto" CACHE STRING "Where wxWidgets comes from: auto, system, vendored")
+set_property(CACHE BFBB_WX PROPERTY STRINGS auto system vendored)
+
+set(BFBB_CONFIG_FRONTEND "none")
+
+if(NOT BFBB_CONFIG_UI STREQUAL "off")
+  # Everything below links `bfbb_wx`, an interface target created here that
+  # forwards to whichever wx this build ended up with. The real target's name
+  # is not stable across the two, and an installed wx found through wx-config
+  # has no imported targets at all -- only the variables the module sets.
+  set(_bfbb_wx_found OFF)
+
+  if(NOT BFBB_CONFIG_UI STREQUAL "win32")
+    if(NOT BFBB_WX STREQUAL "vendored")
+      # Config mode first, which is what a wx built by CMake installs and what
+      # carries the wx::core target. Module mode second, which is wx-config and
+      # is how a distribution's package is usually found.
+      find_package(wxWidgets CONFIG QUIET COMPONENTS core base)
+      if(NOT wxWidgets_FOUND)
+        find_package(wxWidgets QUIET COMPONENTS core base)
+      endif()
+    endif()
+
+    if(wxWidgets_FOUND)
+      message(STATUS "wxWidgets: installed (${wxWidgets_VERSION_STRING})")
+      add_library(bfbb_wx INTERFACE)
+      if(TARGET wx::core)
+        target_link_libraries(bfbb_wx INTERFACE wx::core wx::base)
+      else()
+        # The module-mode answer: include directories, defines and libraries as
+        # loose variables. wxWidgets_USE_FILE is deliberately not included --
+        # it calls include_directories and add_definitions on the whole
+        # directory, and this is one target's dependency, not the build's.
+        target_include_directories(bfbb_wx SYSTEM INTERFACE ${wxWidgets_INCLUDE_DIRS})
+        target_compile_definitions(bfbb_wx INTERFACE ${wxWidgets_DEFINITIONS})
+        target_link_libraries(bfbb_wx INTERFACE ${wxWidgets_LIBRARIES})
+      endif()
+      set(_bfbb_wx_found ON)
+
+    elseif(BFBB_WX STREQUAL "system")
+      message(FATAL_ERROR
+        "BFBB_WX=system, and no installed wxWidgets was found.\n"
+        "  Point -DCMAKE_PREFIX_PATH or -DwxWidgets_ROOT_DIR at one, or\n"
+        "  configure with -DBFBB_WX=vendored to build the submodule.")
+
+    elseif(BFBB_WX STREQUAL "vendored")
+      if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/wxWidgets/CMakeLists.txt)
+        message(FATAL_ERROR
+          "BFBB_WX=vendored, and third_party/wxWidgets is empty. Fetch the\n"
+          "  submodules, or configure with -DBFBB_CONFIG_UI=off.")
+      else()
+        message(STATUS "wxWidgets: building third_party/wxWidgets")
+
+        # Static, so bfbb_config is one file the way the game is. wx's samples,
+        # tests and demos are a far larger build than the library itself and
+        # nothing here runs them.
+        set(wxBUILD_SHARED OFF CACHE BOOL "" FORCE)
+        set(wxBUILD_TESTS OFF CACHE BOOL "" FORCE)
+        set(wxBUILD_SAMPLES OFF CACHE BOOL "" FORCE)
+        set(wxBUILD_DEMOS OFF CACHE BOOL "" FORCE)
+        set(wxBUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
+        set(wxBUILD_INSTALL OFF CACHE BOOL "" FORCE)
+
+        # The libraries this window does not open. Each is build time and
+        # executable size for a control nothing here creates.
+        #
+        # The help controllers go off WITH wxUSE_HTML rather than being left to
+        # follow it. wx checks its own configuration in chkconf.h and treats
+        # "wxUSE_WXHTML_HELP without wxUSE_HTML" as an error rather than as a
+        # consequence, so turning off the library without the two things built
+        # on it fails the build with `#error "Built in help controller can't be
+        # compiled"` before a line of wx is compiled.
+        set(wxUSE_AUI OFF CACHE BOOL "" FORCE)
+        set(wxUSE_HTML OFF CACHE BOOL "" FORCE)
+        set(wxUSE_HELP OFF CACHE BOOL "" FORCE)
+        set(wxUSE_WXHTML_HELP OFF CACHE BOOL "" FORCE)
+        set(wxUSE_MS_HTML_HELP OFF CACHE BOOL "" FORCE)
+        set(wxUSE_MEDIACTRL OFF CACHE BOOL "" FORCE)
+        set(wxUSE_OPENGL OFF CACHE BOOL "" FORCE)
+        set(wxUSE_PROPGRID OFF CACHE BOOL "" FORCE)
+        set(wxUSE_RIBBON OFF CACHE BOOL "" FORCE)
+        set(wxUSE_RICHTEXT OFF CACHE BOOL "" FORCE)
+        set(wxUSE_STC OFF CACHE BOOL "" FORCE)
+        set(wxUSE_WEBVIEW OFF CACHE BOOL "" FORCE)
+        set(wxUSE_XRC OFF CACHE BOOL "" FORCE)
+
+        add_subdirectory(third_party/wxWidgets EXCLUDE_FROM_ALL)
+
+        add_library(bfbb_wx INTERFACE)
+        target_link_libraries(bfbb_wx INTERFACE wx::core wx::base)
+        set(_bfbb_wx_found ON)
+      endif()
+    endif()
+  endif()
+
+  if(_bfbb_wx_found AND NOT BFBB_CONFIG_UI STREQUAL "win32")
+    set(BFBB_CONFIG_FRONTEND "wx")
+  elseif(WIN32 AND NOT BFBB_CONFIG_UI STREQUAL "wx")
+    set(BFBB_CONFIG_FRONTEND "win32")
+  elseif(BFBB_CONFIG_UI STREQUAL "auto")
+    message(STATUS
+      "configurator: not built -- no wxWidgets found, and this host has no"
+      " Win32 controls.\n"
+      "   Install wxWidgets (libwxgtk3.2-dev, or brew install wxwidgets), or"
+      " configure with -DBFBB_WX=vendored.")
+  elseif(BFBB_CONFIG_UI STREQUAL "wx")
+    message(FATAL_ERROR
+      "BFBB_CONFIG_UI=wx, and no wxWidgets was found.\n"
+      "  Install one, or configure with -DBFBB_WX=vendored to build the"
+      " submodule.")
+  else()
+    message(FATAL_ERROR
+      "BFBB_CONFIG_UI=win32, and this host has no Win32 controls.")
+  endif()
+endif()
+
+if(NOT BFBB_CONFIG_FRONTEND STREQUAL "none")
+  message(STATUS "configurator: ${BFBB_CONFIG_FRONTEND}")
+
+  if(BFBB_CONFIG_FRONTEND STREQUAL "wx")
+    set(_bfbb_config_main ${PC_DIR}/configurator/main_wx.cpp)
+  else()
+    set(_bfbb_config_main ${PC_DIR}/configurator/main_win32.cpp)
+  endif()
+
+  # WIN32 here is CMake's keyword for a windowed entry point, not the platform
+  # test -- it is ignored everywhere else.
+  #
+  # MACOSX_BUNDLE is deliberately NOT set with it, even though a .app is the
+  # nicer thing for macOS to launch. This program finds config.ini and the game
+  # BESIDE ITSELF, and inside a bundle "beside itself" is
+  # bfbb_config.app/Contents/MacOS -- so it would create a config.ini the game
+  # never reads and report that it cannot find a game that is sitting right
+  # there.
   add_executable(bfbb_config WIN32
-    ${PC_DIR}/configurator/main_win32.cpp
+    ${_bfbb_config_main}
     ${PC_DIR}/configurator/config_model.cpp
     ${PC_DIR}/iConfigTable.cpp
     ${PC_DIR}/iConfigEdit.cpp
     ${HOST_SOURCES}
+  )
 
+  if(WIN32)
     # A source rather than a resource. CMake writes and embeds a manifest for
     # every executable, and a .manifest listed here is merged into that one --
     # putting it in the .rc instead is a duplicate RT_MANIFEST and a link
     # error. What it asks for is in the file: comctl32 v6 and DPI awareness.
-    ${PC_DIR}/configurator/bfbb_config.manifest
-  )
+    target_sources(bfbb_config PRIVATE ${PC_DIR}/configurator/bfbb_config.manifest)
 
-  # The same resource-compiler check the game's icon gets, and for the same
-  # reason: no rc found is a program without an icon, not a failed build. What
-  # it costs here is also the manifest, so an unmanifested build gets the
-  # Windows 95 controls -- ugly, and not worth failing over.
-  if(CMAKE_RC_COMPILER)
-    target_sources(bfbb_config PRIVATE ${PC_DIR}/res/bfbb_config.rc)
+    # The same resource-compiler check the game's icon gets, and for the same
+    # reason: no rc found is a program without an icon, not a failed build.
+    # What it costs here is also the manifest, so an unmanifested build gets
+    # the Windows 95 controls -- ugly, and not worth failing over.
+    if(CMAKE_RC_COMPILER)
+      target_sources(bfbb_config PRIVATE ${PC_DIR}/res/bfbb_config.rc)
 
-    # The same line the game's icon needs, for the same reason: rc.exe finds a
-    # resource's file through the include path, and CMake builds that from the
-    # target's include directories. Without it the script compiles to nothing
-    # and says nothing about why.
-    target_include_directories(bfbb_config PRIVATE ${PC_DIR}/res)
+      # The same line the game's icon needs, for the same reason: rc.exe finds
+      # a resource's file through the include path, and CMake builds that from
+      # the target's include directories. Without it the script compiles to
+      # nothing and says nothing about why.
+      target_include_directories(bfbb_config PRIVATE ${PC_DIR}/res)
+    endif()
   endif()
 
   target_compile_definitions(bfbb_config PRIVATE PLATFORM_PC)
@@ -1257,8 +1410,16 @@ if(WIN32)
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x
   )
-  target_link_libraries(bfbb_config PRIVATE user32 gdi32 comdlg32 comctl32 shell32 ole32 dbghelp)
   target_compile_options(bfbb_config PRIVATE ${BFBB_NO_WARNINGS})
+
+  if(BFBB_CONFIG_FRONTEND STREQUAL "wx")
+    target_link_libraries(bfbb_config PRIVATE bfbb_wx)
+  endif()
+
+  if(WIN32)
+    target_link_libraries(bfbb_config PRIVATE
+      user32 gdi32 comdlg32 comctl32 shell32 ole32 dbghelp)
+  endif()
 endif()
 
 # --- self-test ---------------------------------------------------------------

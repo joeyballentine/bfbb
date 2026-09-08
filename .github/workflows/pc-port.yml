@@ -56,8 +56,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      # Named one at a time rather than `submodules: recursive`, which would
+      # also fetch third_party/wxWidgets -- 300 MB of working tree, on every
+      # job, for a front end no job here builds from source. The jobs that
+      # want wx install a packaged one.
+      - name: Submodules
+        shell: bash
+        run: git submodule update --init --recursive third_party/librw third_party/SDL
 
       # librw is the renderer, and SDL reads the controllers and, under GL3,
       # owns the window. Neither is vendored as source in the tree, and CMake's
@@ -137,8 +143,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      # Named one at a time rather than `submodules: recursive`, which would
+      # also fetch third_party/wxWidgets -- 300 MB of working tree, on every
+      # job, for a front end no job here builds from source. The jobs that
+      # want wx install a packaged one.
+      - name: Submodules
+        shell: bash
+        run: git submodule update --init --recursive third_party/librw third_party/SDL
 
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@v5
@@ -222,8 +234,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      # Named one at a time rather than `submodules: recursive`, which would
+      # also fetch third_party/wxWidgets -- 300 MB of working tree, on every
+      # job, for a front end no job here builds from source. The jobs that
+      # want wx install a packaged one.
+      - name: Submodules
+        shell: bash
+        run: git submodule update --init --recursive third_party/librw third_party/SDL
 
       - name: Check the submodules came down
         shell: bash
@@ -252,6 +270,19 @@ jobs:
             libxkbcommon-dev libxkbcommon-x11-dev \
             libwayland-dev wayland-protocols libdecor-0-dev \
             libasound2-dev libpulse-dev libudev-dev libdbus-1-dev libibus-1.0-dev
+
+      # The configurator's wx front end. Installed rather than built from
+      # third_party/wxWidgets, which is a long compile for a window this job
+      # only needs to prove compiles -- and installing it is what the
+      # BFBB_WX=auto path does on a real machine, so this exercises that path
+      # rather than the one nobody uses.
+      - name: wxWidgets
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get install -y --no-install-recommends libwxgtk3.2-dev
+          else
+            brew install wxwidgets
+          fi
 
       # BFBB_BUILD_32BIT is deliberately NOT named here. CMakeLists.txt builds
       # 64-bit off Windows on its own -- macOS has no 32-bit runtime at all, and
@@ -348,8 +379,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      # Named one at a time rather than `submodules: recursive`, which would
+      # also fetch third_party/wxWidgets -- 300 MB of working tree, on every
+      # job, for a front end no job here builds from source. The jobs that
+      # want wx install a packaged one.
+      - name: Submodules
+        shell: bash
+        run: git submodule update --init --recursive third_party/librw third_party/SDL
 
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@v5
@@ -375,6 +412,20 @@ jobs:
             libxkbcommon-dev libxkbcommon-x11-dev \
             libwayland-dev wayland-protocols libdecor-0-dev \
             libasound2-dev libpulse-dev libudev-dev libdbus-1-dev libibus-1.0-dev
+
+      # So the package carries a configurator off Windows too. On Windows it
+      # does not, and the Win32 front end is built instead: clang is what
+      # builds the game there, and wx includes the C++ standard library, which
+      # Microsoft's refuses to compile with a clang older than the one it
+      # shipped against.
+      - name: wxWidgets
+        if: runner.os != 'Windows'
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get install -y --no-install-recommends libwxgtk3.2-dev
+          else
+            brew install wxwidgets
+          fi
 
       # CMAKE_RUNTIME_OUTPUT_DIRECTORY is what makes this a package rather than
       # a file list: the button glyphs and the DLLs are staged beside bfbb by
@@ -404,10 +455,13 @@ jobs:
       - name: Build
         run: cmake --build build-pkg --target bfbb
 
-      # bfbb_config is a separate target: it is Windows-only, and asking for it
-      # in the line above would fail the configure everywhere else.
+      # A separate target rather than a second name on the line above, so that
+      # a configurator that stops building is reported as itself instead of as
+      # "the package failed". Every host in this matrix has a front end --
+      # Win32 controls on Windows, the wxWidgets installed above everywhere
+      # else -- so this step failing means one of those went away.
       - name: Build the configurator
-        if: runner.os == 'Windows'
+        shell: bash
         run: cmake --build build-pkg --target bfbb_config
 
       - name: Stage
@@ -429,8 +483,8 @@ jobs:
 
           This folder is the program, not the game. It needs the data files from
           a copy of the Xbox release: start it once, then set [assets] path in
-          the config.ini it writes beside itself and start it again. On Windows
-          bfbb_config.exe edits that file with controls on it.
+          the config.ini it writes beside itself and start it again. bfbb_config
+          edits that file with controls on it.
 
           More than one renderer is built in. video.backend in config.ini picks:
           auto takes the first of the ones listed above, and naming one is worth
