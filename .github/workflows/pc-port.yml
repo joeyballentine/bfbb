@@ -260,3 +260,122 @@ jobs:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
         run: ./build-ci/pc_selftest
+
+  # Release builds, staged into a folder and uploaded.
+  #
+  # Separate from the jobs above rather than an upload step bolted onto them.
+  # Those build Debug, which is unoptimised and too slow to play; this is the
+  # configuration someone would actually run, and it is the only one worth
+  # downloading. It also covers D3D11, which nothing else here builds.
+  #
+  # Each artifact is a folder to run the game out of: the executable, the
+  # configurator on Windows, the button glyphs, and whatever DLLs the build
+  # staged beside them. It does NOT contain the game's data. config.ini is not
+  # in it either -- the game writes one with the defaults on first run, and
+  # shipping one would freeze today's defaults into every download.
+  #
+  # What these are missing: FFmpeg is not installed on the runners, so the movie
+  # decoder and the soundtrack override are their stubs -- no FMV, no music
+  # replacement. BUILD-INFO.txt in the artifact says so.
+  package:
+    runs-on: ${{ matrix.os }}
+    # Gating on Windows and reporting elsewhere, the same split the jobs above
+    # use: the Windows Release build is the one people download.
+    continue-on-error: ${{ matrix.os != 'windows-latest' }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest,  backend: D3D9, name: windows-x86-d3d9 }
+          - { os: windows-latest,  backend: D3D11, name: windows-x86-d3d11 }
+          - { os: windows-latest,  backend: GL3,  name: windows-x86-gl3 }
+          - { os: ubuntu-latest,   backend: GL3,  name: linux-x86_64-gl3 }
+          # macos-latest is absent on purpose. An arm64 build compiles and then
+          # is SIGKILLed at exec, because the game arena needs a low 4 GB that
+          # Apple Silicon will not give up -- see the unix job. Publishing a
+          # binary that cannot start is worse than publishing none.
+          - { os: macos-15-intel,  backend: GL3,  name: macos-x86_64-gl3 }
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: MSVC environment (x86)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgl1-mesa-dev libegl1-mesa-dev libdrm-dev libgbm-dev \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
+            libxfixes-dev libxss-dev libxrender-dev libxtst-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev wayland-protocols libdecor-0-dev \
+            libasound2-dev libpulse-dev libudev-dev libdbus-1-dev libibus-1.0-dev
+
+      # CMAKE_RUNTIME_OUTPUT_DIRECTORY is what makes this a package rather than
+      # a file list: the button glyphs and the DLLs are staged beside bfbb by
+      # POST_BUILD rules that follow the executable, so pointing the executable
+      # at dist/ brings them along and a new one added later needs no edit here.
+      # The tools and self-tests land there too and are pruned after the build.
+      #
+      # The word size is left to CMakeLists.txt for the same reason the unix job
+      # leaves it: 32-bit on Windows, 64-bit off it.
+      - name: Configure
+        shell: bash
+        run: >
+          cmake -S . -B build-pkg -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DBFBB_SDL=vendored
+          -DBFBB_RENDER_BACKEND=${{ matrix.backend }}
+          -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=${{ github.workspace }}/dist
+          ${{ runner.os == 'Windows' && '-DCMAKE_CXX_COMPILER=clang++' || '' }}
+
+      - name: Build
+        run: cmake --build build-pkg --target bfbb
+
+      # bfbb_config is a separate target: it is Windows-only, and asking for it
+      # in the line above would fail the configure everywhere else.
+      - name: Build the configurator
+        if: runner.os == 'Windows'
+        run: cmake --build build-pkg --target bfbb_config
+
+      - name: Stage
+        shell: bash
+        run: |
+          rm -f dist/*selftest* dist/fontfit*
+          cat > dist/BUILD-INFO.txt <<EOF
+          Battle for Bikini Bottom, PC port -- ${{ matrix.name }}
+
+          Built from ${{ github.repository }} ${{ github.ref_name }} at ${{ github.sha }}
+          Render backend: ${{ matrix.backend }}   Configuration: Release
+
+          This folder is the program, not the game. It needs the data files from
+          a copy of the Xbox release: start it once, then set [assets] path in
+          the config.ini it writes beside itself and start it again. On Windows
+          bfbb_config.exe edits that file with controls on it.
+
+          FFmpeg was not available on the build machine, so the movie decoder and
+          the soundtrack override are stubs in this build: cutscenes do not play
+          and [audio] soundtrack does nothing. Everything else is here.
+          EOF
+          ls -R dist
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: bfbb-${{ matrix.name }}
+          path: dist/
+          retention-days: 14
+          if-no-files-found: error
