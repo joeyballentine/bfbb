@@ -125,11 +125,11 @@ namespace
         F64 inset;
         U32 budget;
         S32 passes;
-        bool flatFloors;
+        S32 floors;    // 0 off, 1 those with something lying on them, 2 all
     };
     const F64 kFactor = 1.0;
     Settings sCfg = { -1, kFactor, kWorldTarget, kWorldMaxLevel, kWorldCrease, kNaturalCrease,
-                      kFilletRadius, kModelTarget, kModelInset, kWorldBudget, kPasses, true };
+                      kFilletRadius, kModelTarget, kModelInset, kWorldBudget, kPasses, 1 };
 
     const Settings& settings()
     {
@@ -146,7 +146,10 @@ namespace
             sCfg.inset = iConfigGetFloat("experimental.hipoly_inset", (F32)kModelInset);
             sCfg.budget = (U32)iConfigGetInt("experimental.hipoly_budget", (S32)kWorldBudget);
             sCfg.passes = iConfigGetInt("experimental.hipoly_passes", kPasses);
-            sCfg.flatFloors = iConfigGetBool("experimental.hipoly_flat_floors", TRUE) != 0;
+            {
+                const char* fl = iConfigGetString("experimental.hipoly_flat_floors", "covered");
+                sCfg.floors = strcmp(fl, "all") == 0 ? 2 : (strcmp(fl, "off") == 0 ? 0 : 1);
+            }
             if (sCfg.maxLevel < 1) sCfg.maxLevel = 1;
             if (sCfg.maxLevel > 15) sCfg.maxLevel = 15;
             if (sCfg.target < 0.05) sCfg.target = 0.05;
@@ -217,6 +220,162 @@ namespace
             memcpy(cur.cbary.p + t * 9, out, sizeof(out));
             cur.parent[t] = prev.parent[p];
         }
+    }
+
+    // --- floors with something lying on them ---------------------------------
+
+    // The gap under which a face counts as lying on a floor, in units: a
+    // decal sits a few hundredths above the ground, and a bow reaches a
+    // few tenths. The grid over the ground plane that finds the pairs.
+    const F64 kCoverGap = 1.0;
+    const F64 kCoverCell = 4.0;
+
+    inline F64 turn(F64 ax, F64 az, F64 bx, F64 bz, F64 px, F64 pz)
+    {
+        return (bx - ax) * (pz - az) - (bz - az) * (px - ax);
+    }
+
+    // Strictly inside, on the ground plane: a neighbour that only touches
+    // along an edge is not lying on the face.
+    bool inTri2(F64 px, F64 pz, const F64* v)
+    {
+        F64 c0 = turn(v[0], v[2], v[3], v[5], px, pz);
+        F64 c1 = turn(v[3], v[5], v[6], v[8], px, pz);
+        F64 c2 = turn(v[6], v[8], v[0], v[2], px, pz);
+        const F64 eps = 1e-6;
+        return (c0 > eps && c1 > eps && c2 > eps) || (c0 < -eps && c1 < -eps && c2 < -eps);
+    }
+
+    bool cross2(const F64* a, const F64* b, const F64* c, const F64* d)
+    {
+        F64 d1 = turn(c[0], c[2], d[0], d[2], a[0], a[2]);
+        F64 d2 = turn(c[0], c[2], d[0], d[2], b[0], b[2]);
+        F64 d3 = turn(a[0], a[2], b[0], b[2], c[0], c[2]);
+        F64 d4 = turn(a[0], a[2], b[0], b[2], d[0], d[2]);
+        return ((d1 > 0.0 && d2 < 0.0) || (d1 < 0.0 && d2 > 0.0)) &&
+               ((d3 > 0.0 && d4 < 0.0) || (d3 < 0.0 && d4 > 0.0));
+    }
+
+    // Do the two triangles overlap on the ground plane, in area: a vertex
+    // of one inside the other, or edges that properly cross.
+    bool overlap2(const F64* a, const F64* b)
+    {
+        for (U32 i = 0; i < 3; i++)
+        {
+            if (inTri2(a[i * 3], a[i * 3 + 2], b) || inTri2(b[i * 3], b[i * 3 + 2], a))
+            {
+                return true;
+            }
+        }
+        for (U32 i = 0; i < 3; i++)
+        {
+            for (U32 j = 0; j < 3; j++)
+            {
+                if (cross2(a + i * 3, a + ((i + 1) % 3) * 3, b + j * 3, b + ((j + 1) % 3) * 3))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Does `b` lie on `a`: parallel, on a's front side within the gap, and
+    // over it on the ground plane.
+    bool liesOn(const F64* a, const F64* na, const F64* b, const F64* nb)
+    {
+        F64 par = na[0] * nb[0] + na[1] * nb[1] + na[2] * nb[2];
+        if (par < 0.9 && par > -0.9)
+        {
+            return false;
+        }
+        F64 lo = 1e300, hi = -1e300;
+        for (U32 i = 0; i < 3; i++)
+        {
+            F64 d = (b[i * 3] - a[0]) * na[0] + (b[i * 3 + 1] - a[1]) * na[1] + (b[i * 3 + 2] - a[2]) * na[2];
+            lo = d < lo ? d : lo;
+            hi = d > hi ? d : hi;
+        }
+        if (lo < -0.05 || hi > kCoverGap)
+        {
+            return false;
+        }
+        return overlap2(a, b);
+    }
+
+    // Which floor faces have another face lying on them, or lie on one: a
+    // decal on the ground, a duplicate of the floor. `fpos` is nt * 9,
+    // `fnrm` nt * 3, `isFloor` per face. Pairs are found through a grid
+    // over the ground plane.
+    U32 coveredFloors(U32 nt, const F64* fpos, const F64* fnrm, const U8* isFloor, iHipolyArray<U8>& covered)
+    {
+        covered.resizeZero(nt);
+        iHipolyArray<U64> key;
+        iHipolyArray<U32> face;
+        for (U32 f = 0; f < nt; f++)
+        {
+            if (!isFloor[f])
+            {
+                continue;
+            }
+            const F64* v = fpos + f * 9;
+            F64 lox = v[0], hix = v[0], loz = v[2], hiz = v[2];
+            for (U32 i = 1; i < 3; i++)
+            {
+                lox = v[i * 3] < lox ? v[i * 3] : lox;
+                hix = v[i * 3] > hix ? v[i * 3] : hix;
+                loz = v[i * 3 + 2] < loz ? v[i * 3 + 2] : loz;
+                hiz = v[i * 3 + 2] > hiz ? v[i * 3 + 2] : hiz;
+            }
+            S32 cx0 = (S32)floor(lox / kCoverCell), cx1 = (S32)floor(hix / kCoverCell);
+            S32 cz0 = (S32)floor(loz / kCoverCell), cz1 = (S32)floor(hiz / kCoverCell);
+            for (S32 cx = cx0; cx <= cx1; cx++)
+            {
+                for (S32 cz = cz0; cz <= cz1; cz++)
+                {
+                    key.push(((U64)(U32)cx << 32) | (U32)cz);
+                    face.push(f);
+                }
+            }
+        }
+        iHipolyArray<U32> order;
+        order.resize(key.n);
+        for (U32 i = 0; i < key.n; i++)
+        {
+            order[i] = i;
+        }
+        iHipolySortU64(order.p, order.n, key.p);
+        U32 found = 0;
+        U32 start = 0;
+        while (start < order.n)
+        {
+            U32 end = start;
+            while (end < order.n && key[order[end]] == key[order[start]])
+            {
+                end++;
+            }
+            for (U32 i = start; i < end; i++)
+            {
+                U32 f = face[order[i]];
+                for (U32 j = i + 1; j < end; j++)
+                {
+                    U32 g = face[order[j]];
+                    if (f == g || (covered[f] && covered[g]))
+                    {
+                        continue;
+                    }
+                    if (liesOn(fpos + f * 9, fnrm + f * 3, fpos + g * 9, fnrm + g * 3) ||
+                        liesOn(fpos + g * 9, fnrm + g * 3, fpos + f * 9, fnrm + f * 3))
+                    {
+                        found += !covered[f];
+                        found += !covered[g];
+                        covered[f] = covered[g] = 1;
+                    }
+                }
+            }
+            start = end;
+        }
+        return found;
     }
 
     bool containsWord(const char* name, const char* const* words)
@@ -958,10 +1117,14 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
 
     // Per-face crease angle and bulge caps: landscape textures round past
     // the folds a building keeps, on their steep faces.
-    iHipolyArray<F64> crease, bulge, rel;
+    iHipolyArray<F64> crease, bulge, rel, fpos, fnrm;
+    iHipolyArray<U8> isFloor;
     crease.resize(ntTot);
     bulge.resize(ntTot);
     rel.resize(ntTot);
+    fpos.resize(ntTot * 9);
+    fnrm.resize(ntTot * 3);
+    isFloor.resize(ntTot);
     U32 naturalFaces = 0;
     {
         U32 f = 0;
@@ -987,19 +1150,46 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
                 crease[f] = nat ? cfg.naturalCrease : cfg.crease;
                 bulge[f] = ((nat && steep) ? kNaturalMaxBulge : kWorldMaxBulge) * cfg.factor;
                 rel[f] = ((nat && steep) ? kNaturalRelBulge : kWorldRelBulge) * cfg.factor;
-                // A floor or ceiling keeps its shipped height: the levels
-                // are authored with decals lying just above the ground,
-                // and a floor that bows up comes through them. An edge it
-                // shares with a steep face stays straight with it.
-                if (cfg.flatFloors && !steep)
+                isFloor[f] = !steep;
+                for (U32 c = 0; c < 3; c++)
                 {
-                    bulge[f] = 0.0;
-                    rel[f] = 0.0;
+                    const F32* p = g.pos + g.tris[t * 4 + c] * 3;
+                    fpos[f * 9 + c * 3] = p[0];
+                    fpos[f * 9 + c * 3 + 1] = p[1];
+                    fpos[f * 9 + c * 3 + 2] = p[2];
                 }
+                F64 il = l > 1e-12 ? 1.0 / l : 0.0;
+                fnrm[f * 3] = nx * il;
+                fnrm[f * 3 + 1] = ny * il;
+                fnrm[f * 3 + 2] = nz * il;
                 if (nat)
                 {
                     naturalFaces++;
                 }
+            }
+        }
+    }
+    // A floor or ceiling keeps its shipped height where something lies on
+    // it: the levels are authored with decals a few hundredths above the
+    // ground, and a floor that bows up comes through them. A bare floor
+    // may bow, or every floor when the setting says so. An edge a held
+    // floor shares with a steep face stays straight for both.
+    U32 heldFloors = 0;
+    if (cfg.floors)
+    {
+        iHipolyArray<U8> covered;
+        if (cfg.floors == 1)
+        {
+            coveredFloors(ntTot, fpos.p, fnrm.p, isFloor.p, covered);
+        }
+        for (U32 f = 0; f < ntTot; f++)
+        {
+            bool hold = isFloor[f] && (cfg.floors == 2 || covered[f]);
+            if (hold)
+            {
+                bulge[f] = 0.0;
+                rel[f] = 0.0;
+                heldFloors++;
             }
         }
     }
@@ -1138,10 +1328,10 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
         checkTree((const U8*)tree, *outSize, expandedCount.p, n);
     }
 
-    printf("bfbb: hipoly world: %u -> %u triangles in %u atomics (%u natural faces, target %.2f), "
-           "%u collision triangles, %u open edges, %u T-junctions, %u folds; %.1fs\n",
-           before, total, n, naturalFaces, pr.target, ctris.n, stats.openEdges, stats.tJunctions,
-           stats.folds, (double)(clock() - t0) / CLOCKS_PER_SEC);
+    printf("bfbb: hipoly world: %u -> %u triangles in %u atomics (%u natural faces, %u floors held, "
+           "target %.2f), %u collision triangles, %u open edges, %u T-junctions, %u folds; %.1fs\n",
+           before, total, n, naturalFaces, heldFloors, pr.target, ctris.n, stats.openEdges,
+           stats.tJunctions, stats.folds, (double)(clock() - t0) / CLOCKS_PER_SEC);
     if (fs.seeds)
     {
         printf("bfbb: hipoly fillet: %u crease vertices, %u in the band, %u moved up to %.2f "
