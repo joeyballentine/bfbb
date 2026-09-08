@@ -47,6 +47,12 @@ const iPadHostState* iPadHostGet(S32 port);
 // setting, and PADControlMotor is the only thing retail ever calls.
 void iPadHostRumble(S32 port, S32 on);
 
+// A key that is not the game's, read each poll whether or not a pad holds
+// port 0: the backend calls `fn` with F8's state every frame once one is set.
+// The backend knows keys; what a key does is not its business.
+typedef void (*iPadHostHotkeyFn)(S32 down);
+void iPadHostSetHotkey(iPadHostHotkeyFn fn);
+
 // Names the backend that was linked in, for the startup log.
 const char* iPadHostName();
 

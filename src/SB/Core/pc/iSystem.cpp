@@ -14,6 +14,7 @@
 #include "iTRC.h"
 #include "iSnapshot.h"
 #include "iPadGlyph.h"
+#include "iHipoly.h"
 #include "iSoundtrack.h"
 #include "iTextPatch.h"
 #include "iTime.h"
@@ -927,6 +928,7 @@ void iSystemInit(U32 options)
     xSndInit();
     TRCInit();
 
+    iPadHostSetHotkey(iHipolyHotkey);
     printf("bfbb: platform layer up, input backend: %s\n", iPadHostName());
 
     if (RenderWareInit())

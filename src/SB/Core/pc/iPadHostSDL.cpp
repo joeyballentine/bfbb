@@ -503,6 +503,13 @@ static void MapPortsToSlots()
     }
 }
 
+static iPadHostHotkeyFn sHotkey;
+
+void iPadHostSetHotkey(iPadHostHotkeyFn fn)
+{
+    sHotkey = fn;
+}
+
 void iPadHostPoll()
 {
     if (sReady)
@@ -590,6 +597,12 @@ void iPadHostPoll()
     if (sKeyboardOnPort0)
     {
         iPadKeyboardPoll(&sState[0]);
+    }
+
+    if (sHotkey != NULL)
+    {
+        const bool* keys = SDL_GetKeyboardState(NULL);
+        sHotkey(SDL_GetKeyboardFocus() != NULL && keys != NULL && keys[SDL_SCANCODE_F8]);
     }
 
     // BFBB_PAD: what port 0 is actually reporting, printed when it changes. The

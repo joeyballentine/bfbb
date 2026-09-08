@@ -226,6 +226,9 @@ void xJSP_Destroy(xJSPHeader* jsp)
         globals.sceneCur->env->geom->world = NULL;
     }
 
+#ifdef PLATFORM_PC
+    iHipolyForget(jsp->clump);
+#endif
     RpClumpDestroy(jsp->clump);
 #ifdef PLATFORM_PC
     iHipolyWorldDetach(jsp->colltree);

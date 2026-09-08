@@ -64,3 +64,7 @@ const char* iPadHostInputForLabel(char)
 {
     return NULL;
 }
+
+void iPadHostSetHotkey(iPadHostHotkeyFn)
+{
+}

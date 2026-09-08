@@ -11,6 +11,7 @@
 #include "iCamera.h"
 #include "iScreen.h"
 #include "iAnim.h"
+#include "iHipoly.h"
 #include "xMathInlines.h"
 
 #define MAX2(a, b) ((a) >= (b) ? (a) : (b))
@@ -278,6 +279,7 @@ void iModelUnload(RpAtomic* userdata)
     }
     if (clump != 0)
     {
+        iHipolyForget(clump);
         RpClumpDestroy(clump);
     }
 }

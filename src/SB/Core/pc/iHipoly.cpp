@@ -304,11 +304,34 @@ namespace
         return geo;
     }
 
+    // What every replaced atomic showed and shows, for the F8 swap. One
+    // reference of ours on each geometry, so the one not on the atomic
+    // survives.
+    struct Swap
+    {
+        rw::Atomic* atomic;
+        rw::Geometry* shipped;
+        rw::Geometry* smooth;
+    };
+    iHipolyArray<Swap> sSwaps;
+    bool sShowSmooth = true;
+    bool sHotkeyWasDown = false;
+
     void replaceGeometry(rw::Atomic* atomic, rw::Geometry* geo, U32 flags)
     {
-        // setGeometry takes its own reference; the one create() gave us goes.
+        Swap sw;
+        sw.atomic = atomic;
+        sw.shipped = atomic->geometry;
+        sw.smooth = geo;
+        sw.shipped->addRef();
+        // setGeometry takes its own reference; the one create() gave us is
+        // the one the swap keeps.
         atomic->setGeometry(geo, flags);
-        geo->destroy();
+        if (!sShowSmooth)
+        {
+            atomic->setGeometry(sw.shipped, rw::Atomic::SAMEBOUNDINGSPHERE);
+        }
+        sSwaps.push(sw);
     }
 
     // --- the collision tree ------------------------------------------------
@@ -1124,4 +1147,55 @@ void iHipolyModel(RpClump* rpclump)
     delete[] res;
     delete[] geoms;
     delete[] views;
+}
+
+void iHipolyHotkey(S32 down)
+{
+    bool pressed = down && !sHotkeyWasDown;
+    sHotkeyWasDown = down != 0;
+    if (!pressed || sSwaps.n == 0)
+    {
+        return;
+    }
+    sShowSmooth = !sShowSmooth;
+    for (U32 i = 0; i < sSwaps.n; i++)
+    {
+        Swap& sw = sSwaps[i];
+        sw.atomic->setGeometry(sShowSmooth ? sw.smooth : sw.shipped, rw::Atomic::SAMEBOUNDINGSPHERE);
+    }
+    printf("bfbb: hipoly: showing the %s geometry (%u atomics)\n", sShowSmooth ? "smoothed" : "shipped", sSwaps.n);
+    fflush(stdout);
+}
+
+void iHipolyForget(RpClump* rpclump)
+{
+    if (rpclump == NULL || sSwaps.n == 0)
+    {
+        return;
+    }
+    rw::Clump* clump = reinterpret_cast<rw::Clump*>(rpclump);
+    U32 kept = 0;
+    for (U32 i = 0; i < sSwaps.n; i++)
+    {
+        Swap& sw = sSwaps[i];
+        bool mine = false;
+        FORLIST(link, clump->atomics)
+        {
+            if (rw::Atomic::fromClump(link) == sw.atomic)
+            {
+                mine = true;
+                break;
+            }
+        }
+        if (mine)
+        {
+            sw.shipped->destroy();
+            sw.smooth->destroy();
+        }
+        else
+        {
+            sSwaps[kept++] = sw;
+        }
+    }
+    sSwaps.n = kept;
 }
