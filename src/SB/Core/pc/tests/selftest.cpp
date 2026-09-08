@@ -10,6 +10,9 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#if defined(_WIN32) && defined(_DEBUG)
+#include <crtdbg.h>
+#endif
 #include <string.h>
 
 #include <types.h>
@@ -4555,6 +4558,17 @@ static void test_hip()
 int main()
 {
     setvbuf(stdout, NULL, _IONBF, 0);
+
+    // An assert writes to stderr and exits instead of opening a dialog.
+    //
+    // The MSVC runtime's default for a failed assert in a Debug build is a
+    // modal message box, and a test run that stops for one looks exactly like a
+    // test run that hangs -- which on a build machine is a job that runs until
+    // its timeout with nothing to show for it. This is the whole of what a
+    // headless assert needs.
+#if defined(_WIN32) && defined(_DEBUG)
+    _set_error_mode(_OUT_TO_STDERR);
+#endif
     printf("bfbb PC platform layer selftest\n\n");
 
     // First: iConfig parses once per process, and this is what decides which

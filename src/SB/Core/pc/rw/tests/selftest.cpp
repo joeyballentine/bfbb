@@ -18,6 +18,16 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#if defined(_WIN32) && defined(_DEBUG)
+#include <crtdbg.h>
+#endif
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <pthread.h>
+#include <unistd.h>
+#endif
+#include <stdint.h>
 #include <string.h>
 #include <math.h>
 
@@ -44,6 +54,150 @@
 // and types.h has `#define null 0` in it, which turns librw's `namespace null`
 // into a syntax error.
 #include "../backend.h"
+
+// --- the watchdog -----------------------------------------------------------
+//
+// A test that hangs is worse than a test that fails: on a build machine it is a
+// job that runs to its timeout with nothing to show, and on a desktop it is a
+// window that has to be closed by hand. This kills the run after a while and
+// says which check it got to, which is the whole diagnosis for a hang.
+//
+// BFBB_SELFTEST_TIMEOUT overrides the seconds; 0 turns it off, which is what a
+// debugger session wants.
+//
+// Raw threads rather than <thread>: a MinGW build needs a pthreads runtime for
+// the standard one, and the rest of the port does not depend on having it.
+
+static const char* sWatchdogWhat = "startup";
+
+static void watchdogFired(void)
+{
+#ifdef _WIN32
+    // WriteFile on the raw handle rather than fprintf, and TerminateProcess
+    // rather than exit, because the wedged thread may be holding a lock that
+    // either of those would wait on:
+    //
+    //   - fprintf takes the CRT's lock on stderr.
+    //   - exit runs the atexit handlers, which would wait on whatever wedged.
+    //   - _exit skips those but still ends in ExitProcess, which takes the
+    //     loader lock. A graphics driver call is exactly the kind of thing that
+    //     wedges while holding it, so the watchdog hung instead of firing.
+    //
+    // TerminateProcess on the current process takes no lock and always returns.
+    char msg[256];
+    DWORD written;
+    int n = _snprintf(msg, sizeof(msg), "\nrw_selftest: TIMED OUT waiting on: %s\n", sWatchdogWhat);
+
+    if (n > 0)
+    {
+        WriteFile(GetStdHandle(STD_ERROR_HANDLE), msg, (DWORD)n, &written, NULL);
+    }
+
+    TerminateProcess(GetCurrentProcess(), 4);
+#else
+    fprintf(stderr, "\nrw_selftest: TIMED OUT waiting on: %s\n", sWatchdogWhat);
+    fflush(stderr);
+    _exit(4);
+#endif
+}
+
+#ifdef _WIN32
+static DWORD WINAPI watchdogThread(LPVOID arg)
+{
+    Sleep((DWORD)(uintptr_t)arg * 1000);
+    watchdogFired();
+    return 0;
+}
+#else
+static void* watchdogThread(void* arg)
+{
+    sleep((unsigned)(uintptr_t)arg);
+    watchdogFired();
+    return NULL;
+}
+#endif
+
+// A fault ends the run instead of parking it.
+//
+// The default for an unhandled exception is Windows Error Reporting, which
+// suspends every thread in the process -- including the watchdog's -- while it
+// talks to the reporting service. A crash in driver code therefore looked
+// exactly like a hang that no timeout could break, which is what this is here
+// to stop. The handler names the last check that finished, which is as much of
+// a backtrace as this needs.
+#ifdef _WIN32
+static LONG WINAPI crashFilter(EXCEPTION_POINTERS* ep)
+{
+    char msg[256];
+    DWORD written;
+    int n = _snprintf(msg, sizeof(msg), "\nrw_selftest: CRASHED, code 0x%08lx at %p, after: %s\n",
+                      (unsigned long)ep->ExceptionRecord->ExceptionCode,
+                      ep->ExceptionRecord->ExceptionAddress, sWatchdogWhat);
+
+    if (n > 0)
+    {
+        WriteFile(GetStdHandle(STD_ERROR_HANDLE), msg, (DWORD)n, &written, NULL);
+    }
+
+    TerminateProcess(GetCurrentProcess(), 3);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+#endif
+
+// Every way this can stop writes to stderr rather than opening a window.
+//
+// A test run that stops for a modal dialog looks exactly like a test run that
+// hangs: on a build machine, a job that runs to its timeout with nothing to
+// show, and on a desktop, a window someone has to close by hand.
+static void makeFailuresHeadless(void)
+{
+#ifdef _WIN32
+    // No "the program has stopped working" box, and no error-reporting round
+    // trip behind it.
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+    SetUnhandledExceptionFilter(crashFilter);
+
+    // abort -- which is where a failed assert and an uncaught exception both
+    // end up -- writes its message and dies, rather than reporting the fault.
+    _set_abort_behavior(_WRITE_ABORT_MSG, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+#endif
+
+#if defined(_WIN32) && defined(_DEBUG)
+    _set_error_mode(_OUT_TO_STDERR);
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+    _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+#endif
+}
+
+static void startWatchdog(void)
+{
+    unsigned seconds = 180;
+    const char* env = getenv("BFBB_SELFTEST_TIMEOUT");
+
+    if (env != NULL)
+    {
+        seconds = (unsigned)strtoul(env, NULL, 10);
+    }
+
+    if (seconds == 0)
+    {
+        return;
+    }
+
+#ifdef _WIN32
+    HANDLE h = CreateThread(NULL, 0, watchdogThread, (LPVOID)(uintptr_t)seconds, 0, NULL);
+    if (h != NULL)
+    {
+        CloseHandle(h);
+    }
+#else
+    pthread_t t;
+    pthread_create(&t, NULL, watchdogThread, (void*)(uintptr_t)seconds);
+    pthread_detach(t);
+#endif
+}
 
 // RwGameCubeSetAlphaCompare, and the GX_* constants xModelBucket.cpp calls it
 // with. Included rather than declared by hand -- which is what the rest of this
@@ -84,6 +238,10 @@ static bool near(float a, float b)
 
 static void check(bool ok, const char* what)
 {
+    // The last check that finished, which is what the watchdog names when the
+    // next one does not.
+    sWatchdogWhat = what;
+
     printf("  %-58s %s\n", what, ok ? "ok" : "FAIL");
     if (!ok)
     {
@@ -3690,6 +3848,9 @@ int main(int argc, char** argv)
     // reaches driver code that can fault, and "which check was it" is the whole
     // diagnosis.
     setvbuf(stdout, NULL, _IONBF, 0);
+
+    makeFailuresHeadless();
+    startWatchdog();
 
     SelectBackend(argc, argv);
 
