@@ -43,6 +43,7 @@
 
 #include "rw.h"
 
+#include "backend.h"
 #include "iDebugView.h"
 #include "iDistort.h"
 #include "iGlow.h"
@@ -248,36 +249,21 @@ RwBool RwEngineInit(const RwMemoryFunctions* memFuncs, RwUInt32 initFlags, RwUIn
 static IDirect3D9* sProbeD3D9;
 #endif
 
-RwBool RwEngineOpen(RwEngineOpenParams* initParams)
-{
-    if (RwEngineInstance == NULL)
-    {
-        return FALSE;
-    }
-
-    // librw's EngineOpenParams is declared per backend and there is nothing in
-    // RwEngineOpenParams to translate from: its displayID is a pointer to the
-    // GameCube's RwGameCubeDeviceConfig, which describes a console's video
-    // encoder. So the parameters are built from the port's own window instead,
-    // and initParams is ignored -- iSystem.cpp opens the window before it
-    // reaches here, which is the same order gc/iSystem.cpp uses when it calls
-    // VIInit before RwEngineOpen.
-    //
-    // This is the one place in the shim that has to know which backend was
-    // linked, because EngineOpenParams is the only librw type whose SHAPE
-    // changes with it. Everything else the port touches is backend-neutral.
-    (void)initParams;
-
-    // Before the device opens, because opening it builds shaders and a uniform
-    // registered after a shader was built is a printf in every later flush of
-    // it. Both are no-ops on a backend whose shader constants are numbered.
-    // The notes on the definitions have the rest.
-    iGlowRegisterShaderUniforms();
-    iDistortRegisterShaderUniforms();
-    iDebugViewRegisterShaderUniforms();
+// The device, one function per backend.
+//
+// Each is compiled when its backend is LINKED and called when its backend is
+// the one RUNNING, which are two different questions once an executable can
+// carry several. They were arms of one #if/#elif inside RwEngineOpen while only
+// one could ever be built.
+//
+// Everything they share is in RwEngineOpen below; what is in here is the part
+// that cannot be written twice, which is mostly rw::EngineOpenParams -- the one
+// librw type whose SHAPE is per backend.
 
 #if defined(RW_D3D9) || defined(RW_D3D8)
-    rw::EngineOpenParams params;
+static RwBool OpenDeviceD3D9(void)
+{
+    rw::d3d::EngineOpenParams params;
     params.window = (HWND)iWindowNativeHandle();
 
     if (params.window == NULL)
@@ -426,9 +412,14 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
         return FALSE;
     }
 
-#elif defined(RW_D3D11)
+    return TRUE;
+}
+#endif
 
-    rw::EngineOpenParams params;
+#ifdef RW_D3D11
+static RwBool OpenDeviceD3D11(void)
+{
+    rw::d3d::EngineOpenParams params;
     params.window = (HWND)iWindowNativeHandle();
 
     if (params.window == NULL)
@@ -468,8 +459,13 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
         return FALSE;
     }
 
-#elif defined(RW_GL3)
+    return TRUE;
+}
+#endif
 
+#ifdef RW_GL3
+static RwBool OpenDeviceGL3(void)
+{
     // **librw makes the window here; the port only says what to make.**
     //
     // The opposite way round from D3D9 above, and the reason is in iWindow.h:
@@ -497,7 +493,7 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
 
     rw::gl3::setPerPixelLightingEnabled(iScreenPerPixelLighting());
 
-    rw::EngineOpenParams params;
+    rw::gl3::EngineOpenParams params;
     params.window = (SDL_Window**)deferred->handleSlot;
     params.width = deferred->width;
     params.height = deferred->height;
@@ -545,8 +541,12 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
         return FALSE;
     }
 
-#else
+    return TRUE;
+}
+#endif
 
+static RwBool OpenDeviceNull(void)
+{
     // LIBRW_PLATFORM=NULL. The null device ignores the argument entirely, and
     // there is no window -- which is what lets the shim's own tests run
     // headless.
@@ -555,7 +555,70 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
         return FALSE;
     }
 
+    return TRUE;
+}
+
+RwBool RwEngineOpen(RwEngineOpenParams* initParams)
+{
+    if (RwEngineInstance == NULL)
+    {
+        return FALSE;
+    }
+
+    // librw's EngineOpenParams is declared per backend and there is nothing in
+    // RwEngineOpenParams to translate from: its displayID is a pointer to the
+    // GameCube's RwGameCubeDeviceConfig, which describes a console's video
+    // encoder. So the parameters are built from the port's own window instead,
+    // and initParams is ignored -- iSystem.cpp opens the window before it
+    // reaches here, which is the same order gc/iSystem.cpp uses when it calls
+    // VIInit before RwEngineOpen.
+    //
+    // This is the one place in the shim that has to know which backend was
+    // linked, because EngineOpenParams is the only librw type whose SHAPE
+    // changes with it. Everything else the port touches is backend-neutral.
+    (void)initParams;
+
+    // Before the device opens, because opening it builds shaders and a uniform
+    // registered after a shader was built is a printf in every later flush of
+    // it. Both are no-ops on a backend whose shader constants are numbered.
+    // The notes on the definitions have the rest.
+    iGlowRegisterShaderUniforms();
+    iDistortRegisterShaderUniforms();
+    iDebugViewRegisterShaderUniforms();
+
+    // The backend. Already done by RenderWareInit before the window was
+    // opened; repeated here because this is the call that has to have it, and
+    // because the shim's own tests reach RwEngineOpen without iSystem.
+    iBackendResolve();
+
+    RwBool opened = FALSE;
+
+    switch (iScreenGetBackend())
+    {
+#if defined(RW_D3D9) || defined(RW_D3D8)
+    case iSCREENBACKEND_D3D9:
+        opened = OpenDeviceD3D9();
+        break;
 #endif
+#ifdef RW_D3D11
+    case iSCREENBACKEND_D3D11:
+        opened = OpenDeviceD3D11();
+        break;
+#endif
+#ifdef RW_GL3
+    case iSCREENBACKEND_GL3:
+        opened = OpenDeviceGL3();
+        break;
+#endif
+    default:
+        opened = OpenDeviceNull();
+        break;
+    }
+
+    if (!opened)
+    {
+        return FALSE;
+    }
 
     sGlobals.engineStatus = rwENGINESTATUSOPENED;
     return TRUE;
@@ -649,7 +712,10 @@ RwBool RwEngineStart(void)
     }
 
 #if defined(RW_D3D9) || defined(RW_D3D11) || defined(RW_GL3)
-    SelectFullscreenVideoMode();
+    if (!iBackendIsNull())
+    {
+        SelectFullscreenVideoMode();
+    }
 #endif
 
     if (!rw::Engine::start())
@@ -658,60 +724,67 @@ RwBool RwEngineStart(void)
     }
 
 #ifdef RW_GL3
-    // The window exists from here and not before, so this is the first moment
-    // its real size can be read or borderless applied. See iWindow.h.
-    iWindowDeferredCreated();
-
-    // Engine::start DISCARDS what the device said, exactly as it does for D3D9
-    // below -- so a startSDL3 that failed to create a window or a GL context
-    // still reports success and everything afterwards draws into nothing. The
-    // slot librw writes the window into is the port's own, so checking it needs
-    // no access to librw's internals.
-    if (iWindowNativeHandle() == NULL)
+    if (iBackendIsGL3())
     {
-        printf("bfbb: SDL opened a video device but no window or OpenGL context came up\n");
-        printf("bfbb:   (librw asks for GL 3.3, GL 2.1, GLES 3.1 and GLES 2.0 in that order)\n");
-        fflush(stdout);
-        return FALSE;
-    }
+        // The window exists from here and not before, so this is the first moment
+        // its real size can be read or borderless applied. See iWindow.h.
+        iWindowDeferredCreated();
 
-    // Build the virtual screen now rather than leaving it to whichever camera
-    // raster is created first. There is a context to build it in from here, the
-    // sample count it is granted is what the report below prints, and D3D9 makes
-    // its surfaces at this same point -- when the device comes up.
-    rw::gl3::virtualScreenFramebuffer();
+        // Engine::start DISCARDS what the device said, exactly as it does for D3D9
+        // below -- so a startSDL3 that failed to create a window or a GL context
+        // still reports success and everything afterwards draws into nothing. The
+        // slot librw writes the window into is the port's own, so checking it needs
+        // no access to librw's internals.
+        if (iWindowNativeHandle() == NULL)
+        {
+            printf("bfbb: SDL opened a video device but no window or OpenGL context came up\n");
+            printf(
+                "bfbb:   (librw asks for GL 3.3, GL 2.1, GLES 3.1 and GLES 2.0 in that order)\n");
+            fflush(stdout);
+            return FALSE;
+        }
+
+        // Build the virtual screen now rather than leaving it to whichever camera
+        // raster is created first. There is a context to build it in from here, the
+        // sample count it is granted is what the report below prints, and D3D9 makes
+        // its surfaces at this same point -- when the device comes up.
+        rw::gl3::virtualScreenFramebuffer();
+    }
 #endif
 
 #ifdef RW_D3D9
-    // Engine::start DISCARDS what the device said.
-    //
-    // engine.cpp:311 is `engine->device.system(DEVICEINIT, nil, 0);` with the
-    // result thrown away, and DEVICEINIT is where the d3d9 backend actually
-    // creates the device -- d3ddevice.cpp:1622. So start() reports success
-    // whether or not there is a device, and everything afterwards runs against
-    // a null one and dies somewhere with no bearing on the cause. That is what
-    // an intermittent segfault inside RwFrameCreate turned out to be.
-    //
-    // Engine::open discards its DEVICEOPEN result the same way, but the device
-    // does not exist yet at that point, so this is the first place worth
-    // asking. The adapter probe in RwEngineOpen catches the case where no
-    // adapter admits to hardware support; this catches the case where one does
-    // and the device still fails to come up, which on a working machine is
-    // usually a display that has gone to sleep.
-    if (rw::d3d::d3ddevice == NULL)
+    if (iBackendIsD3D9())
     {
-        printf("bfbb: Direct3D 9 reported a hardware adapter but the device did not "
-               "come up\n");
-        printf("bfbb:   (a display that is asleep or switched off does this)\n");
-        fflush(stdout);
-        return FALSE;
+        // Engine::start DISCARDS what the device said.
+        //
+        // engine.cpp:311 is `engine->device.system(DEVICEINIT, nil, 0);` with the
+        // result thrown away, and DEVICEINIT is where the d3d9 backend actually
+        // creates the device -- d3ddevice.cpp:1622. So start() reports success
+        // whether or not there is a device, and everything afterwards runs against
+        // a null one and dies somewhere with no bearing on the cause. That is what
+        // an intermittent segfault inside RwFrameCreate turned out to be.
+        //
+        // Engine::open discards its DEVICEOPEN result the same way, but the device
+        // does not exist yet at that point, so this is the first place worth
+        // asking. The adapter probe in RwEngineOpen catches the case where no
+        // adapter admits to hardware support; this catches the case where one does
+        // and the device still fails to come up, which on a working machine is
+        // usually a display that has gone to sleep.
+        if (rw::d3d::d3ddevice == NULL)
+        {
+            printf("bfbb: Direct3D 9 reported a hardware adapter but the device did not "
+                   "come up\n");
+            printf("bfbb:   (a display that is asleep or switched off does this)\n");
+            fflush(stdout);
+            return FALSE;
+        }
     }
 
 #endif
 
 #ifdef RW_D3D11
     // Same discarded result, same question. See the D3D9 arm above.
-    if (rw::d3d::d3d11device == NULL)
+    if (iBackendIsD3D11() && rw::d3d::d3d11device == NULL)
     {
         printf("bfbb: Direct3D 11 reported a hardware adapter but the device did "
                "not come up\n");
@@ -725,22 +798,36 @@ RwBool RwEngineStart(void)
     // Said out loud because both can be refused by the card rather than by the
     // setting. Only now: the surfaces are made when the device comes up, and
     // until then there is nothing to have granted anything.
+    if (!iBackendIsNull())
     {
-#if defined(RW_D3D9) || defined(RW_D3D11)
-        S32 granted = (S32)rw::d3d::getVirtualScreenSamples();
-        S32 perPixel = rw::d3d::getPerPixelLighting();
-#else
-        S32 granted = (S32)rw::gl3::getVirtualScreenSamples();
-        S32 perPixel = rw::gl3::getPerPixelLighting();
-#endif
-        S32 asked = iScreenMultiSample();
-#ifdef RW_D3D9
-        const char* path = rw::d3d::getFixedFunction() ? "fixed-function" : "shader";
-#else
+        S32 granted = 0;
+        S32 perPixel = 0;
         const char* path = "shader";
+
+#if defined(RW_D3D9) || defined(RW_D3D11)
+        if (iBackendIsD3D())
+        {
+            granted = (S32)rw::d3d::getVirtualScreenSamples();
+            perPixel = rw::d3d::getPerPixelLighting();
+        }
 #endif
-        printf("bfbb: %s pipeline; %dx MSAA%s; per-pixel lighting %s\n", path,
-               (int)granted,
+#ifdef RW_D3D9
+        if (iBackendIsD3D9() && rw::d3d::getFixedFunction())
+        {
+            path = "fixed-function";
+        }
+#endif
+#ifdef RW_GL3
+        if (iBackendIsGL3())
+        {
+            granted = (S32)rw::gl3::getVirtualScreenSamples();
+            perPixel = rw::gl3::getPerPixelLighting();
+        }
+#endif
+
+        S32 asked = iScreenMultiSample();
+        printf("bfbb: %s backend, %s pipeline; %dx MSAA%s; per-pixel lighting %s\n",
+               iScreenBackendName(iScreenGetBackend()), path, (int)granted,
                granted >= asked ? "" : " (asked for more; the card refused)",
                perPixel ? "on" : "off");
         fflush(stdout);
@@ -791,7 +878,9 @@ RwBool RwEngineClose(void)
 
 #ifdef RW_D3D9
     // After librw has closed its own, so that the probe's reference is the last
-    // one released rather than the one that pulls D3D9 down early.
+    // one released rather than the one that pulls D3D9 down early. Nothing to
+    // release when another backend ran: the probe is only ever made by
+    // OpenDeviceD3D9.
     if (sProbeD3D9 != NULL)
     {
         sProbeD3D9->Release();
@@ -907,17 +996,23 @@ RwVideoMode* RwEngineGetVideoModeInfo(RwVideoMode* modeinfo, RwInt32 modeIndex)
         RwInt32 screenHeight = 0;
 
 #if defined(RW_D3D9) || defined(RW_D3D11)
-        rw::d3d::getVirtualScreen(&screenWidth, &screenHeight);
-#elif defined(RW_GL3)
-        // GL3 has no virtual screen and does not need one -- see the note in
-        // RwEngineOpen -- but the question being asked is the same either way:
-        // how big is the thing the game is drawing into, in the game's own
-        // coordinates. That is the camera raster's size, which is iScreen's,
-        // and it is emphatically NOT what the device would report. librw's SDL3
-        // arm enumerates the DISPLAY's modes, so the current one comes back as
-        // the desktop's resolution.
-        screenWidth = iScreenWidth();
-        screenHeight = iScreenHeight();
+        if (iBackendIsD3D())
+        {
+            rw::d3d::getVirtualScreen(&screenWidth, &screenHeight);
+        }
+#endif
+#ifdef RW_GL3
+        // iScreen's size rather than the device's, and it is emphatically NOT
+        // what the device would report: librw's SDL3 arm enumerates the
+        // DISPLAY's modes, so the current one comes back as the desktop's
+        // resolution. The question being asked is how big the thing the game
+        // draws into is, in the game's own coordinates, which is the camera
+        // raster's size.
+        if (iBackendIsGL3())
+        {
+            screenWidth = iScreenWidth();
+            screenHeight = iScreenHeight();
+        }
 #endif
 
         // The virtual screen, NOT the window. What the game asks this question

@@ -217,38 +217,67 @@ add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 #          SDL3 window librw creates. Portable, and the only backend that can
 #          ever run off Windows.
 #
+# BFBB_RENDER_BACKENDS is a LIST, and the executable carries all of it. Which
+# one runs is video.backend in config.ini; rw/backend.cpp is the seam that reads
+# it and rw::platform is what librw picks the device from.
+#
 # It is read by three sections below -- the window backend, SDL, and librw
 # itself -- so it is declared HERE rather than beside the add_subdirectory that
 # consumes it. That is not tidying: the window backend's GL3 arm used to sit
 # ahead of this declaration and so tested an empty variable, which meant a fresh
-# configure with -DBFBB_RENDER_BACKEND=GL3 silently took the D3D9 arm.
+# configure asking for GL3 silently took the D3D9 arm.
 #
-# Two things follow the choice and must not be set independently of it:
-# rwplcore.h declares RwIm2DVertex per backend, and rw/layout_im2d.cpp asserts
-# it against the backend's own struct -- which is what stops a mismatched vertex
-# reaching a vertex declaration built from offsetof.
+# The default is every backend that draws on the host: D3D9 and GL3 on Windows,
+# GL3 elsewhere.
 #
-# The default is D3D9 on Windows and GL3 everywhere else, because two of the
-# four are Direct3D and only one of the remaining two draws anything.
+# D3D11 is opt-in and EXCLUSIVE. It and D3D9 are two implementations of the same
+# rw::d3d namespace and share their translation units, so a build has one or the
+# other and asking for both stops the configure.
+#
+# NULL alone is the headless configuration: it compiles everything and draws
+# nothing, which is what the self-tests are built in. It is not worth listing
+# BESIDE a real backend -- librw's null driver asserts the first time anything
+# asks it for a raster, so it is not a backend anyone can select at runtime.
 if(WIN32)
-  set(BFBB_RENDER_BACKEND_DEFAULT "D3D9")
+  set(BFBB_RENDER_BACKENDS_DEFAULT "D3D9;GL3")
 else()
-  set(BFBB_RENDER_BACKEND_DEFAULT "GL3")
+  set(BFBB_RENDER_BACKENDS_DEFAULT "GL3")
 endif()
 
-set(BFBB_RENDER_BACKEND "${BFBB_RENDER_BACKEND_DEFAULT}"
-    CACHE STRING "Render backend: D3D9, D3D11, GL3 or NULL")
-set_property(CACHE BFBB_RENDER_BACKEND PROPERTY STRINGS D3D9 D3D11 GL3 NULL)
+# The old singular spelling, still accepted: build scripts and stale caches both
+# carry it, and quietly ignoring it would build a set nobody asked for.
+if(DEFINED BFBB_RENDER_BACKEND AND NOT DEFINED CACHE{BFBB_RENDER_BACKENDS})
+  message(STATUS "bfbb: BFBB_RENDER_BACKEND=${BFBB_RENDER_BACKEND} taken as BFBB_RENDER_BACKENDS")
+  set(BFBB_RENDER_BACKENDS_DEFAULT "${BFBB_RENDER_BACKEND}")
+endif()
+
+set(BFBB_RENDER_BACKENDS "${BFBB_RENDER_BACKENDS_DEFAULT}"
+    CACHE STRING "Render backends to build in, semicolon-separated: D3D9, D3D11, GL3, NULL")
+
+foreach(_backend IN LISTS BFBB_RENDER_BACKENDS)
+  if(NOT _backend MATCHES "^(D3D9|D3D11|GL3|NULL)$")
+    message(FATAL_ERROR "unknown render backend '${_backend}' in BFBB_RENDER_BACKENDS")
+  endif()
+  set(BFBB_BACKEND_${_backend} ON)
+endforeach()
+
+if(BFBB_BACKEND_D3D9 AND BFBB_BACKEND_D3D11)
+  message(FATAL_ERROR
+    "D3D9 and D3D11 cannot be in one build: both are rw::d3d, and every "
+    "function they share is a duplicate symbol at link.\n"
+    "  Ask for one of them.")
+endif()
 
 # Asked for by hand off Windows. librw refuses a D3D platform there as well, but
 # it does so from inside third_party with a message about LIBRW_PLATFORM, which
 # names a variable this build set rather than the one that was typed.
-if(NOT WIN32 AND (BFBB_RENDER_BACKEND STREQUAL "D3D9" OR BFBB_RENDER_BACKEND STREQUAL "D3D11"))
+if(NOT WIN32 AND (BFBB_BACKEND_D3D9 OR BFBB_BACKEND_D3D11))
   message(FATAL_ERROR
-    "BFBB_RENDER_BACKEND=${BFBB_RENDER_BACKEND} needs Direct3D, and this is "
-    "${CMAKE_SYSTEM_NAME}.\n"
+    "BFBB_RENDER_BACKENDS names Direct3D, and this is ${CMAKE_SYSTEM_NAME}.\n"
     "  GL3 is the backend that draws off Windows; NULL is the headless one.")
 endif()
+
+message(STATUS "bfbb: render backends: ${BFBB_RENDER_BACKENDS}")
 
 # Set by any section that needs SDL built. Both the input backend and the GL3
 # window backend can ask for it, independently, and add_subdirectory may only
@@ -406,7 +435,7 @@ endif()
 # Every backend that draws gets the SDL one, rather than a list to keep in step
 # with iWindowSDL.cpp -- which splits on RW_GL3 and treats everything else as
 # the HWND case. NULL takes the stub instead.
-if(NOT BFBB_RENDER_BACKEND STREQUAL "NULL")
+if(BFBB_BACKEND_D3D9 OR BFBB_BACKEND_D3D11 OR BFBB_BACKEND_GL3)
   set(WINDOW_SOURCES ${PC_DIR}/iWindowSDL.cpp)
   set(WINDOW_LIBS bfbb_sdl)
   set(BFBB_NEEDS_SDL ON)
@@ -508,7 +537,7 @@ if(BFBB_NEEDS_SDL)
     if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL/CMakeLists.txt)
       message(FATAL_ERROR
         "third_party/SDL is empty -- run: git submodule update --init --recursive\n"
-        "  (or configure with -DBFBB_INPUT_BACKEND=win32 -DBFBB_RENDER_BACKEND=D3D9)")
+        "  (or configure with -DBFBB_INPUT_BACKEND=null -DBFBB_RENDER_BACKENDS=D3D9)")
     endif()
 
     # Video stays ON even for an input-only build, where no SDL window is ever
@@ -618,7 +647,20 @@ endif()
 #
 #     git submodule update --init --recursive
 #
-set(LIBRW_PLATFORM "${BFBB_RENDER_BACKEND}" CACHE STRING "librw render backend" FORCE)
+# NULL is dropped on the way in. librw's null device is always there -- it is a
+# namespace in engine.cpp, not a platform -- and RW_NULL is its way of saying
+# "this build has no real device", which charset.cpp and the shim's own tests
+# both read. Listing it beside D3D9 would define RW_NULL in a build that has a
+# device and compile the wrong halves of both.
+#
+# video.backend = null still works in every build: the port's own null arm is
+# not conditional on anything.
+set(LIBRW_PLATFORM_LIST ${BFBB_RENDER_BACKENDS})
+list(REMOVE_ITEM LIBRW_PLATFORM_LIST "NULL")
+if(NOT LIBRW_PLATFORM_LIST)
+  set(LIBRW_PLATFORM_LIST "NULL")
+endif()
+set(LIBRW_PLATFORM "${LIBRW_PLATFORM_LIST}" CACHE STRING "librw render backends" FORCE)
 
 # GL3 only, and it decides the SHAPE of rw::EngineOpenParams -- GLFW's carries a
 # GLFWwindow**, SDL's an SDL_Window** and a fullscreen flag -- so the arm in
@@ -690,16 +732,19 @@ target_include_directories(bfbb_rw PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Game
 )
 # The screen passes' shaders. Three trees, as in librw: rw/shaders at ps_2_0 for
-# D3D9, rw/shaders11 at ps_4_0 for D3D11, rw/shadersgl in GLSL for GL3. Which
-# one is on the include path is what a build loads. The D3D trees carry the same
-# file names as each other; the GL one does not, because its sources are what is
-# compiled and a .h of blob bytes is not.
-if(BFBB_RENDER_BACKEND STREQUAL "D3D11")
+# D3D9, rw/shaders11 at ps_4_0 for D3D11, rw/shadersgl in GLSL for GL3.
+#
+# The two D3D trees carry the same file names as each other, which is why they
+# are exclusive here as well as at link. The GL one does not -- its sources are
+# what gets compiled, and a .h of blob bytes is not -- so it goes on the path
+# alongside whichever D3D tree is there.
+if(BFBB_BACKEND_D3D11)
   target_include_directories(bfbb_rw PRIVATE ${PC_DIR}/rw/shaders11)
-elseif(BFBB_RENDER_BACKEND STREQUAL "GL3")
-  target_include_directories(bfbb_rw PRIVATE ${PC_DIR}/rw/shadersgl)
-else()
+elseif(BFBB_BACKEND_D3D9)
   target_include_directories(bfbb_rw PRIVATE ${PC_DIR}/rw/shaders)
+endif()
+if(BFBB_BACKEND_GL3)
+  target_include_directories(bfbb_rw PRIVATE ${PC_DIR}/rw/shadersgl)
 endif()
 
 # WINDOW_LIBS is SDL. Under GL3 librw already drags it in; under D3D9 it does

@@ -302,6 +302,38 @@ void iScreenSetPipeline(iScreenPipeline pipeline)
     sPipeline = pipeline;
 }
 
+// The render backend, the same way and for the same reason: set from config.ini
+// before the window opens, and resolved out of AUTO in RenderWareInit, which is
+// the only place that knows which backends this build actually carries.
+static iScreenBackend sBackend = iSCREENBACKEND_AUTO;
+
+iScreenBackend iScreenGetBackend()
+{
+    return sBackend;
+}
+
+void iScreenSetBackend(iScreenBackend backend)
+{
+    sBackend = backend;
+}
+
+const char* iScreenBackendName(iScreenBackend backend)
+{
+    switch (backend)
+    {
+    case iSCREENBACKEND_D3D9:
+        return "d3d9";
+    case iSCREENBACKEND_D3D11:
+        return "d3d11";
+    case iSCREENBACKEND_GL3:
+        return "gl3";
+    case iSCREENBACKEND_NULL:
+        return "null";
+    default:
+        return "auto";
+    }
+}
+
 // The field of view every camera in the game is built around. zCamera resets to
 // it, xCameraCreate starts at it, and the cutscene and Cruise Bubble values are
 // authored relative to it.

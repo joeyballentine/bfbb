@@ -21,6 +21,8 @@
 
 #include "rw.h"
 
+#include "backend.h"
+
 #if defined(RW_D3D9) || defined(RW_D3D11)
 #include "src/d3d/rwd3dimpl.h"
 #endif
@@ -39,8 +41,12 @@ static S32 sEnabled = TRUE;
 
 #if defined(RW_D3D9) || defined(RW_D3D11) || defined(RW_GL3)
 
-#if defined(RW_D3D9) || defined(RW_D3D11)
+// The compiled shader, whichever backend compiled it. void* rather than a
+// backend's own handle: the chain below only ever passes one back to the
+// backend that made it, and a build can carry several.
+typedef void* GlowShader;
 
+#if defined(RW_D3D9) || defined(RW_D3D11)
 // fxc gives every blob the same name, so each gets its own namespace. PS_NAME
 // is what that name is, and librw's rwd3d.h picks it per shader model.
 namespace bright_ps
@@ -51,12 +57,9 @@ namespace blur_ps
 {
 #include "glow_blur_PS.h"
 }
+#endif
 
-// The compiled shader, as the backend hands it back.
-typedef void* GlowShader;
-
-#else
-
+#ifdef RW_GL3
 // GLSL, wrapped one string literal per line by shadersgl/gen.py. Two files
 // rather than two namespaces: each declares a variable of its own name, which
 // fxc's blobs do not.
@@ -64,10 +67,7 @@ namespace
 {
 #include "glow_blur_gl.inc"
 #include "glow_bright_gl.inc"
-}
-
-typedef rw::gl3::Shader* GlowShader;
-
+} // namespace
 #endif
 
 // --- the chain's sizes, from the Xbox's three render targets ----------------
@@ -100,7 +100,7 @@ struct GlowTarget
     RwInt32 height;
 };
 
-static RwRaster* sScreen;          // the frame, copied so it can be sampled
+static RwRaster* sScreen; // the frame, copied so it can be sampled
 static GlowTarget sHalf, sVert, sQuarter;
 static GlowShader sBrightShader;
 static GlowShader sBlurShader;
@@ -120,150 +120,296 @@ static void glowFail(const char* what, long hr)
 // two shaders, how to hang one on the next 2D primitive, and how to hand it
 // three constants.
 
+// One namespace per backend, and both compile when both are linked. The
+// dispatchers under them are what the chain calls; which half runs is
+// video.backend, resolved before the device opened.
+
 #if defined(RW_D3D9) || defined(RW_D3D11)
-
-// The D3D texture behind the copy at the moment it was written to. See
-// snapshot.cpp: a device reset empties every D3DPOOL_DEFAULT surface without
-// invalidating the Raster* in front of it.
-static void* sCapturedInto;
-
-static inline void* rasterTexture(RwRaster* raster)
+namespace d3dglow
 {
-    rw::Raster* r = reinterpret_cast<rw::Raster*>(raster);
-#if defined(RW_D3D11)
-    return GETD3DRASTEREXT(r)->tex11;
-#else
-    return GETD3DRASTEREXT(r)->texture;
-#endif
-}
 
-static bool glowDeviceReady()
-{
-    return rw::d3d::deviceOpen() != 0;
-}
+    // The D3D texture behind the copy at the moment it was written to. See
+    // snapshot.cpp: a device reset empties every D3DPOOL_DEFAULT surface without
+    // invalidating the Raster* in front of it.
+    static void* sCapturedInto;
 
-static void glowScreenExtent(RwInt32* w, RwInt32* h)
-{
-    rw::d3d::getScreenExtent(w, h);
-}
-
-static bool glowCopyFrame(RwRaster* dst)
-{
-    if (!rw::d3d::captureFrame(reinterpret_cast<rw::Raster*>(dst)))
+    static inline void* rasterTexture(RwRaster* raster)
     {
-        return false;
+        rw::Raster* r = reinterpret_cast<rw::Raster*>(raster);
+#if defined(RW_D3D11)
+        return GETD3DRASTEREXT(r)->tex11;
+#else
+        return GETD3DRASTEREXT(r)->texture;
+#endif
     }
 
-    sCapturedInto = rasterTexture(dst);
-    return true;
-}
+    static bool glowDeviceReady()
+    {
+        return rw::d3d::deviceOpen() != 0;
+    }
 
-// False when the copy was taken but the surface it went into is gone.
-static bool glowCaptureIsLive()
+    static void glowScreenExtent(RwInt32* w, RwInt32* h)
+    {
+        rw::d3d::getScreenExtent(w, h);
+    }
+
+    static bool glowCopyFrame(RwRaster* dst)
+    {
+        if (!rw::d3d::captureFrame(reinterpret_cast<rw::Raster*>(dst)))
+        {
+            return false;
+        }
+
+        sCapturedInto = rasterTexture(dst);
+        return true;
+    }
+
+    // False when the copy was taken but the surface it went into is gone.
+    static bool glowCaptureIsLive()
+    {
+        return rasterTexture(sScreen) == sCapturedInto;
+    }
+
+    static bool glowCreateShaders()
+    {
+        sBrightShader = rw::d3d::createPixelShader((void*)bright_ps::PS_NAME);
+        sBlurShader = rw::d3d::createPixelShader((void*)blur_ps::PS_NAME);
+        return sBrightShader != NULL && sBlurShader != NULL;
+    }
+
+    static void glowBindShader(GlowShader shader)
+    {
+        rw::d3d::im2dOverridePS = shader;
+    }
+
+    static void glowUnbindShader()
+    {
+        rw::d3d::im2dOverridePS = NULL;
+    }
+
+    // c1, c2 and c3, because librw owns c0 for the fog colour.
+    static void glowUploadBlurConstants(F32* weights, F32* offs01, F32* offs23)
+    {
+        rw::d3d::setPixelShaderConstantF(1, weights, 1);
+        rw::d3d::setPixelShaderConstantF(2, offs01, 1);
+        rw::d3d::setPixelShaderConstantF(3, offs23, 1);
+    }
+} // namespace d3dglow
+#endif
+
+#ifdef RW_GL3
+namespace gl3glow
 {
-    return rasterTexture(sScreen) == sCapturedInto;
-}
 
-static bool glowCreateShaders()
-{
-    sBrightShader = rw::d3d::createPixelShader((void*)bright_ps::PS_NAME);
-    sBlurShader = rw::d3d::createPixelShader((void*)blur_ps::PS_NAME);
-    return sBrightShader != NULL && sBlurShader != NULL;
-}
+    // GL3 has no device-lost equivalent to guard against, for the reason
+    // snapshot.cpp's GL3 arm gives, so there is no captured-into pointer here.
+    static rw::int32 sWeightsUniform = -1;
+    static rw::int32 sOffs01Uniform = -1;
+    static rw::int32 sOffs23Uniform = -1;
 
-static void glowBindShader(GlowShader shader)
-{
-    rw::d3d::im2dOverridePS = shader;
-}
+    static bool glowDeviceReady()
+    {
+        return rw::gl3::virtualScreenFramebuffer() != 0;
+    }
 
-static void glowUnbindShader()
-{
-    rw::d3d::im2dOverridePS = NULL;
-}
+    static void glowScreenExtent(RwInt32* w, RwInt32* h)
+    {
+        *w = (RwInt32)rw::gl3::virtualScreenWidth;
+        *h = (RwInt32)rw::gl3::virtualScreenHeight;
+    }
 
-// c1, c2 and c3, because librw owns c0 for the fog colour.
-static void glowUploadBlurConstants(F32* weights, F32* offs01, F32* offs23)
-{
-    rw::d3d::setPixelShaderConstantF(1, weights, 1);
-    rw::d3d::setPixelShaderConstantF(2, offs01, 1);
-    rw::d3d::setPixelShaderConstantF(3, offs23, 1);
-}
+    static bool glowCopyFrame(RwRaster* dst)
+    {
+        return rw::gl3::copyVirtualScreen(reinterpret_cast<rw::Raster*>(dst)) != 0;
+    }
 
-#else
+    static bool glowCaptureIsLive()
+    {
+        return true;
+    }
 
-// GL3 has no device-lost equivalent to guard against, for the reason
-// snapshot.cpp's GL3 arm gives, so there is no captured-into pointer here.
-static rw::int32 sWeightsUniform = -1;
-static rw::int32 sOffs01Uniform = -1;
-static rw::int32 sOffs23Uniform = -1;
+    static bool glowCreateShaders()
+    {
+        // librw's own im2d vertex stage, which is the only one the quad's
+        // coordinates and the xform uniform agree with, and its fragment header,
+        // which is where DoAlphaTest and the state uniforms are declared.
+        const char* vs[] = { rw::gl3::shaderDecl, rw::gl3::header_vert_src, rw::gl3::im2d_vert_src,
+                             NULL };
+
+        const char* brightFs[] = { rw::gl3::shaderDecl, rw::gl3::header_frag_src,
+                                   glow_bright_frag_src, NULL };
+        const char* blurFs[] = { rw::gl3::shaderDecl, rw::gl3::header_frag_src, glow_blur_frag_src,
+                                 NULL };
+
+        sBrightShader = (GlowShader)rw::gl3::Shader::create(vs, brightFs);
+        sBlurShader = (GlowShader)rw::gl3::Shader::create(vs, blurFs);
+
+        return sBrightShader != NULL && sBlurShader != NULL;
+    }
+
+    static void glowBindShader(GlowShader shader)
+    {
+        rw::gl3::im2dOverrideShader = (rw::gl3::Shader*)shader;
+    }
+
+    static void glowUnbindShader()
+    {
+        rw::gl3::im2dOverrideShader = NULL;
+    }
+
+    static void glowUploadBlurConstants(F32* weights, F32* offs01, F32* offs23)
+    {
+        // Nothing to upload before the uniforms exist, and a -1 here means
+        // iGlowRegisterShaderUniforms was never called. Registering them now would
+        // work and then print a line per uniform per flush for the rest of the run;
+        // see that function.
+        if (sWeightsUniform < 0)
+        {
+            return;
+        }
+
+        rw::gl3::setUniform(sWeightsUniform, weights);
+        rw::gl3::setUniform(sOffs01Uniform, offs01);
+        rw::gl3::setUniform(sOffs23Uniform, offs23);
+    }
+} // namespace gl3glow
+#endif
+
+// The six things, dispatched. A build with no real backend, or a run with
+// video.backend = null, answers "no device" and the chain stops there.
 
 static bool glowDeviceReady()
 {
-    return rw::gl3::virtualScreenFramebuffer() != 0;
+#if defined(RW_D3D9) || defined(RW_D3D11)
+    if (iBackendIsD3D())
+    {
+        return d3dglow::glowDeviceReady();
+    }
+#endif
+#ifdef RW_GL3
+    if (iBackendIsGL3())
+    {
+        return gl3glow::glowDeviceReady();
+    }
+#endif
+    return false;
 }
 
 static void glowScreenExtent(RwInt32* w, RwInt32* h)
 {
-    *w = (RwInt32)rw::gl3::virtualScreenWidth;
-    *h = (RwInt32)rw::gl3::virtualScreenHeight;
-}
-
-static bool glowCopyFrame(RwRaster* dst)
-{
-    return rw::gl3::copyVirtualScreen(reinterpret_cast<rw::Raster*>(dst)) != 0;
-}
-
-static bool glowCaptureIsLive()
-{
-    return true;
-}
-
-static bool glowCreateShaders()
-{
-    // librw's own im2d vertex stage, which is the only one the quad's
-    // coordinates and the xform uniform agree with, and its fragment header,
-    // which is where DoAlphaTest and the state uniforms are declared.
-    const char* vs[] = { rw::gl3::shaderDecl, rw::gl3::header_vert_src,
-                         rw::gl3::im2d_vert_src, NULL };
-
-    const char* brightFs[] = { rw::gl3::shaderDecl, rw::gl3::header_frag_src,
-                               glow_bright_frag_src, NULL };
-    const char* blurFs[] = { rw::gl3::shaderDecl, rw::gl3::header_frag_src,
-                             glow_blur_frag_src, NULL };
-
-    sBrightShader = rw::gl3::Shader::create(vs, brightFs);
-    sBlurShader = rw::gl3::Shader::create(vs, blurFs);
-
-    return sBrightShader != NULL && sBlurShader != NULL;
-}
-
-static void glowBindShader(GlowShader shader)
-{
-    rw::gl3::im2dOverrideShader = shader;
-}
-
-static void glowUnbindShader()
-{
-    rw::gl3::im2dOverrideShader = NULL;
-}
-
-static void glowUploadBlurConstants(F32* weights, F32* offs01, F32* offs23)
-{
-    // Nothing to upload before the uniforms exist, and a -1 here means
-    // iGlowRegisterShaderUniforms was never called. Registering them now would
-    // work and then print a line per uniform per flush for the rest of the run;
-    // see that function.
-    if (sWeightsUniform < 0)
+#if defined(RW_D3D9) || defined(RW_D3D11)
+    if (iBackendIsD3D())
     {
+        d3dglow::glowScreenExtent(w, h);
         return;
     }
-
-    rw::gl3::setUniform(sWeightsUniform, weights);
-    rw::gl3::setUniform(sOffs01Uniform, offs01);
-    rw::gl3::setUniform(sOffs23Uniform, offs23);
+#endif
+#ifdef RW_GL3
+    if (iBackendIsGL3())
+    {
+        gl3glow::glowScreenExtent(w, h);
+        return;
+    }
+#endif
+    *w = 0;
+    *h = 0;
 }
 
+static bool glowCopyFrame(RwRaster* dst)
+{
+#if defined(RW_D3D9) || defined(RW_D3D11)
+    if (iBackendIsD3D())
+    {
+        return d3dglow::glowCopyFrame(dst);
+    }
 #endif
+#ifdef RW_GL3
+    if (iBackendIsGL3())
+    {
+        return gl3glow::glowCopyFrame(dst);
+    }
+#endif
+    return false;
+}
+
+static bool glowCaptureIsLive()
+{
+#if defined(RW_D3D9) || defined(RW_D3D11)
+    if (iBackendIsD3D())
+    {
+        return d3dglow::glowCaptureIsLive();
+    }
+#endif
+    return true;
+}
+
+static bool glowCreateShaders()
+{
+#if defined(RW_D3D9) || defined(RW_D3D11)
+    if (iBackendIsD3D())
+    {
+        return d3dglow::glowCreateShaders();
+    }
+#endif
+#ifdef RW_GL3
+    if (iBackendIsGL3())
+    {
+        return gl3glow::glowCreateShaders();
+    }
+#endif
+    return false;
+}
+
+static void glowBindShader(GlowShader shader)
+{
+#if defined(RW_D3D9) || defined(RW_D3D11)
+    if (iBackendIsD3D())
+    {
+        d3dglow::glowBindShader(shader);
+        return;
+    }
+#endif
+#ifdef RW_GL3
+    if (iBackendIsGL3())
+    {
+        gl3glow::glowBindShader(shader);
+    }
+#endif
+}
+
+static void glowUnbindShader()
+{
+#if defined(RW_D3D9) || defined(RW_D3D11)
+    if (iBackendIsD3D())
+    {
+        d3dglow::glowUnbindShader();
+        return;
+    }
+#endif
+#ifdef RW_GL3
+    if (iBackendIsGL3())
+    {
+        gl3glow::glowUnbindShader();
+    }
+#endif
+}
+
+static void glowUploadBlurConstants(F32* weights, F32* offs01, F32* offs23)
+{
+#if defined(RW_D3D9) || defined(RW_D3D11)
+    if (iBackendIsD3D())
+    {
+        d3dglow::glowUploadBlurConstants(weights, offs01, offs23);
+        return;
+    }
+#endif
+#ifdef RW_GL3
+    if (iBackendIsGL3())
+    {
+        gl3glow::glowUploadBlurConstants(weights, offs01, offs23);
+    }
+#endif
+}
 
 // A camera that renders into a texture, which is what the Xbox's 0x170660
 // builds. No Z buffer: every pass here overwrites the whole target, and the
@@ -364,15 +510,14 @@ static void drawPass(RwRaster* src, GlowShader shader, F32 w, F32 h, RwBlendFunc
         // pushes -0.5 twice). librw's im2d transform carries no half-pixel term
         // of its own, so it has to be here.
         //
-        // RWHALFPIXEL is librw's own name for that rule and it is what decides:
-        // D3D10 and up put the pixel centre at 0.5 the way OpenGL does, and
-        // subtracting there moves the whole chain up and left instead.
-        vx[i].x = u * w;
-        vx[i].y = v * h;
-#ifdef RWHALFPIXEL
-        vx[i].x -= 0.5f;
-        vx[i].y -= 0.5f;
-#endif
+        // iBackendHalfPixel is what decides, and it is a runtime question now
+        // that one executable carries several backends: D3D10 and up put the
+        // pixel centre at 0.5 the way OpenGL does, and subtracting there would
+        // move the whole chain up and left instead.
+        const F32 half = iBackendHalfPixel();
+
+        vx[i].x = u * w - half;
+        vx[i].y = v * h - half;
         vx[i].z = z;
         vx[i].u = u;
         vx[i].v = v;
@@ -451,7 +596,7 @@ void iGlowRender(RwCamera* cam, F32 strength)
     // The bright pass and both blurs are ps_2_0. There is no pixel shader to
     // run them in on the fixed-function path, and saying so once is better
     // than a setting that is on and does nothing.
-    if (rw::d3d::getFixedFunction())
+    if (iBackendIsD3D9() && rw::d3d::getFixedFunction())
     {
         glowFail("the fixed-function pipeline has no pixel shader to run it in", 0);
         return;
@@ -540,8 +685,7 @@ void iGlowRender(RwCamera* cam, F32 strength)
 
     // 1. threshold and halve
     RwCameraBeginUpdate(sHalf.camera);
-    drawPass(sScreen, sBrightShader, (F32)sHalf.width, (F32)sHalf.height, rwBLENDONE,
-             rwBLENDZERO);
+    drawPass(sScreen, sBrightShader, (F32)sHalf.width, (F32)sHalf.height, rwBLENDONE, rwBLENDZERO);
     RwCameraEndUpdate(sHalf.camera);
 
     // 2. blur down the vertical axis
@@ -554,8 +698,8 @@ void iGlowRender(RwCamera* cam, F32 strength)
     // 3. and the horizontal one
     RwCameraBeginUpdate(sQuarter.camera);
     setBlurConstants(true, (F32)sVert.width, (F32)sVert.height);
-    drawPass(sVert.raster, sBlurShader, (F32)sQuarter.width, (F32)sQuarter.height,
-             rwBLENDONE, rwBLENDZERO);
+    drawPass(sVert.raster, sBlurShader, (F32)sQuarter.width, (F32)sQuarter.height, rwBLENDONE,
+             rwBLENDZERO);
     RwCameraEndUpdate(sQuarter.camera);
 
     // 4. add it back over the frame, at the frame's size
@@ -567,8 +711,7 @@ void iGlowRender(RwCamera* cam, F32 strength)
 
     // The strength rides in on the vertex alpha, which is where the Xbox puts
     // it: the composite blends SRCALPHA, so this scales the whole glow.
-    drawPass(sQuarter.raster, NULL, w, h, rwBLENDSRCALPHA, rwBLENDONE,
-             (U8)(strength * 255.0f));
+    drawPass(sQuarter.raster, NULL, w, h, rwBLENDSRCALPHA, rwBLENDONE, (U8)(strength * 255.0f));
 
     // Put back what the rest of the frame expects; iScrFxEnd sets some of this
     // again but not the cull mode or the texture.
@@ -612,8 +755,8 @@ void iGlowSetEnabled(S32 enabled)
 void iGlowRegisterShaderUniforms(void)
 {
 #if defined(RW_GL3)
-    sWeightsUniform = rw::gl3::registerUniform("u_glowWeights", rw::gl3::UNIFORM_VEC4);
-    sOffs01Uniform = rw::gl3::registerUniform("u_glowOffs01", rw::gl3::UNIFORM_VEC4);
-    sOffs23Uniform = rw::gl3::registerUniform("u_glowOffs23", rw::gl3::UNIFORM_VEC4);
+    gl3glow::sWeightsUniform = rw::gl3::registerUniform("u_glowWeights", rw::gl3::UNIFORM_VEC4);
+    gl3glow::sOffs01Uniform = rw::gl3::registerUniform("u_glowOffs01", rw::gl3::UNIFORM_VEC4);
+    gl3glow::sOffs23Uniform = rw::gl3::registerUniform("u_glowOffs23", rw::gl3::UNIFORM_VEC4);
 #endif
 }

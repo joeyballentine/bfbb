@@ -1,5 +1,7 @@
 #include "iWindow.h"
 
+#include "rw/backend.h"
+
 // The window, on SDL, for both render backends.
 //
 // The backends still disagree about WHO OWNS IT, which is the whole reason
@@ -55,7 +57,7 @@ static S32 sOpened;
 static iWindowDeferred sDeferred;
 #endif
 
-#if defined(_WIN32) && !defined(RW_GL3)
+#ifdef _WIN32
 // The window's own icons, which are NOT the same thing as the executable's.
 //
 // The shell finds the taskbar and alt-tab icon by reading the lowest-numbered
@@ -78,12 +80,12 @@ static void SetTitleBarIcon(HWND hwnd)
 
     HINSTANCE instance = GetModuleHandleA(NULL);
 
-    HICON big = (HICON)LoadImageA(instance, MAKEINTRESOURCEA(1), IMAGE_ICON,
-                                  GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON),
-                                  LR_DEFAULTCOLOR);
-    HICON small_icon = (HICON)LoadImageA(instance, MAKEINTRESOURCEA(1), IMAGE_ICON,
-                                         GetSystemMetrics(SM_CXSMICON),
-                                         GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR);
+    HICON big =
+        (HICON)LoadImageA(instance, MAKEINTRESOURCEA(1), IMAGE_ICON, GetSystemMetrics(SM_CXICON),
+                          GetSystemMetrics(SM_CYICON), LR_DEFAULTCOLOR);
+    HICON small_icon =
+        (HICON)LoadImageA(instance, MAKEINTRESOURCEA(1), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
+                          GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR);
 
     if (big != NULL)
     {
@@ -152,17 +154,26 @@ S32 iWindowOpen(const iWindowParams* params)
 
     sShouldClose = 0;
 
+    // GL3 creates nothing here. A GL context and the window it draws into have
+    // to be made together, so librw makes both inside RwEngineStart and this
+    // records what to make; see iWindow.h. D3D is the other way round and is
+    // handed a window that already exists, which is the rest of this function.
+    //
+    // A runtime branch and not an #ifdef, because one executable carries both.
+    // iBackendResolve has already run -- RenderWareInit calls it before this,
+    // for exactly this reason.
 #ifdef RW_GL3
+    if (iBackendIsGL3())
+    {
+        sDeferred.handleSlot = (void**)&sWindow;
+        sDeferred.title = sTitle;
+        sDeferred.width = sWidth;
+        sDeferred.height = sHeight;
 
-    sDeferred.handleSlot = (void**)&sWindow;
-    sDeferred.title = sTitle;
-    sDeferred.width = sWidth;
-    sDeferred.height = sHeight;
-
-    sOpened = TRUE;
-    return TRUE;
-
-#else
+        sOpened = TRUE;
+        return TRUE;
+    }
+#endif
 
     // Windowed opens at the render size, wherever the window manager puts it.
     // The other two cover a monitor with no frame -- the WS_POPUP the Win32
@@ -243,26 +254,27 @@ S32 iWindowOpen(const iWindowParams* params)
 
     sOpened = TRUE;
     return TRUE;
-
-#endif
 }
 
 const iWindowDeferred* iWindowDeferredParams()
 {
 #ifdef RW_GL3
-    return sOpened ? &sDeferred : NULL;
-#else
-    // Nothing to defer. D3D9 is handed a window that already exists, so by the
+    if (iBackendIsGL3())
+    {
+        return sOpened ? &sDeferred : NULL;
+    }
+#endif
+
+    // Nothing to defer. D3D is handed a window that already exists, so by the
     // time RwEngineOpen runs there is an HWND and iWindowNativeHandle answers
     // with it.
     return NULL;
-#endif
 }
 
 void iWindowDeferredCreated()
 {
 #ifdef RW_GL3
-    if (sWindow == NULL)
+    if (!iBackendIsGL3() || sWindow == NULL)
     {
         return;
     }
@@ -308,12 +320,10 @@ void iWindowDeferredCreated()
 
 void iWindowClose()
 {
-#ifndef RW_GL3
-    if (sWindow != NULL)
+    if (!iBackendIsGL3() && sWindow != NULL)
     {
         SDL_DestroyWindow(sWindow);
     }
-#endif
 
     // Under GL3 the window is NOT destroyed here, and that is not an omission:
     // librw created it, and its stopSDL3 destroys it and the GL context
@@ -383,14 +393,15 @@ void iWindowPump()
         // Not needed under GL3, where SDL_GL_SwapWindow paints through the GL
         // driver and validates the window as a side effect.
         case SDL_EVENT_WINDOW_EXPOSED:
-#if defined(_WIN32) && !defined(RW_GL3)
-        {
-            HWND hwnd = (HWND)iWindowNativeHandle();
-            if (hwnd != NULL)
+#ifdef _WIN32
+            if (!iBackendIsGL3())
             {
-                ValidateRect(hwnd, NULL);
+                HWND hwnd = (HWND)iWindowNativeHandle();
+                if (hwnd != NULL)
+                {
+                    ValidateRect(hwnd, NULL);
+                }
             }
-        }
 #endif
             break;
 
@@ -538,24 +549,24 @@ void iWindowGetSize(S32* width, S32* height)
     }
 }
 
-// Whatever the linked render backend's EngineOpenParams wants, as iWindow.h
-// says: an SDL_Window* under GL3, which librw wrote into the slot itself, and
-// the HWND behind that window under D3D9.
+// Whatever the running backend's EngineOpenParams wants, as iWindow.h says: an
+// SDL_Window* under GL3, which librw wrote into the slot itself, and the HWND
+// behind that window under D3D.
 void* iWindowNativeHandle()
 {
-#ifdef RW_GL3
-    return (void*)sWindow;
-#elif defined(_WIN32)
-    if (sWindow == NULL)
+#ifdef _WIN32
+    if (!iBackendIsGL3())
     {
-        return NULL;
-    }
+        if (sWindow == NULL)
+        {
+            return NULL;
+        }
 
-    return SDL_GetPointerProperty(SDL_GetWindowProperties(sWindow),
-                                  SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
-#else
-    return (void*)sWindow;
+        return SDL_GetPointerProperty(SDL_GetWindowProperties(sWindow),
+                                      SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
+    }
 #endif
+    return (void*)sWindow;
 }
 
 const char* iWindowBackendName()

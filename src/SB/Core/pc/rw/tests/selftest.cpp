@@ -40,6 +40,11 @@
 // the shim by design.
 #include "../stream.h"
 
+// AFTER stream.h, which is what pulls in librw: backend.h reaches types.h,
+// and types.h has `#define null 0` in it, which turns librw's `namespace null`
+// into a syntax error.
+#include "../backend.h"
+
 // RwGameCubeSetAlphaCompare, and the GX_* constants xModelBucket.cpp calls it
 // with. Included rather than declared by hand -- which is what the rest of this
 // file does for a shim-private entry point -- for the reason engine.cpp gives
@@ -823,8 +828,7 @@ static void test_cameras()
         iFixSetSkyClip(FALSE);
         check(iFixSkyDomeToFarPlane(&mat, &eye, &tooBig, &saved) == FALSE,
               "fixes.sky_clip off leaves the dome where the game put it");
-        check(mat.pos.y == before.pos.y && mat.right.x == before.right.x,
-              "and the matrix with it");
+        check(mat.pos.y == before.pos.y && mat.right.x == before.right.x, "and the matrix with it");
         iFixSetSkyClip(TRUE);
 
         RwCameraEndUpdate(camera);
@@ -982,7 +986,8 @@ static void test_worlds()
 #endif
 
     RwCameraBeginUpdate(camera);
-    check(RwEngineInstance->curWorld == world, "an update on it makes it RwEngineInstance->curWorld");
+    check(RwEngineInstance->curWorld == world,
+          "an update on it makes it RwEngineInstance->curWorld");
     RwCameraEndUpdate(camera);
     check(RwEngineInstance->curWorld == NULL, "and ending the update clears it");
 
@@ -1210,36 +1215,44 @@ static void test_perpixel_lighting()
     printf("per-pixel lighting setting\n");
 
 #if defined(RW_D3D9) || defined(RW_D3D11)
-    const rw::bool32 saved = rw::d3d::getPerPixelLighting();
+    if (iBackendIsD3D())
+    {
+        const rw::bool32 saved = rw::d3d::getPerPixelLighting();
 
-    rw::d3d::setPerPixelLightingEnabled(TRUE);
-    check(rw::d3d::getPerPixelLighting() != 0, "on is remembered");
+        rw::d3d::setPerPixelLightingEnabled(TRUE);
+        check(rw::d3d::getPerPixelLighting() != 0, "on is remembered");
 
-    rw::d3d::setPerPixelLightingEnabled(FALSE);
-    check(rw::d3d::getPerPixelLighting() == 0, "off is remembered");
+        rw::d3d::setPerPixelLightingEnabled(FALSE);
+        check(rw::d3d::getPerPixelLighting() == 0, "off is remembered");
 
-    // Any non-zero means on, because iConfigGetBool answers with whatever it
-    // parsed rather than with 1.
-    rw::d3d::setPerPixelLightingEnabled(37);
-    check(rw::d3d::getPerPixelLighting() != 0, "a non-zero other than 1 is on");
+        // Any non-zero means on, because iConfigGetBool answers with whatever
+        // it parsed rather than with 1.
+        rw::d3d::setPerPixelLightingEnabled(37);
+        check(rw::d3d::getPerPixelLighting() != 0, "a non-zero other than 1 is on");
 
-    rw::d3d::setPerPixelLightingEnabled(saved);
-#elif defined(RW_GL3)
-    const rw::bool32 saved = rw::gl3::getPerPixelLighting();
-
-    rw::gl3::setPerPixelLightingEnabled(TRUE);
-    check(rw::gl3::getPerPixelLighting() != 0, "on is remembered");
-
-    rw::gl3::setPerPixelLightingEnabled(FALSE);
-    check(rw::gl3::getPerPixelLighting() == 0, "off is remembered");
-
-    rw::gl3::setPerPixelLightingEnabled(37);
-    check(rw::gl3::getPerPixelLighting() != 0, "a non-zero other than 1 is on");
-
-    rw::gl3::setPerPixelLightingEnabled(saved);
-#else
-    check(TRUE, "this backend has no shaders to light anything with");
+        rw::d3d::setPerPixelLightingEnabled(saved);
+        return;
+    }
 #endif
+#ifdef RW_GL3
+    if (iBackendIsGL3())
+    {
+        const rw::bool32 saved = rw::gl3::getPerPixelLighting();
+
+        rw::gl3::setPerPixelLightingEnabled(TRUE);
+        check(rw::gl3::getPerPixelLighting() != 0, "on is remembered");
+
+        rw::gl3::setPerPixelLightingEnabled(FALSE);
+        check(rw::gl3::getPerPixelLighting() == 0, "off is remembered");
+
+        rw::gl3::setPerPixelLightingEnabled(37);
+        check(rw::gl3::getPerPixelLighting() != 0, "a non-zero other than 1 is on");
+
+        rw::gl3::setPerPixelLightingEnabled(saved);
+        return;
+    }
+#endif
+    check(TRUE, "this backend has no shaders to light anything with");
 }
 
 // The loading-screen still: capture the frame, latch it, and be handed a
@@ -1260,8 +1273,7 @@ static void test_snapshot()
     // Nothing captured and nothing latched, which is the state at boot: the
     // first loading screen of a session has no previous frame to stand on.
     iSnapshotRelease();
-    check(iSnapshotBackgroundTexture() == NULL,
-          "no still before anything has been captured");
+    check(iSnapshotBackgroundTexture() == NULL, "no still before anything has been captured");
 
     iSnapshotCapture();
 
@@ -1277,8 +1289,7 @@ static void test_snapshot()
     if (still != NULL)
     {
         check(still->raster != NULL, "and the texture has a raster");
-        check(still->raster != NULL && still->raster->width > 0 &&
-                  still->raster->height > 0,
+        check(still->raster != NULL && still->raster->width > 0 && still->raster->height > 0,
               "of the size the port is rendering at");
     }
 
@@ -1519,8 +1530,7 @@ static void test_renderstate()
           "the reference reaches librw unscaled");
 
     setAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
-    check(sAlphaFunc == rw::ALPHAALWAYS && sAlphaRef == 0,
-          "two ALWAYS sides are no test at all");
+    check(sAlphaFunc == rw::ALPHAALWAYS && sAlphaRef == 0, "two ALWAYS sides are no test at all");
 
     setAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_LESS, 64);
     check(sAlphaFunc == rw::ALPHALESS && sAlphaRef == 64,
@@ -1617,11 +1627,7 @@ static void test_immediate()
     // zGame.cpp:848 and zEntPlayerOOBState.cpp:220 put their overlays at these
     // numbers, and an overlay at 0 on a device whose near plane is -1 sits in
     // the middle of the depth buffer instead of in front of it.
-#ifdef RW_GL3
-    const RwReal wantedNearZ = -1.0f;
-#else
-    const RwReal wantedNearZ = 0.0f;
-#endif
+    const RwReal wantedNearZ = iBackendIsGL3() ? -1.0f : 0.0f;
     check(RwIm2DGetNearScreenZ() == wantedNearZ, "RwIm2DGetNearScreenZ comes from the device");
     check(RwIm2DGetFarScreenZ() == 1.0f, "RwIm2DGetFarScreenZ comes from the device");
 
@@ -2080,19 +2086,22 @@ static void test_skin()
           "rpSKINTYPETOON, which no model in this game asks for, falls back to it too");
 
 #ifdef RW_D3D9
-    check(matfxSkin != NULL, "the D3D9 backend registered a combined skin+matfx pipeline");
-    // The two skinning pipelines MUST instance identically. librw caches the
-    // instanced vertex buffer on the geometry and never rebuilds it because the
-    // atomic changed pipeline, so an atomic that moves between them would
-    // otherwise hand a skinning shader a buffer laid out with no bones in it.
-    check(matfxSkin != NULL && plainSkin != NULL &&
-              reinterpret_cast<rw::d3d9::ObjPipeline*>(matfxSkin)->instanceCB ==
-                  reinterpret_cast<rw::d3d9::ObjPipeline*>(plainSkin)->instanceCB,
-          "and it instances vertices exactly as the plain one does");
-    check(matfxSkin != NULL && plainSkin != NULL &&
-              reinterpret_cast<rw::d3d9::ObjPipeline*>(matfxSkin)->renderCB !=
-                  reinterpret_cast<rw::d3d9::ObjPipeline*>(plainSkin)->renderCB,
-          "and renders through a callback of its own");
+    if (iBackendIsD3D9())
+    {
+        check(matfxSkin != NULL, "the D3D9 backend registered a combined skin+matfx pipeline");
+        // The two skinning pipelines MUST instance identically. librw caches the
+        // instanced vertex buffer on the geometry and never rebuilds it because the
+        // atomic changed pipeline, so an atomic that moves between them would
+        // otherwise hand a skinning shader a buffer laid out with no bones in it.
+        check(matfxSkin != NULL && plainSkin != NULL &&
+                  reinterpret_cast<rw::d3d9::ObjPipeline*>(matfxSkin)->instanceCB ==
+                      reinterpret_cast<rw::d3d9::ObjPipeline*>(plainSkin)->instanceCB,
+              "and it instances vertices exactly as the plain one does");
+        check(matfxSkin != NULL && plainSkin != NULL &&
+                  reinterpret_cast<rw::d3d9::ObjPipeline*>(matfxSkin)->renderCB !=
+                      reinterpret_cast<rw::d3d9::ObjPipeline*>(plainSkin)->renderCB,
+              "and renders through a callback of its own");
+    }
 #endif
 
     reinterpret_cast<rw::Atomic*>(atomic)->destroy();
@@ -2172,9 +2181,12 @@ static void test_uvxform()
     // Compiled by fxc into headers checked into librw, then handed to the
     // device at driver open. A blob the device rejects leaves these nil, and
     // then every animated surface would draw with no vertex shader at all.
-    check(rw::d3d::uvxform_amb_VS != NULL && rw::d3d::uvxform_amb_dir_VS != NULL &&
-              rw::d3d::uvxform_all_VS != NULL,
-          "the device accepted all three UV-transform vertex shaders");
+    if (iBackendIsD3D())
+    {
+        check(rw::d3d::uvxform_amb_VS != NULL && rw::d3d::uvxform_amb_dir_VS != NULL &&
+                  rw::d3d::uvxform_all_VS != NULL,
+              "the device accepted all three UV-transform vertex shaders");
+    }
 #endif
 
     void (*librwRender)(rw::ObjPipeline*, rw::Atomic*) = pipe->impl.render;
@@ -2204,7 +2216,7 @@ static void test_uvxform()
     // BOTH of the last two columns are constants that add to the coordinate.
     // gc/iFX.cpp builds the same eight floats in the same order.
     const rw::float32 wanted[rw::NUMUVTRANSFORMELEMENTS] = { 0.25f, -0.5f, 1.5f, 3.5f,
-                                                             0.5f, 0.75f, 2.5f, 4.5f };
+                                                             0.5f,  0.75f, 2.5f, 4.5f };
     check(memcmp(sCapturedUVTransform, wanted, sizeof(wanted)) == 0,
           "the xFXanimUV globals reach the matrix in the GameCube's slots");
     check(memcmp(rw::uvTransform, rw::UVTRANSFORM_IDENTITY, sizeof(wanted)) == 0,
@@ -2289,8 +2301,8 @@ static void test_matfx()
 // to carry the effect, and bone indices and weights in the vertex buffer.
 static RpGeometry* makeSkinnedQuad(RpMaterial* material, rw::Skin** skinOut)
 {
-    RpGeometry* geometry = RpGeometryCreate(
-        4, 2, rpGEOMETRYPOSITIONS | rpGEOMETRYNORMALS | rpGEOMETRYTEXTURED);
+    RpGeometry* geometry =
+        RpGeometryCreate(4, 2, rpGEOMETRYPOSITIONS | rpGEOMETRYNORMALS | rpGEOMETRYTEXTURED);
     if (geometry == NULL)
     {
         return NULL;
@@ -2375,96 +2387,99 @@ static void test_skin_matfx()
     RpMatFXAtomicEnableEffects(atomic);
     rw::ObjPipeline* matfxSkin = rw::skinGlobals.matfxPipelines[rw::platform];
     check(reinterpret_cast<void*>(atomic->pipeline) ==
-              reinterpret_cast<void*>(matfxSkin
-                                          ? matfxSkin
-                                          : rw::skinGlobals.pipelines[rw::platform]),
+              reinterpret_cast<void*>(matfxSkin ? matfxSkin :
+                                                  rw::skinGlobals.pipelines[rw::platform]),
           "enabling effects on a SKINNED atomic keeps it on a skinning pipeline");
 
 #ifdef RW_D3D9
-    // --- the draw ----------------------------------------------------------
-    //
-    // Everything above is a pointer comparison. This runs the pipeline against
-    // the real device the test opened, and then asks the device what the draw
-    // left behind. Two things are worth asking about, and both are things that
-    // would still have "worked" -- drawn a model, reported no error -- if the
-    // shader and the C++ disagreed:
-    //
-    //   - the env coefficient, which only the env path writes, and only to the
-    //     pixel shader constant the env pixel shader reads;
-    //   - the texture matrix, which the combined vertex shader reads from a
-    //     register the plain matfx shader does not use, because the bone
-    //     matrices are sitting where matfx normally puts it. Getting that base
-    //     wrong is silent: the shader samples a matrix of zeroes and the model
-    //     renders with the env map collapsed to one texel.
-    //
-    // NOT checked here, and not checkable this way: what the pixels look like.
-    // A shader that compiles, binds, and is fed the right constants can still
-    // be wrong, and only a playtest says otherwise.
-    RwRaster* envRaster = RwRasterCreate(64, 64, 32, rwRASTERTYPETEXTURE | rwRASTERFORMAT8888);
-    RwTexture* envTex = RwTextureCreate(envRaster);
-    check(envTex != NULL && envRaster != NULL, "an env map texture with a real raster behind it");
-
-    RwFrame* envFrame = RwFrameCreate();
-    RpMatFXMaterialSetEffects(material, rpMATFXEFFECTENVMAP);
-    RpMatFXMaterialSetupEnvMap(material, envTex, envFrame, FALSE, 0.75f);
-
-    RwCamera* camera = RwCameraCreate();
-    RwCameraSetFrame(camera, RwFrameCreate());
-    RwCameraSetRaster(camera, RwRasterCreate(64, 64, 0, rwRASTERTYPECAMERA));
-    RwCameraSetZRaster(camera, RwRasterCreate(64, 64, 0, rwRASTERTYPEZBUFFER));
-    RwCameraSetNearClipPlane(camera, 0.1f);
-    RwCameraSetFarClipPlane(camera, 100.0f);
-
-    // Poisoned first, so that reading them back is a check on the draw rather
-    // than on whatever the last test left in the constant file.
-    const float poison[4] = { -1.0f, -1.0f, -1.0f, -1.0f };
-    rw::d3d::d3ddevice->SetPixelShaderConstantF(1, poison, 1);
-    rw::d3d::d3ddevice->SetVertexShaderConstantF(233, poison, 1);
-
-    RwCameraBeginUpdate(camera);
-    reinterpret_cast<rw::Atomic*>(atomic)->render();
-    RwCameraEndUpdate(camera);
-
-    float ps1[4];
-    rw::d3d::d3ddevice->GetPixelShaderConstantF(1, ps1, 1);
-    check(near(ps1[0], 0.75f),
-          "the env map coefficient reached the shininess the env pixel shader reads");
-
-    float texMat[4];
-    rw::d3d::d3ddevice->GetVertexShaderConstantF(233, texMat, 1);
-    check(!near(texMat[0], -1.0f),
-          "and the env texture matrix reached the register past the bone matrices");
-
-    IDirect3DVertexShader9* envVS = NULL;
-    rw::d3d::d3ddevice->GetVertexShader(&envVS);
-    check(envVS != NULL, "the draw bound a vertex shader that exists");
-
-    // The same atomic, the same pipeline, with the effect taken off the
-    // material -- which is exactly the state AtomicDisableMatFX leaves a bubble
-    // in for pass 1. It must fall back to the plain skinning shader, not draw
-    // an env map off a material that no longer has one.
-    RpMatFXMaterialSetEffects(material, rpMATFXEFFECTNULL);
-    RwCameraBeginUpdate(camera);
-    reinterpret_cast<rw::Atomic*>(atomic)->render();
-    RwCameraEndUpdate(camera);
-
-    IDirect3DVertexShader9* plainVS = NULL;
-    rw::d3d::d3ddevice->GetVertexShader(&plainVS);
-    check(plainVS != NULL && plainVS != envVS,
-          "a mesh with no effect on it falls back to a different, plain skinning shader");
-
-    if (envVS)
+    if (iBackendIsD3D9())
     {
-        envVS->Release();
-    }
-    if (plainVS)
-    {
-        plainVS->Release();
-    }
+        // --- the draw ----------------------------------------------------------
+        //
+        // Everything above is a pointer comparison. This runs the pipeline against
+        // the real device the test opened, and then asks the device what the draw
+        // left behind. Two things are worth asking about, and both are things that
+        // would still have "worked" -- drawn a model, reported no error -- if the
+        // shader and the C++ disagreed:
+        //
+        //   - the env coefficient, which only the env path writes, and only to the
+        //     pixel shader constant the env pixel shader reads;
+        //   - the texture matrix, which the combined vertex shader reads from a
+        //     register the plain matfx shader does not use, because the bone
+        //     matrices are sitting where matfx normally puts it. Getting that base
+        //     wrong is silent: the shader samples a matrix of zeroes and the model
+        //     renders with the env map collapsed to one texel.
+        //
+        // NOT checked here, and not checkable this way: what the pixels look like.
+        // A shader that compiles, binds, and is fed the right constants can still
+        // be wrong, and only a playtest says otherwise.
+        RwRaster* envRaster = RwRasterCreate(64, 64, 32, rwRASTERTYPETEXTURE | rwRASTERFORMAT8888);
+        RwTexture* envTex = RwTextureCreate(envRaster);
+        check(envTex != NULL && envRaster != NULL,
+              "an env map texture with a real raster behind it");
 
-    RwCameraDestroy(camera);
-    RwFrameDestroy(envFrame);
-    RwTextureDestroy(envTex);
+        RwFrame* envFrame = RwFrameCreate();
+        RpMatFXMaterialSetEffects(material, rpMATFXEFFECTENVMAP);
+        RpMatFXMaterialSetupEnvMap(material, envTex, envFrame, FALSE, 0.75f);
+
+        RwCamera* camera = RwCameraCreate();
+        RwCameraSetFrame(camera, RwFrameCreate());
+        RwCameraSetRaster(camera, RwRasterCreate(64, 64, 0, rwRASTERTYPECAMERA));
+        RwCameraSetZRaster(camera, RwRasterCreate(64, 64, 0, rwRASTERTYPEZBUFFER));
+        RwCameraSetNearClipPlane(camera, 0.1f);
+        RwCameraSetFarClipPlane(camera, 100.0f);
+
+        // Poisoned first, so that reading them back is a check on the draw rather
+        // than on whatever the last test left in the constant file.
+        const float poison[4] = { -1.0f, -1.0f, -1.0f, -1.0f };
+        rw::d3d::d3ddevice->SetPixelShaderConstantF(1, poison, 1);
+        rw::d3d::d3ddevice->SetVertexShaderConstantF(233, poison, 1);
+
+        RwCameraBeginUpdate(camera);
+        reinterpret_cast<rw::Atomic*>(atomic)->render();
+        RwCameraEndUpdate(camera);
+
+        float ps1[4];
+        rw::d3d::d3ddevice->GetPixelShaderConstantF(1, ps1, 1);
+        check(near(ps1[0], 0.75f),
+              "the env map coefficient reached the shininess the env pixel shader reads");
+
+        float texMat[4];
+        rw::d3d::d3ddevice->GetVertexShaderConstantF(233, texMat, 1);
+        check(!near(texMat[0], -1.0f),
+              "and the env texture matrix reached the register past the bone matrices");
+
+        IDirect3DVertexShader9* envVS = NULL;
+        rw::d3d::d3ddevice->GetVertexShader(&envVS);
+        check(envVS != NULL, "the draw bound a vertex shader that exists");
+
+        // The same atomic, the same pipeline, with the effect taken off the
+        // material -- which is exactly the state AtomicDisableMatFX leaves a bubble
+        // in for pass 1. It must fall back to the plain skinning shader, not draw
+        // an env map off a material that no longer has one.
+        RpMatFXMaterialSetEffects(material, rpMATFXEFFECTNULL);
+        RwCameraBeginUpdate(camera);
+        reinterpret_cast<rw::Atomic*>(atomic)->render();
+        RwCameraEndUpdate(camera);
+
+        IDirect3DVertexShader9* plainVS = NULL;
+        rw::d3d::d3ddevice->GetVertexShader(&plainVS);
+        check(plainVS != NULL && plainVS != envVS,
+              "a mesh with no effect on it falls back to a different, plain skinning shader");
+
+        if (envVS)
+        {
+            envVS->Release();
+        }
+        if (plainVS)
+        {
+            plainVS->Release();
+        }
+
+        RwCameraDestroy(camera);
+        RwFrameDestroy(envFrame);
+        RwTextureDestroy(envTex);
+    }
 #endif
 
     reinterpret_cast<rw::Atomic*>(atomic)->destroy();
@@ -2523,8 +2538,7 @@ static void test_ptank()
     check(RpPTankAtomicLock(ptank, &pos, rpPTANKDFLAGPOSITION, rpPTANKLOCKWRITE) != FALSE,
           "RpPTankAtomicLock, positions");
     check(pos.data != NULL &&
-              pos.stride >=
-                  (RwInt32)(sizeof(RwV3d) + sizeof(RwRGBA) + 2 * sizeof(RwTexCoords)),
+              pos.stride >= (RwInt32)(sizeof(RwV3d) + sizeof(RwRGBA) + 2 * sizeof(RwTexCoords)),
           "an array-of-structures position cluster strides one whole record");
 
     check(RpPTankAtomicLock(ptank, &uv, rpPTANKDFLAGVTX2TEXCOORDS, rpPTANKLOCKWRITE) != FALSE,
@@ -2601,8 +2615,7 @@ static void test_ptank()
     // into corners; that is what the atomic's render callback now does, and it
     // needs the camera to know which way "up" is on screen.
     RpAtomic* bb = RpPTankAtomicCreate(
-        8, rpPTANKDFLAGPOSITION | rpPTANKDFLAGSIZE | rpPTANKDFLAGCOLOR | rpPTANKDFLAGSTRUCTURE,
-        0);
+        8, rpPTANKDFLAGPOSITION | rpPTANKDFLAGSIZE | rpPTANKDFLAGCOLOR | rpPTANKDFLAGSTRUCTURE, 0);
     check(bb != NULL, "RpPTankAtomicCreate for the instancing checks");
     if (bb == NULL)
     {
@@ -3532,8 +3545,7 @@ static void test_atomic_stream()
     RwUInt32 chunkLength = 0;
     check(RwStreamFindChunk(stream, rwID_ATOMIC, &chunkLength, NULL) != FALSE,
           "RwStreamFindChunk finds the rwID_ATOMIC chunk");
-    check(chunkLength == mem.length - 12,
-          "and the size it declared is the size it wrote");
+    check(chunkLength == mem.length - 12, "and the size it declared is the size it wrote");
 
     RpAtomic* dupe = RpAtomicStreamRead(stream);
     RwStreamClose(stream, NULL);
@@ -3548,8 +3560,7 @@ static void test_atomic_stream()
     // A COPY of the geometry, not another reference to the same one. This is
     // the whole point of the round trip: xModelBucket needs N atomics it can
     // instance separately, and sharing one geometry would defeat it.
-    check(dupe->geometry != NULL && dupe->geometry != geometry,
-          "with a geometry of its own");
+    check(dupe->geometry != NULL && dupe->geometry != geometry, "with a geometry of its own");
     check(geometry->refCount == 2, "and the original's reference count is untouched");
 
     check(dupe->geometry->numVertices == 4 && dupe->geometry->numTriangles == 2,
@@ -3637,7 +3648,42 @@ static void test_engine_shutdown()
 #endif
 }
 
-int main()
+// Which backend to run against, from the command line.
+//
+// The executable can carry several, and everything below is written against
+// whichever one opened -- so the same binary is the test for all of them and
+// this is what picks. No argument takes the build's own default, which is what
+// the game does with video.backend = auto.
+static void SelectBackend(int argc, char** argv)
+{
+    if (argc < 2)
+    {
+        return;
+    }
+
+    const struct
+    {
+        const char* name;
+        iScreenBackend backend;
+    } kNames[] = { { "d3d9", iSCREENBACKEND_D3D9 },
+                   { "d3d11", iSCREENBACKEND_D3D11 },
+                   { "gl3", iSCREENBACKEND_GL3 } };
+
+    for (size_t i = 0; i < sizeof(kNames) / sizeof(kNames[0]); i++)
+    {
+        if (strcmp(argv[1], kNames[i].name) == 0)
+        {
+            iScreenSetBackend(kNames[i].backend);
+            printf("(asked for the %s backend)\n", argv[1]);
+            return;
+        }
+    }
+
+    printf("usage: %s [d3d9|d3d11|gl3]\n", argv[0]);
+    exit(2);
+}
+
+int main(int argc, char** argv)
 {
     // Unbuffered, so that a crash leaves the last completed check on screen
     // instead of a half-flushed line. With a real render backend this test
@@ -3645,12 +3691,14 @@ int main()
     // diagnosis.
     setvbuf(stdout, NULL, _IONBF, 0);
 
+    SelectBackend(argc, argv);
+
     test_engine_startup();
 
     if (sEngineUnusable)
     {
-        printf("\nthe render backend could not be opened -- see above; %d failure%s\n",
-               failures, failures == 1 ? "" : "s");
+        printf("\nthe render backend could not be opened -- see above; %d failure%s\n", failures,
+               failures == 1 ? "" : "s");
         return 1;
     }
 

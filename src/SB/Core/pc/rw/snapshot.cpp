@@ -41,6 +41,7 @@
 #include "src/d3d/rwd3dimpl.h"
 #endif
 
+#include "backend.h"
 #include "iSnapshot.h"
 
 #include <stdio.h>
@@ -84,201 +85,229 @@ static S32 snapshotEnsureRaster(RwInt32 width, RwInt32 height);
 
 #endif
 
+// One namespace per backend, both compiled when both are linked. The two
+// public functions under them dispatch on video.backend, and a build with no
+// device -- or a run with video.backend = null -- gets the refusal the game
+// already handles: zGame falls back to the background texture asset, which is
+// the GameCube and PS2 loading screen exactly.
+
 #if defined(RW_D3D9) || defined(RW_D3D11)
-
-// The D3D texture behind a raster at the moment it was written to.
-//
-// A device reset -- alt-tab, a resize, a driver restart -- takes every
-// D3DPOOL_DEFAULT surface down with it. librw handles that for its own rasters:
-// releaseVidmemRasters destroys the texture behind a CAMERATEXTURE and
-// recreateVidmemRasters makes a new one, EMPTY. The Raster* is still valid and
-// still the right size, so nothing about it says its contents are gone.
-//
-// The new texture is a different allocation, though, so remembering the pointer
-// the picture was written into is enough to notice. This is the whole of the
-// device-lost handling and it is worth having: without it a reset during a load
-// leaves a black rectangle where the level used to be, with no way to tell that
-// from a capture that never happened.
-static void* sCapturedInto;
-
-static inline void* rasterTexture(RwRaster* raster)
+namespace d3dsnap
 {
-    // GETD3DRASTEREXT is a macro, so it is spelled unqualified and expands to
-    // the qualified names itself.
-    rw::Raster* r = reinterpret_cast<rw::Raster*>(raster);
+
+    // The D3D texture behind a raster at the moment it was written to.
+    //
+    // A device reset -- alt-tab, a resize, a driver restart -- takes every
+    // D3DPOOL_DEFAULT surface down with it. librw handles that for its own rasters:
+    // releaseVidmemRasters destroys the texture behind a CAMERATEXTURE and
+    // recreateVidmemRasters makes a new one, EMPTY. The Raster* is still valid and
+    // still the right size, so nothing about it says its contents are gone.
+    //
+    // The new texture is a different allocation, though, so remembering the pointer
+    // the picture was written into is enough to notice. This is the whole of the
+    // device-lost handling and it is worth having: without it a reset during a load
+    // leaves a black rectangle where the level used to be, with no way to tell that
+    // from a capture that never happened.
+    static void* sCapturedInto;
+
+    static inline void* rasterTexture(RwRaster* raster)
+    {
+        // GETD3DRASTEREXT is a macro, so it is spelled unqualified and expands to
+        // the qualified names itself.
+        rw::Raster* r = reinterpret_cast<rw::Raster*>(raster);
 #if defined(RW_D3D11)
-    return GETD3DRASTEREXT(r)->tex11;
+        return GETD3DRASTEREXT(r)->tex11;
 #else
-    return GETD3DRASTEREXT(r)->texture;
+        return GETD3DRASTEREXT(r)->texture;
+#endif
+    }
+
+    // One report, and then off for good.
+    static void snapshotFail(const char* what, long hr)
+    {
+        sFailed = 1;
+        printf("bfbb: the loading-screen snapshot is off -- %s (0x%08lx)\n", what,
+               (unsigned long)hr);
+        fflush(stdout);
+    }
+
+    void iSnapshotCapture()
+    {
+        // Read and cleared here rather than reset by the writer: xScrFxUpdateFade
+        // does not run on every frame the port presents, and a stale FALSE would
+        // be a captured fade while a stale TRUE would stop capturing for good.
+        const S32 obscured = sObscured;
+        sObscured = 0;
+
+        if (!sEnabled || sFailed || sLatched || obscured)
+        {
+            return;
+        }
+
+        if (!rw::d3d::deviceOpen())
+        {
+            return;
+        }
+
+        RwInt32 w = 0;
+        RwInt32 h = 0;
+        rw::d3d::getScreenExtent(&w, &h);
+        if (w <= 0 || h <= 0)
+        {
+            return;
+        }
+
+        if (!snapshotEnsureRaster(w, h))
+        {
+            return;
+        }
+
+        if (rasterTexture(sRaster) == NULL)
+        {
+            // Between a device reset and librw recreating its video-memory rasters.
+            // Not a failure; the next frame has one.
+            return;
+        }
+
+        if (!rw::d3d::captureFrame(reinterpret_cast<rw::Raster*>(sRaster)))
+        {
+            // Whatever refused is a property of the device -- a multisampled source
+            // on D3D9, a format pair nothing will convert between -- so it will
+            // refuse again next frame.
+            snapshotFail("the frame could not be copied into a texture", 0);
+            return;
+        }
+
+        sCapturedInto = rasterTexture(sRaster);
+        sHaveFrame = 1;
+    }
+
+    RwTexture* iSnapshotBackgroundTexture()
+    {
+        if (!sEnabled || sFailed || !sLatched || !sHaveFrame || sTexture == NULL)
+        {
+            return NULL;
+        }
+
+        // The surface the picture went into is not the surface that would be
+        // sampled: a device reset has been and gone, and what is there now is a
+        // fresh empty render target. Fall back rather than draw black.
+        if (rasterTexture(sRaster) != sCapturedInto)
+        {
+            sHaveFrame = 0;
+            return NULL;
+        }
+
+        return sTexture;
+    }
+} // namespace d3dsnap
+#endif
+
+#ifdef RW_GL3
+namespace gl3snap
+{
+
+    // GL3 has no device-lost equivalent to guard against. A GL context can be lost
+    // -- GL_KHR_robustness spells out how -- but librw neither asks for that
+    // extension nor recreates anything on it, so there is no half-alive state to
+    // detect here the way there is on D3D9 after a Reset. The texture behind the
+    // raster is a name that stays valid for as long as the raster does.
+
+    // One report, and then off for good.
+    static void snapshotFail(const char* what)
+    {
+        sFailed = 1;
+        printf("bfbb: the loading-screen snapshot is off -- %s\n", what);
+        fflush(stdout);
+    }
+
+    void iSnapshotCapture()
+    {
+        // Read and cleared here rather than reset by the writer: xScrFxUpdateFade
+        // does not run on every frame the port presents, and a stale FALSE would
+        // be a captured fade while a stale TRUE would stop capturing for good.
+        const S32 obscured = sObscured;
+        sObscured = 0;
+
+        if (!sEnabled || sFailed || sLatched || obscured)
+        {
+            return;
+        }
+
+        // The size the virtual screen was made at, which is the size everything
+        // the game draws lands on. Zero before the engine has started, and zero
+        // for good if the driver refused the framebuffer -- in which case there is
+        // no picture to copy and the game falls back, which is the same answer the
+        // unsupported backends give.
+        RwInt32 width = (RwInt32)rw::gl3::virtualScreenWidth;
+        RwInt32 height = (RwInt32)rw::gl3::virtualScreenHeight;
+
+        if (width <= 0 || height <= 0 || rw::gl3::virtualScreenFramebuffer() == 0)
+        {
+            return;
+        }
+
+        if (!snapshotEnsureRaster(width, height))
+        {
+            return;
+        }
+
+        if (!rw::gl3::copyVirtualScreen(reinterpret_cast<rw::Raster*>(sRaster)))
+        {
+            // Every reason this returns false is a property of the device or of
+            // the raster, so it will be the same reason next frame.
+            snapshotFail("the frame could not be copied into a texture");
+            return;
+        }
+
+        sHaveFrame = 1;
+    }
+
+    RwTexture* iSnapshotBackgroundTexture()
+    {
+        if (!sEnabled || sFailed || !sLatched || !sHaveFrame || sTexture == NULL)
+        {
+            return NULL;
+        }
+
+        return sTexture;
+    }
+} // namespace gl3snap
+#endif
+
+void iSnapshotCapture()
+{
+#if defined(RW_D3D9) || defined(RW_D3D11)
+    if (iBackendIsD3D())
+    {
+        d3dsnap::iSnapshotCapture();
+        return;
+    }
+#endif
+#ifdef RW_GL3
+    if (iBackendIsGL3())
+    {
+        gl3snap::iSnapshotCapture();
+    }
 #endif
 }
 
-// One report, and then off for good.
-static void snapshotFail(const char* what, long hr)
-{
-    sFailed = 1;
-    printf("bfbb: the loading-screen snapshot is off -- %s (0x%08lx)\n", what,
-           (unsigned long)hr);
-    fflush(stdout);
-}
-
-void iSnapshotCapture()
-{
-    // Read and cleared here rather than reset by the writer: xScrFxUpdateFade
-    // does not run on every frame the port presents, and a stale FALSE would
-    // be a captured fade while a stale TRUE would stop capturing for good.
-    const S32 obscured = sObscured;
-    sObscured = 0;
-
-    if (!sEnabled || sFailed || sLatched || obscured)
-    {
-        return;
-    }
-
-    if (!rw::d3d::deviceOpen())
-    {
-        return;
-    }
-
-    RwInt32 w = 0;
-    RwInt32 h = 0;
-    rw::d3d::getScreenExtent(&w, &h);
-    if (w <= 0 || h <= 0)
-    {
-        return;
-    }
-
-    if (!snapshotEnsureRaster(w, h))
-    {
-        return;
-    }
-
-    if (rasterTexture(sRaster) == NULL)
-    {
-        // Between a device reset and librw recreating its video-memory rasters.
-        // Not a failure; the next frame has one.
-        return;
-    }
-
-    if (!rw::d3d::captureFrame(reinterpret_cast<rw::Raster*>(sRaster)))
-    {
-        // Whatever refused is a property of the device -- a multisampled source
-        // on D3D9, a format pair nothing will convert between -- so it will
-        // refuse again next frame.
-        snapshotFail("the frame could not be copied into a texture", 0);
-        return;
-    }
-
-    sCapturedInto = rasterTexture(sRaster);
-    sHaveFrame = 1;
-}
-
 RwTexture* iSnapshotBackgroundTexture()
 {
-    if (!sEnabled || sFailed || !sLatched || !sHaveFrame || sTexture == NULL)
+#if defined(RW_D3D9) || defined(RW_D3D11)
+    if (iBackendIsD3D())
     {
-        return NULL;
+        return d3dsnap::iSnapshotBackgroundTexture();
     }
-
-    // The surface the picture went into is not the surface that would be
-    // sampled: a device reset has been and gone, and what is there now is a
-    // fresh empty render target. Fall back rather than draw black.
-    if (rasterTexture(sRaster) != sCapturedInto)
+#endif
+#ifdef RW_GL3
+    if (iBackendIsGL3())
     {
-        sHaveFrame = 0;
-        return NULL;
+        return gl3snap::iSnapshotBackgroundTexture();
     }
-
-    return sTexture;
-}
-
-#elif defined(RW_GL3)
-
-// GL3 has no device-lost equivalent to guard against. A GL context can be lost
-// -- GL_KHR_robustness spells out how -- but librw neither asks for that
-// extension nor recreates anything on it, so there is no half-alive state to
-// detect here the way there is on D3D9 after a Reset. The texture behind the
-// raster is a name that stays valid for as long as the raster does.
-
-// One report, and then off for good.
-static void snapshotFail(const char* what)
-{
-    sFailed = 1;
-    printf("bfbb: the loading-screen snapshot is off -- %s\n", what);
-    fflush(stdout);
-}
-
-void iSnapshotCapture()
-{
-    // Read and cleared here rather than reset by the writer: xScrFxUpdateFade
-    // does not run on every frame the port presents, and a stale FALSE would
-    // be a captured fade while a stale TRUE would stop capturing for good.
-    const S32 obscured = sObscured;
-    sObscured = 0;
-
-    if (!sEnabled || sFailed || sLatched || obscured)
-    {
-        return;
-    }
-
-    // The size the virtual screen was made at, which is the size everything
-    // the game draws lands on. Zero before the engine has started, and zero
-    // for good if the driver refused the framebuffer -- in which case there is
-    // no picture to copy and the game falls back, which is the same answer the
-    // unsupported backends give.
-    RwInt32 width = (RwInt32)rw::gl3::virtualScreenWidth;
-    RwInt32 height = (RwInt32)rw::gl3::virtualScreenHeight;
-
-    if (width <= 0 || height <= 0 || rw::gl3::virtualScreenFramebuffer() == 0)
-    {
-        return;
-    }
-
-    if (!snapshotEnsureRaster(width, height))
-    {
-        return;
-    }
-
-    if (!rw::gl3::copyVirtualScreen(reinterpret_cast<rw::Raster*>(sRaster)))
-    {
-        // Every reason this returns false is a property of the device or of
-        // the raster, so it will be the same reason next frame.
-        snapshotFail("the frame could not be copied into a texture");
-        return;
-    }
-
-    sHaveFrame = 1;
-}
-
-RwTexture* iSnapshotBackgroundTexture()
-{
-    if (!sEnabled || sFailed || !sLatched || !sHaveFrame || sTexture == NULL)
-    {
-        return NULL;
-    }
-
-    return sTexture;
-}
-
-#else
-
-// Every other backend. The capture needs a way to copy the frame buffer into a
-// texture, and LIBRW_PLATFORM=NULL renders nothing to copy. Saying so here,
-// rather than leaving the file out of the build, keeps the call sites in
-// camera.cpp and zGame.cpp free of backend #ifdefs -- and the game already
-// handles the refusal: zGame falls back to the background texture asset, which
-// is the GameCube and PS2 loading screen exactly.
-
-void iSnapshotCapture()
-{
-}
-
-RwTexture* iSnapshotBackgroundTexture()
-{
+#endif
     return NULL;
 }
-
-#endif
 
 #if defined(RW_D3D9) || defined(RW_D3D11) || defined(RW_GL3)
 
@@ -305,8 +334,7 @@ static S32 snapshotEnsureRaster(RwInt32 width, RwInt32 height)
         return TRUE;
     }
 
-    sRaster = RwRasterCreate(width, height, 32,
-                             rwRASTERTYPECAMERATEXTURE | rwRASTERFORMAT8888);
+    sRaster = RwRasterCreate(width, height, 32, rwRASTERTYPECAMERATEXTURE | rwRASTERFORMAT8888);
     if (sRaster == NULL)
     {
         sFailed = 1;
@@ -362,12 +390,9 @@ void iSnapshotSetEnabled(S32 enabled)
 
 F32 iSnapshotHalfPixel()
 {
-    // RWHALFPIXEL is librw's own name for the D3D9 rule, and it is what
-    // decides: D3D10 and up put the pixel centre at 0.5 the way OpenGL does,
-    // and shifting there would introduce the offset instead of removing it.
-#ifdef RWHALFPIXEL
-    return -0.5f;
-#else
-    return 0.0f;
-#endif
+    // D3D10 and up put the pixel centre at 0.5 the way OpenGL does, and
+    // shifting there would introduce the offset instead of removing it. Negated
+    // because this is the shift to apply, and iBackendHalfPixel is the size of
+    // the pixel's own offset.
+    return -iBackendHalfPixel();
 }

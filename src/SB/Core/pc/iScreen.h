@@ -237,4 +237,40 @@ enum iScreenPipeline
 iScreenPipeline iScreenGetPipeline();
 void iScreenSetPipeline(iScreenPipeline pipeline);
 
+// Which render backend draws.
+//
+// The executable carries every backend BFBB_RENDER_BACKENDS asked for, and one
+// of them opens the device. RW_D3D9, RW_D3D11 and RW_GL3 say which are LINKED
+// and are still what guards each backend's own code; this says which is
+// RUNNING, and is what the parts written against more than one read.
+//
+//   D3D9   Direct3D 9. Windows only, and the only backend with the
+//          fixed-function path above.
+//   D3D11  Direct3D 11. Windows only, and it cannot be in the same build as
+//          D3D9 -- the two are one namespace in librw.
+//   GL3    OpenGL 3.3. The only backend that runs off Windows.
+//   NULL   No device at all, which is what a build with no render backend
+//          resolves to. Headless, for compiling and for the self-tests -- NOT
+//          something video.backend offers, because librw's null driver asserts
+//          the first time anything asks it for a raster.
+//
+// AUTO takes the first one the build has, in the order listed here. It is
+// resolved in RenderWareInit -- which is the only place that knows what was
+// linked -- so nothing downstream ever sees AUTO, exactly as with the pipeline
+// above.
+enum iScreenBackend
+{
+    iSCREENBACKEND_AUTO,
+    iSCREENBACKEND_D3D9,
+    iSCREENBACKEND_D3D11,
+    iSCREENBACKEND_GL3,
+    iSCREENBACKEND_NULL
+};
+
+iScreenBackend iScreenGetBackend();
+void iScreenSetBackend(iScreenBackend backend);
+
+// For the messages. "auto" before RenderWareInit has resolved it.
+const char* iScreenBackendName(iScreenBackend backend);
+
 #endif

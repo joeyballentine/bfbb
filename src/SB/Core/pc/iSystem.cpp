@@ -44,6 +44,8 @@
 #include <rpskin.h>
 #include <rpusrdat.h>
 
+#include "rw/backend.h"
+
 #include "xShadow.h"
 #include "xFX.h"
 
@@ -236,6 +238,11 @@ static void ApplyDisplayRateConfig()
 
 static S32 RenderWareInit()
 {
+    // Which backend draws, before the window rather than before the device.
+    // iWindowOpen needs the answer: D3D is handed a window that already exists
+    // and GL3 makes its own inside librw, so the two open differently.
+    iBackendResolve();
+
     // The window, where VIInit was. It opens at the render size because that is
     // the least surprising thing to do, not because anything requires it: the
     // port draws into a virtual screen which is scaled into the back buffer at
@@ -526,6 +533,38 @@ static void ApplyConfig()
     iScreenSetSize(iConfigGetInt("video.width", 640), iConfigGetInt("video.height", 480));
     iScreenSetMultiSample(iConfigGetInt("video.msaa", 4));
     iScreenSetPerPixelLighting(iConfigGetBool("video.per_pixel_lighting", FALSE));
+
+    // Which backend draws. AUTO is resolved in RenderWareInit, which is where
+    // the RW_* defines are; a name this build was not compiled with is reported
+    // there rather than here, because here cannot tell.
+    const char* backend = iConfigGetString("video.backend", "auto");
+    if (iHostStrCaseCmp(backend, "d3d9") == 0)
+    {
+        iScreenSetBackend(iSCREENBACKEND_D3D9);
+    }
+    else if (iHostStrCaseCmp(backend, "d3d11") == 0)
+    {
+        iScreenSetBackend(iSCREENBACKEND_D3D11);
+    }
+    else if (iHostStrCaseCmp(backend, "gl3") == 0)
+    {
+        iScreenSetBackend(iSCREENBACKEND_GL3);
+    }
+    else
+    {
+        // No "null" here on purpose. iSCREENBACKEND_NULL is what a build with
+        // no render backend resolves to -- the headless configuration the
+        // self-tests are built in -- and librw's null driver asserts the first
+        // time anything asks it for a raster, so it is not something a build
+        // that HAS a device can usefully be told to run as.
+        if (iHostStrCaseCmp(backend, "auto") != 0)
+        {
+            printf("bfbb: config: video.backend is not auto, d3d9, d3d11 or gl3, "
+                   "using the default: %s\n",
+                   backend);
+        }
+        iScreenSetBackend(iSCREENBACKEND_AUTO);
+    }
 
     // Which D3D9 path draws. AUTO is resolved in RenderWareInit, where the
     // adapter caps are; nothing here can know whether ps_2_0 exists.
