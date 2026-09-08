@@ -27,14 +27,26 @@
 #include <signal.h>
 #include <string.h>
 
+#ifdef _WIN32
 #include <windows.h>
 #include <dbghelp.h>
+#else
+#include <pthread.h>
+#include <unistd.h>
+
+// The POSIX arm walks the stack through the host seam rather than writing its
+// own. iHostPrintCallers is the same job -- "which code leads here", symbolised
+// -- and having one implementation means a frame reads the same whether the
+// crash handler or the platform layer asked for it.
+#include "iHost.h"
+#endif
 
 // Named in the startup banner, so that a build says which movie decoder it
 // actually has rather than the reader guessing.
 #include "iFMVAudio.h"
 #include "iFMVDecoder.h"
 
+#ifdef _WIN32
 namespace
 {
     // A crash handler, because the port is going to crash for a while yet and
@@ -323,7 +335,158 @@ namespace
         fflush(stdout);
         return EXCEPTION_EXECUTE_HANDLER;
     }
+
+    void InstallDiagnostics()
+    {
+        sMainThreadId = GetCurrentThreadId();
+
+        AddVectoredExceptionHandler(1, FirstChanceHandler);
+        signal(SIGABRT, AbortHandler);
+
+        const char* watchdogSeconds = getenv("BFBB_WATCHDOG");
+        if (watchdogSeconds != NULL)
+        {
+            DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(),
+                            &sMainThread, 0, FALSE, DUPLICATE_SAME_ACCESS);
+            CreateThread(NULL, 0, WatchdogThread, (LPVOID)(uintptr_t)atoi(watchdogSeconds), 0,
+                         NULL);
+        }
+
+        SetUnhandledExceptionFilter(CrashHandler);
+    }
 }
+
+#else
+
+namespace
+{
+    // The POSIX half of the same job. Everything above is Win32 structured
+    // exceptions and dbghelp, neither of which has an equivalent here: a fault
+    // arrives as a SIGNAL, and there is one chance to report on it rather than
+    // the first-chance/unhandled pair, so this is one handler and not two.
+    //
+    // Neither backtrace() nor printf is async-signal-safe, and both are called
+    // below. The Win32 arm has the same property -- SymInitialize allocates --
+    // and for the same reason: this runs when the process is already dying and
+    // a report that usually arrives beats a rule that never lets it.
+
+    pthread_t sMainThread;
+
+    // Space for the fatal handler to run on, because the fault it most needs to
+    // report is a STACK OVERFLOW and the thread's own stack is by then the
+    // thing that ran out. SA_ONSTACK plus this is what Windows gets from a
+    // vectored handler being called before unwinding.
+    //
+    // A literal rather than SIGSTKSZ. Since glibc 2.34 that macro expands to a
+    // sysconf() call, so it cannot size an array, and it is a few kilobytes
+    // either way -- not enough for backtrace_symbols, which allocates and
+    // formats.
+    char sSignalStack[65536];
+
+    void FatalSignal(int sig, siginfo_t* info, void*)
+    {
+        printf("\nbfbb: CRASH -- %s\n", strsignal(sig));
+
+        // The address that was touched, which is usually the whole diagnosis:
+        // 0 is a null dereference, a small value is a null plus a field offset,
+        // garbage is a wild pointer. Only the memory faults set it.
+        if (sig == SIGSEGV || sig == SIGBUS)
+        {
+            printf("bfbb:   faulting address %p\n", info->si_addr);
+        }
+
+        // Which thread. A crash on a worker and one on the game's own are
+        // different bugs, and the stack alone does not always say which.
+        printf("bfbb:   %s\n", pthread_equal(pthread_self(), sMainThread) ? "the main thread"
+                                                                          : "a worker thread");
+
+        iHostPrintCallers("crash", 32);
+        fflush(stdout);
+        _exit(3);
+    }
+
+    // Aborts, which are a signal here as well but not a fault: assert() inside
+    // librw ends in abort() having printed only which assertion failed, and the
+    // part worth knowing is which of the game's calls tripped it.
+    void AbortSignal(int)
+    {
+        printf("\nbfbb: ABORT -- assertion or abort() call\n");
+        iHostPrintCallers("abort", 32);
+        fflush(stdout);
+        _exit(3);
+    }
+
+    // The watchdog's sample, running ON the main thread.
+    //
+    // Windows suspends the main thread and walks it from outside. POSIX has no
+    // portable way to do that -- there is no ptrace-free equivalent of
+    // GetThreadContext -- so the direction is inverted: the watchdog thread
+    // interrupts the main thread with a signal and the main thread reports on
+    // itself. The stack it prints is the one it was executing, with this
+    // handler and the trampoline on top of it.
+    void SampleSignal(int)
+    {
+        iHostPrintCallers("watchdog", 32);
+        fflush(stdout);
+    }
+
+    void* WatchdogThread(void* param)
+    {
+        const unsigned seconds = (unsigned)(uintptr_t)param;
+
+        for (int sample = 1;; sample++)
+        {
+            sleep(seconds);
+
+            printf("\nbfbb: WATCHDOG sample %d -- main thread stack:\n", sample);
+            fflush(stdout);
+
+            pthread_kill(sMainThread, SIGUSR1);
+        }
+
+        return NULL;
+    }
+
+    void InstallDiagnostics()
+    {
+        sMainThread = pthread_self();
+
+        stack_t altstack;
+        memset(&altstack, 0, sizeof(altstack));
+        altstack.ss_sp = sSignalStack;
+        altstack.ss_size = sizeof(sSignalStack);
+        sigaltstack(&altstack, NULL);
+
+        struct sigaction fatal;
+        memset(&fatal, 0, sizeof(fatal));
+        fatal.sa_sigaction = FatalSignal;
+        fatal.sa_flags = SA_SIGINFO | SA_ONSTACK;
+        sigemptyset(&fatal.sa_mask);
+
+        // SIGBUS as well as SIGSEGV: on macOS an unmapped address raises
+        // SIGBUS where Linux raises SIGSEGV, so a handler for one of them
+        // catches half the faults depending on the host.
+        sigaction(SIGSEGV, &fatal, NULL);
+        sigaction(SIGBUS, &fatal, NULL);
+        sigaction(SIGILL, &fatal, NULL);
+        sigaction(SIGFPE, &fatal, NULL);
+
+        signal(SIGABRT, AbortSignal);
+
+        const char* watchdogSeconds = getenv("BFBB_WATCHDOG");
+        if (watchdogSeconds != NULL)
+        {
+            signal(SIGUSR1, SampleSignal);
+
+            pthread_t watchdog;
+            pthread_create(&watchdog, NULL, WatchdogThread,
+                           (void*)(uintptr_t)atoi(watchdogSeconds));
+            pthread_detach(watchdog);
+        }
+    }
+}
+
+#endif
 
 
 namespace
@@ -344,20 +507,7 @@ namespace
     {
         StartupBanner()
         {
-            sMainThreadId = GetCurrentThreadId();
-
-            AddVectoredExceptionHandler(1, FirstChanceHandler);
-            signal(SIGABRT, AbortHandler);
-
-            const char* watchdogSeconds = getenv("BFBB_WATCHDOG");
-            if (watchdogSeconds != NULL)
-            {
-                DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(),
-                                &sMainThread, 0, FALSE, DUPLICATE_SAME_ACCESS);
-                CreateThread(NULL, 0, WatchdogThread,
-                             (LPVOID)(uintptr_t)atoi(watchdogSeconds), 0, NULL);
-            }
-            SetUnhandledExceptionFilter(CrashHandler);
+            InstallDiagnostics();
             setvbuf(stdout, NULL, _IONBF, 0);
             setvbuf(stderr, NULL, _IONBF, 0);
             // Names what is actually linked, renderer included. A banner
