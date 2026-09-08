@@ -154,3 +154,99 @@ jobs:
         run: |
           build-mingw\rw_selftest.exe
           build-mingw\pc_selftest.exe
+
+  # The port off Windows: Linux and macOS, on the two backends that exist there.
+  #
+  # This is where iHostPosix.cpp is COMPILED. It is one half of the iHost seam
+  # and the Windows jobs above never touch it, so before this job existed the
+  # POSIX backend could be edited into anything at all and every check stayed
+  # green -- and it was, for long enough that it still called clock_nanosleep,
+  # which macOS does not have.
+  #
+  # D3D9 and D3D11 are absent from the matrix rather than skipped: CMakeLists.txt
+  # refuses them off Windows, because librw has no such platform there.
+  #
+  # NOT GATING, for the same reason the MinGW job is not: nothing had ever built
+  # the port on either host when this was added. Drop continue-on-error once it
+  # has been green for a while.
+  unix:
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-latest is Apple Silicon. macos-15-intel is the x86_64 image,
+        # and it is in the matrix for one reason: compat/intrin.h takes the
+        # square root in __frsqrte with an SSE intrinsic there and with a
+        # `fsqrt` instruction on AArch64, and neither arm compiles the other.
+        # GitHub retires the last x86_64 macOS image in August 2027.
+        os: [ubuntu-latest, macos-latest, macos-15-intel]
+        backend: ["NULL", "GL3"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Check the submodules came down
+        shell: bash
+        run: |
+          test -f third_party/librw/CMakeLists.txt || { echo "third_party/librw is empty"; exit 1; }
+          test -f third_party/SDL/CMakeLists.txt || { echo "third_party/SDL is empty"; exit 1; }
+
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      # SDL's video, audio and input backends, and the OpenGL librw links
+      # against. Not optional: SDL's configure FAILS outright when it can find
+      # neither X11 nor Wayland, and it names the missing package one at a time,
+      # so a short list here reads as an unrelated CMake error several minutes
+      # in. macOS needs none of this -- SDL builds against the system frameworks.
+      #
+      # This is the list SDL3 actually asks for on a 24.04 runner, not a guess.
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgl1-mesa-dev libegl1-mesa-dev libdrm-dev libgbm-dev \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
+            libxfixes-dev libxss-dev libxrender-dev libxtst-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev wayland-protocols libdecor-0-dev \
+            libasound2-dev libpulse-dev libudev-dev libdbus-1-dev libibus-1.0-dev
+
+      # BFBB_BUILD_32BIT is deliberately NOT named here. CMakeLists.txt builds
+      # 64-bit off Windows on its own -- macOS has no 32-bit runtime at all, and
+      # a 32-bit Linux build needs a multilib copy of every library SDL links --
+      # and if that logic ever breaks, this job is what says so.
+      #
+      # GCC on Linux and AppleClang on macOS -- two front ends neither of the
+      # Windows jobs uses, which is half the point of building here at all. GCC
+      # is the stricter of the two: it makes a pointer truncated to U32 an error
+      # rather than a warning -Wno-everything then swallows, which is how the
+      # last two of those were found.
+      - name: Configure
+        run: >
+          cmake -S . -B build-ci -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DBFBB_SDL=vendored
+          -DBFBB_RENDER_BACKEND=${{ matrix.backend }}
+
+      - name: Build
+        run: cmake --build build-ci
+
+      # NULL runs the tests, as on Windows and for the same reason. The dummy
+      # SDL drivers are not about the NULL backend: the self-test links the real
+      # audio backend on every host, and a runner has no sound card, so without
+      # this the mixer section tests what SDL does when it cannot open a device.
+      - name: Self-tests
+        if: matrix.backend == 'NULL'
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          ./build-ci/rw_selftest
+          ./build-ci/pc_selftest
