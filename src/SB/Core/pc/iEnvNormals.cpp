@@ -457,6 +457,58 @@ static void ReadNormal(xVec3* out, const NormalWork* w, S32 v, const RwMatrix* l
 }
 
 
+// Whether this geometry's prelight is ARTWORK rather than a record of light.
+//
+// Some of a level is painted, not lit. Lighting it fresh does not improve it,
+// it deletes it, and no rig can put it back because none of it was ever a
+// function of the surface's normal.
+//
+// Both shapes below are read off the prelight itself and not off a name, so
+// they hold on the levels this was never measured against:
+//
+//   **Vertex alpha that is not solid.** The colour is being blended rather
+//   than shown. bb01 fakes the shadow of every building with a piece of
+//   ordinary street laid over the street -- ground_alpha2 and ground_day3,
+//   the same textures as the road it sits on -- darkened in RGB and faded out
+//   at the edges by the alpha. Drop the prelight and the decal becomes opaque
+//   and brightly lit, so the shadow turns into a patch of rock. The texture
+//   was always rock; the shadow was only ever the paint.
+//
+//   **A prelight that is uniformly black.** Nothing about the light is
+//   recorded in it, so there is nothing to replace, and the geometry is
+//   invisible for a reason of its own -- bb01's collision walls carry a fully
+//   transparent texture and a black vertex colour. Lighting one can only
+//   invent light the artist did not put there.
+//
+// 62 of bb01's 405 world atomics are one or the other: 4,869 of its 39,647
+// vertices, a bit over a tenth of the level.
+static S32 PrelightIsArtwork(RpGeometry* geo)
+{
+    if (geo == NULL || geo->preLitLum == NULL || geo->numVertices == 0)
+    {
+        return FALSE;
+    }
+
+    S32 lit = FALSE;
+
+    for (S32 i = 0; i < geo->numVertices; i++)
+    {
+        RwRGBA* c = &geo->preLitLum[i];
+
+        if (c->alpha != 255)
+        {
+            return TRUE;
+        }
+
+        if (c->red != 0 || c->green != 0 || c->blue != 0)
+        {
+            lit = TRUE;
+        }
+    }
+
+    return !lit;
+}
+
 // Recover the rig this level was baked from.
 //
 // **The light kit is not what lit the world.** A kit lights the objects that
@@ -609,7 +661,7 @@ static void RecoverBakedLight(NormalWork* w, iEnv* env)
     {
         RpGeometry* geo = RpAtomicGetGeometry(w->atomics[a]);
 
-        if (!Usable(geo) || geo->preLitLum == NULL)
+        if (!Usable(geo) || geo->preLitLum == NULL || PrelightIsArtwork(geo))
         {
             continue;
         }
@@ -858,14 +910,38 @@ void iEnvDropPrelight(iEnv* env)
         return;
     }
 
+    S32 kept = 0;
+    S32 keptVerts = 0;
+
     for (S32 a = 0; a < w.numAtomics; a++)
     {
         RpGeometry* geo = RpAtomicGetGeometry(w.atomics[a]);
 
-        if (geo != NULL)
+        if (geo == NULL)
         {
-            geo->flags &= ~rpGEOMETRYPRELIT;
+            continue;
         }
+
+        if (PrelightIsArtwork(geo))
+        {
+            // Left exactly as the console drew it. The world's geometry
+            // arrives with LIGHT already set and only NORMALS missing, so
+            // clearing LIGHT is what keeps a piece out of the run-time rig --
+            // and it has to be cleared rather than merely skipped, because
+            // the normals added above would otherwise switch it on.
+            geo->flags &= ~rpGEOMETRYLIGHT;
+            kept++;
+            keptVerts += geo->numVertices;
+            continue;
+        }
+
+        geo->flags &= ~rpGEOMETRYPRELIT;
+    }
+
+    if (kept != 0)
+    {
+        printf("bfbb: world painting kept on %d of %d pieces, %d vertices\n", (int)kept,
+               (int)w.numAtomics, (int)keptVerts);
     }
 
     WorkFree(&w);

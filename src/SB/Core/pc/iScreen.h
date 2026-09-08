@@ -276,14 +276,20 @@ const char* iScreenBackendName(iScreenBackend backend);
 // Light the world geometry at run time instead of reading the colour baked
 // into its vertices.
 //
-// **Groundwork, and off is the better setting on the shipped levels.** Their
-// lighting was painted vertex by vertex, and some of it exists ONLY as paint:
-// bb01's building shadows are ordinary rock-textured ground darkened by hand,
-// so lighting that ground fresh turns its shadows back into bright rock. A rig
-// fitted to the average cannot know about anything local, and dropping the
-// prelight throws all of it away. This is here for levels authored to be lit,
-// and for the work that needs a world whose light can move -- a shadow the
-// world casts on itself, a sun that travels.
+// **Groundwork, and off is still the better setting on the shipped levels.**
+// Their lighting was painted vertex by vertex, and a rig fitted to the average
+// cannot know about anything local: occlusion, bounce, and shadow put in by
+// hand. Most of a bake is exactly that -- 54% of the colour variation on bb01,
+// 80% on hb01 -- so lighting a level fresh loses it.
+//
+// The paint that is doing a JOB rather than recording light is kept, per piece
+// of geometry: the faked shadows, the blended ground decals, the invisible
+// collision walls. See PrelightIsArtwork in iEnvNormals.cpp for how those are
+// told apart, which is by the shape of the prelight and not by any name.
+//
+// This is here for levels authored to be lit, and for the work that needs a
+// world whose light can move -- a shadow the world casts on itself, a sun that
+// travels.
 //
 // Off is what the consoles did and what the artists shipped. Otherwise
 // iEnvNormals generates the normals the level never stored -- two thirds of
@@ -303,7 +309,7 @@ const char* iScreenBackendName(iScreenBackend backend);
 // worth comparing against.
 //
 // A level whose bake cannot be fit keeps its paint either way; the prelight is
-// only dropped when there is something to replace it with. See
+// only dropped where there is something to replace it with. See
 // iEnv::prelightDropped and iEnvNormals.h.
 enum iWorldLightMode
 {

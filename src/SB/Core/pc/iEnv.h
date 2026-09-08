@@ -44,7 +44,7 @@ struct iEnv
     // contrast. See iScreenWorldLightContrast.
     F32 bakedDirMean[3];
     S32 bakedLightValid;
-    // Whether iEnvLoad actually took the baked colour off this world.
+    // Whether iEnvLoad took the baked colour off this world's lit geometry.
     //
     // The render side must not ask the question a second time: if load drops
     // the prelight and render then decides not to light, the level is black,
