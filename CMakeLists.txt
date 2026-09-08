@@ -689,11 +689,15 @@ target_include_directories(bfbb_rw PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x
   ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Game
 )
-# The screen passes' compiled shader blobs. Two trees carrying the same file
-# names, as in librw: rw/shaders at ps_2_0 for D3D9, rw/shaders11 at ps_4_0 for
-# D3D11. Which one is on the include path is what a build loads.
+# The screen passes' shaders. Three trees, as in librw: rw/shaders at ps_2_0 for
+# D3D9, rw/shaders11 at ps_4_0 for D3D11, rw/shadersgl in GLSL for GL3. Which
+# one is on the include path is what a build loads. The D3D trees carry the same
+# file names as each other; the GL one does not, because its sources are what is
+# compiled and a .h of blob bytes is not.
 if(BFBB_RENDER_BACKEND STREQUAL "D3D11")
   target_include_directories(bfbb_rw PRIVATE ${PC_DIR}/rw/shaders11)
+elseif(BFBB_RENDER_BACKEND STREQUAL "GL3")
+  target_include_directories(bfbb_rw PRIVATE ${PC_DIR}/rw/shadersgl)
 else()
   target_include_directories(bfbb_rw PRIVATE ${PC_DIR}/rw/shaders)
 endif()

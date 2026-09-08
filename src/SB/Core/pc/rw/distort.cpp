@@ -1,9 +1,10 @@
 // The cruise bubble's screen distortion. The interface, and the account of
 // where each part of it was recovered from, are in iDistort.h.
 //
-// D3D9 only, for the same reason snapshot.cpp is: the one thing this needs is a
-// way to get the frame buffer into a texture, and the shim has that for one
-// backend.
+// Every backend that can hand back the frame buffer as a texture and take a
+// pixel shader of the port's own for a 2D primitive: D3D9, D3D11 and GL3. What
+// differs between them is gathered in one place below, the way glow.cpp gathers
+// its own.
 
 #include <rwcore.h>
 
@@ -22,6 +23,8 @@
 #if defined(RW_D3D9) || defined(RW_D3D11)
 #include "src/d3d/rwd3dimpl.h"
 #endif
+// GL3 needs no header of its own here: rw.h includes src/gl/rwgl3.h and
+// rwgl3shader.h itself, and neither has an include guard.
 
 #include "iDistort.h"
 
@@ -31,6 +34,8 @@
 
 // config.ini's xbox.distortion, pushed down by iSystem.cpp. See glow.cpp.
 static S32 sEnabled = TRUE;
+
+#if defined(RW_D3D9) || defined(RW_D3D11) || defined(RW_GL3)
 
 #if defined(RW_D3D9) || defined(RW_D3D11)
 
@@ -46,6 +51,21 @@ namespace
 // decode is in iDistort.h.
 #include "distort_PS.h"
 }
+
+typedef void* DistortShader;
+
+#else
+
+namespace
+{
+// The same shader in GLSL, wrapped one string literal per line by
+// shadersgl/gen.py.
+#include "distort_gl.inc"
+}
+
+typedef rw::gl3::Shader* DistortShader;
+
+#endif
 
 // --- the numbers, and where they come from ----------------------------------
 //
@@ -80,9 +100,8 @@ static const F32 kRadiansPerMs = 0.002f;
 // ---------------------------------------------------------------------------
 
 static RwRaster* sScreen;      // the copy of the frame, as a texture
-static void* sPixelShader;
+static DistortShader sPixelShader;
 static S32 sFailed;
-static void* sCapturedInto;    // see snapshot.cpp: a device reset empties these
 
 static void distortFail(const char* what, long hr)
 {
@@ -91,6 +110,15 @@ static void distortFail(const char* what, long hr)
            (unsigned long)hr);
     fflush(stdout);
 }
+
+// --- the backend's half -----------------------------------------------------
+//
+// The same six things glow.cpp names, minus the blur's constants and plus the
+// second texture stage. See the note there.
+
+#if defined(RW_D3D9) || defined(RW_D3D11)
+
+static void* sCapturedInto;    // see snapshot.cpp: a device reset empties these
 
 static inline void* rasterTexture(RwRaster* raster)
 {
@@ -101,6 +129,126 @@ static inline void* rasterTexture(RwRaster* raster)
     return GETD3DRASTEREXT(r)->texture;
 #endif
 }
+
+static bool distortDeviceReady()
+{
+    return rw::d3d::deviceOpen() != 0;
+}
+
+static void distortScreenExtent(RwInt32* w, RwInt32* h)
+{
+    rw::d3d::getScreenExtent(w, h);
+}
+
+static bool distortCopyFrame(RwRaster* dst)
+{
+    if (!rw::d3d::captureFrame(reinterpret_cast<rw::Raster*>(dst)))
+    {
+        return false;
+    }
+
+    sCapturedInto = rasterTexture(dst);
+    return true;
+}
+
+static bool distortCaptureIsLive()
+{
+    return rasterTexture(sScreen) == sCapturedInto;
+}
+
+static bool distortCreateShader()
+{
+    sPixelShader = rw::d3d::createPixelShader((void*)PS_NAME);
+    return sPixelShader != NULL;
+}
+
+static void distortBindShader()
+{
+    rw::d3d::im2dOverridePS = sPixelShader;
+}
+
+static void distortUnbindShader()
+{
+    rw::d3d::im2dOverridePS = NULL;
+}
+
+static void distortSetSwirlMap(RwTexture* map)
+{
+    rw::d3d::setTexture(1, reinterpret_cast<rw::Texture*>(map));
+}
+
+// c1, because librw owns c0 for the fog colour.
+static void distortUploadDisplacement(F32* displace)
+{
+    rw::d3d::setPixelShaderConstantF(1, displace, 1);
+}
+
+#else
+
+static rw::int32 sDisplaceUniform = -1;
+
+static bool distortDeviceReady()
+{
+    return rw::gl3::virtualScreenFramebuffer() != 0;
+}
+
+static void distortScreenExtent(RwInt32* w, RwInt32* h)
+{
+    *w = (RwInt32)rw::gl3::virtualScreenWidth;
+    *h = (RwInt32)rw::gl3::virtualScreenHeight;
+}
+
+static bool distortCopyFrame(RwRaster* dst)
+{
+    return rw::gl3::copyVirtualScreen(reinterpret_cast<rw::Raster*>(dst)) != 0;
+}
+
+// GL3 has no device-lost equivalent to guard against; snapshot.cpp's GL3 arm
+// says why.
+static bool distortCaptureIsLive()
+{
+    return true;
+}
+
+static bool distortCreateShader()
+{
+    const char* vs[] = { rw::gl3::shaderDecl, rw::gl3::header_vert_src,
+                         rw::gl3::im2d_vert_src, NULL };
+    const char* fs[] = { rw::gl3::shaderDecl, rw::gl3::header_frag_src,
+                         distort_frag_src, NULL };
+
+    sPixelShader = rw::gl3::Shader::create(vs, fs);
+    return sPixelShader != NULL;
+}
+
+static void distortBindShader()
+{
+    rw::gl3::im2dOverrideShader = sPixelShader;
+}
+
+static void distortUnbindShader()
+{
+    rw::gl3::im2dOverrideShader = NULL;
+}
+
+static void distortSetSwirlMap(RwTexture* map)
+{
+    rw::gl3::setTexture(1, reinterpret_cast<rw::Texture*>(map));
+}
+
+static void distortUploadDisplacement(F32* displace)
+{
+    // See iDistortRegisterShaderUniforms for what a -1 means and why
+    // registering it here instead would be worse.
+    if (sDisplaceUniform < 0)
+    {
+        return;
+    }
+
+    rw::gl3::setUniform(sDisplaceUniform, displace);
+}
+
+#endif
 
 // Copy what has just been drawn into a texture we can sample.
 //
@@ -115,7 +263,7 @@ static bool captureScreen()
 {
     RwInt32 w = 0;
     RwInt32 h = 0;
-    rw::d3d::getScreenExtent(&w, &h);
+    distortScreenExtent(&w, &h);
     if (w <= 0 || h <= 0)
     {
         return false;
@@ -140,13 +288,12 @@ static bool captureScreen()
         }
     }
 
-    if (!rw::d3d::captureFrame(reinterpret_cast<rw::Raster*>(sScreen)))
+    if (!distortCopyFrame(sScreen))
     {
         distortFail("the frame could not be copied into a texture", 0);
         return false;
     }
 
-    sCapturedInto = rasterTexture(sScreen);
     return true;
 }
 
@@ -159,7 +306,7 @@ void iDistortRender(RwCamera* cam, RwTexture* map, F32 amount, F32 width, F32 he
         return;
     }
 
-    if (map == NULL || map->raster == NULL || !rw::d3d::deviceOpen())
+    if (map == NULL || map->raster == NULL || !distortDeviceReady())
     {
         return;
     }
@@ -182,8 +329,7 @@ void iDistortRender(RwCamera* cam, RwTexture* map, F32 amount, F32 width, F32 he
 
     if (sPixelShader == NULL)
     {
-        sPixelShader = rw::d3d::createPixelShader((void*)PS_NAME);
-        if (sPixelShader == NULL)
+        if (!distortCreateShader())
         {
             distortFail("the distortion pixel shader would not compile", 0);
             return;
@@ -195,7 +341,7 @@ void iDistortRender(RwCamera* cam, RwTexture* map, F32 amount, F32 width, F32 he
     bool captured = captureScreen();
     RwCameraBeginUpdate(cam);
 
-    if (!captured || rasterTexture(sScreen) != sCapturedInto)
+    if (!captured || !distortCaptureIsLive())
     {
         return;
     }
@@ -229,14 +375,13 @@ void iDistortRender(RwCamera* cam, RwTexture* map, F32 amount, F32 width, F32 he
     displace[2] = 0.0f;
     displace[3] = 0.0f;
 
-    // c1, because librw owns c0 for the fog colour.
-    rw::d3d::setPixelShaderConstantF(1, displace, 1);
+    distortUploadDisplacement(displace);
 
     // Stage 0 through the render state, so librw's own cache stays right about
     // it; stage 1 through librw's setter for the same reason. Nothing in the
     // Im2D path touches stage 1, so the map survives the flush.
     RwRenderStateSet(rwRENDERSTATETEXTURERASTER, sScreen);
-    rw::d3d::setTexture(1, reinterpret_cast<rw::Texture*>(map));
+    distortSetSwirlMap(map);
 
     RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
     RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSCLAMP);
@@ -284,14 +429,14 @@ void iDistortRender(RwCamera* cam, RwTexture* map, F32 amount, F32 width, F32 he
         vx[i].emissiveColor.alpha = 0xff;
     }
 
-    rw::d3d::im2dOverridePS = sPixelShader;
+    distortBindShader();
     RwIm2DRenderPrimitive(rwPRIMTYPETRISTRIP, &vx[0], 4);
-    rw::d3d::im2dOverridePS = NULL;
+    distortUnbindShader();
 
     // Put back what the rest of the frame expects. iScrFxEnd runs right after
     // this and sets some of it again, but not the two stages or the cull mode,
     // and leaving a texture bound to stage 1 would follow the next draw.
-    rw::d3d::setTexture(1, NULL);
+    distortSetSwirlMap(NULL);
     RwRenderStateSet(rwRENDERSTATETEXTURERASTER, NULL);
     RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLBACK);
     RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
@@ -303,9 +448,9 @@ void iDistortRender(RwCamera* cam, RwTexture* map, F32 amount, F32 width, F32 he
 #else
 
 // Every other backend. The copy needs a way to get the frame buffer into a
-// texture and the shim has one for D3D9 alone; NULL renders nothing to copy and
-// the GL3 arm does not exist yet. Stubbed here rather than left out of the
-// build so the call site in xScrFx.cpp needs no backend #ifdef.
+// texture, and LIBRW_PLATFORM=NULL renders nothing to copy. Stubbed here rather
+// than left out of the build so the call site in xScrFx.cpp needs no backend
+// #ifdef.
 
 void iDistortRender(RwCamera*, RwTexture*, F32, F32, F32)
 {
@@ -317,4 +462,14 @@ void iDistortRender(RwCamera*, RwTexture*, F32, F32, F32)
 void iDistortSetEnabled(S32 enabled)
 {
     sEnabled = enabled ? TRUE : FALSE;
+}
+
+// Name the displacement to librw's GL3 uniform registry. Nothing on the
+// backends whose constants are numbered. glow.cpp's own registration says why
+// this cannot wait until the shader is built.
+void iDistortRegisterShaderUniforms(void)
+{
+#if defined(RW_GL3)
+    sDisplaceUniform = rw::gl3::registerUniform("u_distortDisplace", rw::gl3::UNIFORM_VEC4);
+#endif
 }

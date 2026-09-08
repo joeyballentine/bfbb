@@ -43,6 +43,8 @@
 
 #include "rw.h"
 
+#include "iDistort.h"
+#include "iGlow.h"
 #include "iScreen.h"
 #include "iWindow.h"
 
@@ -264,6 +266,13 @@ RwBool RwEngineOpen(RwEngineOpenParams* initParams)
     // linked, because EngineOpenParams is the only librw type whose SHAPE
     // changes with it. Everything else the port touches is backend-neutral.
     (void)initParams;
+
+    // Before the device opens, because opening it builds shaders and a uniform
+    // registered after a shader was built is a printf in every later flush of
+    // it. Both are no-ops on a backend whose shader constants are numbered.
+    // The notes on the definitions have the rest.
+    iGlowRegisterShaderUniforms();
+    iDistortRegisterShaderUniforms();
 
 #if defined(RW_D3D9) || defined(RW_D3D8)
     rw::EngineOpenParams params;

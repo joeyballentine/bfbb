@@ -253,9 +253,9 @@ Both take a render backend as their first argument:
 
 | Backend | What it is |
 | --- | --- |
-| `D3D9` | Direct3D 9, on a Win32 window the port creates. The default, and the only one with the Xbox glow and the cruise-bubble effects. |
-| `D3D11` | Direct3D 11, on the same window. Draws levels and characters; it does not have the Xbox effects. |
-| `GL3` | OpenGL 3.3 on an SDL3 window, falling back through 2.1, GLES 3.1 and GLES 2.0. The backend that can eventually run off Windows. It is missing many ported xbox features. |
+| `D3D9` | Direct3D 9, on a Win32 window the port creates. The default, and the one the port is playtested on. |
+| `D3D11` | Direct3D 11, on the same window. Draws levels and characters, and the screen passes. |
+| `GL3` | OpenGL 3.3 on an SDL3 window, falling back through 2.1, GLES 3.1 and GLES 2.0. The backend that can eventually run off Windows. All three screen passes; still missing some of the ported Xbox features. |
 | `NULL` | No renderer. Headless, and what the self-tests run against. |
 
 ```sh

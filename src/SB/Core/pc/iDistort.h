@@ -69,4 +69,9 @@ void iDistortRender(RwCamera* cam, RwTexture* map, F32 amount, F32 width, F32 he
 // the GameCube, which is nothing.
 void iDistortSetEnabled(S32 enabled);
 
+// Name the distortion's shader constant, before any shader exists to hold it.
+// See iGlow.h; the timing is the same and so is the reason. Called from
+// RwEngineOpen.
+void iDistortRegisterShaderUniforms(void);
+
 #endif

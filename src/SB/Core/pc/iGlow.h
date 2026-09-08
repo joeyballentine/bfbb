@@ -59,4 +59,10 @@ void iGlowRender(RwCamera* cam, F32 strength);
 // is on, so a caller that never sets it gets the Xbox behaviour.
 void iGlowSetEnabled(S32 enabled);
 
+// Name the glow's shader constants, before any shader exists to hold them.
+// Nothing on the backends whose constants are numbered; see the note on the
+// definition for what it does on GL3 and why the timing is not negotiable.
+// Called from RwEngineOpen.
+void iGlowRegisterShaderUniforms(void);
+
 #endif
