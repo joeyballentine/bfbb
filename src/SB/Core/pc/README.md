@@ -231,7 +231,7 @@ Each is off unless set, and each costs a load per frame when it is.
                         one replacing it: the outline in green, the game's own
                         atlas in red, yellow where they agree. A coloured fringe
                         is a letter the substitute sizes differently, which is
-                        what `[font] font_padding` moves. Needs `[font] font`
+                        what `[font] padding` moves. Needs `[font] face`
                         set, and makes the text unreadable while it is on.
 
     BFBB_FONTDUMP=<f>   write each font's atlas, character set and glyph boxes
@@ -245,14 +245,14 @@ Each is off unless set, and each costs a load per frame when it is.
                             bin\bfbb.exe                       (BFBB_FONTDUMP set)
                             bin\fontfit fonts.bin face.ttf 3
 
-                        The last argument is `[font] font_upscale` as it
+                        The last argument is `[font] upscale` as it
                         resolves at the resolution being played: the render
                         height over 480, so 3 for 1440p and 4 for 4K. It matters
                         -- padding is applied as a whole number of raster
                         pixels, so the answer is different at each size.
                         `--glyphs` prints per-letter offsets instead of the
                         sweep, and `--width` and `--natural` measure the other
-                        two `font_fit` modes.
+                        two `fit` modes.
 
     BFBB_TEX            textures that did not convert, with the format that
                         defeated the conversion, and textures a material named

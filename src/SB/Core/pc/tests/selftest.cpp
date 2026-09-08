@@ -459,7 +459,9 @@ static void test_config()
         check(strstr(buf, "reverb = on") != NULL, "and reverb");
         check(strstr(buf, "sound_rolloff = on") != NULL, "and the sound rolloff");
         check(strstr(buf, "[font]") != NULL, "it has the [font] section header");
-        check(strstr(buf, "font_fit = box") != NULL, "and the glyph fit at its default");
+        // Anchored on the newline: unanchored, "fit = box" would also be
+        // found inside a "sans_fit = box" line.
+        check(strstr(buf, "\nfit = box") != NULL, "and the glyph fit at its default");
         check(strstr(buf, "platform_wording = on") != NULL, "and the text rewrite at its default");
     }
 

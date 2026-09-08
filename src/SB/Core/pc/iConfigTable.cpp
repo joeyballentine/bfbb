@@ -145,40 +145,40 @@ const iConfigSetting kConfigSettings[] = {
       "; game's. The port matches a file to a track by asset name, or by a\n"
       "; soundtrack.txt beside them holding one 'asset name = file' per line.",
       ICONFIG_FOLDER, NULL, kNone, kNone },
-    { "font", "font", "",
+    { "font", "face", "",
       "A .ttf to draw the game's text with, or empty for the game's own font.\n"
       "; Sharper than the game's atlas above 640x480. No font ships with the\n"
       "; port. tools/getfont.py fetches one and prints the line to paste here.",
       ICONFIG_FONT, NULL, kNone, kNone },
-    { "font", "font_sans", "auto",
+    { "font", "sans", "auto",
       "The same, for the sans serif on the copyright, memory card and\n"
       "; controller screens. auto uses the system's Arial, which is the face\n"
       "; that atlas is. off leaves those screens as the game has them.",
       ICONFIG_FONT, "auto|off", kNone, kNone },
-    { "font", "font_upscale", "0",
-      "How many times the game's own cell resolution to draw that font at, or\n"
+    { "font", "upscale", "0",
+      "How many times the game's own cell resolution to draw the face at, or\n"
       "; 0 to match the render size. Higher is sharper, and the glyph lands in\n"
-      "; the same box either way.",
+      "; the same cell either way.",
       ICONFIG_INT, NULL, 0.0f, 8.0f },
-    { "font", "font_padding", "auto",
-      "How far to inset a glyph inside that box, in the game's own atlas\n"
+    { "font", "padding", "auto",
+      "How far to inset a glyph inside its atlas cell, in the game's own atlas\n"
       "; pixels, or auto to measure it. Larger is smaller letters. Negative\n"
-      "; grows them past the box.",
+      "; grows them past the cell.",
       ICONFIG_FLOAT, "auto", -8.0f, 8.0f },
-    { "font", "font_weight", "auto",
-      "How much to thicken that font's strokes, in the game's own atlas\n"
+    { "font", "weight", "auto",
+      "How much to thicken the face's strokes, in the game's own atlas\n"
       "; pixels, or auto to measure it. 0 draws the face as it is.\n"
       "; tools/fontfit runs the same measurement outside the game.",
       ICONFIG_FLOAT, "auto", -8.0f, 8.0f },
-    { "font", "font_sans_weight", "auto",
-      "The same, for the font_sans face.", ICONFIG_FLOAT, "auto", -8.0f, 8.0f },
-    { "font", "font_fit", "box",
+    { "font", "sans_weight", "auto",
+      "The same, for the sans face.", ICONFIG_FLOAT, "auto", -8.0f, 8.0f },
+    { "font", "fit", "box",
       "How each glyph fills the space the game's own letter took: box (stretch\n"
       "; it to fit), width (keep the height, let the width be the face's),\n"
       "; natural (no fitting at all).",
       ICONFIG_ENUM, "box|width|natural", kNone, kNone },
-    { "font", "font_sans_fit", "natural",
-      "The same, for the font_sans face.", ICONFIG_ENUM, "box|width|natural", kNone, kNone },
+    { "font", "sans_fit", "natural",
+      "The same, for the sans face.", ICONFIG_ENUM, "box|width|natural", kNone, kNone },
 };
 
 const S32 kConfigSettingCount = (S32)(sizeof(kConfigSettings) / sizeof(kConfigSettings[0]));
