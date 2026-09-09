@@ -250,6 +250,10 @@ const iConfigSetting kConfigSettings[] = {
       "Draw the game like the cartoon it came from: light cut into steps,\n"
       "; colour pushed from grey, a line round each character. Direct3D 9 only.",
       ICONFIG_BOOL, NULL, kNone, kNone },
+    { "experimental", "toon_all", "off",
+      "Cel-shade and ink every model the game draws, not just the characters.\n"
+      "; The level itself keeps its painted lighting either way.",
+      ICONFIG_BOOL, NULL, kNone, kNone, "toon" },
     { "experimental", "toon_strength", "0.25",
       "How far the stylised shading is taken against the plain lighting. 0 is\n"
       "; the game as it was, 1 is hard bands with no falloff at all.",

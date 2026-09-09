@@ -405,6 +405,18 @@ F32 iScreenToonOutline();
 S32 iScreenToonFaceLight();
 void iScreenSetToon(S32 on, F32 bands, F32 saturation, F32 outline, F32 strength, S32 faceLight);
 
+// Ink every model the game draws, not just the characters.
+//
+// Off is the show: a crate, a platform and a spatula are things in the world
+// rather than people in a cartoon, and a line round each of them reads as a
+// diagram. On is the whole scene drawn, which is a different look and a
+// coherent one.
+//
+// The level itself is out of reach either way. It is drawn as world geometry
+// rather than as models, and nothing in that path asks about an outline.
+S32 iScreenToonAll();
+void iScreenSetToonAll(S32 on);
+
 // How many shades a character's own colours are rounded to. 0 leaves them.
 F32 iScreenToonColors();
 void iScreenSetToonFlatten(F32 colors);

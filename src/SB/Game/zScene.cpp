@@ -3411,6 +3411,10 @@ static void zSceneRenderPreFX()
 #ifdef PLATFORM_PC
     iToonOutlineClear();
 
+    // What a model nobody names gets. Per frame with the clear, so the setting
+    // can be answered without a restart if it ever becomes live.
+    iToonSetOutlineDefault(iScreenToonAll() ? ITOON_OUTLINE_PLAIN : ITOON_OUTLINE_NONE);
+
     // The colour this level lights its world in, for the characters walking
     // through it. The world's own rig, not theirs -- iToonSetRoomTint says why.
     iToonSetRoomTint(s->env->geom->baked.valid ? s->env->geom->baked.ambient : NULL);
@@ -3557,6 +3561,14 @@ static void zSceneRenderPreFX()
     zEntPlayer_ShadowModelDisable();
     xShadowSimple_Render();
 
+#ifdef PLATFORM_PC
+    // Everything from here down is see-through: alpha models, the floor decals,
+    // the effects, the particles, and the numbers that float off a clam. None
+    // of it is a solid surface, so none of it takes the cartoon look. iToonPause
+    // says why.
+    iToonPause(TRUE);
+#endif
+
     zRenderState(SDRS_AlphaModels);
     xModelBucket_RenderAlpha();
     z_disco_floor::effects_render_all();
@@ -3594,6 +3606,10 @@ static void zSceneRenderPreFX()
     xPTankPoolRender();
     zNPCMgr_scenePostParticleRender();
     xDecalRender();
+
+#ifdef PLATFORM_PC
+    iToonPause(FALSE);
+#endif
 }
 
 #ifdef PLATFORM_PC

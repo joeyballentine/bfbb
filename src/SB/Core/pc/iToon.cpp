@@ -286,6 +286,28 @@ namespace toonbackend
         (void)w;
     }
 
+    inline void setToonShading(S32 on, F32 bands, F32 saturation, F32 strength)
+    {
+#ifdef RW_D3D9
+        if (iBackendIsD3D9())
+        {
+            rw::d3d::setToonShading(on, bands, saturation, strength);
+            return;
+        }
+#endif
+#ifdef RW_GL3
+        if (iBackendIsGL3())
+        {
+            rw::gl3::setToonShading(on, bands, saturation, strength);
+            return;
+        }
+#endif
+        (void)on;
+        (void)bands;
+        (void)saturation;
+        (void)strength;
+    }
+
     inline void setOutlineMaxWidth(F32 w)
     {
 #ifdef RW_D3D9
@@ -563,8 +585,43 @@ void iToonInit(S32 bands)
 // surrounds disagree. A darkened copy of the surface cannot disagree with it.
 static const F32 kInkScale = 0.35f;
 
+// **The see-through half of a frame is not drawn, it is painted over.**
+//
+// A cel ramp and a hull are both statements about a solid surface: the ramp
+// says which way it faces the light, the hull says where it ends. A floor
+// decal, a plant card, a particle and the number that floats off a clam are
+// none of those. They are flat art laid on the picture, and cutting their
+// lighting into bands only darkens them, while a hull traces the rectangle they
+// were cut from rather than the shape their texture leaves behind.
+//
+// So the whole alpha pass runs with the look off. One bracket rather than a
+// test per mesh, because the game already sorts the frame into a solid half and
+// a see-through half and this is that seam.
+static S32 sPaused;
+
+void iToonPause(S32 on)
+{
+    sPaused = on ? 1 : 0;
+
+    if (sPaused)
+    {
+        toonbackend::setToonShading(FALSE, iScreenToonBands(), iScreenToonSaturation(),
+                                    iScreenToonStrength());
+        toonbackend::setOutlineMode(ITOON_OUTLINE_NONE);
+        return;
+    }
+
+    toonbackend::setToonShading(iScreenToon(), iScreenToonBands(), iScreenToonSaturation(),
+                                iScreenToonStrength());
+}
+
 void iToonSetOutline(S32 mode)
 {
+    if (sPaused)
+    {
+        return;
+    }
+
     toonbackend::setOutline(kInkScale, kInkScale, kInkScale, iScreenToonOutline());
 
     // Two tones only where there are two: the upper ink is the surface
@@ -1078,6 +1135,24 @@ void iToonOutlineRegister(xModelInstance* model, S32 mode)
     }
 }
 
+// What a model that nobody registered gets.
+//
+// **This is where "everything" is spelled, and it costs one branch.** The
+// alternative is walking the scene and registering every entity, which means
+// finding every list that draws one -- the entity walk, the pickups, the simple
+// objects, the shrapnel, the glyphs, the hazards -- and adding a call to each.
+// Flipping the default reaches all of them at once, because every one of them
+// is drawn through iModelRender and iModelRender asks this.
+//
+// The level is not reached and cannot be: iEnv.cpp draws the world through
+// RpAtomicRender and never comes here. That is the line the setting draws.
+static S32 sOutlineDefault = ITOON_OUTLINE_NONE;
+
+void iToonSetOutlineDefault(S32 mode)
+{
+    sOutlineDefault = mode;
+}
+
 S32 iToonOutlineFind(void* atomic)
 {
     if (atomic == NULL)
@@ -1099,7 +1174,7 @@ S32 iToonOutlineFind(void* atomic)
         tries++;
     }
 
-    return ITOON_OUTLINE_NONE;
+    return sOutlineDefault;
 }
 
 void iToonShutdown()

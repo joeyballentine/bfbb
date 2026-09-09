@@ -385,6 +385,7 @@ static F32 sToonOcclusion;
 static F32 sToonHardness;
 static F32 sToonOutlineMin;
 static F32 sToonOutlineMax;
+static S32 sToonAll;
 
 S32 iScreenToon()
 {
@@ -414,6 +415,16 @@ F32 iScreenToonStrength()
 S32 iScreenToonFaceLight()
 {
     return sToonFaceLight;
+}
+
+S32 iScreenToonAll()
+{
+    return sToonAll;
+}
+
+void iScreenSetToonAll(S32 on)
+{
+    sToonAll = on ? 1 : 0;
 }
 
 void iScreenSetToon(S32 on, F32 bands, F32 saturation, F32 outline, F32 strength, S32 faceLight)

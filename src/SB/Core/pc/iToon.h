@@ -84,6 +84,27 @@ struct xModelInstance;
 void iToonOutlineClear();
 void iToonOutlineRegister(xModelInstance* model, S32 mode);
 
+// What a model nobody registered is drawn as.
+//
+// ITOON_OUTLINE_NONE is the show's answer: a crate, a platform and a spatula
+// are things in the world rather than people in a cartoon, and inking them
+// makes the picture read as a diagram. ITOON_OUTLINE_PLAIN inks everything the
+// game draws as a model instead, which is what experimental.toon_all asks for.
+//
+// Either way the level itself is untouched, and not by choice of this file:
+// iEnv.cpp draws the world through RpAtomicRender and never reaches the
+// registry at all.
+void iToonSetOutlineDefault(S32 mode);
+
+// Stop and restart the whole look, for a pass that draws see-through art
+// rather than solid surfaces.
+//
+// The alpha half of a frame -- floor decals, plant cards, particles, the
+// numbers that float off a clam -- is flat art laid on the picture. Banding its
+// light only darkens it, and a hull round an alpha card traces the rectangle
+// and not the shape. iToon.cpp says the whole of it.
+void iToonPause(S32 on);
+
 // What was registered for this atomic, or ITOON_OUTLINE_NONE. Called by
 // iModelRender around the draw.
 S32 iToonOutlineFind(void* atomic);
