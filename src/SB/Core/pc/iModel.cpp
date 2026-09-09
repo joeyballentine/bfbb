@@ -1,4 +1,6 @@
 #include "iModel.h"
+#include "iScreen.h"
+#include "iToon.h"
 
 #include <stdio.h>
 #include <types.h>
@@ -625,9 +627,45 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
     {
         model->geometry->flags &= 0xfffffff7;
     }
+    // The outline, here rather than around the caller's render: a bucketed
+    // model is drawn long after whoever asked for it returned. iToon.h says
+    // more.
+    S32 outline = iToonOutlineFind(model);
+
+    if (outline != ITOON_OUTLINE_NONE)
+    {
+        iToonSetOutline(outline);
+
+        // Everything the registry knows about is a character, so this is the
+        // one place that knows both that fact and the model's own matrix.
+        iToonFaceLight(mat);
+        iToonRoomTintApply();
+
+        // Which strip he is shaded with, and how thin his line may get. Both
+        // belong here for the same reason the rest does: this is where a
+        // bucketed model is actually drawn.
+        iToonSetRampRow(iToonRampRowFor(model));
+        iToonOutlineMinWidth();
+
+        // Once per geometry, and it has to happen before the hull is drawn
+        // rather than at load: nothing tells this file when a character's model
+        // arrives, and by the time one is being rendered it certainly has. It
+        // hands back where the model's two inks meet, which only it has walked
+        // the vertices to find.
+        iToonOutlineSplit(iToonWeld(model), outline);
+    }
+
     if (iModelCheckAtomic(model, "iModelRender refused", true))
     {
         iModelCacheAtomic(model)->renderCallBack(iModelCacheAtomic(model));
+    }
+
+    if (outline != ITOON_OUTLINE_NONE)
+    {
+        iToonSetOutline(ITOON_OUTLINE_NONE);
+        iToonFaceLightClear();
+        iToonRoomTintClear();
+        iToonSetRampRow(ITOON_RAMP_CHARACTER);
     }
     if ((iModelHack_DisablePrelight != 0) && (model->geometry->preLitLum != NULL))
     {

@@ -372,4 +372,50 @@ void iScreenSetWorldLightContrast(F32 contrast);
 S32 iScreenWorldLightShadows();
 void iScreenSetWorldLightShadows(S32 on);
 
+// Draw the game like the cartoon it came from: a character's light cut into
+// steps, his colour pushed away from grey, and a black line drawn round him.
+// iToon.h says how each part is made.
+//
+// **Direct3D 9 only.** The cel ramp and the hull are shader permutations that
+// exist in librw's D3D9 tree and nowhere else, so RenderWareInit turns this off
+// on any other backend rather than letting it draw a character with no pixel
+// shader bound.
+S32 iScreenToon();
+F32 iScreenToonBands();
+F32 iScreenToonSaturation();
+F32 iScreenToonStrength();
+
+// The hull's width in WORLD units, and its floor in pixels below. That way
+// round because a line is a property of the thing it goes round: a character
+// keeps the same weight of ink as he walks towards you, and the floor is only
+// there to stop it disappearing in the distance.
+F32 iScreenToonOutline();
+
+// Where a character's shading is measured from.
+//
+//   0  the room's own brightest light, so he shades by where he is standing.
+//   1  his own front, so his face is always lit and his sides always dark --
+//      the show's convention, and true however he turns.
+//   2  the camera, so whichever side of him you can see is the lit one and he
+//      darkens as he walks away.
+#define ITOON_LIGHT_SCENE 0
+#define ITOON_LIGHT_FACE 1
+#define ITOON_LIGHT_CAMERA 2
+
+S32 iScreenToonFaceLight();
+void iScreenSetToon(S32 on, F32 bands, F32 saturation, F32 outline, F32 strength, S32 faceLight);
+
+// How many shades a character's own colours are rounded to. 0 leaves them.
+F32 iScreenToonColors();
+void iScreenSetToonFlatten(F32 colors);
+
+// The rest of the cel, and the hull's floor in pixels of the picture. iToon.h
+// and librw's rwgl3.h say what each one does.
+F32 iScreenToonWrap();
+F32 iScreenToonRim();
+F32 iScreenToonOcclusion();
+F32 iScreenToonHardness();
+F32 iScreenToonOutlineMin();
+void iScreenSetToonLook(F32 wrap, F32 rim, F32 occlusion, F32 hardness, F32 outlineMin);
+
 #endif

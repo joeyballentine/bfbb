@@ -369,6 +369,106 @@ void iScreenSetWorldLightShadows(S32 on)
     sWorldLightShadows = on ? 1 : 0;
 }
 
+// The cartoon look. Nothing below decides anything; iToon.h says what each one
+// does, and this is only where they are kept between being read out of
+// config.ini and being pushed at the renderer.
+static S32 sToon;
+static F32 sToonBands = 3.0f;
+static F32 sToonSaturation = 1.5f;
+static F32 sToonOutline;
+static F32 sToonStrength = 1.0f;
+static S32 sToonFaceLight;
+static F32 sToonColors;
+static F32 sToonWrap;
+static F32 sToonRim;
+static F32 sToonOcclusion;
+static F32 sToonHardness;
+static F32 sToonOutlineMin;
+
+S32 iScreenToon()
+{
+    return sToon;
+}
+
+F32 iScreenToonBands()
+{
+    return sToonBands;
+}
+
+F32 iScreenToonSaturation()
+{
+    return sToonSaturation;
+}
+
+F32 iScreenToonOutline()
+{
+    return sToonOutline;
+}
+
+F32 iScreenToonStrength()
+{
+    return sToonStrength;
+}
+
+S32 iScreenToonFaceLight()
+{
+    return sToonFaceLight;
+}
+
+void iScreenSetToon(S32 on, F32 bands, F32 saturation, F32 outline, F32 strength, S32 faceLight)
+{
+    sToon = on ? 1 : 0;
+    sToonBands = bands;
+    sToonSaturation = saturation;
+    sToonOutline = on ? outline : 0.0f;
+    sToonStrength = strength;
+    sToonFaceLight = on ? faceLight : 0;
+}
+
+F32 iScreenToonColors()
+{
+    return sToonColors;
+}
+
+void iScreenSetToonFlatten(F32 colors)
+{
+    sToonColors = colors;
+}
+
+F32 iScreenToonWrap()
+{
+    return sToonWrap;
+}
+
+F32 iScreenToonRim()
+{
+    return sToonRim;
+}
+
+F32 iScreenToonOcclusion()
+{
+    return sToonOcclusion;
+}
+
+F32 iScreenToonHardness()
+{
+    return sToonHardness;
+}
+
+F32 iScreenToonOutlineMin()
+{
+    return sToonOutlineMin;
+}
+
+void iScreenSetToonLook(F32 wrap, F32 rim, F32 occlusion, F32 hardness, F32 outlineMin)
+{
+    sToonWrap = wrap;
+    sToonRim = rim;
+    sToonOcclusion = occlusion;
+    sToonHardness = hardness;
+    sToonOutlineMin = outlineMin;
+}
+
 // The field of view every camera in the game is built around. zCamera resets to
 // it, xCameraCreate starts at it, and the cutscene and Cruise Bubble values are
 // authored relative to it.

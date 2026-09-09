@@ -807,6 +807,11 @@ add_library(bfbb_platform STATIC
   # on the consoles ever asked the world which way it faced.
   ${PC_DIR}/iEnvNormals.cpp
 
+  # The cartoon look: the ramp a character is shaded through, the hull its ink
+  # is drawn as, and the registry that says which models are characters. No gc/
+  # counterpart. See iToon.h.
+  ${PC_DIR}/iToon.cpp
+
   # Also a verbatim copy, but three of its calls are RenderWare collision-world
   # functions (RpAtomicForAllIntersections, RpCollisionWorldForAllIntersections,
   # RwFrameTransform), so it cannot resolve until librw arrives. Fine in a static

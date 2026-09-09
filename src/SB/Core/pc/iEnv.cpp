@@ -1,4 +1,5 @@
 #include "iEnv.h"
+#include "iToon.h"
 
 #include "iEnvNormals.h"
 #include "iModel.h"
@@ -224,6 +225,12 @@ void iEnvRender(iEnv* env)
     RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
     RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
 
+    // The world is painted, not drawn. Its own strip -- gentler shadow, one
+    // more step -- because hard bands across a wall read as a mistake where the
+    // same bands on a face read as a style. Put back afterwards so that
+    // whatever draws next is not shaded like scenery.
+    iToonSetRampRow(ITOON_RAMP_WORLD);
+
     if (env->jsp)
     {
         Jsp_ClumpRender(env->jsp->clump, env->jsp->jspNodeList);
@@ -232,6 +239,8 @@ void iEnvRender(iEnv* env)
     {
         RpWorldRender(env->world);
     }
+
+    iToonSetRampRow(ITOON_RAMP_CHARACTER);
 
     lastEnv = env;
 }

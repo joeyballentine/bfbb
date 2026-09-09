@@ -11,6 +11,7 @@
 #include "iPadStick.h"
 #include "iDayNight.h"
 #include "iScreen.h"
+#include "iToon.h"
 #include "isavegame.h"
 #include "iTRC.h"
 #include "iSnapshot.h"
@@ -237,12 +238,53 @@ static void ApplyDisplayRateConfig()
     }
 }
 
+// experimental.toon_light, as a word rather than a switch: there are three
+// answers and two of them are not "on".
+static S32 iToonLightModeFromConfig()
+{
+    const char* mode = iConfigGetString("experimental.toon_light", "scene");
+
+    if (iHostStrCaseCmp(mode, "face") == 0)
+    {
+        return ITOON_LIGHT_FACE;
+    }
+    if (iHostStrCaseCmp(mode, "camera") == 0)
+    {
+        return ITOON_LIGHT_CAMERA;
+    }
+    if (iHostStrCaseCmp(mode, "scene") != 0)
+    {
+        printf("bfbb: config: experimental.toon_light = %s is not scene, face or camera; "
+               "using scene\n",
+               mode);
+    }
+
+    return ITOON_LIGHT_SCENE;
+}
+
 static S32 RenderWareInit()
 {
     // Which backend draws, before the window rather than before the device.
     // iWindowOpen needs the answer: D3D is handed a window that already exists
     // and GL3 makes its own inside librw, so the two open differently.
     iBackendResolve();
+
+    // **The cartoon look needs Direct3D 9 or OpenGL, and this is where that is
+    // said.**
+    //
+    // Its cel ramp and its hull are shader permutations that librw carries in
+    // the D3D9 tree and the GL3 tree but not the D3D11 one. Left on, a D3D11
+    // device would take the cel path with no shader bound and draw a black
+    // character, which looks like a fault rather than like a setting.
+    if (iScreenToon() && iScreenGetBackend() != iSCREENBACKEND_D3D9 &&
+        iScreenGetBackend() != iSCREENBACKEND_GL3)
+    {
+        printf("bfbb: experimental.toon needs the Direct3D 9 or OpenGL backend; it is off "
+               "on %s\n",
+               iScreenBackendName(iScreenGetBackend()));
+        iScreenSetToon(FALSE, iScreenToonBands(), iScreenToonSaturation(), 0.0f,
+                       iScreenToonStrength(), ITOON_LIGHT_SCENE);
+    }
 
     // The window, where VIInit was. It opens at the render size because that is
     // the least surprising thing to do, not because anything requires it: the
@@ -336,6 +378,13 @@ static S32 RenderWareInit()
     RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLBACK);
     xShadowInit();
     xFXInit();
+    // Here rather than in ApplyConfig: the ramp is a texture and wants a live
+    // device to be made on. Allowed to fail, which leaves the look off.
+    if (iScreenToon())
+    {
+        iToonInit((S32)iScreenToonBands());
+    }
+
     RwTextureSetMipmapping(TRUE);
     RwTextureSetAutoMipmapping(TRUE);
 
@@ -554,6 +603,17 @@ static void ApplyConfig()
     iScreenSetWorldLighting(WorldLightingFromConfig());
     iScreenSetWorldLightContrast(iConfigGetFloat("experimental.world_light_contrast", 1.0f));
     iScreenSetWorldLightShadows(iConfigGetBool("experimental.world_light_shadows", FALSE));
+    iScreenSetToon(iConfigGetBool("experimental.toon", FALSE),
+                   iConfigGetFloat("experimental.toon_bands", 3.0f),
+                   iConfigGetFloat("experimental.toon_saturation", 1.5f),
+                   iConfigGetFloat("experimental.toon_outline", 0.02f),
+                   iConfigGetFloat("experimental.toon_strength", 0.25f), iToonLightModeFromConfig());
+    iScreenSetToonFlatten(iConfigGetFloat("experimental.toon_colors", 0.0f));
+    iScreenSetToonLook(iConfigGetFloat("experimental.toon_wrap", 0.0f),
+                       iConfigGetFloat("experimental.toon_rim", 0.25f),
+                       iConfigGetFloat("experimental.toon_occlusion", 0.0f),
+                       iConfigGetFloat("experimental.toon_hardness", 0.0f),
+                       iConfigGetFloat("experimental.toon_outline_min", 1.5f));
     iDayNightSetLength(iConfigGetFloat("experimental.day_night_cycle", 0.0f));
 
     // Which backend draws. AUTO is resolved in RenderWareInit, which is where

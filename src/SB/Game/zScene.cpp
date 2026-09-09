@@ -12,6 +12,7 @@
 #include "iDayNight.h"
 #include "iScrFX.h"
 #include "iEnvNormals.h"
+#include "iToon.h"
 #endif
 
 #include "zEntTrigger.h"
@@ -3369,11 +3370,51 @@ static xLightKit* zObjectLightKit(zScene* s)
 }
 #endif
 
+#ifdef PLATFORM_PC
+// Which entities are drawn with a line around them.
+//
+// Characters and nothing else: the player and the NPCs. A crate, a platform, a
+// pickup and a spatula are all things in the world rather than people in a
+// cartoon, and inking them makes the picture look like a diagram.
+//
+// Two inks for the player alone. His trousers are drawn with a black line and
+// the rest of him with a green one, which is a fact about SpongeBob and not
+// about characters -- Patrick has no trousers and Sandy's suit is one piece.
+static void zToonOutlineFor(const xEnt* ent)
+{
+    S32 mode = ITOON_OUTLINE_NONE;
+
+    // **baseType and not collType.** collType says what an entity collides
+    // with, and an NPC does not set it to XENT_COLLTYPE_NPC -- Plankton and Mr
+    // Krabs both came out with no line around them because of it. baseType is
+    // what the entity IS, assigned from the asset when the scene loads, and it
+    // is the only field that answers the question being asked.
+    if (ent->baseType == eBaseTypePlayer)
+    {
+        mode = ITOON_OUTLINE_TWOTONE;
+    }
+    else if (ent->baseType == eBaseTypeNPC)
+    {
+        mode = ITOON_OUTLINE_PLAIN;
+    }
+
+    iToonOutlineRegister(ent->model, mode);
+}
+#endif
+
 static void zSceneRenderPreFX()
 {
     zScene* s = globals.sceneCur;
 
     globals.currWorld = s->env->geom->world;
+
+#ifdef PLATFORM_PC
+    iToonOutlineClear();
+
+    // The colour this level lights its world in, for the characters walking
+    // through it. The world's own rig, not theirs -- iToonSetRoomTint says why.
+    iToonSetRoomTint(s->env->geom->baked.valid ? s->env->geom->baked.ambient : NULL);
+#endif
 
     xLightKit_Enable(NULL, globals.currWorld);
 
@@ -3455,6 +3496,11 @@ static void zSceneRenderPreFX()
             else if (ent->render)
             {
                 xLightKit_Enable(ent->lightKit, globals.currWorld);
+
+#ifdef PLATFORM_PC
+                zToonOutlineFor(ent);
+#endif
+
                 ent->render(ent);
             }
         }
@@ -3473,6 +3519,10 @@ static void zSceneRenderPreFX()
     if (shadowHackCase == 1 && globals.player.Transparent <= 0 && !oob_state::render())
     {
         xLightKit_Enable(globals.player.ent.lightKit, globals.currWorld);
+
+#ifdef PLATFORM_PC
+        zToonOutlineFor(&globals.player.ent);
+#endif
 
         globals.player.ent.render(&globals.player.ent);
 
@@ -3554,11 +3604,13 @@ static void zSceneRenderPreFX()
 // level lives here instead of in the lights.
 static void zDayNightWash()
 {
-    F32 rgb[3];
+    F32 mul[3];
+    F32 add[3];
 
-    iDayNightScreen(rgb);
+    iDayNightScreen(mul, add);
 
-    if (rgb[0] >= 0.999f && rgb[1] >= 0.999f && rgb[2] >= 0.999f)
+    if (mul[0] >= 0.999f && mul[1] >= 0.999f && mul[2] >= 0.999f && add[0] <= 0.001f &&
+        add[1] <= 0.001f && add[2] <= 0.001f)
     {
         return;
     }

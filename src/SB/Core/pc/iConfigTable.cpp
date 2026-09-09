@@ -246,6 +246,54 @@ const iConfigSetting kConfigSettings[] = {
       "Seconds for the sun to go all the way round, or off. Needs world\n"
       "; lighting on and world_light_shadows off.",
       ICONFIG_FLOAT, "off", 5.0f, 3600.0f, "world_lighting" },
+    { "experimental", "toon", "off",
+      "Draw the game like the cartoon it came from: light cut into steps,\n"
+      "; colour pushed from grey, a line round each character. Direct3D 9 only.",
+      ICONFIG_BOOL, NULL, kNone, kNone },
+    { "experimental", "toon_strength", "0.25",
+      "How far the stylised shading is taken against the plain lighting. 0 is\n"
+      "; the game as it was, 1 is hard bands with no falloff at all.",
+      ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
+    { "experimental", "toon_bands", "3",
+      "Steps the light is cut into. 2 is a lit side and a shadow side with one\n"
+      "; hard line between them.",
+      ICONFIG_FLOAT, NULL, 1.0f, 8.0f, "toon" },
+    { "experimental", "toon_saturation", "1.5",
+      "How far colour is pushed away from grey, brightness held. 1 leaves it\n"
+      "; alone.",
+      ICONFIG_FLOAT, NULL, 0.0f, 3.0f, "toon" },
+    { "experimental", "toon_light", "scene",
+      "Where a character's shading is measured from: the room's brightest\n"
+      "; light, his own front, or the camera.",
+      ICONFIG_ENUM, "scene|face|camera", kNone, kNone, "toon" },
+    { "experimental", "toon_colors", "0",
+      "Shades each colour on a character is rounded to, to put back the\n"
+      "; flatness a magnified 2003 texture lost. 0 leaves them alone.",
+      ICONFIG_FLOAT, NULL, 0.0f, 32.0f, "toon" },
+    { "experimental", "toon_outline", "0.02",
+      "Thickness of the black line round each character, in world units.\n"
+      "; SpongeBob is about two units tall. 0 turns it off.",
+      ICONFIG_FLOAT, NULL, 0.0f, 0.2f, "toon" },
+    { "experimental", "toon_outline_min", "1.5",
+      "How thin that line may get, in pixels, so a distant character does not\n"
+      "; stop being inked. 0 lets it vanish.",
+      ICONFIG_FLOAT, NULL, 0.0f, 8.0f, "toon" },
+    { "experimental", "toon_wrap", "0",
+      "How far the shading carries round a character's far side, giving it\n"
+      "; somewhere to put a second tone. 0 is the hard horizon.",
+      ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
+    { "experimental", "toon_rim", "0.25",
+      "How brightly a character's silhouette catches the room's colour, which\n"
+      "; is what keeps a dark character legible on a dark background.",
+      ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
+    { "experimental", "toon_occlusion", "0",
+      "How far the colour baked into a model darkens its own shading. It is\n"
+      "; occlusion somebody drew, and no light rig recovers it.",
+      ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
+    { "experimental", "toon_hardness", "0",
+      "How square the shading breaks at a corner, against the welded normals\n"
+      "; the outline needs. 0 keeps the weld.",
+      ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
 };
 
 const S32 kConfigSettingCount = (S32)(sizeof(kConfigSettings) / sizeof(kConfigSettings[0]));

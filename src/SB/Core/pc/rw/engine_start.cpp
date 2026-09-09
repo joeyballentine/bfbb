@@ -403,6 +403,24 @@ static RwBool OpenDeviceD3D9(void)
                                          (pipeline == iSCREENPIPE_AUTO && !haveShaderModel2));
     }
 
+    // The cartoon look. Every part of it is a shader permutation, so it draws
+    // nothing down the fixed-function path above; iScreenToon is left alone
+    // rather than cleared, because the setting is still what the player asked
+    // for and the card is what could not do it.
+    rw::d3d::setToonShading(iScreenToon(), iScreenToonBands(), iScreenToonSaturation(),
+                            iScreenToonStrength());
+    rw::d3d::setToonFlatten(iScreenToonColors());
+
+    // 0.65 is where the rim starts, and it is not a setting: it is a property of
+    // how wide a line reads, and one knob for the rim is enough.
+    rw::d3d::setToonLook(iScreenToonWrap(), iScreenToonRim(), 0.65f, iScreenToonOcclusion(),
+                         iScreenToonHardness());
+
+    // The ink itself is installed per character by iToonSetOutline, which is the
+    // only thing that knows whose outline it is. Only the width is a setting,
+    // and it rides in alpha.
+    rw::d3d::setOutline(0.35f, 0.35f, 0.35f, iScreenToonOutline());
+
     rw::d3d::setVirtualScreen(iScreenWidth(), iScreenHeight());
     if (!rw::Engine::open(&params))
     {
@@ -491,6 +509,18 @@ static RwBool OpenDeviceGL3(void)
     }
 
     rw::gl3::setPerPixelLightingEnabled(iScreenPerPixelLighting());
+
+    // The cartoon look, the same set the D3D9 arm above pushes. 0.65 is where
+    // the rim starts and is not a setting: it is a property of how wide a line
+    // reads, and one knob for the rim is enough. The ink itself is installed per
+    // character by iToonSetOutline, which is the only thing that knows whose
+    // outline it is; only the width is a setting, and it rides in alpha.
+    rw::gl3::setToonShading(iScreenToon(), iScreenToonBands(), iScreenToonSaturation(),
+                            iScreenToonStrength());
+    rw::gl3::setToonFlatten(iScreenToonColors());
+    rw::gl3::setToonLook(iScreenToonWrap(), iScreenToonRim(), 0.65f, iScreenToonOcclusion(),
+                         iScreenToonHardness());
+    rw::gl3::setOutline(0.35f, 0.35f, 0.35f, iScreenToonOutline());
 
     rw::gl3::EngineOpenParams params;
     params.window = (SDL_Window**)deferred->handleSlot;

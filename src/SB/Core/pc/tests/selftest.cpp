@@ -453,7 +453,7 @@ static void test_config()
         // documentation and grows every time one is added. A buffer that only
         // fits most of it fails the LAST checks below and looks like the writer
         // dropping settings rather than the reader stopping early.
-        char buf[16384];
+        char buf[32768];
         size_t n = fread(buf, 1, sizeof(buf) - 1, r);
         fclose(r);
         buf[n] = '\0';
