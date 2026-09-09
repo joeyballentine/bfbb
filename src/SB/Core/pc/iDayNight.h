@@ -57,4 +57,13 @@ void iDayNightRig(const iEnvBakedRig* noon, iEnvBakedRig* out);
 // is not dark, it is invisible.
 void iDayNightTint(F32 ambient[3], F32 directional[3]);
 
+// What to multiply colour that is already BAKED into a surface by.
+//
+// Not the ambient multiplier above. That one scales a light, and a lit surface
+// at night keeps a fraction of its ambient and loses its directional entirely.
+// Baked colour has both of those in it already, so scaling it by the ambient
+// term alone leaves it far brighter than everything around it -- a pale decal
+// comes out as a lit patch. This is the whole scene's fall instead.
+void iDayNightPaintTint(F32 rgb[3]);
+
 #endif

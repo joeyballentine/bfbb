@@ -2851,22 +2851,17 @@ void zSceneUpdate(F32 elapsedSec)
         iDayNightAdvance(elapsedSec);
     }
 
-    // xLightKit_Enable tints a kit as it goes in and then early-returns for as
-    // long as that kit stays current, which on a quiet frame is every frame. The
-    // one standing therefore has to be told again.
-    xLightKit_DayNight(gLastLightKit);
-
-    // The kept paint has no light to reach it, so it is moved through its
-    // material instead. The ambient tint and not the directional: a decal lying
-    // on the ground is not facing anything.
+    // The kept paint has no light to reach it, so it moves through its material
+    // instead. Every light kit is handled on its way into xLightKit_Enable, which
+    // covers characters and the world alike; this is the one thing left that no
+    // light touches.
     if (iDayNightActive() && globals.sceneCur != NULL && globals.sceneCur->env != NULL &&
         globals.sceneCur->env->geom != NULL)
     {
-        F32 amb[3];
-        F32 dir[3];
+        F32 paint[3];
 
-        iDayNightTint(amb, dir);
-        iEnvTintKeptPaint(globals.sceneCur->env->geom, amb);
+        iDayNightPaintTint(paint);
+        iEnvTintKeptPaint(globals.sceneCur->env->geom, paint);
     }
 #endif
     gSceneUpdateTime = elapsedSec;

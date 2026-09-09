@@ -20,6 +20,11 @@ namespace
     const F32 kNightLevel = 0.55f;
     const F32 kNightHue[3] = { 0.45f, 0.70f, 1.35f };
 
+    // Where baked colour lands at midnight, as a fraction of noon. Lit geometry
+    // in hb01 falls to about a fifth of its midday brightness once the sun is
+    // gone, so paint that does not fall with it reads as a light source.
+    const F32 kPaintNight = 0.18f;
+
     // The moon: a dim blue key while the sun is under the horizon.
     //
     // Ambient alone is flat, and a level lit flat reads as fog rather than as
@@ -197,6 +202,22 @@ void iDayNightRig(const iEnvBakedRig* noon, iEnvBakedRig* out)
                 out->dir[k].assign(-r.x, -r.y, -r.z);
             }
         }
+    }
+}
+
+void iDayNightPaintTint(F32 rgb[3])
+{
+    if (!iDayNightActive())
+    {
+        rgb[0] = rgb[1] = rgb[2] = 1.0f;
+        return;
+    }
+
+    F32 day = Sun();
+
+    for (S32 i = 0; i < 3; i++)
+    {
+        rgb[i] = Lerp(kPaintNight, 1.0f, day) * Lerp(kNightHue[i], 1.0f, day);
     }
 }
 
