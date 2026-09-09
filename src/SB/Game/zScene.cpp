@@ -2140,6 +2140,10 @@ static void DeactivateCB(xBase* base)
     base->baseFlags |= 0x40;
 }
 
+#ifdef PLATFORM_PC
+static xLightKit* zObjectLightKit(zScene* s);
+#endif
+
 void zSceneSetup()
 {
     zScene* s = globals.sceneCur;
@@ -2439,28 +2443,41 @@ void zSceneSetup()
 #endif
         }
 
+        xLightKit* objLightKit = NULL;
+
         if (easset->objectLightKit)
         {
-            xLightKit* objLightKit = (xLightKit*)xSTFindAsset(easset->objectLightKit, NULL);
+            objLightKit = (xLightKit*)xSTFindAsset(easset->objectLightKit, NULL);
+        }
 
-            if (objLightKit)
+#ifdef PLATFORM_PC
+        // The objects follow the world onto its reconstructed rig, including on a
+        // level that authored no object kit at all. See zObjectLightKit.
+        xLightKit* rigKit = zObjectLightKit(globals.sceneCur);
+
+        if (rigKit != NULL)
+        {
+            objLightKit = rigKit;
+        }
+#endif
+
+        if (objLightKit)
+        {
+            zScene* zsc = globals.sceneCur;
+
+            for (i = 0; i < zsc->num_base; i++)
             {
-                zScene* zsc = globals.sceneCur;
-
-                for (i = 0; i < zsc->num_base; i++)
+                if (zsc->base[i]->baseFlags & 0x20)
                 {
-                    if (zsc->base[i]->baseFlags & 0x20)
+                    xEnt* tgtent = (xEnt*)zsc->base[i];
+
+                    if (tgtent->model)
                     {
-                        xEnt* tgtent = (xEnt*)zsc->base[i];
+                        f = tgtent->model->PipeFlags & (0x40 | 0x80);
 
-                        if (tgtent->model)
+                        if (f != 0x40)
                         {
-                            f = tgtent->model->PipeFlags & (0x40 | 0x80);
-
-                            if (f != 0x40)
-                            {
-                                tgtent->lightKit = objLightKit;
-                            }
+                            tgtent->lightKit = objLightKit;
                         }
                     }
                 }
@@ -3113,11 +3130,17 @@ void zSceneUpdate(F32 elapsedSec)
 // The layout is not a style choice: xLightKit_Prepare finds the light list at
 // the sixteen bytes after the header rather than following lightList, so the
 // two have to be one allocation in this order.
-static struct
+struct zRigKit
 {
     xLightKit kit;
     xLightKitLight lights[iENV_BAKED_LIGHTS + 1];
-} sWorldKit;
+};
+
+static zRigKit sWorldKit;
+
+// The same rig again, at neutral contrast, for everything that moves through the
+// level. See zObjectLightKit.
+static zRigKit sObjKit;
 
 // What the kit currently standing was built from.
 //
@@ -3170,6 +3193,61 @@ static void zWorldLightAim(xLightKitLight* light, const xVec3* travel)
     light->matrix[15] = 1.0f;
 }
 
+// Turn a fitted rig into a light kit: one ambient, then one directional each.
+//
+// Scale the directionals by the contrast and take the difference back out of the
+// ambient, so the AVERAGE vertex keeps the brightness the bake gave it however
+// far the two ends are pulled apart. iEnvBakedRig::dirMean is what the
+// directionals contribute to that average at a contrast of 1, and
+// iEnvRigAtContrast caps the contrast at what the level's ambient can pay.
+//
+// **The top end still clips, and that is the real cost of a high contrast.**
+// The mean is held only while nothing saturates, and bb01 reaches 1.03 at 2.5
+// while jf01 reaches 1.13. What clips is lost, so the level comes out under the
+// brightness this was supposed to hold. Around 1.5 is the most these levels take
+// without it.
+static void zRigKitBuild(zRigKit* store, const iEnvBakedRig* rig, F32 contrast)
+{
+    F32 ambient[3];
+    F32 color[iENV_BAKED_LIGHTS][3];
+
+    iEnvRigAtContrast(rig, contrast, ambient, color);
+
+    memset(store, 0, sizeof(*store));
+    store->kit.lightCount = rig->count + 1;
+    store->kit.lightList = store->lights;
+
+    xLightKitLight* amb = &store->lights[0];
+
+    amb->type = kLightKitAmbient;
+    amb->color.alpha = 1.0f;
+
+    F32* ambOut = &amb->color.red;
+
+    for (S32 i = 0; i < 3; i++)
+    {
+        ambOut[i] = ambient[i];
+    }
+
+    for (S32 k = 0; k < rig->count; k++)
+    {
+        xLightKitLight* dir = &store->lights[1 + k];
+        F32* dirOut = &dir->color.red;
+
+        dir->type = kLightKitDirectional;
+        dir->color.alpha = 1.0f;
+
+        for (S32 i = 0; i < 3; i++)
+        {
+            dirOut[i] = color[k][i];
+        }
+
+        zWorldLightAim(dir, &rig->dir[k]);
+    }
+
+    xLightKit_Prepare(&store->kit);
+}
+
 static void zWorldLightBuild(iEnv* env)
 {
     F32 contrast = iScreenWorldLightContrast();
@@ -3200,62 +3278,27 @@ static void zWorldLightBuild(iEnv* env)
         return;
     }
 
+    // **Only safe while neither kit is the one standing.**
+    //
+    // Destroying and rebuilding leaves both at the same ADDRESS, so a
+    // gLastLightKit still pointing at one would make the next xLightKit_Enable
+    // early-return and add none of the new lights. zSceneRenderPreFX clears the
+    // standing kit before it asks for this, which is the only reason the sun can
+    // move mid-level at all.
     if (sWorldKitFrom.valid)
     {
         xLightKit_Destroy(&sWorldKit.kit);
+        xLightKit_Destroy(&sObjKit.kit);
     }
 
     sWorldKitFrom = rig;
     sWorldKitSwing = contrast;
 
-    memset(&sWorldKit, 0, sizeof(sWorldKit));
-    sWorldKit.kit.lightCount = rig.count + 1;
-    sWorldKit.kit.lightList = sWorldKit.lights;
+    zRigKitBuild(&sWorldKit, &rig, contrast);
 
-    // Scale the directionals by the swing and take the difference back out of
-    // the ambient, so the AVERAGE vertex keeps the brightness the bake gave it
-    // however far the two ends are pulled apart. iEnvBakedRig::dirMean is what the
-    // directionals contribute to that average at a swing of 1.
-    //
-    // **The top end still clips, and that is the real cost of a high swing.**
-    // This holds the mean only while nothing saturates, and bb01 reaches 1.03
-    // at a swing of 2.5 while jf01 reaches 1.13. What clips is lost, so the
-    // level comes out under the brightness this was supposed to hold. Around
-    // 1.5 is the most these levels take without it.
-    F32 ambient[3];
-    F32 color[iENV_BAKED_LIGHTS][3];
-
-    iEnvRigAtContrast(&rig, contrast, ambient, color);
-
-    xLightKitLight* amb = &sWorldKit.lights[0];
-
-    amb->type = kLightKitAmbient;
-    amb->color.alpha = 1.0f;
-
-    F32* ambOut = &amb->color.red;
-
-    for (S32 i = 0; i < 3; i++)
-    {
-        ambOut[i] = ambient[i];
-    }
-
-    for (S32 k = 0; k < rig.count; k++)
-    {
-        xLightKitLight* dir = &sWorldKit.lights[1 + k];
-        F32* dirOut = &dir->color.red;
-
-        dir->type = kLightKitDirectional;
-        dir->color.alpha = 1.0f;
-
-        for (S32 i = 0; i < 3; i++)
-        {
-            dirOut[i] = color[k][i];
-        }
-
-        zWorldLightAim(dir, &rig.dir[k]);
-    }
-
-    xLightKit_Prepare(&sWorldKit.kit);
+    // The objects get the same rig at the same contrast. Rebuilt alongside the
+    // world's so the two never sit a frame apart as the sun moves.
+    zRigKitBuild(&sObjKit, &rig, contrast);
 }
 
 // Which rig lights the world, and whether there is one at all.
@@ -3287,6 +3330,43 @@ static xLightKit* zWorldLightKit(zScene* s)
 
     return &sWorldKit.kit;
 }
+
+// Which rig lights the objects that move through the level, once the world is
+// no longer lit by its own vertices.
+//
+// **The same one as the world, or the seam shows.** The artists' object kit was
+// aimed to complement a PRELIT world, so it and the reconstruction disagree on
+// both direction and colour: measured on hb01, a wall facing away from the key
+// comes out three times brighter under the object kit than under the fit, and
+// the fit's fill lights are blue where the object kit's are warm. Spongebob ends
+// up wearing a warm key over blue ground.
+//
+// At the same contrast as the world, for the same reason: a spread applied to
+// one and not the other is the mismatch again in a second form.
+//
+// Returns the kit sWorldKit was built beside, so the two swing together. Empty
+// until the first zWorldLightBuild, which zSceneRenderPreFX reaches before
+// anything is drawn.
+static xLightKit* zObjectLightKit(zScene* s)
+{
+    if (!s->env->geom->prelightDropped)
+    {
+        return NULL;
+    }
+
+    // The world took the level's own kit, so the objects take it too.
+    if (iScreenWorldLighting() == IWORLDLIGHT_AUTO && s->env->lightKit != NULL)
+    {
+        return s->env->lightKit;
+    }
+
+    if (!s->env->geom->baked.valid)
+    {
+        return NULL;
+    }
+
+    return &sObjKit.kit;
+}
 #endif
 
 static void zSceneRenderPreFX()
@@ -3314,6 +3394,23 @@ static void zSceneRenderPreFX()
     // stacks, so the first entity drawn takes the world's rig back out, which
     // is why it goes back to NULL below.
     xLightKit* worldKit = zWorldLightKit(s);
+
+    // **The player's kit is its own, and half the game borrows it.**
+    //
+    // zEntPlayer_Init reads a kit ID straight out of the PLYR asset, and zNPCMgr,
+    // the hazards, the glyphs, the shrapnel and the boulder vehicle all light
+    // themselves from globals.player.ent.lightKit in turn. Left alone it lights
+    // Spongebob and every NPC in the level from a rig nothing else uses.
+    //
+    // Retargeted per frame rather than in zSceneSetup, which runs at
+    // eGameWhere_SetupScene while the player is initialised later at
+    // eGameWhere_SetupPlayerInit and puts the asset's kit straight back.
+    xLightKit* playerKit = zObjectLightKit(s);
+
+    if (playerKit != NULL)
+    {
+        globals.player.ent.lightKit = playerKit;
+    }
 
     if (worldKit != NULL)
     {
