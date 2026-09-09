@@ -532,8 +532,8 @@ static void ReadNormal(xVec3* out, const NormalWork* w, S32 v, const RwMatrix* l
 // Both shapes below are read off the prelight itself and not off a name, so
 // they hold on the levels this was never measured against:
 //
-//   **Vertex alpha that is not solid.** The colour is being blended rather
-//   than shown. bb01 fakes the shadow of every building with a piece of
+//   **Vertex alpha over MUCH of the piece.** The colour is being blended
+//   rather than shown. bb01 fakes the shadow of every building with a piece of
 //   ordinary street laid over the street -- ground_alpha2 and ground_day3,
 //   the same textures as the road it sits on -- darkened in RGB and faded out
 //   at the edges by the alpha. Drop the prelight and the decal becomes opaque
@@ -546,8 +546,18 @@ static void ReadNormal(xVec3* out, const NormalWork* w, S32 v, const RwMatrix* l
 //   transparent texture and a black vertex colour. Lighting one can only
 //   invent light the artist did not put there.
 //
-// 62 of bb01's 405 world atomics are one or the other: 4,869 of its 39,647
-// vertices, a bit over a tenth of the level.
+// **A FRACTION and not "any", which is what a seam is made of.** Asking whether
+// any vertex is see-through keeps a piece of ordinary opaque ground because two
+// dozen vertices along one edge fade into the piece next to it. hb01 has four
+// of those, 2,389 vertices of out-of-bounds sand between them and 1.3% to 4.8%
+// of each one non-opaque, and they held their noon paint while the ground
+// around them was relit: measured over the whole level the kept half averages
+// 130/110/101 against the lit half's 161/147/144, so they read as darker and
+// redder, and the boundary is visible from anywhere on the map.
+//
+// The two populations separate cleanly. bb01's real decals are 28% to 100%
+// non-opaque and the pieces that only fade at an edge are all under 20%, with
+// nothing in between, so a quarter sits in the gap rather than on a slope.
 static S32 PrelightIsArtwork(RpGeometry* geo)
 {
     if (geo == NULL || geo->preLitLum == NULL || geo->numVertices == 0)
@@ -556,6 +566,7 @@ static S32 PrelightIsArtwork(RpGeometry* geo)
     }
 
     S32 lit = FALSE;
+    S32 blended = 0;
 
     for (S32 i = 0; i < geo->numVertices; i++)
     {
@@ -563,7 +574,7 @@ static S32 PrelightIsArtwork(RpGeometry* geo)
 
         if (c->alpha != 255)
         {
-            return TRUE;
+            blended++;
         }
 
         if (c->red != 0 || c->green != 0 || c->blue != 0)
@@ -572,7 +583,12 @@ static S32 PrelightIsArtwork(RpGeometry* geo)
         }
     }
 
-    return !lit;
+    if (!lit)
+    {
+        return TRUE;
+    }
+
+    return blended * 4 >= geo->numVertices;
 }
 
 // Recover the rig this level was baked from.
