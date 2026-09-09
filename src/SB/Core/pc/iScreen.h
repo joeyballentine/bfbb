@@ -409,13 +409,20 @@ void iScreenSetToon(S32 on, F32 bands, F32 saturation, F32 outline, F32 strength
 F32 iScreenToonColors();
 void iScreenSetToonFlatten(F32 colors);
 
-// The rest of the cel, and the hull's floor in pixels of the picture. iToon.h
-// and librw's rwgl3.h say what each one does.
+// The rest of the cel, and the two bounds on the hull's width in pixels of the
+// picture. iToon.h and librw's rwgl3.h say what each one does.
+//
+// The bounds are in pixels while the width itself is in world units. That is
+// what keeps a drawn line reading as one: the floor stops it vanishing down the
+// level, and the ceiling stops it swelling into a marker stroke when the camera
+// closes on a character. 0 on either is no bound.
 F32 iScreenToonWrap();
 F32 iScreenToonRim();
 F32 iScreenToonOcclusion();
 F32 iScreenToonHardness();
 F32 iScreenToonOutlineMin();
-void iScreenSetToonLook(F32 wrap, F32 rim, F32 occlusion, F32 hardness, F32 outlineMin);
+F32 iScreenToonOutlineMax();
+void iScreenSetToonLook(F32 wrap, F32 rim, F32 occlusion, F32 hardness, F32 outlineMin,
+                        F32 outlineMax);
 
 #endif

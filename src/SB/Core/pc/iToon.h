@@ -65,10 +65,15 @@ void iToonSetRampRow(S32 row);
 // remembered, like the weld.
 S32 iToonRampRowFor(void* atomic);
 
-// Push the floor under the outline's width, from the camera about to draw and
-// the size of the picture. Both change, so this is per draw rather than per
-// level.
+// Push the floor under the outline's width and the ceiling over it, from the
+// camera about to draw and the size of the picture. Both change, so these are
+// per draw rather than per level.
+//
+// Both are in pixels while the width itself is in world units, which is what
+// keeps a drawn line reading as a drawn line: it holds its weight on screen
+// instead of swelling as the camera closes and vanishing as it pulls back.
 void iToonOutlineMinWidth();
+void iToonOutlineMaxWidth();
 
 #define ITOON_OUTLINE_NONE 0
 #define ITOON_OUTLINE_PLAIN 1

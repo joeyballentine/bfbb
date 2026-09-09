@@ -285,6 +285,25 @@ namespace toonbackend
 #endif
         (void)w;
     }
+
+    inline void setOutlineMaxWidth(F32 w)
+    {
+#ifdef RW_D3D9
+        if (iBackendIsD3D9())
+        {
+            rw::d3d::setOutlineMaxWidth(w);
+            return;
+        }
+#endif
+#ifdef RW_GL3
+        if (iBackendIsGL3())
+        {
+            rw::gl3::setOutlineMaxWidth(w);
+            return;
+        }
+#endif
+        (void)w;
+    }
 }
 
 #if defined(RW_D3D9) || defined(RW_GL3)
@@ -842,7 +861,8 @@ S32 iToonRampRowFor(void* atomic)
     return sRampRow[slot] - 1;
 }
 
-// How thin the ink may get, in world units per unit of view depth.
+// A number of pixels as world units per unit of view depth, or 0 if the camera
+// cannot say.
 //
 // **The renderer cannot work this out and the game can.** Turning a width in
 // pixels into one in world units needs the camera's view window and the height
@@ -853,14 +873,11 @@ S32 iToonRampRowFor(void* atomic)
 // number of pixels an offset d covers at depth z is d*H / (2*window.y*z).
 // Turned round: the width that covers a given number of pixels is that many
 // times 2*window.y/H, times z. The shader has z as clip w.
-void iToonOutlineMinWidth()
+static F32 PixelsPerDepth(F32 pixels)
 {
-    F32 pixels = iScreenToonOutlineMin();
-
     if (pixels <= 0.0f)
     {
-        toonbackend::setOutlineMinWidth(0.0f);
-        return;
+        return 0.0f;
     }
 
     RwCamera* cam = RwCameraGetCurrentCamera();
@@ -869,11 +886,32 @@ void iToonOutlineMinWidth()
 
     if (vw == NULL || h < 1.0f)
     {
-        toonbackend::setOutlineMinWidth(0.0f);
-        return;
+        return 0.0f;
     }
 
-    toonbackend::setOutlineMinWidth(2.0f * pixels * vw->y / h);
+    return 2.0f * pixels * vw->y / h;
+}
+
+// How thick the ink may get, in the same units.
+//
+// **The width is in world units, so it swells as the camera closes.** That is
+// right for a thing in the world and wrong for a drawn line, which holds one
+// weight whatever the shot -- walk up to a character and his outline turns into
+// a marker stroke. The cap is in pixels for the same reason the floor is: it is
+// a statement about how the line READS, and how it reads is a screen measure.
+//
+// Zero is no cap, which is the shipped behaviour of the branch this came from.
+void iToonOutlineMaxWidth()
+{
+    toonbackend::setOutlineMaxWidth(PixelsPerDepth(iScreenToonOutlineMax()));
+}
+
+// How thin it may get, the same way. A fixed world width falls below a pixel
+// somewhere down the level and the character stops being inked, which is the
+// one thing an animated drawing never does.
+void iToonOutlineMinWidth()
+{
+    toonbackend::setOutlineMinWidth(PixelsPerDepth(iScreenToonOutlineMin()));
 }
 
 // The colour of the room, held between the scene setting it and each character

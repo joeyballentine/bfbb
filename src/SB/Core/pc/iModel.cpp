@@ -641,11 +641,12 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
         iToonFaceLight(mat);
         iToonRoomTintApply();
 
-        // Which strip he is shaded with, and how thin his line may get. Both
-        // belong here for the same reason the rest does: this is where a
-        // bucketed model is actually drawn.
+        // Which strip he is shaded with, and the two bounds on how thick his
+        // line may get. All three belong here for the same reason the rest
+        // does: this is where a bucketed model is actually drawn.
         iToonSetRampRow(iToonRampRowFor(model));
         iToonOutlineMinWidth();
+        iToonOutlineMaxWidth();
 
         // Once per geometry, and it has to happen before the hull is drawn
         // rather than at load: nothing tells this file when a character's model

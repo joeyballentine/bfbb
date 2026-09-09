@@ -278,6 +278,10 @@ const iConfigSetting kConfigSettings[] = {
       "How thin that line may get, in pixels, so a distant character does not\n"
       "; stop being inked. 0 lets it vanish.",
       ICONFIG_FLOAT, NULL, 0.0f, 8.0f, "toon" },
+    { "experimental", "toon_outline_max", "4",
+      "How thick that line may get, in pixels, so a character close to the\n"
+      "; camera is not inked in marker. 0 lets it swell.",
+      ICONFIG_FLOAT, NULL, 0.0f, 16.0f, "toon" },
     { "experimental", "toon_wrap", "0",
       "How far the shading carries round a character's far side, giving it\n"
       "; somewhere to put a second tone. 0 is the hard horizon.",

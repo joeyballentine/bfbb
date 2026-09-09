@@ -384,6 +384,7 @@ static F32 sToonRim;
 static F32 sToonOcclusion;
 static F32 sToonHardness;
 static F32 sToonOutlineMin;
+static F32 sToonOutlineMax;
 
 S32 iScreenToon()
 {
@@ -460,13 +461,20 @@ F32 iScreenToonOutlineMin()
     return sToonOutlineMin;
 }
 
-void iScreenSetToonLook(F32 wrap, F32 rim, F32 occlusion, F32 hardness, F32 outlineMin)
+F32 iScreenToonOutlineMax()
+{
+    return sToonOutlineMax;
+}
+
+void iScreenSetToonLook(F32 wrap, F32 rim, F32 occlusion, F32 hardness, F32 outlineMin,
+                        F32 outlineMax)
 {
     sToonWrap = wrap;
     sToonRim = rim;
     sToonOcclusion = occlusion;
     sToonHardness = hardness;
     sToonOutlineMin = outlineMin;
+    sToonOutlineMax = outlineMax;
 }
 
 // The field of view every camera in the game is built around. zCamera resets to
