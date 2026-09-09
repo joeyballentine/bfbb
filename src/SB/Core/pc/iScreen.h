@@ -326,19 +326,20 @@ void iScreenSetWorldLighting(S32 mode);
 // 1.0 is the rig exactly as measured, and it holds the level's average
 // brightness. bb01's bake averages 0.663 over the surfaces this lights, and the
 // rig renders 0.663. Above 1.0 the setting scales the directionals and drops the
-// ambient by what they gain on the average vertex. That holds the average until
-// the ambient reaches zero, which on bb01 is a swing of 1.61.
+// ambient by what they gain on the average vertex, which holds the average until
+// the ambient reaches zero.
 //
-// **The default of 2.5 is past that deliberately.** It is a look, not a
-// reconstruction. On bb01 the lit end peaks at 2.15, 54% of the lit vertices
-// saturate, and the level renders 0.135 brighter than the paint. Saturated
-// vertex colour is white, so the texture no longer tints the brightest ground,
-// and the Xbox glow carries it further.
+// **iEnvRigAtContrast caps the setting there, per level and per channel.** bb01
+// allows 1.61 and hb01 2.55. Past its cap a level keeps no ambient at all, so
+// every face that none of the four lights reaches renders pure black, and the
+// level also comes out under the brightness the compensation was holding.
 //
-// The default trades fidelity for contrast because an honest fit has little
-// contrast in it. bb01 fits an ambient of 0.27 against a key light of 0.77, so at
-// 1.0 the setting is nearly invisible. Use 1.0 to measure the fit against the
-// paint. The default is for playing.
+// **1.0 by default, because the world and the objects share these lights.**
+// zObjectLightKit puts characters and props on the same rig as the world, so
+// whatever this does it does to both, and a character has no bake to be sharpened
+// against. Above 1.0 the top end clips as well: saturated vertex colour is white,
+// so the texture stops tinting the brightest ground and the Xbox glow carries it
+// further. That is a look rather than a reconstruction.
 F32 iScreenWorldLightContrast();
 void iScreenSetWorldLightContrast(F32 contrast);
 

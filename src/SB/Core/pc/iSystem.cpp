@@ -552,7 +552,7 @@ static void ApplyConfig()
     iScreenSetMultiSample(iConfigGetInt("video.msaa", 4));
     iScreenSetPerPixelLighting(iConfigGetBool("video.per_pixel_lighting", FALSE));
     iScreenSetWorldLighting(WorldLightingFromConfig());
-    iScreenSetWorldLightContrast(iConfigGetFloat("experimental.world_light_contrast", 2.5f));
+    iScreenSetWorldLightContrast(iConfigGetFloat("experimental.world_light_contrast", 1.0f));
     iScreenSetWorldLightShadows(iConfigGetBool("experimental.world_light_shadows", FALSE));
     iDayNightSetLength(iConfigGetFloat("experimental.day_night_cycle", 0.0f));
 

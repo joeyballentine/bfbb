@@ -233,9 +233,9 @@ const iConfigSetting kConfigSettings[] = {
       "; on (its own kit, where it has one), or bake (a rig fitted to the paint).\n"
       "; A shipped level loses the occlusion and bounce its paint recorded.",
       ICONFIG_ENUM, "off|on|bake", kNone, kNone },
-    { "experimental", "world_light_contrast", "2.5",
+    { "experimental", "world_light_contrast", "1",
       "Spread between the lit and shaded sides of a level lit by bake. 1 is the\n"
-      "; rig as fitted, which is nearly flat. The default saturates the lit end.",
+      "; rig as fitted. Higher clips the lit end, and each level caps its own.",
       ICONFIG_FLOAT, NULL, 0.0f, 4.0f, "world_lighting" },
     { "experimental", "world_light_shadows", "off",
       "Darken the parts of a level its own geometry hides from the light. Traced\n"

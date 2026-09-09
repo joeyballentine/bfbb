@@ -1074,6 +1074,41 @@ static S32 SunLight(const iEnvBakedRig* rig)
 void iEnvRigAtContrast(const iEnvBakedRig* rig, F32 contrast, F32 ambient[3],
                        F32 color[iENV_BAKED_LIGHTS][3])
 {
+    // **A level can only lend so much of its ambient to the directionals.**
+    //
+    // The ambient pays for the boost, so above 1 + ambient/dirMean it would have
+    // to go negative and the clamp below swallows the difference: the level ends
+    // with no ambient at all AND under the brightness this was supposed to hold.
+    // Every face none of the four lights reaches then renders pure black. bb01
+    // can absorb 1.61 and hb01 2.55, so the shipped 2.5 emptied bb01's ambient
+    // completely. Capped per level, by whichever channel has least to give.
+    //
+    // Below 1 the ambient is gaining rather than paying, so nothing is capped.
+    F32 cap = contrast;
+
+    for (S32 i = 0; i < 3; i++)
+    {
+        if (rig->dirMean[i] > 0.0001f)
+        {
+            F32 h = 1.0f + rig->ambient[i] / rig->dirMean[i];
+
+            if (h < cap)
+            {
+                cap = h;
+            }
+        }
+    }
+
+    if (cap < 1.0f)
+    {
+        cap = 1.0f;
+    }
+
+    if (contrast > cap)
+    {
+        contrast = cap;
+    }
+
     for (S32 i = 0; i < 3; i++)
     {
         F32 a = rig->ambient[i] + rig->dirMean[i] * (1.0f - contrast);
