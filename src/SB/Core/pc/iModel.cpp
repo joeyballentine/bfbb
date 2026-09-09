@@ -14,6 +14,7 @@
 #include "iScreen.h"
 #include "iAnim.h"
 #include "iHipoly.h"
+#include "iEnvNormals.h"
 #include "xMathInlines.h"
 
 #define MAX2(a, b) ((a) >= (b) ? (a) : (b))
@@ -173,6 +174,16 @@ static RpAtomic* iModelStreamRead(RwStream* stream)
         return NULL;
     }
 
+    // A model that is really a piece of the world takes the world's treatment,
+    // and it has to happen here: the instancing below builds each vertex buffer
+    // from the geometry as it stands at that moment. zAssetTypes left the
+    // answer because only it knows the asset id.
+    if (iEnvTakePendingGroundDecal())
+    {
+        iEnvMarkGroundDecal(clump);
+        iEnvPrepareModel(clump);
+    }
+
     RwBBox bbox = { { 1000.0f, 1000.0f, 1000.0f }, { -1000.0f, -1000.0f, -1000.0f } };
 
     instance_world = RpWorldCreate(&bbox);
@@ -282,6 +293,7 @@ void iModelUnload(RpAtomic* userdata)
     if (clump != 0)
     {
         iHipolyForget(clump);
+        iEnvForgetModel(clump);
         RpClumpDestroy(clump);
     }
 }
@@ -623,7 +635,13 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
 
     frame->ltm = *mat;
     RwMatrixUpdate(&frame->ltm);
-    if (iModelHack_DisablePrelight != 0)
+    // **A ground decal keeps its colour stream, because its ALPHA is the blend
+    // into the sand.** Enabling any light kit asks for the prelight to be
+    // dropped, and dropping it takes the alpha with it: crater_sand fades its
+    // rim to zero over eleven vertices, and without that the decal ends at a
+    // hard edge. iEnvPrepareModel has already painted the colours white, so
+    // there is no baked colour left to drop.
+    if (iModelHack_DisablePrelight != 0 && !iEnvIsGroundDecal(model))
     {
         model->geometry->flags &= 0xfffffff7;
     }
@@ -631,6 +649,13 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
     // model is drawn long after whoever asked for it returned. iToon.h says
     // more.
     S32 outline = iToonOutlineFind(model);
+
+    // The ground is not cel shaded, so neither is a model that is a piece of
+    // it. PLAINDRAW switches the ramp off around the draw and asks for no ink.
+    if (outline > ITOON_OUTLINE_NONE && iEnvIsGroundDecal(model))
+    {
+        outline = ITOON_OUTLINE_PLAINDRAW;
+    }
 
     // Art that goes through the model path but is not a surface. The ramp is
     // global, so it has to be switched off around the draw rather than simply
@@ -650,15 +675,34 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
         iToonOutlineAtomic(model);
         iToonSetOutline(ink);
 
-        // Everything the registry knows about is a character, so this is the
-        // one place that knows both that fact and the model's own matrix.
-        iToonFaceLight(mat);
-        iToonRoomTintApply();
+        // **Only a character.** Lighting a model down its own forward axis is
+        // what holds SpongeBob's two tones still while he turns, and it throws
+        // the room's rig away to do it. A crater lying in the ground wants the
+        // opposite: it is part of the scene and should take the light the scene
+        // has. Under experimental.toon_all every model reaches here, so the
+        // registry is what separates the two -- a named character gets the
+        // show's shading, and everything else keeps the room's.
+        //
+        // The tint is for both. It is the room's colour and not its direction.
+        if (iToonOutlineNamed(model))
+        {
+            iToonFaceLight(mat);
+        }
+
+        // A model that is really a piece of the ground is shaded as scenery:
+        // the world's strip, and no room tint, which is also what keeps the
+        // character rim off it. iEnvNormals.cpp says which models those are.
+        S32 scenery = iEnvIsGroundDecal(model);
+
+        if (!scenery)
+        {
+            iToonRoomTintApply();
+        }
 
         // Which strip he is shaded with, and the two bounds on how thick his
         // line may get. All three belong here for the same reason the rest
         // does: this is where a bucketed model is actually drawn.
-        iToonSetRampRow(iToonRampRowFor(model));
+        iToonSetRampRow(scenery ? ITOON_RAMP_WORLD : iToonRampRowFor(model));
         iToonOutlineMinWidth();
         iToonOutlineMaxWidth();
 

@@ -49,6 +49,23 @@ static const F32 kSeamCos = 0.5f;
 // a zero, which is what breaks a shader that normalizes -- see DoShadowNdl.
 static const F32 kDegenerate = 1e-20f;
 
+// What a ground decal's baked vertex colour is replaced with, which is what a
+// character carries: nothing.
+//
+// Enabling a light kit asks for rpGEOMETRYPRELIT to be dropped, and a geometry
+// with no prelight stream is fed a constant black one, so every bit of a
+// character's colour comes from the light and the whole day/night tint lands on
+// it. Zeroing the colours in place reaches the same number without losing the
+// stream, and the stream has to stay: its alpha is what fades the decal's rim
+// into the sand.
+//
+// **Do not scale the surfaceProps to make this brighter.** The vertex shader
+// clamps the colour to 1.0 before it multiplies by the material colour, so an
+// ambient gain over about 2.4 saturates all three channels against an ambient
+// of 0.41/0.36/0.34, and the light's hue goes with them. That is a decal that
+// cannot turn blue at night however bright it is.
+static const U8 kDecalPrelight = 0;
+
 struct NormalHash
 {
     U32* slots;  // vertex index + 1, 0 meaning empty
@@ -1475,6 +1492,304 @@ void iEnvGenerateNormals(iEnv* env)
     fflush(stdout);
 
     WorkFree(&w);
+}
+
+// A level's props ship the way its world does: baked vertex colour, and no
+// normals. 405 of bb01's 426 model geometries carry PRELIT without NORMALS.
+//
+// **A geometry with no normals is not merely unlit, it is pinned.** librw fills
+// a missing normal from a constant vertex stream holding (0,0,0), so every
+// light gives a dot product of zero and the cel ramp is read at its dark end
+// over the whole model. Nothing a light or a ramp does can move it, and what is
+// left on screen is the paint. That is why a crater standing in relit sand
+// keeps the tan it was baked with while the sand around it does not.
+//
+// So a prop is given what the world is given: generated normals, and its paint
+// dropped where the paint is lighting rather than artwork. The kit that lights
+// it afterwards is the one zScene builds from the same rig the world uses, so
+// the two land in the same place by construction.
+//
+// Same constraint as the world's, for the same reason: before the atomic is
+// instanced, because the vertex buffer is built from the flags the geometry
+// carries at that moment.
+
+// Generated normals belong to the clump and are freed with it. One block per
+// clump, sliced per atomic, the way the world's is.
+struct ModelNormals
+{
+    RpClump* clump;
+    RwV3d* block;
+};
+
+static ModelNormals* sModelNormals;
+static S32 sModelNormalCount;
+static S32 sModelNormalMax;
+
+static S32 KeepModelNormals(RpClump* clump, RwV3d* block)
+{
+    if (sModelNormalCount == sModelNormalMax)
+    {
+        S32 want = sModelNormalMax ? sModelNormalMax * 2 : 64;
+        ModelNormals* grown = (ModelNormals*)RwMalloc(want * sizeof(ModelNormals));
+
+        if (grown == NULL)
+        {
+            return FALSE;
+        }
+
+        if (sModelNormals != NULL)
+        {
+            memcpy(grown, sModelNormals, sModelNormalCount * sizeof(ModelNormals));
+            RwFree(sModelNormals);
+        }
+
+        sModelNormals = grown;
+        sModelNormalMax = want;
+    }
+
+    sModelNormals[sModelNormalCount].clump = clump;
+    sModelNormals[sModelNormalCount].block = block;
+    sModelNormalCount++;
+
+    return TRUE;
+}
+
+
+void iEnvPrepareModel(RpClump* clump)
+{
+    if (clump == NULL)
+    {
+        return;
+    }
+
+    NormalWork w;
+
+    if (!WorkBuild(&w, clump))
+    {
+        return;
+    }
+
+    // Almost every model ships normals -- 210 of the 214 geometries loaded in
+    // bb01 -- so the block is allocated only if something here needs one.
+    S32 want = 0;
+
+    for (S32 a = 0; a < w.numAtomics; a++)
+    {
+        RpGeometry* geo = RpAtomicGetGeometry(w.atomics[a]);
+
+        if (Usable(geo) && !(geo->flags & rpGEOMETRYNORMALS))
+        {
+            want = 1;
+            break;
+        }
+    }
+
+    RwV3d* block = NULL;
+
+    if (want)
+    {
+        block = (RwV3d*)RwMalloc(w.totalVerts * sizeof(RwV3d));
+
+        if (block != NULL && !KeepModelNormals(clump, block))
+        {
+            RwFree(block);
+            block = NULL;
+        }
+    }
+
+    S32 relit = 0;
+    S32 kept = 0;
+
+    for (S32 a = 0; a < w.numAtomics; a++)
+    {
+        RpGeometry* geo = RpAtomicGetGeometry(w.atomics[a]);
+
+        if (!Usable(geo))
+        {
+            continue;
+        }
+
+        S32 gave = FALSE;
+
+        if (!(geo->flags & rpGEOMETRYNORMALS) && block != NULL)
+        {
+            RwFrame* frame = RpAtomicGetFrame(w.atomics[a]);
+            RwMatrix* ltm = frame ? RwFrameGetLTM(frame) : NULL;
+            xVec3* dst = (xVec3*)&block[w.base[a]];
+
+            for (S32 i = 0; i < geo->numVertices; i++)
+            {
+                ReadNormal(&dst[i], &w, w.base[a] + i, ltm);
+            }
+
+            geo->morphTarget[0].normals = (RwV3d*)dst;
+            geo->flags |= rpGEOMETRYNORMALS;
+            gave = TRUE;
+        }
+
+        (void)gave;
+
+        if (geo->preLitLum == NULL || !(geo->flags & rpGEOMETRYPRELIT))
+        {
+            continue;
+        }
+
+        if (PrelightIsArtwork(geo))
+        {
+            kept++;
+            continue;
+        }
+
+        // **Repainted black, not taken away: lit entirely by the light, still
+        // there for alpha.**
+        //
+        // The vertex shader starts at the prelight and ADDS the lighting to it,
+        // so any colour left in here is a floor under the light that dilutes
+        // its hue. Zero is what a character carries, and is why a character
+        // takes the day/night tint whole. Dropping rpGEOMETRYPRELIT reaches the
+        // same colour but loses the alpha with the stream, so the flag stays
+        // and the colours change instead. The surfaceProps are left as authored,
+        // also as a character's are; kDecalPrelight says why scaling them fails.
+        for (S32 i = 0; i < geo->numVertices; i++)
+        {
+            geo->preLitLum[i].red = kDecalPrelight;
+            geo->preLitLum[i].green = kDecalPrelight;
+            geo->preLitLum[i].blue = kDecalPrelight;
+        }
+
+        relit++;
+    }
+
+    WorkFree(&w);
+}
+
+// **A model the level says is never lit, that is really a piece of the ground.**
+//
+// A level's PIPT gives each model a set of pipe flags, and bits 0xC0 == 0x40
+// means "self-coloured, do not light". The class is mostly right: the sky
+// domes, the fountain water, the caustics, the shiny pickups and the floating
+// numbers all carry it and all supply their own colour.
+//
+// The craters carry it too, and they are not that. crater_sand is a decal
+// splatted round the foot of the rocket, baked to 220/182/167 against ground
+// baked to 238/199/184, with an alpha-faded rim to blend into it. It is the
+// world, authored as a model. On the console both sides drew their bake and
+// matched. Here the world's bake is replaced by a run-time rig and the crater's
+// is not, so it stops matching the only thing it was ever meant to match.
+//
+// The flag is enforced in xModelBucket right before the draw -- the bucket
+// enables a NULL kit for a 0x40 model, throwing away whatever the caller set --
+// so nothing done at the entity loop can reach it. It has to come off the model.
+//
+// Kept as a list of asset ids rather than a test on the geometry, because the
+// rest of the 0x40 class looks the same from the inside: the fountain water and
+// the caustics are also flat, also face up, and must stay unlit.
+static const U32 kGroundDecals[] = {
+    0x2273B988,  // hb01 crater_sand, the 19 craters, one of them the rocket's
+    0xF151B4EF,  // hb01 crater_sand_LOD1, what LODT swaps it for past 200 units
+};
+
+static RpAtomic** sDecalAtomics;
+static S32 sDecalCount;
+static S32 sDecalMax;
+
+static RpAtomic* MarkDecalCB(RpAtomic* atomic, void* data)
+{
+    (void)data;
+
+    if (sDecalCount == sDecalMax)
+    {
+        S32 want = sDecalMax ? sDecalMax * 2 : 32;
+        RpAtomic** grown = (RpAtomic**)RwMalloc(want * sizeof(RpAtomic*));
+
+        if (grown == NULL)
+        {
+            return atomic;
+        }
+
+        if (sDecalAtomics != NULL)
+        {
+            memcpy(grown, sDecalAtomics, sDecalCount * sizeof(RpAtomic*));
+            RwFree(sDecalAtomics);
+        }
+
+        sDecalAtomics = grown;
+        sDecalMax = want;
+    }
+
+    sDecalAtomics[sDecalCount] = atomic;
+    sDecalCount++;
+
+    return atomic;
+}
+
+// **The colours have to go before the clump is instanced.**
+//
+// A vertex buffer is built from the geometry as it stands at instance time, so
+// a colour written afterwards is one the buffer never sees. The asset id says
+// which models these are and only zAssetTypes knows it, but the instancing
+// happens two calls below that -- so the answer is left here on the way in and
+// read by iModelStreamRead at the one moment it can still be acted on.
+static S32 sPendingGroundDecal;
+
+void iEnvPendingGroundDecal(S32 on)
+{
+    sPendingGroundDecal = on;
+}
+
+S32 iEnvTakePendingGroundDecal(void)
+{
+    return sPendingGroundDecal;
+}
+
+S32 iEnvGroundDecalAsset(U32 assetID)
+{
+    for (U32 i = 0; i < sizeof(kGroundDecals) / sizeof(kGroundDecals[0]); i++)
+    {
+        if (kGroundDecals[i] == assetID)
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+void iEnvMarkGroundDecal(RpClump* clump)
+{
+    if (clump != NULL)
+    {
+        RpClumpForAllAtomics(clump, MarkDecalCB, NULL);
+    }
+}
+
+S32 iEnvIsGroundDecal(void* atomic)
+{
+    for (S32 i = 0; i < sDecalCount; i++)
+    {
+        if (sDecalAtomics[i] == (RpAtomic*)atomic)
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+void iEnvForgetModel(RpClump* clump)
+{
+    for (S32 i = 0; i < sModelNormalCount; i++)
+    {
+        if (sModelNormals[i].clump != clump)
+        {
+            continue;
+        }
+
+        RwFree(sModelNormals[i].block);
+        sModelNormals[i] = sModelNormals[sModelNormalCount - 1];
+        sModelNormalCount--;
+        return;
+    }
 }
 
 void iEnvNormalsCompare(iEnv* env)

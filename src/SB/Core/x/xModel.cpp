@@ -1,5 +1,9 @@
 #include "iModel.h"
 #include "xModel.h"
+
+#ifdef PLATFORM_PC
+#include "iEnvNormals.h"
+#endif
 #include "xMemMgr.h"
 #include "xMorph.h"
 #include "xScreen.h"
@@ -195,6 +199,18 @@ xModelInstance* xModelInstanceAlloc(RpAtomic* data, void* object, U16 flags, U8 
     {
         dude->PipeFlags |= 0x980000;
     }
+
+#ifdef PLATFORM_PC
+    // **Here, because the flag is enforced three times and this is upstream of
+    // all of them.** Bits 0xC0 == 0x40 means never lit; xModelBucket_Add then
+    // refuses to copy the standing kit, and xModelBucket's render enables NULL
+    // immediately before the draw. A model that is really ground has to be out
+    // of that class before any of it runs. iEnvNormals.cpp says which models.
+    if (iEnvIsGroundDecal(dude->Data))
+    {
+        dude->PipeFlags &= ~0xC0;
+    }
+#endif
 
     dude->anim_coll.verts = NULL;
 

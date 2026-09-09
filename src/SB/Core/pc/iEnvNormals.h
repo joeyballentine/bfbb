@@ -37,6 +37,25 @@ void iEnvDropPrelight(iEnv* env);
 // Release what iEnvGenerateNormals allocated. Called from iEnvFree.
 void iEnvFreeNormals(iEnv* env);
 
+// Give one model the normals it shipped without, and drop the paint that the
+// run-time rig replaces. Between reading the clump and instancing it, like the
+// world's; iEnvNormals.cpp says why a prop without normals cannot be lit at all.
+//
+// Only under experimental.world_lighting, which is the setting that says a rig
+// stands in for the bake. Off, a prop keeps exactly what the console drew.
+void iEnvPrepareModel(RpClump* clump);
+
+// Free what iEnvPrepareModel allocated for this clump. From iModelUnload.
+void iEnvForgetModel(RpClump* clump);
+
+// The models that are really pieces of the world, listed by asset id, and which
+// atomics came out of one. iEnvNormals.cpp says which models and why.
+S32 iEnvGroundDecalAsset(U32 assetID);
+void iEnvPendingGroundDecal(S32 on);
+S32 iEnvTakePendingGroundDecal(void);
+void iEnvMarkGroundDecal(RpClump* clump);
+S32 iEnvIsGroundDecal(void* atomic);
+
 // Fit the rig NOW, from the world's geometry as it shipped.
 //
 // experimental.hipoly_assets rebuilds that geometry before iEnvLoad ever sees

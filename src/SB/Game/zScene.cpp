@@ -2468,7 +2468,23 @@ void zSceneSetup()
 
             for (i = 0; i < zsc->num_base; i++)
             {
-                if (zsc->base[i]->baseFlags & 0x20)
+                S32 wanted = (zsc->base[i]->baseFlags & 0x20) != 0;
+
+#ifdef PLATFORM_PC
+                // A model that is really a piece of the ground takes the rig
+                // whether or not the level put it in the object-kit group --
+                // it was never in that group because it was never meant to be
+                // lit at all. Static entities only, which is what a decal is
+                // and what is safe to read a model off here.
+                if (!wanted && zsc->base[i]->baseType == eBaseTypeStatic)
+                {
+                    xEnt* dent = (xEnt*)zsc->base[i];
+
+                    wanted = dent->model != NULL && iEnvIsGroundDecal(dent->model->Data);
+                }
+#endif
+
+                if (wanted)
                 {
                     xEnt* tgtent = (xEnt*)zsc->base[i];
 
@@ -3457,11 +3473,11 @@ static void zSceneRenderPreFX()
     // Retargeted per frame rather than in zSceneSetup, which runs at
     // eGameWhere_SetupScene while the player is initialised later at
     // eGameWhere_SetupPlayerInit and puts the asset's kit straight back.
-    xLightKit* playerKit = zObjectLightKit(s);
+    xLightKit* objKit = zObjectLightKit(s);
 
-    if (playerKit != NULL)
+    if (objKit != NULL)
     {
-        globals.player.ent.lightKit = playerKit;
+        globals.player.ent.lightKit = objKit;
     }
 
     if (worldKit != NULL)
@@ -3563,10 +3579,23 @@ static void zSceneRenderPreFX()
         }
     }
 
+#ifdef PLATFORM_PC
+    // **A shadow is a mark on the ground, not a surface standing on it.** It is
+    // drawn through the model path, so experimental.toon_all reaches it and
+    // gives it a cel ramp and a line around it -- which reads as a pale
+    // see-through shape rather than a shadow. The object kit standing from the
+    // opaque pass lightens it further, so that goes too.
+    iToonPause(TRUE);
+#endif
+
     zEntPlayer_ShadowModelEnable();
     xShadowManager_Render();
     zEntPlayer_ShadowModelDisable();
     xShadowSimple_Render();
+
+#ifdef PLATFORM_PC
+    iToonPause(FALSE);
+#endif
 
 #ifdef PLATFORM_PC
     // Everything from here down is see-through: alpha models, the floor decals,

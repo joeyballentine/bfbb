@@ -1,6 +1,8 @@
 #include "zAssetTypes.h"
 #ifdef PLATFORM_PC
 #include "iHipoly.h"
+#include "iEnvNormals.h"
+#include "iScreen.h"
 #endif
 
 #include "xAnim.h"
@@ -184,7 +186,18 @@ static HackModelRadius hackRadiusTable[3] = { { 0xFA77E6FAU, 20.0f },
 
 static void* Model_Read(void* param_1, U32 param_2, void* indata, U32 insize, U32* outsize)
 {
+#ifdef PLATFORM_PC
+    // Before the read, because the read is what instances the clump and the
+    // paint has to be gone by then. iEnvNormals.cpp says why.
+    iEnvPendingGroundDecal(iScreenWorldLighting() != IWORLDLIGHT_OFF &&
+                           iEnvGroundDecalAsset(param_2));
+#endif
+
     RpAtomic* model = (RpAtomic*)iModelFileNew(indata, insize);
+
+#ifdef PLATFORM_PC
+    iEnvPendingGroundDecal(FALSE);
+#endif
 
 #ifdef PLATFORM_PC
     // PORT: experimental.hipoly_assets. Here and not in iModelFileNew, which
