@@ -70,14 +70,4 @@ void iEnvRigAtContrast(const iEnvBakedRig* rig, F32 contrast, F32 ambient[3],
 // says what that costs.
 void iEnvBakeShadowedLight(iEnv* env);
 
-// Scale the kept paint by a colour, through the material rather than the
-// vertices.
-//
-// A piece whose prelight is artwork has rpGEOMETRYLIGHT cleared, so no light
-// reaches it and it holds noon for ever while everything around it turns. World
-// geometry carries rpGEOMETRYMODULATEMATERIALCOLOR, and RenderWare multiplies
-// the material's colour into the finished vertex colour, so one RwRGBA per
-// material moves the whole decal without rewriting a vertex.
-void iEnvTintKeptPaint(iEnv* env, const F32 rgb[3]);
-
 #endif

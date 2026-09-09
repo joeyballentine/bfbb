@@ -51,19 +51,29 @@ void iDayNightAdvance(F32 seconds);
 // brightness.
 void iDayNightRig(const iEnvBakedRig* noon, iEnvBakedRig* out);
 
-// What to multiply a light kit's authored colour by, now. Ambient and
-// directional differ: a directional goes to nothing when the sun is down, and an
-// ambient falls to a dim blue instead, because a level with no ambient at night
-// is not dark, it is invisible.
+// What to multiply a light kit's authored colour by, now.
+//
+// **A hue rotation and nothing else.** Every multiplier holds its luminance, so
+// a lit surface is as bright at midnight as at noon, and only its colour and the
+// direction it is lit from change. iDayNightScreen below is what makes the night
+// dark. Scaling the lights as well would darken lit surfaces twice over, leaving
+// the world and its characters black against the props no light reaches.
 void iDayNightTint(F32 ambient[3], F32 directional[3]);
 
-// What to multiply colour that is already BAKED into a surface by.
+// What the finished frame is multiplied by, drawn over the scene and under the
+// interface.
 //
-// Not the ambient multiplier above. That one scales a light, and a lit surface
-// at night keeps a fraction of its ambient and loses its directional entirely.
-// Baked colour has both of those in it already, so scaling it by the ambient
-// term alone leaves it far brighter than everything around it -- a pale decal
-// comes out as a lit patch. This is the whole scene's fall instead.
-void iDayNightPaintTint(F32 rgb[3]);
+// **This is what makes the night dark, and the lights only say which way the
+// sun is.** Chasing the level down through the lighting cannot work, because
+// most of what is on screen is not lit: a model with no light kit draws the
+// colour baked into it, the world keeps its painted decals for the same reason,
+// and the skydome is a texture. Each of those is a separate path and there is no
+// end to them.
+//
+// One multiply over the lot costs a quad and reaches everything, including the
+// things nobody thought of. What it cannot do is tell a surface facing the moon
+// from one facing away, which is exactly what the light kits are still there
+// for.
+void iDayNightScreen(F32 rgb[3]);
 
 #endif

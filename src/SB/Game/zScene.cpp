@@ -10,6 +10,7 @@
 // zWorldLightBuild.
 #include "iScreen.h"
 #include "iDayNight.h"
+#include "iScrFX.h"
 #include "iEnvNormals.h"
 #endif
 
@@ -2851,18 +2852,6 @@ void zSceneUpdate(F32 elapsedSec)
         iDayNightAdvance(elapsedSec);
     }
 
-    // The kept paint has no light to reach it, so it moves through its material
-    // instead. Every light kit is handled on its way into xLightKit_Enable, which
-    // covers characters and the world alike; this is the one thing left that no
-    // light touches.
-    if (iDayNightActive() && globals.sceneCur != NULL && globals.sceneCur->env != NULL &&
-        globals.sceneCur->env->geom != NULL)
-    {
-        F32 paint[3];
-
-        iDayNightPaintTint(paint);
-        iEnvTintKeptPaint(globals.sceneCur->env->geom, paint);
-    }
 #endif
     gSceneUpdateTime = elapsedSec;
 
@@ -3460,6 +3449,39 @@ static void zSceneRenderPreFX()
     xDecalRender();
 }
 
+#ifdef PLATFORM_PC
+// Multiply the finished scene down to the time of day.
+//
+// Over the world and its effects, under the interface: a HUD that dims at
+// midnight reads as a fault rather than as night. iDayNightScreen says why the
+// level lives here instead of in the lights.
+static void zDayNightWash()
+{
+    F32 rgb[3];
+
+    iDayNightScreen(rgb);
+
+    if (rgb[0] >= 0.999f && rgb[1] >= 0.999f && rgb[2] >= 0.999f)
+    {
+        return;
+    }
+
+    iScrFxBegin();
+
+    // A multiply, not the alpha blend iScrFxBegin leaves set. Blending towards a
+    // colour flattens the picture into it; multiplying keeps what is bright
+    // bright and takes red and green down harder than blue, which is the whole
+    // difference between night and grey.
+    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDZERO);
+    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDSRCCOLOR);
+
+    iScrFxDrawBox(0.0f, 0.0f, iScreenWidthF(), iScreenHeightF(), (U8)(rgb[0] * 255.0f),
+                  (U8)(rgb[1] * 255.0f), (U8)(rgb[2] * 255.0f), 255);
+
+    iScrFxEnd();
+}
+#endif
+
 static void zSceneRenderPostFX()
 {
     zRenderState(SDRS_Glare);
@@ -3476,6 +3498,10 @@ static void zSceneRenderPostFX()
 
     cruise_bubble::render_screen();
     oob_state::fx_render();
+
+#ifdef PLATFORM_PC
+    zDayNightWash();
+#endif
 
     zRenderState(SDRS_Font);
     ztextbox::render_all();

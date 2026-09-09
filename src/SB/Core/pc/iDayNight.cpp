@@ -10,48 +10,52 @@ namespace
     F32 sLength;
     F32 sPhase = 0.25f; // start at noon, which is where every level was painted
 
-    // **Night is a blue picture, not a dark one.**
+    // **No light below carries a level. They only say which way the sun is.**
     //
-    // The show lights its nights so you can read every shape, in a heavy blue
-    // wash, and a cycle that fades to black instead just looks like the game has
-    // turned off. So the ambient keeps better than half its daytime strength and
-    // swings hard towards blue -- the multiplier is above 1 on the blue channel,
-    // which brightens blue against the day rather than only taking red away.
-    const F32 kNightLevel = 0.55f;
-    const F32 kNightHue[3] = { 0.45f, 0.70f, 1.35f };
-
-    // Where baked colour lands at midnight, as a fraction of noon. Lit geometry
-    // in hb01 falls to about a fifth of its midday brightness once the sun is
-    // gone, so paint that does not fall with it reads as a light source.
-    const F32 kPaintNight = 0.18f;
-
-    // The moon: a dim blue key while the sun is under the horizon.
+    // Every hue here is scaled to hold its luminance, and nothing scales a light
+    // up or down with the hour. iDayNightScreen is the only thing that darkens
+    // the picture, and it reaches lit and unlit surfaces alike. A light that fell
+    // as well would take the lit ones down twice, and the world and Spongebob
+    // would go black against a crater sitting at noon.
     //
-    // Ambient alone is flat, and a level lit flat reads as fog rather than as
-    // night. Keeping a directional in the sky through the small hours is what
-    // leaves the geometry its shape.
-    const F32 kMoonLevel = 0.30f;
-    const F32 kMoonHue[3] = { 0.50f, 0.68f, 1.20f };
+    // The cost is that night has a day's contrast, where a real night is
+    // flatter. Moving that energy out of the key and into the ambient needs the
+    // rig's own split between the two, and a tint that runs over every kit in
+    // the game does not have it.
 
-    // The horizon's colour, as a multiple of the sun's own. Blended in as the
-    // sun drops, which is what makes dawn and dusk read as dawn and dusk.
-    const F32 kHorizonHue[3] = { 1.00f, 0.62f, 0.36f };
+    // The hue an ambient takes at night: blue up, red down, luminance held.
+    const F32 kNightHue[3] = { 0.90f, 1.01f, 1.23f };
 
-    // How high in the sky the sun is, and how far under it. Exactly one of the
-    // two is above zero away from the horizon, and both are zero at it, which is
-    // what makes sunset hand over to moonrise without a seam.
-    F32 Sun()
+    // The moon's, for the key light while the sun is under the horizon.
+    const F32 kMoonHue[3] = { 0.84f, 1.01f, 1.37f };
+
+    // The sun's at the horizon, which is what makes dawn and dusk read as dawn
+    // and dusk.
+    const F32 kHorizonHue[3] = { 1.42f, 0.88f, 0.51f };
+
+    // How wide the handover from sun to moon is, in sines of the sun's height.
+    // Narrow, so the key changes colour close to the horizon and holds the one
+    // it has for the rest of the day.
+    const F32 kHandover = 0.15f;
+
+    // How far the sun has to climb to lose the horizon's colour. About where a
+    // sunset stops looking like one.
+    const F32 kHorizonBand = 0.35f;
+
+    // What the whole frame is multiplied by at midnight. Red and green fall
+    // furthest, which is what turns the picture blue rather than merely dim.
+    const F32 kScreenNight[3] = { 0.20f, 0.28f, 0.52f };
+
+    // How high the sun is: 1 straight overhead, 0 at the horizon, negative once
+    // it is under it and the moon has the sky.
+    F32 SunHeight()
     {
-        F32 s = sinf(sPhase * 2.0f * 3.14159265f);
-
-        return s > 0.0f ? s : 0.0f;
+        return sinf(sPhase * 2.0f * 3.14159265f);
     }
 
-    F32 Moon()
+    F32 Clamp01(F32 v)
     {
-        F32 s = sinf(sPhase * 2.0f * 3.14159265f);
-
-        return s < 0.0f ? -s : 0.0f;
+        return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
     }
 
     F32 Lerp(F32 a, F32 b, F32 t)
@@ -205,7 +209,7 @@ void iDayNightRig(const iEnvBakedRig* noon, iEnvBakedRig* out)
     }
 }
 
-void iDayNightPaintTint(F32 rgb[3])
+void iDayNightScreen(F32 rgb[3])
 {
     if (!iDayNightActive())
     {
@@ -213,11 +217,11 @@ void iDayNightPaintTint(F32 rgb[3])
         return;
     }
 
-    F32 day = Sun();
+    F32 day = Clamp01(SunHeight());
 
     for (S32 i = 0; i < 3; i++)
     {
-        rgb[i] = Lerp(kPaintNight, 1.0f, day) * Lerp(kNightHue[i], 1.0f, day);
+        rgb[i] = Lerp(kScreenNight[i], 1.0f, day);
     }
 }
 
@@ -234,24 +238,20 @@ void iDayNightTint(F32 ambient[3], F32 directional[3])
         return;
     }
 
-    F32 day = Sun();
-    F32 night = Moon();
+    F32 h = SunHeight();
+    F32 day = Clamp01(h);
 
-    // Warm as the sun drops. Full at the horizon, gone by the time it is a
-    // third of the way up, which is about where a sunset stops looking like one.
-    F32 low = 1.0f - (day < 0.35f ? day / 0.35f : 1.0f);
+    // Which of the two is in the sky, blended across a band either side of the
+    // horizon so sunset hands over to moonrise without a step. Both are at full
+    // strength throughout; the colour is all that says which one it is.
+    F32 sunlit = Clamp01(0.5f + 0.5f * h / kHandover);
+
+    // Warm as the sun drops, full by the time it reaches the horizon.
+    F32 low = 1.0f - Clamp01(day / kHorizonBand);
 
     for (S32 i = 0; i < 3; i++)
     {
-        // The sun on the way down and the moon on the way up, added rather than
-        // chosen between: both are zero at the horizon, so the handover is a
-        // crossfade and needs no branch.
-        directional[i] = day * Lerp(1.0f, kHorizonHue[i], low) +
-                         night * kMoonLevel * kMoonHue[i];
-
-        F32 level = Lerp(kNightLevel, 1.0f, day);
-        F32 hue = Lerp(kNightHue[i], 1.0f, day);
-
-        ambient[i] = level * hue;
+        directional[i] = Lerp(kMoonHue[i], Lerp(1.0f, kHorizonHue[i], low), sunlit);
+        ambient[i] = Lerp(kNightHue[i], 1.0f, day);
     }
 }
