@@ -60,20 +60,21 @@ void iDayNightRig(const iEnvBakedRig* noon, iEnvBakedRig* out);
 // the world and its characters black against the props no light reaches.
 void iDayNightTint(F32 ambient[3], F32 directional[3]);
 
-// What the finished frame is multiplied by, drawn over the scene and under the
-// interface.
+// The grade the finished frame gets, as a multiply and then an add. Drawn over
+// the scene and under the interface.
 //
-// **This is what makes the night dark, and the lights only say which way the
+// **This is what makes the night a night, and the lights only say which way the
 // sun is.** Chasing the level down through the lighting cannot work, because
 // most of what is on screen is not lit: a model with no light kit draws the
 // colour baked into it, the world keeps its painted decals for the same reason,
 // and the skydome is a texture. Each of those is a separate path and there is no
 // end to them.
 //
-// One multiply over the lot costs a quad and reaches everything, including the
-// things nobody thought of. What it cannot do is tell a surface facing the moon
-// from one facing away, which is exactly what the light kits are still there
-// for.
-void iDayNightScreen(F32 rgb[3]);
+// Two quads over the lot reach everything, including the things nobody thought
+// of. The multiply turns the picture cyan and the add keeps it off black, so the
+// result is a saturated night rather than a dim day. What neither can do is tell
+// a surface facing the moon from one facing away, which is exactly what the
+// light kits are still there for.
+void iDayNightScreen(F32 mul[3], F32 add[3]);
 
 #endif

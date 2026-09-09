@@ -23,8 +23,10 @@ namespace
     // rig's own split between the two, and a tint that runs over every kit in
     // the game does not have it.
 
-    // The hue an ambient takes at night: blue up, red down, luminance held.
-    const F32 kNightHue[3] = { 0.90f, 1.01f, 1.23f };
+    // The hue an ambient takes at night: cyan, luminance held. The show's night
+    // fill is the ground bouncing green-blue back up, not a blue sky, so green
+    // rises with blue and only red falls.
+    const F32 kNightHue[3] = { 0.80f, 1.06f, 1.20f };
 
     // The moon's, for the key light while the sun is under the horizon.
     const F32 kMoonHue[3] = { 0.84f, 1.01f, 1.37f };
@@ -42,9 +44,19 @@ namespace
     // sunset stops looking like one.
     const F32 kHorizonBand = 0.35f;
 
-    // What the whole frame is multiplied by at midnight. Red and green fall
-    // furthest, which is what turns the picture blue rather than merely dim.
-    const F32 kScreenNight[3] = { 0.20f, 0.28f, 0.52f };
+    // **Night is a saturated picture, not a dark one.**
+    //
+    // What the whole frame is multiplied by at midnight. Red is nearly gone
+    // while green and blue are mostly kept, so the sand lands on a bright cyan
+    // and the picture reads as night by its colour rather than by its level.
+    // Taking all three down together gives a grey scene at low brightness, which
+    // is a dimmer switch and not a night.
+    const F32 kScreenNight[3] = { 0.26f, 0.58f, 0.64f };
+
+    // Added after that multiply, so nothing in the frame reaches black. A
+    // surface no light finds sits in deep blue instead of in a hole, which is
+    // what lets every shape stay readable at midnight.
+    const F32 kScreenLift[3] = { 0.02f, 0.05f, 0.15f };
 
     // How high the sun is: 1 straight overhead, 0 at the horizon, negative once
     // it is under it and the moon has the sky.
@@ -209,11 +221,16 @@ void iDayNightRig(const iEnvBakedRig* noon, iEnvBakedRig* out)
     }
 }
 
-void iDayNightScreen(F32 rgb[3])
+void iDayNightScreen(F32 mul[3], F32 add[3])
 {
     if (!iDayNightActive())
     {
-        rgb[0] = rgb[1] = rgb[2] = 1.0f;
+        for (S32 i = 0; i < 3; i++)
+        {
+            mul[i] = 1.0f;
+            add[i] = 0.0f;
+        }
+
         return;
     }
 
@@ -221,7 +238,8 @@ void iDayNightScreen(F32 rgb[3])
 
     for (S32 i = 0; i < 3; i++)
     {
-        rgb[i] = Lerp(kScreenNight[i], 1.0f, day);
+        mul[i] = Lerp(kScreenNight[i], 1.0f, day);
+        add[i] = Lerp(kScreenLift[i], 0.0f, day);
     }
 }
 

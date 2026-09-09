@@ -3567,13 +3567,22 @@ static void zDayNightWash()
 
     // A multiply, not the alpha blend iScrFxBegin leaves set. Blending towards a
     // colour flattens the picture into it; multiplying keeps what is bright
-    // bright and takes red and green down harder than blue, which is the whole
-    // difference between night and grey.
+    // bright and takes red down much harder than green and blue, which is what
+    // turns the ground cyan instead of grey.
     RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDZERO);
     RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDSRCCOLOR);
 
-    iScrFxDrawBox(0.0f, 0.0f, iScreenWidthF(), iScreenHeightF(), (U8)(rgb[0] * 255.0f),
-                  (U8)(rgb[1] * 255.0f), (U8)(rgb[2] * 255.0f), 255);
+    iScrFxDrawBox(0.0f, 0.0f, iScreenWidthF(), iScreenHeightF(), (U8)(mul[0] * 255.0f),
+                  (U8)(mul[1] * 255.0f), (U8)(mul[2] * 255.0f), 255);
+
+    // Then the lift, added over the top. A multiply alone drives the darkest
+    // parts of the frame to black, and a black shape reads as a hole rather than
+    // as something standing in the dark.
+    RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
+    RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
+
+    iScrFxDrawBox(0.0f, 0.0f, iScreenWidthF(), iScreenHeightF(), (U8)(add[0] * 255.0f),
+                  (U8)(add[1] * 255.0f), (U8)(add[2] * 255.0f), 255);
 
     iScrFxEnd();
 }
