@@ -640,10 +640,15 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
         iToonSuppress(TRUE);
     }
 
-    if (outline > ITOON_OUTLINE_NONE)
+    // Everything below is the character treatment. SHADEONLY takes all of it
+    // except the hull, so it enters the block and asks for no ink.
+    S32 shadeOnly = outline == ITOON_OUTLINE_SHADEONLY;
+    S32 ink = shadeOnly ? ITOON_OUTLINE_NONE : outline;
+
+    if (outline > ITOON_OUTLINE_NONE || shadeOnly)
     {
         iToonOutlineAtomic(model);
-        iToonSetOutline(outline);
+        iToonSetOutline(ink);
 
         // Everything the registry knows about is a character, so this is the
         // one place that knows both that fact and the model's own matrix.
@@ -662,7 +667,10 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
         // arrives, and by the time one is being rendered it certainly has. It
         // hands back where the model's two inks meet, which only it has walked
         // the vertices to find.
-        iToonOutlineSplit(iToonWeld(model), outline);
+        if (!shadeOnly)
+        {
+            iToonOutlineSplit(iToonWeld(model), ink);
+        }
     }
 
     if (iModelCheckAtomic(model, "iModelRender refused", true))
@@ -675,7 +683,7 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
         iToonSuppress(FALSE);
     }
 
-    if (outline > ITOON_OUTLINE_NONE)
+    if (outline > ITOON_OUTLINE_NONE || shadeOnly)
     {
         iToonSetOutline(ITOON_OUTLINE_NONE);
         iToonFaceLightClear();

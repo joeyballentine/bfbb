@@ -3395,7 +3395,14 @@ static void zToonOutlineFor(const xEnt* ent)
     }
     else if (ent->baseType == eBaseTypeNPC)
     {
-        mode = ITOON_OUTLINE_PLAIN;
+        // Bubble Buddy is shaded but not inked. He is a bubble, and an
+        // inverted hull behind a see-through model fills his silhouette
+        // instead of tracing it -- see ITOON_OUTLINE_SHADEONLY. Every other
+        // see-through character, the jellyfish included, is drawn solid
+        // enough to paint over its own hull and keeps the line.
+        mode = ((const xNPCBasic*)ent)->myNPCType == NPC_TYPE_BUBBUDDY ?
+                   ITOON_OUTLINE_SHADEONLY :
+                   ITOON_OUTLINE_PLAIN;
     }
 
     iToonOutlineRegister(ent->model, mode);

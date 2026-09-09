@@ -87,6 +87,14 @@ void iToonOutlineMaxWidth();
 // PLAINDRAW means somebody did: iModelRender turns the shading off around that
 // model and back on afterwards. It is negative so that the NONE test that
 // gates the ink still reads the way it did.
+//
+// SHADEONLY is the other half of that: a character the game names, shaded like
+// one, with the hull left off. A model drawn as a transparent shell cannot be
+// inked by an inverted hull, because the hull is a solid copy sitting behind it
+// and the model never paints over the middle of it -- the whole silhouette
+// fills with ink and the scene stops showing through. Bubble Buddy is the one
+// that matters.
+#define ITOON_OUTLINE_SHADEONLY (-2)
 #define ITOON_OUTLINE_PLAINDRAW (-1)
 #define ITOON_OUTLINE_NONE 0
 #define ITOON_OUTLINE_PLAIN 1
