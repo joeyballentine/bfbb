@@ -632,8 +632,17 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
     // more.
     S32 outline = iToonOutlineFind(model);
 
-    if (outline != ITOON_OUTLINE_NONE)
+    // Art that goes through the model path but is not a surface. The ramp is
+    // global, so it has to be switched off around the draw rather than simply
+    // not switched on.
+    if (outline == ITOON_OUTLINE_PLAINDRAW)
     {
+        iToonSuppress(TRUE);
+    }
+
+    if (outline > ITOON_OUTLINE_NONE)
+    {
+        iToonOutlineAtomic(model);
         iToonSetOutline(outline);
 
         // Everything the registry knows about is a character, so this is the
@@ -661,7 +670,12 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
         iModelCacheAtomic(model)->renderCallBack(iModelCacheAtomic(model));
     }
 
-    if (outline != ITOON_OUTLINE_NONE)
+    if (outline == ITOON_OUTLINE_PLAINDRAW)
+    {
+        iToonSuppress(FALSE);
+    }
+
+    if (outline > ITOON_OUTLINE_NONE)
     {
         iToonSetOutline(ITOON_OUTLINE_NONE);
         iToonFaceLightClear();

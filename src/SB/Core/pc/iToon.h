@@ -75,6 +75,19 @@ S32 iToonRampRowFor(void* atomic);
 void iToonOutlineMinWidth();
 void iToonOutlineMaxWidth();
 
+// **The cel ramp is global state, so "plain" has to be said out loud.**
+//
+// video.toon shades every model the renderer draws; the registry only ever
+// decided who also gets ink. A floating sign -- the number over a clam, the
+// icon over a task gate -- is art with no shape to describe, and a model drawn
+// with no light kit at all lands in the ramp's darkest band, which is why one
+// comes out as a dark shape inside its own bright outline.
+//
+// NONE means nobody said anything, so experimental.toon_all still reaches it.
+// PLAINDRAW means somebody did: iModelRender turns the shading off around that
+// model and back on afterwards. It is negative so that the NONE test that
+// gates the ink still reads the way it did.
+#define ITOON_OUTLINE_PLAINDRAW (-1)
 #define ITOON_OUTLINE_NONE 0
 #define ITOON_OUTLINE_PLAIN 1
 #define ITOON_OUTLINE_TWOTONE 2
@@ -104,6 +117,18 @@ void iToonSetOutlineDefault(S32 mode);
 // light only darkens it, and a hull round an alpha card traces the rectangle
 // and not the shape. iToon.cpp says the whole of it.
 void iToonPause(S32 on);
+
+// Draw this model with no cel ramp, whenever it is finally drawn. For art that
+// goes through the model path but is not a surface; see ITOON_OUTLINE_PLAINDRAW.
+void iToonPlainRegister(xModelInstance* model);
+
+// Switch the ramp off and on around one draw. iModelRender's, not a caller's.
+void iToonSuppress(S32 on);
+
+// Whether an atomic was named rather than reaching the look through
+// experimental.toon_all, and which atomic the next iToonSetOutline is about.
+S32 iToonOutlineNamed(void* atomic);
+void iToonOutlineAtomic(void* atomic);
 
 // What was registered for this atomic, or ITOON_OUTLINE_NONE. Called by
 // iModelRender around the draw.

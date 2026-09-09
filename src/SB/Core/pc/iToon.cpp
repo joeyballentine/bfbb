@@ -308,6 +308,25 @@ namespace toonbackend
         (void)strength;
     }
 
+    inline void setOutlineAlpha(S32 allow)
+    {
+#ifdef RW_D3D9
+        if (iBackendIsD3D9())
+        {
+            rw::d3d9::setOutlineAlpha(allow);
+            return;
+        }
+#endif
+#ifdef RW_GL3
+        if (iBackendIsGL3())
+        {
+            rw::gl3::setOutlineAlpha(allow);
+            return;
+        }
+#endif
+        (void)allow;
+    }
+
     inline void setOutlineMaxWidth(F32 w)
     {
 #ifdef RW_D3D9
@@ -585,42 +604,70 @@ void iToonInit(S32 bands)
 // surrounds disagree. A darkened copy of the surface cannot disagree with it.
 static const F32 kInkScale = 0.35f;
 
-// **The see-through half of a frame is not drawn, it is painted over.**
+// **A pass of flat art, where only what the game NAMED still takes the look.**
 //
 // A cel ramp and a hull are both statements about a solid surface: the ramp
 // says which way it faces the light, the hull says where it ends. A floor
-// decal, a plant card, a particle and the number that floats off a clam are
-// none of those. They are flat art laid on the picture, and cutting their
-// lighting into bands only darkens them, while a hull traces the rectangle they
-// were cut from rather than the shape their texture leaves behind.
+// decal, a plant card and a particle are none of those. They are art laid on
+// the picture, and banding their light only darkens them, while a hull traces
+// the rectangle they were cut from rather than the shape their texture leaves
+// behind.
 //
-// So the whole alpha pass runs with the look off. One bracket rather than a
-// test per mesh, because the game already sorts the frame into a solid half and
-// a see-through half and this is that seam.
+// **But see-through is not the test, because a jellyfish is translucent.** It
+// draws in the same pass as the decals and it is a character, so a rule that
+// reads the alpha would take the look off both. What separates them is that a
+// character was named by zToonOutlineFor and a decal only ever picked up the
+// experimental.toon_all default. So the pause suspends the DEFAULT and leaves
+// an explicit entry standing.
+//
+// The shading follows the same answer per draw, in iToonSetOutline below --
+// iModelRender calls it either side of a model, which is the only place that
+// knows whether this particular one was named.
 static S32 sPaused;
+
+// Which atomic the next iToonSetOutline is about. Set by iModelRender, which is
+// the only place that has both the atomic and the moment.
+static void* sOutlineAtomic;
+
+void iToonOutlineAtomic(void* atomic)
+{
+    sOutlineAtomic = atomic;
+}
 
 void iToonPause(S32 on)
 {
     sPaused = on ? 1 : 0;
 
+    toonbackend::setToonShading(sPaused ? FALSE : iScreenToon(), iScreenToonBands(),
+                                iScreenToonSaturation(), iScreenToonStrength());
+
     if (sPaused)
     {
-        toonbackend::setToonShading(FALSE, iScreenToonBands(), iScreenToonSaturation(),
-                                    iScreenToonStrength());
         toonbackend::setOutlineMode(ITOON_OUTLINE_NONE);
-        return;
     }
-
-    toonbackend::setToonShading(iScreenToon(), iScreenToonBands(), iScreenToonSaturation(),
-                                iScreenToonStrength());
 }
 
 void iToonSetOutline(S32 mode)
 {
+    // A named model keeps the ramp through the paused pass, and everything else
+    // in it stays plain. Outside the pause the shading is already on and this
+    // writes what is there.
     if (sPaused)
     {
-        return;
+        toonbackend::setToonShading(mode != ITOON_OUTLINE_NONE ? iScreenToon() : FALSE,
+                                    iScreenToonBands(), iScreenToonSaturation(),
+                                    iScreenToonStrength());
+
+        if (mode == ITOON_OUTLINE_NONE)
+        {
+            toonbackend::setOutlineMode(ITOON_OUTLINE_NONE);
+            return;
+        }
     }
+
+    // A named character may be see-through and still be inked; anything that
+    // reached the ink through the toon_all default may not.
+    toonbackend::setOutlineAlpha(mode != ITOON_OUTLINE_NONE && iToonOutlineNamed(sOutlineAtomic));
 
     toonbackend::setOutline(kInkScale, kInkScale, kInkScale, iScreenToonOutline());
 
@@ -1099,8 +1146,21 @@ void iToonOutlineClear()
     memset(sOutlineKey, 0, sizeof(sOutlineKey));
 }
 
+void iToonSuppress(S32 on)
+{
+    toonbackend::setToonShading(on ? FALSE : iScreenToon(), iScreenToonBands(),
+                                iScreenToonSaturation(), iScreenToonStrength());
+}
+
+void iToonPlainRegister(xModelInstance* model)
+{
+    iToonOutlineRegister(model, ITOON_OUTLINE_PLAINDRAW);
+}
+
 void iToonOutlineRegister(xModelInstance* model, S32 mode)
 {
+    // NONE is the absence of an answer and is not worth a slot -- the default
+    // is what it falls through to. PLAINDRAW is an answer.
     if (mode == ITOON_OUTLINE_NONE)
     {
         return;
@@ -1153,6 +1213,36 @@ void iToonSetOutlineDefault(S32 mode)
     sOutlineDefault = mode;
 }
 
+// Whether this atomic was NAMED, as against reaching the look through the
+// experimental.toon_all default.
+//
+// It is the only thing that separates a jellyfish from a floor decal. Both are
+// see-through and both are models; one is a character the game listed and the
+// other picked the ink up from a setting.
+S32 iToonOutlineNamed(void* atomic)
+{
+    if (atomic == NULL)
+    {
+        return FALSE;
+    }
+
+    U32 i = OutlineSlot(atomic);
+    S32 tries = 0;
+
+    while (sOutlineKey[i] != NULL && tries < kOutlineSlots)
+    {
+        if (sOutlineKey[i] == atomic)
+        {
+            return TRUE;
+        }
+
+        i = (i + 1) & (kOutlineSlots - 1);
+        tries++;
+    }
+
+    return FALSE;
+}
+
 S32 iToonOutlineFind(void* atomic)
 {
     if (atomic == NULL)
@@ -1174,7 +1264,9 @@ S32 iToonOutlineFind(void* atomic)
         tries++;
     }
 
-    return sOutlineDefault;
+    // Paused, an unnamed model is plain: the default is exactly what a floor
+    // decal picked the look up from.
+    return sPaused ? ITOON_OUTLINE_NONE : sOutlineDefault;
 }
 
 void iToonShutdown()

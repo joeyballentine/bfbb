@@ -1,4 +1,8 @@
 #include "zNPCGlyph.h"
+
+#ifdef PLATFORM_PC
+#include "iToon.h"
+#endif
 #include "zNPCSupport.h"
 #include "zGlobals.h"
 #include "zRenderState.h"
@@ -393,6 +397,13 @@ void NPCGlyph::Render()
     {
         return;
     }
+
+#ifdef PLATFORM_PC
+    // A floating sign, not a surface. Marked on the model rather than bracketed
+    // around this call, because xModelRender only queues it and the draw itself
+    // happens at the next bucket flush -- long after any bracket here closed.
+    iToonPlainRegister(model);
+#endif
 
     if (flg_glyph & (1 << 6))
     {
