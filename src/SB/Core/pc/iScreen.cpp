@@ -385,6 +385,7 @@ static F32 sToonOcclusion;
 static F32 sToonHardness;
 static F32 sToonOutlineMin;
 static F32 sToonOutlineMax;
+static F32 sToonOutlineBias;
 static F32 sToonTextBrightness = 1.0f;
 static F32 sToonTextSaturation = 1.0f;
 static S32 sToonAll;
@@ -552,6 +553,16 @@ F32 iScreenToonOutlineMin()
 F32 iScreenToonOutlineMax()
 {
     return sToonOutlineMax;
+}
+
+F32 iScreenToonOutlineBias()
+{
+    return sToonOutlineBias;
+}
+
+void iScreenSetToonOutlineBias(F32 widths)
+{
+    sToonOutlineBias = widths;
 }
 
 F32 iScreenToonTextBrightness()

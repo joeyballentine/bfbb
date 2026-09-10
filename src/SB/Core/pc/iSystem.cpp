@@ -623,6 +623,7 @@ static void ApplyConfig()
                        iConfigGetFloat("experimental.toon_hardness", 0.0f),
                        iConfigGetFloat("experimental.toon_outline_min", 1.5f),
                        iConfigGetFloat("experimental.toon_outline_max", 4.0f));
+    iScreenSetToonOutlineBias(iConfigGetFloat("experimental.toon_outline_bias", 0.0f));
     iScreenSetToonText(iConfigGetFloat("experimental.toon_text_brightness", 1.35f),
                        iConfigGetFloat("experimental.toon_text_saturation", 1.2f));
     iDayNightSetLength(iConfigGetFloat("experimental.day_night_cycle", 0.0f));

@@ -266,6 +266,25 @@ namespace toonbackend
         (void)on;
     }
 
+    inline void setOutlineDepthBias(F32 widths)
+    {
+#ifdef RW_D3D9
+        if (iBackendIsD3D9())
+        {
+            rw::d3d::setOutlineDepthBias(widths);
+            return;
+        }
+#endif
+#ifdef RW_GL3
+        if (iBackendIsGL3())
+        {
+            rw::gl3::setOutlineDepthBias(widths);
+            return;
+        }
+#endif
+        (void)widths;
+    }
+
     inline void setOutlineSplit(F32 y)
     {
 #ifdef RW_D3D9
@@ -810,6 +829,11 @@ void iToonSetOutline(S32 mode)
 
     toonbackend::setOutline(ink, ink, ink, iScreenToonOutline());
     toonbackend::setOutlineInk(iScreenToonInkSaturation(), iScreenToonInkGamma());
+
+    // How far the hull's depth is read past the hull, in widths of it. The
+    // margin by which the ink loses to a surface the model is nearly touching:
+    // an arm against a chest, a prop against the floor.
+    toonbackend::setOutlineDepthBias(iScreenToonOutlineBias());
 
     // Two tones only where there are two: the upper ink is the surface
     // darkened, as everywhere, and the lower one is flat black, because his

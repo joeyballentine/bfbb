@@ -503,6 +503,20 @@ F32 iScreenToonOutlineMax();
 void iScreenSetToonLook(F32 wrap, F32 rim, F32 occlusion, F32 hardness, F32 outlineMin,
                         F32 outlineMax);
 
+// How far past the hull the ink's depth is read from, in widths of the line.
+//
+// The hull is an inflated copy of the model, so wherever the model comes within
+// a line's width of something else the copy is inside it -- an arm's hull in the
+// chest, a prop's in the floor -- and the ink wins the depth test against a
+// surface standing in front of it. Reading the depth from further out again
+// hands those pixels back. 0 is the ink where the geometry is.
+//
+// Below zero reads it from further in instead, and -1 lands on the vertex the
+// hull was pushed from -- the model's own surface, with none of the copy's
+// standing in space left in it.
+F32 iScreenToonOutlineBias();
+void iScreenSetToonOutlineBias(F32 widths);
+
 // What the cel look does to the game's own text. iToonTextColor says why there
 // is anything to do; 1 and 1 is the text exactly as it was painted.
 F32 iScreenToonTextBrightness();
