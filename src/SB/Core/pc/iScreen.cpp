@@ -385,7 +385,7 @@ static F32 sToonOcclusion;
 static F32 sToonHardness;
 static F32 sToonOutlineMin;
 static F32 sToonOutlineMax;
-static S32 sToonFlatRim;
+static S32 sToonFlatRim = 1;
 static S32 sToonFlatSmooth = 1;
 static F32 sToonFlatStrength = 0.75f;
 static F32 sToonOutlineBias;

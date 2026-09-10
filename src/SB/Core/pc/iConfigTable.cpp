@@ -322,9 +322,9 @@ const iConfigSetting kConfigSettings[] = {
       "Average the corners of a prop built of flat panels, so its shading and\n"
       "; its rim travel round it instead of stepping face to face.",
       ICONFIG_BOOL, NULL, kNone, kNone, "toon" },
-    { "experimental", "toon_flat_rim", "off",
-      "Whether a prop built of flat panels catches the rim light. The band lands\n"
-      "; square across a panel instead of hugging an edge.",
+    { "experimental", "toon_flat_rim", "on",
+      "Whether a prop built of flat panels catches the rim light. Off is for one\n"
+      "; left faceted, where the band lands square across a face.",
       ICONFIG_BOOL, NULL, kNone, kNone, "toon" },
     { "experimental", "toon_outline_bias", "0",
       "How far the line gives way to whatever a model stands against, in widths\n"

@@ -624,7 +624,7 @@ static void ApplyConfig()
                        iConfigGetFloat("experimental.toon_outline_min", 1.5f),
                        iConfigGetFloat("experimental.toon_outline_max", 4.0f));
     iScreenSetToonOutlineBias(iConfigGetFloat("experimental.toon_outline_bias", 0.0f));
-    iScreenSetToonFlatRim(iConfigGetBool("experimental.toon_flat_rim", FALSE));
+    iScreenSetToonFlatRim(iConfigGetBool("experimental.toon_flat_rim", TRUE));
     iScreenSetToonFlatSmooth(iConfigGetBool("experimental.toon_flat_smooth", TRUE));
     iScreenSetToonFlatStrength(iConfigGetFloat("experimental.toon_flat_strength", 0.75f));
     iScreenSetToonText(iConfigGetFloat("experimental.toon_text_brightness", 1.35f),

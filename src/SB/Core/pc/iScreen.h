@@ -505,10 +505,11 @@ void iScreenSetToonLook(F32 wrap, F32 rim, F32 occlusion, F32 hardness, F32 outl
 
 // Whether a prop built of flat panels catches the rim light the characters do.
 //
-// A rim is a band along a surface turning away from the eye. A panel does not
-// turn -- it holds one facing and then breaks -- so the band lands square across
-// a whole face instead of hugging an edge, and the face reads as wet. Off is the
-// tikis without it.
+// A rim is a band along a surface turning away from the eye, and a panel does
+// not turn: it holds one facing and then breaks, so the band lands square across
+// a whole face and the face reads as wet. That is what off is for. With the
+// corners averaged the face does turn, and the rim traces the model the way it
+// traces a character, which is why this is on.
 // Whether a prop built of flat panels has its normals averaged at the corners.
 //
 // A panel has no shading in it: one normal across a whole face puts the whole
