@@ -1190,6 +1190,13 @@ static S32 ModelHasReflection(RpAtomic* atomic)
 // question asked twice.
 static void WeldInPlace(RpGeometry* geo)
 {
+    // A prop can reach here without any, now that panelled ones are welded too.
+    if (geo->numVertices <= 0 || geo->morphTarget == NULL ||
+        geo->morphTarget[0].verts == NULL || geo->morphTarget[0].normals == NULL)
+    {
+        return;
+    }
+
     S32 n = geo->numVertices;
     RwV3d* avg = (RwV3d*)RwMalloc(n * sizeof(RwV3d));
 
@@ -1764,6 +1771,9 @@ static void SplitScraps(RpGeometry* geo)
     RpGeometryUnlock(geo);
 }
 
+// Defined with the ramp rows, which is the other thing that asks it.
+static S32 PieceIsPanelled(RpGeometry* geo, F32 flat);
+
 static void FillSlot(RpAtomic* atomic, RpGeometry* geo, S32 slot)
 {
     sInsideOut[slot] = InsideOut(geo);
@@ -1775,9 +1785,22 @@ static void FillSlot(RpAtomic* atomic, RpGeometry* geo, S32 slot)
         SplitScraps(geo);
     }
 
-    // The one kind of model that still wants its normals averaged in place.
-    // iToonHullNormals leaves these alone so this is the only walk they get.
-    if (ModelHasReflection(atomic))
+    // **Two kinds of model want their normals averaged in place.**
+    //
+    // A reflection, because it slides across a smooth surface and breaks into
+    // facets on a hard one. iToonHullNormals leaves those alone, so this is the
+    // only walk they get.
+    //
+    // And a prop built of flat panels, because a panel has no shading in it:
+    // one normal across a whole face puts the whole face in one band, and what
+    // should be a tone travelling round a tiki is a handful of flat steps
+    // instead. Averaging at the corners gives the face somewhere to go.
+    //
+    // It costs the model its hard edges in the SHADING only. The hull reads the
+    // normals iToonHullNormals put in its texture coordinates and is untouched,
+    // so the line round a tiki is the line it always had.
+    if (ModelHasReflection(atomic) ||
+        (iScreenToonFlatSmooth() && PieceIsPanelled(geo, sFlat[slot])))
     {
         WeldInPlace(geo);
     }
@@ -2436,6 +2459,26 @@ void iToonSetRampRow(S32 row)
     //
     // The row already says which models those are, so nothing new has to
     // measure them. It is uploaded per draw, and so is the look.
+    // **And it takes the shading harder than anything else does.**
+    //
+    // The strength is how far the surface is carried from flat towards the
+    // ramp, and what it buys depends on how much of the ramp a model crosses. A
+    // character crosses all of it -- his curves run from facing the light to
+    // facing away -- so a quarter of the way over reads as banded. A tiki is a
+    // handful of panels: each one holds a single value, so what you see is two
+    // or three steps a fifth of a stop apart, and the wood grain swallows them.
+    //
+    // Its own number, and higher, so the steps land far enough apart to survive
+    // the texture. The row is what says which models those are.
+    if (!sPaused)
+    {
+        F32 strength = (row == ITOON_RAMP_PROP) ? iScreenToonFlatStrength()
+                                                : iScreenToonStrength();
+
+        toonbackend::setToonShading(iScreenToon(), iScreenToonBands(),
+                                    iScreenToonSaturation(), strength);
+    }
+
     F32 rim = (row == ITOON_RAMP_PROP && !iScreenToonFlatRim()) ? 0.0f : iScreenToonRim();
 
     toonbackend::setToonLook(iScreenToonWrap(), rim, 0.65f, iScreenToonOcclusion(),

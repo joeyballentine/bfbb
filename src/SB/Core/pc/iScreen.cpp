@@ -386,6 +386,8 @@ static F32 sToonHardness;
 static F32 sToonOutlineMin;
 static F32 sToonOutlineMax;
 static S32 sToonFlatRim;
+static S32 sToonFlatSmooth = 1;
+static F32 sToonFlatStrength = 0.75f;
 static F32 sToonOutlineBias;
 static F32 sToonTextBrightness = 1.0f;
 static F32 sToonTextSaturation = 1.0f;
@@ -554,6 +556,26 @@ F32 iScreenToonOutlineMin()
 F32 iScreenToonOutlineMax()
 {
     return sToonOutlineMax;
+}
+
+F32 iScreenToonFlatStrength()
+{
+    return sToonFlatStrength;
+}
+
+void iScreenSetToonFlatStrength(F32 strength)
+{
+    sToonFlatStrength = strength;
+}
+
+S32 iScreenToonFlatSmooth()
+{
+    return sToonFlatSmooth;
+}
+
+void iScreenSetToonFlatSmooth(S32 on)
+{
+    sToonFlatSmooth = on ? 1 : 0;
 }
 
 S32 iScreenToonFlatRim()

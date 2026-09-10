@@ -509,8 +509,26 @@ void iScreenSetToonLook(F32 wrap, F32 rim, F32 occlusion, F32 hardness, F32 outl
 // turn -- it holds one facing and then breaks -- so the band lands square across
 // a whole face instead of hugging an edge, and the face reads as wet. Off is the
 // tikis without it.
+// Whether a prop built of flat panels has its normals averaged at the corners.
+//
+// A panel has no shading in it: one normal across a whole face puts the whole
+// face in a single band. Averaging gives the face somewhere to go, so the tone
+// and the rim travel round the model instead of stepping from panel to panel.
+// The line round it is unaffected, which reads its own normals. Off is the model
+// as the artists built it.
+S32 iScreenToonFlatSmooth();
+void iScreenSetToonFlatSmooth(S32 on);
+
 S32 iScreenToonFlatRim();
 void iScreenSetToonFlatRim(S32 on);
+
+// How far a prop built of flat panels is carried from flat towards the ramp.
+//
+// Its own, because what the strength buys depends on how much of the ramp a
+// model crosses, and a panel holds one value across its whole face. See
+// iToonSetRampRow.
+F32 iScreenToonFlatStrength();
+void iScreenSetToonFlatStrength(F32 strength);
 
 // How far past the hull the ink's depth is read from, in widths of the line.
 //

@@ -625,6 +625,8 @@ static void ApplyConfig()
                        iConfigGetFloat("experimental.toon_outline_max", 4.0f));
     iScreenSetToonOutlineBias(iConfigGetFloat("experimental.toon_outline_bias", 0.0f));
     iScreenSetToonFlatRim(iConfigGetBool("experimental.toon_flat_rim", FALSE));
+    iScreenSetToonFlatSmooth(iConfigGetBool("experimental.toon_flat_smooth", TRUE));
+    iScreenSetToonFlatStrength(iConfigGetFloat("experimental.toon_flat_strength", 0.75f));
     iScreenSetToonText(iConfigGetFloat("experimental.toon_text_brightness", 1.35f),
                        iConfigGetFloat("experimental.toon_text_saturation", 1.2f));
     iDayNightSetLength(iConfigGetFloat("experimental.day_night_cycle", 0.0f));
