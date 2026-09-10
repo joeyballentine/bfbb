@@ -2462,6 +2462,48 @@ void zSceneSetup()
         }
 #endif
 
+#ifdef PLATFORM_PC
+        // **The level's own models, into the shade the level takes.** A house
+        // stands between the ground and the sun as much as a cliff does, and the
+        // trace could not see one at load: iEnvLoad runs as the JSP arrives and
+        // nothing is placed yet. Here it is, so here they are handed over.
+        //
+        // Static entities only. A platform moves, and shade traced at load would
+        // stay where the platform was standing.
+        if (iScreenWorldModelShade() > 0.0f && iScreenWorldLighting() != IWORLDLIGHT_OFF &&
+            globals.sceneCur != NULL && globals.sceneCur->env != NULL)
+        {
+            zScene* shadeScene = globals.sceneCur;
+
+            iEnvOccluderClear();
+
+            for (i = 0; i < shadeScene->num_base; i++)
+            {
+                xBase* shadeBase = shadeScene->base[i];
+
+                if (shadeBase == NULL || shadeBase->baseType != eBaseTypeStatic)
+                {
+                    continue;
+                }
+
+                xEnt* shadeEnt = (xEnt*)shadeBase;
+
+                if (!xEntIsVisible(shadeEnt))
+                {
+                    continue;
+                }
+
+                for (xModelInstance* m = shadeEnt->model; m != NULL; m = m->Next)
+                {
+                    iEnvOccluderAdd(m->Data, m->Mat);
+                }
+            }
+
+            iEnvSunShadeBake(shadeScene->env->geom);
+            iEnvOccluderClear();
+        }
+#endif
+
         if (objLightKit)
         {
             zScene* zsc = globals.sceneCur;
@@ -3268,6 +3310,11 @@ static void zRigKitBuild(zRigKit* store, const iEnvBakedRig* rig, F32 contrast)
 static void zWorldLightBuild(iEnv* env)
 {
     F32 contrast = iScreenWorldLightContrast();
+
+    // The shade the level's models throw, at the time it is now. It costs
+    // nothing until the sun has moved far enough to be worth a write, which is
+    // the same reasoning as the quantized rebuild below.
+    iEnvSunShadeApply(env, iDayNightPhase(), FALSE);
 
     // The level's rig is noon. iDayNightRig swings it to wherever the sun is
     // now, and hands back the rig unchanged while the cycle is off.

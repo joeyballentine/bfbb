@@ -611,7 +611,7 @@ static void ApplyConfig()
     iScreenSetToonFlatten(iConfigGetFloat("experimental.toon_colors", 0.0f));
     iScreenSetToonAll(iConfigGetBool("experimental.toon_all", FALSE));
     iScreenSetSolidFlatProps(iConfigGetBool("experimental.solid_flat_props", FALSE));
-    iScreenSetSolidFlatProps(iConfigGetBool("experimental.solid_flat_props", FALSE));
+    iScreenSetWorldModelShade(iConfigGetFloat("experimental.world_model_shade", 0.0f));
     iScreenSetToonLook(iConfigGetFloat("experimental.toon_wrap", 0.0f),
                        iConfigGetFloat("experimental.toon_rim", 0.25f),
                        iConfigGetFloat("experimental.toon_occlusion", 0.0f),

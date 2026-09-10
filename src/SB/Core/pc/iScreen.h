@@ -405,22 +405,18 @@ F32 iScreenToonOutline();
 S32 iScreenToonFaceLight();
 void iScreenSetToon(S32 on, F32 bands, F32 saturation, F32 outline, F32 strength, S32 faceLight);
 
-// Give a prop modelled as a flat open sheet real thickness.
+// How much shade the level's placed models throw on the level, 0 for none.
 //
-// **A sheet cannot be inked, whatever the ink is set to.** An inverted hull is
-// the model inflated along its own normals with front faces culled, so what
-// survives is the far side and the band of it that reaches past the silhouette.
-// A shiny object is one open sheet of 45 triangles: every normal points out of
-// the front, nothing lies behind to survive the cull, and nothing points
-// sideways to widen the silhouette. On, such a mesh is rebuilt at first sight
-// as a solid -- the sheet, a copy of it out the back, and a rim joining them --
-// which is the shape the effect was designed for.
+// **A shadow the light rig cannot know about.** The world is lit from a
+// direction and a colour, and a house standing in the way is neither. So the
+// scene traces what its models block, over the arc the sun actually takes, and
+// the cel shader scales its light term by what it finds.
 //
-// Separate from the cartoon look on purpose. It changes the geometry rather than
-// the shading, it costs a few hundred triangles per model, and it is worth
-// having or not having on its own terms.
-S32 iScreenSolidFlatProps();
-void iScreenSetSolidFlatProps(S32 on);
+// Needs the cartoon look on: the trace is delivered in the world's prelight, and
+// the cel path is the only one that reads a prelight as a scale rather than
+// adding it. Needs world_light_shadows off for the reason iDayNight.h gives.
+F32 iScreenWorldModelShade();
+void iScreenSetWorldModelShade(F32 amount);
 
 // Give a prop modelled as a flat open sheet real thickness.
 //

@@ -231,6 +231,10 @@ void iEnvRender(iEnv* env)
     // whatever draws next is not shaded like scenery.
     iToonSetRampRow(ITOON_RAMP_WORLD);
 
+    // The shade its own models throw on it, which only the world takes: a house
+    // is not shaded by the answer traced for the ground under it.
+    iToonSetModelShade(iScreenWorldModelShade());
+
     if (env->jsp)
     {
         Jsp_ClumpRender(env->jsp->clump, env->jsp->jspNodeList);
@@ -240,6 +244,7 @@ void iEnvRender(iEnv* env)
         RpWorldRender(env->world);
     }
 
+    iToonSetModelShade(0.0f);
     iToonSetRampRow(ITOON_RAMP_CHARACTER);
 
     lastEnv = env;

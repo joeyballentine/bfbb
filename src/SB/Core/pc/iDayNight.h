@@ -43,6 +43,14 @@ F32 iDayNightPhase();
 // Move the clock on. Called once per scene update, and not while paused.
 void iDayNightAdvance(F32 seconds);
 
+// Where the sun stands at a given phase, as the direction TOWARD it.
+//
+// The same arc iDayNightRig swings the key light along, asked at a phase that
+// need not be now. The shadow trace wants it that way: it traces the day at load
+// and blends between what it found as the clock runs, and it has to trace the
+// path the light will actually take.
+void iDayNightSunToward(const iEnvBakedRig* noon, F32 phase, xVec3* toward);
+
 // The level's rig with its lights swung to the current time of day.
 //
 // Colours come out at their fitted values, NOT scaled for the time: the scaling

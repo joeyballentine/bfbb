@@ -108,19 +108,19 @@ void iDayNightAdvance(F32 seconds)
     sPhase -= floorf(sPhase);
 }
 
-void iDayNightRig(const iEnvBakedRig* noon, iEnvBakedRig* out)
+// **The level's key light is where the sun stands at noon.**
+//
+// Everything else follows from that one vector: its azimuth is the azimuth the
+// whole day runs along, and its height is the height the sun reaches. Taking it
+// rather than picking a direction means a level still looks like itself at
+// midday, which is the only moment the artists actually painted.
+//
+// Its own function, because the shadow trace needs the same answer at a phase
+// that is not now: it traces the day's arc at load and blends between the steps
+// as the clock runs. Two copies of this would put every shadow somewhere the
+// light is not.
+static void SunTowardAt(const iEnvBakedRig* noon, F32 phase, xVec3* sun, xVec3* keyNoon)
 {
-    *out = *noon;
-
-    if (!iDayNightActive() || !noon->valid || noon->count == 0)
-        return;
-
-    // **The level's key light is where the sun stands at noon.**
-    //
-    // Everything else follows from that one vector: its azimuth is the azimuth
-    // the whole day runs along, and its height is the height the sun reaches.
-    // Taking it rather than picking a direction means a level still looks like
-    // itself at midday, which is the only moment the artists actually painted.
     xVec3 up = { 0.0f, 1.0f, 0.0f };
     xVec3 n;
 
@@ -153,24 +153,50 @@ void iDayNightRig(const iEnvBakedRig* noon, iEnvBakedRig* out)
 
     // The great circle through east and the noon direction. east and n are
     // perpendicular by construction, so this needs no correction.
-    F32 a = sPhase * 2.0f * 3.14159265f;
+    F32 a = phase * 2.0f * 3.14159265f;
     F32 ca = cosf(a);
     F32 sa = sinf(a);
 
-    xVec3 sun;
-
-    sun.assign(east.x * ca + n.x * sa, east.y * ca + n.y * sa, east.z * ca + n.z * sa);
-    xVec3Normalize(&sun, &sun);
+    sun->assign(east.x * ca + n.x * sa, east.y * ca + n.y * sa, east.z * ca + n.z * sa);
+    xVec3Normalize(sun, sun);
 
     // Under the horizon the sun is the moon, and a light below the ground lights
     // nothing. Reflecting it back up puts the moon roughly where one belongs and
     // keeps a key on the geometry all night; the colour is what says which of
     // the two is in the sky.
-    if (sun.y < 0.0f)
+    if (sun->y < 0.0f)
     {
-        sun.y = -sun.y;
-        xVec3Normalize(&sun, &sun);
+        sun->y = -sun->y;
+        xVec3Normalize(sun, sun);
     }
+
+    if (keyNoon != NULL)
+    {
+        *keyNoon = n;
+    }
+}
+
+void iDayNightSunToward(const iEnvBakedRig* noon, F32 phase, xVec3* toward)
+{
+    if (noon == NULL || toward == NULL || !noon->valid || noon->count == 0)
+    {
+        return;
+    }
+
+    SunTowardAt(noon, phase, toward, NULL);
+}
+
+void iDayNightRig(const iEnvBakedRig* noon, iEnvBakedRig* out)
+{
+    *out = *noon;
+
+    if (!iDayNightActive() || !noon->valid || noon->count == 0)
+        return;
+
+    xVec3 sun;
+    xVec3 n;
+
+    SunTowardAt(noon, sPhase, &sun, &n);
 
     // Back to a direction of travel for the light itself.
     out->dir[0].assign(-sun.x, -sun.y, -sun.z);

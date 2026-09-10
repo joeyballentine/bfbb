@@ -387,6 +387,7 @@ static F32 sToonOutlineMin;
 static F32 sToonOutlineMax;
 static S32 sToonAll;
 static S32 sSolidFlatProps;
+static F32 sWorldModelShade;
 
 S32 iScreenToon()
 {
@@ -416,6 +417,22 @@ F32 iScreenToonStrength()
 S32 iScreenToonFaceLight()
 {
     return sToonFaceLight;
+}
+
+F32 iScreenWorldModelShade()
+{
+    // Both are what makes it reach the picture; see iScreen.h.
+    if (!iScreenToon() || iScreenWorldLightShadows())
+    {
+        return 0.0f;
+    }
+
+    return sWorldModelShade;
+}
+
+void iScreenSetWorldModelShade(F32 amount)
+{
+    sWorldModelShade = amount < 0.0f ? 0.0f : (amount > 1.0f ? 1.0f : amount);
 }
 
 S32 iScreenSolidFlatProps()

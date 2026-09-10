@@ -6,6 +6,8 @@
 
 #include "iEnvNormals.h"
 
+#include "iDayNight.h"
+
 #include "iEnv.h"
 #include "iScreen.h"
 #include "xClumpColl.h"
@@ -1174,6 +1176,743 @@ void iEnvRigAtContrast(const iEnvBakedRig* rig, F32 contrast, F32 ambient[3],
 }
 
 // One shadow ray, through the tree the game already collides against.
+// **The shade a level's placed models throw on the level, over a whole day.**
+//
+// The world is lit at run time and the sun moves, so a shadow cannot be traced
+// once and kept. It cannot be traced per frame either: a house is thousands of
+// triangles and the world is a hundred thousand vertices.
+//
+// So the day is traced at load, at kSunSteps points along the arc the sun
+// actually takes, and the run time blends between the two steps it stands
+// between. One byte per world vertex per step: on hb01 that is 112,633 vertices
+// by twelve, about 1.3 MB.
+//
+// **Every ray for one step is parallel, and that is what makes it affordable.**
+// A sun is a direction, not a place, so all the rays of a step point the same
+// way -- and then a grid laid out square to that direction sorts every occluder
+// triangle into the cell it covers, and a vertex tests only its own cell. That
+// turns a search over every triangle into a lookup.
+
+// How many points along the day. Twelve is one every thirty degrees, which the
+// blend below carries between without a visible step.
+enum
+{
+    kSunSteps = 12
+};
+
+struct EnvOccluder
+{
+    xVec3 centre;
+    F32 radius;
+    S32 first;
+    S32 count;
+};
+
+struct EnvOccTri
+{
+    xVec3 v[3];
+};
+
+static EnvOccluder* sOcc;
+static S32 sOccCount;
+static S32 sOccMax;
+static EnvOccTri* sOccTris;
+static S32 sOccTriCount;
+static S32 sOccTriMax;
+
+// What the trace found: kSunSteps bytes per world vertex, a step at a time.
+static U8* sSunShade;
+static S32 sSunShadeVerts;
+
+void iEnvOccluderClear()
+{
+    if (sOcc != NULL)
+    {
+        RwFree(sOcc);
+    }
+    if (sOccTris != NULL)
+    {
+        RwFree(sOccTris);
+    }
+
+    sOcc = NULL;
+    sOccTris = NULL;
+    sOccCount = 0;
+    sOccMax = 0;
+    sOccTriCount = 0;
+    sOccTriMax = 0;
+}
+
+static S32 OccGrow(void** arr, S32* max, S32 want, S32 size)
+{
+    if (want <= *max)
+    {
+        return TRUE;
+    }
+
+    S32 grown = *max == 0 ? 1024 : *max;
+
+    while (grown < want)
+    {
+        grown *= 2;
+    }
+
+    void* bigger = RwMalloc(grown * size);
+
+    if (bigger == NULL)
+    {
+        return FALSE;
+    }
+
+    if (*arr != NULL)
+    {
+        memcpy(bigger, *arr, *max * size);
+        RwFree(*arr);
+    }
+
+    *arr = bigger;
+    *max = grown;
+    return TRUE;
+}
+
+// A model the level placed, in world space.
+//
+// Held as triangles rather than asked of the game's collision, because
+// collision is not the same set: a decorative rock often has none and an
+// invisible wall is nothing but. What blocks light is what you can see.
+void iEnvOccluderAdd(RpAtomic* model, const RwMatrix* mat)
+{
+    if (model == NULL || mat == NULL)
+    {
+        return;
+    }
+
+    RpGeometry* geo = RpAtomicGetGeometry(model);
+
+    if (geo == NULL || geo->numTriangles <= 0 || geo->morphTarget == NULL ||
+        geo->morphTarget[0].verts == NULL)
+    {
+        return;
+    }
+
+    const xVec3* src = (const xVec3*)geo->morphTarget[0].verts;
+    S32 first = sOccTriCount;
+
+    if (!OccGrow((void**)&sOccTris, &sOccTriMax, sOccTriCount + geo->numTriangles,
+                 sizeof(EnvOccTri)) ||
+        !OccGrow((void**)&sOcc, &sOccMax, sOccCount + 1, sizeof(EnvOccluder)))
+    {
+        return;
+    }
+
+    xVec3 lo;
+    xVec3 hi;
+    S32 any = FALSE;
+
+    for (S32 t = 0; t < geo->numTriangles; t++)
+    {
+        EnvOccTri* out = &sOccTris[sOccTriCount];
+
+        for (S32 c = 0; c < 3; c++)
+        {
+            ToWorld(&out->v[c], &src[geo->triangles[t].vertIndex[c]], mat);
+
+            if (!any)
+            {
+                lo = out->v[c];
+                hi = out->v[c];
+                any = TRUE;
+            }
+            else
+            {
+                if (out->v[c].x < lo.x) lo.x = out->v[c].x;
+                if (out->v[c].y < lo.y) lo.y = out->v[c].y;
+                if (out->v[c].z < lo.z) lo.z = out->v[c].z;
+                if (out->v[c].x > hi.x) hi.x = out->v[c].x;
+                if (out->v[c].y > hi.y) hi.y = out->v[c].y;
+                if (out->v[c].z > hi.z) hi.z = out->v[c].z;
+            }
+        }
+
+        sOccTriCount++;
+    }
+
+    if (!any)
+    {
+        return;
+    }
+
+    EnvOccluder* occ = &sOcc[sOccCount++];
+
+    occ->centre.assign(0.5f * (lo.x + hi.x), 0.5f * (lo.y + hi.y), 0.5f * (lo.z + hi.z));
+
+    F32 dx = 0.5f * (hi.x - lo.x);
+    F32 dy = 0.5f * (hi.y - lo.y);
+    F32 dz = 0.5f * (hi.z - lo.z);
+
+    occ->radius = xsqrt(dx * dx + dy * dy + dz * dz);
+    occ->first = first;
+    occ->count = sOccTriCount - first;
+}
+
+// Moller-Trumbore, counting both sides. A model's winding is no guide to which
+// way it blocks light, and a one-sided test lets the sun through a wall's back.
+static S32 RayHitsTri(const xVec3* from, const xVec3* dir, F32 reach, const EnvOccTri* tri)
+{
+    F32 e1x = tri->v[1].x - tri->v[0].x;
+    F32 e1y = tri->v[1].y - tri->v[0].y;
+    F32 e1z = tri->v[1].z - tri->v[0].z;
+    F32 e2x = tri->v[2].x - tri->v[0].x;
+    F32 e2y = tri->v[2].y - tri->v[0].y;
+    F32 e2z = tri->v[2].z - tri->v[0].z;
+    F32 px = dir->y * e2z - dir->z * e2y;
+    F32 py = dir->z * e2x - dir->x * e2z;
+    F32 pz = dir->x * e2y - dir->y * e2x;
+    F32 det = e1x * px + e1y * py + e1z * pz;
+
+    if (det > -1e-8f && det < 1e-8f)
+    {
+        return FALSE;
+    }
+
+    F32 inv = 1.0f / det;
+    F32 tx = from->x - tri->v[0].x;
+    F32 ty = from->y - tri->v[0].y;
+    F32 tz = from->z - tri->v[0].z;
+    F32 u = (tx * px + ty * py + tz * pz) * inv;
+
+    if (u < 0.0f || u > 1.0f)
+    {
+        return FALSE;
+    }
+
+    F32 qx = ty * e1z - tz * e1y;
+    F32 qy = tz * e1x - tx * e1z;
+    F32 qz = tx * e1y - ty * e1x;
+    F32 v = (dir->x * qx + dir->y * qy + dir->z * qz) * inv;
+
+    if (v < 0.0f || u + v > 1.0f)
+    {
+        return FALSE;
+    }
+
+    F32 hit = (e2x * qx + e2y * qy + e2z * qz) * inv;
+
+    return hit > 0.0f && hit < reach;
+}
+
+// The grid one step is traced through: the occluders sorted by where they sit
+// across the sun's direction.
+enum
+{
+    kSunGrid = 256,
+
+    // A triangle wider than this many cells goes in the list every ray tests.
+    // Bucketing a wall that spans the level into three thousand cells costs more
+    // memory than testing it outright costs time.
+    kSunSpread = 48
+};
+
+struct SunGrid
+{
+    xVec3 u;
+    xVec3 v;
+    F32 lo[2];
+    F32 span[2];
+    S32* start;   // kSunGrid*kSunGrid + 1
+    S32* item;
+    S32* wide;    // triangles too big to bucket
+    S32 numWide;
+};
+
+static void SunGridFree(SunGrid* g)
+{
+    if (g->start) RwFree(g->start);
+    if (g->item) RwFree(g->item);
+    if (g->wide) RwFree(g->wide);
+    memset(g, 0, sizeof(*g));
+}
+
+static void SunGridCell(const SunGrid* g, const xVec3* p, S32 out[2])
+{
+    F32 a[2];
+
+    a[0] = p->x * g->u.x + p->y * g->u.y + p->z * g->u.z;
+    a[1] = p->x * g->v.x + p->y * g->v.y + p->z * g->v.z;
+
+    for (S32 k = 0; k < 2; k++)
+    {
+        F32 t = (a[k] - g->lo[k]) / g->span[k];
+        S32 c = (S32)(t * (F32)kSunGrid);
+
+        if (c < 0) c = 0;
+        if (c >= kSunGrid) c = kSunGrid - 1;
+
+        out[k] = c;
+    }
+}
+
+static S32 SunGridBuild(SunGrid* g, const xVec3* toward)
+{
+    memset(g, 0, sizeof(*g));
+
+    if (sOccTriCount == 0)
+    {
+        return FALSE;
+    }
+
+    // Any two directions square to the sun will do; the grid only has to be
+    // flat against it.
+    xVec3 pick;
+
+    pick.assign(0.0f, 1.0f, 0.0f);
+
+    if (toward->y > 0.9f || toward->y < -0.9f)
+    {
+        pick.assign(1.0f, 0.0f, 0.0f);
+    }
+
+    xVec3 u;
+    xVec3 v;
+
+    xVec3Cross(&u, &pick, toward);
+
+    if (!Normalize(&u, &u))
+    {
+        return FALSE;
+    }
+
+    xVec3Cross(&v, toward, &u);
+
+    if (!Normalize(&v, &v))
+    {
+        return FALSE;
+    }
+
+    g->u = u;
+    g->v = v;
+
+    F32 lo[2] = { 1e30f, 1e30f };
+    F32 hi[2] = { -1e30f, -1e30f };
+
+    for (S32 t = 0; t < sOccTriCount; t++)
+    {
+        for (S32 c = 0; c < 3; c++)
+        {
+            const xVec3* p = &sOccTris[t].v[c];
+            F32 a[2];
+
+            a[0] = p->x * u.x + p->y * u.y + p->z * u.z;
+            a[1] = p->x * v.x + p->y * v.y + p->z * v.z;
+
+            for (S32 k = 0; k < 2; k++)
+            {
+                if (a[k] < lo[k]) lo[k] = a[k];
+                if (a[k] > hi[k]) hi[k] = a[k];
+            }
+        }
+    }
+
+    for (S32 k = 0; k < 2; k++)
+    {
+        g->lo[k] = lo[k];
+        g->span[k] = hi[k] - lo[k];
+
+        if (g->span[k] < 1e-4f)
+        {
+            g->span[k] = 1e-4f;
+        }
+    }
+
+    S32 cells = kSunGrid * kSunGrid;
+
+    g->start = (S32*)RwMalloc((cells + 1) * sizeof(S32));
+    g->wide = (S32*)RwMalloc(sOccTriCount * sizeof(S32));
+
+    if (g->start == NULL || g->wide == NULL)
+    {
+        SunGridFree(g);
+        return FALSE;
+    }
+
+    memset(g->start, 0, (cells + 1) * sizeof(S32));
+
+    // Count, then place. Two walks and one allocation of exactly the right size.
+    for (S32 pass = 0; pass < 2; pass++)
+    {
+        if (pass == 1)
+        {
+            S32 total = 0;
+
+            for (S32 c = 0; c <= cells; c++)
+            {
+                S32 n = g->start[c];
+
+                g->start[c] = total;
+                total += n;
+            }
+
+            g->item = (S32*)RwMalloc((total > 0 ? total : 1) * sizeof(S32));
+
+            if (g->item == NULL)
+            {
+                SunGridFree(g);
+                return FALSE;
+            }
+
+            g->numWide = 0;
+        }
+
+        for (S32 t = 0; t < sOccTriCount; t++)
+        {
+            S32 c0[2];
+            S32 c1[2];
+
+            SunGridCell(g, &sOccTris[t].v[0], c0);
+            c1[0] = c0[0];
+            c1[1] = c0[1];
+
+            for (S32 k = 1; k < 3; k++)
+            {
+                S32 c[2];
+
+                SunGridCell(g, &sOccTris[t].v[k], c);
+
+                for (S32 d = 0; d < 2; d++)
+                {
+                    if (c[d] < c0[d]) c0[d] = c[d];
+                    if (c[d] > c1[d]) c1[d] = c[d];
+                }
+            }
+
+            if ((c1[0] - c0[0] + 1) * (c1[1] - c0[1] + 1) > kSunSpread)
+            {
+                if (pass == 1)
+                {
+                    g->wide[g->numWide] = t;
+                }
+
+                g->numWide++;
+                continue;
+            }
+
+            for (S32 y = c0[1]; y <= c1[1]; y++)
+            {
+                for (S32 x = c0[0]; x <= c1[0]; x++)
+                {
+                    S32 cell = y * kSunGrid + x;
+
+                    if (pass == 0)
+                    {
+                        g->start[cell + 1]++;
+                    }
+                    else
+                    {
+                        g->item[g->start[cell]++] = t;
+                    }
+                }
+            }
+        }
+
+        if (pass == 1)
+        {
+            // start[] walked forward as it filled, so put it back.
+            for (S32 c = cells; c > 0; c--)
+            {
+                g->start[c] = g->start[c - 1];
+            }
+
+            g->start[0] = 0;
+        }
+    }
+
+    return TRUE;
+}
+
+static S32 SunGridOccluded(const SunGrid* g, const xVec3* from, const xVec3* toward, F32 reach)
+{
+    for (S32 i = 0; i < g->numWide; i++)
+    {
+        if (RayHitsTri(from, toward, reach, &sOccTris[g->wide[i]]))
+        {
+            return TRUE;
+        }
+    }
+
+    S32 c[2];
+
+    SunGridCell(g, from, c);
+
+    S32 cell = c[1] * kSunGrid + c[0];
+
+    for (S32 i = g->start[cell]; i < g->start[cell + 1]; i++)
+    {
+        if (RayHitsTri(from, toward, reach, &sOccTris[g->item[i]]))
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+void iEnvSunShadeClear()
+{
+    if (sSunShade != NULL)
+    {
+        RwFree(sSunShade);
+        sSunShade = NULL;
+    }
+
+    sSunShadeVerts = 0;
+}
+
+const U8* iEnvSunShade(S32* verts, S32* steps)
+{
+    if (verts != NULL)
+    {
+        *verts = sSunShadeVerts;
+    }
+    if (steps != NULL)
+    {
+        *steps = kSunSteps;
+    }
+
+    return sSunShade;
+}
+
+// **Put the day's traced shade into the world, at the time it is now.**
+//
+// The trace above left kSunSteps answers per vertex; this picks the two the
+// clock stands between and blends them into the prelight, which is where the cel
+// pixel shader reads it -- see ToonModelShade. On that path the vertex shader
+// adds no lighting, so the prelight carries this and nothing else.
+//
+// **Not every frame.** The write itself is nothing, but it has to be locked, and
+// a lock means the renderer copies every world colour into its vertex buffers
+// again. The sun crosses a step in twenty-five seconds of a five-minute day, so
+// a write every fiftieth of a step is smooth and costs about four a second.
+static F32 sShadeWrittenAt = -1.0f;
+
+static const F32 kShadeStale = 1.0f / (F32)(kSunSteps * 50);
+
+void iEnvSunShadeApply(iEnv* env, F32 phase, S32 force)
+{
+    if (sSunShade == NULL || env == NULL || env->jsp == NULL || env->jsp->clump == NULL)
+    {
+        return;
+    }
+
+    if (!force && sShadeWrittenAt >= 0.0f)
+    {
+        F32 moved = phase - sShadeWrittenAt;
+
+        if (moved < 0.0f)
+        {
+            moved = -moved;
+        }
+
+        // Across the end of the day the difference is nearly a whole turn.
+        if (moved > 0.5f)
+        {
+            moved = 1.0f - moved;
+        }
+
+        if (moved < kShadeStale)
+        {
+            return;
+        }
+    }
+
+    NormalWork w;
+
+    if (!WorkBuild(&w, env->jsp->clump))
+    {
+        return;
+    }
+
+    if (w.totalVerts != sSunShadeVerts)
+    {
+        WorkFree(&w);
+        return;
+    }
+
+    F32 at = phase * (F32)kSunSteps;
+    S32 step = (S32)at;
+    F32 into = at - (F32)step;
+
+    step = step % kSunSteps;
+
+    if (step < 0)
+    {
+        step += kSunSteps;
+    }
+
+    S32 next = (step + 1) % kSunSteps;
+
+    for (S32 a = 0; a < w.numAtomics; a++)
+    {
+        RpGeometry* geo = RpAtomicGetGeometry(w.atomics[a]);
+
+        // Only the pieces the run-time rig lights. A piece that kept its
+        // painting had rpGEOMETRYLIGHT cleared and its prelight IS the artwork,
+        // so writing shade into it would paint over a decal.
+        if (geo == NULL || geo->preLitLum == NULL || !(geo->flags & rpGEOMETRYLIGHT))
+        {
+            continue;
+        }
+
+        RpGeometryLock(geo, 0x8);
+
+        for (S32 i = 0; i < geo->numVertices; i++)
+        {
+            const U8* got = &sSunShade[(size_t)(w.base[a] + i) * kSunSteps];
+            F32 blended = (F32)got[step] + ((F32)got[next] - (F32)got[step]) * into;
+            U8 v = (U8)(blended < 0.0f ? 0.0f : (blended > 255.0f ? 255.0f : blended));
+
+            geo->preLitLum[i].red = v;
+            geo->preLitLum[i].green = v;
+            geo->preLitLum[i].blue = v;
+
+            // Opaque, always. A prelight alpha under 255 is what the pipeline
+            // reads to turn alpha blending on, and the world is not see-through.
+            geo->preLitLum[i].alpha = 255;
+        }
+
+        RpGeometryUnlock(geo);
+    }
+
+    sShadeWrittenAt = phase;
+    WorkFree(&w);
+}
+
+void iEnvSunShadeBake(iEnv* env)
+{
+    iEnvSunShadeClear();
+
+    if (env == NULL || env->jsp == NULL || env->jsp->clump == NULL || !env->baked.valid ||
+        sOccTriCount == 0)
+    {
+        return;
+    }
+
+    NormalWork w;
+
+    if (!WorkBuild(&w, env->jsp->clump))
+    {
+        return;
+    }
+
+    sSunShade = (U8*)RwMalloc((size_t)w.totalVerts * kSunSteps);
+
+    if (sSunShade == NULL)
+    {
+        WorkFree(&w);
+        return;
+    }
+
+    memset(sSunShade, 255, (size_t)w.totalVerts * kSunSteps);
+    sSunShadeVerts = w.totalVerts;
+
+    // How far a ray has to travel to leave the level, and how far off the
+    // surface it starts so a vertex does not shadow itself.
+    xVec3 lo = w.pos[0];
+    xVec3 hi = w.pos[0];
+
+    for (S32 i = 1; i < w.totalVerts; i++)
+    {
+        if (w.pos[i].x < lo.x) lo.x = w.pos[i].x;
+        if (w.pos[i].y < lo.y) lo.y = w.pos[i].y;
+        if (w.pos[i].z < lo.z) lo.z = w.pos[i].z;
+        if (w.pos[i].x > hi.x) hi.x = w.pos[i].x;
+        if (w.pos[i].y > hi.y) hi.y = w.pos[i].y;
+        if (w.pos[i].z > hi.z) hi.z = w.pos[i].z;
+    }
+
+    F32 dx = hi.x - lo.x;
+    F32 dy = hi.y - lo.y;
+    F32 dz = hi.z - lo.z;
+    F32 reach = xsqrt(dx * dx + dy * dy + dz * dz);
+
+    if (reach < 1.0f)
+    {
+        reach = 1.0f;
+    }
+
+    const F32 kLift = 0.1f;
+    S32 shadowed = 0;
+    S32 traced = 0;
+    clock_t began = clock();
+
+    for (S32 s = 0; s < kSunSteps; s++)
+    {
+        xVec3 toward;
+
+        iDayNightSunToward(&env->baked, (F32)s / (F32)kSunSteps, &toward);
+
+        SunGrid grid;
+
+        if (!SunGridBuild(&grid, &toward))
+        {
+            continue;
+        }
+
+        for (S32 a = 0; a < w.numAtomics; a++)
+        {
+            RpGeometry* geo = RpAtomicGetGeometry(w.atomics[a]);
+
+            if (!Usable(geo))
+            {
+                continue;
+            }
+
+            NormalRead nr;
+
+            NormalReadInit(&nr, &w, a);
+
+            for (S32 i = 0; i < geo->numVertices; i++)
+            {
+                S32 v = w.base[a] + i;
+                xVec3 n;
+
+                NormalReadAt(&n, &nr, i);
+
+                // A surface facing away from the sun is dark whatever stands in
+                // front of it, so there is nothing to trace.
+                if (n.x * toward.x + n.y * toward.y + n.z * toward.z <= 0.0f)
+                {
+                    continue;
+                }
+
+                xVec3 from;
+
+                from.assign(w.pos[v].x + n.x * kLift, w.pos[v].y + n.y * kLift,
+                            w.pos[v].z + n.z * kLift);
+
+                traced++;
+
+                if (SunGridOccluded(&grid, &from, &toward, reach))
+                {
+                    sSunShade[(size_t)v * kSunSteps + s] = 0;
+                    shadowed++;
+                }
+            }
+        }
+
+        SunGridFree(&grid);
+    }
+
+    sShadeWrittenAt = -1.0f;
+
+    printf("bfbb: model shade traced over %d step(s) of the day -- %d of %d vertex-steps facing "
+           "the sun are behind a model, %d model(s) casting (%d triangles); %.1fs\n",
+           (int)kSunSteps, (int)shadowed, (int)traced, (int)sOccCount, (int)sOccTriCount,
+           (double)(clock() - began) / CLOCKS_PER_SEC);
+    fflush(stdout);
+
+    WorkFree(&w);
+}
+
 static S32 sHitAnything;
 
 static RpCollisionTriangle* ShadowRayCB(RpIntersection*, RpWorldSector*, RpCollisionTriangle* tri,
@@ -1407,7 +2146,14 @@ void iEnvDropPrelight(iEnv* env)
             continue;
         }
 
-        geo->flags &= ~rpGEOMETRYPRELIT;
+        // **Kept, when it is carrying the model shade.** The cel path reads a
+        // prelight as a scale on its light term rather than adding it, which is
+        // what iEnvSunShadeApply writes there. Dropped otherwise, because on
+        // every other path a prelight is light and this one is not.
+        if (iScreenWorldModelShade() <= 0.0f)
+        {
+            geo->flags &= ~rpGEOMETRYPRELIT;
+        }
     }
 
     if (kept != 0)

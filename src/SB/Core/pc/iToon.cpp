@@ -189,6 +189,25 @@ namespace toonbackend
         (void)b;
     }
 
+    inline void setToonModelShade(F32 amount)
+    {
+#ifdef RW_D3D9
+        if (iBackendIsD3D9())
+        {
+            rw::d3d::setToonModelShade(amount);
+            return;
+        }
+#endif
+#ifdef RW_GL3
+        if (iBackendIsGL3())
+        {
+            rw::gl3::setToonModelShade(amount);
+            return;
+        }
+#endif
+        (void)amount;
+    }
+
     inline void setOutlineInverted(S32 on)
     {
 #ifdef RW_D3D9
@@ -1742,6 +1761,14 @@ void iToonOutlineOrient(void* atomic)
     }
 
     toonbackend::setOutlineInverted(FALSE);
+}
+
+// How much of the traced model shade this draw takes. The world takes it and the
+// things standing in the world do not: a house does not shade itself with the
+// answer traced for the ground.
+void iToonSetModelShade(F32 amount)
+{
+    toonbackend::setToonModelShade(amount);
 }
 
 void iToonSetRampRow(S32 row)

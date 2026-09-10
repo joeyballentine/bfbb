@@ -237,6 +237,10 @@ const iConfigSetting kConfigSettings[] = {
       "Spread between the lit and shaded sides of a level lit by bake. 1 is the\n"
       "; rig as fitted. Higher clips the lit end, and each level caps its own.",
       ICONFIG_FLOAT, NULL, 0.0f, 4.0f, "world_lighting" },
+    { "experimental", "world_model_shade", "0",
+      "How much shade the level's placed models throw on the level. Traced over\n"
+      "; the day at load. Needs toon on and world_light_shadows off.",
+      ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "world_lighting" },
     { "experimental", "world_light_shadows", "off",
       "Darken the parts of a level its own geometry hides from the light. Traced\n"
       "; at load, so the light cannot move afterwards. Coarse: the shadow can\n"
@@ -246,10 +250,6 @@ const iConfigSetting kConfigSettings[] = {
       "Seconds for the sun to go all the way round, or off. Needs world\n"
       "; lighting on and world_light_shadows off.",
       ICONFIG_FLOAT, "off", 5.0f, 3600.0f, "world_lighting" },
-    { "experimental", "solid_flat_props", "off",
-      "Give a prop modelled as a flat sheet real thickness, so an outline has\n"
-      "; something to go round. Costs a few hundred triangles each.",
-      ICONFIG_BOOL, NULL, kNone, kNone },
     { "experimental", "solid_flat_props", "off",
       "Give a prop modelled as a flat sheet real thickness, so an outline has\n"
       "; something to go round. Costs a few hundred triangles each.",

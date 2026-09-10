@@ -89,4 +89,28 @@ void iEnvRigAtContrast(const iEnvBakedRig* rig, F32 contrast, F32 ambient[3],
 // says what that costs.
 void iEnvBakeShadowedLight(iEnv* env);
 
+// The shade the level's placed models throw on the level, over a whole day.
+//
+// Hand over each placed model with the matrix it stands at, then bake. The trace
+// walks the arc the sun actually takes and keeps one byte per world vertex per
+// step, which the run time blends between as the clock moves; iEnvNormals.cpp
+// says why it cannot be one trace or a trace per frame.
+//
+// **Said by the scene and not found here, because of when.** iEnvLoad runs as
+// the JSP arrives and nothing is placed yet, so this waits for zSceneSetup.
+void iEnvOccluderAdd(RpAtomic* model, const RwMatrix* mat);
+void iEnvOccluderClear();
+void iEnvSunShadeBake(iEnv* env);
+void iEnvSunShadeClear();
+
+// What it found, or NULL. Laid out step-minor: vertex v's step s is at
+// v*steps + s, in the same vertex order iEnvGenerateNormals uses.
+const U8* iEnvSunShade(S32* verts, S32* steps);
+
+// Blend the traced steps into the world's prelight for the time of day given, so
+// the cel shader reads the shade standing now. Cheap to call every frame: it
+// returns without touching anything until the sun has moved far enough to be
+// worth a write. `force` writes regardless, for the first one.
+void iEnvSunShadeApply(iEnv* env, F32 phase, S32 force);
+
 #endif
