@@ -175,6 +175,11 @@ F32 iToonWeld(void* atomic);
 // it.
 S32 iToonInsideOut(void* atomic);
 
+// Give this model real thickness if it is a flat open sheet, so a hull round it
+// has something to be a band past. Once per geometry; the solid replaces the
+// sheet on the atomic. iToon.cpp says why a sheet cannot be inked at all.
+void iToonSolidify(void* atomic);
+
 // Tell the renderer which way round the next hull goes, and put a mesh right
 // if it is wound inside out by mistake rather than by intent. NULL clears it.
 void iToonOutlineOrient(void* atomic);

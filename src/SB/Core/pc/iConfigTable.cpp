@@ -246,6 +246,14 @@ const iConfigSetting kConfigSettings[] = {
       "Seconds for the sun to go all the way round, or off. Needs world\n"
       "; lighting on and world_light_shadows off.",
       ICONFIG_FLOAT, "off", 5.0f, 3600.0f, "world_lighting" },
+    { "experimental", "solid_flat_props", "off",
+      "Give a prop modelled as a flat sheet real thickness, so an outline has\n"
+      "; something to go round. Costs a few hundred triangles each.",
+      ICONFIG_BOOL, NULL, kNone, kNone },
+    { "experimental", "solid_flat_props", "off",
+      "Give a prop modelled as a flat sheet real thickness, so an outline has\n"
+      "; something to go round. Costs a few hundred triangles each.",
+      ICONFIG_BOOL, NULL, kNone, kNone },
     { "experimental", "toon", "off",
       "Draw the game like the cartoon it came from: light cut into steps,\n"
       "; colour pushed from grey, a line round each character. Direct3D 9 only.",

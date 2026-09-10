@@ -17,6 +17,9 @@
 #include "xstransvc.h"
 #include "iAnim.h"
 #include "iModel.h"
+#ifdef PLATFORM_PC
+#include "iToon.h"
+#endif
 
 #include <string.h>
 #include <stdio.h>
@@ -1863,7 +1866,24 @@ void zEntPickup_RenderOne(xEnt* ent)
         RwMatrixScale(&frame->ltm, &vec_scale, rwCOMBINEPRECONCAT);
     }
 
+#ifdef PLATFORM_PC
+    // A shiny object is modelled as a flat open sheet, which is a shape an
+    // inverted hull cannot put a line round at all. Said here because these are
+    // the models it happens to, and it costs one test after the first time.
+    iToonSolidify(imodel);
+
+    // **Through iModelRender, because that is where the cartoon look is.** It
+    // sets a model's ramp row, its ink and the hull round it, and a pickup that
+    // goes straight to RpAtomicRender is drawn with whatever the last model
+    // left standing -- which is no ink at all. Shiny objects were the only
+    // solid things in a level with no line round them.
+    //
+    // The matrix is already in the frame, scale and all, so that is what is
+    // handed over.
+    iModelRender(imodel, &frame->ltm);
+#else
     RpAtomicRender(imodel);
+#endif
 }
 
 void zEntPickup_RenderList(zEntPickup* plist, U32 pcount)
@@ -1917,7 +1937,13 @@ void zEntPickup_RenderList(zEntPickup* plist, U32 pcount)
                 RwMatrixScale(&frame->ltm, &vec_scale, rwCOMBINEPRECONCAT);
             }
 
+#ifdef PLATFORM_PC
+            // As in zEntPickup_Render above, and for the same reasons.
+            iToonSolidify(imodel);
+            iModelRender(imodel, &frame->ltm);
+#else
             RpAtomicRender(imodel);
+#endif
         }
 
         if ((shadowResult == 0 && (plist->state & 0x23)) ||

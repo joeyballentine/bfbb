@@ -386,6 +386,7 @@ static F32 sToonHardness;
 static F32 sToonOutlineMin;
 static F32 sToonOutlineMax;
 static S32 sToonAll;
+static S32 sSolidFlatProps;
 
 S32 iScreenToon()
 {
@@ -415,6 +416,16 @@ F32 iScreenToonStrength()
 S32 iScreenToonFaceLight()
 {
     return sToonFaceLight;
+}
+
+S32 iScreenSolidFlatProps()
+{
+    return sSolidFlatProps;
+}
+
+void iScreenSetSolidFlatProps(S32 on)
+{
+    sSolidFlatProps = on ? 1 : 0;
 }
 
 S32 iScreenToonAll()

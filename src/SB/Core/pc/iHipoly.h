@@ -34,6 +34,13 @@ void iHipolyWorldDetach(const void* colltree);
 // cutscene writes their vertices by index from its own streams.
 void iHipolyModel(RpClump* clump);
 
+// One atomic, for a mesh that did not exist when the model loaded.
+// experimental.solid_flat_props rebuilds a flat prop as a solid at its first
+// draw, long after iHipolyModel has been and gone, and the rim it adds wants
+// smoothing like everything else. Same treatment as a model's, over a welding
+// domain of one.
+void iHipolyAtomic(RpAtomic* atomic);
+
 // F8, for before-and-after shots: every replaced atomic draws its shipped
 // geometry instead of its smoothed one, both kept. `down` is the key's
 // state this frame; the swap is on the press. Only the draw changes: the

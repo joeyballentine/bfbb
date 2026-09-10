@@ -1441,16 +1441,11 @@ void iHipolyWorldDetach(const void* colltree)
     }
 }
 
-void iHipolyModel(RpClump* rpclump)
+// The smoothing itself, over a set of atomics that share one welding domain.
+// iHipolyModel hands it a whole clump's worth; iHipolyAtomic hands it one.
+static void refineAtomics(rw::Atomic** atoms, U32 n)
 {
-    if (!iHipolyEnabled() || rpclump == NULL)
-    {
-        return;
-    }
-    rw::Clump* clump = reinterpret_cast<rw::Clump*>(rpclump);
-    iHipolyArray<rw::Atomic*> atoms;
-    U32 n = listAtomics(clump, atoms);
-    if (n == 0 || !portable(atoms.p, n))
+    if (n == 0 || !portable(atoms, n))
     {
         return;
     }
@@ -1542,6 +1537,28 @@ void iHipolyModel(RpClump* rpclump)
     delete[] res;
     delete[] geoms;
     delete[] views;
+}
+
+void iHipolyModel(RpClump* rpclump)
+{
+    if (!iHipolyEnabled() || rpclump == NULL)
+    {
+        return;
+    }
+    rw::Clump* clump = reinterpret_cast<rw::Clump*>(rpclump);
+    iHipolyArray<rw::Atomic*> atoms;
+    U32 n = listAtomics(clump, atoms);
+    refineAtomics(atoms.p, n);
+}
+
+void iHipolyAtomic(RpAtomic* rpatomic)
+{
+    if (!iHipolyEnabled() || rpatomic == NULL)
+    {
+        return;
+    }
+    rw::Atomic* one = reinterpret_cast<rw::Atomic*>(rpatomic);
+    refineAtomics(&one, 1);
 }
 
 void iHipolyHotkey(S32 down)

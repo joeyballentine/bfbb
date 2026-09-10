@@ -610,6 +610,8 @@ static void ApplyConfig()
                    iConfigGetFloat("experimental.toon_strength", 0.25f), iToonLightModeFromConfig());
     iScreenSetToonFlatten(iConfigGetFloat("experimental.toon_colors", 0.0f));
     iScreenSetToonAll(iConfigGetBool("experimental.toon_all", FALSE));
+    iScreenSetSolidFlatProps(iConfigGetBool("experimental.solid_flat_props", FALSE));
+    iScreenSetSolidFlatProps(iConfigGetBool("experimental.solid_flat_props", FALSE));
     iScreenSetToonLook(iConfigGetFloat("experimental.toon_wrap", 0.0f),
                        iConfigGetFloat("experimental.toon_rim", 0.25f),
                        iConfigGetFloat("experimental.toon_occlusion", 0.0f),

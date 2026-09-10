@@ -6,6 +6,7 @@
 
 #include <rwcore.h>
 
+#include "iHipoly.h"
 #include "iScreen.h"
 #include "rw/backend.h"
 #include "xModel.h"
@@ -743,6 +744,16 @@ static F32 sSplitY[kWeldSlots];
 // Whether each is wound inside out. Same walk, same reason.
 static S32 sInsideOut[kWeldSlots];
 
+// And how flat each one is, which decides whether it is a sheet that has to be
+// given thickness before a hull can go round it. Same walk again.
+static F32 sFlat[kWeldSlots];
+
+// Where a model stops being shaped and starts being flat, by the measure
+// Flatness uses. A sphere scores a half and a cube a third, so this is clear of
+// anything with form to it; a plate scores 0.95 and up.
+static const F32 kFlatLow = 0.80f;
+static const F32 kFlatHigh = 0.94f;
+
 static U32 PointerSlot(void* p, S32 slots)
 {
     U32 h = (U32)(uintptr_t)p;
@@ -989,11 +1000,82 @@ static S32 InsideOut(RpGeometry* geo)
     return closed && volume < 0.0;
 }
 
+// **How much of this model's hull must come from its middle rather than its own
+// normals, because it is too flat to widen along them.**
+//
+// A hull is only ever seen where it reaches PAST the silhouette, and pushing a
+// vertex along its normal widens the silhouette by whatever part of that normal
+// lies across the view. A flat model has almost none. A shiny object is a star
+// cut from a plate: 0.95 of every normal points front or back, and inflating it
+// by a twentieth of a unit moved its outline by a two-hundredth. Ink a tenth of
+// the width asked for reads as no ink at all.
+//
+// The measure is the largest of the three mean absolute normal components: 1.0
+// for a plate, a half for a sphere, a third for a cube. A character scores
+// nothing here and is inked exactly as before.
+static F32 Flatness(RpGeometry* geo)
+{
+    RwV3d* norms = geo->morphTarget[0].normals;
+    S32 n = geo->numVertices;
+
+    if (norms == NULL || n <= 0)
+    {
+        return 0.0f;
+    }
+
+    F32 sum[3] = { 0.0f, 0.0f, 0.0f };
+
+    for (S32 i = 0; i < n; i++)
+    {
+        F32 len2 = norms[i].x * norms[i].x + norms[i].y * norms[i].y + norms[i].z * norms[i].z;
+
+        if (len2 < 1e-12f)
+        {
+            continue;
+        }
+
+        F32 inv = 1.0f / xsqrt(len2);
+        F32 c[3] = { norms[i].x * inv, norms[i].y * inv, norms[i].z * inv };
+
+        for (S32 a = 0; a < 3; a++)
+        {
+            sum[a] += c[a] < 0.0f ? -c[a] : c[a];
+        }
+    }
+
+    F32 best = sum[0];
+
+    if (sum[1] > best)
+    {
+        best = sum[1];
+    }
+    if (sum[2] > best)
+    {
+        best = sum[2];
+    }
+
+    best /= (F32)n;
+
+    if (best <= kFlatLow)
+    {
+        return 0.0f;
+    }
+
+    if (best >= kFlatHigh)
+    {
+        return 1.0f;
+    }
+
+    return (best - kFlatLow) / (kFlatHigh - kFlatLow);
+}
+
 // Everything a fresh slot holds. Both readers below can be the first to see a
 // geometry, so both fill it the same way.
 static void FillSlot(RpGeometry* geo, S32 slot)
 {
     sInsideOut[slot] = InsideOut(geo);
+    sFlat[slot] = Flatness(geo);
+
     WeldGeometry(geo);
     sSplitY[slot] = SplitHeight(geo);
 }
@@ -1162,6 +1244,434 @@ static void ReverseGeometry(RpGeometry* geo)
 // inside, and the game says which models those are; theirs is the case the hull
 // flag still serves, and it puts their hull behind them where the dome covers
 // it.
+// **Give a flat sheet real thickness, because an inverted hull cannot work on
+// one.**
+//
+// A shiny object is 47 vertices and 45 triangles with 47 open boundary edges: a
+// single open sheet, no back and no rim. The hull is that sheet inflated along
+// its own normals with front faces culled, and every one of those normals points
+// out of the front, so nothing lies behind the model to survive the cull and
+// nothing points sideways to widen its silhouette. No ink width fixes that. It
+// is the mesh.
+//
+// So the mesh is made solid: the sheet, a copy of it pushed out the back, and a
+// rim of quads joining the two boundaries. The rim's own vertices carry the
+// outward normal, which is the one the hull needs and the one the sheet never
+// had. The weld that follows averages those against the sheet's, rounding the
+// edge instead of creasing it.
+//
+// Once per geometry, and the result replaces the old one on the atomic, so every
+// pickup sharing that asset gets it.
+static RwV3d Normalized(const RwV3d* v)
+{
+    RwV3d out = { 0.0f, 0.0f, 0.0f };
+    F32 len2 = v->x * v->x + v->y * v->y + v->z * v->z;
+
+    if (len2 > 1e-20f)
+    {
+        F32 inv = 1.0f / xsqrt(len2);
+
+        out.x = v->x * inv;
+        out.y = v->y * inv;
+        out.z = v->z * inv;
+    }
+
+    return out;
+}
+
+// How thick a solidified sheet becomes, against its own longest side. Enough to
+// read as a solid from any angle without turning a coin into a block.
+static const F32 kSolidDepth = 0.12f;
+
+static RpGeometry* Solidified(RpGeometry* old)
+{
+    S32 nv = old->numVertices;
+    S32 nt = old->numTriangles;
+    RwV3d* pos = old->morphTarget[0].verts;
+    RwV3d* nrm = old->morphTarget[0].normals;
+
+    if (nv <= 0 || nt <= 0 || pos == NULL || nrm == NULL || nv * 2 + nt * 12 > 60000)
+    {
+        return NULL;
+    }
+
+    // The boundary: a directed edge whose opposite no triangle owns. Positions
+    // pair them, because a hard edge is stored as a duplicated vertex.
+    S32* canon = (S32*)RwMalloc(nv * sizeof(S32));
+    U64* edge = (U64*)RwMalloc(nt * 3 * sizeof(U64));
+    S32* rimA = (S32*)RwMalloc(nt * 3 * sizeof(S32));
+    S32* rimB = (S32*)RwMalloc(nt * 3 * sizeof(S32));
+    S32* rimT = (S32*)RwMalloc(nt * 3 * sizeof(S32));
+
+    if (canon == NULL || edge == NULL || rimA == NULL || rimB == NULL || rimT == NULL)
+    {
+        RwFree(canon);
+        RwFree(edge);
+        RwFree(rimA);
+        RwFree(rimB);
+        RwFree(rimT);
+        return NULL;
+    }
+
+    for (S32 i = 0; i < nv; i++)
+    {
+        canon[i] = i;
+
+        for (S32 j = 0; j < i; j++)
+        {
+            if (SamePoint(&pos[i], &pos[j]))
+            {
+                canon[i] = canon[j];
+                break;
+            }
+        }
+    }
+
+    S32 ne = 0;
+
+    for (S32 t = 0; t < nt; t++)
+    {
+        for (S32 e = 0; e < 3; e++)
+        {
+            U64 p = (U64)(U32)canon[old->triangles[t].vertIndex[e]];
+            U64 q = (U64)(U32)canon[old->triangles[t].vertIndex[(e + 1) % 3]];
+
+            if (p != q)
+            {
+                edge[ne++] = (p << 32) | q;
+            }
+        }
+    }
+
+    qsort(edge, ne, sizeof(U64), CompareU64);
+
+    S32 nrim = 0;
+
+    for (S32 t = 0; t < nt; t++)
+    {
+        for (S32 e = 0; e < 3; e++)
+        {
+            S32 a = old->triangles[t].vertIndex[e];
+            S32 b = old->triangles[t].vertIndex[(e + 1) % 3];
+            U64 rev = ((U64)(U32)canon[b] << 32) | (U64)(U32)canon[a];
+
+            if (canon[a] != canon[b] && bsearch(&rev, edge, ne, sizeof(U64), CompareU64) == NULL)
+            {
+                rimA[nrim] = a;
+                rimB[nrim] = b;
+                rimT[nrim] = t;
+                nrim++;
+            }
+        }
+    }
+
+    RwFree(canon);
+    RwFree(edge);
+
+    if (nrim == 0)
+    {
+        RwFree(rimA);
+        RwFree(rimB);
+        RwFree(rimT);
+        return NULL;
+    }
+
+    // The middle, so a rim quad can be turned to face away from it, and the
+    // longest side, which sets how thick the solid becomes.
+    RwV3d mid = { 0.0f, 0.0f, 0.0f };
+
+    for (S32 i = 0; i < nv; i++)
+    {
+        mid.x += pos[i].x;
+        mid.y += pos[i].y;
+        mid.z += pos[i].z;
+    }
+
+    mid.x /= (F32)nv;
+    mid.y /= (F32)nv;
+    mid.z /= (F32)nv;
+
+    F32 lo[3] = { pos[0].x, pos[0].y, pos[0].z };
+    F32 hi[3] = { pos[0].x, pos[0].y, pos[0].z };
+
+    for (S32 i = 1; i < nv; i++)
+    {
+        F32 c[3] = { pos[i].x, pos[i].y, pos[i].z };
+
+        for (S32 k = 0; k < 3; k++)
+        {
+            if (c[k] < lo[k])
+            {
+                lo[k] = c[k];
+            }
+            if (c[k] > hi[k])
+            {
+                hi[k] = c[k];
+            }
+        }
+    }
+
+    F32 longest = hi[0] - lo[0];
+
+    if (hi[1] - lo[1] > longest)
+    {
+        longest = hi[1] - lo[1];
+    }
+    if (hi[2] - lo[2] > longest)
+    {
+        longest = hi[2] - lo[2];
+    }
+
+    F32 depth = kSolidDepth * longest;
+
+    if (depth <= 0.0f)
+    {
+        RwFree(rimA);
+        RwFree(rimB);
+        RwFree(rimT);
+        return NULL;
+    }
+
+    // The sheet, the sheet again out the back, and four rim vertices per
+    // boundary edge so the rim can carry a normal of its own.
+    S32 outV = nv * 2 + nrim * 4;
+    S32 outT = nt * 2 + nrim * 2;
+    U32 flags = old->flags & ~(U32)(rw::Geometry::TRISTRIP | rw::Geometry::NATIVE |
+                                    rw::Geometry::NATIVEINSTANCE);
+    rw::Geometry* built = rw::Geometry::create(outV, outT, flags);
+
+    if (built == NULL)
+    {
+        RwFree(rimA);
+        RwFree(rimB);
+        RwFree(rimT);
+        return NULL;
+    }
+
+    RpGeometry* geo = (RpGeometry*)built;
+    RwV3d* dpos = geo->morphTarget[0].verts;
+    RwV3d* dnrm = geo->morphTarget[0].normals;
+
+    for (S32 i = 0; i < nv; i++)
+    {
+        RwV3d unit = Normalized(&nrm[i]);
+
+        dpos[i] = pos[i];
+        dpos[nv + i].x = pos[i].x - unit.x * depth;
+        dpos[nv + i].y = pos[i].y - unit.y * depth;
+        dpos[nv + i].z = pos[i].z - unit.z * depth;
+
+        if (dnrm != NULL)
+        {
+            dnrm[i] = unit;
+            dnrm[nv + i].x = -unit.x;
+            dnrm[nv + i].y = -unit.y;
+            dnrm[nv + i].z = -unit.z;
+        }
+
+        for (S32 s = 0; s < old->numTexCoordSets && s < geo->numTexCoordSets; s++)
+        {
+            geo->texCoords[s][i] = old->texCoords[s][i];
+            geo->texCoords[s][nv + i] = old->texCoords[s][i];
+        }
+
+        if (geo->preLitLum != NULL && old->preLitLum != NULL)
+        {
+            geo->preLitLum[i] = old->preLitLum[i];
+            geo->preLitLum[nv + i] = old->preLitLum[i];
+        }
+    }
+
+    for (S32 t = 0; t < nt; t++)
+    {
+        geo->triangles[t] = old->triangles[t];
+
+        geo->triangles[nt + t].vertIndex[0] = (RwUInt16)(old->triangles[t].vertIndex[0] + nv);
+        geo->triangles[nt + t].vertIndex[1] = (RwUInt16)(old->triangles[t].vertIndex[2] + nv);
+        geo->triangles[nt + t].vertIndex[2] = (RwUInt16)(old->triangles[t].vertIndex[1] + nv);
+        geo->triangles[nt + t].matIndex = old->triangles[t].matIndex;
+    }
+
+    S32 v = nv * 2;
+    S32 tri = nt * 2;
+
+    for (S32 r = 0; r < nrim; r++)
+    {
+        S32 a = rimA[r];
+        S32 b = rimB[r];
+        RwV3d face = Normalized(&nrm[a]);
+        RwV3d along;
+
+        along.x = pos[b].x - pos[a].x;
+        along.y = pos[b].y - pos[a].y;
+        along.z = pos[b].z - pos[a].z;
+
+        // Across the edge and along the surface, which is the way out.
+        RwV3d out;
+
+        out.x = along.y * face.z - along.z * face.y;
+        out.y = along.z * face.x - along.x * face.z;
+        out.z = along.x * face.y - along.y * face.x;
+        out = Normalized(&out);
+
+        F32 away = (0.5f * (pos[a].x + pos[b].x) - mid.x) * out.x +
+                   (0.5f * (pos[a].y + pos[b].y) - mid.y) * out.y +
+                   (0.5f * (pos[a].z + pos[b].z) - mid.z) * out.z;
+
+        if (away < 0.0f)
+        {
+            out.x = -out.x;
+            out.y = -out.y;
+            out.z = -out.z;
+        }
+
+        S32 af = v;
+        S32 bf = v + 1;
+        S32 ab = v + 2;
+        S32 bb = v + 3;
+
+        dpos[af] = dpos[a];
+        dpos[bf] = dpos[b];
+        dpos[ab] = dpos[nv + a];
+        dpos[bb] = dpos[nv + b];
+
+        if (dnrm != NULL)
+        {
+            dnrm[af] = out;
+            dnrm[bf] = out;
+            dnrm[ab] = out;
+            dnrm[bb] = out;
+        }
+
+        for (S32 s = 0; s < old->numTexCoordSets && s < geo->numTexCoordSets; s++)
+        {
+            geo->texCoords[s][af] = old->texCoords[s][a];
+            geo->texCoords[s][bf] = old->texCoords[s][b];
+            geo->texCoords[s][ab] = old->texCoords[s][a];
+            geo->texCoords[s][bb] = old->texCoords[s][b];
+        }
+
+        if (geo->preLitLum != NULL && old->preLitLum != NULL)
+        {
+            geo->preLitLum[af] = old->preLitLum[a];
+            geo->preLitLum[bf] = old->preLitLum[b];
+            geo->preLitLum[ab] = old->preLitLum[a];
+            geo->preLitLum[bb] = old->preLitLum[b];
+        }
+
+        // Wound to agree with the outward normal, whichever way round the
+        // boundary happens to run.
+        RwV3d e1;
+        RwV3d e2;
+
+        e1.x = dpos[bf].x - dpos[af].x;
+        e1.y = dpos[bf].y - dpos[af].y;
+        e1.z = dpos[bf].z - dpos[af].z;
+        e2.x = dpos[ab].x - dpos[af].x;
+        e2.y = dpos[ab].y - dpos[af].y;
+        e2.z = dpos[ab].z - dpos[af].z;
+
+        F32 wound = (e1.y * e2.z - e1.z * e2.y) * out.x + (e1.z * e2.x - e1.x * e2.z) * out.y +
+                    (e1.x * e2.y - e1.y * e2.x) * out.z;
+
+        if (wound >= 0.0f)
+        {
+            geo->triangles[tri].vertIndex[0] = (RwUInt16)af;
+            geo->triangles[tri].vertIndex[1] = (RwUInt16)bf;
+            geo->triangles[tri].vertIndex[2] = (RwUInt16)ab;
+            geo->triangles[tri].matIndex = old->triangles[rimT[r]].matIndex;
+            tri++;
+
+            geo->triangles[tri].vertIndex[0] = (RwUInt16)bf;
+            geo->triangles[tri].vertIndex[1] = (RwUInt16)bb;
+            geo->triangles[tri].vertIndex[2] = (RwUInt16)ab;
+        }
+        else
+        {
+            geo->triangles[tri].vertIndex[0] = (RwUInt16)af;
+            geo->triangles[tri].vertIndex[1] = (RwUInt16)ab;
+            geo->triangles[tri].vertIndex[2] = (RwUInt16)bf;
+            geo->triangles[tri].matIndex = old->triangles[rimT[r]].matIndex;
+            tri++;
+
+            geo->triangles[tri].vertIndex[0] = (RwUInt16)bf;
+            geo->triangles[tri].vertIndex[1] = (RwUInt16)ab;
+            geo->triangles[tri].vertIndex[2] = (RwUInt16)bb;
+        }
+
+        geo->triangles[tri].matIndex = old->triangles[rimT[r]].matIndex;
+        tri++;
+
+        v += 4;
+    }
+
+    RwFree(rimA);
+    RwFree(rimB);
+    RwFree(rimT);
+
+    for (S32 m = 0; m < old->matList.numMaterials; m++)
+    {
+        built->matList.appendMaterial((rw::Material*)old->matList.materials[m]);
+    }
+
+    built->calculateBoundingSphere();
+    built->buildMeshes();
+
+    return geo;
+}
+
+void iToonSolidify(void* atomic)
+{
+    RpAtomic* a = (RpAtomic*)atomic;
+
+    if (a == NULL || !iScreenSolidFlatProps())
+    {
+        return;
+    }
+
+    RpGeometry* geo = RpAtomicGetGeometry(a);
+
+    if (geo == NULL || geo->numVertices <= 0 || geo->morphTarget == NULL ||
+        geo->morphTarget[0].verts == NULL || geo->morphTarget[0].normals == NULL)
+    {
+        return;
+    }
+
+    S32 fresh = FALSE;
+    S32 slot = WeldSlot(geo, &fresh);
+
+    if (slot < 0)
+    {
+        return;
+    }
+
+    if (fresh)
+    {
+        FillSlot(geo, slot);
+    }
+
+    // Only a sheet: flat enough that its own normals cannot widen it. A closed
+    // model is already a solid and Solidified finds no boundary to build on; a
+    // shaped one inks itself.
+    if (sFlat[slot] <= 0.0f)
+    {
+        return;
+    }
+
+    RpGeometry* solid = Solidified(geo);
+
+    if (solid != NULL)
+    {
+        RpAtomicSetGeometry(a, solid, 0);
+
+        // And smoothed, if the level's models are. This mesh was built after
+        // iHipolyModel ran over the asset, so it has to ask for itself; the rim
+        // is the part that most wants it, because smoothing is what rounds the
+        // edge the sheet never had.
+        iHipolyAtomic(a);
+    }
+}
+
 void iToonOutlineOrient(void* atomic)
 {
     if (atomic == NULL || !iToonInsideOut(atomic))
@@ -1447,19 +1957,36 @@ void iToonOutlineThinCap(void* atomic, const RwMatrix* mat)
         return;
     }
 
+    // **The middle of the three sides, not the smallest.**
+    //
+    // The smallest is the wrong one to measure a line against on anything that
+    // is not a box. A shiny object is a plate 0.48 by 0.32 by 0.18: its band
+    // grows in the plane of the plate, where it has a third of a unit to spare,
+    // and holding it to a third of the 0.18 pinned it at the pixel floor and no
+    // more. On a boxy model the middle and the smallest are the same number, so
+    // nothing else moves.
     const RwV3d* size = &sThinSize[slot];
-    F32 thin = size->x * RowLength(&mat->right);
-    F32 tall = size->y * RowLength(&mat->up);
-    F32 deep = size->z * RowLength(&mat->at);
+    F32 side[3];
 
-    if (tall < thin)
+    side[0] = size->x * RowLength(&mat->right);
+    side[1] = size->y * RowLength(&mat->up);
+    side[2] = size->z * RowLength(&mat->at);
+
+    for (S32 i = 0; i < 2; i++)
     {
-        thin = tall;
+        for (S32 j = i + 1; j < 3; j++)
+        {
+            if (side[j] < side[i])
+            {
+                F32 swap = side[i];
+
+                side[i] = side[j];
+                side[j] = swap;
+            }
+        }
     }
-    if (deep < thin)
-    {
-        thin = deep;
-    }
+
+    F32 thin = side[1];
 
     if (thin <= 0.0f)
     {
@@ -1490,6 +2017,19 @@ void iToonOutlineThinCap(void* atomic, const RwMatrix* mat)
     }
 
     F32 capped = kThinInk * thin / depth;
+
+    // **Never under the floor, whatever the model's size says.** A small model
+    // far away is thinner than a line is allowed to be, and a proportion of it
+    // works out at a fraction of a pixel. The shader applies this ceiling last,
+    // so it wins over the floor unless it is held here, and the floor is the
+    // stronger claim: a line nobody can see is not a line.
+    F32 lowest = PixelsPerDepth(iScreenToonOutlineMin());
+
+    if (capped < lowest)
+    {
+        capped = lowest;
+    }
+
     F32 standing = PixelsPerDepth(iScreenToonOutlineMax());
 
     if (standing <= 0.0f || capped < standing)

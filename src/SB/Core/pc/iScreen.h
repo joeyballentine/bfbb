@@ -405,6 +405,40 @@ F32 iScreenToonOutline();
 S32 iScreenToonFaceLight();
 void iScreenSetToon(S32 on, F32 bands, F32 saturation, F32 outline, F32 strength, S32 faceLight);
 
+// Give a prop modelled as a flat open sheet real thickness.
+//
+// **A sheet cannot be inked, whatever the ink is set to.** An inverted hull is
+// the model inflated along its own normals with front faces culled, so what
+// survives is the far side and the band of it that reaches past the silhouette.
+// A shiny object is one open sheet of 45 triangles: every normal points out of
+// the front, nothing lies behind to survive the cull, and nothing points
+// sideways to widen the silhouette. On, such a mesh is rebuilt at first sight
+// as a solid -- the sheet, a copy of it out the back, and a rim joining them --
+// which is the shape the effect was designed for.
+//
+// Separate from the cartoon look on purpose. It changes the geometry rather than
+// the shading, it costs a few hundred triangles per model, and it is worth
+// having or not having on its own terms.
+S32 iScreenSolidFlatProps();
+void iScreenSetSolidFlatProps(S32 on);
+
+// Give a prop modelled as a flat open sheet real thickness.
+//
+// **A sheet cannot be inked, whatever the ink is set to.** An inverted hull is
+// the model inflated along its own normals with front faces culled, so what
+// survives is the far side and the band of it that reaches past the silhouette.
+// A shiny object is one open sheet of 45 triangles: every normal points out of
+// the front, nothing lies behind to survive the cull, and nothing points
+// sideways to widen the silhouette. On, such a mesh is rebuilt at first sight
+// as a solid -- the sheet, a copy of it out the back, and a rim joining them --
+// which is the shape the effect was designed for.
+//
+// Separate from the cartoon look on purpose. It changes the geometry rather than
+// the shading, it costs a few hundred triangles per model, and it is worth
+// having or not having on its own terms.
+S32 iScreenSolidFlatProps();
+void iScreenSetSolidFlatProps(S32 on);
+
 // Ink every model the game draws, not just the characters.
 //
 // Off is the show: a crate, a platform and a spatula are things in the world
