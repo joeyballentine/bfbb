@@ -3265,6 +3265,51 @@ static void zWorldLightAim(xLightKitLight* light, const xVec3* travel)
 // while jf01 reaches 1.13. What clips is lost, so the level comes out under the
 // brightness this was supposed to hold. Around 1.5 is the most these levels take
 // without it.
+// Move the colour out of a rig's ambient and into its directionals, holding
+// the two together. See the call site for what it is for.
+static void zRigNeutralAmbient(iEnvBakedRig* rig)
+{
+    if (!rig->valid || rig->count <= 0)
+    {
+        return;
+    }
+
+    F32 mean[3];
+    S32 c;
+
+    for (c = 0; c < 3; c++)
+    {
+        mean[c] = rig->ambient[c] + rig->dirMean[c];
+    }
+
+    F32 lumA = 0.299f * rig->ambient[0] + 0.587f * rig->ambient[1] +
+               0.114f * rig->ambient[2];
+    F32 lumM = 0.299f * mean[0] + 0.587f * mean[1] + 0.114f * mean[2];
+
+    if (lumM < 1e-4f || lumA >= lumM)
+    {
+        return;
+    }
+
+    F32 keep = lumA / lumM;
+
+    for (c = 0; c < 3; c++)
+    {
+        F32 was = rig->dirMean[c];
+
+        rig->ambient[c] = mean[c] * keep;
+        rig->dirMean[c] = mean[c] - rig->ambient[c];
+
+        // The lights carry the difference, in the proportion they already had.
+        F32 scale = was > 1e-4f ? rig->dirMean[c] / was : 1.0f;
+
+        for (S32 i = 0; i < rig->count; i++)
+        {
+            rig->color[i][c] *= scale;
+        }
+    }
+}
+
 static void zRigKitBuild(zRigKit* store, const iEnvBakedRig* rig, F32 contrast)
 {
     F32 ambient[3];
@@ -3362,7 +3407,24 @@ static void zWorldLightBuild(iEnv* env)
 
     // The objects get the same rig at the same contrast. Rebuilt alongside the
     // world's so the two never sit a frame apart as the sun moves.
-    zRigKitBuild(&sObjKit, &rig, contrast);
+    //
+    // **With the colour taken out of its ambient, which is not a colour anything
+    // is.** The fit is a least squares against the level's paint and nothing in
+    // it asks the ambient to be plausible on its own. Measured in Sandy's
+    // treedome: an ambient of (0.18, 0.10, 0.05) against a directional mean of
+    // (0.47, 0.54, 0.58) -- a saturated orange and three blue fills that sum to
+    // a neutral (0.65, 0.64, 0.63). A wall adds them back up. A character
+    // standing in shadow sees the ambient and almost nothing else, and comes
+    // out red.
+    //
+    // So the ambient is given the hue of the average surface at the brightness
+    // it already had, and the directionals take back exactly what it gave up.
+    // The sum is untouched, so the level's own look does not move -- it keeps
+    // the rig as fitted.
+    iEnvBakedRig objRig = rig;
+
+    zRigNeutralAmbient(&objRig);
+    zRigKitBuild(&sObjKit, &objRig, contrast);
 }
 
 // Which rig lights the world, and whether there is one at all.
@@ -3487,7 +3549,24 @@ static void zSceneRenderPreFX()
 
     // The colour this level lights its world in, for the characters walking
     // through it. The world's own rig, not theirs -- iToonSetRoomTint says why.
-    iToonSetRoomTint(s->env->geom->baked.valid ? s->env->geom->baked.ambient : NULL);
+    //
+    // **The whole of the light a surface gets, and not the ambient alone.** The
+    // ambient is one term of a least squares fit and nothing constrains it to a
+    // colour anything in the level actually is: Sandy's treedome is a blue
+    // dome, which drives the fit to blue directionals and leaves an orange
+    // ambient behind to balance them. Normalized to its brightest channel that
+    // is a tint of (1.00, 0.53, 0.27), and every character in the level came out
+    // orange. Adding the directionals back gives (1.00, 0.97, 0.96), which is
+    // what the room is.
+    F32 room[3];
+    const iEnvBakedRig* lit = &s->env->geom->baked;
+
+    for (S32 c = 0; c < 3; c++)
+    {
+        room[c] = lit->ambient[c] + lit->dirMean[c];
+    }
+
+    iToonSetRoomTint(lit->valid ? room : NULL);
 #endif
 
     xLightKit_Enable(NULL, globals.currWorld);
