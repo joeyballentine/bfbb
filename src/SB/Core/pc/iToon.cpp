@@ -189,6 +189,45 @@ namespace toonbackend
         (void)b;
     }
 
+    inline void setToonRoomScale(F32 scale)
+    {
+#ifdef RW_D3D9
+        if (iBackendIsD3D9())
+        {
+            rw::d3d::setToonRoomScale(scale);
+            return;
+        }
+#endif
+#ifdef RW_GL3
+        if (iBackendIsGL3())
+        {
+            rw::gl3::setToonRoomScale(scale);
+            return;
+        }
+#endif
+        (void)scale;
+    }
+
+    inline void setOutlineInk(F32 saturation, F32 gamma)
+    {
+#ifdef RW_D3D9
+        if (iBackendIsD3D9())
+        {
+            rw::d3d::setOutlineInk(saturation, gamma);
+            return;
+        }
+#endif
+#ifdef RW_GL3
+        if (iBackendIsGL3())
+        {
+            rw::gl3::setOutlineInk(saturation, gamma);
+            return;
+        }
+#endif
+        (void)saturation;
+        (void)gamma;
+    }
+
     inline void setToonModelShade(F32 amount)
     {
 #ifdef RW_D3D9
@@ -686,7 +725,11 @@ void iToonInit(S32 bands)
 // fixed colour sitting on a character whose own shading moves with the room, so
 // the moment the lighting is anything but neutral the line and the surface it
 // surrounds disagree. A darkened copy of the surface cannot disagree with it.
-static const F32 kInkScale = 0.35f;
+//
+// **How dark is a setting, because a multiply alone is not enough.** Scaling a
+// surface down holds its saturation and takes brightness off all of it, so the
+// line lands halfway to grey however dark it is set. iScreenToonInk says what
+// the other two do about that.
 
 // **A pass of flat art, where only what the game NAMED still takes the look.**
 //
@@ -753,7 +796,10 @@ void iToonSetOutline(S32 mode)
     // reached the ink through the toon_all default may not.
     toonbackend::setOutlineAlpha(mode != ITOON_OUTLINE_NONE && iToonOutlineNamed(sOutlineAtomic));
 
-    toonbackend::setOutline(kInkScale, kInkScale, kInkScale, iScreenToonOutline());
+    F32 ink = iScreenToonInk();
+
+    toonbackend::setOutline(ink, ink, ink, iScreenToonOutline());
+    toonbackend::setOutlineInk(iScreenToonInkSaturation(), iScreenToonInkGamma());
 
     // Two tones only where there are two: the upper ink is the surface
     // darkened, as everywhere, and the lower one is flat black, because his
@@ -1970,6 +2016,14 @@ void iToonOutlineOrient(void* atomic)
 void iToonSetModelShade(F32 amount)
 {
     toonbackend::setToonModelShade(amount);
+}
+
+// How bright the room this draw is in. The level's own draw sets it; a character
+// standing in the level is lit by his own kit and keeps the room as a colour,
+// which is what iToonSetRoomTint is for.
+void iToonSetRoomLevel(F32 scale)
+{
+    toonbackend::setToonRoomScale(scale);
 }
 
 void iToonSetRampRow(S32 row)

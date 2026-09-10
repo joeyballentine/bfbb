@@ -235,6 +235,22 @@ void iEnvRender(iEnv* env)
     // is not shaded by the answer traced for the ground under it.
     iToonSetModelShade(iScreenWorldModelShade());
 
+    // And how bright the level itself is, measured off its paint, which is how a
+    // room indoors reads as one. kPaintFullyLit is what an exterior paints: hb01
+    // is 0.578 and the inside of SpongeBob's house 0.487.
+    {
+        const F32 kPaintFullyLit = 0.58f;
+        F32 painted = iEnvPaintLevel();
+        F32 scale = 1.0f;
+
+        if (painted > 0.0f && painted < kPaintFullyLit)
+        {
+            scale = powf(painted / kPaintFullyLit, iScreenToonRoomLevel());
+        }
+
+        iToonSetRoomLevel(scale);
+    }
+
     if (env->jsp)
     {
         Jsp_ClumpRender(env->jsp->clump, env->jsp->jspNodeList);
@@ -245,6 +261,7 @@ void iEnvRender(iEnv* env)
     }
 
     iToonSetModelShade(0.0f);
+    iToonSetRoomLevel(1.0f);
     iToonSetRampRow(ITOON_RAMP_CHARACTER);
 
     lastEnv = env;

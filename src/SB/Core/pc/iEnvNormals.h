@@ -89,6 +89,14 @@ void iEnvRigAtContrast(const iEnvBakedRig* rig, F32 contrast, F32 ambient[3],
 // says what that costs.
 void iEnvBakeShadowedLight(iEnv* env);
 
+// How bright the artists painted this level, 0 to 1, or 0 if it was never
+// measured -- which is any level whose paint is left alone.
+//
+// The cel path needs it because the lights cannot answer it: the room colour
+// there is every light summed, so a house indoors resolves as bright as open
+// sunlight. iEnvNormals.cpp has the numbers for two levels.
+F32 iEnvPaintLevel();
+
 // The shade the level's placed models throw on the level, over a whole day.
 //
 // Hand over each placed model with the matrix it stands at, then bake. The trace

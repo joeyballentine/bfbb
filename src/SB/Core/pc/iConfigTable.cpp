@@ -286,6 +286,22 @@ const iConfigSetting kConfigSettings[] = {
       "Thickness of the black line round each character, in world units.\n"
       "; SpongeBob is about two units tall. 0 turns it off.",
       ICONFIG_FLOAT, NULL, 0.0f, 0.2f, "toon" },
+    { "experimental", "toon_room_level", "1.25",
+      "How strongly a level's own brightness shows in its shading. 1 shades it by\n"
+      "; what its paint says, above that exaggerates, and an exterior is untouched.",
+      ICONFIG_FLOAT, NULL, 1.0f, 4.0f, "toon" },
+    { "experimental", "toon_ink", "0.45",
+      "How dark a character's line is against the surface it goes round. A true\n"
+      "; black stays black at any value.",
+      ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
+    { "experimental", "toon_ink_saturation", "1.5",
+      "How much colour a character's line keeps. 1 is the surface darkened, above\n"
+      "; it the line holds its hue instead of washing towards grey.",
+      ICONFIG_FLOAT, NULL, 0.0f, 3.0f, "toon" },
+    { "experimental", "toon_ink_gamma", "0.85",
+      "A curve on the line's brightness. Under 1 lifts its middle and leaves both\n"
+      "; ends where they are.",
+      ICONFIG_FLOAT, NULL, 0.2f, 2.0f, "toon" },
     { "experimental", "toon_outline_min", "1.5",
       "How thin that line may get, in pixels, so a distant character does not\n"
       "; stop being inked. 0 lets it vanish.",

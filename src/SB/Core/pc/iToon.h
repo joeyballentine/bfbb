@@ -130,6 +130,11 @@ void iToonPause(S32 on);
 // goes through the model path but is not a surface; see ITOON_OUTLINE_PLAINDRAW.
 void iToonPlainRegister(xModelInstance* model);
 
+// How bright the room this draw is in, as a scale on the colour the lights
+// resolve to. The world's draw sets it and clears it again; iScreen.h says why
+// the lights cannot answer it alone.
+void iToonSetRoomLevel(F32 scale);
+
 // How much of the shade the scene traced from its placed models this draw takes.
 // The world's draw sets it and clears it again; see iScreenWorldModelShade.
 void iToonSetModelShade(F32 amount);

@@ -388,6 +388,10 @@ static F32 sToonOutlineMax;
 static S32 sToonAll;
 static S32 sSolidFlatProps;
 static F32 sWorldModelShade;
+static F32 sToonRoomLevel = 1.0f;
+static F32 sToonInk = 0.35f;
+static F32 sToonInkSaturation = 1.0f;
+static F32 sToonInkGamma = 1.0f;
 
 S32 iScreenToon()
 {
@@ -417,6 +421,38 @@ F32 iScreenToonStrength()
 S32 iScreenToonFaceLight()
 {
     return sToonFaceLight;
+}
+
+F32 iScreenToonRoomLevel()
+{
+    return sToonRoomLevel;
+}
+
+void iScreenSetToonRoomLevel(F32 power)
+{
+    sToonRoomLevel = power < 1.0f ? 1.0f : (power > 4.0f ? 4.0f : power);
+}
+
+F32 iScreenToonInk()
+{
+    return sToonInk;
+}
+
+F32 iScreenToonInkSaturation()
+{
+    return sToonInkSaturation;
+}
+
+F32 iScreenToonInkGamma()
+{
+    return sToonInkGamma;
+}
+
+void iScreenSetToonInk(F32 scale, F32 saturation, F32 gamma)
+{
+    sToonInk = scale < 0.0f ? 0.0f : (scale > 1.0f ? 1.0f : scale);
+    sToonInkSaturation = saturation < 0.0f ? 0.0f : saturation;
+    sToonInkGamma = gamma < 0.05f ? 0.05f : gamma;
 }
 
 F32 iScreenWorldModelShade()

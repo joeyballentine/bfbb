@@ -451,6 +451,34 @@ void iScreenSetToonAll(S32 on);
 F32 iScreenToonColors();
 void iScreenSetToonFlatten(F32 colors);
 
+// How strongly a level's own brightness shows in its shading.
+//
+// **A room indoors was reading as open sunlight.** The cel path asks the lights
+// how bright a room is and they cannot say, so the level's paint is measured
+// instead: hb01 is painted at 0.578 and the inside of SpongeBob's house at 0.487.
+// See iEnvPaintLevel.
+//
+// This is the exponent on that ratio against a lit exterior. 1 shades a level by
+// exactly the amount the artists painted it down, and above 1 exaggerates it;
+// either way a level painted as brightly as an exterior is untouched, because one
+// to any power is one. Applied to the level's own draw and not to what stands in
+// it, because a character has his own kit.
+F32 iScreenToonRoomLevel();
+void iScreenSetToonRoomLevel(F32 power);
+
+// The ink a character's line is drawn in.
+//
+// **A line is the surface darkened, which gets the hue right and the colour
+// wrong.** Multiplying a surface down holds its saturation where it was and
+// takes brightness off everything, so SpongeBob's olive line lands halfway to
+// grey. Scale sets how dark, saturation puts the colour back, and gamma lifts
+// the middle. All three leave a genuine black alone: there is nothing to push
+// and no room to lift.
+F32 iScreenToonInk();
+F32 iScreenToonInkSaturation();
+F32 iScreenToonInkGamma();
+void iScreenSetToonInk(F32 scale, F32 saturation, F32 gamma);
+
 // The rest of the cel, and the two bounds on the hull's width in pixels of the
 // picture. iToon.h and librw's rwgl3.h say what each one does.
 //

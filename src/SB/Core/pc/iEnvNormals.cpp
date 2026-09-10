@@ -2111,6 +2111,14 @@ void iEnvBakeShadowedLight(iEnv* env)
     WorkFree(&w);
 }
 
+// What the level was painted at, 0 to 1, or 0 where nothing measured it.
+static F32 sPaintLevel;
+
+F32 iEnvPaintLevel()
+{
+    return sPaintLevel;
+}
+
 void iEnvDropPrelight(iEnv* env)
 {
     if (env == NULL || env->jsp == NULL || env->jsp->clump == NULL)
@@ -2127,6 +2135,18 @@ void iEnvDropPrelight(iEnv* env)
 
     S32 kept = 0;
     S32 keptVerts = 0;
+
+    // **How bright the artists painted this level, which is the only record of
+    // it.** The cel path asks the lights how bright a room is and they cannot
+    // say: four lights pointing four ways sum past one whether or not any
+    // surface sees more than one of them, so a house indoors resolves as bright
+    // as open sunlight. hb01 measures 0.578 here and the inside of SpongeBob's
+    // house 0.487 -- the room IS darker, and only the paint knows it.
+    //
+    // Measured over the pieces about to lose their paint, so it is the light the
+    // paint recorded and not the artwork PrelightIsArtwork keeps.
+    double paintSum = 0.0;
+    S32 paintCount = 0;
 
     for (S32 a = 0; a < w.numAtomics; a++)
     {
@@ -2151,6 +2171,17 @@ void iEnvDropPrelight(iEnv* env)
             continue;
         }
 
+        if (geo->preLitLum != NULL)
+        {
+            for (S32 i = 0; i < geo->numVertices; i++)
+            {
+                RwRGBA* c = &geo->preLitLum[i];
+
+                paintSum += 0.299 * c->red + 0.587 * c->green + 0.114 * c->blue;
+                paintCount++;
+            }
+        }
+
         // **Kept, when it is carrying the model shade.** The cel path reads a
         // prelight as a scale on its light term rather than adding it, which is
         // what iEnvSunShadeApply writes there. Dropped otherwise, because on
@@ -2160,6 +2191,8 @@ void iEnvDropPrelight(iEnv* env)
             geo->flags &= ~rpGEOMETRYPRELIT;
         }
     }
+
+    sPaintLevel = paintCount != 0 ? (F32)(paintSum / paintCount / 255.0) : 0.0f;
 
     if (kept != 0)
     {
