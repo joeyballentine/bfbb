@@ -1542,15 +1542,20 @@ static S32 SunGridBuild(SunGrid* g, const xVec3* toward)
     {
         if (pass == 1)
         {
-            S32 total = 0;
-
-            for (S32 c = 0; c <= cells; c++)
+            // **Counts into offsets, and the accumulation runs one way only.**
+            //
+            // Pass 0 put each cell's count at start[cell + 1], so adding each
+            // entry to the one before it leaves start[c] holding where cell c
+            // begins and start[cells] holding the total. An exclusive scan --
+            // which is the other way to write this and what was here first --
+            // leaves every offset one cell's count short, so the ranges overlap
+            // and the last cell's fill runs off the end of item[].
+            for (S32 c = 1; c <= cells; c++)
             {
-                S32 n = g->start[c];
-
-                g->start[c] = total;
-                total += n;
+                g->start[c] += g->start[c - 1];
             }
+
+            S32 total = g->start[cells];
 
             g->item = (S32*)RwMalloc((total > 0 ? total : 1) * sizeof(S32));
 
