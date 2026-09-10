@@ -314,6 +314,14 @@ const iConfigSetting kConfigSettings[] = {
       "How thick that line may get, in pixels, so a character close to the\n"
       "; camera is not inked in marker. 0 lets it swell.",
       ICONFIG_FLOAT, NULL, 0.0f, 16.0f, "toon" },
+    { "experimental", "toon_text_brightness", "1.35",
+      "How far the cel look lifts the game's text, which is painted for a scene\n"
+      "; that is not this one. 1 leaves it alone.",
+      ICONFIG_FLOAT, NULL, 0.25f, 4.0f, "toon" },
+    { "experimental", "toon_text_saturation", "1.2",
+      "How far it pushes that text off grey, the way it pushes every surface\n"
+      "; round it. 1 leaves it alone.",
+      ICONFIG_FLOAT, NULL, 0.0f, 3.0f, "toon" },
     { "experimental", "toon_wrap", "0",
       "How far the shading carries round a character's far side, giving it\n"
       "; somewhere to put a second tone. 0 is the hard horizon.",

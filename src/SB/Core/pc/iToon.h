@@ -162,6 +162,18 @@ S32 iToonOutlineNamed(void* atomic);
 // artists drew with. Everything downstream reads the new geometry, so this runs
 // before the rest. iToon.cpp says why the hull cannot share the surface's.
 void iToonHullNormals(void* atomic);
+
+// Lift one text colour into the cel look, in place.
+//
+// The game's text is painted for a photographic scene and the cel look is not
+// one: every surface around it has had its colour pushed away from grey and its
+// light cut into bands, and the text keeps the muted colour it was authored
+// with. It reads as dull rather than as restrained. Brightness scales it and
+// saturation pushes it off its own grey; both leave white alone, so a white
+// caption is untouched and a coloured one comes up to meet the scene.
+//
+// Does nothing with the cel look off, or with both left at 1.
+void iToonTextColor(U8* r, U8* g, U8* b);
 void iToonOutlineAtomic(void* atomic);
 
 // What was registered for this atomic, or ITOON_OUTLINE_NONE. Called by

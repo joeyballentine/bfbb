@@ -10,6 +10,7 @@
 #include "xScreen.h"
 
 #ifdef PLATFORM_PC
+#include "iToon.h"
 #include "iFont.h"
 #endif
 
@@ -768,6 +769,11 @@ namespace
         {
             return;
         }
+
+#ifdef PLATFORM_PC
+        // The cel look lifts the text with everything else it lifts.
+        iToonTextColor(&color.r, &color.g, &color.b);
+#endif
 
         if (vert_buffer_used == VERT_BUFFER_SIZE)
         {

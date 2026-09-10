@@ -1184,6 +1184,44 @@ static void WeldInPlace(RpGeometry* geo)
     RwFree(avg);
 }
 
+void iToonTextColor(U8* r, U8* g, U8* b)
+{
+    if (!iScreenToon())
+    {
+        return;
+    }
+
+    F32 bright = iScreenToonTextBrightness();
+    F32 sat = iScreenToonTextSaturation();
+
+    if (bright == 1.0f && sat == 1.0f)
+    {
+        return;
+    }
+
+    F32 c[3];
+    S32 i;
+
+    c[0] = *r * (1.0f / 255.0f);
+    c[1] = *g * (1.0f / 255.0f);
+    c[2] = *b * (1.0f / 255.0f);
+
+    // The same weights the ink uses, so a colour that survives one survives the
+    // other.
+    F32 grey = 0.299f * c[0] + 0.587f * c[1] + 0.114f * c[2];
+
+    for (i = 0; i < 3; i++)
+    {
+        F32 v = (grey + (c[i] - grey) * sat) * bright;
+
+        c[i] = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
+    }
+
+    *r = (U8)(c[0] * 255.0f + 0.5f);
+    *g = (U8)(c[1] * 255.0f + 0.5f);
+    *b = (U8)(c[2] * 255.0f + 0.5f);
+}
+
 void iToonHullNormals(void* atomic)
 {
     RpAtomic* a = (RpAtomic*)atomic;

@@ -503,4 +503,10 @@ F32 iScreenToonOutlineMax();
 void iScreenSetToonLook(F32 wrap, F32 rim, F32 occlusion, F32 hardness, F32 outlineMin,
                         F32 outlineMax);
 
+// What the cel look does to the game's own text. iToonTextColor says why there
+// is anything to do; 1 and 1 is the text exactly as it was painted.
+F32 iScreenToonTextBrightness();
+F32 iScreenToonTextSaturation();
+void iScreenSetToonText(F32 brightness, F32 saturation);
+
 #endif

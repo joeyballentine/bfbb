@@ -385,6 +385,8 @@ static F32 sToonOcclusion;
 static F32 sToonHardness;
 static F32 sToonOutlineMin;
 static F32 sToonOutlineMax;
+static F32 sToonTextBrightness = 1.0f;
+static F32 sToonTextSaturation = 1.0f;
 static S32 sToonAll;
 static S32 sSolidFlatProps;
 static S32 sWorldOutline = 1;
@@ -550,6 +552,22 @@ F32 iScreenToonOutlineMin()
 F32 iScreenToonOutlineMax()
 {
     return sToonOutlineMax;
+}
+
+F32 iScreenToonTextBrightness()
+{
+    return sToonTextBrightness;
+}
+
+F32 iScreenToonTextSaturation()
+{
+    return sToonTextSaturation;
+}
+
+void iScreenSetToonText(F32 brightness, F32 saturation)
+{
+    sToonTextBrightness = brightness;
+    sToonTextSaturation = saturation;
 }
 
 void iScreenSetToonLook(F32 wrap, F32 rim, F32 occlusion, F32 hardness, F32 outlineMin,
