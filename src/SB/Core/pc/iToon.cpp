@@ -1300,19 +1300,69 @@ void iToonHullNormals(void* atomic)
 // per cent of the actual range is what the GameCube version used and it is
 // right for the same reason -- it is measured on him rather than on a sphere he
 // happens to fit inside.
-static F32 SplitHeight(RpGeometry* geo)
-{
-    const RwV3d* v = geo->morphTarget[0].verts;
-    F32 lo = v[0].y;
-    F32 hi = v[0].y;
+// How far up a model its two inks meet, as a fraction of its height. His
+// trousers are the bottom third of him.
+static const F32 kSplitUp = 0.30f;
 
-    for (S32 i = 1; i < geo->numVertices; i++)
+static void SplitRange(RpGeometry* geo, F32* range)
+{
+    if (geo == NULL || geo->numVertices <= 0 || geo->morphTarget == NULL ||
+        geo->morphTarget[0].verts == NULL)
     {
-        if (v[i].y < lo) lo = v[i].y;
-        if (v[i].y > hi) hi = v[i].y;
+        return;
     }
 
-    return lo + (hi - lo) * 0.30f;
+    const RwV3d* v = geo->morphTarget[0].verts;
+
+    for (S32 i = 0; i < geo->numVertices; i++)
+    {
+        if (v[i].y < range[0]) range[0] = v[i].y;
+        if (v[i].y > range[1]) range[1] = v[i].y;
+    }
+}
+
+static RpAtomic* SplitRangeCB(RpAtomic* atomic, void* data)
+{
+    SplitRange(RpAtomicGetGeometry(atomic), (F32*)data);
+
+    return atomic;
+}
+
+// **Asked of the whole model and not of the piece.**
+//
+// A model is not one piece, and a fraction of a piece's height is a statement
+// about the piece. SpongeBob's hands are atomics of their own, a hand's worth of
+// height each, so a third of the way up a hand fell across the middle of it and
+// the bottom half was inked as trousers. Every separate piece was inventing its
+// own waistline.
+//
+// The height of the whole clump is the one that means anything, and its pieces
+// share a space to measure in -- a skinned model's atomics are all in the same
+// bind pose, which is what the shader compares against.
+static F32 SplitHeight(RpAtomic* atomic, RpGeometry* geo)
+{
+    RpClump* clump = atomic != NULL ? RpAtomicGetClump(atomic) : NULL;
+    F32 range[2];
+
+    range[0] = 1.0e30f;
+    range[1] = -1.0e30f;
+
+    if (clump != NULL)
+    {
+        RpClumpForAllAtomics(clump, SplitRangeCB, range);
+    }
+
+    if (range[0] > range[1])
+    {
+        SplitRange(geo, range);
+    }
+
+    if (range[0] > range[1])
+    {
+        return 0.0f;
+    }
+
+    return range[0] + (range[1] - range[0]) * kSplitUp;
 }
 
 // Whether a geometry is wound inside out.
@@ -1732,7 +1782,7 @@ static void FillSlot(RpAtomic* atomic, RpGeometry* geo, S32 slot)
         WeldInPlace(geo);
     }
 
-    sSplitY[slot] = SplitHeight(geo);
+    sSplitY[slot] = SplitHeight(atomic, geo);
 }
 
 F32 iToonWeld(void* atomic)
