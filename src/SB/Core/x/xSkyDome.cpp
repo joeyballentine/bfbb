@@ -3,6 +3,9 @@
 #include "xEvent.h"
 #include "xFixes.h"
 #include "iModel.h"
+#ifdef PLATFORM_PC
+#include "iToon.h"
+#endif
 
 struct SkyDomeInfo
 {
@@ -58,6 +61,13 @@ void xSkyDome_AddEntity(xEnt* ent, S32 sortorder, S32 lockY)
 
     ent->model->Flags &= (U16)~0x1;
     ent->baseFlags &= (U16)~0x10;
+
+#ifdef PLATFORM_PC
+    // A dome's faces point inward because the camera is inside it. Said here
+    // because the cartoon look corrects a mesh that faces inward by mistake,
+    // and cannot tell the two apart on its own.
+    iToonSeenFromInside(ent->model->Data);
+#endif
 
     zEntEvent(ent, eEventCollisionOff);
     zEntEvent(ent, eEventCameraCollideOff);

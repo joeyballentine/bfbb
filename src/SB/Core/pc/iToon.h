@@ -175,8 +175,13 @@ F32 iToonWeld(void* atomic);
 // it.
 S32 iToonInsideOut(void* atomic);
 
-// Tell the renderer which way round the next hull goes. NULL clears it.
+// Tell the renderer which way round the next hull goes, and put a mesh right
+// if it is wound inside out by mistake rather than by intent. NULL clears it.
 void iToonOutlineOrient(void* atomic);
+
+// This model is meant to face inward: it is seen from inside, so leave its
+// winding alone. Said by xSkyDome, which is the only thing that knows.
+void iToonSeenFromInside(void* atomic);
 
 // The colour the level's own lighting paints the room, so a character standing
 // in it is painted the same.

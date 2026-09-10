@@ -1064,9 +1064,130 @@ S32 iToonInsideOut(void* atomic)
     return sInsideOut[slot];
 }
 
+enum
+{
+    kInsideSlots = 16
+};
+
+// Geometries a caller says are meant to be inward facing. Only the sky domes,
+// and only two or three of those in a level.
+static RpGeometry* sSeenFromInside[kInsideSlots];
+static S32 sSeenCount;
+
+void iToonSeenFromInside(void* atomic)
+{
+    RpAtomic* a = (RpAtomic*)atomic;
+    RpGeometry* geo = a != NULL ? RpAtomicGetGeometry(a) : NULL;
+
+    if (geo == NULL)
+    {
+        return;
+    }
+
+    for (S32 i = 0; i < sSeenCount; i++)
+    {
+        if (sSeenFromInside[i] == geo)
+        {
+            return;
+        }
+    }
+
+    if (sSeenCount < kInsideSlots)
+    {
+        sSeenFromInside[sSeenCount++] = geo;
+    }
+}
+
+static S32 MeantToBeInward(RpGeometry* geo)
+{
+    for (S32 i = 0; i < sSeenCount; i++)
+    {
+        if (sSeenFromInside[i] == geo)
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+// Wind a geometry the other way, which is the way it should have been.
+//
+// Swapping two corners of every triangle turns the mesh's faces outward, and
+// negating the normals turns its shading outward with them; a mesh needs both
+// or it is inside out in the other half. LOCKPOLYGONS drops the mesh header so
+// the unlock rebuilds it, which changes its serial and makes the renderer
+// instance the whole thing again -- the index buffer included, which no other
+// lock reaches.
+static void ReverseGeometry(RpGeometry* geo)
+{
+    RwV3d* norms = geo->morphTarget[0].normals;
+
+    // 0x1 is librw Geometry::LOCKPOLYGONS and 0x4 LOCKNORMALS. rpworld.h
+    // declares the call and not the flags, so the values are spelled out.
+    RpGeometryLock(geo, 0x1 | 0x4);
+
+    for (S32 t = 0; t < geo->numTriangles; t++)
+    {
+        RwUInt16 swap = geo->triangles[t].vertIndex[1];
+
+        geo->triangles[t].vertIndex[1] = geo->triangles[t].vertIndex[2];
+        geo->triangles[t].vertIndex[2] = swap;
+    }
+
+    if (norms != NULL)
+    {
+        for (S32 i = 0; i < geo->numVertices; i++)
+        {
+            norms[i].x = -norms[i].x;
+            norms[i].y = -norms[i].y;
+            norms[i].z = -norms[i].z;
+        }
+    }
+
+    RpGeometryUnlock(geo);
+}
+
+// **Which way round this model's hull goes, and whether the model itself is the
+// thing to correct.**
+//
+// A mesh wound inside out is wrong for every pass, not only the hull. The
+// game's own draw culls back faces, and on such a mesh the faces pointing at
+// the camera ARE the back ones, so it throws away the near side and draws the
+// far side: a solid digit that reads as a hollow shell you can see into. Only
+// the hull was fixed by drawing it the other way round, so the mesh is put
+// right instead, once, and every pass is correct after it.
+//
+// Except where inward facing is what the artist meant. A sky dome is seen from
+// inside, and the game says which models those are; theirs is the case the hull
+// flag still serves, and it puts their hull behind them where the dome covers
+// it.
 void iToonOutlineOrient(void* atomic)
 {
-    toonbackend::setOutlineInverted(atomic != NULL && iToonInsideOut(atomic));
+    if (atomic == NULL || !iToonInsideOut(atomic))
+    {
+        toonbackend::setOutlineInverted(FALSE);
+        return;
+    }
+
+    RpGeometry* geo = RpAtomicGetGeometry((RpAtomic*)atomic);
+
+    if (MeantToBeInward(geo))
+    {
+        toonbackend::setOutlineInverted(TRUE);
+        return;
+    }
+
+    S32 fresh = FALSE;
+    S32 slot = WeldSlot(geo, &fresh);
+
+    if (slot >= 0)
+    {
+        ReverseGeometry(geo);
+        sInsideOut[slot] = FALSE;
+    }
+
+    toonbackend::setOutlineInverted(FALSE);
 }
 
 void iToonSetRampRow(S32 row)
