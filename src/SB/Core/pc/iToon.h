@@ -156,6 +156,12 @@ void iToonOutlineThinCap(void* atomic, const RwMatrix* mat);
 // Whether an atomic was named rather than reaching the look through
 // experimental.toon_all, and which atomic the next iToonSetOutline is about.
 S32 iToonOutlineNamed(void* atomic);
+
+// Give this model's hull a normal of its own, once, by rebuilding its geometry
+// with the welded normal in two texture coordinate sets beside the ones the
+// artists drew with. Everything downstream reads the new geometry, so this runs
+// before the rest. iToon.cpp says why the hull cannot share the surface's.
+void iToonHullNormals(void* atomic);
 void iToonOutlineAtomic(void* atomic);
 
 // What was registered for this atomic, or ITOON_OUTLINE_NONE. Called by

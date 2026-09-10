@@ -672,6 +672,9 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
 
     if (outline > ITOON_OUTLINE_NONE || shadeOnly)
     {
+        // First, because it replaces the geometry and everything below reads
+        // it: the weld, the split, the ramp row and the hull itself.
+        iToonHullNormals(model);
         iToonOutlineAtomic(model);
         iToonSetOutline(ink);
 

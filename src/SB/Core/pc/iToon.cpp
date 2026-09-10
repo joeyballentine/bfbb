@@ -927,28 +927,21 @@ static int CompareU64(const void* a, const void* b)
     return x < y ? -1 : (x > y ? 1 : 0);
 }
 
-static void WeldGeometry(RpGeometry* geo)
+// **Written somewhere of its own, because the surface still needs its own
+// normals.** This used to overwrite them, and everything that reads a normal
+// afterwards was reading the hull's: the cel bands lost the corners the drawing
+// wants square, and the rim -- which is a statement about a silhouette -- was
+// answering from a normal 45 degrees off the face it was drawn on. See
+// HullNormalGeometry, which is where these end up.
+static void AveragedNormals(RpGeometry* geo, RwV3d* out)
 {
     S32 n = geo->numVertices;
-
-    if (n <= 0 || geo->morphTarget == NULL || geo->morphTarget[0].verts == NULL ||
-        geo->morphTarget[0].normals == NULL)
-    {
-        return;
-    }
-
     RwV3d* verts = geo->morphTarget[0].verts;
     RwV3d* norms = geo->morphTarget[0].normals;
-    RwV3d* summed = (RwV3d*)RwMalloc(n * sizeof(RwV3d));
-
-    if (summed == NULL)
-    {
-        return;
-    }
 
     for (S32 i = 0; i < n; i++)
     {
-        summed[i] = norms[i];
+        out[i] = norms[i];
     }
 
     // Quadratic in the worst case, and that is fine: a character is a couple of
@@ -960,37 +953,192 @@ static void WeldGeometry(RpGeometry* geo)
         {
             if (SamePoint(&verts[i], &verts[j]))
             {
-                summed[i].x += norms[j].x;
-                summed[i].y += norms[j].y;
-                summed[i].z += norms[j].z;
-                summed[j].x += norms[i].x;
-                summed[j].y += norms[i].y;
-                summed[j].z += norms[i].z;
+                out[i].x += norms[j].x;
+                out[i].y += norms[j].y;
+                out[i].z += norms[j].z;
+                out[j].x += norms[i].x;
+                out[j].y += norms[i].y;
+                out[j].z += norms[i].z;
             }
         }
     }
 
-    // 0x4 is librw Geometry::LOCKNORMALS. rpworld.h declares the call and
-    // not the flags, so the value is spelled out rather than named.
-    RpGeometryLock(geo, 0x4);
-
     for (S32 i = 0; i < n; i++)
     {
-        F32 len2 = summed[i].x * summed[i].x + summed[i].y * summed[i].y +
-                   summed[i].z * summed[i].z;
+        F32 len2 = out[i].x * out[i].x + out[i].y * out[i].y + out[i].z * out[i].z;
 
         if (len2 > 1e-12f)
         {
             F32 inv = 1.0f / xsqrt(len2);
 
-            norms[i].x = summed[i].x * inv;
-            norms[i].y = summed[i].y * inv;
-            norms[i].z = summed[i].z * inv;
+            out[i].x *= inv;
+            out[i].y *= inv;
+            out[i].z *= inv;
+        }
+        else
+        {
+            out[i] = norms[i];
         }
     }
+}
 
-    RpGeometryUnlock(geo);
-    RwFree(summed);
+// **The hull's normal, in two texture coordinate sets of its own.**
+//
+// A model stores a hard edge by duplicating the vertex, one copy per face, each
+// carrying its own face's normal. Inflating along those sends the copies in
+// different directions and the faces come apart -- a gap exactly where the
+// outline is meant to be -- so the hull needs one normal per position. The
+// average is that normal, and it is no use to anything else: it describes a
+// crease rather than either of the faces meeting at it.
+//
+// So the geometry is rebuilt with the average alongside rather than on top,
+// (x,y) in set 1 and (z,0) in set 2. Fixed indices, so a vertex shader can name
+// them, which means padding a model that ships one set and refusing one that
+// ships two -- nothing in this game does, and the alternative is a shader that
+// has to be told where to look.
+//
+// Same vertices, same triangles, same order. That matters: game code holds
+// per-vertex arrays sized to whatever geometry an atomic had when it looked,
+// and a UV animation writing them back through the atomic must land on the same
+// vertex it read.
+enum
+{
+    kHullNormalSet = 1,
+    kHullSets = 3
+};
+
+static RpGeometry* HullNormalGeometry(RpGeometry* old)
+{
+    S32 nv = old->numVertices;
+    S32 nt = old->numTriangles;
+    RwV3d* avg = (RwV3d*)RwMalloc(nv * sizeof(RwV3d));
+
+    if (avg == NULL)
+    {
+        return NULL;
+    }
+
+    AveragedNormals(old, avg);
+
+    U32 flags = old->flags & ~(U32)(rw::Geometry::TRISTRIP | rw::Geometry::NATIVE |
+                                    rw::Geometry::NATIVEINSTANCE);
+
+    // The set count rides in the flags, above the flags themselves, and it
+    // wins over what TEXTURED would have said.
+    flags |= rw::Geometry::TEXTURED | ((U32)kHullSets << 16);
+
+    rw::Geometry* built = rw::Geometry::create(nv, nt, flags);
+
+    if (built == NULL)
+    {
+        RwFree(avg);
+        return NULL;
+    }
+
+    RpGeometry* geo = (RpGeometry*)built;
+
+    memcpy(geo->morphTarget[0].verts, old->morphTarget[0].verts, nv * sizeof(RwV3d));
+
+    if (geo->morphTarget[0].normals != NULL && old->morphTarget[0].normals != NULL)
+    {
+        memcpy(geo->morphTarget[0].normals, old->morphTarget[0].normals, nv * sizeof(RwV3d));
+    }
+
+    if (geo->preLitLum != NULL && old->preLitLum != NULL)
+    {
+        memcpy(geo->preLitLum, old->preLitLum, nv * sizeof(RwRGBA));
+    }
+
+    for (S32 i = 0; i < nv; i++)
+    {
+        if (old->numTexCoordSets > 0)
+        {
+            geo->texCoords[0][i] = old->texCoords[0][i];
+        }
+        else
+        {
+            geo->texCoords[0][i].u = 0.0f;
+            geo->texCoords[0][i].v = 0.0f;
+        }
+
+        geo->texCoords[kHullNormalSet][i].u = avg[i].x;
+        geo->texCoords[kHullNormalSet][i].v = avg[i].y;
+        geo->texCoords[kHullNormalSet + 1][i].u = avg[i].z;
+        geo->texCoords[kHullNormalSet + 1][i].v = 0.0f;
+    }
+
+    memcpy(geo->triangles, old->triangles, nt * sizeof(RpTriangle));
+
+    for (S32 m = 0; m < old->matList.numMaterials; m++)
+    {
+        ((rw::Geometry*)geo)->matList.appendMaterial((rw::Material*)old->matList.materials[m]);
+    }
+
+    // The skin, vertex for vertex, since neither the count nor the order moved.
+    rw::Skin* oldSkin = rw::Skin::get((rw::Geometry*)old);
+
+    if (oldSkin != NULL)
+    {
+        rw::Skin* skin = rwNewT(rw::Skin, 1, rw::MEMDUR_EVENT | rw::ID_SKIN);
+
+        memset(skin, 0, sizeof(*skin));
+        skin->init(oldSkin->numBones, oldSkin->numBones, nv);
+
+        if (oldSkin->numBones != 0)
+        {
+            memcpy(skin->inverseMatrices, oldSkin->inverseMatrices, oldSkin->numBones * 64);
+        }
+
+        memcpy(skin->indices, oldSkin->indices, nv * 4);
+        memcpy(skin->weights, oldSkin->weights, nv * 16);
+        skin->findNumWeights(nv);
+        skin->findUsedBones(nv);
+        rw::Skin::set((rw::Geometry*)geo, skin);
+    }
+
+    ((rw::Geometry*)geo)->calculateBoundingSphere();
+    ((rw::Geometry*)geo)->buildMeshes();
+    RwFree(avg);
+
+    return geo;
+}
+
+void iToonHullNormals(void* atomic)
+{
+    RpAtomic* a = (RpAtomic*)atomic;
+
+    if (a == NULL)
+    {
+        return;
+    }
+
+    RpGeometry* geo = RpAtomicGetGeometry(a);
+
+    if (geo == NULL || geo->numVertices <= 0 || geo->numTriangles <= 0 ||
+        geo->morphTarget == NULL || geo->morphTarget[0].verts == NULL ||
+        geo->morphTarget[0].normals == NULL)
+    {
+        return;
+    }
+
+    // Already carrying them, or carrying a second set of its own that the fixed
+    // indices have no room beside.
+    if (geo->numTexCoordSets >= kHullSets || geo->numTexCoordSets > 1)
+    {
+        return;
+    }
+
+    RpGeometry* built = HullNormalGeometry(geo);
+
+    if (built == NULL)
+    {
+        return;
+    }
+
+    // A reference of ours on the old one, so a pointer somebody took before now
+    // still reads. iHipoly.cpp keeps one for the same reason.
+    ((rw::Geometry*)geo)->addRef();
+    RpAtomicSetGeometry(a, built, 0);
 }
 
 // Where the model's lower ink starts, from the bind pose.
@@ -1421,14 +1569,12 @@ static void FillSlot(RpAtomic* atomic, RpGeometry* geo, S32 slot)
     sInsideOut[slot] = InsideOut(geo);
     sFlat[slot] = Flatness(geo);
 
-    // Before the weld, which is the walk this shares its cost with, and before
-    // anything reads the mesh header: the split rebuilds it.
+    // Before anything reads the mesh header: the split rebuilds it.
     if (iToonOutlineNamed(atomic))
     {
         SplitScraps(geo);
     }
 
-    WeldGeometry(geo);
     sSplitY[slot] = SplitHeight(geo);
 }
 
