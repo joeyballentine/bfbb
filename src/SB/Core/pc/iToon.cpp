@@ -2378,6 +2378,18 @@ void iToonSetRampRow(S32 row)
         row = ITOON_RAMP_CHARACTER;
     }
 
+    // **A prop built of flat panels takes no rim.** The rim is a band along a
+    // surface turning away from the eye, and a panel does not turn: it holds one
+    // facing and then breaks. So the band does not hug an edge, it lands square
+    // across a whole face and lights it like a lamp. That is what makes a tiki
+    // look wet.
+    //
+    // The row already says which models those are, so nothing new has to
+    // measure them. It is uploaded per draw, and so is the look.
+    F32 rim = (row == ITOON_RAMP_PROP && !iScreenToonFlatRim()) ? 0.0f : iScreenToonRim();
+
+    toonbackend::setToonLook(iScreenToonWrap(), rim, 0.65f, iScreenToonOcclusion(),
+                             iScreenToonHardness());
     toonbackend::setToonRampRow(row);
 }
 

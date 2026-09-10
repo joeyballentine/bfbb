@@ -503,6 +503,15 @@ F32 iScreenToonOutlineMax();
 void iScreenSetToonLook(F32 wrap, F32 rim, F32 occlusion, F32 hardness, F32 outlineMin,
                         F32 outlineMax);
 
+// Whether a prop built of flat panels catches the rim light the characters do.
+//
+// A rim is a band along a surface turning away from the eye. A panel does not
+// turn -- it holds one facing and then breaks -- so the band lands square across
+// a whole face instead of hugging an edge, and the face reads as wet. Off is the
+// tikis without it.
+S32 iScreenToonFlatRim();
+void iScreenSetToonFlatRim(S32 on);
+
 // How far past the hull the ink's depth is read from, in widths of the line.
 //
 // The hull is an inflated copy of the model, so wherever the model comes within

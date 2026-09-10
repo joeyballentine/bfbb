@@ -314,6 +314,10 @@ const iConfigSetting kConfigSettings[] = {
       "How thick that line may get, in pixels, so a character close to the\n"
       "; camera is not inked in marker. 0 lets it swell.",
       ICONFIG_FLOAT, NULL, 0.0f, 16.0f, "toon" },
+    { "experimental", "toon_flat_rim", "off",
+      "Whether a prop built of flat panels catches the rim light. The band lands\n"
+      "; square across a panel instead of hugging an edge.",
+      ICONFIG_BOOL, NULL, kNone, kNone, "toon" },
     { "experimental", "toon_outline_bias", "0",
       "How far the line gives way to whatever a model stands against, in widths\n"
       "; of the line. -1 is the model's own surface.",
