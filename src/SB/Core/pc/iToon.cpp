@@ -1103,6 +1103,53 @@ static RpGeometry* HullNormalGeometry(RpGeometry* old)
     return geo;
 }
 
+// A material with a reflection on it is metal. Nothing else in these models
+// distinguishes a robot from a fish without the game naming it, and the game has
+// no field that answers -- baseType says NPC for both.
+static S32 HasReflection(RpGeometry* geo)
+{
+    for (S32 i = 0; i < geo->matList.numMaterials; i++)
+    {
+        RpMaterial* mat = geo->matList.materials[i];
+
+        if (mat != NULL && RpMatFXMaterialGetEffects(mat) != rpMATFXEFFECTNULL)
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+// The average written over the model's own, which is what everything did before
+// the two were separated.
+//
+// **The shiny objects want it that way.** A reflection is the one thing that
+// reads better with the corners rounded off: it slides across a smoothed surface
+// and breaks into facets on a hard one, and these are small objects made of few
+// faces, so the facets are most of what you see. The models with a reflection
+// are the ones that measured as metal for the ramp, and that is the same
+// question asked twice.
+static void WeldInPlace(RpGeometry* geo)
+{
+    S32 n = geo->numVertices;
+    RwV3d* avg = (RwV3d*)RwMalloc(n * sizeof(RwV3d));
+
+    if (avg == NULL)
+    {
+        return;
+    }
+
+    AveragedNormals(geo, avg);
+
+    // 0x4 is librw Geometry::LOCKNORMALS. rpworld.h declares the call and not
+    // the flags, so the value is spelled out rather than named.
+    RpGeometryLock(geo, 0x4);
+    memcpy(geo->morphTarget[0].normals, avg, n * sizeof(RwV3d));
+    RpGeometryUnlock(geo);
+    RwFree(avg);
+}
+
 void iToonHullNormals(void* atomic)
 {
     RpAtomic* a = (RpAtomic*)atomic;
@@ -1124,6 +1171,13 @@ void iToonHullNormals(void* atomic)
     // Already carrying them, or carrying a second set of its own that the fixed
     // indices have no room beside.
     if (geo->numTexCoordSets >= kHullSets || geo->numTexCoordSets > 1)
+    {
+        return;
+    }
+
+    // A reflective model keeps the two normals as one. FillSlot does that walk;
+    // this one would only get in its way.
+    if (HasReflection(geo))
     {
         return;
     }
@@ -1573,6 +1627,13 @@ static void FillSlot(RpAtomic* atomic, RpGeometry* geo, S32 slot)
     if (iToonOutlineNamed(atomic))
     {
         SplitScraps(geo);
+    }
+
+    // The one kind of model that still wants its normals averaged in place.
+    // iToonHullNormals leaves these alone so this is the only walk they get.
+    if (HasReflection(geo))
+    {
+        WeldInPlace(geo);
     }
 
     sSplitY[slot] = SplitHeight(geo);
@@ -2343,17 +2404,9 @@ static S32 PieceIsPanelled(RpGeometry* geo, F32 flat)
 
 static S32 RampRowOf(RpGeometry* geo, F32 flat)
 {
-    // A material with a reflection on it is metal. Nothing else in these models
-    // distinguishes a robot from a fish without the game naming it, and the
-    // game has no field that answers -- baseType says NPC for both.
-    for (S32 i = 0; i < geo->matList.numMaterials; i++)
+    if (HasReflection(geo))
     {
-        RpMaterial* mat = geo->matList.materials[i];
-
-        if (mat != NULL && RpMatFXMaterialGetEffects(mat) != rpMATFXEFFECTNULL)
-        {
-            return ITOON_RAMP_METAL;
-        }
+        return ITOON_RAMP_METAL;
     }
 
     if (PieceIsPanelled(geo, flat))
