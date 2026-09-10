@@ -1218,6 +1218,11 @@ enum
     kScrapDenominator = 20
 };
 
+// How much of a model its biggest island has to hold before the rest of it can
+// be read as details laid on it. The models this was written for run 48% and up
+// and the assemblies it must leave alone reach 29%.
+static const F32 kScrapBody = 0.40f;
+
 static S32 ScrapRoot(S32* root, S32 i)
 {
     while (root[i] != i)
@@ -1292,6 +1297,33 @@ static void SplitScraps(RpGeometry* geo)
     for (S32 i = 0; i < nv; i++)
     {
         size[ScrapRoot(root, i)]++;
+    }
+
+    // **A body with details on it, and not an assembly of parts.**
+    //
+    // The rule below calls anything under a twentieth of the model a detail, and
+    // that is only true of a model that has a body for the details to sit on.
+    // A robot has none: measured in jf01, the fodder robot's biggest island is
+    // 19% of it and the hammer robot's 29%, both of them a pile of similar
+    // pieces, so the rule took 7 and 12 of their parts for scraps and the ink
+    // came off a robot's arms and bolts. The models it was written for all have
+    // one: SpongeBob 48%, Squidward 68%, a fish 85%.
+    S32 biggest = 0;
+
+    for (S32 i = 0; i < nv; i++)
+    {
+        if (ScrapRoot(root, i) == i && size[i] > biggest)
+        {
+            biggest = size[i];
+        }
+    }
+
+    if ((F32)biggest < kScrapBody * (F32)nv)
+    {
+        RwFree(root);
+        RwFree(size);
+        RwFree(moved);
+        return;
     }
 
     S32 limit = nv / kScrapDenominator;
