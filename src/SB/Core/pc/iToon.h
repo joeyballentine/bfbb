@@ -191,6 +191,11 @@ void iToonSetOutline(S32 mode);
 // his face in the top band of the ramp and his sides in the bottom one, always.
 //
 // `forward` is the model's own facing. Cleared after the draw.
+
+// Forget everything measured about a model's geometries, because the model is
+// being unloaded and the next one loaded will sit where it did.
+void iToonForgetModel(void* clump);
+
 // Average an atomic's normals across vertices that share a position, once.
 //
 // A hard edge is stored as a duplicated vertex, one per face, each with its own

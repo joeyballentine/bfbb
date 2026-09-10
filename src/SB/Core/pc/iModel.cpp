@@ -292,6 +292,7 @@ void iModelUnload(RpAtomic* userdata)
     }
     if (clump != 0)
     {
+        iToonForgetModel(clump);
         iHipolyForget(clump);
         iEnvForgetModel(clump);
         RpClumpDestroy(clump);

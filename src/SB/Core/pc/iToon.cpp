@@ -873,11 +873,24 @@ enum
     kWeldSlots = 512
 };
 
-// Geometries already welded, so a character costs this once rather than once a
-// frame. Cleared when a level unloads would be better; a stale entry only means
-// a geometry at a recycled address is not welded a second time, and it was
-// already welded.
+// Geometries already measured, so a character costs the walk once rather than
+// once a frame.
+//
+// **Keyed by the pointer, so a slot has to be given up when the geometry is.**
+// A level load frees every model it is done with and the next level's land on
+// the same addresses, and a slot still holding one of those reads as a geometry
+// that has already been through here: no weld, and the flatness, the winding,
+// the ink's split and the ramp row all belonging to whatever was there before.
+// The robots are what shows it -- they are shiny, so their smooth shading is
+// this table's weld and nothing else -- and it takes a second level to see,
+// which is what makes it look like a change in the look rather than a stale
+// pointer. iToonForgetModel is called from the model's own unload.
 static void* sWelded[kWeldSlots];
+
+// A slot whose geometry has gone. Not NULL: NULL ends a probe, and ending one
+// early loses every entry placed past a collision. Insertion takes the first
+// of these it walked over, so the table does not fill up with them.
+static void* const kSlotFreed = (void*)1;
 
 // Where the two inks meet on each of them, in object space, worked out from the
 // same walk that welds. Kept because it is a property of the model and the
@@ -890,6 +903,10 @@ static S32 sInsideOut[kWeldSlots];
 // And how flat each one is, which decides whether it is a sheet that has to be
 // given thickness before a hull can go round it. Same walk again.
 static F32 sFlat[kWeldSlots];
+
+// Which strip each is shaded with, one higher than it is so that zero can mean
+// unanswered. Filled on demand rather than by FillSlot, so WeldSlot clears it.
+static S32 sRampRow[kWeldSlots];
 
 // Where a model stops being shaped and starts being flat, by the measure
 // Flatness uses. A sphere scores a half and a cube a third, so this is clear of
@@ -914,7 +931,10 @@ static S32 WeldSlot(void* geo, S32* fresh)
 {
     U32 i = PointerSlot(geo, kWeldSlots);
     S32 tries = 0;
+    S32 freed = -1;
 
+    // The whole probe first, and only then the free slot: a match may lie past
+    // one, and taking the free slot early would enter the geometry twice.
     while (sWelded[i] != NULL && tries < kWeldSlots)
     {
         if (sWelded[i] == geo)
@@ -923,17 +943,27 @@ static S32 WeldSlot(void* geo, S32* fresh)
             return (S32)i;
         }
 
+        if (sWelded[i] == kSlotFreed && freed < 0)
+        {
+            freed = (S32)i;
+        }
+
         i = (i + 1) & (kWeldSlots - 1);
         tries++;
     }
 
-    if (tries >= kWeldSlots)
+    if (freed >= 0)
+    {
+        i = (U32)freed;
+    }
+    else if (tries >= kWeldSlots)
     {
         *fresh = FALSE;
         return -1;
     }
 
     sWelded[i] = geo;
+    sRampRow[i] = 0;
     *fresh = TRUE;
     return (S32)i;
 }
@@ -1808,6 +1838,49 @@ static void FillSlot(RpAtomic* atomic, RpGeometry* geo, S32 slot)
     sSplitY[slot] = SplitHeight(atomic, geo);
 }
 
+// Give up what was measured about a model, because the model is going away.
+//
+// Its geometries are about to be freed and the next level's will be allocated
+// where they were, so a slot left holding one of these hands the new geometry
+// somebody else's measurements and skips its weld. Called from the model's
+// unload, before iHipolyForget: the atomic still holds the geometry this file
+// measured until that runs.
+static RpAtomic* ForgetSlotCB(RpAtomic* atomic, void* data)
+{
+    RpGeometry* geo = RpAtomicGetGeometry(atomic);
+
+    if (geo == NULL)
+    {
+        return atomic;
+    }
+
+    U32 i = PointerSlot(geo, kWeldSlots);
+
+    for (S32 tries = 0; sWelded[i] != NULL && tries < kWeldSlots; tries++)
+    {
+        if (sWelded[i] == geo)
+        {
+            sWelded[i] = kSlotFreed;
+            sRampRow[i] = 0;
+            break;
+        }
+
+        i = (i + 1) & (kWeldSlots - 1);
+    }
+
+    return atomic;
+}
+
+void iToonForgetModel(void* clump)
+{
+    if (clump == NULL)
+    {
+        return;
+    }
+
+    RpClumpForAllAtomics((RpClump*)clump, ForgetSlotCB, NULL);
+}
+
 F32 iToonWeld(void* atomic)
 {
     RpAtomic* a = (RpAtomic*)atomic;
@@ -2485,11 +2558,6 @@ void iToonSetRampRow(S32 row)
                              iScreenToonHardness());
     toonbackend::setToonRampRow(row);
 }
-
-// Which row each geometry wants, alongside where its inks meet. Same slot, same
-// walk, same reason: it is a property of the model and the renderer asks every
-// draw.
-static S32 sRampRow[kWeldSlots];
 
 // Whether a model is built out of flat panels.
 //

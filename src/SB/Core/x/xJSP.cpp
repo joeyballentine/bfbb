@@ -6,6 +6,7 @@
 
 #ifdef PLATFORM_PC
 #include "iHipoly.h"
+#include "iToon.h"
 // The bake fit reads the world's geometry before iHipolyWorld replaces it.
 #include "iEnvNormals.h"
 #include "iScreen.h"
@@ -237,6 +238,7 @@ void xJSP_Destroy(xJSPHeader* jsp)
     }
 
 #ifdef PLATFORM_PC
+    iToonForgetModel(jsp->clump);
     iHipolyForget(jsp->clump);
 #endif
     RpClumpDestroy(jsp->clump);
