@@ -1134,10 +1134,211 @@ static F32 Flatness(RpGeometry* geo)
 
 // Everything a fresh slot holds. Both readers below can be the first to see a
 // geometry, so both fill it the same way.
-static void FillSlot(RpGeometry* geo, S32 slot)
+// **Ink follows a character's shape, not the scraps laid on his face.**
+//
+// SpongeBob's main atomic is nine separate islands of geometry in ONE material:
+// a body of 1295 vertices, four of about 250 that are his eyes and his shoes,
+// and four of 74 and 116 that are the details on his face. A hull round a detail
+// draws a box round the detail, because that is what a hull does -- it traces the
+// shape a mesh is cut from, and an eyelash laid on a cheek is its own little
+// shape floating in front of one.
+//
+// **The rule for this already exists and could never fire.** The renderer refuses
+// a mesh under a twentieth of its model, for exactly this reason and in those
+// words. But a mesh IS a material, and the artists put a whole character in one,
+// so the rule never had anything to act on. This gives it some: each island under
+// the same twentieth is moved to a material of its own, one apiece so each lands
+// under the rule by itself, and the renderer does the rest.
+//
+// The line between a detail and a part is a real gap and not a guess. On
+// SpongeBob the small four are 2.7% and 4.3% of him and the next one up is 9.1%;
+// on Patrick the body is 1886 vertices and the five details run 32 to 69.
+//
+// **Named characters only.** A bamboo wall is 25 poles of 74 vertices and every
+// one of them is under a twentieth of the wall. Scenery is not details laid on a
+// surface, and inking it whole is right.
+enum
+{
+    kScrapDenominator = 20
+};
+
+static S32 ScrapRoot(S32* root, S32 i)
+{
+    while (root[i] != i)
+    {
+        i = root[i];
+    }
+
+    return i;
+}
+
+static void ScrapJoin(S32* root, S32 a, S32 b)
+{
+    S32 ra = ScrapRoot(root, a);
+    S32 rb = ScrapRoot(root, b);
+
+    if (ra != rb)
+    {
+        root[ra] = rb;
+    }
+}
+
+static void SplitScraps(RpGeometry* geo)
+{
+    S32 nv = geo->numVertices;
+    S32 nt = geo->numTriangles;
+    RwV3d* pos = geo->morphTarget != NULL ? geo->morphTarget[0].verts : NULL;
+
+    if (nv <= 0 || nt <= 0 || pos == NULL || geo->matList.numMaterials <= 0)
+    {
+        return;
+    }
+
+    S32* root = (S32*)RwMalloc(nv * sizeof(S32));
+    S32* size = (S32*)RwMalloc(nv * sizeof(S32));
+    S32* moved = (S32*)RwMalloc(nv * sizeof(S32));
+
+    if (root == NULL || size == NULL || moved == NULL)
+    {
+        RwFree(root);
+        RwFree(size);
+        RwFree(moved);
+        return;
+    }
+
+    for (S32 i = 0; i < nv; i++)
+    {
+        root[i] = i;
+        size[i] = 0;
+        moved[i] = -1;
+    }
+
+    // One point, however many vertices sit on it. Quadratic, once, like the weld
+    // beside it.
+    for (S32 i = 0; i < nv; i++)
+    {
+        for (S32 j = 0; j < i; j++)
+        {
+            if (SamePoint(&pos[i], &pos[j]))
+            {
+                ScrapJoin(root, i, j);
+                break;
+            }
+        }
+    }
+
+    for (S32 t = 0; t < nt; t++)
+    {
+        ScrapJoin(root, geo->triangles[t].vertIndex[0], geo->triangles[t].vertIndex[1]);
+        ScrapJoin(root, geo->triangles[t].vertIndex[1], geo->triangles[t].vertIndex[2]);
+    }
+
+    for (S32 i = 0; i < nv; i++)
+    {
+        size[ScrapRoot(root, i)]++;
+    }
+
+    S32 limit = nv / kScrapDenominator;
+    S32 anySmall = FALSE;
+    S32 anyBig = FALSE;
+
+    for (S32 i = 0; i < nv; i++)
+    {
+        if (ScrapRoot(root, i) != i)
+        {
+            continue;
+        }
+
+        if (size[i] < limit)
+        {
+            anySmall = TRUE;
+        }
+        else
+        {
+            anyBig = TRUE;
+        }
+    }
+
+    // A model that is all details, or has none, is one the renderer already
+    // handles correctly.
+    if (!anySmall || !anyBig)
+    {
+        RwFree(root);
+        RwFree(size);
+        RwFree(moved);
+        return;
+    }
+
+    S32 split = 0;
+
+    for (S32 t = 0; t < nt; t++)
+    {
+        S32 r = ScrapRoot(root, geo->triangles[t].vertIndex[0]);
+
+        if (size[r] >= limit)
+        {
+            continue;
+        }
+
+        if (moved[r] < 0)
+        {
+            S32 was = geo->triangles[t].matIndex;
+
+            if (was < 0 || was >= geo->matList.numMaterials)
+            {
+                continue;
+            }
+
+            rw::Material* copy = ((rw::Material*)geo->matList.materials[was])->clone();
+
+            if (copy == NULL)
+            {
+                continue;
+            }
+
+            S32 at = ((rw::Geometry*)geo)->matList.appendMaterial(copy);
+
+            // The list holds a reference of its own now.
+            copy->destroy();
+
+            if (at < 0)
+            {
+                continue;
+            }
+
+            moved[r] = at;
+            split++;
+        }
+
+        geo->triangles[t].matIndex = (RwInt16)moved[r];
+    }
+
+    RwFree(root);
+    RwFree(size);
+    RwFree(moved);
+
+    if (split == 0)
+    {
+        return;
+    }
+
+    // 0x1 is librw's LOCKPOLYGONS, which drops the mesh header so the unlock
+    // builds it again -- one mesh per material, which is the whole point.
+    RpGeometryLock(geo, 0x1);
+    RpGeometryUnlock(geo);
+}
+
+static void FillSlot(RpAtomic* atomic, RpGeometry* geo, S32 slot)
 {
     sInsideOut[slot] = InsideOut(geo);
     sFlat[slot] = Flatness(geo);
+
+    // Before the weld, which is the walk this shares its cost with, and before
+    // anything reads the mesh header: the split rebuilds it.
+    if (iToonOutlineNamed(atomic))
+    {
+        SplitScraps(geo);
+    }
 
     WeldGeometry(geo);
     sSplitY[slot] = SplitHeight(geo);
@@ -1170,7 +1371,7 @@ F32 iToonWeld(void* atomic)
 
     if (fresh)
     {
-        FillSlot(geo, slot);
+        FillSlot(a, geo, slot);
     }
 
     return sSplitY[slot];
@@ -1203,7 +1404,7 @@ S32 iToonInsideOut(void* atomic)
 
     if (fresh)
     {
-        FillSlot(geo, slot);
+        FillSlot(a, geo, slot);
     }
 
     return sInsideOut[slot];
@@ -1710,7 +1911,7 @@ void iToonSolidify(void* atomic)
 
     if (fresh)
     {
-        FillSlot(geo, slot);
+        FillSlot(a, geo, slot);
     }
 
     // Only a sheet: flat enough that its own normals cannot widen it. A closed
@@ -1832,7 +2033,7 @@ S32 iToonRampRowFor(void* atomic)
     // been here, or this call is what claims the slot and has to fill it.
     if (fresh)
     {
-        FillSlot(geo, slot);
+        FillSlot(a, geo, slot);
     }
 
     if (sRampRow[slot] == 0)
