@@ -15,6 +15,7 @@
 #include <rpmatfx.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 // **D3D9 and GL3 both draw this, and one build carries both.**
@@ -185,6 +186,25 @@ namespace toonbackend
 #endif
         (void)a;
         (void)b;
+    }
+
+    inline void setOutlineInverted(S32 on)
+    {
+#ifdef RW_D3D9
+        if (iBackendIsD3D9())
+        {
+            rw::d3d::setOutlineInverted(on);
+            return;
+        }
+#endif
+#ifdef RW_GL3
+        if (iBackendIsGL3())
+        {
+            rw::gl3::setOutlineInverted(on);
+            return;
+        }
+#endif
+        (void)on;
     }
 
     inline void setOutlineSplit(F32 y)
@@ -720,6 +740,9 @@ static void* sWelded[kWeldSlots];
 // renderer needs it every draw.
 static F32 sSplitY[kWeldSlots];
 
+// Whether each is wound inside out. Same walk, same reason.
+static S32 sInsideOut[kWeldSlots];
+
 static U32 PointerSlot(void* p, S32 slots)
 {
     U32 h = (U32)(uintptr_t)p;
@@ -764,6 +787,14 @@ static S32 WeldSlot(void* geo, S32* fresh)
 static S32 SamePoint(const RwV3d* a, const RwV3d* b)
 {
     return a->x == b->x && a->y == b->y && a->z == b->z;
+}
+
+static int CompareU64(const void* a, const void* b)
+{
+    U64 x = *(const U64*)a;
+    U64 y = *(const U64*)b;
+
+    return x < y ? -1 : (x > y ? 1 : 0);
 }
 
 static void WeldGeometry(RpGeometry* geo)
@@ -856,6 +887,117 @@ static F32 SplitHeight(RpGeometry* geo)
     return lo + (hi - lo) * 0.30f;
 }
 
+// Whether a geometry is wound inside out.
+//
+// **Four of the seven gate digits are, and only the hull can tell.** A plate
+// looks the same from either side, so number_1 and number_5 shipped with every
+// face pointing INTO the plate and nobody saw: with back faces culled the game
+// draws the far sheet instead of the near one, which is still a digit. The
+// hull sees it at once. It inflates along the normals, which point inward, so
+// the copy shrinks; and it keeps the faces that point away from the camera,
+// which is now the NEAR sheet. That is a sheet of ink in front of the digit,
+// with the digit's own colour showing round it where the copy shrank -- the
+// hull turned inside out, because the model is.
+//
+// The test is the signed volume: positive when the winding points out of the
+// mesh, negative when it points in. It means nothing on a mesh with an open
+// edge -- a sign, a plant card and a bucket all report negative and none of
+// them is inside out -- so anything not closed is left as it is.
+//
+// A sky dome is closed and negative on purpose: it is seen from inside. Drawn
+// the inside-out way its hull lands behind it instead of being culled away,
+// which is the same picture.
+static S32 InsideOut(RpGeometry* geo)
+{
+    S32 nv = geo->numVertices;
+    S32 nt = geo->numTriangles;
+    const RwV3d* v = geo->morphTarget[0].verts;
+    const RpTriangle* tri = geo->triangles;
+
+    if (nv <= 0 || nt < 4 || v == NULL || tri == NULL)
+    {
+        return FALSE;
+    }
+
+    // A hard edge is a duplicated vertex, so an edge's two faces name it by
+    // different indices. Positions are what pair them. Quadratic, once, like
+    // the weld.
+    S32* canon = (S32*)RwMalloc(nv * sizeof(S32));
+    U64* edge = (U64*)RwMalloc(nt * 3 * sizeof(U64));
+
+    if (canon == NULL || edge == NULL)
+    {
+        RwFree(canon);
+        RwFree(edge);
+        return FALSE;
+    }
+
+    for (S32 i = 0; i < nv; i++)
+    {
+        canon[i] = i;
+
+        for (S32 j = 0; j < i; j++)
+        {
+            if (SamePoint(&v[i], &v[j]))
+            {
+                canon[i] = canon[j];
+                break;
+            }
+        }
+    }
+
+    // Closed means every directed edge has its reverse on a neighbour.
+    S32 ne = 0;
+    F64 volume = 0.0;
+
+    for (S32 t = 0; t < nt; t++)
+    {
+        const RwV3d* a = &v[tri[t].vertIndex[0]];
+        const RwV3d* b = &v[tri[t].vertIndex[1]];
+        const RwV3d* c = &v[tri[t].vertIndex[2]];
+
+        volume += (F64)a->x * ((F64)b->y * c->z - (F64)b->z * c->y) +
+                  (F64)a->y * ((F64)b->z * c->x - (F64)b->x * c->z) +
+                  (F64)a->z * ((F64)b->x * c->y - (F64)b->y * c->x);
+
+        for (S32 k = 0; k < 3; k++)
+        {
+            U64 p = (U64)(U32)canon[tri[t].vertIndex[k]];
+            U64 q = (U64)(U32)canon[tri[t].vertIndex[(k + 1) % 3]];
+
+            if (p != q)
+            {
+                edge[ne++] = (p << 32) | q;
+            }
+        }
+    }
+
+    qsort(edge, ne, sizeof(U64), CompareU64);
+
+    S32 closed = TRUE;
+
+    for (S32 i = 0; i < ne && closed; i++)
+    {
+        U64 rev = (edge[i] << 32) | (edge[i] >> 32);
+
+        closed = bsearch(&rev, edge, ne, sizeof(U64), CompareU64) != NULL;
+    }
+
+    RwFree(canon);
+    RwFree(edge);
+
+    return closed && volume < 0.0;
+}
+
+// Everything a fresh slot holds. Both readers below can be the first to see a
+// geometry, so both fill it the same way.
+static void FillSlot(RpGeometry* geo, S32 slot)
+{
+    sInsideOut[slot] = InsideOut(geo);
+    WeldGeometry(geo);
+    sSplitY[slot] = SplitHeight(geo);
+}
+
 F32 iToonWeld(void* atomic)
 {
     RpAtomic* a = (RpAtomic*)atomic;
@@ -883,11 +1025,48 @@ F32 iToonWeld(void* atomic)
 
     if (fresh)
     {
-        WeldGeometry(geo);
-        sSplitY[slot] = SplitHeight(geo);
+        FillSlot(geo, slot);
     }
 
     return sSplitY[slot];
+}
+
+S32 iToonInsideOut(void* atomic)
+{
+    RpAtomic* a = (RpAtomic*)atomic;
+
+    if (a == NULL)
+    {
+        return FALSE;
+    }
+
+    RpGeometry* geo = RpAtomicGetGeometry(a);
+
+    if (geo == NULL || geo->numVertices <= 0 || geo->morphTarget == NULL ||
+        geo->morphTarget[0].verts == NULL)
+    {
+        return FALSE;
+    }
+
+    S32 fresh = FALSE;
+    S32 slot = WeldSlot(geo, &fresh);
+
+    if (slot < 0)
+    {
+        return FALSE;
+    }
+
+    if (fresh)
+    {
+        FillSlot(geo, slot);
+    }
+
+    return sInsideOut[slot];
+}
+
+void iToonOutlineOrient(void* atomic)
+{
+    toonbackend::setOutlineInverted(atomic != NULL && iToonInsideOut(atomic));
 }
 
 void iToonSetRampRow(S32 row)
@@ -951,8 +1130,7 @@ S32 iToonRampRowFor(void* atomic)
     // been here, or this call is what claims the slot and has to fill it.
     if (fresh)
     {
-        WeldGeometry(geo);
-        sSplitY[slot] = SplitHeight(geo);
+        FillSlot(geo, slot);
     }
 
     if (sRampRow[slot] == 0)
@@ -1016,6 +1194,187 @@ void iToonOutlineMaxWidth()
 void iToonOutlineMinWidth()
 {
     toonbackend::setOutlineMinWidth(PixelsPerDepth(iScreenToonOutlineMin()));
+}
+
+enum
+{
+    kThinSlots = 512
+};
+
+// Geometries whose object-space size has been measured, and what it was. Held
+// for the same reason the weld cache is: it is a property of the model and the
+// renderer wants it on every draw.
+static void* sThinGeo[kThinSlots];
+static RwV3d sThinSize[kThinSlots];
+static RwV3d sThinCentre[kThinSlots];
+
+// How much of a model's own thickness the ink may take.
+//
+// A third reads as a line round the model rather than a border competing with
+// it, and leaves margin for the perspective difference between the middle of
+// the model and its corners.
+static const F32 kThinInk = 0.35f;
+
+// The slot holding this geometry's size, measuring it if this is the first
+// sight of it, or -1 if there is nothing to measure.
+static S32 ThinSlot(RpGeometry* geo)
+{
+    U32 i = PointerSlot(geo, kThinSlots);
+    S32 tries = 0;
+
+    while (sThinGeo[i] != NULL && tries < kThinSlots)
+    {
+        if (sThinGeo[i] == geo)
+        {
+            return (S32)i;
+        }
+
+        i = (i + 1) & (kThinSlots - 1);
+        tries++;
+    }
+
+    if (tries >= kThinSlots)
+    {
+        return -1;
+    }
+
+    RwV3d* v = geo->morphTarget != NULL ? geo->morphTarget[0].verts : NULL;
+
+    if (v == NULL || geo->numVertices <= 0)
+    {
+        return -1;
+    }
+
+    RwV3d lo = v[0];
+    RwV3d hi = v[0];
+
+    for (S32 k = 1; k < geo->numVertices; k++)
+    {
+        if (v[k].x < lo.x)
+        {
+            lo.x = v[k].x;
+        }
+        if (v[k].y < lo.y)
+        {
+            lo.y = v[k].y;
+        }
+        if (v[k].z < lo.z)
+        {
+            lo.z = v[k].z;
+        }
+        if (v[k].x > hi.x)
+        {
+            hi.x = v[k].x;
+        }
+        if (v[k].y > hi.y)
+        {
+            hi.y = v[k].y;
+        }
+        if (v[k].z > hi.z)
+        {
+            hi.z = v[k].z;
+        }
+    }
+
+    sThinGeo[i] = geo;
+    sThinSize[i].x = hi.x - lo.x;
+    sThinSize[i].y = hi.y - lo.y;
+    sThinSize[i].z = hi.z - lo.z;
+    sThinCentre[i].x = 0.5f * (hi.x + lo.x);
+    sThinCentre[i].y = 0.5f * (hi.y + lo.y);
+    sThinCentre[i].z = 0.5f * (hi.z + lo.z);
+
+    return (S32)i;
+}
+
+static F32 RowLength(const RwV3d* r)
+{
+    return xsqrt(r->x * r->x + r->y * r->y + r->z * r->z);
+}
+
+// **A model cannot be inked thicker than it is, and the pixel floor does not
+// know that.**
+//
+// The floor is a pixel count turned into a world width by multiplying by view
+// depth, so the ink grows without limit as a model recedes: a distant sign ends
+// up with a band as wide as the sign. What reads as a line is a fraction of the
+// thing it draws round, so the ceiling is lowered to what this model can carry.
+//
+// In world units, which the shader wants as a per-depth figure like the others,
+// so it is divided by the depth of the model's middle -- near enough for an
+// object small enough for this to matter at all.
+void iToonOutlineThinCap(void* atomic, const RwMatrix* mat)
+{
+    RpAtomic* model = (RpAtomic*)atomic;
+
+    if (model == NULL || mat == NULL)
+    {
+        return;
+    }
+
+    RpGeometry* geo = RpAtomicGetGeometry(model);
+
+    if (geo == NULL)
+    {
+        return;
+    }
+
+    S32 slot = ThinSlot(geo);
+
+    if (slot < 0)
+    {
+        return;
+    }
+
+    const RwV3d* size = &sThinSize[slot];
+    F32 thin = size->x * RowLength(&mat->right);
+    F32 tall = size->y * RowLength(&mat->up);
+    F32 deep = size->z * RowLength(&mat->at);
+
+    if (tall < thin)
+    {
+        thin = tall;
+    }
+    if (deep < thin)
+    {
+        thin = deep;
+    }
+
+    if (thin <= 0.0f)
+    {
+        return;
+    }
+
+    RwCamera* cam = RwCameraGetCurrentCamera();
+    RwMatrix* cm = cam != NULL ? RwFrameGetLTM(RwCameraGetFrame(cam)) : NULL;
+
+    if (cm == NULL)
+    {
+        return;
+    }
+
+    const RwV3d* c = &sThinCentre[slot];
+    RwV3d world;
+
+    world.x = mat->pos.x + c->x * mat->right.x + c->y * mat->up.x + c->z * mat->at.x;
+    world.y = mat->pos.y + c->x * mat->right.y + c->y * mat->up.y + c->z * mat->at.y;
+    world.z = mat->pos.z + c->x * mat->right.z + c->y * mat->up.z + c->z * mat->at.z;
+
+    F32 depth = (world.x - cm->pos.x) * cm->at.x + (world.y - cm->pos.y) * cm->at.y +
+                (world.z - cm->pos.z) * cm->at.z;
+
+    if (depth < 1e-3f)
+    {
+        return;
+    }
+
+    F32 capped = kThinInk * thin / depth;
+    F32 standing = PixelsPerDepth(iScreenToonOutlineMax());
+
+    if (standing <= 0.0f || capped < standing)
+    {
+        toonbackend::setOutlineMaxWidth(capped);
+    }
 }
 
 // The colour of the room, held between the scene setting it and each character

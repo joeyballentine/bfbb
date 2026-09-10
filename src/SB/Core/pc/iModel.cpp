@@ -705,6 +705,7 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
         iToonSetRampRow(scenery ? ITOON_RAMP_WORLD : iToonRampRowFor(model));
         iToonOutlineMinWidth();
         iToonOutlineMaxWidth();
+        iToonOutlineThinCap(model, mat);
 
         // Once per geometry, and it has to happen before the hull is drawn
         // rather than at load: nothing tells this file when a character's model
@@ -714,6 +715,11 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
         if (!shadeOnly)
         {
             iToonOutlineSplit(iToonWeld(model), ink);
+
+            // And which way round the hull goes. A model wound inside out
+            // has its copy pushed the other way and culled the other way, so
+            // it still swells past the silhouette. iToon.cpp says which.
+            iToonOutlineOrient(model);
         }
     }
 
@@ -730,6 +736,7 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
     if (outline > ITOON_OUTLINE_NONE || shadeOnly)
     {
         iToonSetOutline(ITOON_OUTLINE_NONE);
+        iToonOutlineOrient(NULL);
         iToonFaceLightClear();
         iToonRoomTintClear();
         iToonSetRampRow(ITOON_RAMP_CHARACTER);

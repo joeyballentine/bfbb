@@ -133,6 +133,12 @@ void iToonPlainRegister(xModelInstance* model);
 // Switch the ramp off and on around one draw. iModelRender's, not a caller's.
 void iToonSuppress(S32 on);
 
+// Hold this model's ink under a third of its own thinnest side, so a distant
+// model does not end up with a band as wide as itself. After
+// iToonOutlineMaxWidth, whose ceiling it lowers, and per draw because it
+// depends on where the model is. iToon.cpp says why a pixel floor needs this.
+void iToonOutlineThinCap(void* atomic, const RwMatrix* mat);
+
 // Whether an atomic was named rather than reaching the look through
 // experimental.toon_all, and which atomic the next iToonSetOutline is about.
 S32 iToonOutlineNamed(void* atomic);
@@ -162,6 +168,15 @@ void iToonSetOutline(S32 mode);
 // Returns the object-space height where the model's two inks meet, measured
 // from its bind pose the first time it is seen and remembered after.
 F32 iToonWeld(void* atomic);
+
+// Whether an atomic's geometry is wound inside out: closed, with every face
+// pointing into its own volume. Four of the seven gate digits are. Measured
+// once, on the same walk as the weld; iToon.cpp says what the hull does about
+// it.
+S32 iToonInsideOut(void* atomic);
+
+// Tell the renderer which way round the next hull goes. NULL clears it.
+void iToonOutlineOrient(void* atomic);
 
 // The colour the level's own lighting paints the room, so a character standing
 // in it is painted the same.
