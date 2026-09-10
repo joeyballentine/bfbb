@@ -1121,6 +1121,40 @@ static S32 HasReflection(RpGeometry* geo)
     return FALSE;
 }
 
+static RpAtomic* ReflectVoteCB(RpAtomic* atomic, void* data)
+{
+    RpGeometry* geo = RpAtomicGetGeometry(atomic);
+
+    if (geo != NULL && HasReflection(geo))
+    {
+        *(S32*)data = TRUE;
+    }
+
+    return atomic;
+}
+
+// **Asked of the whole model and not of the piece.** A golden spatula is two
+// pieces and the reflection is on one of them; a fodder robot's is on all of it
+// and the tar-tar robot has none at all. Deciding piece by piece smoothed half
+// of a spatula and left the other half faceted, which is one object wearing two
+// treatments.
+static S32 ModelHasReflection(RpAtomic* atomic)
+{
+    RpClump* clump = atomic != NULL ? RpAtomicGetClump(atomic) : NULL;
+    S32 any = FALSE;
+
+    if (clump == NULL)
+    {
+        RpGeometry* geo = atomic != NULL ? RpAtomicGetGeometry(atomic) : NULL;
+
+        return geo != NULL && HasReflection(geo);
+    }
+
+    RpClumpForAllAtomics(clump, ReflectVoteCB, &any);
+
+    return any;
+}
+
 // The average written over the model's own, which is what everything did before
 // the two were separated.
 //
@@ -1177,7 +1211,7 @@ void iToonHullNormals(void* atomic)
 
     // A reflective model keeps the two normals as one. FillSlot does that walk;
     // this one would only get in its way.
-    if (HasReflection(geo))
+    if (ModelHasReflection(a))
     {
         return;
     }
@@ -1631,7 +1665,7 @@ static void FillSlot(RpAtomic* atomic, RpGeometry* geo, S32 slot)
 
     // The one kind of model that still wants its normals averaged in place.
     // iToonHullNormals leaves these alone so this is the only walk they get.
-    if (HasReflection(geo))
+    if (ModelHasReflection(atomic))
     {
         WeldInPlace(geo);
     }
