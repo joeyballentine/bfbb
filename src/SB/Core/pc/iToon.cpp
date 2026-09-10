@@ -525,8 +525,18 @@ static const ToonRampRow kRampRows[ITOON_RAMP_ROWS] = {
     // reads as two tones and a line.
     { { 0.28f, 0.36f, 0.64f }, { 1.0f, 0.97f, 0.86f }, 0.42f, 0, 0.34f },
 
-    // Spare. Point sampling means a row nobody asks for costs nothing, and a
-    // power of two keeps the row coordinate exact.
+    // Props built out of flat panels, which the wooden tikis are.
+    //
+    // **The character's look exactly, and the row is here to say what a model
+    // is.** A tone that is right on a curve is right on a panel too: pulling the
+    // top band down and softening the crossings was tried and it took the cel
+    // shading off the tikis, which is the one thing they were being drawn this
+    // way for.
+    //
+    // What a panel does need is less rim. A rim traces a silhouette by watching
+    // the facing turn, and the facing does not turn across a flat panel, so the
+    // shader hands a panelled prop a fraction of the rim spread over a wide
+    // edge. It reads the row to know which models those are. See ToonRimAmount.
     { { 0.34f, 0.40f, 0.62f }, { 1.0f, 0.97f, 0.88f }, 0.45f, 0, 0.0f },
 };
 
@@ -2041,7 +2051,119 @@ void iToonSetRampRow(S32 row)
 // draw.
 static S32 sRampRow[kWeldSlots];
 
-static S32 RampRowOf(RpGeometry* geo)
+// Whether a model is built out of flat panels.
+//
+// Face directions are collected within ten degrees of each other and weighted by
+// area, and a model with one direction holding an eighth of its surface is
+// panels. Measured in jf01: a wooden tiki's largest holds 19% to 31%, the
+// floating tiki's 14%, and SpongeBob's body 8% spread over more directions than
+// this counts.
+//
+// The budget is a tracking cost and not part of the answer. Area past it counts
+// towards the surface without joining a direction, so overrunning it can only
+// make a model look less panelled than it is -- which is why the budget is large
+// enough that a faceted prop's panels are all still being counted when its last
+// triangle arrives.
+//
+// Face normals off the positions and not the vertex normals, so the answer is
+// the same before and after the weld.
+enum
+{
+    kPanelDirs = 128
+};
+
+static const F32 kPanelSame = 0.985f;
+static const F32 kPanelShare = 0.125f;
+
+static S32 IsPanelled(RpGeometry* geo)
+{
+    if (geo->morphTarget == NULL || geo->morphTarget[0].verts == NULL ||
+        geo->numTriangles <= 0)
+    {
+        return FALSE;
+    }
+
+    const RwV3d* v = geo->morphTarget[0].verts;
+    RwV3d dir[kPanelDirs];
+    F32 area[kPanelDirs];
+    S32 dirs = 0;
+    F32 total = 0.0f;
+
+    for (S32 t = 0; t < geo->numTriangles; t++)
+    {
+        const RwV3d* a = &v[geo->triangles[t].vertIndex[0]];
+        const RwV3d* b = &v[geo->triangles[t].vertIndex[1]];
+        const RwV3d* c = &v[geo->triangles[t].vertIndex[2]];
+        RwV3d e0 = { b->x - a->x, b->y - a->y, b->z - a->z };
+        RwV3d e1 = { c->x - a->x, c->y - a->y, c->z - a->z };
+        RwV3d n = { e0.y * e1.z - e0.z * e1.y, e0.z * e1.x - e0.x * e1.z,
+                    e0.x * e1.y - e0.y * e1.x };
+        F32 len = xsqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+
+        if (len < 1e-12f)
+        {
+            continue;
+        }
+
+        RwV3d u = { n.x / len, n.y / len, n.z / len };
+        S32 hit = -1;
+
+        total += 0.5f * len;
+
+        for (S32 d = 0; d < dirs; d++)
+        {
+            if (u.x * dir[d].x + u.y * dir[d].y + u.z * dir[d].z > kPanelSame)
+            {
+                hit = d;
+                break;
+            }
+        }
+
+        if (hit >= 0)
+        {
+            area[hit] += 0.5f * len;
+        }
+        else if (dirs < kPanelDirs)
+        {
+            dir[dirs] = u;
+            area[dirs] = 0.5f * len;
+            dirs++;
+        }
+
+        // Past the budget the area still counts towards the surface. Nothing
+        // else to do with it: a direction nobody is tracking cannot hold a
+        // panel's worth.
+    }
+
+    if (total <= 0.0f)
+    {
+        return FALSE;
+    }
+
+    for (S32 d = 0; d < dirs; d++)
+    {
+        if (area[d] / total >= kPanelShare)
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+// **Asked of each piece and not of the model.** The floating tiki is a rounded
+// body of 384 triangles carrying a faceted piece of 126, so a model answers for
+// its pieces only if they all look alike, and these do not. What the row changes
+// is the rim, and a rim steps across a flat panel whatever that panel is part of.
+//
+// A sheet is refused. Everything laid on a character -- his eyes, an eyelash, a
+// decal -- is a single panel and would otherwise measure as a prop.
+static S32 PieceIsPanelled(RpGeometry* geo, F32 flat)
+{
+    return flat <= 0.0f && IsPanelled(geo);
+}
+
+static S32 RampRowOf(RpGeometry* geo, F32 flat)
 {
     // A material with a reflection on it is metal. Nothing else in these models
     // distinguishes a robot from a fish without the game naming it, and the
@@ -2054,6 +2176,11 @@ static S32 RampRowOf(RpGeometry* geo)
         {
             return ITOON_RAMP_METAL;
         }
+    }
+
+    if (PieceIsPanelled(geo, flat))
+    {
+        return ITOON_RAMP_PROP;
     }
 
     return ITOON_RAMP_CHARACTER;
@@ -2094,7 +2221,7 @@ S32 iToonRampRowFor(void* atomic)
     {
         // Stored one higher than it is, so that zero can mean unanswered
         // without a second array of flags.
-        sRampRow[slot] = RampRowOf(geo) + 1;
+        sRampRow[slot] = RampRowOf(geo, sFlat[slot]) + 1;
     }
 
     return sRampRow[slot] - 1;

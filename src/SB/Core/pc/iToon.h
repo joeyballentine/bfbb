@@ -53,6 +53,7 @@ void iToonShutdown();
 #define ITOON_RAMP_CHARACTER 0
 #define ITOON_RAMP_METAL 1
 #define ITOON_RAMP_WORLD 2
+#define ITOON_RAMP_PROP 3
 #define ITOON_RAMP_ROWS 4
 
 void iToonSetRampRow(S32 row);
