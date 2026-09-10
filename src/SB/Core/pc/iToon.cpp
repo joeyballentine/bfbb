@@ -376,11 +376,14 @@ namespace toonbackend
 
 static RwTexture* sRamp;
 
-// How wide the strip is. The bands are cut out of it, so this only has to be
-// fine enough that a band edge lands where it was asked to -- 64 puts every
-// edge within a sixty-fourth of the light range, which is finer than the eye
-// can place a terminator.
-static const S32 kRampWidth = 64;
+// How wide the strip is.
+//
+// 64 is enough for hard bands, where all a width has to do is put an edge where
+// it was asked. A row with a SOFT edge needs more: at 64 a third of the strip is
+// 21 texels, a soft edge spans a handful of them, and point sampling turns that
+// handful into its own little staircase. 256 gives an edge four times the room
+// and costs four kilobytes.
+static const S32 kRampWidth = 256;
 
 // **One ramp is not enough, because skin does not band like sheet metal.**
 //
@@ -414,17 +417,35 @@ struct ToonRampRow
     // How many steps, against the setting. The setting is what a character
     // gets; a row that wants to be harder or softer than him says so here.
     S32 bandBias;
+
+    // How much of each band is spent turning into the next, as a fraction of
+    // the band's width. 0 is a step.
+    //
+    // **A hard band is right on a character and wrong on a level, and the
+    // reason is polygon size.** A band edge lands wherever the light term
+    // crosses a value, so on a character -- hundreds of small triangles across
+    // a curve -- the edge falls where the curve says and reads as drawn ink.
+    // A level is built from a few large flat pieces: one piece has one normal,
+    // so the whole of it crosses the edge at the same moment and the entire
+    // surface changes tone at once. Turn the sun and the level snaps a piece at
+    // a time; hold it still and two pieces that differ by a degree sit in
+    // different bands, which draws their shared edge as a tone boundary. That
+    // is the level's own polygons showing through the shading.
+    //
+    // A soft edge fixes all of it without giving up the flat tones: the middle
+    // of each band is still one colour, and only the crossing is graded.
+    F32 softness;
 };
 
 static const ToonRampRow kRampRows[ITOON_RAMP_ROWS] = {
     // Characters. The tuning everything else is measured against.
-    { { 0.34f, 0.40f, 0.62f }, { 1.0f, 0.97f, 0.88f }, 0.45f, 0 },
+    { { 0.34f, 0.40f, 0.62f }, { 1.0f, 0.97f, 0.88f }, 0.45f, 0, 0.0f },
 
     // Metal. Harder and cooler at both ends: a reflective surface in the show
     // is drawn as two flat tones with a bright edge rather than as a graded
     // curve, so it loses a step and gains contrast. The robots are what this
     // is for.
-    { { 0.22f, 0.26f, 0.42f }, { 1.0f, 1.0f, 1.0f }, 0.50f, -1 },
+    { { 0.22f, 0.26f, 0.42f }, { 1.0f, 1.0f, 1.0f }, 0.50f, -1, 0.0f },
 
     // The world.
     //
@@ -440,11 +461,15 @@ static const ToonRampRow kRampRows[ITOON_RAMP_ROWS] = {
     // lit and shade tones being different HUES rather than from either of them
     // being more saturated -- which is what a painter does and what turning
     // toon_saturation up cannot imitate.
-    { { 0.28f, 0.36f, 0.64f }, { 1.0f, 0.97f, 0.86f }, 0.42f, 0 },
+    // The bands stay as hard as a character's in COUNT and in COLOUR, and only
+    // their crossings are graded -- see softness. A third of a band is enough
+    // to take the polygons out of a wall and little enough that a level still
+    // reads as two tones and a line.
+    { { 0.28f, 0.36f, 0.64f }, { 1.0f, 0.97f, 0.86f }, 0.42f, 0, 0.34f },
 
     // Spare. Point sampling means a row nobody asks for costs nothing, and a
     // power of two keeps the row coordinate exact.
-    { { 0.34f, 0.40f, 0.62f }, { 1.0f, 0.97f, 0.88f }, 0.45f, 0 },
+    { { 0.34f, 0.40f, 0.62f }, { 1.0f, 0.97f, 0.88f }, 0.45f, 0, 0.0f },
 };
 
 // Which way round a 8888 raster stores its channels on this backend.
@@ -492,7 +517,26 @@ static void WriteRampRow(U8* px, const ToonRampRow* row, S32 bands)
             t = 0.5f + 0.5f * (l - row->terminator) / (1.0f - row->terminator);
         }
 
-        F32 step = (F32)((S32)(t * bands));
+        // Which band, and how far into the crossing out of it. A hard row
+        // takes the whole band at one value; a soft one grades the last of it
+        // into the next, smoothly at both ends so the join itself is not a
+        // corner.
+        F32 scaled = t * (F32)bands;
+        F32 index = (F32)((S32)scaled);
+        F32 into = scaled - index;
+        F32 step = index;
+
+        if (row->softness > 0.0f)
+        {
+            F32 x = (into - (1.0f - row->softness)) / row->softness;
+
+            if (x > 0.0f)
+            {
+                if (x > 1.0f) x = 1.0f;
+
+                step += x * x * (3.0f - 2.0f * x);
+            }
+        }
 
         if (step > bands - 1) step = (F32)(bands - 1);
 
