@@ -611,6 +611,7 @@ static void ApplyConfig()
     iScreenSetToonFlatten(iConfigGetFloat("experimental.toon_colors", 0.0f));
     iScreenSetToonAll(iConfigGetBool("experimental.toon_all", FALSE));
     iScreenSetSolidFlatProps(iConfigGetBool("experimental.solid_flat_props", FALSE));
+    iScreenSetWorldOutline(iConfigGetBool("experimental.world_outline", TRUE));
     iScreenSetWorldModelShade(iConfigGetFloat("experimental.world_model_shade", 0.0f));
     iScreenSetToonRoomLevel(iConfigGetFloat("experimental.toon_room_level", 1.25f));
     iScreenSetToonInk(iConfigGetFloat("experimental.toon_ink", 0.45f),

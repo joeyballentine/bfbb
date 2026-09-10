@@ -251,6 +251,26 @@ void iEnvRender(iEnv* env)
         iToonSetRoomLevel(scale);
     }
 
+    // **The level itself, inked.** A hull is geometry, so this draws the whole
+    // level a second time; that is the whole of what it costs and why it is a
+    // setting.
+    //
+    // Nothing has named an atomic, so the ink is refused on anything
+    // see-through -- the water, the plants on their cards, the goo. The split
+    // height is pushed out of reach as well, or the two-tone region the player
+    // left behind would fire on a wall.
+    S32 worldInk = iScreenToon() && iScreenWorldOutline();
+
+    if (worldInk)
+    {
+        iToonOutlineAtomic(NULL);
+        iToonOutlineOrient(NULL);
+        iToonOutlineSplit(0.0f, ITOON_OUTLINE_PLAIN);
+        iToonSetOutline(ITOON_OUTLINE_PLAIN);
+        iToonOutlineMinWidth(NULL);
+        iToonOutlineMaxWidth(NULL);
+    }
+
     if (env->jsp)
     {
         Jsp_ClumpRender(env->jsp->clump, env->jsp->jspNodeList);
@@ -258,6 +278,11 @@ void iEnvRender(iEnv* env)
     else
     {
         RpWorldRender(env->world);
+    }
+
+    if (worldInk)
+    {
+        iToonSetOutline(ITOON_OUTLINE_NONE);
     }
 
     iToonSetModelShade(0.0f);

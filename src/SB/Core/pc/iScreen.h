@@ -435,6 +435,14 @@ void iScreenSetWorldModelShade(F32 amount);
 S32 iScreenSolidFlatProps();
 void iScreenSetSolidFlatProps(S32 on);
 
+// Whether the level itself is inked, as against only what stands in it.
+//
+// The hull is geometry, so a level costs what a level costs: it is drawn once
+// more, in full, before it is drawn. Off leaves the world shaded but bare, which
+// is what a painted background usually is.
+S32 iScreenWorldOutline();
+void iScreenSetWorldOutline(S32 on);
+
 // Ink every model the game draws, not just the characters.
 //
 // Off is the show: a crate, a platform and a spatula are things in the world

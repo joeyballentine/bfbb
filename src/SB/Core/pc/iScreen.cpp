@@ -387,6 +387,7 @@ static F32 sToonOutlineMin;
 static F32 sToonOutlineMax;
 static S32 sToonAll;
 static S32 sSolidFlatProps;
+static S32 sWorldOutline = 1;
 static F32 sWorldModelShade;
 static F32 sToonRoomLevel = 1.0f;
 static F32 sToonInk = 0.35f;
@@ -469,6 +470,16 @@ F32 iScreenWorldModelShade()
 void iScreenSetWorldModelShade(F32 amount)
 {
     sWorldModelShade = amount < 0.0f ? 0.0f : (amount > 1.0f ? 1.0f : amount);
+}
+
+S32 iScreenWorldOutline()
+{
+    return sWorldOutline;
+}
+
+void iScreenSetWorldOutline(S32 on)
+{
+    sWorldOutline = on ? 1 : 0;
 }
 
 S32 iScreenSolidFlatProps()

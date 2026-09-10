@@ -258,6 +258,10 @@ const iConfigSetting kConfigSettings[] = {
       "Draw the game like the cartoon it came from: light cut into steps,\n"
       "; colour pushed from grey, a line round each character. Direct3D 9 only.",
       ICONFIG_BOOL, NULL, kNone, kNone },
+    { "experimental", "world_outline", "on",
+      "Draw the level itself with a line round it, the way the models are.\n"
+      "; Needs toon on. The level is drawn twice, so it costs a frame.",
+      ICONFIG_BOOL, NULL, kNone, kNone, "toon" },
     { "experimental", "toon_all", "off",
       "Cel-shade and ink every model the game draws, not just the characters.\n"
       "; The level itself keeps its painted lighting either way.",
