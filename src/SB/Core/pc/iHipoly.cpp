@@ -1133,13 +1133,47 @@ S32 iHipolyEnabled()
     return settings().enabled;
 }
 
-void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSize)
+// How much coarser to go each time the address space says no, and how coarse is
+// too coarse to be worth having.
+static const F64 kBackoffStep = 1.6;
+static const F64 kBackoffLimit = 8.0;
+
+// The geometries a pass has built and not yet swapped in. Whatever is still
+// waiting when the scope ends is destroyed, so a pass that gives up leaves the
+// level exactly as it found it.
+struct iHipolyBuilt
 {
-    *outSize = 0;
-    if (!iHipolyEnabled() || rpclump == NULL)
+    rw::Geometry** p;
+    U32 n;
+
+    iHipolyBuilt(U32 count) : p(new rw::Geometry*[count]), n(count)
     {
-        return NULL;
+        for (U32 i = 0; i < count; i++)
+        {
+            p[i] = NULL;
+        }
     }
+    ~iHipolyBuilt()
+    {
+        for (U32 i = 0; i < n; i++)
+        {
+            if (p[i] != NULL)
+            {
+                p[i]->destroy();
+            }
+        }
+
+        delete[] p;
+    }
+
+private:
+    iHipolyBuilt(const iHipolyBuilt&);
+    iHipolyBuilt& operator=(const iHipolyBuilt&);
+};
+
+static void* hipolyWorldBody(RpClump* rpclump, const void* coll, U32 collSize,
+                             U32* outSize)
+{
     const Settings& cfg = settings();
     rw::Clump* clump = reinterpret_cast<rw::Clump*>(rpclump);
     clock_t t0 = clock();
@@ -1150,8 +1184,10 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
         return NULL;
     }
 
-    View* views = new View[n];
-    iHipolyGeom* geoms = new iHipolyGeom[n];
+    iHipolyOwn<View> viewsOwn(n);
+    iHipolyOwn<iHipolyGeom> geomsOwn(n);
+    View* views = viewsOwn.p;
+    iHipolyGeom* geoms = geomsOwn.p;
     U32 ntTot = 0, before = 0;
     for (U32 k = 0; k < n; k++)
     {
@@ -1222,7 +1258,8 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
     // may bow, or every floor when the setting says so. An edge a held
     // floor shares with a steep face stays straight for both.
     U32 heldFloors = 0;
-    iHipolyArray<U8>* held = new iHipolyArray<U8>[n];
+    iHipolyOwn<iHipolyArray<U8> > heldOwn(n);
+    iHipolyArray<U8>* held = heldOwn.p;
     if (cfg.floors)
     {
         iHipolyArray<U8> covered;
@@ -1261,18 +1298,54 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
     pr.maxVerts = kMaxVerts;
     pr.maxTris = kMaxTris;
 
-    iHipolyResult* res = new iHipolyResult[n];
+    iHipolyOwn<iHipolyResult>* resOwn = new iHipolyOwn<iHipolyResult>(n);
+    iHipolyResult* res = resOwn->p;
     iHipolyStats stats;
     U32 total = 0;
     for (;;)
     {
-        iHipolyRefine(geoms, n, pr, res, &stats);
+        // **A tessellation that will not fit asks for a coarser one.**
+        //
+        // A level's worth of new triangles is tens of megabytes wanted in one
+        // piece, and in a 32-bit process that runs out long before the machine
+        // does. The failure arrives from whichever buffer happened to grow
+        // last, which says nothing about what to do, so the answer is always
+        // the same: drop the target, throw away what the attempt was holding,
+        // and ask for less.
+        //
+        // A fresh result array is what frees it. Every buffer the attempt
+        // built hangs off one, so replacing them hands the address space back
+        // before the next attempt goes looking for a block in it.
+        try
+        {
+            iHipolyRefine(geoms, n, pr, res, &stats);
+        }
+        catch (const iHipolyOutOfMemory& oom)
+        {
+            delete resOwn;
+            resOwn = new iHipolyOwn<iHipolyResult>(n);
+            res = resOwn->p;
+
+            if (pr.target >= kBackoffLimit)
+            {
+                delete resOwn;
+                printf("bfbb: hipoly: wanted %u bytes; the level keeps the "
+                       "geometry it shipped with\n",
+                       oom.wanted);
+                fflush(stdout);
+                return NULL;
+            }
+
+            pr.target *= kBackoffStep;
+            continue;
+        }
+
         total = 0;
         for (U32 k = 0; k < n; k++)
         {
             total += res[k].nt;
         }
-        if (total <= cfg.budget || pr.target >= 8.0)
+        if (total <= cfg.budget || pr.target >= kBackoffLimit)
         {
             break;
         }
@@ -1282,7 +1355,8 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
     }
 
     // The shipped tree's flags, before the geometries go.
-    ParentFlags* pf = new ParentFlags[n];
+    iHipolyOwn<ParentFlags> pfOwn(n);
+    ParentFlags* pf = pfOwn.p;
     parentFlags(atoms.p, n, (const U8*)coll, collSize, pf);
 
     // The fillet, over the tessellation: which triangles are landscape and
@@ -1291,10 +1365,14 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
     memset(&fs, 0, sizeof(fs));
     if (cfg.fillet > 0.0 && cfg.factor > 0.0)
     {
-        iHipolyArray<U8>* natural = new iHipolyArray<U8>[n];
-        iHipolyArray<U8>* landable = new iHipolyArray<U8>[n];
-        const U8** natp = new const U8*[n];
-        const U8** landp = new const U8*[n];
+        iHipolyOwn<iHipolyArray<U8> > naturalOwn(n);
+        iHipolyOwn<iHipolyArray<U8> > landableOwn(n);
+        iHipolyOwn<const U8*> natpOwn(n);
+        iHipolyOwn<const U8*> landpOwn(n);
+        iHipolyArray<U8>* natural = naturalOwn.p;
+        iHipolyArray<U8>* landable = landableOwn.p;
+        const U8** natp = natpOwn.p;
+        const U8** landp = landpOwn.p;
         for (U32 k = 0; k < n; k++)
         {
             const rw::Geometry* geo = atoms[k]->geometry;
@@ -1319,16 +1397,21 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
         fp.maxMove = kFilletMove * cfg.factor;
         fp.floorMove = kFilletFloorMove * cfg.factor;
         iHipolyFillet(res, n, natp, landp, fp, &fs);
-        delete[] landp;
-        delete[] natp;
-        delete[] landable;
-        delete[] natural;
     }
 
     // The new geometries, and the collision triangles over them, addressed
     // the way xJSP's expanded index buffer will number them: material by
     // material, three consecutive entries per triangle.
+    // **Nothing is swapped in until the tree is built.**
+    //
+    // The level's shape and the tree that says where the player may stand have
+    // to agree, and the caller falls back to the SHIPPED tree when this returns
+    // nothing. So a pass that gives up halfway must not have moved any geometry:
+    // a smoothed floor under a shipped tree is a floor the player walks through.
+    // The built geometries wait here and go in together at the end.
     iHipolyArray<CollTri> ctris;
+    iHipolyBuilt built(n);
+
     for (U32 k = 0; k < n; k++)
     {
         rw::Geometry* geo = makeGeometry(atoms[k]->geometry, res[k]);
@@ -1336,6 +1419,7 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
         {
             continue;
         }
+        built.p[k] = geo;
         U32 rank = 0;
         for (rw::int32 m = 0; m < geo->matList.numMaterials; m++)
         {
@@ -1367,9 +1451,20 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
                 rank++;
             }
         }
-        replaceGeometry(atoms[k], geo, 0);
     }
+
     void* tree = collisionTree(ctris.p, ctris.n, outSize);
+
+    // Past every allocation the pass makes, so the swap can go ahead.
+    for (U32 k = 0; k < n; k++)
+    {
+        if (built.p[k] != NULL)
+        {
+            replaceGeometry(atoms[k], built.p[k], 0);
+            built.p[k] = NULL;
+        }
+    }
+
     {
         iHipolyArray<U32> expandedCount;
         expandedCount.resize(n);
@@ -1395,12 +1490,43 @@ void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSiz
     }
     fflush(stdout);
 
-    delete[] pf;
-    delete[] res;
-    delete[] held;
-    delete[] geoms;
-    delete[] views;
+    delete resOwn;
     return tree;
+}
+
+// **A level that will not fit keeps the one it shipped with.**
+//
+// The tessellation asks for tens of megabytes in one piece, and a 32-bit
+// process runs out of contiguous space long before the machine runs out of
+// memory: Sandy's treedome dies looking for 46MB with gigabytes free. Where the
+// refine itself is what ran out it asks again more coarsely -- see the retry
+// around iHipolyRefine -- and this is what catches everything after it, where
+// there is nothing left to coarsen.
+//
+// Nothing leaks on the way out. Every buffer the pass holds is an
+// iHipolyArray or an iHipolyOwn, and both free in their destructors.
+void* iHipolyWorld(RpClump* rpclump, const void* coll, U32 collSize, U32* outSize)
+{
+    *outSize = 0;
+
+    if (!iHipolyEnabled() || rpclump == NULL)
+    {
+        return NULL;
+    }
+
+    try
+    {
+        return hipolyWorldBody(rpclump, coll, collSize, outSize);
+    }
+    catch (const iHipolyOutOfMemory& oom)
+    {
+        *outSize = 0;
+        printf("bfbb: hipoly: wanted %u bytes and could not have it; the level "
+               "keeps the geometry it shipped with\n",
+               oom.wanted);
+        fflush(stdout);
+        return NULL;
+    }
 }
 
 namespace
@@ -1488,8 +1614,16 @@ static void refineAtomics(rw::Atomic** atoms, U32 n)
     pr.maxVerts = kMaxVerts;
     pr.maxTris = kMaxTris;
     iHipolyResult* res = NULL;
+    iHipolyResult* next = NULL;
     iHipolyGeom* passIn = new iHipolyGeom[n];
     iHipolyStats stats;
+
+    // A model is small enough that the address space running out on one means
+    // it has run out for good, so there is nothing to back off to. It keeps
+    // what it shipped with. See iHipolyWorld for the level, which has room to
+    // ask again more coarsely.
+    try
+    {
     for (S32 pass = 0; pass < cfg.passes; pass++)
     {
         const iHipolyGeom* in = geoms;
@@ -1500,7 +1634,7 @@ static void refineAtomics(rw::Atomic** atoms, U32 n)
         }
         pr.target = passTarget(cfg.modelTarget, cfg.passes, pass);
         pr.minBulge = kModelMinBulge / pow(4.0, (F64)pass);
-        iHipolyResult* next = new iHipolyResult[n];
+        next = new iHipolyResult[n];
         iHipolyRefine(in, n, pr, next, &stats);
         if (pass > 0)
         {
@@ -1511,8 +1645,9 @@ static void refineAtomics(rw::Atomic** atoms, U32 n)
             delete[] res;
         }
         res = next;
+        next = NULL;
     }
-    delete[] passIn;
+
     bool changed = false;
     for (U32 k = 0; k < n; k++)
     {
@@ -1535,6 +1670,14 @@ static void refineAtomics(rw::Atomic** atoms, U32 n)
         }
     }
     delete[] res;
+    }
+    catch (const iHipolyOutOfMemory&)
+    {
+        delete[] next;
+        delete[] res;
+    }
+
+    delete[] passIn;
     delete[] geoms;
     delete[] views;
 }

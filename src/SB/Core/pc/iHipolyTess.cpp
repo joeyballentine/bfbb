@@ -1648,7 +1648,8 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
         }
     }
 
-    Build* builds = new Build[numGeoms];
+    iHipolyOwn<Build> buildsOwn(numGeoms);
+    Build* builds = buildsOwn.p;
     for (U32 g = 0; g < numGeoms; g++)
     {
         Build& b = builds[g];
@@ -1819,7 +1820,6 @@ void iHipolyRefine(const iHipolyGeom* geoms, U32 numGeoms, const iHipolyParams& 
     {
         finish(builds[g], geoms[g], out[g], &folds);
     }
-    delete[] builds;
     if (stats)
     {
         stats->folds = folds;

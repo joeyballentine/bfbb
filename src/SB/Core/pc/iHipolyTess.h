@@ -14,6 +14,41 @@
 
 // A growable array. The port's game code keeps the STL out, and these files
 // follow it; this is all of std::vector that the tessellator needs.
+// **What a tessellation that cannot fit says, instead of stopping the game.**
+//
+// It is a 32-bit process and a level's worth of new triangles is tens of
+// megabytes in one piece, so the block that fails is not the one that ran the
+// address space out -- Sandy's treedome dies looking for 46MB with gigabytes
+// free. Backing off is the only answer, and the caller is the only one that
+// knows what to back off to, so this travels up to it.
+//
+// Every buffer between here and there is an iHipolyArray, whose destructor
+// frees on the way out, so the memory the failed attempt was holding is gone
+// before the next one starts.
+struct iHipolyOutOfMemory
+{
+    U32 wanted;
+};
+
+// Deletes what it holds however the scope ends. Only where an array of objects
+// is wanted rather than one of values -- everything else is iHipolyArray.
+template <typename T> struct iHipolyOwn
+{
+    T* p;
+
+    iHipolyOwn(U32 n) : p(new T[n])
+    {
+    }
+    ~iHipolyOwn()
+    {
+        delete[] p;
+    }
+
+private:
+    iHipolyOwn(const iHipolyOwn&);
+    iHipolyOwn& operator=(const iHipolyOwn&);
+};
+
 template <typename T> struct iHipolyArray
 {
     T* p;
@@ -42,10 +77,10 @@ template <typename T> struct iHipolyArray
         T* q = (T*)realloc(p, (size_t)c * sizeof(T));
         if (q == NULL)
         {
-            printf("bfbb: hipoly: out of memory asking for %u bytes\n",
-                   (U32)((size_t)c * sizeof(T)));
-            fflush(stdout);
-            abort();
+            iHipolyOutOfMemory oom;
+
+            oom.wanted = (U32)((size_t)c * sizeof(T));
+            throw oom;
         }
         p = q;
         cap = c;

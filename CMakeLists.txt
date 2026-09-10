@@ -912,6 +912,23 @@ add_library(bfbb_platform STATIC
 # iScrFX.h's _iMotionBlurData had one colour order in iScrFX.cpp and another
 # everywhere that touches it. Same size, so nothing failed to link and nothing
 # asserted -- it would have surfaced as wrong colours, or worse.
+# **Unwinding, for the three files that need it.**
+#
+# The tessellation asks for tens of megabytes in one piece and a 32-bit process
+# runs out of contiguous space long before the machine runs out of memory. The
+# only answer is to give up on that attempt and ask for a coarser one, and the
+# only way back from the middle of a half-built tessellation that frees what it
+# was holding is an unwind -- every buffer in there is an iHipolyArray, whose
+# destructor runs on the way out.
+#
+# These three and nothing else: the throw and the catch are both inside them,
+# and so is every frame between.
+set_source_files_properties(
+  ${PC_DIR}/iHipoly.cpp
+  ${PC_DIR}/iHipolyFillet.cpp
+  ${PC_DIR}/iHipolyTess.cpp
+  PROPERTIES COMPILE_OPTIONS "-fexceptions;-fcxx-exceptions")
+
 target_link_libraries(bfbb_platform PUBLIC bfbb_rw)
 
 # The movie decoder and its audio device. PRIVATE: nothing above bfbb_platform
