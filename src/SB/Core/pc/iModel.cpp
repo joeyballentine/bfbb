@@ -703,8 +703,8 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
         // line may get. All three belong here for the same reason the rest
         // does: this is where a bucketed model is actually drawn.
         iToonSetRampRow(scenery ? ITOON_RAMP_WORLD : iToonRampRowFor(model));
-        iToonOutlineMinWidth();
-        iToonOutlineMaxWidth();
+        iToonOutlineMinWidth(mat);
+        iToonOutlineMaxWidth(mat);
         iToonOutlineThinCap(model, mat);
 
         // Once per geometry, and it has to happen before the hull is drawn

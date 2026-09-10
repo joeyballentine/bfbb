@@ -73,8 +73,12 @@ S32 iToonRampRowFor(void* atomic);
 // Both are in pixels while the width itself is in world units, which is what
 // keeps a drawn line reading as a drawn line: it holds its weight on screen
 // instead of swelling as the camera closes and vanishing as it pulls back.
-void iToonOutlineMinWidth();
-void iToonOutlineMaxWidth();
+//
+// They take the matrix the model is about to be drawn with because the hull is
+// pushed in the model's own units: a HUD model is sheared down to about a tenth
+// and needs ten times the width to draw the same line. iToon.cpp says more.
+void iToonOutlineMinWidth(const RwMatrix* mat);
+void iToonOutlineMaxWidth(const RwMatrix* mat);
 
 // **The cel ramp is global state, so "plain" has to be said out loud.**
 //

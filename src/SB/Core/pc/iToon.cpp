@@ -2267,6 +2267,55 @@ S32 iToonRampRowFor(void* atomic)
 // of the picture, and librw is handed neither -- it gets a projection matrix
 // that has already swallowed both. So the sum happens here.
 //
+static F32 RowLength(const RwV3d* r)
+{
+    return xsqrt(r->x * r->x + r->y * r->y + r->z * r->z);
+}
+
+// How much bigger the world is than the model's own units, by the middle of the
+// matrix's three rows.
+//
+// **The hull is pushed in the model's units and the pixel widths are in the
+// world's, so the two only agree when a model is placed at its own size.** A
+// HUD model is not: xModelRender2D shears it into the corner of the frustum at
+// about a tenth, so a floor that promises a pixel and a half delivered a sixth
+// of a pixel and the ceiling crushed what was left. That is why the shiny in
+// the counter and the jellyfish in the menu had no line worth the name.
+//
+// The middle row and not the largest, for the reason iToonOutlineThinCap gives:
+// a HUD model's two screen-facing rows carry the same tenth and its third is
+// whatever the shear left, so the middle is the one the silhouette is drawn at.
+// A model standing in the level has three ones and divides by one.
+static F32 ObjectScale(const RwMatrix* mat)
+{
+    if (mat == NULL)
+    {
+        return 1.0f;
+    }
+
+    F32 row[3];
+
+    row[0] = RowLength(&mat->right);
+    row[1] = RowLength(&mat->up);
+    row[2] = RowLength(&mat->at);
+
+    for (S32 i = 0; i < 2; i++)
+    {
+        for (S32 j = i + 1; j < 3; j++)
+        {
+            if (row[j] < row[i])
+            {
+                F32 swap = row[i];
+
+                row[i] = row[j];
+                row[j] = swap;
+            }
+        }
+    }
+
+    return row[1] > 1e-6f ? row[1] : 1.0f;
+}
+
 // A view window is the half-extent of the picture at unit distance, so the
 // number of pixels an offset d covers at depth z is d*H / (2*window.y*z).
 // Turned round: the width that covers a given number of pixels is that many
@@ -2299,17 +2348,17 @@ static F32 PixelsPerDepth(F32 pixels)
 // a statement about how the line READS, and how it reads is a screen measure.
 //
 // Zero is no cap, which is the shipped behaviour of the branch this came from.
-void iToonOutlineMaxWidth()
+void iToonOutlineMaxWidth(const RwMatrix* mat)
 {
-    toonbackend::setOutlineMaxWidth(PixelsPerDepth(iScreenToonOutlineMax()));
+    toonbackend::setOutlineMaxWidth(PixelsPerDepth(iScreenToonOutlineMax()) / ObjectScale(mat));
 }
 
 // How thin it may get, the same way. A fixed world width falls below a pixel
 // somewhere down the level and the character stops being inked, which is the
 // one thing an animated drawing never does.
-void iToonOutlineMinWidth()
+void iToonOutlineMinWidth(const RwMatrix* mat)
 {
-    toonbackend::setOutlineMinWidth(PixelsPerDepth(iScreenToonOutlineMin()));
+    toonbackend::setOutlineMinWidth(PixelsPerDepth(iScreenToonOutlineMin()) / ObjectScale(mat));
 }
 
 enum
@@ -2401,11 +2450,6 @@ static S32 ThinSlot(RpGeometry* geo)
     sThinCentre[i].z = 0.5f * (hi.z + lo.z);
 
     return (S32)i;
-}
-
-static F32 RowLength(const RwV3d* r)
-{
-    return xsqrt(r->x * r->x + r->y * r->y + r->z * r->z);
 }
 
 // **A model cannot be inked thicker than it is, and the pixel floor does not
@@ -2519,7 +2563,8 @@ void iToonOutlineThinCap(void* atomic, const RwMatrix* mat)
 
     if (standing <= 0.0f || capped < standing)
     {
-        toonbackend::setOutlineMaxWidth(capped);
+        // Into the model's own units, the same as the two widths above.
+        toonbackend::setOutlineMaxWidth(capped / ObjectScale(mat));
     }
 }
 
