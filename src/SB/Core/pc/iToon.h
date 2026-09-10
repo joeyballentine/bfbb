@@ -192,6 +192,13 @@ void iToonSetOutline(S32 mode);
 //
 // `forward` is the model's own facing. Cleared after the draw.
 
+// Bracket the goo's own surface draw: the cel look, the world's strip and the
+// wet glint on, then back to what the pass had.
+//
+// Called from zFXGooRenderAtomic, which is the only place that knows a draw is
+// goo. See the definition, which says why each of the three has to be asked for.
+void iToonGooDraw(S32 on);
+
 // Forget everything measured about a model's geometries, because the model is
 // being unloaded and the next one loaded will sit where it did.
 void iToonForgetModel(void* clump);

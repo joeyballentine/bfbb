@@ -350,6 +350,18 @@ const iConfigSetting kConfigSettings[] = {
       "How far the colour baked into a model darkens its own shading. It is\n"
       "; occlusion somebody drew, and no light rig recovers it.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
+    { "experimental", "toon_goo_wave", "0.35",
+      "How steep the goo's ripple is made to look, as a slope. 0 shades it by\n"
+      "; the real one, which the levels author at half a degree.",
+      ICONFIG_FLOAT, NULL, 0.0f, 2.0f, "toon" },
+    { "experimental", "toon_goo_gloss", "0.5",
+      "How brightly the goo catches a highlight under the cel look. It is one\n"
+      "; hard band and not a falloff, so it reads as a glint.",
+      ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
+    { "experimental", "toon_goo_gloss_edge", "0.92",
+      "How far round the goo's surface that highlight starts. Higher is a\n"
+      "; smaller, tighter glint.",
+      ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
     { "experimental", "toon_hardness", "0",
       "How square the shading breaks at a corner, against the welded normals\n"
       "; the outline needs. 0 keeps the weld.",

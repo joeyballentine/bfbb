@@ -346,6 +346,66 @@ namespace toonbackend
         (void)hardness;
     }
 
+    inline void setToonUnlit(S32 on)
+    {
+#ifdef RW_D3D9
+        if (iBackendIsD3D9())
+        {
+            rw::d3d::setToonUnlit(on);
+            return;
+        }
+#endif
+#ifdef RW_GL3
+        if (iBackendIsGL3())
+        {
+            rw::gl3::setToonUnlit(on);
+            return;
+        }
+#endif
+        (void)on;
+    }
+
+    inline void setToonRoomColor(F32 r, F32 g, F32 b)
+    {
+#ifdef RW_D3D9
+        if (iBackendIsD3D9())
+        {
+            rw::d3d::setToonRoomColor(r, g, b);
+            return;
+        }
+#endif
+#ifdef RW_GL3
+        if (iBackendIsGL3())
+        {
+            rw::gl3::setToonRoomColor(r, g, b);
+            return;
+        }
+#endif
+        (void)r;
+        (void)g;
+        (void)b;
+    }
+
+    inline void setToonGloss(F32 amount, F32 edge)
+    {
+#ifdef RW_D3D9
+        if (iBackendIsD3D9())
+        {
+            rw::d3d::setToonGloss(amount, edge);
+            return;
+        }
+#endif
+#ifdef RW_GL3
+        if (iBackendIsGL3())
+        {
+            rw::gl3::setToonGloss(amount, edge);
+            return;
+        }
+#endif
+        (void)amount;
+        (void)edge;
+    }
+
     inline void setToonRampRow(S32 row)
     {
 #ifdef RW_D3D9
@@ -3080,6 +3140,118 @@ void iToonRoomTintApply()
 void iToonRoomTintClear()
 {
     toonbackend::clearToonRoomTint();
+}
+
+// Where the goo's light comes from: over the viewer's shoulder, and well off
+// vertical.
+//
+// **A flat surface lit from above has no shading in it.** The cel term is the
+// facing against the light, and near the top of a cosine even a large lean
+// barely moves it: straight down, leaning the normal 19 degrees takes the term
+// from 1.00 to 0.945, which is one band and nothing to see. At 55 degrees off
+// vertical the same lean sweeps most of the strip.
+//
+// From behind the camera because that is where the show puts a highlight on
+// water: it sits between you and the light, so it follows you round the pool.
+// The same reason experimental.toon_light offers `camera` for a character.
+static const F32 kGooSlantSin = 0.819f;
+static const F32 kGooSlantCos = 0.574f;
+
+static void GooLightDir()
+{
+    RwCamera* cam = RwCameraGetCurrentCamera();
+    RwFrame* frame = cam != NULL ? (RwFrame*)cam->object.object.parent : NULL;
+
+    if (frame == NULL)
+    {
+        toonbackend::setToonLightDir(0.0f, -1.0f, 0.0f);
+        return;
+    }
+
+    // The camera's forward, flattened and unit: the light travels the way you
+    // are looking, and downward. No negation, as with a character -- `at`
+    // already points into the scene.
+    F32 x = frame->ltm.at.x;
+    F32 z = frame->ltm.at.z;
+    F32 len = xsqrt(x * x + z * z);
+
+    if (len > 1e-4f)
+    {
+        x /= len;
+        z /= len;
+    }
+    else
+    {
+        x = 0.0f;
+        z = 1.0f;
+    }
+
+    toonbackend::setToonLightDir(x * kGooSlantSin, -kGooSlantCos, z * kGooSlantSin);
+}
+
+// The goo's own draw, which asks for four things nothing else does.
+//
+// **It has no lights on it, and the renderer read that as art to leave alone.**
+// Measured in jf01: every goo atomic reaches the pipeline with no light bits,
+// so the cel look was never selected for one, whatever this file uploaded.
+// setToonUnlit is the draw saying it wants the look regardless -- and with no
+// lights nothing resolves a room colour either, so that is named here too, or
+// the surface comes out black.
+//
+// **The look is off when this runs, half the time.** iToonPause takes the cel
+// look off the whole see-through pass, because most of what draws there is a
+// card or a decal that only gets darker for bands. Some goo is bucketed there
+// and some is not -- four pools opaque and three see-through, in that one level.
+//
+// **The world's strip and not a character's.** The ground beside a goo pool is
+// drawn with the same one, and its bands are the ones written to cross a wall
+// without reading as a mistake. A model nobody registered is drawn with whatever
+// the last draw left set, which is the character strip: the hardest of the four,
+// written for skin.
+//
+// **And the glint**, which is most of what says a surface is wet. Nothing else
+// in a scene is liquid, so nothing else asks.
+void iToonGooDraw(S32 on)
+{
+    if (!on)
+    {
+        toonbackend::setToonGloss(0.0f, iScreenToonGooGlossEdge());
+        toonbackend::setToonUnlit(FALSE);
+        toonbackend::clearToonLightDir();
+        iToonSetRampRow(ITOON_RAMP_CHARACTER);
+        toonbackend::setToonShading(sPaused ? FALSE : iScreenToon(), iScreenToonBands(),
+                                    iScreenToonSaturation(), iScreenToonStrength());
+        return;
+    }
+
+    toonbackend::setToonUnlit(TRUE);
+
+    // The colour of the room, named and not resolved. setToonRoomColor and not
+    // setToonRoomTint: the tint also says the draw is a character, and this one
+    // wants none of what hangs off that.
+    if (sRoomTintValid)
+    {
+        toonbackend::setToonRoomColor(sRoomTint[0], sRoomTint[1], sRoomTint[2]);
+    }
+    else
+    {
+        toonbackend::setToonRoomColor(1.0f, 1.0f, 1.0f);
+    }
+
+    GooLightDir();
+    iToonSetRampRow(ITOON_RAMP_WORLD);
+
+    // No rim. A pool is flat, so its facing does not turn across it, and a rim
+    // meant to soften one pixel becomes a step that flips a whole region at
+    // once. That is what the tikis showed.
+    toonbackend::setToonLook(iScreenToonWrap(), 0.0f, 0.65f, iScreenToonOcclusion(),
+                             iScreenToonHardness());
+
+    // After the row, which uploads the shading itself when the pass is not
+    // paused and leaves it alone when it is.
+    toonbackend::setToonShading(iScreenToon(), iScreenToonBands(), iScreenToonSaturation(),
+                                iScreenToonStrength());
+    toonbackend::setToonGloss(iScreenToonGooGloss(), iScreenToonGooGlossEdge());
 }
 
 void iToonOutlineSplit(F32 y, S32 mode)

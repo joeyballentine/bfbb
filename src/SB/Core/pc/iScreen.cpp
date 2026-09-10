@@ -387,6 +387,9 @@ static F32 sToonOutlineMin;
 static F32 sToonOutlineMax;
 static S32 sToonFlatRim = 1;
 static S32 sToonFlatSmooth = 1;
+static F32 sToonGooWave = 0.35f;
+static F32 sToonGooGloss = 0.5f;
+static F32 sToonGooGlossEdge = 0.92f;
 static F32 sToonFlatStrength = 0.75f;
 static F32 sToonOutlineBias;
 static F32 sToonTextBrightness = 1.0f;
@@ -556,6 +559,36 @@ F32 iScreenToonOutlineMin()
 F32 iScreenToonOutlineMax()
 {
     return sToonOutlineMax;
+}
+
+F32 iScreenToonGooWave()
+{
+    return sToonGooWave;
+}
+
+void iScreenSetToonGooWave(F32 slope)
+{
+    sToonGooWave = slope;
+}
+
+F32 iScreenToonGooGloss()
+{
+    return sToonGooGloss;
+}
+
+void iScreenSetToonGooGloss(F32 amount)
+{
+    sToonGooGloss = amount;
+}
+
+F32 iScreenToonGooGlossEdge()
+{
+    return sToonGooGlossEdge;
+}
+
+void iScreenSetToonGooGlossEdge(F32 edge)
+{
+    sToonGooGlossEdge = edge;
 }
 
 F32 iScreenToonFlatStrength()

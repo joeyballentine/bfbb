@@ -19,6 +19,11 @@
 #include "zScene.h"
 #include "zTextBox.h"
 
+#ifdef PLATFORM_PC
+#include "iScreen.h"
+#include "iToon.h"
+#endif
+
 #include <stdio.h>
 #include <types.h>
 #include <string.h>
@@ -489,7 +494,37 @@ void zFXGooUpdateInstance(zFXGooInstance* goo, F32 dt)
     if (goo->alpha < 1.0f && goo->atomic != NULL)
     {
         RpGeometry* geom = RpAtomicGetGeometry(goo->atomic);
-        if (geom != NULL && RpGeometryLock(geom, 2))
+#ifdef PLATFORM_PC
+        // **The surface moves and its shading does not.**
+        //
+        // The warble writes a height and nothing else, so the goo is lit as the
+        // flat sheet the artists drew however far it has risen. One normal over
+        // the whole surface is one value of every term that reads a normal: one
+        // cel band, one rim, one glint. That is the difference between a slab of
+        // liquid and a painted floor.
+        //
+        // **And the wave is far too small to shade by.** The levels set their
+        // own: measured in jf01, an amplitude of 0.01 units against a frequency
+        // of 1, which is a slope of 0.01 and a tilt of half a degree. Building
+        // the true normal off that is correct and invisible.
+        //
+        // So the normal is built at a steepness the setting names. The authored
+        // numbers keep the wavelength and the phase, so the shading wave is the
+        // one the surface is really making, and only how far it leans is ours.
+        // The height, the silhouette and the collision are untouched.
+        //
+        // Two cosines of arguments already worked out for the height. The lean
+        // is scaled by the same (1 - alpha) the amplitudes are, so the shading
+        // flattens as the goo freezes.
+        F32 gooTilt = iScreenToonGooWave() * (1.0f - goo->alpha);
+        RwV3d* morphNorms = gooTilt > 0.0f && geom != NULL && geom->morphTarget != NULL ?
+                                geom->morphTarget->normals :
+                                NULL;
+        S32 gooLock = morphNorms != NULL ? 6 : 2;
+#else
+        S32 gooLock = 2;
+#endif
+        if (geom != NULL && RpGeometryLock(geom, gooLock))
         {
             F32 warb_time = goo->warb_time;
             xVec3* verts = goo->orig_verts;
@@ -499,12 +534,26 @@ void zFXGooUpdateInstance(zFXGooInstance* goo, F32 dt)
                 F32 a = xfmod(goo->warbc[1] * (verts->x + warb_time), 2 * PI);
                 F32 b = xfmod(goo->warbc[3] * (verts->z + warb_time), 2 * PI);
                 F32 c = isin(a);
+#ifdef PLATFORM_PC
+                F32 slopeX = gooTilt * icos(a);
+                F32 slopeZ = gooTilt * icos(b);
+#endif
 
                 a = goo->warbc[0] * c + verts->y;
 
                 F32 d = isin(b);
 
                 morphVerts->y = goo->warbc[2] * d + a;
+#ifdef PLATFORM_PC
+                if (morphNorms != NULL)
+                {
+                    F32 len = xsqrt(slopeX * slopeX + slopeZ * slopeZ + 1.0f);
+
+                    morphNorms[s].x = -slopeX / len;
+                    morphNorms[s].y = 1.0f / len;
+                    morphNorms[s].z = -slopeZ / len;
+                }
+#endif
             }
 
             RpGeometryUnlock(geom);
@@ -557,11 +606,21 @@ RpAtomic* zFXGooRenderAtomic(class RpAtomic* atomic)
         g_txtr_gooFrozen = (RwTexture*)xSTFindAsset(0x13401f, NULL);
     }
 
+#ifdef PLATFORM_PC
+    // The cel look, the world's strip and the wet glint, for this draw alone.
+    // iToonGooDraw says why each of the three has to be said out loud here.
+    iToonGooDraw(TRUE);
+#endif
+
     // The default atomic render must run unconditionally: this callback replaces
     // the goo entity's own render callback, so skipping it makes the goo surface
     // invisible. Retail's `bf 2, <+6>` jumps only past the xSTFindAsset block and
     // falls straight into `lwz 12 / mtctr / bctrl`.
     (*gAtomicRenderCallBack)(atomic);
+
+#ifdef PLATFORM_PC
+    iToonGooDraw(FALSE);
+#endif
 
     S32 i;
     zFXGooInstance* goo = zFXGooInstances;

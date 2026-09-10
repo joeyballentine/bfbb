@@ -531,6 +531,31 @@ void iScreenSetToonFlatRim(S32 on);
 F32 iScreenToonFlatStrength();
 void iScreenSetToonFlatStrength(F32 strength);
 
+// How steep the goo's ripple is made to look, as a slope: 0.35 is a lean of 19
+// degrees at the steepest part of the wave.
+//
+// **The real wave is far too small to shade by.** The levels author an amplitude
+// of 0.01 units against a frequency of 1, which is a slope of 0.01. Nothing that
+// reads a normal can show that. The wavelength and the phase stay the surface's
+// own, so the shading wave is the one the goo is really making, and only how far
+// it leans is a setting. 0 shades it by the true slope, which is flat.
+F32 iScreenToonGooWave();
+void iScreenSetToonGooWave(F32 slope);
+
+// How brightly the goo catches a highlight, and how far round its surface that
+// highlight starts.
+//
+// **A band and not a lobe.** A specular falloff is a gradient, and a gradient is
+// what the cel look removes, so the highlight is thresholded the way the ramp
+// thresholds the light term. What that draws is a glint with an edge on it, which
+// is most of what says a surface is wet rather than painted. The goo's own
+// warble supplies the moving normals it slides across.
+F32 iScreenToonGooGloss();
+void iScreenSetToonGooGloss(F32 amount);
+
+F32 iScreenToonGooGlossEdge();
+void iScreenSetToonGooGlossEdge(F32 edge);
+
 // How far past the hull the ink's depth is read from, in widths of the line.
 //
 // The hull is an inflated copy of the model, so wherever the model comes within
