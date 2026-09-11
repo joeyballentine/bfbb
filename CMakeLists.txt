@@ -923,11 +923,25 @@ add_library(bfbb_platform STATIC
 #
 # These three and nothing else: the throw and the catch are both inside them,
 # and so is every frame between.
+#
+# Which flag turns them on is the compiler's business. Clang targeting the MSVC
+# ABI needs both -fexceptions and -fcxx-exceptions. GCC has C++ exceptions on
+# already and wants only -fexceptions; -fcxx-exceptions it rejects outright
+# rather than ignoring, which fails the mingw and Linux builds. cl.exe takes
+# neither, and wants /EHsc.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  set(BFBB_EXCEPTIONS -fexceptions -fcxx-exceptions)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  set(BFBB_EXCEPTIONS -fexceptions)
+else()
+  set(BFBB_EXCEPTIONS /EHsc)
+endif()
+
 set_source_files_properties(
   ${PC_DIR}/iHipoly.cpp
   ${PC_DIR}/iHipolyFillet.cpp
   ${PC_DIR}/iHipolyTess.cpp
-  PROPERTIES COMPILE_OPTIONS "-fexceptions;-fcxx-exceptions")
+  PROPERTIES COMPILE_OPTIONS "${BFBB_EXCEPTIONS}")
 
 target_link_libraries(bfbb_platform PUBLIC bfbb_rw)
 
