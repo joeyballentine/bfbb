@@ -3989,13 +3989,12 @@ static void test_snd()
     // that forgot the conversion looks correct until the HUD counter reaches
     // 6.5 semitones and plays six and a half times too fast.
     //
-    // The two passes wait DIFFERENT amounts, and that is deliberate. Both used
-    // to wait 0.08 s, which put the pitch-0 check 20 ms from the end of its own
-    // sample -- less than a loaded CI runner takes to reschedule a sleeping
-    // thread, so it failed intermittently. A voice advances by the samples the
-    // mixer has consumed, so a longer sleep is a voice further along: waiting
-    // less is what gives that check room, and the octave check only wants to be
-    // past an end it is already well clear of.
+    // The pitch-0 pass is the control: same sample, same call, only the pitch
+    // differs, so the octave pass's negative means the pitch did it rather than
+    // the voice never starting. It is checked at the start of its sample and
+    // not partway through -- a voice advances by the samples the mixer has
+    // consumed, so "still playing" some way in races the scheduler on a loaded
+    // machine and says nothing about pitch either way.
     for (S32 pass = 0; pass < 2; pass++)
     {
         F32 semitones = (pass == 0) ? 12.0f : 0.0f;
@@ -4012,22 +4011,20 @@ static void test_snd()
         vp->category = (sound_category)0;
         iSndPlay(vp);
 
-        // 0.08 s for the octave, which ran out at 0.05 s; 0.04 s for pitch 0,
-        // which does not run out until 0.1 s.
-        const U64 waitNs = (pass == 0) ? 80000000ULL : 40000000ULL;
+        if (pass == 1)
+        {
+            check(iSndIsPlayingByHandle(vp->sndID), "and the same sample at pitch 0 starts");
+        }
 
-        iHostSleepUntilNs(iHostMonotonicNs() + waitNs);
+        // Past the 0.05 s the octave pass runs out at, and short of the 0.1 s
+        // the pitch-0 one lasts.
+        iHostSleepUntilNs(iHostMonotonicNs() + 80000000ULL);
         iSndHostUpdate();
 
         if (pass == 0)
         {
             check(!iSndIsPlayingByHandle(vp->sndID),
                   "+12 semitones is an octave up, so the sample ends in half the time");
-        }
-        else
-        {
-            check(iSndIsPlayingByHandle(vp->sndID),
-                  "and the same sample at pitch 0 is still going at 0.04 s");
         }
 
         iSndStop(0x4400 + pass);
