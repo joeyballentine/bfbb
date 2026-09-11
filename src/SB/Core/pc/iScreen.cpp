@@ -387,6 +387,7 @@ static F32 sToonOutlineMin;
 static F32 sToonOutlineMax;
 static S32 sToonFlatRim = 1;
 static S32 sToonRimBlend = ITOON_RIM_ROOM;
+static S32 sToonSkyBright = 1;
 static S32 sToonTikiRim;
 static S32 sToonFlatSmooth = 1;
 static F32 sToonGooWave = 0.35f;
@@ -621,6 +622,16 @@ S32 iScreenToonRimBlend()
 void iScreenSetToonRimBlend(S32 mode)
 {
     sToonRimBlend = mode;
+}
+
+S32 iScreenToonSkyBright()
+{
+    return sToonSkyBright;
+}
+
+void iScreenSetToonSkyBright(S32 on)
+{
+    sToonSkyBright = on ? 1 : 0;
 }
 
 S32 iScreenToonTikiRim()

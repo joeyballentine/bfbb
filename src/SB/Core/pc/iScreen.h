@@ -546,6 +546,23 @@ void iScreenSetToonFlatRim(S32 on);
 // panels welded at the corners: the facing turns across a whole face rather than
 // round an edge, so the light lands as a stripe on the front of it. The rest of
 // the panelled family reads correctly and keeps it.
+// Whether a skydome is drawn at full strength under the cel look.
+//
+// **A dome carries a vertex colour per corner**, which is a gradient across the
+// largest surface in the shot, and a gradient is the thing the bands exist to
+// remove. On paints those colours white, so what is left is the texture as
+// painted. Off is the dome the console drew, which is what a level wants if its
+// sky lives in those colours rather than in the texture.
+//
+// **Painted white and not switched off, which is not the same thing.** Clearing
+// the prelit flag makes the renderer take its constant vertex colour instead,
+// and that colour is black, so the dome goes out. Clearing the lit flag with it
+// changes nothing either way: zScene.cpp enables NO light kit before the sky
+// draws, on purpose, so the dome's own colours are the whole of its lighting and
+// removing them can only leave nothing.
+S32 iScreenToonSkyBright();
+void iScreenSetToonSkyBright(S32 on);
+
 S32 iScreenToonTikiRim();
 void iScreenSetToonTikiRim(S32 on);
 

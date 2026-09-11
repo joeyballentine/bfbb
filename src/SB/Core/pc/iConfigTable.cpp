@@ -319,6 +319,10 @@ const iConfigSetting kConfigSettings[] = {
       "How hard the cel shading bites on a prop built of flat panels. Its own,\n"
       "; because a panel holds one tone across a whole face.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
+    { "experimental", "toon_sky_bright", "on",
+      "Draw a skydome at full strength, dropping the gradient painted into its\n"
+      "; vertex colours. Off is the sky the console drew.",
+      ICONFIG_BOOL, NULL, kNone, kNone, "toon" },
     { "experimental", "toon_tiki_rim", "off",
       "Let a tiki take the rim light. Its welded corners turn the facing across\n"
       "; a whole face, so the light lands as a stripe rather than an edge.",
