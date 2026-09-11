@@ -2611,8 +2611,40 @@ S32 iEnvIsGroundDecal(void* atomic)
     return FALSE;
 }
 
+// This clump's atomics, dropped from the decal list.
+//
+// **Keyed by the pointer, and the list only ever grew.** A level's decals left
+// their atomics in it, the next level's models were allocated where those had
+// been, and a model at a recycled address then read as a decal. Two things
+// follow from that answer and both are silent: iModelRender forces the draw to
+// ITOON_OUTLINE_PLAINDRAW, which switches the ramp off and asks for no ink, and
+// xModelInstanceAlloc takes the model out of the never-lit class. Because it
+// turns on whether the allocator reuses one address, a tree came up with its
+// shipped look on one load of jf01 and the cel look on the next.
+static RpAtomic* ForgetDecalCB(RpAtomic* atomic, void* data)
+{
+    for (S32 i = 0; i < sDecalCount; i++)
+    {
+        if (sDecalAtomics[i] != atomic)
+        {
+            continue;
+        }
+
+        sDecalAtomics[i] = sDecalAtomics[sDecalCount - 1];
+        sDecalCount--;
+        break;
+    }
+
+    return atomic;
+}
+
 void iEnvForgetModel(RpClump* clump)
 {
+    if (clump != NULL && sDecalCount != 0)
+    {
+        RpClumpForAllAtomics(clump, ForgetDecalCB, NULL);
+    }
+
     for (S32 i = 0; i < sModelNormalCount; i++)
     {
         if (sModelNormals[i].clump != clump)
