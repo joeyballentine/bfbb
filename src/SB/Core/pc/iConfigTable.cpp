@@ -318,6 +318,10 @@ const iConfigSetting kConfigSettings[] = {
       "How hard the cel shading bites on a prop built of flat panels. Its own,\n"
       "; because a panel holds one tone across a whole face.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
+    { "experimental", "toon_tiki_rim", "off",
+      "Let a tiki take the rim light. Its welded corners turn the facing across\n"
+      "; a whole face, so the light lands as a stripe rather than an edge.",
+      ICONFIG_BOOL, NULL, kNone, kNone, "toon" },
     { "experimental", "toon_flat_smooth", "on",
       "Average the corners of a prop built of flat panels, so its shading and\n"
       "; its rim travel round it instead of stepping face to face.",
@@ -346,6 +350,10 @@ const iConfigSetting kConfigSettings[] = {
       "How brightly a character's silhouette catches the room's colour, which\n"
       "; is what keeps a dark character legible on a dark background.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
+    { "experimental", "toon_rim_blend", "room",
+      "How the silhouette light is put on: towards the room's colour, screened\n"
+      "; over the surface, or added.",
+      ICONFIG_ENUM, "room|screen|add", kNone, kNone, "toon" },
     { "experimental", "toon_occlusion", "0",
       "How far the colour baked into a model darkens its own shading. It is\n"
       "; occlusion somebody drew, and no light rig recovers it.",

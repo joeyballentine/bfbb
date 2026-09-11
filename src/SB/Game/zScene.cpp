@@ -3531,6 +3531,28 @@ static void zToonOutlineFor(const xEnt* ent)
     }
 
     iToonOutlineRegister(ent->model, mode);
+
+    // **No rim light on a tiki.** A rim traces a silhouette by watching the
+    // facing turn as the surface curves, and a tiki is a stack of flat panels
+    // welded at the corners: the facing turns across a whole face instead, so
+    // the light lands as a stripe lying on the front of it rather than as an
+    // edge. Every other prop built of panels takes the rim as it is; these five
+    // are the ones it reads wrong on.
+    if (ent->baseType == eBaseTypeNPC)
+    {
+        switch (((const xNPCBasic*)ent)->myNPCType)
+        {
+        case NPC_TYPE_TIKI_WOOD:
+        case NPC_TYPE_TIKI_LOVEY:
+        case NPC_TYPE_TIKI_QUIET:
+        case NPC_TYPE_TIKI_THUNDER:
+        case NPC_TYPE_TIKI_STONE:
+            iToonNoRimRegister(ent->model);
+            break;
+        default:
+            break;
+        }
+    }
 }
 #endif
 

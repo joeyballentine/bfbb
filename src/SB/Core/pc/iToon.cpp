@@ -406,6 +406,25 @@ namespace toonbackend
         (void)edge;
     }
 
+    inline void setToonRimBlend(S32 mode)
+    {
+#ifdef RW_D3D9
+        if (iBackendIsD3D9())
+        {
+            rw::d3d::setToonRimBlend(mode);
+            return;
+        }
+#endif
+#ifdef RW_GL3
+        if (iBackendIsGL3())
+        {
+            rw::gl3::setToonRimBlend(mode);
+            return;
+        }
+#endif
+        (void)mode;
+    }
+
     inline void setToonRampRow(S32 row)
     {
 #ifdef RW_D3D9
@@ -2577,6 +2596,9 @@ void iToonSetRoomLevel(F32 scale)
     toonbackend::setToonRoomScale(scale);
 }
 
+// Defined with the registry it reads, which is where the scene writes it.
+static S32 NoRimNamed(void* atomic);
+
 void iToonSetRampRow(S32 row)
 {
     if (row < 0 || row >= ITOON_RAMP_ROWS)
@@ -2612,10 +2634,15 @@ void iToonSetRampRow(S32 row)
                                     iScreenToonSaturation(), strength);
     }
 
-    F32 rim = (row == ITOON_RAMP_PROP && !iScreenToonFlatRim()) ? 0.0f : iScreenToonRim();
+    // The row quiets a panelled prop's rim; the scene can refuse one outright.
+    // iToonOutlineAtomic named this draw's atomic on the way in.
+    S32 noRim = NoRimNamed(sOutlineAtomic) ||
+                (row == ITOON_RAMP_PROP && !iScreenToonFlatRim());
+    F32 rim = noRim ? 0.0f : iScreenToonRim();
 
     toonbackend::setToonLook(iScreenToonWrap(), rim, 0.65f, iScreenToonOcclusion(),
                              iScreenToonHardness());
+    toonbackend::setToonRimBlend(iScreenToonRimBlend());
     toonbackend::setToonRampRow(row);
 }
 
@@ -3320,6 +3347,16 @@ enum
 static void* sOutlineKey[kOutlineSlots];
 static S32 sOutlineMode[kOutlineSlots];
 
+// And which of them are drawn with no rim light.
+//
+// **A fact about the model and not about its ramp row.** The row says a model is
+// built of flat panels, which the tikis are and so are a good many crates and
+// signs -- and the panels are exactly why a rim misbehaves on them, so the row
+// was the right gate for quieting it. It is the wrong gate for refusing it: the
+// tikis are the models the rim looks wrong on and the rest of the family is not.
+// The scene names them, the way it names a character.
+static S32 sOutlineNoRim[kOutlineSlots];
+
 static U32 OutlineSlot(void* atomic)
 {
     U32 h = (U32)(uintptr_t)atomic;
@@ -3334,6 +3371,7 @@ static U32 OutlineSlot(void* atomic)
 void iToonOutlineClear()
 {
     memset(sOutlineKey, 0, sizeof(sOutlineKey));
+    memset(sOutlineNoRim, 0, sizeof(sOutlineNoRim));
 }
 
 void iToonSuppress(S32 on)
@@ -3383,6 +3421,66 @@ void iToonOutlineRegister(xModelInstance* model, S32 mode)
             sOutlineMode[i] = mode;
         }
     }
+}
+
+// Drawn with no rim light, whatever its row would otherwise take.
+//
+// Registered beside the ink and cleared with it, so it is a statement about this
+// frame. It claims a slot of its own where the model has not been inked, because
+// a model can want the one without the other.
+void iToonNoRimRegister(xModelInstance* model)
+{
+    if (!iScreenToonTikiRim())
+    {
+        for (xModelInstance* m = model; m != NULL; m = m->Next)
+        {
+            void* key = m->Data;
+
+            if (key == NULL)
+            {
+                continue;
+            }
+
+            U32 i = OutlineSlot(key);
+            S32 tries = 0;
+
+            while (sOutlineKey[i] != NULL && sOutlineKey[i] != key && tries < kOutlineSlots)
+            {
+                i = (i + 1) & (kOutlineSlots - 1);
+                tries++;
+            }
+
+            if (tries < kOutlineSlots)
+            {
+                sOutlineKey[i] = key;
+                sOutlineNoRim[i] = TRUE;
+            }
+        }
+    }
+}
+
+static S32 NoRimNamed(void* atomic)
+{
+    if (atomic == NULL)
+    {
+        return FALSE;
+    }
+
+    U32 i = OutlineSlot(atomic);
+    S32 tries = 0;
+
+    while (sOutlineKey[i] != NULL && tries < kOutlineSlots)
+    {
+        if (sOutlineKey[i] == atomic)
+        {
+            return sOutlineNoRim[i];
+        }
+
+        i = (i + 1) & (kOutlineSlots - 1);
+        tries++;
+    }
+
+    return FALSE;
 }
 
 // What a model that nobody registered gets.

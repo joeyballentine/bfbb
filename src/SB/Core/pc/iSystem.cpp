@@ -262,6 +262,30 @@ static S32 iToonLightModeFromConfig()
     return ITOON_LIGHT_SCENE;
 }
 
+// experimental.toon_rim_blend, as a word: the three answers are three ways of
+// putting light on a surface and none of them is "on".
+static S32 iToonRimBlendFromConfig()
+{
+    const char* mode = iConfigGetString("experimental.toon_rim_blend", "room");
+
+    if (iHostStrCaseCmp(mode, "screen") == 0)
+    {
+        return ITOON_RIM_SCREEN;
+    }
+    if (iHostStrCaseCmp(mode, "add") == 0)
+    {
+        return ITOON_RIM_ADD;
+    }
+    if (iHostStrCaseCmp(mode, "room") != 0)
+    {
+        printf("bfbb: config: experimental.toon_rim_blend = %s is not room, screen or add; "
+               "using room\n",
+               mode);
+    }
+
+    return ITOON_RIM_ROOM;
+}
+
 static S32 RenderWareInit()
 {
     // Which backend draws, before the window rather than before the device.
@@ -625,6 +649,8 @@ static void ApplyConfig()
                        iConfigGetFloat("experimental.toon_outline_max", 4.0f));
     iScreenSetToonOutlineBias(iConfigGetFloat("experimental.toon_outline_bias", 0.0f));
     iScreenSetToonFlatRim(iConfigGetBool("experimental.toon_flat_rim", TRUE));
+    iScreenSetToonRimBlend(iToonRimBlendFromConfig());
+    iScreenSetToonTikiRim(iConfigGetBool("experimental.toon_tiki_rim", FALSE));
     iScreenSetToonFlatSmooth(iConfigGetBool("experimental.toon_flat_smooth", TRUE));
     iScreenSetToonFlatStrength(iConfigGetFloat("experimental.toon_flat_strength", 0.75f));
     iScreenSetToonGooWave(iConfigGetFloat("experimental.toon_goo_wave", 0.35f));

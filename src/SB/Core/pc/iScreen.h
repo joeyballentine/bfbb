@@ -402,6 +402,18 @@ F32 iScreenToonOutline();
 #define ITOON_LIGHT_FACE 1
 #define ITOON_LIGHT_CAMERA 2
 
+// How the rim light is put on. A rim is light and not paint, and the three
+// answers are three statements about that.
+//
+// ROOM replaces: at full amount the band IS the colour of the room, so whatever
+// the surface was doing stops at its edge. SCREEN keeps the surface, brightening
+// by what is left of the range rather than by a fixed amount, so a texture still
+// reads through the band; it cannot leave the range however bright either side
+// already is. ADD is the brightest of the three and the only one that clips.
+#define ITOON_RIM_ROOM 0
+#define ITOON_RIM_SCREEN 1
+#define ITOON_RIM_ADD 2
+
 S32 iScreenToonFaceLight();
 void iScreenSetToon(S32 on, F32 bands, F32 saturation, F32 outline, F32 strength, S32 faceLight);
 
@@ -520,8 +532,20 @@ void iScreenSetToonLook(F32 wrap, F32 rim, F32 occlusion, F32 hardness, F32 outl
 S32 iScreenToonFlatSmooth();
 void iScreenSetToonFlatSmooth(S32 on);
 
+// Which of ITOON_RIM_ROOM, SCREEN or ADD the silhouette light uses.
+S32 iScreenToonRimBlend();
+void iScreenSetToonRimBlend(S32 mode);
+
 S32 iScreenToonFlatRim();
 void iScreenSetToonFlatRim(S32 on);
+
+// Whether a tiki takes the rim light. Off, because a tiki is a stack of flat
+// panels welded at the corners: the facing turns across a whole face rather than
+// round an edge, so the light lands as a stripe on the front of it. The rest of
+// the panelled family reads correctly and keeps it.
+S32 iScreenToonTikiRim();
+void iScreenSetToonTikiRim(S32 on);
+
 
 // How far a prop built of flat panels is carried from flat towards the ramp.
 //

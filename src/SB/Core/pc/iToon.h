@@ -135,6 +135,10 @@ void iToonPause(S32 on);
 // goes through the model path but is not a surface; see ITOON_OUTLINE_PLAINDRAW.
 void iToonPlainRegister(xModelInstance* model);
 
+// Draw this model with no rim light, for this frame. Cleared with the ink
+// registry. experimental.toon_tiki_rim turns it back on.
+void iToonNoRimRegister(xModelInstance* model);
+
 // How bright the room this draw is in, as a scale on the colour the lights
 // resolve to. The world's draw sets it and clears it again; iScreen.h says why
 // the lights cannot answer it alone.
