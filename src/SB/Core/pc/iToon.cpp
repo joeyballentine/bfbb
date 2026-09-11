@@ -1404,7 +1404,17 @@ void iToonHullNormals(void* atomic)
     // A reference of ours on the old one, so a pointer somebody took before now
     // still reads. iHipoly.cpp keeps one for the same reason.
     ((rw::Geometry*)geo)->addRef();
-    RpAtomicSetGeometry(a, built, 0);
+
+    // **The atomic keeps its own bounding sphere, because it is not always its
+    // geometry's.** This mesh has the vertices of the one it replaces, so either
+    // sphere describes it -- but zAssetTypes.cpp hand-sets the radius on three
+    // models by asset id, 20, 1000 and 50 units about the origin, and that is
+    // the game's own fix for models their true sphere culls too early. Copying
+    // morph target 0's over the atomic's throws it away, and the model then
+    // vanishes with part of it still on screen. iHipoly.cpp keeps its own for
+    // the same reason. 1 is rpATOMICSAMEBOUNDINGSPHERE, which rpworld.h
+    // declares the call without naming.
+    RpAtomicSetGeometry(a, built, 1);
 }
 
 // Where the model's lower ink starts, from the bind pose.
@@ -2542,7 +2552,10 @@ void iToonSolidify(void* atomic)
 
     if (solid != NULL)
     {
-        RpAtomicSetGeometry(a, solid, 0);
+        // Its own sphere again, as with the hull's normals above: the same
+        // object, thicker by the width of a line, and a radius the game set by
+        // hand is a statement about the object and not about the mesh.
+        RpAtomicSetGeometry(a, solid, 1);
 
         // And smoothed, if the level's models are. This mesh was built after
         // iHipolyModel ran over the asset, so it has to ask for itself; the rim
