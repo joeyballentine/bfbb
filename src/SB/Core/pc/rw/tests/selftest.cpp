@@ -3401,6 +3401,71 @@ static RpMesh* stopAfterFirstMeshCB(RpMesh* mesh, RpMeshHeader* meshHeader, void
     return NULL;
 }
 
+// iModelRender writes an atomic's LTM straight from the game's own matrix
+// instead of moving the frame, so anything that recomputes that LTM afterwards
+// replaces the pose the game asked for with the one baked into the DFF. Two
+// atomics of one clump drawn in different passes show it plainly: bc04's scale
+// dome loses the hanging glass when a shadow ray transforms the beam's frame
+// between the opaque pass and the alpha pass.
+static void test_ltm_writeback()
+{
+    printf("writing an LTM against a dirty hierarchy\n");
+
+    RwFrame* root = RwFrameCreate();
+    RwFrame* glass = RwFrameCreate();
+    RwFrame* beam = RwFrameCreate();
+    check(root != NULL && glass != NULL && beam != NULL, "a clump root and two atomic frames");
+    if (root == NULL || glass == NULL || beam == NULL)
+    {
+        return;
+    }
+
+    // addChild prepends, so adding the glass first puts the beam ahead of it in
+    // the walk -- the order the dome's own frame list has, and the order that
+    // makes the beam's dirty bit reach the glass.
+    reinterpret_cast<rw::Frame*>(root)->addChild(reinterpret_cast<rw::Frame*>(glass));
+    reinterpret_cast<rw::Frame*>(root)->addChild(reinterpret_cast<rw::Frame*>(beam));
+
+    // The clump's authored pose: an offset on the root that the children
+    // inherit, and that a resync puts back.
+    RwV3d authored = { 2.0f, 3.0f, -2.0f };
+    RwFrameTranslate(root, &authored, rwCOMBINEREPLACE);
+    check(near(RwFrameGetLTM(glass)->pos.x, 2.0f), "a child inherits the root's offset");
+
+    // The matrix the game hands a draw, nowhere near the authored pose.
+    RwMatrix want;
+    want.right.x = 1.0f; want.right.y = 0.0f; want.right.z = 0.0f;
+    want.up.x = 0.0f;    want.up.y = 1.0f;    want.up.z = 0.0f;
+    want.at.x = 0.0f;    want.at.y = 0.0f;    want.at.z = 1.0f;
+    want.pos.x = 40.0f;  want.pos.y = 0.0f;   want.pos.z = 0.0f;
+    want.flags = 0;
+
+    glass->ltm = want;
+    check(near(RwFrameGetLTM(glass)->pos.x, 40.0f),
+          "a written LTM reads back while the clump is clean");
+
+    // xShadowSimple.cpp's shadowRayEntCB moves the first atomic's frame of
+    // every entity under the player's shadow, which marks the whole clump.
+    glass->ltm = want;
+    RwV3d elsewhere = { 7.0f, 0.0f, 0.0f };
+    RwFrameTranslate(beam, &elsewhere, rwCOMBINEREPLACE);
+    check(!near(RwFrameGetLTM(glass)->pos.x, 40.0f),
+          "moving a sibling frame throws that write away");
+
+    // So iModelRender reads before it writes. One read settles the hierarchy
+    // and clears the flag, and the write is then what the render pipeline gets.
+    RwFrameTranslate(beam, &elsewhere, rwCOMBINEREPLACE);
+    RwFrameGetLTM(glass);
+    glass->ltm = want;
+    check(near(RwFrameGetLTM(glass)->pos.x, 40.0f), "reading first makes the write stick");
+
+    reinterpret_cast<rw::Frame*>(beam)->removeChild();
+    reinterpret_cast<rw::Frame*>(glass)->removeChild();
+    RwFrameDestroy(beam);
+    RwFrameDestroy(glass);
+    RwFrameDestroy(root);
+}
+
 // The three functions the old regeneration command hid, and the reason they
 // are tested together is that they have nothing else in common: a `sed
 // 's/^_*//'` in front of a `^(Rw|Rp|Rt|Rx)` anchor dropped every RenderWare
@@ -3902,6 +3967,7 @@ int main(int argc, char** argv)
     test_intersections();
     test_slerp();
     test_object_frames();
+    test_ltm_writeback();
     test_underscored();
     test_hanim();
     test_userdata();

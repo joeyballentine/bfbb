@@ -599,6 +599,26 @@ void iModelRender(RpAtomic* model, RwMatrixTag* mat)
         hierarchy->pMatrixArray = mat + 1;
     }
     frame = (RwFrame*)model->object.object.parent;
+
+    // PORT: settle the clump's frame hierarchy before overwriting the LTM.
+    //
+    // The game keeps its own matrices in xModelInstance::Mat and hands one to
+    // every draw, so this writes the atomic's LTM directly rather than moving
+    // the frame. librw's render pipelines read that LTM back through
+    // Frame::getLTM, which recomputes the whole hierarchy from the frames'
+    // modelling matrices whenever the clump root carries HIERARCHYSYNCLTM --
+    // throwing away the line below and drawing the atomic at the pose baked
+    // into the DFF instead.
+    //
+    // Anything that moves one frame of a clump raises that flag on the root,
+    // and xShadowSimple.cpp's shadowRayEntCB does exactly that, to every entity
+    // the player's shadow ray passes over, between the opaque and alpha passes.
+    // A model whose atomics straddle the two passes then draws half in one pose
+    // and half in the other. Reading the LTM here clears the flag first, so the
+    // write below is what the pipeline gets. It costs one predictable branch
+    // when nothing is dirty, which is the common case.
+    RwFrameGetLTM(frame);
+
     frame->ltm = *mat;
     RwMatrixUpdate(&frame->ltm);
     if (iModelHack_DisablePrelight != 0)
