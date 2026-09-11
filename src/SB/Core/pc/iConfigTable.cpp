@@ -311,8 +311,9 @@ const iConfigSetting kConfigSettings[] = {
       "; stop being inked. 0 lets it vanish.",
       ICONFIG_FLOAT, NULL, 0.0f, 8.0f, "toon" },
     { "experimental", "toon_outline_max", "4",
-      "How thick that line may get, in pixels, so a character close to the\n"
-      "; camera is not inked in marker. 0 lets it swell.",
+      "How thick that line may get, so a character close to the camera is not\n"
+      "; inked in marker. In pixels of a 1440-line picture, so its weight holds at\n"
+      "; any resolution. 0 lets it swell.",
       ICONFIG_FLOAT, NULL, 0.0f, 16.0f, "toon" },
     { "experimental", "toon_flat_strength", "0.75",
       "How hard the cel shading bites on a prop built of flat panels. Its own,\n"

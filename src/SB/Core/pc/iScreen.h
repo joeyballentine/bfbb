@@ -511,6 +511,9 @@ F32 iScreenToonRim();
 F32 iScreenToonOcclusion();
 F32 iScreenToonHardness();
 F32 iScreenToonOutlineMin();
+// In pixels of a 1440-line picture, so the line holds its weight at any
+// resolution. See kInkRefHeight in iToon.cpp, and iScreenToonOutlineMin, which
+// is in real pixels and says why the two differ.
 F32 iScreenToonOutlineMax();
 void iScreenSetToonLook(F32 wrap, F32 rim, F32 occlusion, F32 hardness, F32 outlineMin,
                         F32 outlineMax);

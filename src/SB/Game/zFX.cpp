@@ -516,7 +516,9 @@ void zFXGooUpdateInstance(zFXGooInstance* goo, F32 dt)
         // Two cosines of arguments already worked out for the height. The lean
         // is scaled by the same (1 - alpha) the amplitudes are, so the shading
         // flattens as the goo freezes.
-        F32 gooTilt = iScreenToonGooWave() * (1.0f - goo->alpha);
+        // The look's, so it goes with the look: vanilla goo is lit by the
+        // normals the artists drew, flat sheet and all.
+        F32 gooTilt = iScreenToon() ? iScreenToonGooWave() * (1.0f - goo->alpha) : 0.0f;
         RwV3d* morphNorms = gooTilt > 0.0f && geom != NULL && geom->morphTarget != NULL ?
                                 geom->morphTarget->normals :
                                 NULL;

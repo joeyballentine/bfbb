@@ -730,6 +730,26 @@ static void WriteRampRow(U8* px, const ToonRampRow* row, S32 bands)
     }
 }
 
+// **Nothing below does anything while the look is off.**
+//
+// The setting used to reach the shading and the ink alone. Everything else still
+// ran: the scene named every character whatever the setting said, so iModelRender
+// entered the per-model path and rebuilt the geometry to carry the hull's
+// normals, welded it, split its scraps and measured its ink -- on a player who
+// had asked for none of it. A defect anywhere in that was a defect in the
+// default settings, and one of them was: the rebuild handed the atomic the new
+// mesh's bounding sphere, which dropped a radius zAssetTypes.cpp had set by hand,
+// and characters were culled with part of them still on screen.
+//
+// Default settings are meant to be the picture the console drew. So the gate is
+// here, once, in front of every entry point rather than at the callers -- there
+// are a dozen of those across the scene, the entities, the pickups, the glyphs,
+// the sky and the goo, and one of them forgetting is this bug again.
+static S32 ToonOff()
+{
+    return !iScreenToon();
+}
+
 void iToonInit(S32 bands)
 {
     if (sRamp != NULL)
@@ -866,11 +886,21 @@ static void* sOutlineAtomic;
 
 void iToonOutlineAtomic(void* atomic)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     sOutlineAtomic = atomic;
 }
 
 void iToonPause(S32 on)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     sPaused = on ? 1 : 0;
 
     toonbackend::setToonShading(sPaused ? FALSE : iScreenToon(), iScreenToonBands(),
@@ -884,6 +914,11 @@ void iToonPause(S32 on)
 
 void iToonSetOutline(S32 mode)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     // A named model keeps the ramp through the paused pass, and everything else
     // in it stays plain. Outside the pause the shading is already on and this
     // writes what is there.
@@ -1364,6 +1399,11 @@ void iToonTextColor(U8* r, U8* g, U8* b)
 
 void iToonHullNormals(void* atomic)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     RpAtomic* a = (RpAtomic*)atomic;
 
     if (a == NULL)
@@ -1962,6 +2002,11 @@ static RpAtomic* ForgetSlotCB(RpAtomic* atomic, void* data)
 
 void iToonForgetModel(void* clump)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     if (clump == NULL)
     {
         return;
@@ -1972,6 +2017,11 @@ void iToonForgetModel(void* clump)
 
 F32 iToonWeld(void* atomic)
 {
+    if (ToonOff())
+    {
+        return -1.0e30f;
+    }
+
     RpAtomic* a = (RpAtomic*)atomic;
 
     if (a == NULL)
@@ -2005,6 +2055,11 @@ F32 iToonWeld(void* atomic)
 
 S32 iToonInsideOut(void* atomic)
 {
+    if (ToonOff())
+    {
+        return FALSE;
+    }
+
     RpAtomic* a = (RpAtomic*)atomic;
 
     if (a == NULL)
@@ -2048,6 +2103,11 @@ static S32 sSeenCount;
 
 void iToonSeenFromInside(void* atomic)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     RpAtomic* a = (RpAtomic*)atomic;
     RpGeometry* geo = a != NULL ? RpAtomicGetGeometry(a) : NULL;
 
@@ -2512,6 +2572,11 @@ static RpGeometry* Solidified(RpGeometry* old)
 
 void iToonSolidify(void* atomic)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     RpAtomic* a = (RpAtomic*)atomic;
 
     if (a == NULL || !iScreenSolidFlatProps())
@@ -2567,6 +2632,11 @@ void iToonSolidify(void* atomic)
 
 void iToonOutlineOrient(void* atomic)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     if (atomic == NULL || !iToonInsideOut(atomic))
     {
         toonbackend::setOutlineInverted(FALSE);
@@ -2598,6 +2668,11 @@ void iToonOutlineOrient(void* atomic)
 // answer traced for the ground.
 void iToonSetModelShade(F32 amount)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     toonbackend::setToonModelShade(amount);
 }
 
@@ -2606,6 +2681,11 @@ void iToonSetModelShade(F32 amount)
 // which is what iToonSetRoomTint is for.
 void iToonSetRoomLevel(F32 scale)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     toonbackend::setToonRoomScale(scale);
 }
 
@@ -2614,6 +2694,11 @@ static S32 NoRimNamed(void* atomic);
 
 void iToonSetRampRow(S32 row)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     if (row < 0 || row >= ITOON_RAMP_ROWS)
     {
         row = ITOON_RAMP_CHARACTER;
@@ -2788,6 +2873,11 @@ static S32 RampRowOf(RpGeometry* geo, F32 flat)
 
 S32 iToonRampRowFor(void* atomic)
 {
+    if (ToonOff())
+    {
+        return ITOON_RAMP_CHARACTER;
+    }
+
     RpAtomic* a = (RpAtomic*)atomic;
 
     if (a == NULL)
@@ -2888,7 +2978,23 @@ static F32 ObjectScale(const RwMatrix* mat)
 // number of pixels an offset d covers at depth z is d*H / (2*window.y*z).
 // Turned round: the width that covers a given number of pixels is that many
 // times 2*window.y/H, times z. The shader has z as clip w.
-static F32 PixelsPerDepth(F32 pixels)
+// The picture the line's weight is measured against, in scanlines.
+//
+// **A cap in true pixels is not resolution independent, it only looks it.** Four
+// pixels of a 480-line picture and four of a 2160-line one are the same count
+// and a fifth of the weight, so the ink thins as the picture grows -- which is
+// the opposite of what a drawn line does. The cap is a statement about how the
+// line READS, so it is measured against a fixed picture and the real one is
+// nothing to do with it.
+//
+// 1440, because that is the picture these numbers were tuned on. It is the
+// reference and not a limit: at 2160 lines the same cap is six real pixels and
+// the same fraction of the frame.
+static const F32 kInkRefHeight = 1440.0f;
+
+// A number of pixels of a picture `height` lines tall, as world units per unit
+// of view depth.
+static F32 PixelsPerDepth(F32 pixels, F32 height)
 {
     if (pixels <= 0.0f)
     {
@@ -2897,14 +3003,13 @@ static F32 PixelsPerDepth(F32 pixels)
 
     RwCamera* cam = RwCameraGetCurrentCamera();
     const RwV2d* vw = cam != NULL ? RwCameraGetViewWindow(cam) : NULL;
-    F32 h = iScreenHeightF();
 
-    if (vw == NULL || h < 1.0f)
+    if (vw == NULL || height < 1.0f)
     {
         return 0.0f;
     }
 
-    return 2.0f * pixels * vw->y / h;
+    return 2.0f * pixels * vw->y / height;
 }
 
 // How thick the ink may get, in the same units.
@@ -2918,15 +3023,32 @@ static F32 PixelsPerDepth(F32 pixels)
 // Zero is no cap, which is the shipped behaviour of the branch this came from.
 void iToonOutlineMaxWidth(const RwMatrix* mat)
 {
-    toonbackend::setOutlineMaxWidth(PixelsPerDepth(iScreenToonOutlineMax()) / ObjectScale(mat));
+    if (ToonOff())
+    {
+        return;
+    }
+
+    toonbackend::setOutlineMaxWidth(PixelsPerDepth(iScreenToonOutlineMax(), kInkRefHeight) /
+                                    ObjectScale(mat));
 }
 
-// How thin it may get, the same way. A fixed world width falls below a pixel
-// somewhere down the level and the character stops being inked, which is the
-// one thing an animated drawing never does.
+// How thin it may get.
+//
+// **The floor is in REAL pixels, where the cap is not, and the difference is not
+// an oversight.** The cap answers how heavy the line looks, which is a fraction
+// of the picture. The floor answers whether the line survives the pixel grid at
+// all: a fixed world width falls under a pixel somewhere down the level and the
+// character stops being inked, and a pixel is a pixel however large the picture
+// is. So this one is measured on the picture being drawn.
 void iToonOutlineMinWidth(const RwMatrix* mat)
 {
-    toonbackend::setOutlineMinWidth(PixelsPerDepth(iScreenToonOutlineMin()) / ObjectScale(mat));
+    if (ToonOff())
+    {
+        return;
+    }
+
+    toonbackend::setOutlineMinWidth(PixelsPerDepth(iScreenToonOutlineMin(), iScreenHeightF()) /
+                                    ObjectScale(mat));
 }
 
 enum
@@ -3033,6 +3155,11 @@ static S32 ThinSlot(RpGeometry* geo)
 // object small enough for this to matter at all.
 void iToonOutlineThinCap(void* atomic, const RwMatrix* mat)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     RpAtomic* model = (RpAtomic*)atomic;
 
     if (model == NULL || mat == NULL)
@@ -3120,14 +3247,14 @@ void iToonOutlineThinCap(void* atomic, const RwMatrix* mat)
     // works out at a fraction of a pixel. The shader applies this ceiling last,
     // so it wins over the floor unless it is held here, and the floor is the
     // stronger claim: a line nobody can see is not a line.
-    F32 lowest = PixelsPerDepth(iScreenToonOutlineMin());
+    F32 lowest = PixelsPerDepth(iScreenToonOutlineMin(), iScreenHeightF());
 
     if (capped < lowest)
     {
         capped = lowest;
     }
 
-    F32 standing = PixelsPerDepth(iScreenToonOutlineMax());
+    F32 standing = PixelsPerDepth(iScreenToonOutlineMax(), kInkRefHeight);
 
     if (standing <= 0.0f || capped < standing)
     {
@@ -3143,6 +3270,11 @@ static S32 sRoomTintValid;
 
 void iToonSetRoomTint(const F32* rgb)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     if (rgb == NULL)
     {
         sRoomTintValid = FALSE;
@@ -3171,6 +3303,11 @@ void iToonSetRoomTint(const F32* rgb)
 
 void iToonRoomTintApply()
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     if (sRoomTintValid)
     {
         toonbackend::setToonRoomTint(sRoomTint[0], sRoomTint[1], sRoomTint[2]);
@@ -3179,6 +3316,11 @@ void iToonRoomTintApply()
 
 void iToonRoomTintClear()
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     toonbackend::clearToonRoomTint();
 }
 
@@ -3253,6 +3395,11 @@ static void GooLightDir()
 // in a scene is liquid, so nothing else asks.
 void iToonGooDraw(S32 on)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     if (!on)
     {
         toonbackend::setToonGloss(0.0f, iScreenToonGooGlossEdge());
@@ -3296,6 +3443,11 @@ void iToonGooDraw(S32 on)
 
 void iToonOutlineSplit(F32 y, S32 mode)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     // Below every vertex for a one-ink model, which is a split that never fires
     // rather than a second path through the shader.
     toonbackend::setOutlineSplit(mode == ITOON_OUTLINE_TWOTONE ? y : -1.0e30f);
@@ -3303,6 +3455,11 @@ void iToonOutlineSplit(F32 y, S32 mode)
 
 void iToonFaceLight(const RwMatrixTag* mat)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     S32 mode = iScreenToonFaceLight();
 
     if (mode == ITOON_LIGHT_FACE)
@@ -3343,6 +3500,11 @@ void iToonFaceLight(const RwMatrixTag* mat)
 
 void iToonFaceLightClear()
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     toonbackend::clearToonLightDir();
 }
 
@@ -3383,23 +3545,43 @@ static U32 OutlineSlot(void* atomic)
 
 void iToonOutlineClear()
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     memset(sOutlineKey, 0, sizeof(sOutlineKey));
     memset(sOutlineNoRim, 0, sizeof(sOutlineNoRim));
 }
 
 void iToonSuppress(S32 on)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     toonbackend::setToonShading(on ? FALSE : iScreenToon(), iScreenToonBands(),
                                 iScreenToonSaturation(), iScreenToonStrength());
 }
 
 void iToonPlainRegister(xModelInstance* model)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     iToonOutlineRegister(model, ITOON_OUTLINE_PLAINDRAW);
 }
 
 void iToonOutlineRegister(xModelInstance* model, S32 mode)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     // NONE is the absence of an answer and is not worth a slot -- the default
     // is what it falls through to. PLAINDRAW is an answer.
     if (mode == ITOON_OUTLINE_NONE)
@@ -3443,6 +3625,11 @@ void iToonOutlineRegister(xModelInstance* model, S32 mode)
 // a model can want the one without the other.
 void iToonNoRimRegister(xModelInstance* model)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     if (!iScreenToonTikiRim())
     {
         for (xModelInstance* m = model; m != NULL; m = m->Next)
@@ -3511,6 +3698,11 @@ static S32 sOutlineDefault = ITOON_OUTLINE_NONE;
 
 void iToonSetOutlineDefault(S32 mode)
 {
+    if (ToonOff())
+    {
+        return;
+    }
+
     sOutlineDefault = mode;
 }
 
@@ -3522,6 +3714,11 @@ void iToonSetOutlineDefault(S32 mode)
 // other picked the ink up from a setting.
 S32 iToonOutlineNamed(void* atomic)
 {
+    if (ToonOff())
+    {
+        return FALSE;
+    }
+
     if (atomic == NULL)
     {
         return FALSE;
@@ -3546,6 +3743,11 @@ S32 iToonOutlineNamed(void* atomic)
 
 S32 iToonOutlineFind(void* atomic)
 {
+    if (ToonOff())
+    {
+        return ITOON_OUTLINE_NONE;
+    }
+
     if (atomic == NULL)
     {
         return ITOON_OUTLINE_NONE;
