@@ -237,7 +237,7 @@ const iConfigSetting kConfigSettings[] = {
       "Spread between the lit and shaded sides of a level lit by bake. 1 is the\n"
       "; rig as fitted. Higher clips the lit end, and each level caps its own.",
       ICONFIG_FLOAT, NULL, 0.0f, 4.0f, "world_lighting" },
-    { "experimental", "world_model_shade", "0",
+    { "experimental", "world_model_shade", "0.8",
       "How much shade the level's placed models throw on the level. Traced over\n"
       "; the day at load. Needs toon on and world_light_shadows off.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "world_lighting" },
@@ -250,7 +250,7 @@ const iConfigSetting kConfigSettings[] = {
       "Seconds for the sun to go all the way round, or off. Needs world\n"
       "; lighting on and world_light_shadows off.",
       ICONFIG_FLOAT, "off", 5.0f, 3600.0f, "world_lighting" },
-    { "experimental", "solid_flat_props", "off",
+    { "experimental", "solid_flat_props", "on",
       "Give a prop modelled as a flat sheet real thickness, so an outline has\n"
       "; something to go round. Costs a few hundred triangles each.",
       ICONFIG_BOOL, NULL, kNone, kNone },
@@ -262,11 +262,11 @@ const iConfigSetting kConfigSettings[] = {
       "Draw the level itself with a line round it, the way the models are.\n"
       "; Needs toon on. The level is drawn twice, so it costs a frame.",
       ICONFIG_BOOL, NULL, kNone, kNone, "toon" },
-    { "experimental", "toon_all", "off",
+    { "experimental", "toon_all", "on",
       "Cel-shade and ink every model the game draws, not just the characters.\n"
       "; The level itself keeps its painted lighting either way.",
       ICONFIG_BOOL, NULL, kNone, kNone, "toon" },
-    { "experimental", "toon_strength", "0.35",
+    { "experimental", "toon_strength", "0.4",
       "How far the stylised shading is taken against the plain lighting. 0 is\n"
       "; the game as it was, 1 is hard bands with no falloff at all.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
@@ -286,7 +286,7 @@ const iConfigSetting kConfigSettings[] = {
       "Shades each colour on a character is rounded to, to put back the\n"
       "; flatness a magnified 2003 texture lost. 0 leaves them alone.",
       ICONFIG_FLOAT, NULL, 0.0f, 32.0f, "toon" },
-    { "experimental", "toon_outline", "0.02",
+    { "experimental", "toon_outline", "0.05",
       "Thickness of the black line round each character, in world units.\n"
       "; SpongeBob is about two units tall. 0 turns it off.",
       ICONFIG_FLOAT, NULL, 0.0f, 0.2f, "toon" },
