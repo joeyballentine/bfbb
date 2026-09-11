@@ -74,7 +74,7 @@ namespace
     {
         return a + (b - a) * t;
     }
-}
+} // namespace
 
 F32 iDayNightLength()
 {

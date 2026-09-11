@@ -70,9 +70,9 @@ static const U8 kDecalPrelight = 0;
 
 struct NormalHash
 {
-    U32* slots;  // vertex index + 1, 0 meaning empty
-    S32* head;   // first vertex of the group in that slot
-    S32* next;   // next vertex at the same position, -1 to end
+    U32* slots; // vertex index + 1, 0 meaning empty
+    S32* head; // first vertex of the group in that slot
+    S32* next; // next vertex at the same position, -1 to end
     S32 mask;
 };
 
@@ -189,7 +189,7 @@ struct NormalWork
     RpAtomic** atomics;
     S32 numAtomics;
     S32 totalVerts;
-    S32* base;  // where each atomic's vertices start
+    S32* base; // where each atomic's vertices start
     xVec3* pos; // world position, per vertex
     xVec3* acc; // summed face normals, per vertex
     xVec3* out; // the answer, world space and unnormalized, per vertex
@@ -249,17 +249,24 @@ static void NormalReadAt(xVec3* n, const NormalRead* r, S32 i)
     Normalize(n, &r->own[i]);
 }
 
-
 static void WorkFree(NormalWork* w)
 {
-    if (w->hash.slots) RwFree(w->hash.slots);
-    if (w->hash.head) RwFree(w->hash.head);
-    if (w->hash.next) RwFree(w->hash.next);
-    if (w->pos) RwFree(w->pos);
-    if (w->acc) RwFree(w->acc);
-    if (w->out) RwFree(w->out);
-    if (w->base) RwFree(w->base);
-    if (w->atomics) RwFree(w->atomics);
+    if (w->hash.slots)
+        RwFree(w->hash.slots);
+    if (w->hash.head)
+        RwFree(w->hash.head);
+    if (w->hash.next)
+        RwFree(w->hash.next);
+    if (w->pos)
+        RwFree(w->pos);
+    if (w->acc)
+        RwFree(w->acc);
+    if (w->out)
+        RwFree(w->out);
+    if (w->base)
+        RwFree(w->base);
+    if (w->atomics)
+        RwFree(w->atomics);
     memset(w, 0, sizeof(*w));
 }
 
@@ -541,7 +548,6 @@ static void ReadNormal(xVec3* out, const NormalWork* w, S32 v, const RwMatrix* l
     }
 }
 
-
 // Whether this geometry's prelight is ARTWORK rather than a record of light.
 //
 // Some of a level is painted, not lit. Lighting it fresh does not improve it,
@@ -666,7 +672,6 @@ static const S32 kFitSample = 12000;
 // systems are five unknowns at most, so this is cheap and well past converged.
 static const S32 kFitIters = 200;
 
-
 // Fibonacci sphere: the cheapest even spread that needs no tables.
 static void FitBasis(xVec3* b)
 {
@@ -697,10 +702,12 @@ static void FitSolveNN(const double* A, const double* rhs, S32 n, double* x)
             sum += A[i * n + j] < 0.0 ? -A[i * n + j] : A[i * n + j];
         }
 
-        if (sum > step) step = sum;
+        if (sum > step)
+            step = sum;
     }
 
-    for (S32 i = 0; i < n; i++) x[i] = 0.0;
+    for (S32 i = 0; i < n; i++)
+        x[i] = 0.0;
 
     if (step <= 0.0)
     {
@@ -713,7 +720,8 @@ static void FitSolveNN(const double* A, const double* rhs, S32 n, double* x)
         {
             double g = -rhs[i];
 
-            for (S32 j = 0; j < n; j++) g += A[i * n + j] * x[j];
+            for (S32 j = 0; j < n; j++)
+                g += A[i * n + j] * x[j];
 
             double v = x[i] - g / step;
 
@@ -739,15 +747,18 @@ static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
 
     FitBasis(basis);
 
-    for (S32 i = 0; i < nc * nc; i++) G[i] = 0.0;
-    for (S32 i = 0; i < nc * 3; i++) R[i] = 0.0;
+    for (S32 i = 0; i < nc * nc; i++)
+        G[i] = 0.0;
+    for (S32 i = 0; i < nc * 3; i++)
+        R[i] = 0.0;
 
     double cc[3] = { 0.0, 0.0, 0.0 };
     double csum[3] = { 0.0, 0.0, 0.0 };
     S32 used = 0;
     S32 stride = w->totalVerts / kFitSample;
 
-    if (stride < 1) stride = 1;
+    if (stride < 1)
+        stride = 1;
 
     double* row = (double*)RwMalloc(nc * sizeof(double));
 
@@ -792,10 +803,13 @@ static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
             // Upper triangle only; the search reads it symmetrically.
             for (S32 r = 0; r < nc; r++)
             {
-                if (row[r] == 0.0) continue;
+                if (row[r] == 0.0)
+                    continue;
 
-                for (S32 c = r; c < nc; c++) G[r * nc + c] += row[r] * row[c];
-                for (S32 c = 0; c < 3; c++) R[r * 3 + c] += row[r] * lum[c];
+                for (S32 c = r; c < nc; c++)
+                    G[r * nc + c] += row[r] * row[c];
+                for (S32 c = 0; c < 3; c++)
+                    R[r * 3 + c] += row[r] * lum[c];
             }
 
             for (S32 c = 0; c < 3; c++)
@@ -818,7 +832,8 @@ static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
     }
 
     for (S32 r = 0; r < nc; r++)
-        for (S32 c = r + 1; c < nc; c++) G[c * nc + r] = G[r * nc + c];
+        for (S32 c = r + 1; c < nc; c++)
+            G[c * nc + r] = G[r * nc + c];
 
     // Add lights one at a time, each the direction that leaves the least
     // residual once every amplitude is refitted around it.
@@ -827,8 +842,10 @@ static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
     S32 count = 0;
     double sol[iENV_BAKED_LIGHTS + 1][3];
 
-    for (S32 j = 0; j < kFitBasis; j++) taken[j] = 0;
-    for (S32 c = 0; c < 3; c++) sol[0][c] = 0.0;
+    for (S32 j = 0; j < kFitBasis; j++)
+        taken[j] = 0;
+    for (S32 c = 0; c < 3; c++)
+        sol[0][c] = 0.0;
 
     double have = cc[0] + cc[1] + cc[2];
 
@@ -837,7 +854,6 @@ static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
         S32 bestj = -1;
         double bestErr = 0.0;
         double bestSol[iENV_BAKED_LIGHTS + 1][3];
-
 
         for (S32 j = 0; j < kFitBasis; j++)
         {
@@ -850,7 +866,8 @@ static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
             S32 n = count + 2;
 
             cols[0] = 0;
-            for (S32 k = 0; k < count; k++) cols[1 + k] = 1 + chosen[k];
+            for (S32 k = 0; k < count; k++)
+                cols[1 + k] = 1 + chosen[k];
             cols[n - 1] = 1 + j;
 
             double A[(iENV_BAKED_LIGHTS + 2) * (iENV_BAKED_LIGHTS + 2)];
@@ -860,11 +877,13 @@ static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
             double trial[iENV_BAKED_LIGHTS + 1][3];
 
             for (S32 r = 0; r < n; r++)
-                for (S32 c = 0; c < n; c++) A[r * n + c] = G[cols[r] * nc + cols[c]];
+                for (S32 c = 0; c < n; c++)
+                    A[r * n + c] = G[cols[r] * nc + cols[c]];
 
             for (S32 ch = 0; ch < 3; ch++)
             {
-                for (S32 r = 0; r < n; r++) rhs[r] = R[cols[r] * 3 + ch];
+                for (S32 r = 0; r < n; r++)
+                    rhs[r] = R[cols[r] * 3 + ch];
 
                 FitSolveNN(A, rhs, n, x);
 
@@ -876,12 +895,14 @@ static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
                 {
                     e -= 2.0 * x[r] * rhs[r];
 
-                    for (S32 c = 0; c < n; c++) e += x[r] * A[r * n + c] * x[c];
+                    for (S32 c = 0; c < n; c++)
+                        e += x[r] * A[r * n + c] * x[c];
                 }
 
                 err += e;
 
-                for (S32 r = 0; r < n; r++) trial[r][ch] = x[r];
+                for (S32 r = 0; r < n; r++)
+                    trial[r][ch] = x[r];
             }
 
             if (bestj < 0 || err < bestErr)
@@ -890,9 +911,9 @@ static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
                 bestErr = err;
 
                 for (S32 r = 0; r < n; r++)
-                    for (S32 ch = 0; ch < 3; ch++) bestSol[r][ch] = trial[r][ch];
+                    for (S32 ch = 0; ch < 3; ch++)
+                        bestSol[r][ch] = trial[r][ch];
             }
-
         }
 
         // A round that buys less than a thousandth of what is left is noise,
@@ -904,7 +925,8 @@ static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
 
         double amp = 0.0;
 
-        for (S32 ch = 0; ch < 3; ch++) amp += bestSol[count + 1][ch];
+        for (S32 ch = 0; ch < 3; ch++)
+            amp += bestSol[count + 1][ch];
 
         if (amp <= 0.0)
         {
@@ -917,7 +939,8 @@ static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
         have = bestErr;
 
         for (S32 r = 0; r <= count; r++)
-            for (S32 ch = 0; ch < 3; ch++) sol[r][ch] = bestSol[r][ch];
+            for (S32 ch = 0; ch < 3; ch++)
+                sol[r][ch] = bestSol[r][ch];
     }
 
     if (count == 0)
@@ -1000,8 +1023,7 @@ static void RecoverBakedLight(NormalWork* w, iEnvBakedRig* rig)
     for (S32 i = 0; i < count; i++)
     {
         printf("bfbb:   light %d from %.3f %.3f %.3f, colour %.2f %.2f %.2f\n", (int)i,
-               -rig->dir[i].x, -rig->dir[i].y, -rig->dir[i].z,
-               rig->color[i][0], rig->color[i][1],
+               -rig->dir[i].x, -rig->dir[i].y, -rig->dir[i].z, rig->color[i][0], rig->color[i][1],
                rig->color[i][2]);
     }
 
@@ -1165,12 +1187,15 @@ void iEnvRigAtContrast(const iEnvBakedRig* rig, F32 contrast, F32 ambient[3],
         // brightness change stapled to them.
         F32 peak = color[k][0];
 
-        if (color[k][1] > peak) peak = color[k][1];
-        if (color[k][2] > peak) peak = color[k][2];
+        if (color[k][1] > peak)
+            peak = color[k][1];
+        if (color[k][2] > peak)
+            peak = color[k][2];
 
         if (peak > 1.0f)
         {
-            for (S32 i = 0; i < 3; i++) color[k][i] /= peak;
+            for (S32 i = 0; i < 3; i++)
+                color[k][i] /= peak;
         }
     }
 }
@@ -1325,12 +1350,18 @@ void iEnvOccluderAdd(RpAtomic* model, const RwMatrix* mat)
             }
             else
             {
-                if (out->v[c].x < lo.x) lo.x = out->v[c].x;
-                if (out->v[c].y < lo.y) lo.y = out->v[c].y;
-                if (out->v[c].z < lo.z) lo.z = out->v[c].z;
-                if (out->v[c].x > hi.x) hi.x = out->v[c].x;
-                if (out->v[c].y > hi.y) hi.y = out->v[c].y;
-                if (out->v[c].z > hi.z) hi.z = out->v[c].z;
+                if (out->v[c].x < lo.x)
+                    lo.x = out->v[c].x;
+                if (out->v[c].y < lo.y)
+                    lo.y = out->v[c].y;
+                if (out->v[c].z < lo.z)
+                    lo.z = out->v[c].z;
+                if (out->v[c].x > hi.x)
+                    hi.x = out->v[c].x;
+                if (out->v[c].y > hi.y)
+                    hi.y = out->v[c].y;
+                if (out->v[c].z > hi.z)
+                    hi.z = out->v[c].z;
             }
         }
 
@@ -1419,17 +1450,20 @@ struct SunGrid
     xVec3 v;
     F32 lo[2];
     F32 span[2];
-    S32* start;   // kSunGrid*kSunGrid + 1
+    S32* start; // kSunGrid*kSunGrid + 1
     S32* item;
-    S32* wide;    // triangles too big to bucket
+    S32* wide; // triangles too big to bucket
     S32 numWide;
 };
 
 static void SunGridFree(SunGrid* g)
 {
-    if (g->start) RwFree(g->start);
-    if (g->item) RwFree(g->item);
-    if (g->wide) RwFree(g->wide);
+    if (g->start)
+        RwFree(g->start);
+    if (g->item)
+        RwFree(g->item);
+    if (g->wide)
+        RwFree(g->wide);
     memset(g, 0, sizeof(*g));
 }
 
@@ -1445,8 +1479,10 @@ static void SunGridCell(const SunGrid* g, const xVec3* p, S32 out[2])
         F32 t = (a[k] - g->lo[k]) / g->span[k];
         S32 c = (S32)(t * (F32)kSunGrid);
 
-        if (c < 0) c = 0;
-        if (c >= kSunGrid) c = kSunGrid - 1;
+        if (c < 0)
+            c = 0;
+        if (c >= kSunGrid)
+            c = kSunGrid - 1;
 
         out[k] = c;
     }
@@ -1507,8 +1543,10 @@ static S32 SunGridBuild(SunGrid* g, const xVec3* toward)
 
             for (S32 k = 0; k < 2; k++)
             {
-                if (a[k] < lo[k]) lo[k] = a[k];
-                if (a[k] > hi[k]) hi[k] = a[k];
+                if (a[k] < lo[k])
+                    lo[k] = a[k];
+                if (a[k] > hi[k])
+                    hi[k] = a[k];
             }
         }
     }
@@ -1585,8 +1623,10 @@ static S32 SunGridBuild(SunGrid* g, const xVec3* toward)
 
                 for (S32 d = 0; d < 2; d++)
                 {
-                    if (c[d] < c0[d]) c0[d] = c[d];
-                    if (c[d] > c1[d]) c1[d] = c[d];
+                    if (c[d] < c0[d])
+                        c0[d] = c[d];
+                    if (c[d] > c1[d])
+                        c1[d] = c[d];
                 }
             }
 
@@ -1826,12 +1866,18 @@ void iEnvSunShadeBake(iEnv* env)
 
     for (S32 i = 1; i < w.totalVerts; i++)
     {
-        if (w.pos[i].x < lo.x) lo.x = w.pos[i].x;
-        if (w.pos[i].y < lo.y) lo.y = w.pos[i].y;
-        if (w.pos[i].z < lo.z) lo.z = w.pos[i].z;
-        if (w.pos[i].x > hi.x) hi.x = w.pos[i].x;
-        if (w.pos[i].y > hi.y) hi.y = w.pos[i].y;
-        if (w.pos[i].z > hi.z) hi.z = w.pos[i].z;
+        if (w.pos[i].x < lo.x)
+            lo.x = w.pos[i].x;
+        if (w.pos[i].y < lo.y)
+            lo.y = w.pos[i].y;
+        if (w.pos[i].z < lo.z)
+            lo.z = w.pos[i].z;
+        if (w.pos[i].x > hi.x)
+            hi.x = w.pos[i].x;
+        if (w.pos[i].y > hi.y)
+            hi.y = w.pos[i].y;
+        if (w.pos[i].z > hi.z)
+            hi.z = w.pos[i].z;
     }
 
     F32 dx = hi.x - lo.x;
@@ -1950,8 +1996,8 @@ static S32 Occluded(xClumpCollBSPTree* tree, const xVec3* from, const xVec3* tow
 
 void iEnvBakeShadowedLight(iEnv* env)
 {
-    if (env == NULL || env->jsp == NULL || env->jsp->clump == NULL ||
-        env->jsp->colltree == NULL || !env->baked.valid)
+    if (env == NULL || env->jsp == NULL || env->jsp->clump == NULL || env->jsp->colltree == NULL ||
+        !env->baked.valid)
     {
         return;
     }
@@ -1983,12 +2029,18 @@ void iEnvBakeShadowedLight(iEnv* env)
 
     for (S32 i = 1; i < w.totalVerts; i++)
     {
-        if (w.pos[i].x < lo.x) lo.x = w.pos[i].x;
-        if (w.pos[i].y < lo.y) lo.y = w.pos[i].y;
-        if (w.pos[i].z < lo.z) lo.z = w.pos[i].z;
-        if (w.pos[i].x > hi.x) hi.x = w.pos[i].x;
-        if (w.pos[i].y > hi.y) hi.y = w.pos[i].y;
-        if (w.pos[i].z > hi.z) hi.z = w.pos[i].z;
+        if (w.pos[i].x < lo.x)
+            lo.x = w.pos[i].x;
+        if (w.pos[i].y < lo.y)
+            lo.y = w.pos[i].y;
+        if (w.pos[i].z < lo.z)
+            lo.z = w.pos[i].z;
+        if (w.pos[i].x > hi.x)
+            hi.x = w.pos[i].x;
+        if (w.pos[i].y > hi.y)
+            hi.y = w.pos[i].y;
+        if (w.pos[i].z > hi.z)
+            hi.z = w.pos[i].z;
     }
 
     F32 dx = hi.x - lo.x;
@@ -2080,7 +2132,8 @@ void iEnvBakeShadowedLight(iEnv* env)
                     }
                 }
 
-                for (S32 c = 0; c < 3; c++) lit[c] += ndl * color[k][c];
+                for (S32 c = 0; c < 3; c++)
+                    lit[c] += ndl * color[k][c];
             }
 
             RwRGBA* out = &geo->preLitLum[i];
@@ -2104,9 +2157,8 @@ void iEnvBakeShadowedLight(iEnv* env)
 
     printf("bfbb: world shadows traced from light %d (%.0f degrees up) -- %d of %d vertices "
            "facing it are in its shadow, %d rays over %d pieces; %.1fs\n",
-           (int)sun, (double)(asinf(-env->baked.dir[sun].y) * 180.0f / 3.14159265f),
-           (int)shadowed, (int)traced, (int)rays, (int)done,
-           (double)(clock() - began) / CLOCKS_PER_SEC);
+           (int)sun, (double)(asinf(-env->baked.dir[sun].y) * 180.0f / 3.14159265f), (int)shadowed,
+           (int)traced, (int)rays, (int)done, (double)(clock() - began) / CLOCKS_PER_SEC);
 
     WorkFree(&w);
 }
@@ -2338,7 +2390,6 @@ static S32 KeepModelNormals(RpClump* clump, RwV3d* block)
     return TRUE;
 }
 
-
 void iEnvPrepareModel(RpClump* clump)
 {
     if (clump == NULL)
@@ -2469,8 +2520,8 @@ void iEnvPrepareModel(RpClump* clump)
 // rest of the 0x40 class looks the same from the inside: the fountain water and
 // the caustics are also flat, also face up, and must stay unlit.
 static const U32 kGroundDecals[] = {
-    0x2273B988,  // hb01 crater_sand, the 19 craters, one of them the rocket's
-    0xF151B4EF,  // hb01 crater_sand_LOD1, what LODT swaps it for past 200 units
+    0x2273B988, // hb01 crater_sand, the 19 craters, one of them the rocket's
+    0xF151B4EF, // hb01 crater_sand_LOD1, what LODT swaps it for past 200 units
 };
 
 static RpAtomic** sDecalAtomics;
@@ -2622,17 +2673,24 @@ void iEnvNormalsCompare(iEnv* env)
 
             F32 d = mine.x * shipped[i].x + mine.y * shipped[i].y + mine.z * shipped[i].z;
 
-            if (d > 1.0f) d = 1.0f;
-            if (d < -1.0f) d = -1.0f;
+            if (d > 1.0f)
+                d = 1.0f;
+            if (d < -1.0f)
+                d = -1.0f;
 
             total++;
             sumDot += d;
 
-            if (d < 0.0f) flipped++;
-            if (d > 0.99619f) within[0]++;  // 5 degrees
-            if (d > 0.98481f) within[1]++;  // 10 degrees
-            if (d > 0.86603f) within[2]++;  // 30 degrees
-            if (d > 0.5f) within[3]++;      // 60 degrees
+            if (d < 0.0f)
+                flipped++;
+            if (d > 0.99619f)
+                within[0]++; // 5 degrees
+            if (d > 0.98481f)
+                within[1]++; // 10 degrees
+            if (d > 0.86603f)
+                within[2]++; // 30 degrees
+            if (d > 0.5f)
+                within[3]++; // 60 degrees
         }
     }
 
@@ -2642,8 +2700,8 @@ void iEnvNormalsCompare(iEnv* env)
 
         printf("bfbb: world normals check -- %d verts, mean dot %.4f, within 5deg %.1f%%, "
                "10deg %.1f%%, 30deg %.1f%%, 60deg %.1f%%, backwards %.1f%%\n",
-               (int)total, sumDot / (F32)total, within[0] * pct, within[1] * pct,
-               within[2] * pct, within[3] * pct, flipped * pct);
+               (int)total, sumDot / (F32)total, within[0] * pct, within[1] * pct, within[2] * pct,
+               within[3] * pct, flipped * pct);
         fflush(stdout);
     }
 

@@ -3282,8 +3282,7 @@ static void zRigNeutralAmbient(iEnvBakedRig* rig)
         mean[c] = rig->ambient[c] + rig->dirMean[c];
     }
 
-    F32 lumA = 0.299f * rig->ambient[0] + 0.587f * rig->ambient[1] +
-               0.114f * rig->ambient[2];
+    F32 lumA = 0.299f * rig->ambient[0] + 0.587f * rig->ambient[1] + 0.114f * rig->ambient[2];
     F32 lumM = 0.299f * mean[0] + 0.587f * mean[1] + 0.114f * mean[2];
 
     if (lumM < 1e-4f || lumA >= lumM)
@@ -3525,9 +3524,8 @@ static void zToonOutlineFor(const xEnt* ent)
         // instead of tracing it -- see ITOON_OUTLINE_SHADEONLY. Every other
         // see-through character, the jellyfish included, is drawn solid
         // enough to paint over its own hull and keeps the line.
-        mode = ((const xNPCBasic*)ent)->myNPCType == NPC_TYPE_BUBBUDDY ?
-                   ITOON_OUTLINE_SHADEONLY :
-                   ITOON_OUTLINE_PLAIN;
+        mode = ((const xNPCBasic*)ent)->myNPCType == NPC_TYPE_BUBBUDDY ? ITOON_OUTLINE_SHADEONLY :
+                                                                         ITOON_OUTLINE_PLAIN;
     }
 
     iToonOutlineRegister(ent->model, mode);

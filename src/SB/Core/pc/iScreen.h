@@ -549,7 +549,6 @@ void iScreenSetToonFlatRim(S32 on);
 S32 iScreenToonTikiRim();
 void iScreenSetToonTikiRim(S32 on);
 
-
 // How far a prop built of flat panels is carried from flat towards the ramp.
 //
 // Its own, because what the strength buys depends on how much of the ramp a

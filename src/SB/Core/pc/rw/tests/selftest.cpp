@@ -3434,10 +3434,18 @@ static void test_ltm_writeback()
 
     // The matrix the game hands a draw, nowhere near the authored pose.
     RwMatrix want;
-    want.right.x = 1.0f; want.right.y = 0.0f; want.right.z = 0.0f;
-    want.up.x = 0.0f;    want.up.y = 1.0f;    want.up.z = 0.0f;
-    want.at.x = 0.0f;    want.at.y = 0.0f;    want.at.z = 1.0f;
-    want.pos.x = 40.0f;  want.pos.y = 0.0f;   want.pos.z = 0.0f;
+    want.right.x = 1.0f;
+    want.right.y = 0.0f;
+    want.right.z = 0.0f;
+    want.up.x = 0.0f;
+    want.up.y = 1.0f;
+    want.up.z = 0.0f;
+    want.at.x = 0.0f;
+    want.at.y = 0.0f;
+    want.at.z = 1.0f;
+    want.pos.x = 40.0f;
+    want.pos.y = 0.0f;
+    want.pos.z = 0.0f;
     want.flags = 0;
 
     glass->ltm = want;

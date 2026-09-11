@@ -522,7 +522,7 @@ namespace toonbackend
 #endif
         (void)w;
     }
-}
+} // namespace toonbackend
 
 #if defined(RW_D3D9) || defined(RW_GL3)
 #define TOON_HAVE_BACKEND 1
@@ -649,8 +649,10 @@ static U8 ToByte(F32 v)
 {
     S32 i = (S32)(v * 255.0f + 0.5f);
 
-    if (i < 0) i = 0;
-    if (i > 255) i = 255;
+    if (i < 0)
+        i = 0;
+    if (i > 255)
+        i = 255;
 
     return (U8)i;
 }
@@ -666,8 +668,10 @@ static void WriteRampRow(U8* px, const ToonRampRow* row, S32 bands)
 {
     bands += row->bandBias;
 
-    if (bands < 2) bands = 2;
-    if (bands > 8) bands = 8;
+    if (bands < 2)
+        bands = 2;
+    if (bands > 8)
+        bands = 8;
 
     for (S32 x = 0; x < kRampWidth; x++)
     {
@@ -698,13 +702,15 @@ static void WriteRampRow(U8* px, const ToonRampRow* row, S32 bands)
 
             if (x > 0.0f)
             {
-                if (x > 1.0f) x = 1.0f;
+                if (x > 1.0f)
+                    x = 1.0f;
 
                 step += x * x * (3.0f - 2.0f * x);
             }
         }
 
-        if (step > bands - 1) step = (F32)(bands - 1);
+        if (step > bands - 1)
+            step = (F32)(bands - 1);
 
         F32 f = step / (F32)(bands - 1);
 
@@ -839,8 +845,8 @@ void iToonInit(S32 bands)
 
     toonbackend::setToonRamp(reinterpret_cast<rw::Texture*>(sRamp));
 
-    printf("bfbb: cel ramp %d rows, %d bands, terminator at %.0f%%\n",
-           (int)ITOON_RAMP_ROWS, (int)bands, kRampRows[0].terminator * 100.0f);
+    printf("bfbb: cel ramp %d rows, %d bands, terminator at %.0f%%\n", (int)ITOON_RAMP_ROWS,
+           (int)bands, kRampRows[0].terminator * 100.0f);
     fflush(stdout);
 }
 
@@ -957,7 +963,6 @@ void iToonSetOutline(S32 mode)
 
     toonbackend::setOutlineMode(mode);
 }
-
 
 // Welding, so the hull does not split at a hard corner.
 //
@@ -1335,8 +1340,8 @@ static S32 ModelHasReflection(RpAtomic* atomic)
 static void WeldInPlace(RpGeometry* geo)
 {
     // A prop can reach here without any, now that panelled ones are welded too.
-    if (geo->numVertices <= 0 || geo->morphTarget == NULL ||
-        geo->morphTarget[0].verts == NULL || geo->morphTarget[0].normals == NULL)
+    if (geo->numVertices <= 0 || geo->morphTarget == NULL || geo->morphTarget[0].verts == NULL ||
+        geo->morphTarget[0].normals == NULL)
     {
         return;
     }
@@ -1482,8 +1487,10 @@ static void SplitRange(RpGeometry* geo, F32* range)
 
     for (S32 i = 0; i < geo->numVertices; i++)
     {
-        if (v[i].y < range[0]) range[0] = v[i].y;
-        if (v[i].y > range[1]) range[1] = v[i].y;
+        if (v[i].y < range[0])
+            range[0] = v[i].y;
+        if (v[i].y > range[1])
+            range[1] = v[i].y;
     }
 }
 
@@ -2725,17 +2732,15 @@ void iToonSetRampRow(S32 row)
     // the texture. The row is what says which models those are.
     if (!sPaused)
     {
-        F32 strength = (row == ITOON_RAMP_PROP) ? iScreenToonFlatStrength()
-                                                : iScreenToonStrength();
+        F32 strength = (row == ITOON_RAMP_PROP) ? iScreenToonFlatStrength() : iScreenToonStrength();
 
-        toonbackend::setToonShading(iScreenToon(), iScreenToonBands(),
-                                    iScreenToonSaturation(), strength);
+        toonbackend::setToonShading(iScreenToon(), iScreenToonBands(), iScreenToonSaturation(),
+                                    strength);
     }
 
     // The row quiets a panelled prop's rim; the scene can refuse one outright.
     // iToonOutlineAtomic named this draw's atomic on the way in.
-    S32 noRim = NoRimNamed(sOutlineAtomic) ||
-                (row == ITOON_RAMP_PROP && !iScreenToonFlatRim());
+    S32 noRim = NoRimNamed(sOutlineAtomic) || (row == ITOON_RAMP_PROP && !iScreenToonFlatRim());
     F32 rim = noRim ? 0.0f : iScreenToonRim();
 
     toonbackend::setToonLook(iScreenToonWrap(), rim, 0.65f, iScreenToonOcclusion(),
@@ -2770,8 +2775,7 @@ static const F32 kPanelShare = 0.125f;
 
 static S32 IsPanelled(RpGeometry* geo)
 {
-    if (geo->morphTarget == NULL || geo->morphTarget[0].verts == NULL ||
-        geo->numTriangles <= 0)
+    if (geo->morphTarget == NULL || geo->morphTarget[0].verts == NULL || geo->numTriangles <= 0)
     {
         return FALSE;
     }
@@ -3286,8 +3290,10 @@ void iToonSetRoomTint(const F32* rgb)
     // dimmed to nothing on top of the shading the ramp already gives him.
     F32 m = rgb[0];
 
-    if (rgb[1] > m) m = rgb[1];
-    if (rgb[2] > m) m = rgb[2];
+    if (rgb[1] > m)
+        m = rgb[1];
+    if (rgb[2] > m)
+        m = rgb[2];
 
     if (m < 1e-4f)
     {

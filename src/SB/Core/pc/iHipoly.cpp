@@ -1171,8 +1171,7 @@ private:
     iHipolyBuilt& operator=(const iHipolyBuilt&);
 };
 
-static void* hipolyWorldBody(RpClump* rpclump, const void* coll, U32 collSize,
-                             U32* outSize)
+static void* hipolyWorldBody(RpClump* rpclump, const void* coll, U32 collSize, U32* outSize)
 {
     const Settings& cfg = settings();
     rw::Clump* clump = reinterpret_cast<rw::Clump*>(rpclump);
@@ -1624,52 +1623,52 @@ static void refineAtomics(rw::Atomic** atoms, U32 n)
     // ask again more coarsely.
     try
     {
-    for (S32 pass = 0; pass < cfg.passes; pass++)
-    {
-        const iHipolyGeom* in = geoms;
-        if (pass > 0)
+        for (S32 pass = 0; pass < cfg.passes; pass++)
         {
-            resultGeoms(res, n, passIn);
-            in = passIn;
+            const iHipolyGeom* in = geoms;
+            if (pass > 0)
+            {
+                resultGeoms(res, n, passIn);
+                in = passIn;
+            }
+            pr.target = passTarget(cfg.modelTarget, cfg.passes, pass);
+            pr.minBulge = kModelMinBulge / pow(4.0, (F64)pass);
+            next = new iHipolyResult[n];
+            iHipolyRefine(in, n, pr, next, &stats);
+            if (pass > 0)
+            {
+                for (U32 k = 0; k < n; k++)
+                {
+                    composeParents(res[k], next[k]);
+                }
+                delete[] res;
+            }
+            res = next;
+            next = NULL;
         }
-        pr.target = passTarget(cfg.modelTarget, cfg.passes, pass);
-        pr.minBulge = kModelMinBulge / pow(4.0, (F64)pass);
-        next = new iHipolyResult[n];
-        iHipolyRefine(in, n, pr, next, &stats);
-        if (pass > 0)
+
+        bool changed = false;
+        for (U32 k = 0; k < n; k++)
+        {
+            if (res[k].nt != geoms[k].nt)
+            {
+                changed = true;
+            }
+        }
+        if (changed)
         {
             for (U32 k = 0; k < n; k++)
             {
-                composeParents(res[k], next[k]);
-            }
-            delete[] res;
-        }
-        res = next;
-        next = NULL;
-    }
-
-    bool changed = false;
-    for (U32 k = 0; k < n; k++)
-    {
-        if (res[k].nt != geoms[k].nt)
-        {
-            changed = true;
-        }
-    }
-    if (changed)
-    {
-        for (U32 k = 0; k < n; k++)
-        {
-            rw::Geometry* geo = makeGeometry(atoms[k]->geometry, res[k]);
-            if (geo)
-            {
-                // iModelStreamRead has already given every atomic of the model
-                // one bounding sphere, with room to spare; keep it.
-                replaceGeometry(atoms[k], geo, rw::Atomic::SAMEBOUNDINGSPHERE);
+                rw::Geometry* geo = makeGeometry(atoms[k]->geometry, res[k]);
+                if (geo)
+                {
+                    // iModelStreamRead has already given every atomic of the model
+                    // one bounding sphere, with room to spare; keep it.
+                    replaceGeometry(atoms[k], geo, rw::Atomic::SAMEBOUNDINGSPHERE);
+                }
             }
         }
-    }
-    delete[] res;
+        delete[] res;
     }
     catch (const iHipolyOutOfMemory&)
     {

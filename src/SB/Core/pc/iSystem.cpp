@@ -609,8 +609,8 @@ static S32 WorldLightingFromConfig()
         return IWORLDLIGHT_BAKE;
     }
 
-    return iConfigGetBool("experimental.world_lighting", FALSE) ? IWORLDLIGHT_AUTO
-                                                                 : IWORLDLIGHT_OFF;
+    return iConfigGetBool("experimental.world_lighting", FALSE) ? IWORLDLIGHT_AUTO :
+                                                                  IWORLDLIGHT_OFF;
 }
 
 static void ApplyConfig()
@@ -941,8 +941,8 @@ static void ApplyConfig()
     if (iScreenWorldLighting() != IWORLDLIGHT_OFF)
     {
         printf("bfbb: world lit at run time from %s, contrast %.2f\n",
-               iScreenWorldLighting() == IWORLDLIGHT_BAKE ? "the paint"
-                                                          : "the level's kit where it has one",
+               iScreenWorldLighting() == IWORLDLIGHT_BAKE ? "the paint" :
+                                                            "the level's kit where it has one",
                (double)iScreenWorldLightContrast());
     }
     if (fancyLoad)
