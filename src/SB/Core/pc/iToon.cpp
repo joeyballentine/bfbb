@@ -1100,6 +1100,13 @@ static int CompareU64(const void* a, const void* b)
     return x < y ? -1 : (x > y ? 1 : 0);
 }
 
+// Which geometries are meant to face inward, declared here because the two
+// things that have to keep that mark in step with a rebuilt mesh both sit above
+// the table itself.
+static S32 MeantToBeInward(RpGeometry* geo);
+static void MarkSeenFromInside(RpGeometry* geo);
+static void ForgetSeenFromInside(RpGeometry* geo);
+
 // **Written somewhere of its own, because the surface still needs its own
 // normals.** This used to overwrite them, and everything that reads a normal
 // afterwards was reading the hull's: the cel bands lost the corners the drawing
@@ -1448,6 +1455,16 @@ void iToonHullNormals(void* atomic)
 
     // A reference of ours on the old one, so a pointer somebody took before now
     // still reads. iHipoly.cpp keeps one for the same reason.
+    // **The mark travels with the mesh.** xSkyDome_AddEntity says a dome faces
+    // inward, and it says it about the geometry the dome had at the time. This
+    // hands the atomic a different one, so the mark was left behind on a mesh
+    // nothing draws any more -- and a dome whose mark is lost measures as wound
+    // inside out, which turns its hull round and draws it over the sky.
+    if (MeantToBeInward(geo))
+    {
+        MarkSeenFromInside(built);
+    }
+
     ((rw::Geometry*)geo)->addRef();
 
     // **The atomic keeps its own bounding sphere, because it is not always its
@@ -1990,6 +2007,8 @@ static RpAtomic* ForgetSlotCB(RpAtomic* atomic, void* data)
         return atomic;
     }
 
+    ForgetSeenFromInside(geo);
+
     U32 i = PointerSlot(geo, kWeldSlots);
 
     for (S32 tries = 0; sWelded[i] != NULL && tries < kWeldSlots; tries++)
@@ -2108,16 +2127,8 @@ enum
 static RpGeometry* sSeenFromInside[kInsideSlots];
 static S32 sSeenCount;
 
-void iToonSeenFromInside(void* atomic)
+static void MarkSeenFromInside(RpGeometry* geo)
 {
-    if (ToonOff())
-    {
-        return;
-    }
-
-    RpAtomic* a = (RpAtomic*)atomic;
-    RpGeometry* geo = a != NULL ? RpAtomicGetGeometry(a) : NULL;
-
     if (geo == NULL)
     {
         return;
@@ -2135,6 +2146,38 @@ void iToonSeenFromInside(void* atomic)
     {
         sSeenFromInside[sSeenCount++] = geo;
     }
+}
+
+// **Given up with the model, because the table is keyed by the pointer.**
+// Sixteen slots that only ever filled: a level's domes left theirs behind, the
+// next level's meshes were allocated where they had been, and a mesh at a
+// recycled address read as a dome -- its hull turned round for no reason its own
+// geometry could explain. Sixteen loads in, nothing could be marked at all.
+static void ForgetSeenFromInside(RpGeometry* geo)
+{
+    for (S32 i = 0; i < sSeenCount; i++)
+    {
+        if (sSeenFromInside[i] != geo)
+        {
+            continue;
+        }
+
+        sSeenFromInside[i] = sSeenFromInside[sSeenCount - 1];
+        sSeenCount--;
+        return;
+    }
+}
+
+void iToonSeenFromInside(void* atomic)
+{
+    if (ToonOff())
+    {
+        return;
+    }
+
+    RpAtomic* a = (RpAtomic*)atomic;
+
+    MarkSeenFromInside(a != NULL ? RpAtomicGetGeometry(a) : NULL);
 }
 
 static S32 MeantToBeInward(RpGeometry* geo)
@@ -3411,6 +3454,14 @@ void iToonGooDraw(S32 on)
         toonbackend::setToonGloss(0.0f, iScreenToonGooGlossEdge());
         toonbackend::setToonUnlit(FALSE);
         toonbackend::clearToonLightDir();
+
+        // **And the room goes back to being worked out rather than named.**
+        // Naming one sets a flag that stops the lights resolving it, and the
+        // goo names its own because it is drawn with no lights to resolve from.
+        // Left standing, every draw after it in the frame was lit the colour of
+        // the goo -- which is what turned the dream skies. A draw nobody has
+        // spoken for wants the answer from its own lights.
+        iToonRoomTintClear();
         iToonSetRampRow(ITOON_RAMP_CHARACTER);
         toonbackend::setToonShading(sPaused ? FALSE : iScreenToon(), iScreenToonBands(),
                                     iScreenToonSaturation(), iScreenToonStrength());
