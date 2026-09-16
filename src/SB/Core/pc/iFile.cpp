@@ -356,6 +356,113 @@ const char* iFileMissingAssetPath()
     return NULL;
 }
 
+// Which console's packer wrote the assets, out of boot.HIP's own header.
+//
+// The port reads the Xbox release. A GameCube or PS2 set does not announce
+// itself -- it loads, and then fails somewhere far from the cause, because the
+// packer's container is the same on every platform and only what is inside it
+// differs. A GameCube boot.HIP gets as far as the animation tables before
+// zAssetTypes.cpp's `(xAnimAssetTable*)indata` reads a big-endian count of 74
+// as 1,241,513,984 and walks off the end of memory. That crash says nothing
+// about what is actually wrong.
+//
+// HIPA holds PACK, PACK holds PLAT, and PLAT is a run of NUL-terminated
+// strings: a two-letter id, then the long name, then the video standard, the
+// region and the project. Chunk sizes are big-endian on every platform -- the
+// container is the packer's, not the console's -- so this reads the same way
+// whatever wrote it. Every chunk here is at a known small offset, so a few
+// hundred bytes off the front of the file is enough.
+const char* iFileAssetPlatform(const char** longName)
+{
+    static char sId[8];
+    static char sName[32];
+
+    if (longName != NULL)
+    {
+        *longName = NULL;
+    }
+
+    char path[512];
+    snprintf(path, sizeof(path), "%sboot.HIP", sBasePath);
+    if (!iResolveCaseInsensitive(path, sizeof(path)))
+    {
+        return NULL;
+    }
+
+    FILE* fp = fopen(path, "rb");
+    if (fp == NULL)
+    {
+        return NULL;
+    }
+
+    U8 head[512];
+    size_t got = fread(head, 1, sizeof(head), fp);
+    fclose(fp);
+
+    if (got < 16 || memcmp(head, "HIPA", 4) != 0)
+    {
+        return NULL;
+    }
+
+    // HIPA's own payload is the rest of the file, so step into it and walk the
+    // top-level chunks; PACK's children are walked the same way.
+    size_t o = 8;
+    size_t end = got;
+
+    for (int depth = 0; depth < 2; depth++)
+    {
+        bool descended = false;
+
+        while (o + 8 <= end)
+        {
+            const U8* c = head + o;
+            U32 size = ((U32)c[4] << 24) | ((U32)c[5] << 16) | ((U32)c[6] << 8) | c[7];
+            size_t body = o + 8;
+
+            if (memcmp(c, "PACK", 4) == 0)
+            {
+                o = body;
+                end = (body + size < got) ? body + size : got;
+                descended = true;
+                break;
+            }
+
+            if (memcmp(c, "PLAT", 4) == 0)
+            {
+                size_t stop = (body + size < got) ? body + size : got;
+                snprintf(sId, sizeof(sId), "%.*s", (int)(stop - body), (const char*)head + body);
+
+                // The long name is the string after it.
+                size_t n = body + strlen(sId);
+                while (n < stop && head[n] == '\0')
+                {
+                    n++;
+                }
+                snprintf(sName, sizeof(sName), "%.*s", (int)(stop - n), (const char*)head + n);
+
+                if (longName != NULL && sName[0] != '\0')
+                {
+                    *longName = sName;
+                }
+                return sId[0] != '\0' ? sId : NULL;
+            }
+
+            if (size == 0)
+            {
+                break;
+            }
+            o = body + size;
+        }
+
+        if (!descended)
+        {
+            break;
+        }
+    }
+
+    return NULL;
+}
+
 // A package the game cannot open, and the end of the run.
 //
 // xSTPreLoadScene's HIP arm is `do { ... } while (i == 0)`: a failed open is

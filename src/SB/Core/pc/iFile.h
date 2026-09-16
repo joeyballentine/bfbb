@@ -53,6 +53,12 @@ const char* iFileAssetRoot();
 // `while (xSTLoadStep('FONT') < 1.0f)` with no exit and no caller to fail to.
 const char* iFileMissingAssetPath();
 
+// PC-only. Which console's packer wrote the assets. Returns the two-letter id
+// out of boot.HIP's PLAT chunk -- "XB", "GC", "PS2" -- and sets *longName to
+// the spelling beside it ("Xbox", "GameCube"). NULL when the file cannot be
+// read or carries no PLAT, which is not treated as an answer either way.
+const char* iFileAssetPlatform(const char** longName);
+
 // PC-only. A package the game asked for and could not open, said out loud,
 // and then the process stops. Either path may be NULL, for the scene tags
 // that are only ever looked for at the asset root.
