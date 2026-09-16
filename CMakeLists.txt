@@ -435,9 +435,20 @@ endif()
 # The movie's own audio output, which is deliberately not the game's mixer --
 # see iFMVAudio.h. On the same SDL the mixer uses, and for the same reason: one
 # audio library, on every host.
-list(APPEND FMV_SOURCES ${PC_DIR}/iFMVAudioSDL.cpp)
-list(APPEND FMV_LIBRARIES bfbb_sdl)
-set(BFBB_NEEDS_SDL ON)
+#
+# Except where the game itself is being built without audio. This was appended
+# unconditionally, so BFBB_AUDIO_BACKEND=null still raised BFBB_NEEDS_SDL and
+# the configure stopped at "third_party/SDL is empty" -- which made the
+# all-null headless configuration impossible to build from a checkout with no
+# submodules, the one place it is most useful. iFMVAudioNull.cpp already
+# existed for exactly this.
+if(BFBB_AUDIO_BACKEND STREQUAL "null")
+  list(APPEND FMV_SOURCES ${PC_DIR}/iFMVAudioNull.cpp)
+else()
+  list(APPEND FMV_SOURCES ${PC_DIR}/iFMVAudioSDL.cpp)
+  list(APPEND FMV_LIBRARIES bfbb_sdl)
+  set(BFBB_NEEDS_SDL ON)
+endif()
 
 set(AUDIO_DEFINES)
 set(AUDIO_LIBS)
