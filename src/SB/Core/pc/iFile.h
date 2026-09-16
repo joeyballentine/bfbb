@@ -52,6 +52,15 @@ const char* iFileAssetRoot();
 // iSystemInit, because the alternative is a hang: zMainLoadFontHIP spins on
 // `while (xSTLoadStep('FONT') < 1.0f)` with no exit and no caller to fail to.
 const char* iFileMissingAssetPath();
+
+// PC-only. A package the game asked for and could not open, said out loud,
+// and then the process stops. Either path may be NULL, for the scene tags
+// that are only ever looked for at the asset root.
+//
+// It does not return, because there is nothing to return to: xSTPreLoadScene
+// retries a failed HIP open forever. See the call site.
+void iFileMissingPackage(const char* subdirPath, const char* rootPath);
+
 S32 iFileSeek(tag_xFile* file, S32 offset, S32 whence);
 U32 iFileRead(tag_xFile* file, void* buf, U32 size);
 S32 iFileReadAsync(tag_xFile* file, void* buf, U32 aSize, void (*callback)(tag_xFile*),

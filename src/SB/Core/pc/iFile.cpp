@@ -196,52 +196,24 @@ void iFileFullPath(const char* relname, char* fullname)
     snprintf(fullname, sizeof(((tag_iFile*)0)->path), "%s%s", sBasePath, relname);
 }
 
-// The disc filesystem is case-insensitive and the asset names in the game data
-// do not agree with each other on case; a host filesystem usually does not
-// forgive that. Only used when the exact name misses, so a correctly-cased
-// tree costs nothing.
-static bool iResolveCaseInsensitive(char* path, size_t pathsize)
+// One component of a path, matched against a directory without regard to case.
+// Writes the directory's own spelling into `name` -- which is safe in place,
+// because a case-insensitive match is the same length -- and says whether it
+// found one.
+static bool iResolveComponent(const char* dir, char* name)
 {
-    if (iHostPathExists(path))
-    {
-        return true;
-    }
-
-    char* slash = strrchr(path, '/');
-    char* leaf = slash ? slash + 1 : path;
-
-    char dirbuf[512];
-    if (slash)
-    {
-        size_t n = (size_t)(slash - path);
-        if (n >= sizeof(dirbuf))
-        {
-            return false;
-        }
-        memcpy(dirbuf, path, n);
-        dirbuf[n] = '\0';
-    }
-    else
-    {
-        strcpy(dirbuf, ".");
-    }
-
-    iHostDir* d = iHostDirOpen(dirbuf);
+    iHostDir* d = iHostDirOpen(dir[0] != '\0' ? dir : ".");
     if (d == NULL)
     {
         return false;
     }
 
-    // The space left for the leaf, so a longer replacement cannot run off the
-    // end of the caller's buffer.
-    size_t leafroom = pathsize - (size_t)(leaf - path);
-
     bool found = false;
-    for (const char* name = iHostDirNext(d); name != NULL; name = iHostDirNext(d))
+    for (const char* entry = iHostDirNext(d); entry != NULL; entry = iHostDirNext(d))
     {
-        if (iHostStrCaseCmp(name, leaf) == 0)
+        if (iHostStrCaseCmp(entry, name) == 0)
         {
-            snprintf(leaf, leafroom, "%s", name);
+            memcpy(name, entry, strlen(name));
             found = true;
             break;
         }
@@ -249,6 +221,103 @@ static bool iResolveCaseInsensitive(char* path, size_t pathsize)
 
     iHostDirClose(d);
     return found;
+}
+
+// The disc filesystem is case-insensitive and the asset names in the game data
+// do not agree with each other on case; a host filesystem usually does not
+// forgive that. Only used when the exact name misses, so a correctly-cased
+// tree costs nothing.
+//
+// **Every component, not only the last one.** The asset system asks for
+// `GL/GL01.HIP`, because xUtil_idtag2string spells a scene tag the way the tag
+// is spelled and the tags are upper case, while an extraction has the
+// directory as `gl`. Resolving the leaf alone meant opening `<root>/GL` to
+// look in, which does not exist, so the function gave up before it ever
+// reached the name it was there to fix: the pack was invisible and
+// xSTPreLoadScene span on it forever. Windows never saw this -- its filesystem
+// answers for `GL` and `gl` alike -- and Android's does not.
+//
+// The walk starts after the root (`/`, or a Windows drive) and resolves each
+// component against the one above it. A component that already exists is left
+// alone, so the only directories ever scanned are the ones actually spelled
+// wrong.
+static bool iResolveCaseInsensitive(char* path, size_t pathsize)
+{
+    if (iHostPathExists(path))
+    {
+        return true;
+    }
+
+    char out[512];
+    size_t len = 0;
+    const char* p = path;
+
+    // The root, taken as given. Everything after it is what the game spells
+    // for itself and so what can disagree with the disk.
+    if (p[0] == '/')
+    {
+        out[len++] = *p++;
+    }
+    else if (p[0] != '\0' && p[1] == ':')
+    {
+        out[len++] = *p++;
+        out[len++] = *p++;
+        if (*p == '/')
+        {
+            out[len++] = *p++;
+        }
+    }
+    out[len] = '\0';
+
+    while (*p != '\0')
+    {
+        const char* end = strchr(p, '/');
+        size_t n = (end != NULL) ? (size_t)(end - p) : strlen(p);
+
+        if (n == 0)
+        {
+            p++; // a doubled separator
+            continue;
+        }
+
+        // The separator this component needs, unless the root already ended in
+        // one or nothing has been written yet.
+        size_t sep = (len > 0 && out[len - 1] != '/') ? 1 : 0;
+
+        if (len + sep + n + 1 > sizeof(out))
+        {
+            return false;
+        }
+
+        // Where the component goes, and the parent to look in if it is not
+        // there under this spelling.
+        char parent[512];
+        memcpy(parent, out, len);
+        parent[len] = '\0';
+        if (sep)
+        {
+            out[len++] = '/';
+        }
+        char* component = out + len;
+        memcpy(component, p, n);
+        len += n;
+        out[len] = '\0';
+
+        if (!iHostPathExists(out) && !iResolveComponent(parent, component))
+        {
+            return false;
+        }
+
+        p += n;
+    }
+
+    if (len >= pathsize)
+    {
+        return false;
+    }
+
+    memcpy(path, out, len + 1);
+    return true;
 }
 
 // Whether the asset root actually holds the game.
@@ -285,6 +354,59 @@ const char* iFileMissingAssetPath()
     }
 
     return NULL;
+}
+
+// A package the game cannot open, and the end of the run.
+//
+// xSTPreLoadScene's HIP arm is `do { ... } while (i == 0)`: a failed open is
+// retried, forever, with no exit and no caller to fail to. On a disc that is
+// the right thing -- a failed read is a dirty lens or a drive still spinning
+// up, and the next attempt may well work. On a host the file is either there
+// or it is not, so the loop is a hang at a hundred percent of a core with
+// nothing said, which is exactly how a half-copied asset set presents itself.
+// It cost an afternoon and a debugger to find the first time.
+//
+// So: name the package, name both places it was looked for, and stop. This is
+// iSystemInit's treatment of a missing FONT.HIP, applied to the same failure
+// arriving later -- and it arrives later for every pack except the two that
+// are checked at startup.
+void iFileMissingPackage(const char* subdirPath, const char* rootPath)
+{
+    char tried[2][512];
+    S32 count = 0;
+
+    if (subdirPath != NULL && subdirPath[0] != '\0')
+    {
+        snprintf(tried[count++], sizeof(tried[0]), "%s%s", sBasePath, subdirPath);
+    }
+    if (rootPath != NULL && rootPath[0] != '\0')
+    {
+        snprintf(tried[count++], sizeof(tried[0]), "%s%s", sBasePath, rootPath);
+    }
+
+    const char* leaf = (rootPath != NULL) ? rootPath : subdirPath;
+
+    printf("bfbb: FATAL -- the game asked for a file that is not there: %s\n",
+           leaf != NULL ? leaf : "(unnamed)");
+    for (S32 i = 0; i < count; i++)
+    {
+        printf("bfbb:   looked for: %s\n", tried[i]);
+    }
+    printf("bfbb:   the asset set is incomplete. Every .HIP and .HOP from the disc has\n");
+    printf("bfbb:   to be there, in the folders it came in.\n");
+    fflush(stdout);
+
+    char message[1536];
+    snprintf(message, sizeof(message),
+             "The game asked for a file that is not there:\n\n%s\n\n"
+             "Looked for:\n%s%s%s\n\n"
+             "The asset set is incomplete. Every .HIP and .HOP from the disc has to "
+             "be there, in the folders it came in.",
+             leaf != NULL ? leaf : "(unnamed)", count > 0 ? tried[0] : "",
+             count > 1 ? "\n" : "", count > 1 ? tried[1] : "");
+
+    iHostErrorBox("SpongeBob SquarePants: Battle for Bikini Bottom", message);
+    exit(1);
 }
 
 // A file that is not there, said out loud.

@@ -1505,6 +1505,37 @@ static void test_file()
     tag_xFile missing = {};
     check(iFileOpen("NOSUCH.HIP", 0, &missing) != 0, "a missing file reports failure");
 
+    // **A wrong-case DIRECTORY, which is the case that actually ships.** The
+    // asset system asks for `GL/GL01.HIP` because a scene tag is spelled in
+    // upper case, and an extraction has the folder as `gl`. Resolving only the
+    // last component meant looking inside a directory that does not exist, so
+    // the pack was invisible on any case-sensitive filesystem -- Android's, and
+    // every Linux build.
+    {
+        char sub[512];
+        snprintf(sub, sizeof(sub), "%s/gl", dir);
+        if (iHostMakeDir(sub))
+        {
+            snprintf(path, sizeof(path), "%s/gl01.hip", sub);
+            FILE* g = fopen(path, "wb");
+            fwrite(payload, 1, sizeof(payload) - 1, g);
+            fclose(g);
+
+            tag_xFile nested = {};
+            check(iFileOpen("GL/GL01.HIP", 0, &nested) == 0,
+                  "a wrong-case directory resolves too, not just the leaf");
+            iFileClose(&nested);
+
+            tag_xFile nomatch = {};
+            check(iFileOpen("GL/NOSUCH.HIP", 0, &nomatch) != 0,
+                  "and a missing file under it still reports failure");
+
+            tag_xFile nodir = {};
+            check(iFileOpen("ZZ/GL01.HIP", 0, &nodir) != 0,
+                  "as does a directory that is not there under any spelling");
+        }
+    }
+
     // The asynchronous path: queued by iFileReadAsync, completed by the
     // service function the load loops call.
     tag_xFile afile = {};

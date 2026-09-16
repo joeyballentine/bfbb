@@ -102,11 +102,21 @@ S32 xSTPreLoadScene(U32 sid, void* userdata, S32 flg_hiphop)
             sdata->userdata = userdata;
             sdata->isHOP = 0;
 
+#ifdef PLATFORM_PC
+            // Both candidates, kept for the report below. The two translate
+            // functions hold their answers in separate statics, so the first
+            // survives the second being asked for.
+            const char* subdirPath = NULL;
+#endif
+
             if (sid != 0x424f4f54 && sid != 0x464f4e54)
             {
                 path = XST_translate_sid_path(sid, ".HIP");
                 if (path != NULL)
                 {
+#ifdef PLATFORM_PC
+                    subdirPath = path;
+#endif
                     strcpy(sdata->fnam, path);
                     i = XST_PreLoadScene(sdata, path);
                 }
@@ -124,6 +134,19 @@ S32 xSTPreLoadScene(U32 sid, void* userdata, S32 flg_hiphop)
             {
                 XST_unlock(sdata);
                 result = 0;
+#ifdef PLATFORM_PC
+                // **The loop this sits in never ends.** Retail retries a failed
+                // HIP open forever, which is right on a disc -- a failed read
+                // is a dirty lens or a drive still spinning up, and the next
+                // attempt may work. A host has no such thing: the file is
+                // either there or it is not. So this became a hang at a
+                // hundred percent of a core with nothing printed, which is how
+                // an incomplete asset set presents itself and is the single
+                // least diagnosable failure in the port.
+                //
+                // iFileMissingPackage does not return. See iFile.cpp.
+                iFileMissingPackage(subdirPath, path);
+#endif
             }
             else
             {
