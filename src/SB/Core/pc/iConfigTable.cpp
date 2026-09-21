@@ -41,6 +41,10 @@ const iConfigSetting kConfigSettings[] = {
       "Folder holding boot.HIP, FONT.HIP and fmv/. Empty means the folder you\n"
       "; started the game from. BFBB_ASSETS overrides this.",
       ICONFIG_FOLDER, NULL, kNone, kNone },
+    { "assets", "mod", "",
+      "Mod folder, laid out like the asset folder. Its files are read in place\n"
+      "; of the originals. Empty means none. BFBB_MOD overrides this.",
+      ICONFIG_FOLDER, NULL, kNone, kNone },
     { "assets", "platform_wording", "on",
       "Rewrite the Xbox wording in the game's text as it loads: dashboard,\n"
       "; memory card slots. The port never changes the files on disk.",

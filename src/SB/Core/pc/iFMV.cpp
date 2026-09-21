@@ -268,7 +268,21 @@ U32 iFMVPlay(char* filename, U32 buttons, F32 time, bool skippable, bool lockCon
 
     char path[512];
     iFMVDecoderInfo info;
-    iFMVDecoder* dec = openAnyCase(path, sizeof(path), rootbuf, filename, &info);
+    iFMVDecoder* dec = NULL;
+
+    const char* mod = iFileModRoot();
+    if (mod[0] != 0)
+    {
+        char modbuf[512];
+        size_t n = strlen(mod);
+        snprintf(modbuf, sizeof(modbuf), "%s%s", mod, mod[n - 1] == '/' ? "" : "/");
+        dec = openAnyCase(path, sizeof(path), modbuf, filename, &info);
+    }
+
+    if (dec == NULL)
+    {
+        dec = openAnyCase(path, sizeof(path), rootbuf, filename, &info);
+    }
 
     if (dec == NULL)
     {

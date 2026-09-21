@@ -45,6 +45,11 @@ static S32 sOpenedAny;
 // what it means on the console, and an absolute one is honoured as given.
 static char sAssetRoot[512];
 
+// The mod folder, with a trailing slash, or "" when there is none. A file here
+// is read in place of the asset root's file of the same relative name. See
+// iModOverride.
+static char sModRoot[512];
+
 // Where the game's files are. No trailing slash is added -- the callers that
 // print it want the folder someone named and not a decorated version of it,
 // and the ones that build paths with it fix the tail themselves.
@@ -59,39 +64,44 @@ static char sAssetRoot[512];
 // assets gets used without editing the file -- which is what a bisect over two
 // extractions, or a build run against a stripped-down set, actually needs.
 //
-// Resolved once and cached: iConfigGetString hands back a pointer into the
-// settings table, and this is read from several places at startup.
+// Copied out rather than returned as iConfigGetString's pointer into the
+// settings table, and read afresh on every call so that a test can change the
+// environment between iFileInit calls.
 //
 // Backslashes become slashes on the way through. A path typed into a settings
 // file on Windows is `D:\games\bfbb`, and everything downstream here splits
 // paths on '/' -- iResolveCaseInsensitive would take a backslash path for a
 // bare leaf name and look for it in the working directory.
+static void iReadFolderSetting(const char* env, const char* key, char* out, size_t outsize)
+{
+    const char* value = getenv(env);
+    if (value == NULL || value[0] == '\0')
+    {
+        value = iConfigGetString(key, "");
+    }
+
+    snprintf(out, outsize, "%s", value);
+
+    for (char* c = out; *c != '\0'; c++)
+    {
+        if (*c == '\\')
+        {
+            *c = '/';
+        }
+    }
+}
+
 const char* iFileAssetRoot()
 {
     static char sRoot[512];
-    static S32 sResolved;
+    iReadFolderSetting("BFBB_ASSETS", "assets.path", sRoot, sizeof(sRoot));
+    return sRoot;
+}
 
-    if (!sResolved)
-    {
-        sResolved = 1;
-
-        const char* root = getenv("BFBB_ASSETS");
-        if (root == NULL || root[0] == '\0')
-        {
-            root = iConfigGetString("assets.path", "");
-        }
-
-        snprintf(sRoot, sizeof(sRoot), "%s", root);
-
-        for (char* c = sRoot; *c != '\0'; c++)
-        {
-            if (*c == '\\')
-            {
-                *c = '/';
-            }
-        }
-    }
-
+const char* iFileModRoot()
+{
+    static char sRoot[512];
+    iReadFolderSetting("BFBB_MOD", "assets.mod", sRoot, sizeof(sRoot));
     return sRoot;
 }
 
@@ -143,6 +153,25 @@ void iFileInit()
         }
 
         iFileSetPath((char*)assets);
+    }
+
+    sModRoot[0] = 0;
+
+    const char* mod = iFileModRoot();
+    if (mod[0] != 0)
+    {
+        if (!iHostPathExists(mod))
+        {
+            printf("bfbb: mod folder not found, ignored: %s\n", mod);
+            fflush(stdout);
+        }
+        else
+        {
+            size_t n = strlen(mod);
+            snprintf(sModRoot, sizeof(sModRoot), "%s%s", mod, mod[n - 1] == '/' ? "" : "/");
+            printf("bfbb: mod folder: %s\n", mod);
+            fflush(stdout);
+        }
     }
 
     for (S32 i = 0; i < 4; i++)
@@ -372,27 +401,18 @@ const char* iFileMissingAssetPath()
 // container is the packer's, not the console's -- so this reads the same way
 // whatever wrote it. Every chunk here is at a known small offset, so a few
 // hundred bytes off the front of the file is enough.
-const char* iFileAssetPlatform(const char** longName)
+//
+// iHipPlatform reads any package's PLAT; iFileAssetPlatform asks it of the asset
+// root's boot.HIP. Writes "" to both outputs when there is no answer.
+static bool iHipPlatform(const char* path, char* id, size_t idsize, char* name, size_t namesize)
 {
-    static char sId[8];
-    static char sName[32];
-
-    if (longName != NULL)
-    {
-        *longName = NULL;
-    }
-
-    char path[512];
-    snprintf(path, sizeof(path), "%sboot.HIP", sBasePath);
-    if (!iResolveCaseInsensitive(path, sizeof(path)))
-    {
-        return NULL;
-    }
+    id[0] = '\0';
+    name[0] = '\0';
 
     FILE* fp = fopen(path, "rb");
     if (fp == NULL)
     {
-        return NULL;
+        return false;
     }
 
     U8 head[512];
@@ -401,7 +421,7 @@ const char* iFileAssetPlatform(const char** longName)
 
     if (got < 16 || memcmp(head, "HIPA", 4) != 0)
     {
-        return NULL;
+        return false;
     }
 
     // HIPA's own payload is the rest of the file, so step into it and walk the
@@ -430,21 +450,16 @@ const char* iFileAssetPlatform(const char** longName)
             if (memcmp(c, "PLAT", 4) == 0)
             {
                 size_t stop = (body + size < got) ? body + size : got;
-                snprintf(sId, sizeof(sId), "%.*s", (int)(stop - body), (const char*)head + body);
+                snprintf(id, idsize, "%.*s", (int)(stop - body), (const char*)head + body);
 
                 // The long name is the string after it.
-                size_t n = body + strlen(sId);
+                size_t n = body + strlen(id);
                 while (n < stop && head[n] == '\0')
                 {
                     n++;
                 }
-                snprintf(sName, sizeof(sName), "%.*s", (int)(stop - n), (const char*)head + n);
-
-                if (longName != NULL && sName[0] != '\0')
-                {
-                    *longName = sName;
-                }
-                return sId[0] != '\0' ? sId : NULL;
+                snprintf(name, namesize, "%.*s", (int)(stop - n), (const char*)head + n);
+                return id[0] != '\0';
             }
 
             if (size == 0)
@@ -460,7 +475,158 @@ const char* iFileAssetPlatform(const char** longName)
         }
     }
 
-    return NULL;
+    return false;
+}
+
+const char* iFileAssetPlatform(const char** longName)
+{
+    static char sId[8];
+    static char sName[32];
+
+    if (longName != NULL)
+    {
+        *longName = NULL;
+    }
+
+    char path[512];
+    snprintf(path, sizeof(path), "%sboot.HIP", sBasePath);
+    if (!iResolveCaseInsensitive(path, sizeof(path)))
+    {
+        return NULL;
+    }
+
+    if (!iHipPlatform(path, sId, sizeof(sId), sName, sizeof(sName)))
+    {
+        return NULL;
+    }
+
+    if (longName != NULL && sName[0] != '\0')
+    {
+        *longName = sName;
+    }
+    return sId;
+}
+
+// Whether `name` has been reported yet, remembering it if not. Bounded: past
+// the table's size nothing more is reported.
+static bool iModFirstReport(const char* name)
+{
+    enum
+    {
+        kMaxReported = 256,
+        kMaxName = 64
+    };
+
+    static char sReported[kMaxReported][kMaxName];
+    static S32 sCount;
+
+    for (S32 i = 0; i < sCount; i++)
+    {
+        if (iHostStrCaseCmp(sReported[i], name) == 0)
+        {
+            return false;
+        }
+    }
+
+    if (sCount == kMaxReported)
+    {
+        return false;
+    }
+
+    snprintf(sReported[sCount++], kMaxName, "%s", name);
+    return true;
+}
+
+static bool iHasPackageExtension(const char* path)
+{
+    size_t n = strlen(path);
+    return n >= 4 &&
+           (iHostStrCaseCmp(path + n - 4, ".HIP") == 0 || iHostStrCaseCmp(path + n - 4, ".HOP") == 0);
+}
+
+// The mod folder's copy of a file under the asset root. When the mod has one,
+// its path is written over `path` and the result is true.
+//
+// Matched on the path relative to the asset root, so `gl/gl01.HIP` in the mod
+// folder replaces `gl/gl01.HIP` in the assets, and whatever SB.INI's PATH= did
+// to the base path applies to both. A path outside the asset root is left
+// alone.
+//
+// A package from another console's release is refused and the original is
+// read: the port only understands the Xbox layout, and a GameCube HIP loads
+// and then crashes far from the cause. See iFileAssetPlatform.
+static bool iModOverride(char* path, size_t pathsize)
+{
+    if (sModRoot[0] == 0)
+    {
+        return false;
+    }
+
+    const char* rel;
+    size_t rootlen = strlen(sAssetRoot);
+    if (rootlen > 0)
+    {
+        if (strncmp(path, sAssetRoot, rootlen) != 0)
+        {
+            return false;
+        }
+        rel = path + rootlen;
+    }
+    else
+    {
+        if (iPathIsAbsolute(path))
+        {
+            return false;
+        }
+        rel = path;
+    }
+
+    while (rel[0] == '.' && rel[1] == '/')
+    {
+        rel += 2;
+    }
+
+    char candidate[512];
+    if (snprintf(candidate, sizeof(candidate), "%s%s", sModRoot, rel) >= (int)sizeof(candidate))
+    {
+        return false;
+    }
+
+    if (!iResolveCaseInsensitive(candidate, sizeof(candidate)))
+    {
+        return false;
+    }
+
+    if (iHasPackageExtension(candidate))
+    {
+        char id[8];
+        char longName[32];
+        if (iHipPlatform(candidate, id, sizeof(id), longName, sizeof(longName)) &&
+            strcmp(id, "XB") != 0)
+        {
+            if (iModFirstReport(rel))
+            {
+                printf("bfbb: mod: %s is from the %s release, not the Xbox one; using the "
+                       "original\n",
+                       rel, longName[0] != '\0' ? longName : id);
+                fflush(stdout);
+            }
+            return false;
+        }
+    }
+
+    if ((size_t)snprintf(path, pathsize, "%s", candidate) >= pathsize)
+    {
+        return false;
+    }
+
+    if (iModFirstReport(rel))
+    {
+        printf("bfbb: mod: %s\n", rel);
+        fflush(stdout);
+    }
+
+    return true;
 }
 
 // A package the game cannot open, and the end of the run.
@@ -607,11 +773,10 @@ U32 iFileOpen(const char* name, S32 flags, tag_xFile* file)
 
     const char* mode = (flags & IFILE_OPEN_WRITE) ? "wb" : "rb";
 
-    if (!(flags & IFILE_OPEN_WRITE))
+    if (!(flags & IFILE_OPEN_WRITE) && !iModOverride(ps->path, sizeof(ps->path)))
     {
         iResolveCaseInsensitive(ps->path, sizeof(ps->path));
     }
-
 
     FILE* fp = fopen(ps->path, mode);
     if (fp == NULL)

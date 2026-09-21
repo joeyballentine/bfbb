@@ -35,6 +35,14 @@ at load rather than ignored.
                         that never loads and used to look like a hang on a blank
                         window. iFileAssetRoot is where the answer is resolved.
 
+    mod                 Empty by default. A folder laid out like the asset
+                        folder; a file in it is read instead of the asset
+                        folder's file at the same relative path, in any case.
+                        The asset folder is never written to. A .HIP or .HOP
+                        whose PLAT is not the Xbox's is skipped with a message
+                        and the original is read. Each replaced file is logged
+                        once. `BFBB_MOD` overrides it. iModOverride in iFile.cpp.
+
     platform_wording    On by default. Rewrites the console out of the game's
                         text as it loads: "your Xbox console" becomes "your
                         computer", "Reboot to Xbox Dashboard" becomes "Quit to
@@ -167,6 +175,8 @@ See `configurator/README.md`.
                         how one build gets run against a second extraction, or a
                         stripped-down set, without editing anyone's config.ini.
                         Same rules and the same startup check as the setting.
+
+    BFBB_MOD=<dir>      the mod folder, overriding `[assets] mod`.
 
     BFBB_CONFIG=<path>  use this file as config.ini, and write the defaults
                         there if it does not exist.
