@@ -696,6 +696,101 @@ static void test_images()
     check(RwImageSetFromRaster(NULL, NULL) == NULL, "RwImageSetFromRaster(NULL, NULL) is refused");
 }
 
+// A GameCube native texture's STRUCT: 0x6C bytes of big-endian header with the
+// size and GX formats filled in, then `payload`.
+static void makeGCTexture(RwUInt8* out, int w, int h, int fmt, int palfmt, const RwUInt8* payload,
+                          size_t n)
+{
+    memset(out, 0, 0x6C);
+    out[3] = 6;
+    out[0x5C] = (RwUInt8)(w >> 8);
+    out[0x5D] = (RwUInt8)w;
+    out[0x5E] = (RwUInt8)(h >> 8);
+    out[0x5F] = (RwUInt8)h;
+    out[0x62] = (RwUInt8)fmt;
+    out[0x63] = (RwUInt8)palfmt;
+    memcpy(out + 0x6C, payload, n);
+}
+
+static const RwUInt8* gcTexel(rw::Image* img, int x, int y)
+{
+    return img->pixels + y * img->stride + x * 4;
+}
+
+// Mods ship GameCube textures inside Xbox packages, and BFBBMix's B303, EX07
+// and JF01 crashed on them. Checked against texels worked out by hand, because a
+// tile or bit order got wrong decodes into plausible noise rather than failing.
+static void test_gc_textures()
+{
+    printf("\nGameCube textures\n");
+
+    // CMPR, one 8x8 tile of four DXT1 blocks. Block 0 is red over blue in the
+    // four-colour mode, with the first texel's index 1 (blue) in the top two
+    // bits of its row. Blocks 1-3 are the three-colour mode, all index 3: a hole.
+    RwUInt8 cmpr[32];
+    memset(cmpr, 0, sizeof(cmpr));
+    cmpr[0] = 0xF8; // c0 = F800, red
+    cmpr[3] = 0x1F; // c1 = 001F, blue
+    cmpr[4] = 0x40; // row 0: 01 00 00 00
+    for (int b = 1; b < 4; b++)
+    {
+        cmpr[b * 8 + 2] = 0xFF; // c1 = FFFF > c0 = 0000
+        cmpr[b * 8 + 3] = 0xFF;
+        memset(cmpr + b * 8 + 4, 0xFF, 4);
+    }
+
+    RwUInt8 buf[0x6C + 512 + 32];
+    makeGCTexture(buf, 8, 8, 14, 0xFF, cmpr, sizeof(cmpr));
+    rw::Image* img = rw::readGCTextureImage(buf, 0x6C + sizeof(cmpr));
+    check(img != NULL && img->width == 8 && img->height == 8 && img->depth == 32,
+          "a CMPR texture decodes to an 8x8 RGBA image");
+    if (img != NULL)
+    {
+        const RwUInt8* p = gcTexel(img, 0, 0);
+        check(p[0] == 0 && p[1] == 0 && p[2] == 255 && p[3] == 255,
+              "the leftmost texel takes its index from the row's top two bits");
+        p = gcTexel(img, 1, 0);
+        check(p[0] == 255 && p[1] == 0 && p[2] == 0 && p[3] == 255, "and the next one is c0");
+        check(gcTexel(img, 4, 0)[3] == 0 && gcTexel(img, 0, 4)[3] == 0 &&
+                  gcTexel(img, 7, 7)[3] == 0,
+              "blocks 1-3 land right, below, and below-right, as holes");
+        img->destroy();
+    }
+
+    // C8, one 8x4 tile, with an RGB5A3 palette ahead of the texels: entry 0
+    // opaque red (RGB555), entry 1 white at alpha 7 of 7, entry 2 red at alpha 0.
+    RwUInt8 c8[512 + 32];
+    memset(c8, 0, sizeof(c8));
+    c8[0] = 0xFC; // FC00
+    c8[2] = 0x7F; // 7FFF
+    c8[3] = 0xFF;
+    c8[4] = 0x0F; // 0F00
+    c8[512 + 0] = 1;
+    c8[512 + 1] = 2;
+    c8[512 + 8] = 1; // second row
+    makeGCTexture(buf, 8, 4, 9, 2, c8, sizeof(c8));
+    img = rw::readGCTextureImage(buf, 0x6C + sizeof(c8));
+    check(img != NULL, "a C8 texture decodes");
+    if (img != NULL)
+    {
+        const RwUInt8* p = gcTexel(img, 0, 0);
+        check(p[0] == 255 && p[1] == 255 && p[2] == 255 && p[3] == 255,
+              "the palette comes first, and alpha 7 of 7 is fully opaque");
+        check(gcTexel(img, 1, 0)[3] == 0 && gcTexel(img, 1, 0)[0] == 255,
+              "an RGB5A3 entry with its top bit clear carries alpha");
+        p = gcTexel(img, 2, 0);
+        check(p[0] == 255 && p[1] == 0 && p[3] == 255, "and one with it set is opaque RGB555");
+        check(gcTexel(img, 0, 1)[1] == 255, "the ninth texel starts the tile's second row");
+        img->destroy();
+    }
+
+    check(rw::readGCTextureImage(buf, 0x6C + 100) == NULL,
+          "a struct too short for its texels is refused rather than overrun");
+    makeGCTexture(buf, 8, 8, 7, 0xFF, cmpr, sizeof(cmpr));
+    check(rw::readGCTextureImage(buf, 0x6C + sizeof(cmpr)) == NULL,
+          "and so is a GX format this does not know");
+}
+
 // The alpha classification a DXT surface gets at load, which decides whether a
 // texture is blended, cut or left alone entirely.
 //
@@ -4092,6 +4187,7 @@ int main(int argc, char** argv)
     test_textures();
     test_images();
     test_alpha_kind();
+    test_gc_textures();
     test_cameras();
     test_lights();
     test_worlds();
