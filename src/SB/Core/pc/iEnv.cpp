@@ -105,6 +105,20 @@ void iEnvLoad(iEnv* env, const void* data, U32, S32 dataType)
             RpClumpForAllAtomics(env->jsp->clump, SetPipelineCB, NULL);
             xClumpColl_InstancePointers(env->jsp->colltree, env->jsp->clump);
 
+            // A collision tree with no triangles, which mods ship when a level
+            // is built from placed models instead of a world. With no branch
+            // nodes the traversals test one leaf at tree->triangles anyway,
+            // and that points past the tree at whatever follows, so its vertex
+            // pointer is garbage. A zeroed triangle fails every filter and its
+            // flags end the leaf.
+            xClumpCollBSPTree* tree = env->jsp->colltree;
+            if (tree != NULL && tree->numTriangles == 0)
+            {
+                static xClumpCollBSPTriangle sNoTriangles;
+                tree->branchNodes = NULL;
+                tree->triangles = &sNoTriangles;
+            }
+
             RpWorldRemoveCamera(sPipeWorld, sPipeCamera);
 
             iCameraDestroy(sPipeCamera);
