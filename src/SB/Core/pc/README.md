@@ -42,6 +42,9 @@ at load rather than ignored.
                         whose PLAT is not the Xbox's is skipped with a message
                         and the original is read. Each replaced file is logged
                         once. `BFBB_MOD` overrides it. iModOverride in iFile.cpp.
+                        Saves go to bfbb/mods/<folder name>/saves under the
+                        per-user data folder instead of bfbb/saves, unless
+                        `save_folder` or `BFBB_SAVE_DIR` names one.
 
     platform_wording    On by default. Rewrites the console out of the game's
                         text as it loads: "your Xbox console" becomes "your

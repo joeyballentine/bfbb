@@ -1652,6 +1652,8 @@ static void test_file_mod()
     char got[16];
     read_through_ifile("GL/GL01.HIP", got, sizeof(got));
     check(strcmp(got, "MODDED") == 0, "a mod file replaces the original at the same relative path");
+    check(strncmp(iFileModName(), "bfbb_pc_modover_", 16) == 0,
+          "the mod's name is its folder's last component, for its own saves");
 
     read_through_ifile("ONLY.HIP", got, sizeof(got));
     check(strcmp(got, "BASE") == 0, "a file the mod does not have comes from the asset root");
@@ -1673,6 +1675,7 @@ static void test_file_mod()
     iFileInit();
     read_through_ifile("GL/GL01.HIP", got, sizeof(got));
     check(strcmp(got, "BASE") == 0, "a missing mod folder leaves the asset root in force");
+    check(iFileModName()[0] == '\0', "and names no mod, so saves stay where the disc's are");
 
     iHostSetEnv("BFBB_ASSETS", NULL);
     iHostSetEnv("BFBB_MOD", NULL);

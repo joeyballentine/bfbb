@@ -53,6 +53,11 @@ const char* iFileAssetRoot();
 // written to.
 const char* iFileModRoot();
 
+// PC-only. The last component of the mod folder iFileInit accepted, like
+// "BFBBMix", or "" when no mod is in use. isavegame keeps a mod's saves apart
+// under this name.
+const char* iFileModName();
+
 // PC-only. The full path of the first file the game cannot run without that
 // is not under the asset root, or NULL when they are all there. Asked once by
 // iSystemInit, because the alternative is a hang: zMainLoadFontHIP spins on

@@ -105,6 +105,26 @@ const char* iFileModRoot()
     return sRoot;
 }
 
+const char* iFileModName()
+{
+    static char sName[256];
+
+    size_t n = strlen(sModRoot);
+    while (n > 0 && sModRoot[n - 1] == '/')
+    {
+        n--;
+    }
+
+    size_t start = n;
+    while (start > 0 && sModRoot[start - 1] != '/' && sModRoot[start - 1] != ':')
+    {
+        start--;
+    }
+
+    snprintf(sName, sizeof(sName), "%.*s", (int)(n - start), sModRoot + start);
+    return sName;
+}
+
 static bool iPathIsAbsolute(const char* path)
 {
     if (path == NULL || path[0] == 0)
