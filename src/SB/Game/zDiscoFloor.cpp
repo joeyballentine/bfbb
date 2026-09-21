@@ -694,7 +694,7 @@ void z_disco_floor::load(z_disco_floor_asset& asset)
 
     state_masks = (U8**)xMemAllocSize(asset.states_size * sizeof(U8*));
 
-    size_t* state_offsets = (size_t*)(data + asset.states_offset);
+    U32* state_offsets = (U32*)(data + asset.states_offset);
 
     for (size_t i = 0; i < asset.states_size; i++)
     {
