@@ -872,6 +872,30 @@ static void test_config_model()
     check(ConfigModelSave(why, sizeof(why), NULL, NULL) == CONFIG_MODEL_OK, "it saves");
     check(!ConfigModelDirty(), "and is clean afterwards");
 
+    // The mod folder: a folder picker in [assets], beside the asset path, and a
+    // Windows path with spaces in it saves as typed.
+    S32 mod = -1;
+    for (S32 i = 0; i < ConfigModelSettingCount(); i++)
+    {
+        const iConfigSetting* s = ConfigModelSetting(i);
+        if (strcmp(s->section, "assets") == 0 && strcmp(s->name, "mod") == 0)
+        {
+            mod = i;
+        }
+    }
+
+    check(mod >= 0, "assets.mod is in the table");
+    if (mod >= 0)
+    {
+        check(ConfigModelWantsBrowse(ConfigModelSetting(mod)), "and gets a Browse button");
+        check(strcmp(ConfigModelSectionName(ConfigModelSectionOf(mod)), "assets") == 0,
+              "in the assets section");
+
+        ConfigModelSetText(mod, "C:\\mods\\BFBBMix Xbox");
+        check(ConfigModelSave(why, sizeof(why), NULL, NULL) == CONFIG_MODEL_OK,
+              "a mod folder with a space in it saves");
+    }
+
     ConfigModelClose();
 
     {
@@ -885,6 +909,7 @@ static void test_config_model()
         buf[n] = '\0';
 
         check(strstr(buf, "mode = fullscreen") != NULL, "the changed value is in the file");
+        check(strstr(buf, "mod = C:\\mods\\BFBBMix Xbox") != NULL, "and so is the mod folder");
 
         // The rule the window used to own. A setting the file never mentioned
         // and that nobody touched is answered from the table, and writing it
