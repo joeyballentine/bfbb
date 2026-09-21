@@ -3305,6 +3305,62 @@ static void test_snd_data()
 
     iSndDataRelease(sFakePkgAsset);
     iSndDataReset();
+
+    // Stereo, which retail never ships and BFBBMix does: a 72-byte block, both
+    // headers first, then four-byte words alternating left and right. The left
+    // is predictor 1000 over all-zero words, so it holds at 1000 as above. The
+    // right is predictor -2000 and its first word starts 0x07: nibble 7 at
+    // step 7 adds 0+1+3+7 = 11 and moves the index to 8 (step 16), then nibble
+    // 0 adds 16>>3 = 2. A decoder that swapped the channels or took the words
+    // in the wrong order puts those values somewhere else.
+    snprintf(path, sizeof(path), "%s/adpcm.HOP", dir);
+    f = fopen(path, "wb");
+    check(f != NULL, "the stereo ADPCM package could be created");
+    if (f == NULL)
+    {
+        return;
+    }
+
+    const U8 stereoHead[16] = { 1000 & 0xff, (1000 >> 8) & 0xff, 0, 0,          // left header
+                                (U8)(-2000 & 0xff), (U8)((-2000 >> 8) & 0xff), 0, 0, // right
+                                0, 0, 0, 0,                                     // left word 0
+                                0x07, 0, 0, 0 };                                // right word 0
+    fwrite(stereoHead, 1, sizeof(stereoHead), f);
+    for (U32 i = sizeof(stereoHead); i < 2 * kBlock; i++)
+    {
+        fputc(0x00, f);
+    }
+    fclose(f);
+
+    sFakePkgAsset = 0x0AD9C001;
+    sFakePkgSize = 2 * kBlock;
+
+    adpcm.channels = 2;
+    adpcm.block_align = 2 * kBlock;
+
+    abytes = 0;
+    iSndDataPcm spcm;
+    const S16* s = (const S16*)iSndDataAcquire(sFakePkgAsset, &adpcm, &abytes, &spcm);
+
+    check(s != NULL, "a stereo ADPCM asset decodes");
+    check(abytes == 64 * 2 * sizeof(S16), "a 72-byte stereo block is 64 frames of two samples");
+    check(spcm.channels == 2, "and reaches the mixer as two channels");
+
+    if (s != NULL)
+    {
+        check(s[1] == -1989 && s[3] == -1987,
+              "the right channel's first word lands in the right channel's first frames");
+
+        bool left = true;
+        for (U32 i = 0; i < 64; i++)
+        {
+            left = left && s[i * 2] == 1000;
+        }
+        check(left, "and the left channel holds, untouched by the right's nibbles");
+    }
+
+    iSndDataRelease(sFakePkgAsset);
+    iSndDataReset();
 }
 
 // ---------------------------------------------------------------------------

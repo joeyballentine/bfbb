@@ -207,25 +207,40 @@ static S16 iClamp16(S32 v)
     return (S16)v;
 }
 
-// Decode `srcBytes` of mono IMA ADPCM into a fresh 16-bit PCM block. NULL if
-// the block size makes no sense or the allocation fails.
-static void* iDecodeAdpcm(const U8* src, U32 srcBytes, U32 blockAlign, U32* outBytes)
+// **Stereo** is the IMA WAV layout: a block holds one four-byte header per
+// channel, then the payload in four-byte words that take turns by channel --
+// eight samples of the left, eight of the right, and so on. A block is 36 bytes
+// per channel. Retail ships no stereo sound; BFBBMix does.
+
+// Decode `srcBytes` of IMA ADPCM into a fresh 16-bit PCM block, interleaved by
+// channel. NULL if the block size makes no sense or the allocation fails.
+static void* iDecodeAdpcm(const U8* src, U32 srcBytes, U32 blockAlign, U32 channels,
+                          U32* outBytes)
 {
-    if (blockAlign < 5 || srcBytes < 5)
+    enum
+    {
+        kMaxChannels = 8
+    };
+
+    if (channels == 0 || channels > kMaxChannels || blockAlign % channels != 0 ||
+        blockAlign / channels < 5 || srcBytes < 4 * channels + 1)
     {
         return NULL;
     }
 
+    U32 headerBytes = 4 * channels;
     U32 blocks = (srcBytes + blockAlign - 1) / blockAlign;
-    U32 maxSamples = blocks * ((blockAlign - 4) * 2);
+    U32 framesPerBlock = (blockAlign - headerBytes) * 2 / channels;
 
-    S16* out = (S16*)malloc((size_t)maxSamples * sizeof(S16));
+    // Zeroed, so a trailing block that stops partway through one channel's
+    // word leaves silence in the others rather than whatever malloc returned.
+    S16* out = (S16*)calloc((size_t)blocks * framesPerBlock * channels, sizeof(S16));
     if (out == NULL)
     {
         return NULL;
     }
 
-    U32 written = 0;
+    U32 frames = 0;
 
     for (U32 b = 0; b < blocks; b++)
     {
@@ -236,30 +251,38 @@ static void* iDecodeAdpcm(const U8* src, U32 srcBytes, U32 blockAlign, U32* outB
             avail = blockAlign;
         }
 
-        // A trailing fragment too short to hold a header is not a block.
-        if (avail < 5)
+        // A trailing fragment too short to hold the headers is not a block.
+        if (avail <= headerBytes)
         {
             break;
         }
 
         const U8* blk = src + off;
 
-        S32 pred = (S16)((U16)blk[0] | ((U16)blk[1] << 8));
-        S32 index = blk[2];
-        if (index > 88)
+        S32 pred[kMaxChannels];
+        S32 index[kMaxChannels];
+        for (U32 c = 0; c < channels; c++)
         {
-            index = 88;
+            const U8* h = blk + 4 * c;
+            pred[c] = (S16)((U16)h[0] | ((U16)h[1] << 8));
+            index[c] = h[2] > 88 ? 88 : h[2];
         }
 
-        for (U32 i = 4; i < avail; i++)
+        U32 blockFrames = 0;
+
+        for (U32 i = headerBytes; i < avail; i++)
         {
+            U32 j = i - headerBytes;
+            U32 word = j / 4;
+            U32 c = word % channels;
+            U32 frame = ((word / channels) * 4 + j % 4) * 2;
             U8 byte = blk[i];
 
             // Low nibble first, as IMA ADPCM in a WAV always is.
             for (S32 half = 0; half < 2; half++)
             {
                 S32 nibble = half == 0 ? (byte & 0xf) : (byte >> 4);
-                S32 step = kImaStep[index];
+                S32 step = kImaStep[index[c]];
 
                 S32 diff = step >> 3;
                 if (nibble & 1)
@@ -275,24 +298,30 @@ static void* iDecodeAdpcm(const U8* src, U32 srcBytes, U32 blockAlign, U32* outB
                     diff += step;
                 }
 
-                pred = (nibble & 8) ? pred - diff : pred + diff;
-                out[written++] = iClamp16(pred);
-                pred = out[written - 1];
+                pred[c] = iClamp16((nibble & 8) ? pred[c] - diff : pred[c] + diff);
+                out[(size_t)(frames + frame + half) * channels + c] = (S16)pred[c];
 
-                index += kImaIndex[nibble];
-                if (index < 0)
+                index[c] += kImaIndex[nibble];
+                if (index[c] < 0)
                 {
-                    index = 0;
+                    index[c] = 0;
                 }
-                else if (index > 88)
+                else if (index[c] > 88)
                 {
-                    index = 88;
+                    index[c] = 88;
                 }
             }
+
+            if (frame + 2 > blockFrames)
+            {
+                blockFrames = frame + 2;
+            }
         }
+
+        frames += blockFrames;
     }
 
-    *outBytes = written * sizeof(S16);
+    *outBytes = frames * channels * sizeof(S16);
     return out;
 }
 
@@ -377,10 +406,11 @@ static void* iDecodeToPcm(void* raw, U32 rawBytes, const iSndDataFormat* fmt, U3
         return raw;
     }
 
-    if (fmt->format_tag == ISND_FORMAT_XBOX_ADPCM && fmt->channels <= 1)
+    if (fmt->format_tag == ISND_FORMAT_XBOX_ADPCM)
     {
         U32 got = 0;
-        void* pcm = iDecodeAdpcm((const U8*)raw, rawBytes, fmt->block_align, &got);
+        void* pcm = iDecodeAdpcm((const U8*)raw, rawBytes, fmt->block_align,
+                                 fmt->channels != 0 ? fmt->channels : 1, &got);
         free(raw);
 
         if (pcm == NULL)
@@ -392,10 +422,8 @@ static void* iDecodeToPcm(void* raw, U32 rawBytes, const iSndDataFormat* fmt, U3
         return pcm;
     }
 
-    // Stereo ADPCM interleaves a block per channel and nothing in the retail
-    // asset set is encoded that way, so the arm for it is absent rather than
-    // guessed at. Anything else is a format this port has never seen. Either
-    // way, refusing is right: playing it as PCM would be loud noise.
+    // A format this port has never seen. Refusing is right: playing it as PCM
+    // would be loud noise.
     static bool said = false;
     if (!said)
     {

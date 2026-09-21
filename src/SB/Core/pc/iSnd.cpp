@@ -481,10 +481,13 @@ static U32 entry_frames(const xbox_sndhdr& e)
         return 0;
     }
 
-    if (e.format_tag == 0x69 && e.block_align >= 5)
+    // A block is 36 bytes per channel, a four-byte header each; see
+    // iDecodeAdpcm.
+    U32 channels = e.channels != 0 ? e.channels : 1;
+    if (e.format_tag == 0x69 && e.block_align / channels >= 5)
     {
         U32 blocks = e.data_size / e.block_align;
-        return blocks * ((e.block_align - 4) * 2);
+        return blocks * ((e.block_align / channels - 4) * 2);
     }
 
     return e.data_size / e.block_align;
