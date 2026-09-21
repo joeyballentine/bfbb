@@ -615,7 +615,9 @@ static bool iModOverride(char* path, size_t pathsize)
         }
     }
 
-    if ((size_t)snprintf(path, pathsize, "%s", candidate) >= pathsize)
+    // `rel` points into `path`, so it is reported before path is overwritten.
+    size_t len = strlen(candidate);
+    if (len >= pathsize)
     {
         return false;
     }
@@ -626,6 +628,7 @@ static bool iModOverride(char* path, size_t pathsize)
         fflush(stdout);
     }
 
+    memcpy(path, candidate, len + 1);
     return true;
 }
 
