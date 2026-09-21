@@ -86,6 +86,37 @@ RpClump* RpClumpStreamRead(RwStream* stream)
     // was authored for -- the same gap as Raster::convertTexToCurrentPlatform,
     // and with a louder symptom, since an unconverted skin renders with empty
     // bone weights. See convert.cpp.
+    // A geometry streamed without a BinMesh extension has triangles and no
+    // mesh header. RenderWare builds the meshes from the triangles in that
+    // case; librw leaves them nil. Retail never ships one, but models exported
+    // by Industrial Park for mods do.
+    //
+    // buildMeshes indexes a mesh per material by each triangle's matId, so a
+    // geometry with a matId past its material list is left alone.
+    {
+        rw::LinkList& atomics = clump->atomics;
+        for (rw::LLLink* cur = atomics.link.next; cur != atomics.end(); cur = cur->next)
+        {
+            rw::Geometry* geo = rw::Atomic::fromClump(cur)->geometry;
+            if (geo == NULL || geo->meshHeader != NULL || geo->numTriangles <= 0 ||
+                (geo->flags & rw::Geometry::NATIVE))
+            {
+                continue;
+            }
+
+            bool inRange = true;
+            for (rw::int32 i = 0; i < geo->numTriangles; i++)
+            {
+                inRange = inRange && geo->triangles[i].matId < geo->matList.numMaterials;
+            }
+
+            if (inRange)
+            {
+                geo->buildMeshes();
+            }
+        }
+    }
+
     rwConvertClumpToCurrentPlatform(clump);
 
     // **An atomic with no geometry is a trap, and it is worth saying so here.**
