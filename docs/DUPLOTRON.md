@@ -7188,3 +7188,44 @@ for clause C, with two gates, each backed by one witness:
 
 Measured variants: indirect bit tolerated with no gate +4 / -1; float loads
 only +4 / -1.
+
+## Clause W: E3n's write-after-read half, for float literals (2026-09-22)
+
+Shipped. `GC/2.0p1a` sha1 `a78a5fdb6c1d5677e987636b2e0743dbaefe9542`. Full
+`ninja`: game **7322 -> 7357 (+35 / -0)**, matched_code 82.726 -> 84.288,
+fuzzy 99.386 -> 99.421, DOL intact. Four partials down:
+`add_trail_sample` 97.661 -> 91.457, `RendConeRange` 89.021 -> 85.967,
+`DiscoRender` 81.053 -> 79.620, `NPCCone::RenderCone` 99.056 -> 98.925.
+
+**The rule.** A plain store to a declared frame local (Object+0x18 non-zero,
+E3n's frame gate) may not pass an earlier `lfs`/`lfd` from the literal pool
+(an anonymous static of at most 8 bytes). E3n is the read-after-write
+direction (store, then a later static load); this is the write-after-read
+direction, and only for float literals. The alias edge carries the load's
+latency, so retail leaves the store behind it. That is the "retail leaves the
+stall" shape these notes recorded as the entry-4 plurality of the SCHED list:
+`BoulderRollCB`, `BoulderRollDoneCB`, `xEntDriveMount`, `xEntDriveUpdate`,
+`xSphereHitsOBB_nu`, `InvertRaster` and `NPCC_LineHitsBound` all cross. The
+store's frame object and the literal are different objects, so the pair
+reaches the clause on entries 0 and 1, not entry 4.
+
+**How it was found.** `scratchpad`-style frida probe: every `may_alias` query
+tagged with a feature signature (opcode class, indirect bit, direct operand,
+storage class -- literal / named static / declared frame / temporary --
+subrange or whole, size bucket), counted per function, then each signature
+ranked by how many non-matching functions contain it against how many
+matching ones do. Flipping the top signature alone was +13 / -5; the five
+losses were all stores into `const` locals (flag 0x40), and widening from
+`stw` to every plain store took it to +35 / -0.
+
+**Measured variants (frida, against the E3n-indirect compiler):**
+
+| variant | result |
+|---|---|
+| shipped: lfs/lfd literal, any plain store, declared frame | +35 / -0 |
+| `stw` stores only | +13 / -0 |
+| integer loads too (lwz of templates) | +39 / -43 |
+| named statics too | +13 / -2 (lfs only) |
+| compiler temporaries too | +31 / -176 |
+| indirect stores, or static stores, too | identical (never reached) |
+| store size up to 8 | identical |
