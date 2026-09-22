@@ -19,7 +19,7 @@ namespace
 
 void ztaskbox::load(const ztaskbox::asset_type& a)
 {
-    xBaseInit((xBase*)this, &(xBaseAsset)a);
+    xBaseInit((xBase*)this, &(xBaseAsset&)a);
     this->baseType = eBaseTypeTaskBox;
     this->asset = &a;
     this->eventFunc = cb_dispatch;
