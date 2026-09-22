@@ -184,7 +184,7 @@ jobs:
         run: |
           python configure.py --map --version GQPE78
           ninja
-          ninja build/GQPE78/report.json build/GQPE78/progress.json
+          ninja build/GQPE78/report.json
 
       # The gate. Exits non-zero only if the DOL moved or functions regressed;
       # "not everything matches yet" is the normal state and is not a failure.
@@ -224,14 +224,6 @@ jobs:
           git add README.md tools/gcgate.json
           git commit -m "chore(ci): Update the progress badges [skip ci]"
           git push origin HEAD:${{ github.ref_name }}
-
-      - name: Upload report
-        uses: actions/upload-artifact@v4
-        with:
-          name: GQPE78_report
-          path: |
-            build/GQPE78/report.json
-            build/GQPE78/progress.json
 
   # Advisory only. --non-matching links every src/SB unit from OUR object, which
   # is what the PC port and the playtest disc need, and it can break on a unit
