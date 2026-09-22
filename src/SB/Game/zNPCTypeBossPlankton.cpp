@@ -2591,7 +2591,7 @@ void zNPCBPlankton::fall(F32 accel, F32 max_vel)
 
 void zNPCBPlankton::aim_gun(xAnimPlay* play, xQuat* q, xVec3* v, S32 count)
 {
-    zNPCBPlankton* npc = (zNPCBPlankton*)play->Object;
+    zNPCBPlankton* npc = (zNPCBPlankton*)(xEnt*)play->Object;
 
     if (npc->flag.aim_gun)
     {
