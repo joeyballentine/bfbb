@@ -98,14 +98,20 @@ def vn_stub(at, sb_vn_store_kill, alias_list_head_va):
     return bytes(b)
 
 
-def vn_subrange_stub(at, sb_vn_subrange_store):
-    """update_alias_value entry 1. ebx=alias, esi=stored value. Return 1 ->
-       zero esi (clause S's forwarding half). Always fall into the stock
-       subrange kill."""
+def vn_subrange_stub(at, sb_vn_subrange_store, alias_list_head_va):
+    """update_alias_value entry 1. ebx=alias, esi=store PCode. Pass (alias,
+       store, head). Return 1 -> zero esi (clause S's forwarding half). Always
+       fall into the stock subrange kill."""
     b = bytearray()
-    b += b"\x53"                           # push ebx   (alias)
-    b += b"\xE8"; b += _rel32(at + len(b) + 4, sb_vn_subrange_store)
+    b += b"\xE8\x00\x00\x00\x00"           # call $+5
+    pop_va = at + len(b)                   # VA of the pop = value left in ecx
     b += b"\x59"                           # pop ecx
+    b += b"\x8B\x89"; b += struct.pack("<i", alias_list_head_va - pop_va)   # mov ecx,[ecx+disp]
+    b += b"\x51"                           # push ecx   (list_head, arg3)
+    b += b"\x56"                           # push esi   (store, arg2)
+    b += b"\x53"                           # push ebx   (alias, arg1)
+    b += b"\xE8"; b += _rel32(at + len(b) + 4, sb_vn_subrange_store)
+    b += b"\x83\xC4\x0C"                   # add esp,0xc
     b += b"\x85\xC0"                       # test eax,eax
     b += b"\x74\x02"                       # jz +2
     b += b"\x31\xF6"                       # xor esi,esi

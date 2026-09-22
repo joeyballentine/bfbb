@@ -1,7 +1,7 @@
 """GENERATED -- do not edit. The linked AliasPatch blob.
 
 Produced by `python tools/aliaspatch_link.py --refresh` from AliasPatch.c in
-the mwcc-gc repo (source sha1 3ef31cd12ea8563281295a42742d5b3a25175d2e). patch_compiler.py injects these
+the mwcc-gc repo (source sha1 1ad137f161bb8da0c53b462a26a0f5cf77011399). patch_compiler.py injects these
 bytes; when the mwcc-gc repo is present the build recompiles the C and refuses
 to run if it no longer produces exactly this blob. After refreshing, update
 PATCHED_SHA1 in tools/patch_compiler.py and re-measure with
@@ -9,7 +9,7 @@ tools/patchcost.py.
 """
 
 BASE_VA = 0x57ea50
-SRC_SHA1 = "3ef31cd12ea8563281295a42742d5b3a25175d2e"
+SRC_SHA1 = "1ad137f161bb8da0c53b462a26a0f5cf77011399"
 BLOB_HEX = (
     "538b5424088d4a108b19807a2c01750985db7405833b05740431c0eb348d4208"
     "8b08eb278d41088b0085c0741980782c0075138d5010391a750c8d5018833a08"
@@ -42,15 +42,17 @@ BLOB_HEX = (
     "8b4c240483c1108b0185c0741b83380575168d42108b0885c9740d8339057508"
     "8d4218833804760331c0c331c040c3008b5424048d4a188b018d52148b0a83e1"
     "02741885c0741480782c00750e83c0108b1085d27405833a05740331c0c331c0"
-    "40c300005589e553568b4d0883c1108b0185c0740f8b1883fb05740d81fb0500"
-    "0100740583c8ffeb378b750ceb228d461883380477188d46108b1085d2740f83"
-    "3a05750a6a0056e844b4f8ff59598b3685f675da83fb05750531c040eb0231c0"
-    "8d65f85e5b5dc3005589e5ff7508e8adfbffff5985c00f95c083e001c9c3"
+    "40c300005589e5538b5d08eb228d431883380477188d43108b0885c9740f8339"
+    "05750a6a0053e865b4f8ff59598b1b85db75da8d65fc5b5dc30000005589e553"
+    "8b4d0883c1108b0185c0740f8b1883fb05740d81fb05000100740583c8ffeb15"
+    "ff750ce89cffffff5983fb05750531c040eb0231c08d65fc5b5dc3005589e553"
+    "8b5d0cff7508e895fbffff5985c0750431c0eb1685db740f807b3c037509ff75"
+    "10e85effffff5931c0408d65fc5b5dc3"
 )
 EXPORTS = {
     "_sb_licm_clause": 0x57edcc,
     "_sb_licm_invariant": 0x57ee00,
     "_sb_sched_clause": 0x57ec48,
-    "_sb_vn_store_kill": 0x57ee34,
-    "_sb_vn_subrange_store": 0x57ee98,
+    "_sb_vn_store_kill": 0x57ee6c,
+    "_sb_vn_subrange_store": 0x57eeac,
 }

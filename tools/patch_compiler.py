@@ -104,7 +104,7 @@ BASE_SHA1 = "74bc177b10d1bbe8a60a21a6c0aa86d2dd9c0668"
 # The C-sourced GC/2.0p1a. This is a NEW hash: the old byte-cave p1a was
 # 5c6862b641adb8845f0fc09a6569902df068a83f. The derived-compiler bytes differ;
 # the OBJECTS it produces do not (verified byte-identical on 450 SB units).
-PATCHED_SHA1 = "d607436cef80246fa74bce4293eb2a997195292d"
+PATCHED_SHA1 = "c1241e54e45c258cca85d5860b6a911e2f82db2a"
 
 # ---- where the injected code goes ---------------------------------------
 # The executable tail of .text is the run from VirtualSize's end to the next
@@ -199,7 +199,7 @@ def build_injection():
     emit("s4", A.sched_stub(at, sched, 4, A.STOCK_E4))
     emit("licm", A.licm_stub(at, licm))
     emit("vn", A.vn_stub(at, vn, ALIAS_LIST_HEAD_VA))
-    emit("vn1", A.vn_subrange_stub(at, vn1))
+    emit("vn1", A.vn_subrange_stub(at, vn1, ALIAS_LIST_HEAD_VA))
     emit("inv", A.licm_invariant_stub(at, inv))
 
     if at > EXEC_LIMIT:

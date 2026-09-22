@@ -7082,6 +7082,19 @@ Blob sections are packed at 4-byte alignment instead of 16. Refactor checked
 by compiling the clause out: all 224 game objects byte-identical to the old
 compiler's.
 
+**Direct stores also run clause V's walk (2026-09-22, +1 / -0).** A store that
+names part of a small static directly (`stfs f0, sCamTweakPitch@sda21`) kills
+the cached small statics the way a whole-object store does:
+`zCameraTweakGlobal_Reset` reloads `0.0f` after it. A store to the same half
+through a pointer (`stfs f0, 0x4(r4)`) does not: `zCameraTweakGlobal_Remove`
+holds `1.0f` in `f2` across two of them. Running the walk on every
+small-static subrange store gains the same function and drops those two
+partials; running it on every direct subrange store of any static costs 2
+exact functions. Applying clause S's forwarding half only to direct stores is
+indistinguishable from applying it to all of them on this corpus. New sha1
+`c1241e54e45c258cca85d5860b6a911e2f82db2a`; game 7314, matched_code 82.162,
+fuzzy 99.371. The injected region now has 29 bytes free.
+
 Moved but not closed: `zGameLoop` 99.979, `xFXAuraUpdate` 99.838,
 `xFXanimUVSetAngle`/`xFXanimUV2PSetAngle` 94.783, `zCameraTweakGlobal_Add`
 96.331, `NightLightUVStep` 67.700.
