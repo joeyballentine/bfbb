@@ -7102,11 +7102,23 @@ ended exactly at `.reloc`'s raw data and the section table had a free slot
 below SizeOfHeaders) and puts the blob and all eight stubs there; `.text` is
 no longer grown and its cave is untouched. 542 objects byte-identical before
 and after on a full build, sjiswrap units included. New sha1
-`5c4e8e29f9d24079bb1f52d4d79bb3ec30bd4566`; 2,691 bytes free.
+`5c4e8e29f9d24079bb1f52d4d79bb3ec30bd4566`; about 2.7 KiB free.
+
+**Two small statics are compared the way entry 0 compares whole objects
+(2026-09-22, +2 / -0).** Clause S's different-object test was clause A alone,
+so two same-opcode stores to different small statics could still pass each
+other: `xFXanimUVSetAngle` stores `xFXanimUVRotMat0[1]` (through a pointer)
+before `xFXanimUVRotMat1[0]`, and retail keeps that order. The test now
+mirrors entry 0 under the same 4-byte gate: clause A for differing opcodes,
+clause B for two stores of one opcode. `xFXanimUVSetAngle` and
+`xFXanimUV2PSetAngle` cross, nothing moves down. Clause B's own tests are
+satisfied by any subrange (it belongs to its whole object and contains
+nothing), so no new predicate was needed. sha1
+`e4b080e02f4437e788524b14e9736089c86a9d14`, game 7318, matched_code 82.307,
+fuzzy 99.382.
 
 Moved but not closed: `zGameLoop` 99.979, `xFXAuraUpdate` 99.838,
-`xFXanimUVSetAngle`/`xFXanimUV2PSetAngle` 94.783, `zCameraTweakGlobal_Add`
-96.331, `NightLightUVStep` 67.700.
+`zCameraTweakGlobal_Add` 96.331, `NightLightUVStep` 67.700.
 
 ## Clause A needs a static side (2026-09-22)
 
