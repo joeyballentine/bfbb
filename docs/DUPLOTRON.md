@@ -7028,3 +7028,60 @@ pattern;` declared before `i`, and the loop walks `p`. Rule of thumb recorded.
   read back (`CheckObjectAgainstMeleeBound`: `stfs f1; frsp f0, f1; fcmpo`),
   and after `fabs`/`fneg` (`xGridInit`, `xQuickCullForSphere`); none of those
   constructs is present here. The build is otherwise DOL-clean at 7308/7673.
+
+## Clause S: a static of at most 8 bytes is one alias unit (2026-09-22)
+
+Shipped. `GC/2.0p1a` sha1 `d607436cef80246fa74bce4293eb2a997195292d`. Full
+`ninja`: game **matched_functions 7308 -> 7313 (+5 / -0)**, matched_code
+81.968 -> 82.157, fuzzy 99.353 -> 99.370, DOL `306526d9...` intact, no function
+anywhere lower in `report.json` (rwsdk `_rpGeometryOpen` also crosses).
+`patchcost.py --stock` against the same compiler with the clause compiled out:
++5 functions / 3,100 bytes, 0 lost.
+
+**The defect.** `make_alias` (Alias.c) gives an access to part of an object a
+subrange alias (kind 1). Two subranges of one object that do not overlap never
+alias (`may_alias_alias` case 1x1), and a store to one subrange only kills that
+subrange in value numbering (`update_alias_value` AliasType1). Retail treats a
+static object of at most 8 bytes -- the `-sdata` threshold, i.e. anything in
+small data -- as one unit:
+
+- `sTimeCurrent = iTimeGet()` (an `S64`): retail reloads both words after
+  storing them; we forwarded the registers. `zGameUpdateTransitionBubbles`,
+  `zGameLoop`, `zSaveLoad_Tick`.
+- `gTrcDisk[0] = state; gTrcDisk[1] = ...` keep their order (`xTRCDisk`).
+- `sAuraPulseAng[0]`/`[1]` (`xFXAuraUpdate`), the two `F32[2]` UV statics in
+  `NightLightUVStep`, `sCamTweakDistMult` in `zCameraTweak`.
+
+**The clause** (`small_static_whole` in AliasPatch.c):
+
+- scheduler entry 4 (subrange x subrange): both sides subranges of static
+  objects of at most 8 bytes -> the same object always may-alias; two
+  different objects may-alias under clause A's test (differing opcodes, plain
+  accesses, both at most 4 bytes);
+- VN entry 1: a store to such a subrange records a fresh value number instead
+  of the stored register (clause F for subranges).
+
+Each half is load-bearing (frida A/B on the shipped compiler): without the
+same-object rule +1, without the different-object rule +4 and one partial
+down, without the VN half +4 and one partial down. The size bound is
+load-bearing: 12 bytes +5/-3, 16 bytes +5/-4, unbounded +5/-119. Killing the
+sibling subranges in VN as well is inert. Excluding anonymous `@NNN` objects is
+inert.
+
+A whole-alias rewrite at `make_alias` (the direct model: return the whole
+alias for a subrange of a small static) reaches a different set: +4/-1, five
+partials down, because the whole alias then has size 8 and falls outside
+clauses A/C/C+, whose size tests were fitted on access size. Excluding `@NNN`
+templates takes it to +4/-0 with the partials still down. The predicate form
+is strictly better.
+
+**Injection layout changed.** The blob grew to 1,118 bytes and no longer fit
+the grown page. It now starts at `0x57ea50` in the original cave and runs
+into the grown page; the eight stubs follow it (1,367 of 1,460 bytes used).
+Blob sections are packed at 4-byte alignment instead of 16. Refactor checked
+by compiling the clause out: all 224 game objects byte-identical to the old
+compiler's.
+
+Moved but not closed: `zGameLoop` 99.979, `xFXAuraUpdate` 99.838,
+`xFXanimUVSetAngle`/`xFXanimUV2PSetAngle` 94.783, `zCameraTweakGlobal_Add`
+96.331, `NightLightUVStep` 67.700.

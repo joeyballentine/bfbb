@@ -53,7 +53,7 @@ EXTERNS = {"_killmemory": 0x0050A2C0}
 
 # The exported predicates the stubs call.
 EXPORTS = ("_sb_sched_clause", "_sb_licm_clause", "_sb_vn_store_kill",
-           "_sb_licm_invariant")
+           "_sb_licm_invariant", "_sb_vn_subrange_store")
 
 REL32 = 0x14
 DIR32 = 0x06
@@ -99,13 +99,14 @@ def link(base_va, obj_path):
     data = compile_obj(obj_path)
     secs, syms = _parse(data)
 
-    # Assign each .text section a place in the blob, 16-byte aligned (COFF
-    # ALIGN_16BYTES), deterministic in section-table order.
+    # Assign each .text section a place in the blob, 4-byte aligned,
+    # deterministic in section-table order. The COFF asks for 16; x86 does not
+    # need it and the injected region is short of room.
     text_idx = [i for i, s in enumerate(secs) if s["name"] == ".text" and s["rsz"]]
     place = {}      # section index (0-based) -> base VA
     blob = bytearray()
     for i in text_idx:
-        while len(blob) % 16:
+        while len(blob) % 4:
             blob.append(0)
         place[i] = base_va + len(blob)
         s = secs[i]
@@ -194,8 +195,8 @@ def refresh():
     if not source_available():
         sys.exit(f"cannot refresh: mwcc-gc repo not found at {MWCC_GC} "
                  f"(set MWCC_GC to its location)")
-    from patch_compiler import PAGE_VA   # the one home of the base VA
-    blob, exports = _fresh_link(PAGE_VA)
+    from patch_compiler import BLOB_VA   # the one home of the base VA
+    blob, exports = _fresh_link(BLOB_VA)
     import hashlib
     src_sha = hashlib.sha1(open(SRC, "rb").read()).hexdigest()
     hexs = blob.hex()
@@ -210,7 +211,7 @@ PATCHED_SHA1 in tools/patch_compiler.py and re-measure with
 tools/patchcost.py.
 """
 
-BASE_VA = {PAGE_VA:#x}
+BASE_VA = {BLOB_VA:#x}
 SRC_SHA1 = "{src_sha}"
 BLOB_HEX = (
 {lines}
@@ -219,7 +220,7 @@ EXPORTS = {{
 ''' + "".join(f'    "{k}": {v:#x},\n' for k, v in sorted(exports.items())) + "}\n"
     with open(ARTIFACT, "w") as f:
         f.write(body)
-    print(f"wrote {ARTIFACT}: {len(blob)} bytes at {PAGE_VA:#x}, "
+    print(f"wrote {ARTIFACT}: {len(blob)} bytes at {BLOB_VA:#x}, "
           f"source sha1 {src_sha}")
     print("now update PATCHED_SHA1 in tools/patch_compiler.py (build once to "
           "see the new hash) and re-measure with tools/patchcost.py")
