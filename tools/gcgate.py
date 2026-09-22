@@ -37,7 +37,7 @@ rebuilding reported check_hide_entities__Fv in zCutsceneMgr down to 91.047%,
 and deleting that one .o and rebuilding put it back at 100% with nothing else
 changed. Neither the unit nor any header it includes differed between the two
 branches. So when this fails, delete the named unit's object, rebuild, and read
-it again -- the same discipline the hand-off applies to `ninja | tail`.
+it again -- the same discipline docs/PCPORT.md applies to `ninja | tail`.
 
 Usage:
   gcgate.py                 check both; exit 1 if either fails

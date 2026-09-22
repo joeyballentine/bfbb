@@ -15,8 +15,6 @@
 // same tile turned on its side. Sixteen of the twenty quads share a single UV
 // rectangle. So a wider frame is the same tile a few more times -- not a
 // resample, not a guess, just the repeat the artist was already making.
-//
-// See PCPORT.md for the measurements this rests on.
 
 struct RpAtomic;
 

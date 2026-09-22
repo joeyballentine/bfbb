@@ -3,8 +3,8 @@
 The GameCube implementation of the game's platform interfaces lives in
 `src/SB/Core/gc`. This is the same set of interfaces, for a host.
 
-Everything here is phase 2 of `docs/PCPORT.md`. To pick the work up, start with
-`docs/PCPORT-HANDOFF.md` at the repository root.
+`docs/PCPORT.md` covers how the port is built and gated, and how it is kept
+apart from the GameCube build.
 
 ## Settings: config.ini
 
@@ -92,12 +92,10 @@ at load rather than ignored.
     width               640 by default, the consoles' framebuffer
     height              480
 
-                        Keep the ratio at 4:3. The camera's frustum and every
-                        2D layer work in a 4:3 space, so 1280x720 is the same
-                        picture stretched to fit rather than a wider view of
-                        the world. docs/RESOLUTION.md is the whole account,
-                        including the rule that every full-screen camera in the
-                        game has to be built at this size or it draws nothing.
+                        Any ratio. A ratio wider than 4:3 keeps the vertical
+                        view and adds width. docs/RESOLUTION.md is the whole
+                        account, including the D3D9 rule that every full-screen
+                        camera has to be built at this size.
 
     fov                 75 by default, which is the number the game is built
                         around: the horizontal field of view in degrees at 4:3.
