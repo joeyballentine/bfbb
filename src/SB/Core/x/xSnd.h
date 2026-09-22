@@ -80,6 +80,10 @@ struct _xSndDelayed
     U32 pad0;
 };
 
+// sound_queue calls these; two-phase lookup needs them declared first.
+void xSndStop(U32 snd);
+U8 xSndIsPlayingByHandle(U32 sndID);
+
 template <S32 N> struct sound_queue
 {
     U32 _playing[N + 1];
