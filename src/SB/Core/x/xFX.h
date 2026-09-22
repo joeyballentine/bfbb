@@ -84,10 +84,7 @@ struct xFXRibbon
 
     bool debug_need_update() const;
 
-    void clear()
-    {
-        joints.clear();
-    }
+    void clear();
 
     void init(const char*, const char*);
     void init(S32, const char*);
@@ -115,6 +112,15 @@ struct xFXRibbon
     void render();
     void set_raster(RwRaster*);
 };
+
+// Specialized in xFX.cpp. The declaration has to precede the first
+// instantiation, which is xFXRibbon::clear() below.
+template <> void tier_queue<xFXRibbon::joint_data>::clear();
+
+inline void xFXRibbon::clear()
+{
+    joints.clear();
+}
 
 struct xFXStreakElem
 {
