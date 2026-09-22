@@ -1189,7 +1189,7 @@ target_compile_options(fontfit PRIVATE ${BFBB_NO_WARNINGS})
 
 # The other half of the same guarantee. Almost none of the sixty-odd rebased
 # game sites can be reached from a unit test -- they want a scene, a model, a
-# player -- so what protects them is a scan for the four shapes plus a baseline
+# player -- so what protects them is a scan for the five shapes plus a baseline
 # of every one that has been read and judged. A new one fails here.
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_FOUND)
@@ -1475,8 +1475,7 @@ endif()
 # a thing an Android application can do to itself. The settings it edits are
 # still read: config.ini is written with the defaults on the first run, in the
 # internal storage directory (iHostExeDir), and can be pulled, edited and
-# pushed back with adb. A settings screen inside the game is the honest answer
-# and is phase 6 in docs/ANDROID.md.
+# pushed back with adb. See "Files on the device" in docs/ANDROID.md.
 if(ANDROID)
   set(BFBB_CONFIGURATOR_DEFAULT OFF)
 else()

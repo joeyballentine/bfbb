@@ -32,7 +32,7 @@ android {
 
         // 24 rather than SDL's 21: the port wants GLES 3.1 where it can get
         // it, and the scoped-storage behaviour the asset import is written
-        // against (docs/ANDROID.md, "Assets") is not worth having two answers
+        // against (docs/ANDROID.md, "Importing the game files") is not worth having two answers
         // for. Nothing below 24 is a device anyone is going to run this on.
         minSdk = 24
         targetSdk = 35
@@ -61,7 +61,7 @@ android {
         }
 
         // arm64 only, for now, and the choice is not arbitrary: see
-        // docs/ANDROID.md, "The low 4 GB". The game allocator addresses its
+        // docs/ANDROID.md, "Arena below 4 GB". The game allocator addresses its
         // arena with a 32-bit integer, and whether a 64-bit Android process
         // can get a mapping below 4 GB is the question the whole port turns
         // on. armeabi-v7a is the fallback if it cannot -- 32-bit pointers

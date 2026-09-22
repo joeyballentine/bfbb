@@ -29,8 +29,8 @@
 //
 // It is here because armeabi-v7a is a REAL configuration for this port and
 // not a curiosity -- it is what the port falls back to if a device cannot
-// give the game allocator its arena below 4 GB, which is the first question
-// docs/ANDROID.md asks. Without this arm the build lands in the generic case
+// give the game allocator its arena below 4 GB (docs/ANDROID.md, "Arena
+// below 4 GB"). Without this arm the build lands in the generic case
 // below and carries its recursion hazard into the one configuration chosen
 // for being safer.
 #define BFBB_FRSQRTE_ARM 1

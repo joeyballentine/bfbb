@@ -84,8 +84,8 @@
              for. That is not a nicety: an activity restart destroys the EGL
              context, and librw has no path that rebuilds its rasters and
              shaders, so a rotation or a keyboard appearing would take the
-             renderer out from under the game. See docs/ANDROID.md, "Losing
-             the GL context". -->
+             renderer out from under the game. See docs/ANDROID.md, "GL
+             context and surface loss". -->
         <activity
             android:name=".BfbbActivity"
             android:label="@string/app_name"
