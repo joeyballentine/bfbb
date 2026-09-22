@@ -7163,3 +7163,28 @@ functions on the patch-cost list (`xBoxFromCircle`,
 `zNPCGoalJellyBirth::Process`, `BasisBspline`, `zEntPlayer_AnimTable`,
 `zNPCGoalPatrol::MoveNormal`); the sixth, `zNPCFodBzzt::Setup`, is recovered
 by no single ablation.
+
+## Clause E3n counts indirect stores into frame arrays (2026-09-22)
+
+Shipped. `GC/2.0p1a` sha1 `1d1bae88d9550883de90779e85cabcb9983e29ac`. Full
+`ninja`: game **7318 -> 7322 (+4 / -0)**, matched_code 82.307 -> 82.726,
+fuzzy 99.382 -> 99.386, DOL intact, nothing down.
+
+This closes the "literal load hoisted over an INDEXED frame store" candidate
+recorded under zNPCTypeBossPlankton. A store through a pointer into a local
+array carries the indirect bit (0x20, set by `gather_alias_info` when the
+alias is the whole object rather than the accessed word), so E3n's
+`flags == 4` test declined it. Retail keeps the literal load after
+`stwx` into `anim_list[]` (`ZNPC_AnimTable_BossPlankton`,
+`ZNPC_AnimTable_BossSB2`), after `stfs` into `pos[100]`
+(`zFX_SpawnBubbleWall`) and after `stfs` into `tranresult[]`
+(`xcsCalcAnimMatrices`). The clause now tolerates the bit, as clause C+ did
+for clause C, with two gates, each backed by one witness:
+
+- the store writes a word or more: `zMainFirstScreen`'s `stb` into
+  `text[617]` lets a template load pass (without this gate, -1);
+- the array is larger than 16 bytes: `zNPCBSandy::Process`'s `stfsx` into a
+  12-byte local lets `1.0f` pass (without this gate, one partial down).
+
+Measured variants: indirect bit tolerated with no gate +4 / -1; float loads
+only +4 / -1.
