@@ -37,31 +37,36 @@ Supported versions:
 
 ## About this fork
 
-This is a fork of [bfbbdecomp/bfbb](https://github.com/bfbbdecomp/bfbb) where the
-decompilation is driven by an LLM, as an experiment. All of the decomp work on the
-`duplotron` branch was written by Claude. Claude used the existing tooling in the decomp repo as well as its own tooling. 
-Most of the work was done completely autonomously, with minimal guidance to make sure it wasn't creating fakematches 
-(at least, to the best of my ability). From what I can tell, the quality of the code it output is generally pretty good, 
-and the process it used was basically looking at the asm/ghidra output, testing out various permutations of 
-the c++ code in a scratchpad, and then applying the most-matching version to the repo. 
+This is a fork of [bfbbdecomp/bfbb](https://github.com/bfbbdecomp/bfbb) where
+the decompilation on the `duplotron` branch was written by Claude, as an
+experiment.
 
-This was an experiment/proof of concept I did with my extra claude usage I wasn't going to use for anything else, so it didn't cost me any extra money.
-Though much of the generated code seems pretty good, I would consider this mostly "slop", and 
-will need to be carefully verified before merging to main. This was a "move-fast-break-things" approach to get something working, 
-which worked for my personal purposes, but long-term we want the official decomp to be high quality.
+Claude did the work mostly unattended, using the decomp's tooling plus tools it
+wrote itself. For each function it read the assembly and Ghidra output, tried
+source variants in a scratchpad, and applied the best-matching one. I checked
+it for fakematches as well as I could.
 
-This also uses a scheduler-patched CodeWarrior (`GC/2.0p1a`, produced at
-configure time by `tools/patch_compiler.py`), which unblocks functions that
-differ only by instruction scheduling. The patches were found by multiple Fable instances, 
-and compared against a mwcc decomp to validate.
+The code is generally decent, but treat it as unreviewed. It needs careful
+verification before any of it goes to upstream `main`. It was a fast
+proof of concept run on Claude usage I had spare.
 
-The work has gone almost entirely into game code rather than the SDK and
-library code around it (the existing decomp project's goal), and that is what made the PC port on `treedome`
-possible, since none of the non-game code was required to port to PC.
+Differences from upstream:
 
-Slop warning: See [docs/DUPLOTRON.md](docs/DUPLOTRON.md) for what's been tried and ruled out. This plus a bunch of other slop .md files here that are not intended to be read by actual humans but were helpful for claude to track things.
+- **Game code first.** Almost all work went into the game code in `src/SB`,
+  not the SDK and libraries. That is what the PC port on the `treedome` branch
+  needed.
+- **Patched compiler.** The build uses `GC/2.0p1a`, a scheduler-patched
+  CodeWarrior that `tools/patch_compiler.py` derives from the stock compiler at
+  build time. It matches functions that differed only in instruction
+  scheduling. Several Fable instances found the patches, and they were
+  checked against a decompilation of mwcc.
+- **Playable build.** The matching build still gates on the retail sha1.
+  `python configure.py --non-matching` links every `src/SB` unit from source
+  into a `main.dol` that runs, with some bugs.
 
-This fork still contains the matching gate that the original uses to build a matching .dol file. Though, it is also completely linkable to a working non-matching .dol file that can be played (with some bugs).
+[docs/DUPLOTRON.md](docs/DUPLOTRON.md) records what has been tried and ruled
+out. It and the other notes files in `docs/` are working notes for Claude, not
+documentation.
 
 # Dependencies
 
