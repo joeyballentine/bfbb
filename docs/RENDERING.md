@@ -1,439 +1,377 @@
-# Adding to the renderer
+# The renderer
 
-## Where things stand
+How the PC port draws, what the game's assets give it to work with, which
+optional effects exist, the fixed-function Direct3D 9 mode, and what is not
+built. [RESOLUTION.md](RESOLUTION.md) covers render size, widescreen and the
+window.
 
-This began as an audit of two questions asked in the same sitting -- what modern
-graphical effects the port could realistically gain as optional settings, and
-whether it could also gain a fixed-function mode for old hardware -- and it
-records what reading the pipeline turned up for each. The file:line references
-are to the tree as of the `treedome` branch.
+## Backends
 
-The two halves pull in opposite directions on purpose. One raises the ceiling,
-the other lowers the floor, and the last section of part two is about what it
-costs to want both.
+One executable carries several render backends. `[video] backend` picks one at
+startup: `auto`, `d3d9`, `d3d11`, `gl3` or `vulkan`.
 
-Shipped from part one since: MSAA and alpha-to-coverage as `video.msaa` and
-`video.alpha_to_coverage`, supersampling named as such in `video.width` /
-`video.height`, and per-pixel lighting as `video.per_pixel_lighting`.
-Anisotropic filtering is still unexposed and still the best ratio on the list.
+| Backend | Window | Shaders | Notes |
+|---|---|---|---|
+| Direct3D 9 | SDL window, created by the port | HLSL, SM 2.0 (SM 3.0 for toon) | The only backend with a fixed-function path. |
+| Direct3D 11 | SDL window, created by the port | HLSL, SM 4.0 (feature level 10_0) | Same pipelines as D3D9. |
+| Vulkan 1.3 | SDL window, created by the port | HLSL compiled to SPIR-V | Same pipelines as D3D9. Not in the default build. |
+| OpenGL 3.3 | SDL window, created by librw | GLSL | Falls back through 2.1, GLES 3.1 and GLES 2.0. The backend off Windows. |
 
-Part two is built and unfinished: `video.pipeline = auto | shader | fixed`
-draws the world, the models, the characters and the interface without a shader.
-See [What is still missing](#what-is-still-missing).
+- `BFBB_RENDER_BACKENDS` (CMake) lists what the build carries. The default is
+  `D3D9;D3D11;GL3` on Windows and `GL3` elsewhere. `VULKAN` has to be added.
+  `NULL` alone is the headless build the self-tests run in.
+- `auto` takes the first backend the build has, in the order D3D9, D3D11, GL3,
+  Vulkan. A named backend the build lacks falls back to the first one it has,
+  with a message. `iBackendResolve` in `src/SB/Core/pc/rw/backend.cpp` does
+  this before the window opens.
+- librw is our fork: `third_party/librw`, `joeyballentine/librw`, branch
+  `bfbb-port`. Changing it is normal practice here.
+- D3D11 and Vulkan are implementations of librw's `rw::d3d` device. All three
+  answer to `PLATFORM_D3D9`, read the same native data and register the same
+  pipelines. `rw::d3d::useD3D11` and `rw::d3d::useVulkan` pick the device.
+- Port code tests the running backend with `iBackendIsD3D9`, `iBackendIsD3D11`,
+  `iBackendIsVulkan`, `iBackendIsGL3` (`rw/backend.h`). `iBackendIsD3D` covers
+  both Direct3Ds and not Vulkan. The `RW_*` defines only say what compiles.
 
-Which renderer draws is `video.backend`, not a build flag. One Windows
-executable carries Direct3D 9, Direct3D 11 and OpenGL 3.3; `auto` takes the
-first, and naming one is what a machine with a bad driver needs.
+## Shaders
 
-## What the pipeline already is
+**D3D9, D3D11 and Vulkan share one HLSL source per shader**, in
+`third_party/librw/src/d3d/shaders/`. `make_shaders.cmd` there compiles each one
+three times:
 
-Three facts decide most of what follows, and all three are better than they
-might have been.
+- SM 2.0 or 3.0 into `shaders/`, for D3D9 (fxc).
+- SM 4.0 with `SM4` defined into `shaders11/`, for D3D11 (fxc).
+- SPIR-V from the SM 4.0 source into `shadersvk/`, for Vulkan (dxc, then
+  `spirv_h.py`).
 
-**librw's D3D9 backend is shader-based, not fixed-function.** Every draw goes
-through a real vertex and pixel shader pair --
-`third_party/librw/src/d3d/shaders/default_VS.hlsl` and `default_PS.hlsl`, with
-lighting, fog and material constants in `standardConstants.h`. There is no
-fixed-function wall to climb over for anything in part one.
+`shaders/rwshader.h` holds everything that differs between SM 2/3 and SM 4:
+texture and sampler declarations, the alpha test (a `clip` against `c7` at SM 4),
+integer constants, and blend indices. Constant registers are the same in both.
+The compiled blobs are checked in, so a build needs no shader compiler.
 
-**Full-screen post infrastructure exists and is ours.**
-`src/SB/Core/pc/rw/glow.cpp` captures the back buffer into a sampleable raster,
-manages a downsample chain of render targets, and runs compiled shader blobs
-over it, with `rw/shaders/make_shaders.cmd` to rebuild them from HLSL.
-`distort.cpp` and `snapshot.cpp` do the same capture. Adding another post pass
-is a copy of an existing file rather than new plumbing.
+The port's own pass shaders (glow, distort) follow the same scheme in
+`src/SB/Core/pc/rw/shaders/make_shaders.cmd`, which includes librw's
+`rwshader.h`.
 
-**Everything already renders offscreen.** `rw/engine_start.cpp:364` calls
-`setVirtualScreen`, so the frame is drawn into a render target of the configured
-size and stretched into the back buffer at present time. A post chain running at
-render resolution is already the shape the engine is in. See
-[RESOLUTION.md](RESOLUTION.md).
+**GL3 has its own GLSL**, in `third_party/librw/src/gl/shaders/` and
+`src/SB/Core/pc/rw/shadersgl/`. The `.inc` files are generated from the
+`.vert` and `.frag` sources.
 
-The current hardware floor is Shader Model 2.0: everything compiles to `vs_2_0`
-and `ps_2_0`, except the cel look's two `ps_3_0` pixel shaders
-(`shaders/make_shaders.cmd`, `rw/shaders/make_shaders.cmd`). The same sources
-compile to shader model 4 for the D3D11 backend; `shaders/rwshader.h` is what
-differs between the two.
+**The hardware floor on D3D9 is Shader Model 2.0.** Everything is `vs_2_0` and
+`ps_2_0` except the two toon pixel shaders, `default_toon_PS` and
+`default_tex_toon_PS`, which are `ps_3_0` because they need `ddx`/`ddy`.
+
+Lighting is per vertex unless `video.per_pixel_lighting` is on:
+`default_VS.hlsl` and `skin_VS.hlsl` sum ambient, directional, point and spot
+lights. Fog is per vertex on every backend: `default_VS.hlsl` writes the factor
+into `TexCoord0.z` and `default_PS.hlsl` lerps by it; GL3's `default.vert`
+writes `v_fog`.
+
+## Everything renders offscreen
+
+Every backend draws the frame into a render target of the render size, the
+virtual screen, and scales it into the window at present with black bars.
+
+- D3D9: `setVirtualScreen` and `blitVirtualScreen` in `d3d/d3ddevice.cpp`.
+- D3D11: the same names in `d3d/d3d11device.cpp`, presented through
+  `blit_VS`/`blit_PS`.
+- Vulkan: the scene image, `acquireScene` in `d3d/vkdevice.cpp`.
+- GL3: a framebuffer object, `setVirtualScreen` and `blitVirtualScreen` in
+  `gl/gl3device.cpp`.
+
+The `OpenDevice*` functions in `src/SB/Core/pc/rw/engine_start.cpp` set the size
+and sample count before `Engine::open`. MSAA lives on this surface: a
+multisampled target, resolved at present.
+
+Other offscreen targets:
+
+- **Camera textures.** A `Raster::CAMERATEXTURE` camera draws into its own
+  colour surface. D3D11 and Vulkan pair it with its Z raster only when the two
+  are the same size. A camera with no Z raster is legal on every backend; the
+  glow chain's cameras have none.
+- **The character shadow.** `xShadow.cpp` renders the caster into a camera
+  texture and projects it onto receivers. Its size is
+  `video.shadow_resolution`: `auto` is half the render height rounded up to a
+  power of two (480 lines gives retail's 256), or a power of two from 64 to
+  4096. `SetupShadow` halves it until it fits inside the render size.
+- **Full-screen cameras** (`Raster::CAMERA`) have no surface. They draw into the
+  virtual screen, and on D3D9 their Z raster has to match its size.
+  [RESOLUTION.md](RESOLUTION.md) has the list and the reason.
+- **GL3 depth as a texture.** `rw::gl3::bindVirtualScreenDepth` copies the
+  virtual screen's depth into a texture and binds it to a stage. Nothing calls
+  it.
+
+## Screen passes
+
+`src/SB/Core/pc/rw/glow.cpp`, `distort.cpp` and `snapshot.cpp`. Each copies the
+virtual screen into a texture and draws 2D quads over it with its own pixel
+shader. One file per pass, with an arm per backend chosen by `iBackendIs*`. All
+four backends have all three.
+
+| Pass | Setting | What it is |
+|---|---|---|
+| Glow | `xbox.glow` | The Xbox bloom: bright pass, two four-tap blurs, additive composite. The chain is sized from the captured frame; `iGlow.h` has the numbers. |
+| Distort | `xbox.distortion` | The Cruise Bubble screen warp. |
+| Snapshot | `xbox.snapshot` | Keeps the last presented frame for the loading screen. |
+
+A new pass is a copy of one of these files. Under the D3D9 fixed-function path,
+glow and distort report themselves off; the snapshot is a surface copy and
+still works.
 
 ## What the assets are
 
 Measured across all 55 level `.HOP` files, bounded to each asset's extent from
-the file's own `AHDR` dictionary. Four numbers decide what any lighting work can
-do, and two of them are the ones this document previously listed as unverified.
+the file's own `AHDR` dictionary.
 
-**The world is baked vertex colour, all of it.** 1,313,413 world vertices across
-two `JSP ` assets per level, 100% carrying prelit colour. Clearing it leaves the
-world flat-shaded, which is a known-good mod.
+**The world is baked vertex colour, all of it.** 1,313,413 world vertices
+across two `JSP ` assets per level, 100% carrying prelit colour. Clearing it
+leaves the world flat-shaded.
 
-**Only 36.4% of world vertices carry normals, and it is all-or-nothing per
-level: 34 of 55 levels have none.** This, not the bake, is what stops the world
-being lit at run time. Levels with normals include b301-b303, hb01-hb06, hb08-hb10,
-rb01-rb03, gy01, gy03, jf02, sm01, bb02 and bc03; jf01, gl01-gl03, kf01, kf02,
-kf04, kf05, hb00, hb07, db01-db06 and the rest have none. Generating them at load is tractable --
-hash positions across the whole JSP clump, area-weight the face normals, split on
-a smoothing angle, set the flag before `iEnv.cpp:68`'s `RpAtomicInstance` runs --
-and the 21 levels that ship normals are a free correctness test for the generator.
+**Only 36.4% of world vertices carry normals, all-or-nothing per level: 34 of
+55 levels have none.** Levels with normals include b301-b303, hb01-hb06,
+hb08-hb10, rb01-rb03, gy01, gy03, jf02, sm01, bb02 and bc03. jf01, gl01-gl03,
+kf01, kf02, kf04, kf05, hb00, hb07, db01-db06 and the rest have none.
+`iEnvGenerateNormals` (`src/SB/Core/pc/iEnvNormals.cpp`) generates them at load
+under `experimental.world_lighting`. `iEnvNormalsCompare` checks the generator
+against the 21 levels that ship normals.
 
-**Every light kit in the game is directional-only.** 34 distinct `LKIT` assets,
-each 4 to 8 directionals plus at most one ambient. No point light and no spot
-light ships in any of them; the only point light the game ever makes is
-`zDiscoFloor.cpp`'s, at run time. Anything that needs a per-light budget can be
-sized for directionals and fall back for the rest.
+**Every light kit is directional-only.** 34 distinct `LKIT` assets, each 4 to 8
+directionals plus at most one ambient. No point or spot light ships. The only
+point light the game makes is `zDiscoFloor.cpp`'s, at run time.
 
-**No placed dynamic lights ship at all.** Zero `LITE` assets in the whole game,
-so `zLight.cpp`'s subsystem -- flicker, strobe, dim, cauldron -- has no data to
-run on.
+**No placed dynamic lights ship.** Zero `LITE` assets, so `zLight.cpp`'s
+flicker, strobe, dim and cauldron code has no data.
 
-One loose end worth an experiment: 17 of the 55 levels ship a non-zero
-`bspLightKit` in their ENV asset, an authored light rig for the world.
-`zScene.cpp:2406` reads it into `env->lightKit` and nothing anywhere reads that
-field back -- `xEnv.cpp:19` nulls it and that is the only other mention. Enabling
-it during `zEnvRender` is a one-line change and would show whether it is still
-good data or a leftover from an earlier lighting model.
+**17 of 55 levels ship a `bspLightKit`** in their ENV asset, a light rig
+authored for the world. `zSceneSetup` loads it into `xEnv::lightKit`. Retail
+never enables it. `experimental.world_lighting = on` does: `zWorldLightKit` in
+`zScene.cpp` uses it where the level has one.
 
-A warning for anyone repeating the measurement: scan the asset extents, not from
-the `JSP\0` marker. A HOP holds ~167 `MODL` assets alongside its two JSPs, and
-the JSP's clump comes *before* its `JSP\0` header, which follows the `0xBEEF01`
-collision block. Scanning marker-to-EOF measures the models instead and reports
-the world as mostly unlit. `AHDR` fields are big-endian: `assetID, type(4cc),
-offset, size, plus, flags`, then an `ADBG` sub-chunk with the name.
+To repeat the measurement: scan asset extents, not from the `JSP\0` marker. A
+HOP holds ~167 `MODL` assets beside its two JSPs, and the JSP's clump comes
+before its `JSP\0` header, which follows the `0xBEEF01` collision block.
+Scanning marker-to-EOF measures the models. `AHDR` fields are big-endian:
+`assetID, type(4cc), offset, size, plus, flags`, then an `ADBG` sub-chunk with
+the name.
 
----
-
-# Part one: modern effects
-
-## Already in the engine, not exposed
-
-These are the best ratio in the document. The code is present and unreachable.
-
-### Anisotropic filtering
-
-`maxAniso` is plumbed all the way to the sampler state
-(`d3d/d3ddevice.cpp:599-616`), but it is a per-texture value and nothing in the
-port ever sets one, so every texture runs at 1. A global override at the
-`setFilterMode` call site plus a `video.anisotropy` key is small.
-
-On a game whose floors are all long oblique ground planes, this is the largest
-single sharpness gain available at high render sizes -- larger than any post
-effect. It depends on the textures having mipmaps, which is **unverified**;
-`rw/raster.cpp` handles mip levels but nothing generates them. Check the assets
-before building anything on this.
+## Shipped options
 
 ### MSAA
 
-`d3d9Globals.msLevel` exists and feeds the present parameters
-(`d3ddevice.cpp:1951`), but the virtual screen render target is created
-`D3DMULTISAMPLE_NONE` (`d3ddevice.cpp:1333`), and since every draw lands there,
-the back buffer's sample count is dead. Making it work needs a multisampled
-target and a resolve. Contained, but it is a change to the virtual screen, so
-read RESOLUTION.md's account of who owns that surface first.
+`video.msaa = 1 | 2 | 4 | 8`, all four backends. The virtual screen is
+multisampled and resolved at present. A count the device refuses falls back to
+off. D3D9 and D3D11 turn multisampling off for 2D quads, whose edges are placed
+in pixels.
 
-Note that MSAA does not touch alpha-tested edges, which is most of this game's
-silhouettes. See alpha-to-coverage below.
+### Keyed alpha cutout
 
-### Supersampling, which is already there
+Not a setting. A texture classified as keyed when its raster is read (almost
+no alpha values between 0 and 255) is alpha-tested instead of blended when the draw writes depth,
+has no vertex alpha and is not a 2D quad. The reference moves to the middle of
+the alpha ramp when the game left it at 1. This is `updateAlphaStates` in each
+backend (`d3ddevice.cpp`, `d3d11state.cpp`, `vkpipeline.cpp`,
+`gl3device.cpp`).
 
-`video.width` and `height` render above the display and downsample at present.
-That is SSAA, and it is the most effective antialiasing on the list, but nothing
-says so. Either the `config.ini` comment should say it or a `render_scale`
-should be split out so nobody has to compute it.
+It stops a magnified cutout edge from blending while writing depth, which showed
+the sky through walls. Alpha-to-coverage and `video.alpha_to_coverage` are
+gone. Cutout edges are hard at every MSAA count.
 
-## One new shader, existing plumbing
+### Supersampling
 
-### Alpha-to-coverage
+A render size above the display size is downsampled at present. There is no
+separate `render_scale`; `video.width` and `video.height` are the render size.
 
-The game cuts out its own foliage, fences and grates with an alpha test. Those
-edges are aliased, and MSAA will not fix them because the edge comes from the
-test rather than from geometry. Alpha-to-coverage is a single render state and
-it gives that silhouette proper antialiasing. Highest gain per line in part
-one.
+### Per-pixel lighting
+
+`video.per_pixel_lighting`, off by default. All four backends (`default_pp_VS`,
+`default_pp_PS`, `skin_pp_VS` in HLSL; `lighting.frag` on GL3).
+
+- Moves ambient and directional lighting into the pixel shader for the default,
+  UV-transform and skin pipelines, and for matfx meshes that carry no effect.
+  Environment-mapped draws stay per vertex.
+- A draw lit by a point or spot light falls back to per vertex. In practice that
+  is the disco floor.
+- Fits `ps_2_0`: eight unrolled directionals plus ambient. Unused slots are
+  uploaded as zero, so one shader covers every light count.
+- D3D9 uploads a second set of constants to the pixel stage, starting at `c8`.
+  GL3 needs none: a uniform declared in both stages is one uniform in the linked
+  program.
+
+### Toon
+
+`experimental.toon` and the `toon_*` keys under it. All four backends; D3D9
+needs `ps_3_0`.
+
+- Lighting looked up in a ramp texture of bands (`iToon.cpp` generates it; rows
+  for characters, metal, world and props), with saturation pushed.
+- An inverted-hull outline (`outline_VS`, `skin_outline_VS`, `outline_PS`;
+  GL3 `outline.frag`).
+- Forces the per-pixel path for the draws it shades.
+- `world_outline` draws the level a second time for its outline.
+
+### World lighting
+
+`experimental.world_lighting = off | on | bake`. Replaces the world's baked
+colour with lights computed at run time.
+
+- Generates the missing normals, then drops the prelight
+  (`iEnvDropPrelight`) where there is a rig to replace it.
+- `on` uses the level's `bspLightKit` where it has one, and the fitted rig
+  otherwise. `bake` always uses the fit: an ambient and four directionals
+  fitted per channel to the baked colour.
+- Objects are lit by the same rig as the world (`zObjectLightKit`).
+- `world_light_contrast` spreads the fitted rig. `world_light_shadows` traces
+  each vertex against the collision tree at load and makes the lighting static.
+  `day_night_cycle` rotates the sun. `world_model_shade` needs toon.
+
+## The fixed-function mode
+
+`video.pipeline = auto | shader | fixed`, D3D9 only. The other backends ignore
+the setting. The path is `third_party/librw/src/d3d/d3d9ff.cpp`. It draws the
+world, static models, characters, im2d and im3d.
+
+### What it targets
+
+DX7-class hardware T&L: GeForce 256/2/4MX, Radeon 7x00. The shader path needs
+Shader Model 2.0: Radeon 9500, GeForce FX 5200.
+
+### Where it plugs in
+
+- `rw::d3d::setFixedFunctionEnabled` is set in `OpenDeviceD3D9`
+  (`engine_start.cpp`) before `Engine::open` and never changed. `auto` takes
+  the fixed path when `D3DCAPS9` reports less than `vs_2_0` or `ps_2_0`, because
+  librw asserts on a shader it asked for and did not get.
+- `driverOpen`, `skinOpen` and `matfxOpen` read the flag to pick each pipeline's
+  render callback and to skip compiling shaders. Nothing switches per draw.
+- `beginUpdate` sets `D3DTS_VIEW`, `D3DTS_PROJECTION` and the fog range on the
+  device (`ffBeginUpdate`). `flushCache` skips the fog constants. `FOGENABLE`
+  reaches the device. im2d draws through a `POSITIONT` declaration.
+- `glow.cpp` and `distort.cpp` report themselves off.
+
+### How it maps
+
+- Vertex lighting, fog and the UV transform: `D3DRS_LIGHTING` with
+  `D3DLIGHT9`, `D3DRS_FOGVERTEXMODE`, `D3DTSS_TEXTURETRANSFORMFLAGS`.
+- `diffuse * texture`: one texture stage, `MODULATE(TEXTURE, DIFFUSE)`.
+- The material colour goes into `D3DRS_TEXTUREFACTOR` in stage 1, because the
+  shaders multiply by it after clamping the lighting and a `D3DMATERIAL9`
+  cannot express that.
+- Alpha test is render state and carries over unchanged.
+- Table fog is per pixel. The shader path's fog is per vertex, so here the
+  fixed path is the better picture.
+- **Skinning is on the CPU.** Fixed-function vertex blending caps at about four
+  matrices per draw and the characters have more bones. `skinRenderCB_Fix`
+  blends into a dynamic vertex buffer each frame from the geometry's portable
+  arrays (`skin->indices`, `skin->weights`, morph target 0) and emits
+  POSITION/NORMAL/COLOR/TEXCOORD. The index buffer is the instance header's,
+  unchanged.
+
+`third_party/librw/src/d3d/d3d8.cpp` is not a fixed-function backend. It is the
+`PLATFORM_D3D8` stream plugin. `lightingCB_Fix`, `setMaterial_fix` and the
+formerly commented-out `defaultRenderCB_Fix` are what the fixed path reused.
+
+### What it loses
+
+Glow, distortion, per-pixel lighting and toon. The lighting is close, not
+identical: fixed function normalises with `D3DRS_NORMALIZENORMALS` and
+attenuates point and spot lights as `1/(a + bd + cd^2)`. The tree's fix for
+librw lighting an object in proportion to its scale (`94b867a3`) is not
+replicated. The header of `d3d9ff.cpp` lists the differences.
+
+### What is still missing
+
+- **Environment mapping.** matfx and skin+matfx fall back to the plain render,
+  so a shiny material draws its base texture only. It needs a second stage with
+  `D3DTSS_TCI_CAMERASPACEREFLECTIONVECTOR`.
+- **Vertex alpha on lit geometry.** Fixed function takes vertex alpha from the
+  DIFFUSE source, so a mesh with vertex alpha reads its diffuse from the
+  vertices, which tints its dynamic light by the baked one.
+- **No run on hardware without shaders.** Every check so far is
+  `pipeline = fixed` on a modern card. Two texture stages,
+  `D3DRS_TEXTUREFACTOR`, `D3DTTFF_COUNT2` and a stride-0 constant vertex stream
+  are assumed present.
+- **No side-by-side comparison with the shader path.** A second implementation
+  of the same lighting, fog, alpha and blend rules finds bugs where the two
+  disagree. That needs someone to look at the same scene in both.
+
+Every effect added to the shader path has to be gated or duplicated for as long
+as both paths exist.
+
+## Not built
+
+### Anisotropic filtering
+
+The sampler side is plumbed on every backend: `setFilterMode` in
+`d3ddevice.cpp`, `filterMode` in `d3d11state.cpp`, `setFilterMode` in
+`gl3device.cpp` (`EXT_texture_filter_anisotropic`), and the Vulkan sampler
+cache. All read `Texture::getMaxAnisotropy`, which is 1 because nothing calls
+`setMaxAnisotropy`. A global override plus a `video.anisotropy` key is small.
+
+It depends on mip levels, which are not confirmed; see below. The game's floors
+are long oblique planes, so this is the largest sharpness gain available at
+high render sizes.
 
 ### Per-pixel fog
 
-The fog factor is computed in the vertex shader and interpolated:
-`default_VS.hlsl:66` writes it into `TexCoord0.z` and `default_PS.hlsl` lerps
-with it. World sectors are large polygons, so the factor is subtly wrong across
-them. Computing it in the pixel shader from interpolated `w` is a few lines, and
-opens the door to exponential and height fog as options.
-
-### Per-pixel lighting -- shipped as `video.per_pixel_lighting`
-
-librw lit per vertex -- ambient, directional, point and spot, all summed in
-`default_VS.hlsl` and `skin_VS.hlsl`. The characters are low-poly, so the
-shading was visibly faceted on curved surfaces.
-
-The setting moves ambient and directional lighting into the pixel shader for the
-default and skin pipelines. Directional only, because every light kit in the game
-is (see above); an atomic reached by a point or spot light falls back to the
-per-vertex path for that draw, which in practice is only the disco floor. matfx
-and skinmatfx stay per-vertex -- doubling their permutations to reach the two
-env-mapped surfaces in the game is not worth it.
-
-It stays inside `ps_2_0`, so the hardware floor does not move: eight unrolled
-directionals plus ambient is about forty instructions of the sixty-four
-available. Unused light slots are uploaded zeroed rather than skipped, which is
-what makes one shader cover every light count.
-
-Both backends have it. The two implementations differ in one interesting way.
-D3D9 needs a whole second set of pixel shader constants, because its constants
-are per-stage; GL3 needs none, because a uniform of the same name declared in
-both stages is one uniform in the linked program and `Shader::create` resolves
-locations against the whole program. And GL3's shader keeps the light loop,
-where ps_2_0 has neither loops nor branches and has to unroll.
-
-Writing the GL3 side turned up a live bug in `setLights`: it bailed out of its
-loops with a `goto` that landed past all five `setUniform` calls, so an atomic
-lit by exactly `MAX_LIGHTS` lights drew with the previous atomic's lights.
-Reachable here -- the game ships a light kit of eight directionals, and
-`MAX_LIGHTS` is eight. Fixed. That is the second bug found by making the two
-backends do the same thing, which is the argument part two makes for a second
-pipeline.
+The fog factor is interpolated from the vertices, and world sectors are large
+polygons. Computing it in the pixel shader from interpolated `w` is a few lines
+per backend and allows exponential and height fog.
 
 ### Better bloom
 
-The glow chain is faithful to the Xbox: two passes, four taps, weights and tap
-distances documented in `glow.cpp` and `iGlow.h`. It is thin at high render
-sizes. An optional enhanced mode -- Karis-average bright pass, progressive
-downsample and upsample chain -- reuses `glow.cpp`'s render target management
-wholesale. Low risk because the hard part is already written.
+The glow matches the Xbox: two passes, four taps. It is thin at high render
+sizes. An optional mode with a Karis-average bright pass and a progressive
+downsample/upsample chain reuses `glow.cpp`'s target management.
 
-### The cheap post passes
+### Cheap post passes
 
-FXAA or SMAA 1x for when MSAA is not affordable, sharpening for when the render
-size is below the display, and a tonemap with an optional 3D LUT slot. All pure
-post, all fit in `ps_2_0`, all copies of the glow pass's structure.
+FXAA or SMAA 1x for when MSAA is too costly, sharpening for render sizes below
+the display, a tonemap with an optional 3D LUT. All pure post, all fit
+`ps_2_0`, all shaped like the glow pass.
 
-## Needs a depth source
+### A depth source
 
-D3D9 cannot read the depth buffer. Everything in this section is gated behind
-one decision: the INTZ format hack, which works on essentially all D3D9-era
-parts from all three vendors, or an explicit depth prepass into an `R32F`
-target, which costs an extra pass over world and skinned geometry but depends on
-nothing. That choice should be made once, deliberately, before any of the
-following is started.
-
-GL3 already has its half. `rw::gl3::bindVirtualScreenDepth` blits the virtual
-screen's depth into a texture and binds it to a texture stage; the copy is what
-makes it sampleable at all, the depth buffer being attached to the framebuffer
-being drawn into and, under MSAA, a renderbuffer. Nothing calls it today -- a
-diagnostic inset used to -- so the first thing here to want depth on OpenGL has
-it already and should check that it still works.
+D3D9 cannot sample its depth buffer. The options are the INTZ format or a
+depth prepass into an `R32F` target. Branch `pc-shadowmap` (unmerged) packs
+depth into an RGBA8 colour target instead, which needs neither and works on
+D3D9 and GL3 alike. GL3 already has `bindVirtualScreenDepth`. D3D11 and Vulkan
+can sample depth directly. Decide this once before building anything below.
 
 ### SSAO
 
-Realistic once depth exists, with one important caveat. **The world's lighting
-is baked vertex colour** -- measured, 100% of it -- and it already contains
-authored ambient occlusion. Naive SSAO will darken every corner a second time and
-look muddy. It has to land as a multiply on the ambient term only, tuned tight
-and small-radius, catching the creases the bake missed. Reconstruct normals from
-depth rather than trusting geometry normals: two thirds of the levels have none
-to trust.
+Needs the depth source. The world's lighting is baked vertex colour and is
+expected to contain authored occlusion already, so naive SSAO darkens corners
+twice. It has to multiply the ambient term only, small radius. Reconstruct
+normals from depth: 34 levels ship no geometry normals.
 
 ### Depth of field
 
-Worth scoping to cutscenes only. Gameplay depth of field on a 3D platformer
-fights the player's ability to judge a jump.
+Cutscenes only. In gameplay it fights the player's judgement of a jump.
 
 ### Shadow maps
 
-`x/xShadow.cpp` projects a raster blob; `xShadowSimple.cpp` is the cheaper one.
-Real shadows for the player and NPCs would be the largest single visual upgrade
-available, and also the largest job.
-
-Less of it is missing than it looks. `xShadow.cpp` already creates an offscreen
-perspective camera and its raster (`SetupShadow:123`, `ShadowCameraCreatePersp`),
-renders the caster into it, and projects the result onto receivers, with a light
-direction plumbed in through `xShadowSetLight`. What has to be added is a depth
-format for that target, a light-space projection instead of the fitted
-perspective one, and receiver sampling in the default and skin pixel shaders --
-which the per-pixel lighting setting has now given a place to live.
-
-Still multi-week, and world receivers need the normals problem solved first.
-The cheaper middle ground remains: keep the projected shadow and make it soft
-and correctly fitted.
+Branch `pc-shadowmap`, unmerged: an orthographic light camera renders the player
+as packed depth, working on GL3; nothing samples it yet. librw on treedome
+already has GL3's receiver side (`rw::gl3::setShadowMap`, the `u_shadowParams`
+uniforms in `header.frag`), with no caller. Treedome ships the retail projected
+shadow only.
 
 ## Ruled out
 
-**TAA.** Needs motion vectors, which needs per-object previous transforms, which
-librw does not track, plus jitter infrastructure, on a game whose art is
-alpha-test-heavy. Bad trade.
+- **TAA.** Needs motion vectors, which need per-object previous transforms that
+  librw does not track, plus jitter, on alpha-test-heavy art.
+- **SSR.** No roughness data. The matfx environment map covers the reflections
+  the art asks for.
+- **PBR or a deferred path.** The game is prelit with no material parameters.
 
-**SSR.** No roughness data anywhere, and the matfx environment map already fakes
-what little reflection the art asks for.
+## Not verified
 
-**PBR relighting or a deferred path.** The game is baked prelit with no material
-parameters. It would not look better, it would look wrong.
-
-## If only one thing gets done
-
-Anisotropic filtering. Alpha-to-coverage was the other half of this
-recommendation and has shipped; aniso is the remaining one that fixes what makes
-the game read as low-resolution at high render sizes, and it is still a day's
-work behind a `maxAniso` that is already plumbed to the sampler.
-
-SSAO is genuinely reachable but it is the depth-source decision plus a careful
-fight with the baked lighting, so it is a project rather than a setting.
-
----
-
-# Part two: a fixed-function mode
-
-**Built, and not finished.** `video.pipeline = auto | shader | fixed`, in
-`third_party/librw/src/d3d/d3d9ff.cpp`. The world, the models, the characters
-and the interface all draw through it. [What is still
-missing](#what-is-still-missing) is the list to work from; the rest of this
-section is the design it was built to, kept because it is still what the code
-does and why.
-
-## What it lowers the bar to
-
-From Shader Model 2.0 -- Radeon 9500 (2002), GeForce FX 5200 (2003) -- to
-DX7-class hardware T&L: GeForce 256/2/4MX, Radeon 7x00, 1999-2000. A real
-three-year span, and it lands the game on hardware contemporary with the
-GameCube and Xbox it shipped on, which is most of the appeal.
-
-## `d3d8.cpp` is not what it looks like
-
-`third_party/librw/src/d3d/d3d8.cpp` reads like a fixed-function backend and is
-not one. It is the `PLATFORM_D3D8` stream plugin -- the reader for D3D8-instanced
-geometry in RW files. There is no `IDirect3DDevice8` anywhere in librw. Nobody
-should start this work expecting a backend to already be sitting there.
-
-What was there and is now used: `lightingCB_Fix` and `setMaterial_fix` in
-`d3ddevice.cpp` and `d3drender.cpp`, and the commented-out `defaultRenderCB_Fix`
-in `d3d9render.cpp`, which is what `d3d9ff.cpp`'s render callback grew from.
-`setMaterial_fix` had both its alphas a factor of 255 out; nothing called it.
-
-## The mapping is mostly one to one
-
-- `default_VS.hlsl` does transform, vertex lighting for all four light types, a
-  fog factor and an optional UV transform. Fixed function does every one of
-  those natively: `D3DRS_LIGHTING` with `D3DLIGHT9`, `D3DRS_FOGVERTEXMODE`,
-  `D3DTSS_TEXTURETRANSFORMFLAGS`.
-- `default_PS.hlsl` is `diffuse * texture` then a fog lerp. That is one texture
-  stage set to `MODULATE(TEXTURE, DIFFUSE)`, and fixed-function fog.
-- `im2d` is pre-transformed 2D. `D3DFVF_XYZRHW`.
-- Alpha test is render state (`D3DRS_ALPHATESTENABLE`, `ALPHAREF`,
-  `ALPHAFUNC`) rather than shader code, so it crosses over unchanged.
-- matfx environment mapping maps to `D3DTSS_TCI_CAMERASPACEREFLECTIONVECTOR`
-  plus a second blended stage. Fiddly rather than hard. It needs two texture
-  stages, which is exactly what DX7-era parts have, so it just fits.
-
-There is an irony here worth keeping. Fixed-function **table fog**
-(`D3DRS_FOGTABLEMODE`) is evaluated per pixel. The shader path computes fog per
-vertex and interpolates it. Until the per-pixel fog above is written, the
-fixed-function mode would have better fog than the shader mode.
-
-## Skinning is the one real problem
-
-`skin_VS.hlsl` declares `float4x3 boneMatrices[64]` and blends four influences
-per vertex; `d3d9skin.cpp:289` uploads `skin->numBones*3` constants. Fixed
-function has indexed vertex blending, but it is capped at
-`MaxVertexBlendMatrixIndex`, which on hardware of that era is typically four
-matrices per draw. The characters have far more bones than that. Two ways out:
-
-1. **Bone-partition each mesh** into batches whose vertices touch at most four
-   bones, one draw per batch. Correct, stays on the GPU, and is a week plus a
-   permanent extra path in the pipeline builder.
-2. **Skin on the CPU** into a dynamic vertex buffer each frame, emitting a plain
-   POSITION/NORMAL/COLOR/TEXCOORD stream with no blend data at all. Two or three
-   days, and it is what games of that hardware generation actually did. On a
-   GeForce 2 the CPU is frequently the better skinner anyway.
-
-Option 2. `skinRenderCB_Fix` blends into a dynamic vertex buffer each frame and
-emits POSITION/NORMAL/COLOR/TEXCOORD with no blend data at all. It reads the
-geometry's PORTABLE arrays -- `skin->indices`, `skin->weights`, morph target 0 --
-rather than locking the instanced buffer, because that is the same data
-`skinInstanceCB` reads and it is already in system memory. The index buffer is
-the instance header's, unchanged: both writers put the vertices in geometry
-order, so a mesh's `baseIndex` and `startIndex` mean the same thing against
-either buffer.
-
-## What is lost
-
-Glow, distortion and everything in part one -- all `ps_2_0`. The `xbox.glow` and
-`xbox.distortion` settings would need to report themselves forced off rather
-than silently doing nothing. The snapshot should survive; it is a surface copy,
-not a shader.
-
-The lighting will be close but not identical. Fixed function has its own
-normalisation and attenuation, and the tree already carries a local fix in that
-area (`94b867a3`, librw lighting an object in proportion to its scale) which
-would have to be replicated by hand. This is a look-alike mode, not a match.
-
-## What is still missing
-
-- **Environment mapping.** The matfx and skin+matfx pipelines fall back to the
-  plain fixed-function render, so a shiny material draws its base texture and
-  no shine. It needs a second texture stage with
-  `D3DTSS_TCI_CAMERASPACEREFLECTIONVECTOR`, which is the mapping described
-  above and which nothing has been written for.
-- **Vertex alpha on lit geometry.** Fixed function takes the vertex's alpha
-  from whatever the DIFFUSE term reads, and there is no way to take colour from
-  one source and alpha from another. A mesh with vertex alpha therefore reads
-  its diffuse from the vertices, which tints its dynamic light by the baked
-  one. It is the lesser of the two errors, not a correct answer.
-- **`MaxVertexBlendMatrixIndex` is still not a measured number.** It stopped
-  mattering the moment the skinning moved to the CPU, but the caps query has
-  never been run on any specific target.
-- **Nothing has been run on hardware without shaders.** Every check so far is
-  `video.pipeline = fixed` on a modern card, which proves the path draws and
-  proves nothing about the parts a DX7 driver would refuse: two texture stages
-  is a floor, `D3DRS_TEXTUREFACTOR` and `D3DTTFF_COUNT2` are assumed present,
-  and the stride-0 constant vertex stream is assumed to work.
-- **The picture has not been compared against the shader path.** That
-  comparison is most of the reason the mode is worth having -- see below -- and
-  it needs somebody to look at the same scene twice.
-
-## Where it plugs in
-
-librw is our own fork (`joeyballentine/librw`, branch `bfbb-port`), so editing it
-is ordinary practice here rather than a vendor patch.
-
-The seam turned out to be clean. `rw::d3d::setFixedFunctionEnabled` is set
-before `Engine::open` and never afterwards, and `driverOpen`, `skinOpen` and
-`matfxOpen` read it to pick each pipeline's render callback and to decide
-whether to compile a shader at all. Nothing switches per draw. `auto` is
-resolved in `engine_start.cpp`, from the `D3DCAPS9` the port already reads to
-check for a hardware adapter: below `D3DVS_VERSION(2, 0)` or
-`D3DPS_VERSION(2, 0)` it takes the fixed path, because librw asserts on a
-shader it asked for and did not get and a failed compile is a poor way to find
-out why the game closed.
-
-The rest of the seams are five: `beginUpdate` sets `D3DTS_VIEW`,
-`D3DTS_PROJECTION` and the fog range instead of uploading them as constants;
-`flushCache` skips the fog constants; `FOGENABLE` reaches the device instead of
-being swallowed; `d3dimmed.cpp` draws im2d through a `POSITIONT` declaration;
-and `glow.cpp` and `distort.cpp` report themselves off rather than silently
-doing nothing.
-
-## The argument beyond nostalgia
-
-The better argument is not nostalgia. A fixed-function path is an independent
-second implementation of the same lighting, fog, alpha and blend semantics.
-Where the two disagree, one of them is wrong. The port has already shipped two
-bugs that came from librw's D3D9 driver inferring alpha state the console left
-to the game; a second path turns that class of bug into something findable by
-comparison rather than by noticing it in play.
-
-The real cost is not the build, it is that every effect in part one then has to
-be gated or duplicated for as long as both modes exist.
-
----
-
-## What is not verified here
-
-Stated plainly so nobody builds on it by accident:
-
-- **Whether the assets ship mipmaps.** Anisotropic and trilinear filtering both
-  depend on it and neither does anything without it.
-- **That the vertex prelight contains baked AO.** The prelight itself is measured
-  and universal; that what it contains is occlusion rather than only colour is
-  still the expectation from how the world looks, not something measured. It
-  decides how SSAO has to be applied, so measure it before tuning anything.
-- **Whether the 17 unused `bspLightKit`s are still good data.** They parse and
-  they name real light kits. Nobody has enabled one and looked.
-
-Answered since this list was written: world geometry normals (36.4% of world
-vertices, none at all in 34 of 55 levels) and the world prelight (100%). Both are
-in [What the assets are](#what-the-assets-are).
+- **Mip levels.** `iSystem.cpp` asks for auto-mipmapping, but whether any
+  backend builds mip levels for the game's textures has not been checked. hb01's
+  Xbox textures ship none. Anisotropic and trilinear filtering do nothing
+  without them.
+- **That the prelight contains baked occlusion.** The prelight is measured and
+  universal. That it holds occlusion and not only colour is inferred from how
+  the world looks. It decides how SSAO has to be applied.
+- **How the 17 `bspLightKit`s compare with the bake.** `world_lighting = on`
+  renders them. No comparison against `off` is recorded here.

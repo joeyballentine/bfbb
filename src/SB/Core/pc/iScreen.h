@@ -9,7 +9,7 @@
 // literals on the console.
 //
 // This is the render size, not the window size. The port draws into a virtual
-// screen that blitVirtualScreen (third_party/librw/src/d3d/d3ddevice.cpp)
+// screen that each backend's blitVirtualScreen
 // stretches into the back buffer at present time, keeping its aspect. The two
 // are independent: a render size above the window supersamples, below it scales
 // up. iSystem opens the window at the render size because that is the least
@@ -225,8 +225,7 @@ void iScreenSetPerPixelLighting(S32 on);
 //           the two above before the device is made, so nothing downstream
 //           ever sees AUTO.
 //
-// D3D9 only. The GL3 and D3D11 backends have no fixed function to fall back
-// to, and asking for one there is reported and ignored.
+// D3D9 only. The other backends have no fixed function to fall back to.
 enum iScreenPipeline
 {
     iSCREENPIPE_AUTO,
@@ -246,8 +245,8 @@ void iScreenSetPipeline(iScreenPipeline pipeline);
 //
 //   D3D9   Direct3D 9. Windows only, and the only backend with the
 //          fixed-function path above.
-//   D3D11  Direct3D 11. Windows only, and it cannot be in the same build as
-//          D3D9 -- the two are one namespace in librw.
+//   D3D11  Direct3D 11. Windows only. A second rw::d3d device beside D3D9;
+//          the default Windows build carries both.
 //   GL3    OpenGL 3.3. Runs off Windows.
 //   VULKAN Vulkan 1.3. Runs off Windows too. librw's third rw::d3d device, so
 //          it draws with the D3D pipelines and shaders.

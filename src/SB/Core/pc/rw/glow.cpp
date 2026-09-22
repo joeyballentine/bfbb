@@ -2,7 +2,7 @@
 // in iGlow.h.
 //
 // Every backend that can hand back the frame buffer as a texture and take a
-// pixel shader of the port's own for a 2D primitive: D3D9, D3D11 and GL3. What
+// pixel shader of the port's own for a 2D primitive: D3D9, D3D11, GL3 and Vulkan. What
 // differs between them is the shader language, how a constant is named and how
 // the frame is copied. Everything else -- the chain, its sizes, the quad and
 // the render states -- is written once below.
