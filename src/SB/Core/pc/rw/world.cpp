@@ -23,14 +23,15 @@
 // malloc: the plugin block is real, and the offset is checked at attach time
 // against what the struct declaration assumes rather than trusted.
 //
-// Two of the eight functions in this group are NOT here. RpWorldStreamRead
-// refuses and says why below; RpCollisionWorldForAllIntersections is blocked on
-// the same missing piece and is in collision_world.cpp.
+// Two of the eight functions in this group are incomplete. RpWorldStreamRead
+// reads only the bounding box and says why below;
+// RpCollisionWorldForAllIntersections is blocked on the same missing piece and
+// is in collision_world.cpp.
 
 #include <rwcore.h>
 #include <rpworld.h>
 
-#include "rw.h"
+#include "stream.h" // brings in librw's rw.h, which must not be included twice
 
 // Declared rather than included: librw's src/d3d/rwxbox.h has no include guard
 // and redefines InstanceData, InstanceDataHeader and ObjPipeline against what
@@ -45,6 +46,7 @@ namespace rw
 }
 
 #include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 
 static inline rw::World* asWorld(RpWorld* world)
@@ -347,10 +349,12 @@ RpWorld* RpWorldRemoveLight(RpWorld* world, RpLight* light)
 // ---------------------------------------------------------------------------
 // RpWorldStreamRead
 //
-// NOT IMPLEMENTED, and this is the largest hole in the port's RenderWare layer
-// rather than a corner case: every BSP level asset comes through here
-// (zAssetTypes.cpp:220), and without it a level has no geometry, no materials
-// and no collision.
+// Reads the world's bounding box and nothing else: the result is an empty world
+// the size of the stream's. Every retail Xbox level is a JSP, so no retail
+// asset reaches this. Mods do, with placeholder BSPs for scenes that have no
+// level, and the scene needs a world regardless: iCameraAssignEnv adds the
+// camera to env->world without a NULL check. A world with triangles is
+// reported, since its geometry, materials and collision are all dropped.
 //
 // What is missing is not a shim but a subsystem. librw has no world sector code
 // of any kind -- no RpWorldSector, no plane sectors, no world chunk reader, and
@@ -373,15 +377,41 @@ RpWorld* RpWorldRemoveLight(RpWorld* world, RpLight* light)
 //      reading _rpDlWorldVtxFmtOffset off the current world is the game's own
 //      evidence for which kind it is loading.
 //
-// Returning NULL is the honest answer and the game is already loud about it:
-// BSP_Read prints "BSP_Read RpWorldStreamRead failed". A partial reader that
-// filled in the material list and left the geometry empty would report success
-// and hand back a level with nothing in it, which is worse -- the failure would
-// surface as an invisible world and a player falling through the floor rather
-// than as a message naming this function.
+// The struct chunk is 64 bytes, or 76 in older streams that put a
+// surface-properties block after the origin; the bounding box is its last 24
+// bytes in both.
 RpWorld* RpWorldStreamRead(RwStream* stream)
 {
-    return NULL;
+    rw::uint32 length;
+    if (stream == NULL || !rw::findChunk(stream, rw::ID_STRUCT, &length, NULL) || length < 64 ||
+        length > 128)
+    {
+        return NULL;
+    }
+
+    rw::uint8 buf[128];
+    if (stream->read32(buf, length) != length)
+    {
+        return NULL;
+    }
+
+    RwBBox bbox;
+    memcpy(&bbox, buf + length - sizeof(bbox), sizeof(bbox));
+
+    // numTriangles follows rootIsWorldSector and the origin in the 64-byte form.
+    rw::int32 numTriangles = 0;
+    if (length == 64)
+    {
+        memcpy(&numTriangles, buf + 16, sizeof(numTriangles));
+    }
+    if (numTriangles != 0)
+    {
+        printf("bfbb: BSP world has %d triangles; BSP geometry is not read, loading it empty\n",
+               (int)numTriangles);
+        fflush(stdout);
+    }
+
+    return RpWorldCreate(&bbox);
 }
 
 // Render everything in the world.
