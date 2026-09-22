@@ -648,7 +648,7 @@ namespace xhud
         return true;
     }
 
-    void xhud::render_model(xModelInstance& m, const xhud::render_context& rc)
+    void render_model(xModelInstance& m, const xhud::render_context& rc)
     {
         basic_rect<F32> r = { 0 };
         r.x = rc.loc.x;
