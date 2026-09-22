@@ -7129,3 +7129,25 @@ Ablations of the other scheduler clauses on the same compiler, each removed
 alone (exact functions lost): C on entry 1 -35, B on entry 1 -16, C on entry
 3 -86, B on entry 3 -6, E3n on entry 0 -2, C+ -57, B on entry 0 -30. None
 is free.
+
+## Clause H is gone: the LICM call-site hook subsumes it (2026-09-22)
+
+Removed. `GC/2.0p1a` sha1 `b4f01e81afc552380a76dd5b3f7ea790aeee42b0`. Full
+`ninja`: **542 objects byte-identical** to the previous compiler, 7316 / 7673,
+DOL intact.
+
+Clause H made a store to a static array in a loop a def of every small static
+in the use-def chains, so `isloopinvariant` kept a literal load in the loop.
+The later `sb_licm_invariant` hook refuses every whole static read at
+`moveinvariantsfromloop`'s call regardless of defs, which covers the same
+loads. Returning 0 from `sb_licm_clause` changed no object anywhere, so the
+predicate, its stub, the jump rewrite at `0x511ce5` and the retyped
+relocation all went.
+
+Ablations of the other non-scheduler pieces on the same compiler (exact
+functions lost when removed alone): clause F -39, clause V's walk -38, the
+LICM hook -11. E3n on entry 3 is -120 / +5, and those 5 are five of the six
+functions on the patch-cost list (`xBoxFromCircle`,
+`zNPCGoalJellyBirth::Process`, `BasisBspline`, `zEntPlayer_AnimTable`,
+`zNPCGoalPatrol::MoveNormal`); the sixth, `zNPCFodBzzt::Setup`, is recovered
+by no single ablation.

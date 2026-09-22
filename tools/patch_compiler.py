@@ -7,11 +7,10 @@ mwcceppc.exe GC/2.0p1 answers memory-disambiguation questions more
 aggressively than the compiler that built the retail DOL: a float constant
 loaded from the .sdata2 literal pool gets hoisted above a store it is assumed
 not to touch (the long-standing "float meme"), a store to a small static does
-not kill a cached literal load, a loop-invariant literal load is hoisted out
-of a loop that stores to a static array, a whole static read is hoisted out
-of any loop that has no def of it, and the two halves of a static of at most
-8 bytes are disambiguated as if they were separate objects. This patch narrows
-those answers back toward retail's.
+not kill a cached literal load, a whole static read is hoisted out of a loop,
+and the two halves of a static of at most 8 bytes are disambiguated as if
+they were separate objects. This patch narrows those answers back toward
+retail's.
 
 The narrowing is expressed as C, not as hand-assembled bytes. It lives in the
 CodeWarrior decompilation repo:
@@ -29,33 +28,32 @@ inlined call site, because a byte patch cannot call a shared function.
 
 HOW IT IS INJECTED
 ------------------
-Three sites are hooked through the operand-kind tables in Alias.c, and one
-call site in CodeMotion.c:
+Two operand-kind tables in Alias.c are hooked, and one call site in
+CodeMotion.c:
 
     0x5bd068  update_alias_value (0x511a30)  entry 0 -> clauses V and F
                                              entry 1 -> clause S
-    0x5bd074  may_alias_object   (0x511cb0)  pre-dispatch -> clause H
     0x5bd0bc  may_alias          (0x511fc0)  entries 0,1,3 -> A/B/C/C+/E3n
                                              entry 4 -> clause S
     0x56f472  call isloopinvariant (0x570f60) from moveinvariantsfromloop
               -> sb_licm_invariant (a whole static read is never invariant)
 
-The fourth is a REL32 call retargeted to a stub: isloopinvariant decides a
+The third is a REL32 call retargeted to a stub: isloopinvariant decides a
 read by the defs of its own object, so for a loop with no store and no call
-none of the three alias tables is ever consulted, and the only place to say
+no alias table is ever consulted, and the only place to say
 "not invariant" is the call itself. Only moveinvariantsfromloop's call is
 redirected; simpleunswitchloop and srawi_addze_isloopinvariant keep the stock
 routine.
 
-`may_alias` and `may_alias_object` keep the original PCode arguments in esi/ebp
-at the dispatch point, so the predicates read opcode and flags directly; eax and
+`may_alias` keeps the original PCode arguments in esi/ebp at the dispatch
+point, so the predicates read opcode and flags directly; eax and
 edx hold the two memrefs.
 
 The injected image is a new executable section, .sbpatch, appended after
 .reloc at the old SizeOfImage. No existing section, VA or RVA moves; the
 section table had room for an eleventh header below SizeOfHeaders. It holds:
 
-  * eight register-marshalling stubs (tools/aliaspatch_asm.py) that hand each
+  * seven register-marshalling stubs (tools/aliaspatch_asm.py) that hand each
     query to the right C predicate in cdecl form and act on the answer -- jump
     to the compiler's own "may alias" answer tail on a hit, fall into the
     compiler's own stock test on a miss;
@@ -72,11 +70,9 @@ The blob is position-independent: every relocation is a REL32 (inter-function
 calls and the one call to killmemory), which survives the sjiswrap rebase
 because caller and callee move together. The alias-list head is loaded PC-
 relatively by the VN stub and passed in, so the blob carries no absolute word
-and needs no base relocations of its own. The three redirected dispatch entries
-and the CodeMotion hook are the only absolute edits; the dispatch entries
-already carry HIGHLOW relocations that rebase their new in-image targets, and
-the hook is a rel32 jump with the displaced table-operand relocation retyped to
-a padding no-op. The LICM call-site retarget is a rel32 with no relocation
+and needs no base relocations of its own. The six redirected dispatch entries
+are the only absolute edits, and they already carry HIGHLOW relocations that
+rebase their new in-image targets. The LICM call-site retarget is a rel32 with no relocation
 entry of its own (verified against .reloc), so it needs none.
 
 All writes are guarded by the SHA-1 of the input and by the expected bytes at
@@ -103,7 +99,7 @@ BASE_SHA1 = "74bc177b10d1bbe8a60a21a6c0aa86d2dd9c0668"
 # The C-sourced GC/2.0p1a. This is a NEW hash: the old byte-cave p1a was
 # 5c6862b641adb8845f0fc09a6569902df068a83f. The derived-compiler bytes differ;
 # the OBJECTS it produces do not (verified byte-identical on 450 SB units).
-PATCHED_SHA1 = "61ab511748b3dc08df62f55a72e28218c72dac7a"
+PATCHED_SHA1 = "b4f01e81afc552380a76dd5b3f7ea790aeee42b0"
 
 # ---- where the injected code goes ---------------------------------------
 # A new section after the last one. Stock SizeOfImage is 0x20e000 and the file
@@ -132,15 +128,6 @@ VN_DISPATCH_OFFSET = 0x1BA668
 VN_STOCK_E0 = 0x00511A53
 VN_STOCK_E1 = 0x00511B0E
 
-# ---- CodeMotion loop-invariance hook (0x511ce5) -------------------------
-# Rewrite the 7-byte `jmp [ebx*4+0x5bd074]` into a rel32 jump to the licm stub
-# and retype the displaced table-operand HIGHLOW relocation to a no-op.
-CM_HOOK_OFFSET = 0x1110E5           # VA 0x511ce5
-CM_HOOK_OLD = bytes.fromhex("ff249d74d05b00")
-CM_RELOC_OFFSET = 0x1E6A98          # pre-insert file offset of the reloc u16
-CM_RELOC_OLD = 0x3CE8               # HIGHLOW @ RVA 0x111ce8
-CM_RELOC_NEW = 0x0CE8               # ABSOLUTE (padding no-op), offset kept
-
 # ---- CodeMotion LICM call site (0x56f472) --------------------------------
 # `call isloopinvariant` inside moveinvariantsfromloop, retargeted to the
 # licm-invariant stub. A REL32 call carries no base relocation.
@@ -157,7 +144,7 @@ def sha1(path: Path) -> str:
 
 
 def build_injection():
-    """Lay out the C blob and the eight stubs in the new section.
+    """Lay out the C blob and the seven stubs in the new section.
 
     The blob comes from aliaspatch_link.blob_for: the checked-in artefact,
     verified against a fresh compile of AliasPatch.c whenever the mwcc-gc repo
@@ -167,7 +154,6 @@ def build_injection():
 
     blob, exp = aliaspatch_link.blob_for(BLOB_VA)
     sched = exp["_sb_sched_clause"]
-    licm = exp["_sb_licm_clause"]
     vn = exp["_sb_vn_store_kill"]
     vn1 = exp["_sb_vn_subrange_store"]
     inv = exp["_sb_licm_invariant"]
@@ -187,7 +173,6 @@ def build_injection():
     emit("s1", A.sched_stub(at, sched, 1, A.STOCK_E1_E3))
     emit("s3", A.sched_stub(at, sched, 3, A.STOCK_E1_E3))
     emit("s4", A.sched_stub(at, sched, 4, A.STOCK_E4))
-    emit("licm", A.licm_stub(at, licm))
     emit("vn", A.vn_stub(at, vn, ALIAS_LIST_HEAD_VA))
     emit("vn1", A.vn_subrange_stub(at, vn1, ALIAS_LIST_HEAD_VA))
     emit("inv", A.licm_invariant_stub(at, inv))
@@ -232,20 +217,7 @@ def _apply(data: bytearray) -> bytes:
                  f"expected {VN_STOCK_E1:#x}")
     struct.pack_into("<I", data, o, vas["vn1"])
 
-    # 3. hook the CodeMotion alias dispatch -> licm stub, retype its reloc
-    if data[CM_HOOK_OFFSET:CM_HOOK_OFFSET + 7] != CM_HOOK_OLD:
-        sys.exit(f"CM hook bytes at {CM_HOOK_OFFSET:#x} are "
-                 f"{data[CM_HOOK_OFFSET:CM_HOOK_OFFSET + 7].hex()}, expected "
-                 f"{CM_HOOK_OLD.hex()}")
-    rel = vas["licm"] - (0x00511CE5 + 5)
-    data[CM_HOOK_OFFSET:CM_HOOK_OFFSET + 7] = b"\xE9" + struct.pack("<i", rel) + b"\x90\x90"
-    found = struct.unpack_from("<H", data, CM_RELOC_OFFSET)[0]
-    if found != CM_RELOC_OLD:
-        sys.exit(f"reloc word at {CM_RELOC_OFFSET:#x} is {found:#x}, "
-                 f"expected {CM_RELOC_OLD:#x}")
-    struct.pack_into("<H", data, CM_RELOC_OFFSET, CM_RELOC_NEW)
-
-    # 4. retarget moveinvariantsfromloop's call isloopinvariant -> licm-invariant stub
+    # 3. retarget moveinvariantsfromloop's call isloopinvariant -> licm-invariant stub
     if data[LICM_CALL_OFFSET:LICM_CALL_OFFSET + 5] != LICM_CALL_OLD:
         sys.exit(f"LICM call bytes at {LICM_CALL_OFFSET:#x} are "
                  f"{data[LICM_CALL_OFFSET:LICM_CALL_OFFSET + 5].hex()}, expected "
@@ -253,7 +225,7 @@ def _apply(data: bytearray) -> bytes:
     rel = vas["inv"] - (0x0056F472 + 5)
     data[LICM_CALL_OFFSET:LICM_CALL_OFFSET + 5] = b"\xE8" + struct.pack("<i", rel)
 
-    # 5. append the .sbpatch section: one more header, SizeOfImage grown, the
+    # 4. append the .sbpatch section: one more header, SizeOfImage grown, the
     #    raw data at the end of the file
     pe = struct.unpack_from("<I", data, 0x3C)[0]
     nsec = struct.unpack_from("<H", data, pe + 6)[0]
