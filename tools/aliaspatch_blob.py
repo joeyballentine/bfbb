@@ -8,7 +8,7 @@ PATCHED_SHA1 in tools/patch_compiler.py and re-measure with
 tools/patchcost.py.
 """
 
-BASE_VA = 0x57ea50
+BASE_VA = 0x60e000
 SRC_SHA1 = "1ad137f161bb8da0c53b462a26a0f5cf77011399"
 BLOB_HEX = (
     "538b5424088d4a108b19807a2c01750985db7405833b05740431c0eb348d4208"
@@ -43,16 +43,16 @@ BLOB_HEX = (
     "8d4218833804760331c0c331c040c3008b5424048d4a188b018d52148b0a83e1"
     "02741885c0741480782c00750e83c0108b1085d27405833a05740331c0c331c0"
     "40c300005589e5538b5d08eb228d431883380477188d43108b0885c9740f8339"
-    "05750a6a0053e865b4f8ff59598b1b85db75da8d65fc5b5dc30000005589e553"
+    "05750a6a0053e8b5beefff59598b1b85db75da8d65fc5b5dc30000005589e553"
     "8b4d0883c1108b0185c0740f8b1883fb05740d81fb05000100740583c8ffeb15"
     "ff750ce89cffffff5983fb05750531c040eb0231c08d65fc5b5dc3005589e553"
     "8b5d0cff7508e895fbffff5985c0750431c0eb1685db740f807b3c037509ff75"
     "10e85effffff5931c0408d65fc5b5dc3"
 )
 EXPORTS = {
-    "_sb_licm_clause": 0x57edcc,
-    "_sb_licm_invariant": 0x57ee00,
-    "_sb_sched_clause": 0x57ec48,
-    "_sb_vn_store_kill": 0x57ee6c,
-    "_sb_vn_subrange_store": 0x57eeac,
+    "_sb_licm_clause": 0x60e37c,
+    "_sb_licm_invariant": 0x60e3b0,
+    "_sb_sched_clause": 0x60e1f8,
+    "_sb_vn_store_kill": 0x60e41c,
+    "_sb_vn_subrange_store": 0x60e45c,
 }

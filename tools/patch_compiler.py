@@ -51,10 +51,9 @@ routine.
 at the dispatch point, so the predicates read opcode and flags directly; eax and
 edx hold the two memrefs.
 
-The injected image fills the executable tail of .text: the original cave
-past VirtualSize plus one page grown onto the raw data (SizeOfRawData
-0x17dc00 -> 0x17e000; no VirtualSize, VA or RVA changes, exactly as the loader
-already maps the padding past VirtualSize). It holds:
+The injected image is a new executable section, .sbpatch, appended after
+.reloc at the old SizeOfImage. No existing section, VA or RVA moves; the
+section table had room for an eleventh header below SizeOfHeaders. It holds:
 
   * eight register-marshalling stubs (tools/aliaspatch_asm.py) that hand each
     query to the right C predicate in cdecl form and act on the answer -- jump
@@ -104,28 +103,20 @@ BASE_SHA1 = "74bc177b10d1bbe8a60a21a6c0aa86d2dd9c0668"
 # The C-sourced GC/2.0p1a. This is a NEW hash: the old byte-cave p1a was
 # 5c6862b641adb8845f0fc09a6569902df068a83f. The derived-compiler bytes differ;
 # the OBJECTS it produces do not (verified byte-identical on 450 SB units).
-PATCHED_SHA1 = "c1241e54e45c258cca85d5860b6a911e2f82db2a"
+PATCHED_SHA1 = "5c4e8e29f9d24079bb1f52d4d79bb3ec30bd4566"
 
 # ---- where the injected code goes ---------------------------------------
-# The executable tail of .text is the run from VirtualSize's end to the next
-# page boundary, which the loader maps executable (the section's raw data stops
-# earlier). It spans VA 0x57ea4c..0x57f000 -- 1460 bytes -- and .rdata begins
-# at 0x57f000, so nothing may reach that address. The C blob goes first, at
-# BLOB_VA, and the stubs follow it; the run is one region in VA but two in the
-# file:
-#
-#   0x57ea4c  CAVE1  the original 436-byte tail cave, already in .text's raw data
-#   0x57ec00  the page grown onto .text's raw data (as clause H did)
-#
-# Growing SizeOfRawData does not change any VA -- the region must simply end
-# below EXEC_LIMIT.
-CAVE1_VA = 0x0057EA4C
-CAVE1_FILE = 0x17DE4C
-CAVE1_LEN = 0x1B4                   # 436 bytes to the grown page
-BLOB_VA = 0x0057EA50               # CAVE1_VA rounded up to 4
-TEXT_SECTION_GROW = 0x400          # raw bytes added for the blob
-TEXT_RAW_INSERT_AT = 0x17E000      # first byte past the original raw .text
-EXEC_LIMIT = 0x0057F000            # .rdata starts here; injected code must end below
+# A new section after the last one. Stock SizeOfImage is 0x20e000 and the file
+# ends exactly at .reloc's raw data (0x1f8200, FileAlignment-aligned), so the
+# section's RVA and raw offset are both the old ends. The C blob goes first, at
+# BLOB_VA, and the stubs follow it.
+SECTION_NAME = b".sbpatch"
+SECTION_RVA = 0x0020E000           # stock SizeOfImage
+SECTION_FILE = 0x001F8200          # stock file size
+SECTION_SIZE = 0x1000              # virtual and raw
+SECTION_FLAGS = 0x60000020         # code | execute | read
+IMAGE_BASE = 0x00400000
+BLOB_VA = IMAGE_BASE + SECTION_RVA
 ALIAS_LIST_HEAD_VA = 0x005E1FD8    # global holding the Alias list head
 
 # ---- scheduler may-alias dispatch table (0x5bd0bc) ----------------------
@@ -166,13 +157,12 @@ def sha1(path: Path) -> str:
 
 
 def build_injection():
-    """Lay out the C blob and the eight stubs in the .text tail.
+    """Lay out the C blob and the eight stubs in the new section.
 
     The blob comes from aliaspatch_link.blob_for: the checked-in artefact,
     verified against a fresh compile of AliasPatch.c whenever the mwcc-gc repo
     is present. It is placed at BLOB_VA and the stubs, which call into it,
-    directly after it. The whole run must end below EXEC_LIMIT (.rdata).
-    Returns (cave1_bytes, page_bytes, stub_vas)."""
+    directly after it. Returns (section_bytes, stub_vas)."""
     A = aliaspatch_asm
 
     blob, exp = aliaspatch_link.blob_for(BLOB_VA)
@@ -202,28 +192,20 @@ def build_injection():
     emit("vn1", A.vn_subrange_stub(at, vn1, ALIAS_LIST_HEAD_VA))
     emit("inv", A.licm_invariant_stub(at, inv))
 
-    if at > EXEC_LIMIT:
-        sys.exit(f"injected code ends at {at:#x}, past the executable limit "
-                 f"{EXEC_LIMIT:#x}; reduce its size")
+    if at > BLOB_VA + SECTION_SIZE:
+        sys.exit(f"injected code ends at {at:#x}, past the end of the "
+                 f"{SECTION_SIZE:#x}-byte section; grow SECTION_SIZE")
 
-    region = bytearray(EXEC_LIMIT - CAVE1_VA)
-    o = BLOB_VA - CAVE1_VA
-    region[o:o + len(blob)] = blob
-    o = BLOB_VA + len(blob) + (-(BLOB_VA + len(blob)) % 4) - CAVE1_VA
+    region = bytearray(SECTION_SIZE)
+    region[0:len(blob)] = blob
+    o = len(blob) + (-(BLOB_VA + len(blob)) % 4)
     stubs = b"".join(parts)
     region[o:o + len(stubs)] = stubs
-    print(f"injected {at - CAVE1_VA} of {EXEC_LIMIT - CAVE1_VA} bytes "
-          f"(blob {len(blob)}, stubs {len(stubs)})")
-    return bytes(region[:CAVE1_LEN]), bytes(region[CAVE1_LEN:]), vas
+    return bytes(region), vas
 
 
 def _apply(data: bytearray) -> bytes:
-    cave1, page, vas = build_injection()
-
-    # 0. write the head of the region into the pristine cave1 padding
-    if any(data[CAVE1_FILE:CAVE1_FILE + len(cave1)]):
-        sys.exit(f"cave1 padding at {CAVE1_FILE:#x} is not zero, refusing to overwrite")
-    data[CAVE1_FILE:CAVE1_FILE + len(cave1)] = cave1
+    section, vas = build_injection()
 
     # 1. redirect the scheduler dispatch entries (0,1,3,4)
     for index, stock in SCHED_STOCK.items():
@@ -271,24 +253,26 @@ def _apply(data: bytearray) -> bytes:
     rel = vas["inv"] - (0x0056F472 + 5)
     data[LICM_CALL_OFFSET:LICM_CALL_OFFSET + 5] = b"\xE8" + struct.pack("<i", rel)
 
-    # 5. grow .text's raw data by one page and bump later sections' raw
-    #    pointers, then insert the page image (done LAST so every offset above
-    #    was written at its pristine location)
+    # 5. append the .sbpatch section: one more header, SizeOfImage grown, the
+    #    raw data at the end of the file
     pe = struct.unpack_from("<I", data, 0x3C)[0]
     nsec = struct.unpack_from("<H", data, pe + 6)[0]
     optsz = struct.unpack_from("<H", data, pe + 20)[0]
-    sec0 = pe + 24 + optsz
-    for i in range(nsec):
-        so = sec0 + 40 * i
-        name = bytes(data[so:so + 8]).rstrip(b"\0").decode()
-        rsz, rptr = struct.unpack_from("<II", data, so + 16)
-        if name == ".text":
-            if rsz != 0x17DC00:
-                sys.exit(f".text raw size is {rsz:#x}, expected 0x17dc00")
-            struct.pack_into("<I", data, so + 16, rsz + TEXT_SECTION_GROW)
-        elif rptr >= TEXT_RAW_INSERT_AT and rptr != 0:
-            struct.pack_into("<I", data, so + 20, rptr + TEXT_SECTION_GROW)
-    data[TEXT_RAW_INSERT_AT:TEXT_RAW_INSERT_AT] = page
+    opt = pe + 24
+    size_of_image = struct.unpack_from("<I", data, opt + 56)[0]
+    size_of_headers = struct.unpack_from("<I", data, opt + 60)[0]
+    hdr = opt + optsz + 40 * nsec
+    if size_of_image != SECTION_RVA or len(data) != SECTION_FILE:
+        sys.exit(f"SizeOfImage {size_of_image:#x} / file size {len(data):#x}, "
+                 f"expected {SECTION_RVA:#x} / {SECTION_FILE:#x}")
+    if hdr + 40 > size_of_headers or any(data[hdr:hdr + 40]):
+        sys.exit(f"no free section header slot at {hdr:#x}")
+    struct.pack_into("<8sIIIIIIHHI", data, hdr, SECTION_NAME, SECTION_SIZE,
+                     SECTION_RVA, SECTION_SIZE, SECTION_FILE, 0, 0, 0, 0,
+                     SECTION_FLAGS)
+    struct.pack_into("<H", data, pe + 6, nsec + 1)
+    struct.pack_into("<I", data, opt + 56, size_of_image + SECTION_SIZE)
+    data += section
     return bytes(data)
 
 

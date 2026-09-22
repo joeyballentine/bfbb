@@ -7095,6 +7095,15 @@ indistinguishable from applying it to all of them on this corpus. New sha1
 `c1241e54e45c258cca85d5860b6a911e2f82db2a`; game 7314, matched_code 82.162,
 fuzzy 99.371. The injected region now has 29 bytes free.
 
+**The patch now lives in its own section.** The .text tail had 29 bytes left
+after the direct-store walk. `patch_compiler.py` now appends an executable
+`.sbpatch` section (4 KiB at RVA `0x20e000`, the stock SizeOfImage; the file
+ended exactly at `.reloc`'s raw data and the section table had a free slot
+below SizeOfHeaders) and puts the blob and all eight stubs there; `.text` is
+no longer grown and its cave is untouched. 542 objects byte-identical before
+and after on a full build, sjiswrap units included. New sha1
+`5c4e8e29f9d24079bb1f52d4d79bb3ec30bd4566`; 2,691 bytes free.
+
 Moved but not closed: `zGameLoop` 99.979, `xFXAuraUpdate` 99.838,
 `xFXanimUVSetAngle`/`xFXanimUV2PSetAngle` 94.783, `zCameraTweakGlobal_Add`
 96.331, `NightLightUVStep` 67.700.

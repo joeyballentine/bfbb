@@ -101,7 +101,7 @@ def link(base_va, obj_path):
 
     # Assign each .text section a place in the blob, 4-byte aligned,
     # deterministic in section-table order. The COFF asks for 16; x86 does not
-    # need it and the injected region is short of room.
+    # need it.
     text_idx = [i for i, s in enumerate(secs) if s["name"] == ".text" and s["rsz"]]
     place = {}      # section index (0-based) -> base VA
     blob = bytearray()
