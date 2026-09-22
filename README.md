@@ -1,258 +1,92 @@
 # Battle for Bikini Bottom: Unofficial PC port (WIP)
 
 A native PC and Android build of SpongeBob SquarePants: Battle for Bikini Bottom,
-compiled from decompiled game code and librw. This is not an emulator or wrapper.
+compiled from decompiled game code and librw. Not an emulator or a wrapper.
 
-Discord: https://discord.gg/5gcmHBVFzU
+[Discord](https://discord.gg/5gcmHBVFzU) · Decomp base: the `duplotron` branch ·
+Upstream decomp: [bfbbdecomp/bfbb](https://github.com/bfbbdecomp/bfbb) ·
+[Docs](docs/README.md)
 
-**This is still a work in progress.** I believe now it is in a state where it can be fully played through without any game breaking issues for casual play, but there are still many bugs that need to be fixed and it is definitely not ready for speedrunning yet (though many of the same tricks/glitches still work).
+## Status
 
-There are no downloads or releases. You have to build the game yourself and get the game assets from the xbox version.
+- The game can be played start to finish. Known bugs remain.
+- Not ready for speedrunning. Many console tricks and glitches still work.
+- No downloads or releases. You build it yourself.
+- Needs the game files from the **Xbox** release. GameCube and PS2 files are not
+  supported.
+- The goal is a modern port with optional extras, not a period-accurate one.
+  Every extra can be turned off.
+- This project is written with an LLM. I am not a C++ or RenderWare expert, so
+  expect code that someone with that background would write differently. A
+  hand-written port by people who know the engine will come later and will
+  likely be more conservative about what it adds. Until then, this is a
+  personal project, and features go in as I see fit.
 
-The xbox assets are live-patched to change xbox wording to pc terminology for a better experience. There is currently no support for GameCube or PS2 assets (which are lower quality anyway, so this is the better PC-like experience anyway).
+## Quick start (Windows)
 
-This branch (`treedome`) is the PC and Android port. For the full decomp it is based on, see the `duplotron` branch.
-
-This project is LLM-driven. I am trying to make it as good of an experience as possible, but I am not a C++ expert nor am I that knowledgeable on renderware semantics. An official hand-made PC port made by people that know what they are doing will surely come at some point, but for now this is the best we have.
-
-For the original/official decomp repo, see
-[bfbbdecomp/bfbb](https://github.com/bfbbdecomp/bfbb).
-
-Note that the goal is not a period-accurate port (though it can definitely be run that way), but rather a modern implementation with many extra features. Since this is a personal project, I will be implementing things as I personally see fit. The official PC port, whenever that comes, will surely be more conservative in what it adds. 
-
-## How it works
-
-The original game as programmed by Heavy Iron was designed with multi-platform compiling in mind. 
-The platform-specific game code is segmented into `i*` interfaces, separate from the rest of the game code. The port
-reimplements those (as well as implementing new ones) for PC.
-
-Everything outside of that (`src/SB/Core/x` and `src/SB/Game`) is the same code
-the GameCube build uses. Changes there have to keep the GameCube build byte identical using build flags.
-
-## What the port adds
-
-Everything here has a switch in `config.ini`, which `bfbb_config.exe` edits. The
-`[experimental]` ones are off by default. See **Settings** below.
-
-### Xbox parity
-
-The GameCube release has these stubbed out: the functions are empty in the
-decomp but still have live call sites, and the Xbox version implements them. They
-were recovered from the `.xbe`.
-
-| Feature | Setting | What it is |
-| --- | --- | --- |
-| Glow | `[xbox] glow` | The full-screen bloom. A bright pass, two blurs, composited back over the frame. Both shaders decoded from the Xbox build's pixel shader definitions. |
-| Cruise Bubble distortion | `[xbox] distortion` | Swirls the picture while you fly the Cruise Bubble. The offset map is a genuine Xbox asset, `BXCruiseBubbleDistort`, already shipping in `plat.HIP`. |
-| Loading screen still | `[xbox] snapshot` | The frame you just left, behind the rising loading bubbles, instead of the GameCube backdrop. Falls back to the backdrop on the first load of a run. |
-| Cave reverb | `[xbox] reverb` | In the Mermalair and the caves. The game side already worked on both consoles; `iSndSetEnvironmentalEffect` was the empty part. The Xbox's reverb is DSP microcode that is not on the disc, so its twelve I3DL2 parameters were read out of the binary and fed to a reverb built on Microsoft's published I3DL2 design. |
-| Sound rolloff | `[xbox] sound_rolloff` | Mixes sound effects the way the xbox Directsound implementation does, fixing various sound issues like the Kelp Forest waterfall. |
-
-### New in the port
-
-| Feature | Setting | What it does |
-| --- | --- | --- |
-| Renderer | `[video] backend` | Direct3D 9, Direct3D 11, OpenGL or Vulkan. See **Build** for which ones a build carries. |
-| Video profile | `[video] profile` | `vanilla`: 640x480, 4:3 HUD, console draw distance. `modern`: the display's aspect ratio at up to 1080 lines, HUD at the screen edges, no draw distance limit. `custom`: the individual settings below. Defaults to `modern` on Android and `custom` elsewhere. |
-| Resolution | `[video] width`, `height` | Renders at any size and scales the result to the display. Any size that is not 4:3 gives widescreen: the camera keeps the same vertical view and adds width, so nothing is stretched. `docs/RESOLUTION.md`. |
-| Window mode | `[video] mode` | Exclusive fullscreen, borderless, or windowed. Separate from the render size. |
-| UI anchoring | `[video] ui` | The HUD either stays in a centred 4:3 box as the console drew it, or moves out to the real screen edges. |
-| Field of view | `[video] fov` | Widens or narrows the camera from the game's own 75 degrees. Applied as a difference, so the cutscene cameras and the Cruise Bubble's zoom keep their relative angles. |
-| Frame rate and vsync | `[video] framerate`, `vsync` | Any rate, the monitor's refresh rate, or uncapped. The port runs one simulation step per frame, so this is the speed of the game as well as the picture. `docs/UNCAPPED.md` lists what was converted off a per-frame rate and what has not been swept yet. |
-| Antialiasing | `[video] msaa` | Multi-Sample Anti-Aliasing. Off by default. |
-| Per-pixel lighting | `[video] per_pixel_lighting` | Sums the lights per pixel instead of per vertex, so curved surfaces on low-polygon models stop shading in flat facets. Affects characters and objects; the level's lighting is baked into its vertex colours and does not change. |
-| Fixed-function mode | `[video] pipeline` | Draws through Direct3D 9's own transform, lighting and texture stages instead of shaders, which lowers the bar from a 2002 card to a 1999 one. Not finished: the glow, the distortion and per-pixel lighting are all shaders and turn themselves off, and environment mapping is missing. `docs/RENDERING.md`. |
-| Shadow resolution | `[video] shadow_resolution` | Character shadows scale with the render size instead of staying at the consoles' 256 pixels. |
-| Draw distance | `[video] draw_distance` | Drops the per-object cull distance, the low-detail swap and the 400-unit world clip. Affects what is drawn, not what is simulated, and not fog. |
-| Loading screen | `[video] load_time` | A host loads a scene faster than the loading screen's bubble animation can play, so it flickers past. Give it a number of seconds to hold the screen up for. It is a minimum, not a delay: a longer load waits for nothing. `fancy` holds it for nothing and instead wipes the still of the level you left off the new one, bottom to top. `off` for neither. |
-| Soundtrack replacement | `[audio] soundtrack` | Play your own files instead of the game's music. The game's music is mono, as are all 3537 of its sounds, so this is mainly how to get a stereo soundtrack in. Looping tracks loop where the game's version ended, not where your file does. |
-| Controllers | `[input] controller`, `[pad]`, `[keyboard]` | Controllers go through SDL, so any modern pad works and one `[pad]` section fits them all. Every button is remappable. |
-| Stick tuning | `[input] deadzone`, `camera_sensitivity` | How much slack a stick has before the game sees it, and how fast the right stick moves the camera. |
-| Control presets | `[input] preset` | Start from the Xbox, PS2 or GameCube control layout. `auto` follows the connected controller. `[pad]` lines override it. |
-| Button prompts | `[input] button_icons` | Draw Xbox, GameCube or PS2 button icons, or a custom set from a folder under `buttons/`. The icon follows the button's binding. |
-| Touch controls | `[input] touch_controls` | On-screen stick, buttons and camera drag. On by default on Android. Hidden while a controller is in use. |
-| Boot straight into a level | `[game] boot` | Names a scene to start in, skipping the menu. Retail's `SB.INI` has the same switch, but it lives with the assets, so two instances share it; `config.ini` is per instance and wins over it. |
-| Skip the logos | `[game] intro_movies` | Off goes straight to the title screen. |
-| Save folder | `[game] save_folder` | Where saves go. Empty is this machine's per-user data folder. |
-| Six save slots | none | The save and load screens always drew two buttons, because the memory card had two slots, but the second did nothing. It is now a second folder with its own three slots. The first is still the save directory itself, so existing saves are where the game looks for them. |
-| Save sizes in bytes | none | Those screens measured a memory card in 8 KB blocks. There is no card here, so the figures were byte counts with "block(s)" printed after them, which is where "Available Free Block(s): 2147483647 block(s)" came from. Now shown as "348 KB" or "1.5 MB", with the stray label removed. |
-| Custom font | `[font] face`, `sans` | The game's fonts are texture atlases authored for 640x480, so above that they are magnified and go soft. Point these at TrueType files and the same text is drawn from outlines at the size it is actually drawn. Layout, spacing and colour stay the game's. No font ships with the port; `tools/getfont.py` fetches one. It sizes itself against the atlas it replaces at startup, so a font is a path and nothing else. |
-| Mod folder | `[assets] mod` | Point it at an Xbox mod's files. They are read in place of the originals at the same path, so the asset folder stays unmodified. A modded game keeps its own saves. GameCube packages are skipped for now. |
-| PC wording | `[assets] platform_wording` | The Xbox text is rewritten as it loads, so nothing offers to reboot to the dashboard or calls a save folder a memory card. The files on disc are never touched. |
-| Original-game bugs | `[fixes] menu_rope`, `sky_clip` | Can be disabled for a more console-accurate experience. |
-| Smoothed geometry | `[experimental] hipoly_assets`, `hipoly_factor` | Tessellates the level and its models into curved PN-triangle patches as they load, so rocks, coral, trees and characters lose their facets while walls, and any floor with a decal lying on it, stay where they were. The collision tree is rebuilt to match. Nothing on disk changes; loads take a few seconds longer. `hipoly_passes` runs the smoothing again over its own output on models, `hipoly_factor` scales how far everything rounds, `hipoly_fillet` rounds the sharp folds of the rock over as well, `hipoly_inset` says how much of the rounding cuts corners in instead of bowing faces out, and the other `hipoly_` keys are the individual knobs. F8 swaps the shipped geometry back in and out, for before-and-after shots. `src/SB/Core/pc/iHipolyTess.cpp` and `iHipolyFillet.cpp` say what they do to a mesh. |
-| Toon shading | `[experimental] toon` | Cel shading: light in steps, raised saturation, and ink outlines on characters. `world_outline` outlines the level too, `toon_all` extends it to every model, and the other `toon_` keys tune it. Not available in fixed-function mode. |
-| World lighting | `[experimental] world_lighting` | Lights the level at runtime instead of using its baked vertex colours. `on` uses the level's own light kit where it has one, `bake` fits lights to the baked colours. The level loses the occlusion baked into those colours. `world_light_shadows` traces static shadows at load. `day_night_cycle` rotates the sun. |
-
-### Fixed bugs
-
-Three bugs in the original game that the port fixes instead of copying:
-
-- **3D sound panned the wrong way.** L and R were flipped on GameCube. The
-  community's Action Replay fix for the disc was ported here.
-- **The pause menu's bamboo frame is missing the rope at its corners.** The rope
-  is painted on the ends of the horizontal poles, but the vertical poles are
-  closer to the camera and are drawn afterwards, so they cover it up. The port
-  swaps the two depths and draws the vertical poles first. This has nothing to do
-  with the render size. The rope was invisible at 640x480 as well.
-- **Goo Lagoon's pier has no sky.** A level with fog puts its far clip plane at
-  the fog stop, and GL03's skydome is scaled past its own, so all of it is
-  clipped. The port shrinks the dome about the camera until it fits, which does
-  not move it on screen.
+1. Install Visual Studio Build Tools (C++ workload), clang, CMake, Ninja and Git.
+2. `git clone --recurse-submodules -b treedome https://github.com/joeyballentine/bfbb.git`
+3. Optionally install FFmpeg and libusb through vcpkg.
+4. Run `build-release.bat`.
+5. Run `bin\bfbb.exe` once. It writes `bin\config.ini` and stops.
+6. Set `[assets] path` in `config.ini` to your extracted Xbox files. Run it again.
 
 ## Getting the assets
 
-No assets are included. The port reads the **Xbox** release's files, which you
-extract yourself (i.e. out of a disc image with an Xbox
-ISO extractor such as [extract-xiso](https://github.com/XboxDev/extract-xiso)).
-The path has to name the folder that DIRECTLY contains `boot.HIP`, `font.HIP`,
-`fmv/`, `hb/`, etc, not a folder above it and not the image:
+No assets are included. Extract the Xbox disc image yourself, for example with
+[extract-xiso](https://github.com/XboxDev/extract-xiso). Point `[assets] path`
+at the folder that directly contains `boot.HIP`, `font.HIP`, `fmv/` and `hb/`:
 
 ```ini
 [assets]
 path = D:\path\to\extracted\xbox\game
 ```
 
-The game writes that file with the defaults the first time it runs, so start it
-once, fill the path in, and start it again. Backslashes or forward slashes both
-work, and a path with spaces in it does not need quotes.
+Either slash direction works. Paths with spaces need no quotes. The
+`BFBB_ASSETS` environment variable overrides the setting.
 
-As of right now, GameCube and PS2 assets do not work.
-
-If the folder is wrong or only partly extracted, the game prints an error and
-exits before the window opens. It tells you the path it looked in and whether
-`FONT.HIP` or `boot.HIP` was the file it could not find.
+If the folder is wrong or incomplete, the game exits before opening a window
+and says which path it checked and which file (`FONT.HIP` or `boot.HIP`) was
+missing.
 
 ## Building
 
-These steps are for Windows. Linux and macOS also build, with plain CMake and
-the GL3 backend, but get less testing. For Android, see **Android** below.
-
-The Windows output is a 32-bit executable by default. A 64-bit
-build works too and plays -- pass `x64` as the second argument to the build
-script. 32-bit stays the default because it is the configuration that gets
-played; see the comment above `BFBB_BUILD_32BIT` in `CMakeLists.txt`.
-
-Start to finish: install the tools, clone with submodules, optionally install
-FFmpeg and libusb, run `build-release.bat`, point `bin\config.ini` at your Xbox
-files, run `bin\bfbb.exe`.
+These steps are for Windows. Linux and macOS build with plain CMake and the GL3
+backend. [docs/BUILDING.md](docs/BUILDING.md) covers optional dependencies,
+64-bit, MinGW, other platforms and configuring by hand. Android is
+[below](#android).
 
 ### 1. Install the tools
 
-| Tool | Why | Where |
-| --- | --- | --- |
-| Visual Studio 2019+ with the "Desktop development with C++" workload | clang links against the MSVC libraries and the Windows SDK. The IDE is never used; [Build Tools](https://visualstudio.microsoft.com/downloads/) alone is enough. The workload must include the x86 (32-bit) toolchain, which it does by default. | Microsoft |
-| clang for Windows | The compiler. Put `clang++` on `PATH`. Built and tested with clang 16. | [LLVM releases](https://github.com/llvm/llvm-project/releases), or the "C++ Clang tools for Windows" component of the VS installer |
-| CMake 3.16 or newer | The build system. | [cmake.org](https://cmake.org/download/) |
-| Ninja | The generator. Put `ninja` on `PATH`. | [ninja-build releases](https://github.com/ninja-build/ninja/releases) |
-| Git | For the clone and the submodules. | [git-scm.com](https://git-scm.com/) |
-| Python 3 (optional) | `tools/*.py` and the `fpsdep` test. Nothing needs it to produce the executable. | [python.org](https://www.python.org/) |
-
-`clang++ --version`, `cmake --version` and `ninja --version` all have to answer
-before anything below works. You do not need to run `vcvarsall` yourself:
-`build-release.bat` finds Visual Studio with `vswhere` and enters the x86
-environment itself.
-
-MinGW-w64 builds it too, in place of clang and Visual Studio. It has to be an
-**i686** toolchain: the port is 32-bit and the configure stops if the compiler
-produces 64-bit pointers, and the x86_64 MinGW has no 32-bit runtime to fall
-back on. Put `gcc` and `g++` on `PATH` and name them on the configure line.
-`build-release.bat` is the clang path and does not take a compiler.
-
-```sh
-cmake -S . -B build-pc -G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
-cmake --build build-pc
-```
+- Visual Studio 2019+ or its Build Tools, with "Desktop development with C++".
+- clang for Windows, with `clang++` on `PATH`. Tested with clang 22.
+- CMake 3.16+ and Ninja, both on `PATH`.
+- Git.
 
 ### 2. Get the source
 
 ```sh
 git clone --recurse-submodules -b treedome https://github.com/joeyballentine/bfbb.git
-cd bfbb
 ```
 
-Already cloned without them:
+The librw and SDL submodules are required. If you cloned without them:
 
 ```sh
 git submodule update --init --recursive
 ```
 
-The submodules are librw, which is the renderer, and SDL, which is the window,
-the controllers, the keyboard and the audio device. Neither is optional and
-neither is vendored, so a setup without `third_party/librw` or `third_party/SDL`
-will not configure.
-
 ### 3. Optional dependencies
 
-All three are found at configure time. Install them before the first build, or
-delete the build directory afterwards so CMake looks again.
-
-Every vcpkg triplet below follows the architecture you are building: use
-`:x86-windows` for the default 32-bit build and `:x64-windows` for `x64`. The
-build script looks in `installed\<arch>-windows` for the architecture it was
-asked for, so both sets can be installed side by side.
-
-**FFmpeg** decodes the startup videos and any replacement soundtrack in a
-format other than WAVE. It has to match the architecture being built and to
-carry headers and import libraries, which most prebuilt Windows FFmpeg does not
-any more. vcpkg builds one:
+- **FFmpeg** plays the startup movies. Without it the game skips them.
+- **libusb** is needed for Switch 2 controllers and the GameCube adapter.
 
 ```sh
 git clone https://github.com/microsoft/vcpkg %USERPROFILE%\vcpkg
 %USERPROFILE%\vcpkg\bootstrap-vcpkg.bat
-%USERPROFILE%\vcpkg\vcpkg install "ffmpeg[core,avcodec,avformat,swresample,swscale]:x86-windows"
+%USERPROFILE%\vcpkg\vcpkg install "ffmpeg[core,avcodec,avformat,swresample,swscale]:x86-windows" libusb:x86-windows
 ```
 
-**libusb** is what SDL reads five controllers through: the Switch 2 Pro
-controller, its two Joy-Cons, the Switch 2 GameCube controller and the original
-GameCube adapter. Nothing is installed on the player's machine; those pads are
-composite devices whose USB interface already carries Microsoft OS descriptors,
-so Windows binds it itself and their HID interface is left alone.
-
-```sh
-%USERPROFILE%\vcpkg\vcpkg install libusb:x86-windows
-```
-
-**SDL3**, if one is installed, is linked instead of building
-`third_party/SDL`. The submodule is not going anywhere and nothing has to be
-installed, but SDL is the longest thing in this build, and a build directory
-per backend and per configuration means each one compiling its own copy. An
-installed SDL is compiled once and found by all of them.
-
-```sh
-%USERPROFILE%\vcpkg\vcpkg install sdl3:x86-windows
-```
-
-Or build the submodule once, by hand, and install it where every build
-directory can find it:
-
-```sh
-cmake -S third_party/SDL -B build-sdl -G Ninja -DCMAKE_BUILD_TYPE=Release ^
-      -DCMAKE_INSTALL_PREFIX=%USERPROFILE%/sdl3
-cmake --build build-sdl --target install
-```
-
-Add `-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON` under MinGW: SDL builds through a
-precompiled header and GCC on Windows cannot always load one back. The port's
-own build turns it off already.
-
-It has to match this build's architecture and ABI. CMake links a test program
-against whatever it finds and quietly falls back to the submodule when that
-fails, so an SDL of the wrong architecture on the prefix path costs a few
-seconds and nothing else.
-`-DBFBB_SDL=vendored` skips the search; `-DBFBB_SDL=system` fails instead of
-falling back, which is what to use when an installed SDL is meant to be found
-and is not.
-
-`build-release.bat` looks in `%USERPROFILE%\vcpkg\installed\<arch>-windows`
-for the architecture it is building and uses whatever is there. Set
-`BFBB_VCPKG` if your vcpkg is somewhere else. The DLLs are copied next to the
-executable automatically.
-
-Skipping FFmpeg is a supported configuration: CMake prints `FMV decoder: none`
-and the game advances past movies as if they had played. Skipping libusb leaves
-every other controller working; those five report themselves as devices with no
-layout, which the game says at startup.
+Install them before the first build, or delete `build-release\` afterwards.
 
 ### 4. Build
 
@@ -260,156 +94,176 @@ layout, which the game says at startup.
 build-release.bat
 ```
 
-This is the main build script. It enters the 32-bit MSVC environment, configures
-`build-release\`, builds, and puts `bfbb.exe` and the DLLs it needs in `bin\`.
-`build-debug.bat` does the same into `build-debug\` and is unoptimised and slow.
+This puts `bfbb.exe`, `bfbb_config.exe` and their DLLs in `bin\`.
+`build-debug.bat` makes an unoptimised build.
 
-**The executable carries more than one renderer.** On Windows a default build
-has Direct3D 9, Direct3D 11 and OpenGL 3.3 in it, and `video.backend` in
-`config.ini` picks between them at startup -- so a machine whose Direct3D driver
-misbehaves needs a line in a settings file rather than a different build.
+The executable contains Direct3D 9, Direct3D 11 and OpenGL. `[video] backend`
+picks one at startup. Vulkan is a separate build: `build-release.bat VULKAN`.
 
-| Backend | What it is |
-| --- | --- |
-| `D3D9` | Direct3D 9. The only one with the fixed-function path. |
-| `D3D11` | Direct3D 11. |
-| `GL3` | OpenGL 3.3, falling back through 2.1, GLES 3.1, 3.0 and 2.0. Runs on Windows, Linux, macOS and Android. |
-| `VULKAN` | Vulkan 1.3. Runs on Windows and Android. Not in the default Windows set: `build-release.bat VULKAN` builds it alone. |
-| `NULL` | No renderer at all. Headless, and what the self-tests are built against. Not something `video.backend` offers. |
-
-Both scripts take a backend as their first argument, which builds only that one:
-
-```sh
-build-release.bat GL3
-```
-
-The build directory is per configuration, not per backend set: that reconfigures
-`build-release\` and rebuilds it, because the set is baked into the CMake cache
-and into librw's compile definitions. Every build writes into `bin\` and
-overwrites the previous files. `bin\BUILD-INFO.txt` says which config, backends
-and architecture is sitting there.
-
-The second argument is the architecture, `x86` (the default) or `x64`:
-
-```sh
-build-release.bat D3D9 x64
-```
-
-That one builds into `build-release-x64\`, which is a separate cache because
-the architecture cannot be flipped in an existing one. It enters the x64 MSVC
-environment itself and reads the `x64-windows` vcpkg triplet, so the only thing
-to do first is install the optional dependencies for that triplet.
-
-To configure by hand instead, from an x86 developer command prompt:
-
-```sh
-cmake -S . -B build-pc -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++
-cmake --build build-pc
-```
-
-Add `-DBFBB_RENDER_BACKENDS=GL3` for an OpenGL-only build and
-`-DCMAKE_PREFIX_PATH=%USERPROFILE%/vcpkg/installed/x86-windows` for FFmpeg,
-libusb and SDL. The settings program is drawn in wxWidgets, and with none
-installed the first build of a directory compiles `third_party/wxWidgets`,
-which is a long one: `-DBFBB_BUILD_CONFIGURATOR=OFF` skips it for a build that
-only wants the game. `-m32` is set by `CMakeLists.txt` before `project()` and is not
-something to pass yourself; for a 64-bit build, use an x64 developer command
-prompt, pass `-DBFBB_BUILD_32BIT=OFF`, and point the prefix path at the
-`x64-windows` triplet. This leaves the executable in `build-pc\`; add
-`-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=<repo>/bin` to put it where the scripts do.
-
-### 5. Run it
+### 5. Run
 
 ```sh
 bin\bfbb.exe
 ```
 
-The first run writes `bin\config.ini` with every setting at its default, then
-stops with an error box, because there is nowhere to read the game's files from
-yet. Put your Xbox asset folder in it as shown in **Getting the assets**
-above, and run it again. `bin\bfbb_config.exe`, built beside the game, edits
-that file with controls on it and lists what every setting accepts. `BFBB_ASSETS` overrides `[assets] path` when it is set,
-which is how to run a build against a second extraction without editing
-anything.
-
 ### When it fails
 
 | Symptom | Cause |
 | --- | --- |
-| `lld-link: error: <root>: undefined symbol: mainCRTStartup` at configure time | The MSVC environment does not match the architecture being built -- an x64 prompt for the default 32-bit build, or the reverse. Use `build-release.bat`, which enters the right one. |
-| `ERROR: clang++ is not on PATH` | clang is not installed, or its `bin` directory is not on `PATH`. |
-| `ERROR: no Visual Studio installation found` | No VS, or no `vswhere.exe`. Install the C++ Build Tools. |
-| `third_party/librw is empty` | The submodules were not cloned. `git submodule update --init --recursive`. |
-| `FMV decoder: none` when you installed FFmpeg | The build directory was configured before the install. Delete `build-release\` and build again. |
-| Switching `BFBB_BUILD_32BIT` does nothing | `CMAKE_CXX_FLAGS_INIT` is read once, when the language is enabled. Configure a fresh directory. |
-| The game starts and the window is blank | Almost always the asset path. The startup check catches a missing `FONT.HIP` or `boot.HIP`, but not a folder holding the wrong extraction. |
+| `ERROR: clang++ is not on PATH` | clang is missing or its `bin` is not on `PATH`. |
+| `ERROR: no Visual Studio installation found` | Install the C++ Build Tools. |
+| `third_party/librw is empty` | Run `git submodule update --init --recursive`. |
+| `FMV decoder: none` after installing FFmpeg | Delete `build-release\` and build again. |
+| The window opens blank | The asset path points at the wrong folder. |
+
+More in [docs/BUILDING.md](docs/BUILDING.md#troubleshooting).
 
 ## Android
 
-arm64 only, Android 7.0 or newer. Vulkan needs a Vulkan 1.3 driver.
+arm64, Android 7.0 or newer. Vulkan needs a Vulkan 1.3 driver.
 
-### Build the APK
-
-Needs Gradle 8.9, JDK 17, the Android SDK, and the NDK version pinned in
-`android/app/build.gradle`. Clone with submodules as above, then:
+Build with Gradle 8.9, JDK 17, the Android SDK, and the NDK version pinned in
+`android/app/build.gradle`:
 
 ```sh
 cd android
 gradle assembleDebug
 ```
 
-The APK is `android/app/build/outputs/apk/debug/app-debug.apk`. It carries GL3
-and Vulkan, and uses GL3. `-Pbfbb.backends=GL3` or `-Pbfbb.backends=VULKAN`
-builds an APK with only that renderer.
+The APK is `android/app/build/outputs/apk/debug/app-debug.apk`. It contains
+GL3 and Vulkan and uses GL3 by default. `-Pbfbb.backends=GL3` or
+`-Pbfbb.backends=VULKAN` builds with only one.
 
-### First launch
+On first launch, pick the Xbox game folder. The app either copies the files or
+reads them in place (needs "All files access"). Then pick the `modern` or
+`vanilla` video profile. Long-press the app icon to change the profile or import
+again. Back pauses. A controller hides the touch controls.
 
-1. Pick the Xbox game folder. The app either copies the files into its own
-   storage, or reads them in place (needs "All files access").
-2. Pick `modern` or `vanilla` for `[video] profile`.
-
-Long-press the app icon to switch profiles or import the files again. The back
-button pauses. A controller hides the touch controls.
-
-`docs/ANDROID.md` has the details.
+Details in [docs/ANDROID.md](docs/ANDROID.md).
 
 ## Settings
 
 `config.ini` is written next to the executable on first run, with every setting
-at its default and a comment saying what it does. Read that file for what the
-values mean. Only `[assets] path` has to be filled in, and `BFBB_ASSETS`
-overrides it when set.
+and a comment explaining it. `bfbb_config.exe` edits it with a GUI. Android has
+no configurator. A newer build adds new settings to an existing `config.ini`
+without touching your edits.
 
-`bfbb_config.exe`, built beside the game on desktop, edits `config.ini` with
-controls and lists the values each setting accepts. Android has no
-configurator.
+Settings under `[experimental]` are off by default.
 
-A newer build appends settings an older `config.ini` predates rather than
-rewriting it, so your edits survive an update.
+Things `config.ini` does not tell you:
 
-Three things `config.ini` cannot tell you:
+- The sticks cannot be remapped. Left moves, right turns the camera. On the
+  keyboard that is WASD and IJKL.
+- Steam holds Switch 2 controllers while its Nintendo configuration support is
+  on, and the port then cannot use them. Turn that off, or add `bfbb.exe` to
+  Steam as a non-Steam game.
+- A controller SDL does not recognise is reported at startup with its USB ids.
+  Put a `gamecontrollerdb.txt` next to `bfbb.exe` to give it a layout.
 
-- The sticks are not remappable. The left one moves, the right one turns the
-  camera, and on the keyboard that is WASD and IJKL.
-- A Switch 2 controller is shared with Steam, and only one program can hold one
-  at a time. Steam takes it whenever its Nintendo configuration support is on,
-  and the port then reports it as a device it cannot use. Turn that off in
-  Steam's controller settings, or add `bfbb.exe` to Steam as a non-Steam game
-  and let Steam Input hand it over as a standard pad.
-- A controller SDL does not recognise says so at startup, with its USB ids, and
-  cannot be played on until it has a layout. Put a `gamecontrollerdb.txt` beside
-  `bfbb.exe` to give it one. Use the community file of that name, or a single
-  line from SDL's own gamepad mapping tool.
+[src/SB/Core/pc/README.md](src/SB/Core/pc/README.md) documents the platform
+layer and the `BFBB_*` build switches.
 
-`src/SB/Core/pc/README.md` documents the platform layer interface by interface
-and lists the `BFBB_*` build switches.
+## Features
 
+### Xbox parity
+
+The GameCube release has these as empty functions with live call sites. They
+were recovered from the Xbox `.xbe`.
+
+| Feature | Setting | What it is |
+| --- | --- | --- |
+| Glow | `[xbox] glow` | Full-screen bloom: a bright pass, two blurs, added back over the frame. Shaders decoded from the Xbox build. |
+| Cruise Bubble distortion | `[xbox] distortion` | Warps the picture while flying the Cruise Bubble, using the Xbox offset map in `plat.HIP`. |
+| Loading screen still | `[xbox] snapshot` | Shows the frame you just left behind the loading bubbles. |
+| Cave reverb | `[xbox] reverb` | Reverb in the Mermalair and caves, using the Xbox's I3DL2 parameters. |
+| Sound rolloff | `[xbox] sound_rolloff` | Uses the Xbox's DirectSound distance and volume curves. Fixes sounds such as the Kelp Forest waterfall. |
+
+### Video
+
+| Feature | Setting | What it does |
+| --- | --- | --- |
+| Renderer | `[video] backend` | Direct3D 9, Direct3D 11, OpenGL or Vulkan. |
+| Video profile | `[video] profile` | `vanilla`: 640x480, 4:3 HUD, console draw distance. `modern`: native aspect up to 1080p, HUD at the screen edges, no draw distance limit. `custom`: the individual settings. |
+| Resolution | `[video] width`, `height` | Any render size. Non-4:3 sizes are widescreen: the vertical view stays the same and width is added. Rendering above the display size supersamples. See [docs/RESOLUTION.md](docs/RESOLUTION.md). |
+| Window mode | `[video] mode` | Fullscreen, borderless or windowed. |
+| UI anchoring | `[video] ui` | HUD in a centred 4:3 box, or at the screen edges. |
+| Field of view | `[video] fov` | Changes the camera's 75-degree FOV. Cutscene and Cruise Bubble cameras keep their relative angles. |
+| Frame rate and vsync | `[video] framerate`, `vsync` | Any cap, the display's refresh rate, or uncapped. See [docs/UNCAPPED.md](docs/UNCAPPED.md). |
+| Antialiasing | `[video] msaa` | MSAA. Off by default. |
+| Per-pixel lighting | `[video] per_pixel_lighting` | Smooth shading on characters and objects. The level's baked lighting does not change. |
+| Fixed-function mode | `[video] pipeline` | Direct3D 9 without shaders, for pre-2002 hardware. Unfinished: no glow, distortion, per-pixel lighting, toon shading or environment maps. See [docs/RENDERING.md](docs/RENDERING.md). |
+| Shadow resolution | `[video] shadow_resolution` | Character shadows scale with the render size instead of staying at 256 pixels. |
+| Draw distance | `[video] draw_distance` | Removes the per-object cull distance, the low-detail swap and the world clip. Does not change fog or simulation. |
+| Loading screen | `[video] load_time` | Minimum seconds to show the loading screen, since loads are near-instant. `fancy` wipes from the old level to the new one instead. `off` for neither. |
+
+### Audio, input and game
+
+| Feature | Setting | What it does |
+| --- | --- | --- |
+| Soundtrack replacement | `[audio] soundtrack` | Plays your own music files instead of the game's mono music. |
+| Controllers | `[input] controller`, `[pad]`, `[keyboard]` | Any SDL-supported controller. Every button is remappable. |
+| Stick tuning | `[input] deadzone`, `camera_sensitivity` | Stick deadzone and right-stick camera speed. |
+| Control presets | `[input] preset` | Xbox, PS2 or GameCube layout. `auto` follows the connected controller. |
+| Button prompts | `[input] button_icons` | Xbox, GameCube, PS2 or custom icons from `buttons/`. Icons follow your bindings. |
+| Touch controls | `[input] touch_controls` | On-screen controls. On by default on Android. |
+| Boot into a level | `[game] boot` | Starts in the named scene, skipping the menu. Overrides `SB.INI`. |
+| Skip the logos | `[game] intro_movies` | Goes straight to the title screen. |
+| Save folder | `[game] save_folder` | Where saves go. Empty means the per-user data folder. |
+| Six save slots | none | The unused second memory-card slot is now a second folder with three more slots. |
+| Save sizes | none | The save screens show KB/MB instead of memory-card blocks. |
+| Custom font | `[font] face`, `sans` | Draws text from TrueType fonts at the render size instead of the 640x480 atlases. `tools/getfont.py` fetches one. The other `[font]` keys tune the fit. |
+| Mod folder | `[assets] mod` | Loads an Xbox mod's files in place of the originals without modifying the asset folder. Modded games use separate saves. |
+| PC wording | `[assets] platform_wording` | Rewrites Xbox-specific text (dashboard, memory card) as it loads. |
+
+### Experimental
+
+| Feature | Setting | What it does |
+| --- | --- | --- |
+| Smoothed geometry | `[experimental] hipoly_assets` | Tessellates the level and models into curved surfaces at load and rebuilds collision to match. F8 toggles it. The other `hipoly_` keys tune it. |
+| Toon shading | `[experimental] toon` | Cel shading with ink outlines. `solid_flat_props` gives flat props thickness for the outlines. The other `toon_` keys tune it. Shader pipeline only. |
+| World lighting | `[experimental] world_lighting` | Lights the level at runtime instead of using baked vertex colours. `world_light_shadows` and `day_night_cycle` extend it. |
+
+### Fixed bugs
+
+The port fixes these bugs from the original game. The two with a setting can be
+turned off for console-accurate behaviour.
+
+| Bug | Fix | Setting |
+| --- | --- | --- |
+| 3D sound is panned to the wrong side on GameCube. | Swaps left and right, as the community's Action Replay code does. | none |
+| The pause menu's bamboo frame has no rope at its corners. The rope is drawn on the horizontal poles, and the vertical poles are drawn over it. | Draws the vertical poles first. | `[fixes] menu_rope` |
+| The sky is missing on Goo Lagoon's pier. The skydome sits beyond the far clip plane, which that level sets at the fog distance. | Shrinks the dome around the camera until it fits. It looks the same on screen. | `[fixes] sky_clip` |
+
+## How it works
+
+The game code comes from the [bfbbdecomp](https://github.com/bfbbdecomp/bfbb)
+decompilation of the GameCube release. The port compiles that code with clang
+instead of the GameCube's CodeWarrior compiler.
+
+Heavy Iron wrote the game to build for several consoles. Code that talks to the
+hardware (files, controllers, sound, rendering, memory cards) sits behind `i*`
+interfaces such as `iFile`, `iPad` and `iSnd`. Each console had its own
+implementation. The port adds a PC implementation in `src/SB/Core/pc/`, built
+on SDL for the window, input and audio, and on librw for rendering.
+
+librw is an open-source reimplementation of RenderWare, the engine the game
+was built on. It reads the Xbox release's models, textures and levels, which
+is why the port needs Xbox files.
+
+All other game code (`src/SB/Game` and `src/SB/Core/x`) is shared with the
+GameCube build of the decomp. That build must still produce a byte-identical
+copy of the original executable, so port-only changes in shared code sit
+behind build flags.
+
+[docs/PCPORT.md](docs/PCPORT.md) covers the build split and how to check it.
+[src/SB/Core/pc/README.md](src/SB/Core/pc/README.md) covers each interface.
 
 ## Credit
 
-The decompilation is the work of the
-[bfbbdecomp](https://github.com/bfbbdecomp/bfbb) project and its contributors.
-The renderer is [librw](https://github.com/aap/librw) by aap, through a
-[fork](https://github.com/joeyballentine/librw) with the changes this port needed.
-
-This would not be possible without their prior efforts.
+- Decompilation: [bfbbdecomp](https://github.com/bfbbdecomp/bfbb) and its
+  contributors.
+- Renderer: [librw](https://github.com/aap/librw) by aap, through a
+  [fork](https://github.com/joeyballentine/librw).
+- Platform layer: [SDL](https://github.com/libsdl-org/SDL).
+- Movie and music decoding: [FFmpeg](https://ffmpeg.org/).
+- Settings program: [wxWidgets](https://www.wxwidgets.org/).

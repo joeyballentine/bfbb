@@ -2,44 +2,33 @@
 
 ## PC port
 
-- [PCPORT.md](PCPORT.md) is the design record. Why librw, why 32-bit, why Xbox
-  assets, and where the platform seam is.
-- [PCPORT-HANDOFF.md](PCPORT-HANDOFF.md) is the practical one. How to verify a
-  change without fooling yourself, and what past investigations found. A few of
-  them record being wrong, which is deliberate.
-- [../src/SB/Core/pc/README.md](../src/SB/Core/pc/README.md) covers the platform
-  layer interface by interface, plus the `BFBB_*` switches.
-- [UNCAPPED.md](UNCAPPED.md) is why the frame rate is capped at 60, and the
-  audit of what would have to change to let it go free.
-- [RESOLUTION.md](RESOLUTION.md) is the same audit for rendering above 640x480:
-  what the virtual screen already gives you, and the camera rasters that have to
-  move together.
-- [RENDERING.md](RENDERING.md) is what could be added to the renderer, in both
-  directions: modern effects as optional settings, and a fixed-function mode for
-  hardware older than Shader Model 2.0. Nothing in it is implemented.
-- [ANDROID.md](ANDROID.md) is the Android port: the two problems that decide
-  whether it is possible, what has been written so far, and what is still
-  unknown. Partly implemented; nothing in it has been run on a device.
+- [BUILDING.md](BUILDING.md): building on Windows, Linux and macOS. Optional
+  dependencies, backends, 64-bit, MinGW, troubleshooting.
+- [PCPORT.md](PCPORT.md): developer guide. Branches, the GameCube gate, how the
+  two builds are kept apart, conventions, pitfalls.
+- [../src/SB/Core/pc/README.md](../src/SB/Core/pc/README.md): the platform
+  layer, interface by interface, and the `BFBB_*` switches.
+- [ANDROID.md](ANDROID.md): the Android port. Building the APK, first launch,
+  files on the device, logs, how the platform pieces work.
+- [RENDERING.md](RENDERING.md): the renderer and its backends, shipped options,
+  the fixed-function mode, and proposed effects.
+- [RESOLUTION.md](RESOLUTION.md): rendering above 640x480 and widescreen.
+- [UNCAPPED.md](UNCAPPED.md): frame rates other than 60. The defect classes,
+  what was fixed, and what is still open.
 
 ## Decomp
 
-- [DUPLOTRON.md](DUPLOTRON.md) is the decomp branch's record: the
-  scheduler-patched CodeWarrior, the ground rules, what's been tried.
-- [dependencies.md](dependencies.md) is what the GameCube build needs.
+- [DUPLOTRON.md](DUPLOTRON.md): the decomp branch's record. The patched
+  CodeWarrior, the ground rules, what has been tried.
+- [dependencies.md](dependencies.md): what the GameCube build needs.
 
 ## Reference
 
-Inherited from [bfbbdecomp](https://github.com/bfbbdecomp/bfbb) and still
-accurate:
+From [bfbbdecomp](https://github.com/bfbbdecomp/bfbb):
 
-- [splits.md](splits.md), format of `config/GQPE78/splits.txt`
-- [symbols.md](symbols.md), format of `config/GQPE78/symbols.txt`
-- [common_bss.md](common_bss.md), how `-common on` places uninitialised globals.
-  Worth knowing: retail's placement tells you whether a symbol was static.
-- [comment_section.md](comment_section.md), CodeWarrior's `.comment` section and
-  what it says about the compiler that built a unit
-
-`getting_started.md`, `github_actions.md` and `images/` were dropped. They were
-dtk template setup for starting a new decomp ("rename GAMEID", "create a repo
-from this template") and pointed at a `.github.example/` folder that doesn't
-exist here. Real CI is in `.github/workflows/`.
+- [splits.md](splits.md): format of `config/GQPE78/splits.txt`.
+- [symbols.md](symbols.md): format of `config/GQPE78/symbols.txt`.
+- [common_bss.md](common_bss.md): how `-common on` places uninitialised
+  globals. Retail's placement shows whether a symbol was static.
+- [comment_section.md](comment_section.md): CodeWarrior's `.comment` section
+  and what it says about the compiler that built a unit.

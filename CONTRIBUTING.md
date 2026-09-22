@@ -31,3 +31,19 @@ U32 myFunc(U32 r3, U32 r4, F32 f1)
     return r3;
 }
 ```
+
+## PC port (`treedome`)
+
+The rules above apply to game code on every branch. On `treedome`, also:
+
+- Platform differences go in the `i*` layer (`src/SB/Core/pc/`), not in
+  `#ifdef` arms inside `src/SB/Game` or `src/SB/Core/x`.
+- Changes to shared code must leave the GameCube build byte identical. Run
+  `python tools/gcgate.py` after `ninja` to check.
+- Use enums and named constants, not raw numbers or struct offsets. Offsets
+  differ between the GameCube, 32-bit and 64-bit builds.
+- Do not commit debug logging.
+- Comments say what the code does, not how the problem was found.
+
+[docs/PCPORT.md](docs/PCPORT.md) covers the gate, the build split and the
+known pitfalls.
