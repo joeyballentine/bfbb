@@ -7107,3 +7107,25 @@ and after on a full build, sjiswrap units included. New sha1
 Moved but not closed: `zGameLoop` 99.979, `xFXAuraUpdate` 99.838,
 `xFXanimUVSetAngle`/`xFXanimUV2PSetAngle` 94.783, `zCameraTweakGlobal_Add`
 96.331, `NightLightUVStep` 67.700.
+
+## Clause A needs a static side (2026-09-22)
+
+Shipped. `GC/2.0p1a` sha1 `61ab511748b3dc08df62f55a72e28218c72dac7a`. Full
+`ninja`: game **7314 -> 7316 (+2 / -0)**, matched_code 82.162 -> 82.296,
+fuzzy 99.371 -> 99.381, DOL intact. One partial down:
+`SkinXformVertAndNormal` 85.504 -> 85.451.
+
+An ablation of every scheduler clause against the clause-S compiler found one
+that costs more than it pays. Clause A (entry 0: two whole accesses of at most
+4 bytes, differing opcodes, plain) had no storage test, so it also serialised
+two frame objects. Retail does not: `LOD_r_PLAT` interleaves its frame-slot
+copies, and `xFXRenderProximityFade` (the recorded entry-0 over-fire witness)
+hoists a frame reload over a frame store. Removing clause A outright is
++2 / -1 (`xShadowManager_Render` needs it for a frame load against a store to
+`sEntSelf`). Requiring one side to be a static object keeps that and drops
+the frame-frame pairs; "not both frame objects" measures the same.
+
+Ablations of the other scheduler clauses on the same compiler, each removed
+alone (exact functions lost): C on entry 1 -35, B on entry 1 -16, C on entry
+3 -86, B on entry 3 -6, E3n on entry 0 -2, C+ -57, B on entry 0 -30. None
+is free.

@@ -103,7 +103,7 @@ BASE_SHA1 = "74bc177b10d1bbe8a60a21a6c0aa86d2dd9c0668"
 # The C-sourced GC/2.0p1a. This is a NEW hash: the old byte-cave p1a was
 # 5c6862b641adb8845f0fc09a6569902df068a83f. The derived-compiler bytes differ;
 # the OBJECTS it produces do not (verified byte-identical on 450 SB units).
-PATCHED_SHA1 = "5c4e8e29f9d24079bb1f52d4d79bb3ec30bd4566"
+PATCHED_SHA1 = "61ab511748b3dc08df62f55a72e28218c72dac7a"
 
 # ---- where the injected code goes ---------------------------------------
 # A new section after the last one. Stock SizeOfImage is 0x20e000 and the file
