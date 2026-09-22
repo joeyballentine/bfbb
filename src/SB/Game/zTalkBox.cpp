@@ -1629,7 +1629,7 @@ namespace
 
 } // namespace
 
-void ztalkbox::load(xBase& data, xDynAsset& asset, u32)
+void ztalkbox::load(xBase& data, xDynAsset& asset, size_t)
 {
     ((ztalkbox&)data).load((const ztalkbox::asset_type&)asset);
 }
