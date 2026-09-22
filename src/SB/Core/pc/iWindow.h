@@ -91,7 +91,7 @@ void iWindowPump();
 // it paces to the MONITOR, and a 240 Hz monitor gives four times the frames a
 // GameCube title was built for. Every part of the game that counts frames
 // rather than seconds then runs four times too fast, and retail's own guard at
-// zGame.cpp:559 -- which substitutes 1/60 s for any frame it measures under ten
+// zGameLoop -- which substitutes 1/60 s for any frame it measures under ten
 // microseconds -- is a reminder that its timing was written against a console
 // that could not produce one.
 void iWindowPaceFrame();

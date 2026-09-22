@@ -1,1027 +1,935 @@
-# Running uncapped: what was fixed, and what is left
+# Frame rates other than 60
 
-## Where things stand
+Retail ran at a fixed 60 fps, and much of its code does something once per
+frame that should happen a fixed number of times per second. The PC port runs
+at any frame rate. The fixes below make those sites per-second on the PC build.
 
-The frame rate is a setting. `config.ini`'s `video.framerate` takes a number of
-frames a second, `display` for the monitor's refresh rate, or `0` for no cap;
-`video.vsync` decides separately whether the present waits for the display. The
-default is 60 and vsync on, which is what the GameCube's video interface gave
-the game.
+## Frame pacing
 
-The two settings answer different questions and are wired separately.
-`iWindowPaceFrame` in `iWindowSDL.cpp` holds the cap and sleeps to a deadline;
-`RwCameraShowRaster` in `rw/camera.cpp` decides the flip flag. Vsync alone still
-runs at whatever the monitor gives, and a cap alone still tears.
+### Settings
 
-`dt` is the real frame time. Uncapped, gameplay runs at 1700-3200 fps (median
-1732, over 64 seconds), putting `dt` near 0.3 ms — a factor of fifty off the
-sixtieth of a second the original code was written against, not the factor of
-four a 240 Hz display suggests.
+`config.ini`'s `video.framerate` takes a number of frames a second, `display`
+for the monitor's refresh rate, or `0`/`off` for no cap. `video.vsync` decides
+separately whether the present waits for the display. The defaults are 60 and
+vsync on, which is what the GameCube's video interface gave the game.
+`ApplyDisplayRateConfig` in `iSystem.cpp` reads both after the window opens.
+If `display` cannot read the refresh rate, it leaves the rate uncapped.
 
-Every change below is inside `#ifdef PLATFORM_PC`. The GameCube arm of every
-file this touched is byte identical to what it was.
+The two settings do separate jobs:
 
-## The three systems the first audit named
+- `iWindowPaceFrame` (`iWindowSDL.cpp`) holds the cap. It advances a deadline
+  by one frame period and sleeps to it with `SDL_DelayPrecise`. A frame that
+  overran its deadline drops it and returns without sleeping, so one slow frame
+  does not become a burst of fast ones. `iWindowSetFrameRate` resets the
+  deadline.
+- `RwCameraShowRaster` (`rw/camera.cpp`) decides the flip flag. Retail passes
+  `rwRASTERFLIPDONTWAIT`. The port sets or clears `rwRASTERFLIPWAITVSYNC` from
+  `iWindowGetVSync()`, then calls `iWindowPaceFrame`.
 
-Two were real. The camera was not, and finding that out cost a revert.
+Vsync alone runs at the monitor's rate. A cap alone still tears.
 
-### Camera — NOT a bug, and not fixed
+Loops that draw nothing call `iVSync` (`iSystem.cpp`), which paces to a fixed
+60 Hz with the same deadline logic.
 
-The original version of this document called `zCamera.cpp`'s yaw constant a rate
-times a hardcoded timestep and said the camera turned four times too fast at 240
-fps. That is wrong, it was changed to use `dt`, and the change was reverted after
-a player reported the camera turning at half speed at 128 fps.
+### dt
 
-`dp` does not accumulate. It is added to `cam->pcur` and to a LOCAL `pgoal`, and
-`xCameraMove` then writes that local into `cam->pgoal` — so the goal is always
-exactly `dp` ahead of where the camera is, never further. `xCameraUpdate`
-re-derives `pcur` from `mat.pos` through `xCam_worldtocyl` at the top of every
-frame, which throws the `pcur` write away, and `xCam_CorrectP` springs the
-POSITION toward the goal by a fraction proportional to `dt`.
+`dt` is the real frame time. Uncapped, it is well under a millisecond, not
+the sixtieth of a second the code was written against. The main loop in
+`zGame.cpp` builds it:
 
-So the angle moved per frame is `(k * dt) * dp` and the rate per second is that
-over `dt` — `k * dp`, with the `dt` cancelled. A CONSTANT `dp` is what makes the
-turn rate frame-rate independent. The `1/60` converts stick units into radians of
-gap. Multiplying by `dt` makes the rate proportional to `dt`, which is the
-half-speed-at-double-the-frame-rate the player saw.
+- `iTimeDiffSec` between this frame and the last. `iTimeSuspend` and
+  `iTimeResume` stop the clock while an Android app is in the background, so
+  the first frame back does not carry the whole absence.
+- With `sHackSmoothedUpdate`, a moving average. Retail averages the last two
+  frames. The PC arm averages the newest samples that cover a thirtieth of a
+  second, from a 128-slot ring. At 60 fps that is the same two samples in the
+  same order.
+- Clamped. A frame under 1e-5 s becomes 1/60, and a frame over 0.1 s becomes
+  0.1. The lower clamp is 100,000 fps and is not reached in practice.
+- Written to `globals.update_dt` and passed down the update tree.
 
-The pitch pair at `pitch_s` is the same shape for a different reason: it is reset
-to zero every frame and consumed in `zCameraFreeLookSetGoals` as a 0..1 blend
-weight. Also not a timestep.
+### gFrameCount and gGameSeconds
 
-The overrotation site further down builds its `dp` from `zcam_overrot_rate` with
-no `dt` at all and feeds the same `pcur`/`pgoal` mechanism, so it is frame-rate
-independent for the same reason. Leave it.
+`gFrameCount` counts rendered frames. `gGameSeconds` (`xDebug.h`, PC only) is
+the same tick in seconds: `zGame.cpp` adds `sTimeElapsed` to it beside
+`gFrameCount++`. It is `F64`. An `F32` accumulator stops advancing past 8192 s
+when the addend is 3e-4.
 
-`xCamera.cpp` keeps a `static F32 last_dt` and uses it to turn a per-frame
-position delta into a velocity. Retail wrote this camera for a variable frame
-time. It is one of the few systems in the game that was already right, which is
-why the naive reading fails here three times over.
+Consumers that read `gFrameCount` as a clock use `gGameSeconds`. Consumers
+that compare it for equality keep the counter. `xFX.cpp`'s aura stamps
+`ap->frame = gFrameCount` in the update and draws only what was stamped this
+frame. That is correct because the port runs one update per presented frame.
+It breaks if simulation and rendering are decoupled.
 
-The boss fights do not use this camera. `xBinaryCamera` does, and that one has a
-real defect - see *A bound and a lag that multiply* below.
+### The GameCube build
 
-### Pickups — fixed
+Every change is inside `#ifdef PLATFORM_PC`. The GameCube arm of every touched
+function is retail's code, and the GameCube build stays byte identical. Where a
+split would cost a match, keep retail's exact spelling in the `#else`. For
+example, `--x < 0` becomes a decrement and a compare only on the PC arm
+(`zNPCSlick::SlipSlidenAway`, `zNPCGoalAlertTubelet::EmitSteam`).
 
-`zEntPickup_SceneUpdate` multiplied one shared global matrix into itself every
-frame with `xMat3x3RMulRotY`, which does not renormalise. Error accumulated per
-MULTIPLICATION rather than per second, so fifty times the frame rate was fifty
-times the drift — and the next line then set `rwMATRIXTYPEORTHONORMAL`,
-asserting a property the matrix no longer had. Every pickup copies that matrix.
+New fields on a game struct go at the end, behind `PLATFORM_PC`, when the
+struct's size appears in a table. `xEntBoulder` is one: `zScene.cpp` uses
+`sizeof(xEntBoulder)`.
 
-Now the angle is held as a scalar and the basis is rebuilt with `xMat3x3RotY`
-each frame. That cannot drift at all.
+## Rate helpers
 
-### Particles — fixed
+Each helper returns retail's constant at a sixtieth of a second, so a 60 fps
+build behaves like the console. `fps_selftest` checks that property for each
+one.
 
-`xParEmitterEmitCustom(xParEmitter*, F32 dt, ...)` and
-`zParPTankConvertEmitRate(xParEmitter*, F32 dt)` take a time WINDOW as their
-second argument and emit that much worth of particles. A constant there emits a
-fixed amount per FRAME.
+### `xpow(k, 60.0f * dt)`
 
-Passed `dt`:
+Rebases a per-frame multiplier. Retail uses it itself at `zFX.cpp:460` and
+`:482`. Use it for `x *= k` where `k` is a known constant in [0, 1].
 
-    zEntPickup.cpp      the three shiny-sparkle sites
-    zEntPlayer.cpp      gEmitBFX
-    zEntHangable.cpp    the chandelier candle flame and smoke
-    zNPCTypeDutchman.cpp  the beam light
-    zNPCTypeTiki.cpp    the thunder cloud
+### `xFrameApproach(F32 k, F32 dt)` (`xMath.h`)
 
-`zEntPlayer.cpp`'s stank breath is behind a `sLastInvulnEmit > 0.02f` time gate,
-so `dt` is the wrong window there — it fires at 50 Hz, not per frame. It passes
-half the elapsed time the gate measured, which is exactly `1/60` at 60 fps and
-constant particles per second above it.
+Returns `1 - xpow(1 - k, 60 * dt)`: the fraction of the remaining distance a
+frame of `dt` closes, given that a console frame closed `k`. Use it for
+`x += k * (target - x)` and its spellings. It clamps `k` to [0, 1] before the
+power. `xpow` of a negative base with a fractional exponent is a NaN, and
+several callers read `k` from level data with no bound.
 
-### The emitter core itself — audited, one defect
+### `xFrameEmitCount(F32 count, F32 dt)` (`xMath.h`)
 
-`xParEmitterEmit` at `xParEmitter.cpp:432` turns a rate and a window into a
-count, and `zParPTankConvertEmitRate` at `zParPTank.cpp:814` is a copy of the
-first half of it. Both are correct.
+Converts a count per console frame into a count for a frame of `dt`. It
+returns the whole part of `count * 60 * dt` and adds one more with probability
+equal to the fraction. The caller keeps no state. Use it where retail spawns N
+things every frame.
 
-    pe->rate_fraction += rate * emit_dt;
-    count = std::floorf(pe->rate_fraction);
-    if (count > 0) pe->rate_fraction -= count;
-    if (count == 0) return NULL;
+### `xFrameEmitChance(F32 chance, F32 dt)` (`xMath.h`)
 
-The count FLOORS, there is no per-call minimum, and the remainder stays in
-`rate_fraction` until it makes a whole particle. Halving the window doubles the
-number of calls and halves each one's contribution, so the particles a second
-do not change. `rate_fraction` is reset only in `xParEmitterInit`.
+Converts a probability per console frame into one for a frame of `dt`:
+`1 - xpow(1 - chance, 60 * dt)`, clamped to [0, 1]. Use it for a random draw
+against a constant on a per-frame path. Compute it once outside a loop over
+particles.
 
-The accumulator is per-emitter and several emitters are shared globals, but that
-does not bias the count either: twenty pickups calling `gEmitShinySparkles` with
-their own rates add `sum(rate_i) * dt` a frame however the frame is diced. What
-the sharing does change is WHICH caller's position gets the particle when the
-accumulator crosses an integer, and that is retail behaviour at any frame rate.
+### A fixed step with a carried remainder
 
-`rate_time` is a wall-clock phase, wrapped modulo `prop->rate.freq` and fed to
-`xParInterpCompute`. Every interpolation mode reads it as seconds.
+For code whose behaviour is a sequence of frames rather than a rate, run it at
+60 Hz:
 
-The per-particle update in `xParGroupAnimate` ages life, colour and size against
-`dt`. All correct.
+    tmr += dt;
+    S32 steps = (S32)(60.0f * tmr);
+    if (steps > 4) steps = 4;         // or clamp tmr to 0.1
+    tmr -= steps * (1.0f / 60.0f);
+    for (S32 i = 0; i < steps; i++) { ...retail body... }
 
-The one defect is the velocity convention. `xParCmdVelocityApply_Update` does
+Carry the remainder. Zeroing it drops a tick whenever a frame is slightly
+short. Cap the steps or clamp the accumulator so a hitch does not spend a
+backlog in one frame. Where a counter is also reset by other code (`Enter`,
+`Resume`), keep the counter and subtract `steps` from it rather than replacing
+it with a timer.
 
-    xVec3Add(&p->m_pos, &p->m_pos, &p->m_vel);
+Use this for frame-counted animation (HUD shake), FIR filters and fixed-slot
+histories, collision that depends on step size (boulders), and rounding that
+fails at small `dt` (King Jelly).
 
-with no `dt`, so `xPar::m_vel` is a displacement per FRAME, and the emitter
-types set it as `asset_vel * par_dt` at birth to match. That pair is
-self-consistent. The acceleration commands are not: they add `acc * dt` to a
-per-frame displacement, which is an acceleration of `acc / dt` a second — 2.1x
-too strong at 128 fps. Six sites in `xParCmd.cpp` now carry an extra `60 * dt`,
-which is one at a sixtieth of a second:
+### `xParEmitterEmitCustom(..., F32 par_frames)` (`xParEmitter.h`, PC only)
 
-    xParCmdFollow_Update, xParCmdOrbitPoint_Update, xParCmdOrbitLine_Update,
-    xParCmdAccelerate_Update, xParCmdApplyWind_Update, xParCmd_Shaper_Update
+See *Particle system* below. `par_frames` is how many console frames the
+caller's window stands for. It defaults to 1. `xParFrameStep` in
+`xParEmitter.cpp` turns it into the birth-velocity step.
 
-`xParCmdKillSlow_Update` compares `m_vel` squared against a limit scaled by one
-`dt`, so the two sides scale apart; it takes the same factor.
+## Defect classes
 
-`xParCmd_DampenSpeed_Update` and the `damp` term in `xParCmd_Shaper_Update` are
-NOT this. They scale `m_vel` by a fraction of itself, which compounds to the
-same factor a second whatever the frame rate. `xParCmdRandomVelocityPar_Update`
-rotates `m_vel` by `cmd->x * dt` radians, an angular rate, and is also correct.
+### Emission counted in frames
 
-## Emission counted in frames
-
-A spawn that runs every frame, every N frames, or on a per-frame coin flip is an
-emission rate per frame whatever the emitter behind it does. Two helpers in
-`xMath.h` convert one:
-
-    U32 xFrameEmitCount(F32 count, F32 dt)    // count per frame -> per second
-    F32 xFrameEmitChance(F32 chance, F32 dt)  // chance per frame -> per second
-
-`xFrameEmitCount` resolves the leftover fraction with a coin flip rather than an
-accumulator, so no site needs new state. `xFrameEmitChance` is
-`1 - xpow(1 - chance, 60 * dt)`, the same shape as the bungee turn lerp.
+A spawn that runs every frame, every N frames, or on a per-frame coin flip is a
+rate per frame. Fix with `xFrameEmitCount`, `xFrameEmitChance`, or a seconds
+timer at the same period.
 
 Converted:
 
     xEntBoulder.cpp         the bubble bowl trail, a tenth of the speed a frame
+    xClimate.cpp            the PTank snow path. zParPTankSpawnSnow adds flakes
+                            outright, so a count a frame set the population
     zThrown.cpp             the thrown-object trail
     zEntPlayer.cpp          the springboard, stun, goo, Patrick melee, tongue
                             and slide bubble trails
-    zEntPlayer.cpp          `zEntPlayer_SpawnWandBubbles`, the bubble wand
-                            trail. SpongeBob's melee. Three bubbles a frame for
-                            the whole bubble spin, one a frame for the Bbash and
-                            Bbounce windups. Scaled inside the function, since
-                            all three callers run once a frame while their
-                            effect is live and none of them pass a window.
-                            A frame that wins no bubble stamps `last_frame`
-                            without touching `last_center`, so the five-frame
-                            restart gap still measures a break in the effect and
-                            the next spawn spreads its bubbles over the whole
-                            path the wand travelled. Passing zero would have hit
-                            the `count != 0` default and emitted three.
+    zEntPlayer.cpp          zEntPlayer_SpawnWandBubbles, the bubble wand trail.
+                            Three a frame for the bubble spin, one for the Bbash
+                            and Bbounce windups. Scaled inside the function,
+                            since all three callers run once a frame and none
+                            passes a window. A frame that wins no bubble stamps
+                            last_frame and last_time without moving last_center,
+                            so the next spawn spreads over the whole path.
+                            Passing zero would hit the `count != 0` default and
+                            emit three
+    zEntPlayer.cpp          MeleeAttackBoundCollide's zFX_SpawnBubbleHit, ten a
+                            frame while a target is inside the bound. All three
+                            callers (slide, bubble spin wand, Sandy's melee)
+                            repeat every frame. The one-shot users of
+                            zFX_SpawnBubbleHit are separate call sites, so the
+                            scale goes at this call, not inside the function
+    zEntPlayer.cpp          the bubble bash and bounce bone contrails, one a
+                            frame at each of four bones. Each bone rolls its own
+                            count so the trail keeps its spread
+    zEntPlayer.cpp          Patrick's StunLand slam, a 24-bubble ring every
+                            frame for the first quarter second. The number of
+                            RINGS scales, not the bubbles in one, because the
+                            ring spreads its angles over its own count
     zScene.cpp              the menu bubbles, a 1.5% chance a frame
     zEntSimpleObj.cpp       the blob burst
     zShrapnel.cpp           the projectile trail
     zNPCHazard.cpp          seven `moreorless` frame dividers, now seconds
                             timers at the same period
-    zNPCTypeRobot.cpp       DoFX_Motorboat, a bubble on five of every sixteen
-                            frames
-    zNPCGoalRobo.cpp        the AlertGlove whirlwind counter (now
-                            `tmr_nextemit`), the death-ray tip, both tube-dying
-                            propel trails
+    zNPCHazard.cpp          `cnt_nextemit`, four sites, now `tmr_nextemit`
+    zNPCHazard.cpp          DeathStar, twenty a frame for the first sixth of
+                            the hazard's life
+    zNPCTypeRobot.cpp       DoFX_Motorboat, a bubble on six of every sixteen
+                            frames. From cnt_nextemit = 15, 14 down to 5 are
+                            silent and 4 to -1 emit
+    zNPCTypeRobot.cpp       the chomper's breath wisps (BreathTrail) and the
+                            slick's oil vapours (`moreorless`)
+    zNPCGoalRobo.cpp        the AlertGlove whirlwind (`tmr_nextemit`), the
+                            death-ray tip, both tube-dying propel trails
+    zNPCGoalRobo.cpp        the tubelet's steam jet, a particle per call with
+                            no gate
+    zNPCGoalRobo.cpp        FurryFlurry's cone. `moreorless` is reset to -1, so
+                            the cone went out every frame. Scales the number of
+                            cones, like the StunLand ring
     zNPCGoalAmbient.cpp     the bumped-jellyfish trail
     zNPCTypeBossPatrick.cpp the glob trail
-    zEntPlayer.cpp          the bubble bash and bounce bone contrails, one
-                            bubble a frame at each of four bones. Each bone
-                            rolls its own count, so the trail keeps its spread
-                            instead of collapsing onto the first bones
-    zEntPlayer.cpp          Patrick's StunLand slam, a 24-bubble ring every
-                            frame for the first quarter second. The number of
-                            RINGS scales, not the bubbles in one: the ring
-                            spreads its angles over its own count, so a thinner
-                            ring is a few fixed spokes rather than a circle
-    zNPCHazard.cpp          DeathStar, twenty bubbles a frame for the first
-                            sixth of the hazard's life
-    zNPCGoalRobo.cpp        FurryFlurry's cone. `moreorless` is reset to -1, so
-                            it is negative on every later call and the cone goes
-                            out every frame
-    zNPCFXCinematic.cpp     the `_AR` callbacks and NCIN_BubWipe/NCIN_BubHit --
-                            see below
+    zNPCTypeBossSandy.cpp   the Poseidome laser show, two ribbon joints a frame
+    zNPCFXCinematic.cpp     see below
+
+`zNPCFXCinematic.cpp`'s callbacks take no `dt`. They read `globals.update_dt`,
+which `zGame.cpp` writes once a frame. `NCIN_BubbleTrail_AR` already builds its
+accumulator from it. The per-frame sites scaled from it are `NCIN_BubWipe`
+(fifty a frame; its buffer is sized from the scaled count), `NCIN_BubHit`'s
+three-a-frame tail, `NCIN_BubTrailBone_AR`, `NCIN_SleepyDRay_AR`,
+`NCIN_MidFish_AR`, `NCIN_BombTrail_AR`, `NCIN_BoneTrail_AR` and
+`NCIN_HookRecoil_AR`.
+
+`flg_stat & 2` is the effect's first-frame flag. `zNPCFXCutscene` clears it
+after the first `cb_fxupd` call. Anything behind it is a one-shot and keeps a
+fixed count: `NCIN_BubSlam`, `NCIN_SleepyDRay_Upd`, `NCIN_ShieldPop`, and the
+sixteen bubbles at the top of `NCIN_BubHit`.
 
 Left alone:
 
-    zNPCSupplement.cpp:702  a burst inside a nested loop, run once on an event
-    zNPCTypeAmbient.cpp:455 ActLikeOctopus, run once from a goal Exit
-    zNPCHazard.cpp:2233     ReconTarTar and the other Recon/Kick bursts
+    zNPCSupplement.cpp      a burst inside a nested loop, run once on an event
+    zNPCTypeAmbient.cpp     zNPCJelly::ActLikeOctopus, run once from a goal Exit
+    zNPCHazard.cpp          ReconTarTar and the other Recon/Kick bursts
     zEntCruiseBubble.cpp    `shared.trail.bubbles += dt * bubble_rate` already
-    zFX.cpp                 `update_popper` and `entrail_data::update` already
-    zNPCGoalRobo.cpp:1413   `cnt_nextlos` throttles a line-of-sight raycast, not
-                            a spawn. Cheaper at a high frame rate, not wrong.
+    zFX.cpp                 update_popper and entrail_data::update already
 
-`zEntPlayer.cpp:4406` was on this list and should not have been. It reads as an
-impact burst — ten bubbles when the melee bound hits something — and the worry
-was that scaling it would cut a genuine one-frame hit to four bubbles. But all
-THREE callers of `MeleeAttackBoundCollide` repeat once a frame while their move
-is live: the slide track at `:7260`, the bubble spin's wand at `:8481` and
-Sandy's melee tag at `:8975`. None is one-shot, so ten a frame is a rate for as
-long as a target stays inside the bound, and during a bubble spin that is the
-whole window. The one-shot users of `zFX_SpawnBubbleHit` — the boulder, the
-teleport box, the shrapnel — are separate call sites, which is why the scale
-goes at this call and not inside the function. `num == 0` returns early there,
-so a frame that wins no bubble costs nothing.
+#### The bubble pool
 
-Together with the wand trail above it, the bubble spin was emitting three
-bubbles a frame along the wand path plus ten a frame per object in the bound.
+`zParPTankBubbleUpdate` ages `life` by `dt`, moves by `vel * dt`, adds
+buoyancy as `3.0f * dt` and damps with `xpow(0.95f, 60 * dt)`. A bubble between
+1.2 and 0.5 seconds of life left has a 4% chance of popping each frame. That is
+now `xFrameEmitChance(0.04f, dt)`. Over the 0.7 s window the console makes 42
+rolls and 18% survive (0.96^42). At 240 fps retail's per-frame roll makes 168
+rolls and 0.1% survive.
 
-`zNPCFXCinematic.cpp` has no `dt` in any of its callback signatures, but it does
-not need one: `NCIN_BubbleTrail_AR` builds its own accumulator out of
-`globals.update_dt`, which is retail's own global and is written once a frame in
-`zGame.cpp`. The seven other per-frame sites now take their window from the same
-place — `NCIN_BubWipe` (fifty a frame, and its buffer is sized from the scaled
-count), `NCIN_BubHit`'s three-a-frame tail, `NCIN_BubTrailBone_AR`,
-`NCIN_SleepyDRay_AR`, `NCIN_MidFish_AR`, `NCIN_BombTrail_AR`,
-`NCIN_BoneTrail_AR` and `NCIN_HookRecoil_AR`.
+The pool holds 0x300 bubbles (0x10 for the menu tank). `zParPTankSpawnBubbles`
+truncates a request that would overflow it. The live count is spawn rate times
+the 1.75 s life, so a per-second rate saturates it as often as the console did.
+A per-frame rate does not: StunLand alone asks for 1440 bubbles in a quarter
+second at 240 fps.
 
-`flg_stat & 2` is the effect's first-frame flag: `zNPCFXCutscene` clears it after
-the first `cb_fxupd` call. Anything behind it is a one-shot and stays a fixed
-count — `NCIN_BubSlam`, `NCIN_SleepyDRay_Upd`, `NCIN_ShieldPop`, and the sixteen
-bubbles at the top of `NCIN_BubHit`.
+#### An emitter offset walked per frame
 
-## The bubble pool
+`zNPCTypeTiki.cpp`'s thunder cloud steps `t2` a quarter unit per frame across a
+grid so consecutive emissions do not stack. With a `dt` window a particle comes
+out every few frames, and a per-frame walk aliases against that onto a
+sub-grid. `t2` now advances a quarter per sixtieth of a second (`15 * dt`).
+`t3` is the carry digit and advances a quarter per wrap of `t2`. `loveyFloat`
+walks `t2` and `t3` the same way. Nothing reads either, so it is unchanged.
 
-`zParPTankBubbleUpdate` ages `life` by `dt`, moves by `vel * dt`, adds buoyancy
-as `3.0f * dt` and damps with `xpow(0.95f, 60 * dt)` — retail's own rebase, the
-`zFX.cpp:445` idiom. All correct.
+### Particle system
 
-The one defect was the early pop. A bubble between 1.2 and 0.5 seconds of life
-left had a 4% chance of popping EVERY FRAME, which is a rate per frame. Over the
-0.7 seconds the window is open that is 42 rolls on the console and 0.96^42 = 18%
-survival; at 240 fps it is 168 rolls and 0.1%, so nothing reached the fade-out at
-all. It is now `xFrameEmitChance(0.04f, dt)`, computed once outside the particle
-loop.
+#### The emit window
 
-The pool caps at 0x300 bubbles (0x10 for the menu tank), and `zParPTankSpawnBubbles`
-silently truncates a request that would overflow it. Live count is spawn rate
-times the 1.75-second life, so a correct rate saturates it exactly as often as
-the console did. Every uncorrected site above was over that budget on its own:
-the StunLand slam alone asked for 1440 bubbles in a quarter second at 240 fps
-against a 768 pool.
+`xParEmitterEmitCustom(xParEmitter*, F32 dt, ...)` and
+`zParPTankConvertEmitRate(xParEmitter*, F32 dt)` take a time window and emit
+that much worth of particles. A constant there emits a fixed amount per frame
+when the call runs every frame.
 
-## The emit window is two things at once
+Passed `dt`:
 
-`xParEmitterEmit(pe, emit_dt, par_dt)` takes them separately and every caller
-passes the same number for both. They are not the same job:
+    zEntPickup.cpp          the three shiny-sparkle sites
+    zEntPlayer.cpp          gEmitBFX
+    zEntHangable.cpp        the chandelier candle flame and smoke, as 2 * dt
+    zNPCTypeDutchman.cpp    the beam light
+    zNPCTypeTiki.cpp        the thunder cloud
 
-- `emit_dt` buys particles. The count is `rate * emit_dt`, remainder carried.
-- `par_dt` scales the BIRTH VELOCITY, because `xPar::m_vel` is a displacement
-  per FRAME — `xParCmdVelocityApply_Update` adds it to the position with no `dt`.
+The candle window is `1/30` every frame, which is two console frames' worth:
+retail asks for twice the emitter's authored rate. It passes `2.0f * dt`.
+Check how often a call runs before reading a constant window as one frame.
 
-That is right only while the window IS the frame. A one-shot burst asking for a
-console frame's worth of particles also asks for a console frame's worth of
-step, so its debris leaves at `(1/60)/dt` times the intended speed — four times
-too fast at 240 fps. A caller that subdivides its frame, like the Dutchman's
-beam, has the opposite problem.
+`zEntPlayer.cpp`'s stank breath is behind a `sLastInvulnEmit > 0.02f` time
+gate, so it fires at about 50 Hz, not per frame. It passes half the elapsed
+time the gate measured, which is `1/60` at 60 fps and a constant count per
+second above it.
 
-Fixed in `xParEmitterEmitCustom`: the count keeps the caller's window, the step
-takes the frame's own share of it. This is what makes every "left alone as a
-count" entry below correct rather than merely correct in count, and it is why
-the firework burst can pass `1/60` safely.
+#### The emitter core
 
-The first version of this fix put the override in `xParEmitterEmit` itself and
-set `par_dt = globals.update_dt` for everyone, on the reasoning that at a
-sixtieth of a second the two are the same number. They are not. Four callers
-pass a THIRTIETH -- `zEntHangable.cpp:154` and `:253`, `zGust.cpp:331`, and the
-`eEventEmit` handler in `xParEmitter.cpp` -- and their particles came out at
-half their console speed at 60 fps as well as above it. Only the caller knows
-how many console frames its window stands for, so `xParEmitterEmitCustom` takes
-that count as `par_frames` and the four pass `2.0f`. Everything else means the
-one console frame that is the default.
+`xParEmitterEmit` turns a rate and a window into a count, and
+`zParPTankConvertEmitRate` copies the first half of it. Both are correct:
 
-Still divergent, and left: the Dutchman's beam subdivides its frame and passes
-`ddt`, so on console its plasma and sparks got SLOWER the faster the beam swept.
-They no longer do. That only shows while the beam covers more than one and a
-half segment widths in a frame.
+    pe->rate_fraction += rate * emit_dt;
+    count = floorf(pe->rate_fraction);
+    pe->rate_fraction -= count;
 
-## A rate constant that is not a rate
+The count floors, there is no per-call minimum, and the remainder carries in
+`rate_fraction`, which is reset only in `xParEmitterInit`. Halving the window
+doubles the calls and halves each one's share. Shared emitters do not bias the
+count either: twenty pickups calling `gEmitShinySparkles` add
+`sum(rate_i) * dt` a frame however the frame is divided. Which caller's
+position gets the particle when the accumulator crosses an integer depends on
+call order, at any frame rate.
 
-An emitter whose `rate` is set to a multiple of 60 immediately before the call
-is spelling an exact particle COUNT, not a rate. `rate.set(59.999996f)` against
-a `1/60` window is one particle; `rate.set(119.99999f * n)` is `2n`. Passing
-`dt` at one of those makes the effect thin out as the frame rate rises.
+`rate_time` is a phase in seconds, wrapped modulo `prop->rate.freq`.
+`xParGroupAnimate` ages life, colour and size by `dt`.
 
-Left alone for that reason. Each was read a second time against the source and
-each held:
+#### Birth velocity
 
-    zNPCTypeDutchman.cpp:1877  the flame. `emit = (S32)(dist * emit_rate) + 1`
-                            against a running `wave.emitted[i]`, so the loop
-                            runs on distance travelled, not on frames
-    zNPCTypeKingJelly.cpp:3025  the shock ring. `shock_ring_emitter_settings
-                            .rate.val[0] = 59.999996f` at :862, and `total =
-                            amount * dt * xurand() + 0.5f` already carries dt
-    zNPCTypeKingJelly.cpp:3057  the thump ring. `rate.val[0] = 59.999996f *
-                            tweak.thump.particles` at :3046, and the only caller
-                            sets `delay = 1e9` right after it
-    xLaserBolt.cpp:475,482  both take `dt`. The `reset()`/`emit()` in this file
-                            are xDecalEmitter, not a particle window
-    xParEmitter.cpp:230     eEventEmit, and no dt is in scope
-    zGust.cpp:331           behind `debris_timer`, reset to 0.15-0.3 SECONDS at
-                            :290 by the same block
-    zPlatform.cpp:1093      `zPlatform_Tremble` runs on an event
-    zPlatform.cpp:1108      `zPlatform_BreakawayFallFX` takes dt but its only
-                            caller is the state 2 -> 3 transition at :835
-    zEntHangable.cpp:248    `zEntHangableMountFX` runs on eEventMount
+`xParEmitterEmit(pe, emit_dt, par_dt)` takes two windows. `emit_dt` buys
+particles. `par_dt` scales the birth velocity, because `xPar::m_vel` is a
+displacement per frame: `xParCmdVelocityApply_Update` adds it to the position
+with no `dt`. Retail passes the same number for both, which is right only
+while the window is the frame.
 
-`xClimate.cpp` and `zLightning.cpp` pass a variable named `seconds`, which is
-the real frame time, not a constant. Both correct.
+On the PC arm `xParEmitterEmitCustom` keeps the caller's window for the count
+and sizes the step from `globals.update_dt` times `par_frames`. A one-shot
+burst sized at 1/60 therefore leaves at its console speed at any frame rate.
+Four callers pass a thirtieth and `par_frames = 2.0f`: `zEntHangable.cpp`
+(candles and `zEntHangableMountFX`), `zGust.cpp`'s debris, and the
+`eEventEmit` handler in `xParEmitter.cpp`.
 
-## Hardcoded 1/60 used as a timestep
+The Dutchman's beam subdivides its frame and passes the sub-step. On console
+its plasma and sparks slowed as the beam swept faster. On PC they do not. The
+difference shows only while the beam covers more than one and a half segment
+widths in a frame.
 
-Fixed:
+#### Particle commands
 
-    zNPCHazard.cpp      the whole spin group. The four ConfigHelper sites, the
-                        ROBOBITS `ang_spin *= 1/60` and the in-function
-                        `xVec3SMulBy` all funnel through TypData_RotMatStore into
-                        one matrix that Timestep applied once per frame. The
-                        rate is now kept in radians per second on the hazard
-                        (`ang_spinRate`) and the delta is rebuilt from it and dt.
-    zNPCSupplement.cpp  `useFixedTimestepForSpiral` — a real timestep. It ages
-                        `tmr_remain` and integrates `pos += vel * ts`.
-    zNPCTypeRobot.cpp   `NPCC_TmrCycle(&tmr_cycle, 1/60, 2.63f)`, the sleepy
-                        night light. Every other caller of NPCC_TmrCycle passes
-                        its own dt. Not in the original audit.
+`m_vel` is a displacement per frame, and the emitter types set it as
+`asset_vel * par_dt` at birth to match. The acceleration commands add
+`acc * dt` to that per-frame displacement, which is an acceleration of
+`acc / dt` a second. They carry an extra `60 * dt`:
 
-Left alone, with the reason:
+    xParCmdFollow_Update, xParCmdOrbitPoint_Update, xParCmdOrbitLine_Update,
+    xParCmdAccelerate_Update, xParCmdApplyWind_Update, xParCmd_Shaper_Update
 
-    zNPCHazard.cpp      `tym_end += 1/60` — a fixed padding past the lifespan
-                        clamp so a swept sphere is not degenerate at end of life.
-                        dt would shrink it to 0.3 ms and break the sweep.
-    zNPCSupplement.cpp  `info->freq = 1/60` — a PERIOD in seconds, consumed by
-                        xFXStreak as `elapsed >= frequency`. Already correct.
-    zEntPlayer.cpp      `update_dt` / `last_update_dt` initialisers, written at
-                        the top of zEntPlayer_Update before any reader.
-    zNPCMgr.cpp:509     a one-shot catch-up call, not a per-frame path.
-    zCamera.cpp         `zcam_flytime` and the 1/30 in zMain.cpp — animation
-                        frame numbers converted to seconds. Unit conversions.
+`xParCmdKillSlow_Update` compares `m_vel` squared against a limit scaled by one
+`dt`, so the sides scale apart. It takes the same factor.
 
-## Per-frame multiplicative damping
+Correct as they stand: `xParCmd_DampenSpeed_Update` and the `damp` term in
+`xParCmd_Shaper_Update` scale `m_vel` by a fraction of itself.
+`xParCmdRandomVelocityPar_Update` rotates `m_vel` by `cmd->x * dt` radians.
 
-`x *= k` once per frame settles at a rate set by the frame rate. The fix is
-`x *= xpow(k, 60.0f * dt)`, which is the codebase's own idiom — retail uses it
-at `zFX.cpp:445` and `:467`.
+### Hardcoded 1/60 used as a timestep
 
-Converted:
+A `1/60` that advances persistent state is a timestep. Replace it with `dt`.
+
+    zNPCHazard.cpp          the spin group. The four ConfigHelper sites, the
+                            ROBOBITS `ang_spin *= 1/60` and the in-function
+                            xVec3SMulBy fed one matrix that Timestep applied
+                            once a frame. The rate is now `ang_spinRate` in
+                            radians a second and the delta is rebuilt from it
+                            and dt
+    zNPCSupplement.cpp      useFixedTimestepForSpiral. It ages tmr_remain and
+                            integrates `pos += vel * ts`
+    zNPCTypeRobot.cpp       `NPCC_TmrCycle(&tmr_cycle, 1/60, 2.63f)`, the
+                            sleepy night light. Every other caller passes dt
+
+Unit conversions and one-shots that stay:
+
+    zNPCHazard.cpp          `tym_end += 1/60`, padding past the lifespan clamp
+                            so a swept sphere is not degenerate. dt would
+                            shrink it and break the sweep
+    zNPCSupplement.cpp      `info->freq = 1/60`, a period in seconds consumed
+                            by xFXStreak as `elapsed >= frequency`
+    zEntPlayer.cpp          the `update_dt` / `last_update_dt` initialisers,
+                            written before any reader
+    zNPCMgr.cpp             BackdoorUpdateAllNPCsOnce, a one-shot catch-up
+    zCamera.cpp, zMain.cpp  `zcam_flytime` and the 1/30 conversions: animation
+                            frame numbers to seconds
+    zEntPlayerOOBState.cpp  `xModelUpdate(model, 1/1000)` inside
+                            grab_state_type::start(), a one-shot
+
+### Per-frame multiplicative damping
+
+`x *= k` once a frame settles at a rate set by the frame rate. The fix is
+`x *= xpow(k, 60.0f * dt)`.
 
     zEntPlayer.cpp              vel.x, vel.z *= 0.96f   (jump)
     zEntPlayer.cpp              v->x, v->z *= 0.97f     (slick surface)
+    zEntHangable.cpp            xVec3SMul(&ent->vel, &ent->vel, 0.97f)
     zNPCGoalRobo.cpp            drot.angle *= 0.97f, *= 0.8f
     zNPCGoalRobo.cpp            ang_spinrate *= 0.8f, *= 0.99f
     zNPCGoalVillager.cpp        ang_spinrate *= 0.985f
-    zNPCSupplement.cpp          npdata->vel *= 0.9f
+    zNPCSupplement.cpp          npdata->vel *= 0.9f, and seven spellings of
+                                npdata->vel *= fac_keep
+    zNPCTypeKingJelly.cpp       vel *= tweak.vel_decay
     zEntPlayerBungeeState.cpp   rot_vel *= fixed.turn.decay
     zEntPlayerBungeeState.cpp   v *= fixed.horizontal.decay
     zEntPlayerBungeeState.cpp   roll_offset *= eh.camera.roll_decay
 
-`zEntPlayerBungeeState.cpp`'s `cam_dir = start + (dir - start) * turn_speed` is
-the same shape written as a lerp. The fraction that survives the frame is what
-compounds, so it becomes `1 - xpow(1 - turn_speed, 60 * dt)`.
-
-### A fifth shape: the one-pole filter
-
-`zNPCTypeBossSandy.cpp` has
-
-    jawLevel *= 0.9f;
-    jawLevel = 0.1f * amp + jawLevel;
-
-Rebasing only the `*=` leaves the input weight at 0.1 while the decay approaches
-1, and the value runs away as the frame rate rises. Both coefficients have to
-move together:
-
-    F32 decay = xpow(0.9f, 60.0f * dt);
-    jawLevel = (1.0f - decay) * amp + decay * jawLevel;
-
-Any `x *= k;` immediately followed by `x += (1 - k) * input;` is this, not plain
-damping.
-
-## Frame counters read as time
-
-`gFrameCount` is a frame counter, and some consumers read it as a clock.
-`gGameSeconds` (`xDebug.h`, PC only) is the same tick measured in seconds,
-incremented beside `gFrameCount` in `zGame.cpp`.
-
-    zSurface.cpp        mode 1 UV animation was `isin(2 * gFrameCount * (1/60))`,
-                        i.e. gFrameCount/60 as a time in seconds. Now gGameSeconds.
-    zGame.cpp           `ostrich_delay`, ten frames of grace before the scene
-                        counts as entered and the pad-removed dialog may appear.
-                        Now a sixth of a second.
-    zNPCHazard.cpp      `cnt_nextemit`, four sites. A trail particle every N
-                        frames is an emission rate per frame. Now a `tmr_nextemit`
-                        in seconds, at the same period. The seven `moreorless`
-                        dividers in the same file are the same shape and are in
-                        the emission-counted-in-frames section above.
-
-`gFrameCount` itself is NOT replaced. The consumers that compare it for
-equality — `xFXAura` stamps `ap->frame` in the simulation and the render draws
-only what was stamped this frame — want the counter, and are correct with it
-because the port runs one update per presented frame. That equality breaks the
-moment simulation and rendering are decoupled, which is what happened the last
-time the cap came off; it is not what happens here.
-
-Checked and left alone:
-
-    zEntPlayer.cpp:339      `gFrameCount - last_frame > 5`, a wand-bubble
-                            debounce. All callers call it on consecutive frames
-                            while the effect is live, so the delta is 1 at any
-                            frame rate; between two separate uses of the wand the
-                            gap exceeds five frames at any frame rate too.
-    zNPCGoalRobo.cpp:7052   `cnt_nextfunfrag` counts robot DEATHS, not frames.
-    xScrFx.cpp:421          `gFrameCount % 2` feeds gNumDistortionParticles,
-                            which is dead code on the GameCube.
-
-## A particle count rounded to nearest
-
-`zNPCTypeKingJelly.cpp` sizes a burst as `S32 total = amount * dt * xurand() +
-0.5f`. Below a sixtieth-second frame `amount * dt` never reaches the half that
-rounds to one, so the count is zero every frame and the effect vanishes rather
-than floods. A fractional accumulator feeding `total` does not fix it either:
-the distribution loop underneath spends `j * total / (ring_size - 1)`, which
-never reaches `total`, so a `total` of one emits nothing.
-
-Both sites — the wave ring in `update_rings` and the tentacle zaps in
-`update_tentacle_lightning` — now run on a fixed sixtieth-second step with the
-remainder carried in `tmr_ringemit` and `tmr_zapemit`, PC-only members reset in
-`zNPCKingJelly::Reset`. `dt` is clamped to 0.1 s in `zGame.cpp`, so the catch-up
-loop runs at most six times.
-
-## Matrix drift, again
-
-`NPCHazard::TypData_RotMatApply` does `xMat3x3Mul(frame, mat, frame)` once per
-frame — the pickups' shape, error accruing per multiply rather than per second.
-The basis is now rebuilt from `at` after the multiply.
-
-The reason it was not simply renormalised is that the frame might have carried a
-scale. It does not. A hazard's scale lives in `mdl_hazard->Scale` and is applied
-at render, and every writer of the frame stores an orthonormal basis:
-`GrabModel` writes an identity euler, `TypData_RotMatSet` takes
-`xMat3x3LookVec`/`xMat3x3Rot` output, and `ReconTarTar`, `ReconChuck` and the
-third site at `zNPCHazard.cpp:3416` build theirs from a unit normal, a
-normalised `NPCC_MakePerp` and a cross of the two.
-
-## An emitter offset walked per frame
-
-`zNPCTypeTiki.cpp`'s thunder cloud steps `t2` a quarter of a unit per frame
-across a grid so consecutive emissions do not stack on one point.
-`xParEmitterEmit` keeps its own fractional particle count, so with a `dt` window
-a particle comes out every few frames rather than every frame, and a per-frame
-walk aliases against that: at a steady frame rate the emissions land on a
-sub-grid. `t2` now advances a quarter per sixtieth of a second. `t3` is the
-carry digit and still advances a quarter per wrap of `t2`.
-
-`loveyFloat` in the same file steps `t2` and `t3` the same way. Nothing reads
-either, so it is left alone.
-
-## Spinning glyphs
-
-The icon that floats over a talkable NPC, the one over an NPC with a task, and
-the stars over a stunned robot are all `NPCGlyph`s, and all three spun at a
-constant angle per frame.
-
-`NPCGlyph::RotSet(xVec3* ang, ...)` builds `rot_glyph` from an euler triple and
-`NPCGlyph::RotAddDelta` does `xMat3x3Mul(frame, rot_glyph, frame)` on the model
-frame. The three callers pass a per-FRAME delta: `DEG2RAD(3)` for
-`NPC_GLYPH_TALK`, `DEG2RAD(-3)` for `NPC_GLYPH_TALKOTHER`, `DEG2RAD(2.1)` for
-`NPC_GLYPH_DAZED`. Three degrees a frame is half a turn a second at 60 fps and
-384 degrees a second at 128.
-
-The euler `RotSet` now also records the angles as a rate a second
-(`angrate_glyph`), and a PC-only `RotAddDelta(xMat3x3*, F32 dt)` steps
-`angspin_glyph` by that rate and rebuilds the basis with `xMat3x3Euler`.
-Rebuilding also removes the drift of composing a matrix into itself. The four
-call sites — `zNPCGlyph.cpp`'s autospin branch and shiny `Timestep`,
-`zNPCGoalVillager.cpp:285`, `zNPCTypeRobot.cpp`'s `SyncStunGlyph` — all have
-`dt` in scope already.
-
-When no rate was recorded the new overload calls the old one, so the matrix
-`RotSet` overload and the shiny glyphs behave exactly as before. Only three
-glyph types are ever acquired — `NPC_GLYPH_TALK`, `NPC_GLYPH_TALKOTHER` and
-`NPC_GLYPH_DAZED`. The five shiny types and `NPC_GLYPH_FRIEND` have no
-`GLYF_Acquire` caller, and `NPCGlyph::Reset` never initialises `rot_glyph`, so
-a shiny glyph would multiply its frame by the zero matrix.
-
-`NPCGlyph::Timestep`'s billboard branch for the talk glyphs is unreachable: it
-needs bit 2 or bit 3 of `flg_glyph`, bit 2 is set only by `VelSet` and bit 3 by
-nothing. The talk glyph free-spins rather than facing the camera, at any frame
-rate.
-
-## The pickups were already right
-
-`zEntPickup_SceneUpdate` takes `elapsedSec` from `zSceneUpdate` and rotated by
-`PI * dt`, so the rate was never wrong — the fix in the pickups section above
-removes drift, not speed. Golden spatulas are ordinary `zEntPickup`s: both
-`zEntPickup_RenderOne` (reached from the aura pass at `xFX.cpp:3270`) and
-`zEntPickup_RenderList` (`zScene.cpp:3114`) copy `sPickupOrientation` into the
-model matrix, skipping it only when the pickup has an anim or is already
-collected. A reward spatula freezes its matrix in `zEntPickup_DoPickup` and does
-not spin at all.
-
-## A HUD shake counted in frames
-
-`xhud::shake_motive_update` stashes a frame counter in `motive::context`, flips
-the sign of the displacement every frame, decays the amplitude every fourth and
-ends after fifty. `zHud.cpp`'s `ping_widget` uses it to jog a HUD widget when its
-count changes.
-
-It now runs on a fixed sixtieth-second step with the remainder carried in a
-PC-only `motive::step_time`. Rebasing the amplitude decay alone would not help:
-the four-frame sign pattern is the effect.
-
-## Not resolved
-
-### Additive accumulation without dt
-
-A scan of `+=` and `-=` inside functions taking `F32 dt`, where the line does not
-mention `dt`, yields 223 hits: 92 writing through a pointer or object, 131
-writing to locals. Spot-checking the persistent group found a high false positive
-rate:
-
-    zSurface.cpp:355, 357, 362, 364      rot -= 360.0f, trans.x += 1.0f
-                                         wrapping into range, not accumulating
-    xParEmitterType.cpp:150, 152, 221    per-emission random spread, runs once
-                                         per particle, not per frame
-    zEntPickup.cpp:1628                  += 10000.0f, moves a thing offscreen
-    zEntPickup.cpp:2239                  += 1.0f spawn offset
-
-`zEntPickup.cpp:1354`, which an earlier version of this document called the one
-that looked real, is not. `ent->vel` is overwritten by `xVec3Copy` from a freshly
-normalised direction three lines above, so `vel.y += 0.08f * ydiff` accumulates
-nothing. The `vel2 > 2.0f` collect test in the same block is a "would step past
-the player this frame" guard and correctly fires less often as frames get
-shorter.
-
-So roughly one in five of what the scan flags is worth changing, and which one
-cannot be told without reading the surrounding function. Treating these as a
-to-do list would overstate the work about fivefold.
-
-Files with the most persistent-group hits, as a place to start reading:
-`zSurface.cpp` (15), `zEntPlayer.cpp` (14), `zNPCSupplement.cpp` (12),
-`xParCmd.cpp` (11), `xParEmitterType.cpp` (9), `zNPCTypeBossPatrick.cpp` (7),
-`zNPCTypeTiki.cpp` (7).
-
-### Known and left
-
-    zEntHangable.cpp    `enabled = -2` counted back to zero is a two-frame
-                        re-enable delay. Nothing reads `enabled`: the countdown
-                        in zEntHangable_Update is its only reader, and `grabTimer`
-                        beside it is written on dismount and decremented but never
-                        tested either. The delay gates nothing at any frame rate.
-    iFMV.cpp            the movie loop presents every iteration and decodes on a
-                        timestamp, so with no cap AND vsync off it re-presents
-                        the same frame thousands of times a second. The video
-                        still plays at the right speed; it is wasted work, and
-                        either setting on its own bounds it.
-
-### Swept and clean
-
-Recorded so the next sweep does not re-open them.
-
-`xAnim.cpp` is time-based end to end: `Time += timeDelta * CurrentSpeed` from
-`xModelUpdate(inst, dt)`, and blend progress is `BlendFactor * BlendRecip` where
-`BlendRecip` is one over a number of SECONDS. Keyframes sample by absolute time
-in `iAnimSKB.cpp` and `xMorph.cpp`; there is no frame index anywhere. The 30 fps
-authoring rate appears only as load-time unit conversions in `zMain.cpp`.
-
-`xScrFx.cpp` ages everything by `dt` — fade, letterbox, glare, the distortion
-pool. `zSurface.cpp` proper is `dt` throughout. `zGust.cpp` is `dt` plus a
-seconds timer. `zShrapnel.cpp`'s managers age by `lifetime -= dt` and integrate
-the parabola analytically.
-
-`zEntPlayerOOBState.cpp:1102` calls `xModelUpdate(model, 1.0f/1000.0f)` and is
-NOT a defect — it is inside `grab_state_type::start()`, a one-shot.
-`xFFXShakeUpdateEnt` derives its magnitude from an absolute timer and applies
-only the delta.
-
-A sweep for rotation advanced once per frame — `xMat3x3RMulRot*`, `xMat3x3Mul`
-composing a matrix into itself, and `+=` on anything named angle, ang, rot, yaw,
-spin, theta or phase — turned up the glyphs above and nothing else. Rejected,
-with the reason:
-
-    xEntMotion.cpp:808      the mech rotation is `speed * dt`, and the PEN
-                            `xMat3x3Mul(modlrot, modlrot, &pshrot)` at :164 is
-                            in the reset path, not per frame. The ORB mode
-                            evaluates a position from `motion->t`
-    zPlatform.cpp:669-689   the FM platform steps by `ds`, solved from `dt` and
-                            the asset's accel/decel times. Teeter and paddle
-                            derive their angles from `dt` and a timer too
-    zNPCTypeBossSB2.cpp     the spinning platforms run `xAccelMove(ang, vel,
-                            accel, dt, ...)`
-    zShrapnel.cpp:1089      `xMat3x3Rot(&spin, axis, dt * angVel)`
-    xEntBoulder.cpp:637     `xMat3x3Rot(&rotM, rotVec, angVel * dt)`
-    zEntPlayer.cpp:6908     `sReticleRot += 8.0f * dt`
-    zEntPlayer.cpp:8803     `sHitchAngle += 3.14f * dt`
-    xFX.cpp:3011,3027       the aura pulse and spin, both `* dt`
-    xHud.cpp:663            `rc.rot` comes from the asset and the motives, and
-                            the linear, accelerate and delay motives all use dt
-    xFont.cpp:3246          the rotation is a parsed markup argument
-    zEntTrigger.cpp:24      one-time setup from `asset->ang`
-    zEntTeleportBox.cpp     both eulers are built from a launch angle on an event
-    zNPCTypeVillager.cpp:1651  `screenRot` is written once, to 1.0f
-    zEntHangable.cpp        `ent->spin` is set to zero and never advanced
-    zNPCGoalVillager.cpp:1089  `ang_spinrate += 16.0f` is an impulse in
-                            NPCMessage, on taking side damage
-
-`zUI.cpp:740`'s `ushift += 0.05f` in `zUIRenderAll` is a per-rendered-frame
-counter with no `dt` anywhere in the function. Nothing in the tree reads
-`ushift`, so it is left alone.
-
-### Still open
-
-`zNPCGoalVillager.cpp:346`'s `cnt_nextMedic` decrements per frame to grant a
-health point — frame-rate dependent, but it is a cheat.
-
-`zMain.cpp:1152`, the memory-card screen, calls `xPadUpdate(pad, 1.0f/60)`, so
-rumble timers there age one console frame per iteration of an uncapped loop.
-Nothing rumbles on that screen.
-
-## Corrections found by re-auditing this branch
-
-The golden spatula was cleared twice as "rate-correct" and was not. Both looks
-checked `PI * dt` in
-
-    xMat3x3MulRotC(Mat, Mat, 0, 1, 0, PI * dt + sSpatulaGrabbedSpinMult);
-
-found it to be a proper rate, and stopped. The term beside it ramps at a tenth
-per SECOND and is added raw to an angle whose unit is radians per FRAME. Reading
-one operand of an expression is not reading the expression.
-
-The work above was reviewed adversarially after the first play test. What that
-turned up, recorded because each one was a plausible-looking mistake:
-
-`zEntHangable.cpp` — the candle window is `1/30` applied EVERY frame, which is
-retail asking for twice the emitter's authored rate. Converting it to `dt`
-halved the flame and smoke at every frame rate including 60. It is `2.0f * dt`.
-A constant window is not automatically one frame's worth; check how often the
-call runs.
-
-`zNPCTypeRobot.cpp` — the motorboat emits on SIX frames of sixteen, not five.
-From `cnt_nextemit = 15` the decrement gives 14 down to 5 silent, because `< 5`
-is false at 5, then 4, 3, 2, 1, 0 and -1 emitting. Count the reset frame.
-
-`xpow(1 - k, 60 * dt)` is a NaN when `k` comes from level data above 1, and a
-NaN never washes out of a position or a quaternion. Four sites read `turn_speed`
-or `roll_speed` from an asset with no bound of their own. `xFrameApproach` in
-`xMath.h` clamps before the power; the two bungee `decay` tweaks were already
-clamped to [0,1] at load and did not need it.
-
-`gGameSeconds` was `F32`. At a few thousand frames a second the addend is 3e-4
-and an F32 accumulator stops advancing entirely past 8192 — a couple of hours of
-play, after which the clock silently freezes. It is `F64`, and `zSurface` wraps
-the angle before casting because a sine's whole turns carry no information.
-
-`zNPCKingJelly`'s catch-up accumulators are zeroed by `Reset()` but not by the
-constructor, and `RyzMemData::operator new` clears only the first four bytes. A
-`while (t >= 1/60)` loop on a garbage accumulator is a hang, where the retail
-line it replaced merely emitted a wrong count once. Both are clamped to 0.1 s,
-which `dt` can never exceed anyway.
-
-`zNPCGoalRobo.cpp`'s tubelet spin-down compares `drot.angle` against two
-absolute thresholds. `drot.angle` is one FRAME's rotation, so the band traps it
-at 5.24-5.76 radians a second only while a frame is a sixtieth of one — settled,
-the tubelet spun four times as fast at 240 fps. The branch works in radians a
-second on both sides now.
-
-The claim that the `drot.angle` DECAY rebase was wrong was itself wrong:
-`zNPCGoalRobo.cpp:3729` builds the value as `dt * -bonkSpinRate`, so it is a
-rate times the frame and the `xpow` rebase is right.
-
-## The second sweep
-
-Everything above came out of the first pass and the play test that followed it.
-A second pass went after three shapes the first had no scan for.
-
-### Ribbons and streaks: joints laid per frame
-
-Every ribbon in the game draws joints from ONE pool -- `joint_alloc.init(...,
-32, 128)` at `xFX.cpp:2906`, so 4096 joints for the whole game -- and
-`xFXRibbon::insert` evicts a ribbon's own tail when that pool is full. So a
-ribbon that lays a joint per frame does not just get denser at 240 fps, it
-shortens every other ribbon on screen with it.
-
-    zEntCruiseBubble.cpp:1087   the wake's `samples <= 0` floor threw the carry
-                                away and took a sample anyway. Carries the
-                                unspent time now, so the frame that does sample
-                                still spans the whole path
-    zNPCTypeDutchman.cpp:3329   the eye scorch subdivides by distance and then
-                                adds one more joint for the leftover. The
-                                subdivided joints stay; the leftover is gated
-    zNPCTypeBossSandy.cpp:2105  the Poseidome laser show, fixed in the first
-                                pass, is the same shape -- two joints a frame,
-                                each pair a separate beam
-
-`xFXStreakUpdate` is the same thing one level up. It advances the head when
-`elapsed > frequency`, and almost every streak starts with a frequency of `0.0f`
-or `-1.0f`, both of which are always true. The head moves once a frame and the
-fifty elements span fifty frames. The player's melee and spin trails and the
-bubble wand are all in that group.
-
-`zLasso.cpp`'s `fizzicalCenter`, `fizzicalNormal` and `fizzicalHonda` are FIR
-filters over a five-slot ring pushed once per frame. Rebasing a coefficient
-cannot fix a FIR window, so `zLasso_Update` runs at 60 Hz instead.
-
-### Probability gates
-
-A random draw against a constant, on a path that runs once per frame, is a rate
-per frame. `xFrameEmitChance` rebases it. The first pass found the bubble pop;
-the second found one more:
-
-    zNPCTypeAmbient.cpp:494     jellyfish lightning, a twentieth chance a frame
-                                through `xUtil_yesno` -- the indirection is why
-                                a grep for `xurand` missed it. Two bolts a
-                                flash out of a 48-bolt pool, so a shoal can
-                                starve every other lightning effect in the scene
-
-### Facing filters written as two calls
-
-`x = 0.9*x + 0.1*target` does not look like `x *= 0.9f` when it is spelled
+The multiplier is not always a literal and the multiply is not always `*=`.
+`fpsdep.py`'s damping pattern matches all three spellings above.
+
+Check what the value is before rebasing. `zNPCGoalRobo.cpp`'s `drot.angle`
+decay is right to rebase because the value is built as `dt * -bonkSpinRate`,
+a rate times the frame.
+
+### Exponential approach and facing filters
+
+`x += k * (target - x)` once a frame is the same defect written as a lerp. The
+fraction that survives the frame is what compounds. Fix with
+`xFrameApproach(k, dt)`.
+
+    zEntPlayerBungeeState.cpp   cam_dir turn lerp (turn_speed), roll offset
+    zEntCruiseBubble.cpp        player aim turn_speed, missile engine pitch,
+                                camera aim turn_speed
+    zEntPlayer.cpp              SlideTrackLean, 4% a frame
+    zEntPlayer.cpp              the lasso swing radius, `0.95f * hangDist +
+                                0.2f`. Unfixed, the rope becomes a rigid rod
+    zNPCTypeBossSandy.cpp       facing, in all eight goals
+    xEntBoulder.cpp             the spin axis and rate close on the contact
+                                values by `stickiness`
+
+The facing filter is often two calls:
 
     xVec3SMul(&frame->mat.at, &model->Mat->at, 0.9f);
     xVec3AddScaled(&frame->mat.at, &newAt, 0.1f);
 
 `xEntBeginUpdate` copies `model->Mat` into `frame->mat` and `xEntEndUpdate`
-copies it back, so the value read is last frame's own output. Sandy does this
-in all eight of her goals and turns four times as fast at 240 fps, which costs
-the player the lead-in before a charge. `xEntBoulder.cpp:611` does it to the
-boulder's spin axis and rate, which costs the skid after a deflection, and
-`zEntPlayer.cpp:14359`'s `0.95f * hangDist + 0.2f` does it to the lasso swing
-radius, which turns the rope into a rigid rod.
+copies it back, so the value read is last frame's output. Unfixed, Sandy turns
+four times as fast at 240 fps and the player loses the lead-in before a
+charge.
 
-### Frame counters, again
+Four sites read `turn_speed` or `roll_speed` from an asset with no bound. They
+go through `xFrameApproach` for its clamp. The two bungee `decay` tweaks are
+clamped to [0, 1] at load.
 
-    zNPCGoalDuplotron.cpp:213   `cnt_destruct = 120; // 2 seconds`. The whole
-                                self-destruct body now runs at 60 Hz, which also
-                                fixes the light strobe and the overheat smoke
-                                throttle inside it
-    zNPCHazard.cpp:1985         `cnt_skipcol` staggers a hazard's collision test
-                                five or six frames apart to spread the load.
-                                Counted in frames it is four times as many
-                                chances to connect at 240 fps
+### One-pole filters
 
-## What holds this in place
+    jawLevel *= 0.9f;
+    jawLevel = 0.1f * amp + jawLevel;
 
-Two things, because the work splits cleanly into what a test can reach and what
-it cannot.
+Rebasing only the `*=` leaves the input weight at 0.1 while the decay
+approaches 1, and the value runs away as the frame rate rises. Move both
+coefficients together:
 
-`fps_selftest` checks the rate helpers as PROPERTIES rather than values. The
-interesting claim is not that the arithmetic is right, it is that at a sixtieth
-of a second every helper gives back the constant it replaced -- so the default
-build is the console's -- and that a second of game time costs the same at 60
-fps as at 3000. It runs a second of damping, approach, emission and pop-chance
-at 60, 120, 144, 240, 1000 and 3000 fps and compares the totals, plus the
-bubble-pop loop driven through the real `xurand` rather than the closed form.
-31 checks, a sixth of a second. Breaking `60.0f * dt` in `xFrameApproach` trips
-seven of them.
+    F32 decay = xpow(0.9f, 60.0f * dt);
+    jawLevel = (1.0f - decay) * amp + decay * jawLevel;
 
-It is its own target rather than a case in `pc_selftest` because linking
-`xMath.cpp` needs `range_limit<F32>`, which CodeWarrior placed in
-`xCamera.cpp` -- the weak-inline problem that is also why `pc_selftest` links no
-game math at all.
+Any `x *= k;` followed by `x += (1 - k) * input;` is this shape.
 
-`tools/fpsdep.py` covers the rest. Sixty-odd rebased sites are in game code that
-wants a scene, a model and a player before it will run, so none of them are
-unit-testable. What is testable is that no NEW one appears: the four shapes are
-mechanically recognisable, every known site is recorded in `tools/fpsdep.json`,
-and anything not in that file fails. It scans the PC arm only, so a fixed site
-shows its guarded line and not the retail line beside it -- which is why the
-nine `damping` hits it reports are all known false positives and every real one
-is invisible.
+    zNPCTypeBossSandy.cpp   jawLevel
+    zEntPlayer.cpp          PredictCurrVel and the turn-rate filter beside it,
+                            read by every NPC that leads its aim through
+                            zEntPlayer_PredictPos
+    zEntPlayer.cpp          the lasso camera factor, 0.8/0.2
 
-The baseline is a record of what has been READ and judged, not of what is
-correct. Roughly one in five of what the scan finds is worth changing, and the
-list below is how to tell which.
+### Frame counters read as time
 
-Both are `ctest` cases in `build-pc`.
+A counter ticked once a frame measures frames. Fix with `gGameSeconds`, a
+seconds timer at the same period, or a fixed step that subtracts whole
+sixtieths from the counter.
 
-## The third sweep
+    zSurface.cpp            mode 1 UV animation, `isin(2 * gFrameCount / 60)`.
+                            Now gGameSeconds, wrapped with fmod before the cast
+    zGame.cpp               ostrich_delay, ten frames of grace before the
+                            pad-removed dialog may appear. Now a sixth of a
+                            second
+    zEntPlayer.cpp          the wand bubbles' five-frame restart gap. Now
+                            5/60 s of gGameSeconds
+    zNPCGoalDuplotron.cpp   `cnt_destruct = 120; // 2 seconds`. The body runs
+                            at 60 Hz with the remainder carried in
+                            tmr_destruct, which also fixes the light strobe and
+                            the overheat smoke throttle inside it
+    zNPCHazard.cpp          cnt_skipcol staggers the collision test five or six
+                            frames apart. Counted in frames a hazard gets four
+                            times the chances to connect at 240 fps. Now
+                            tmr_skipcol
+    zNPCGoalRobo.cpp        cnt_nextlos, the Fodder death ray's line-of-sight
+                            recheck. cnt_inContact steps inside the block it
+                            gates, so the ray damaged the player about 2.4x
+                            faster at 144 fps. Enter, Resume and the warm-up
+                            path zero the counter to force a check, so it stays
+                            a counter and tmr_nextlos spends whole sixtieths
+                            against it
+    zMain.cpp               the copyright screen, 180 fields. Now three seconds
+                            by iTimeDiffSec on PC
 
-After the second, two shapes were still unswept, and both turned out to be
-populated.
+Left alone:
 
-### A bounded history pushed once per frame
+    zNPCGoalRobo.cpp        cnt_nextfunfrag counts robot deaths
+    xScrFx.cpp              `gFrameCount % 2` calls xScrFxDistortionAdd, whose
+                            body is empty
 
-`missle_record` is a `fixed_queue<missle_record_data, 127>` holding the cruise
-bubble's flight path, one sample a frame. 127 slots is 2.1 seconds on console
-and a quarter of that at 240 fps. The consumer is the explosion cinematic: when
-a missile detonates more than ten units away the camera drifts from six to
-eight world units BACK ALONG the missile's own path, and `eval_missle_path`
-does not clamp its lerp. Past about 190 fps the record is shorter than eight
-units and the camera is extrapolated off the oldest pair of samples, through
-whatever the missile flew past. The roll is worse: `t` reaches a thousand
-uncapped, so one frame's roll becomes a couple of radians.
+### Probability gates
 
-`zGame`'s frame-time boxcar averages the last two FRAMES. That is a thirtieth
-of a second on console and an eighth of that at 240 fps -- the one filter
-between an uneven frame and every system's `dt`, and it stops filtering exactly
-where jitter starts to matter most, since a millisecond hitch is a sixteenth of
-a console frame and a quarter of a 240 fps one.
+A random draw against a constant on a per-frame path is a rate per frame. Fix
+with `xFrameEmitChance`.
 
-Every other bounded container in the tree is event-driven, seconds-gated or
-distance-gated. `containers.h` holds the only ring primitives, and all nine
-instantiations were enumerated. The frame-amortised work queues -- `zLOD`'s
-round-robin, the shadow caches -- are the INVERSE of this shape: a higher frame
-rate refreshes them sooner, which is the safe direction.
+    zParPTank.cpp           the bubble early pop
+    zScene.cpp              the menu bubbles
+    zEntSimpleObj.cpp       the blob burst
+    zNPCTypeAmbient.cpp     jellyfish lightning, a twentieth chance a frame
+                            through xUtil_yesno. Two bolts a flash from a
+                            48-bolt pool, so a shoal could starve every other
+                            lightning effect in the scene
+
+Look for draws through wrappers like `xUtil_yesno` as well as bare `xurand`.
+
+### Bounded histories pushed once per frame
+
+A fixed number of slots with one sample pushed per frame spans a window
+measured in frames. No coefficient can be rebased to fix it. The samples have
+to arrive at a fixed rate.
+
+    xFX.cpp                 xFXStreakUpdate advances the head when
+                            `elapsed > frequency`. Most streaks start with a
+                            frequency of 0 or -1, so the head moved every frame
+                            and the fifty elements spanned fifty frames. A
+                            frequency <= 0 now means 1/60, with the remainder
+                            carried. The player's melee and spin trails and the
+                            bubble wand are in this group
+    zLasso.cpp              fizzicalCenter, fizzicalNormal and fizzicalHonda
+                            are FIR filters over a five-slot ring. zLasso_Update
+                            runs at 60 Hz
+    zEntCruiseBubble.cpp    missle_record, a fixed_queue of 127 flight samples:
+                            2.1 s on console. The explosion camera drifts 6 to
+                            8 units back along the path and eval_missle_path
+                            does not clamp its lerp, so a short record
+                            extrapolates the camera off the oldest pair. Now
+                            sampled at 60 Hz; the impact sample is never skipped
+    zGame.cpp               the dt boxcar. See *dt* above
+
+Every ribbon draws joints from one pool:
+`xFXRibbon::joint_alloc.init(sizeof(joint_data), 32, 128)`, 4096 joints for
+the game. `xFXRibbon::insert` evicts a ribbon's own tail when the pool is full.
+A ribbon that lays a joint per frame shortens every other ribbon on screen.
+
+    zEntCruiseBubble.cpp    the wake's `samples <= 0` floor threw the carry
+                            away and sampled anyway. It carries unspent time
+                            now, so the frame that does sample spans the path
+    zNPCTypeDutchman.cpp    the eye scorch subdivides by distance and adds one
+                            joint for the leftover. The leftover is gated
+    zNPCTypeBossSandy.cpp   the Poseidome laser show
+
+The other bounded containers in the tree are event-driven, seconds-gated or
+distance-gated. `containers.h` holds the ring primitives. Frame-amortised work
+queues (`zLOD`'s round-robin, the shadow caches) are the inverse shape: a
+higher frame rate refreshes them sooner.
+
+Gating an update does not gate what writes into it. `fizzicalSlack` runs from
+the 60 Hz `zLasso_Update` but consumes a rope-length delta that `zLasso_Render`
+stamps every rendered frame. Reading only the latest delta drops the ones
+overwritten between updates. It measures against `sSlackDist`, the rope length
+it last saw, instead.
 
 ### A quantity whose unit is a frame
 
-Shape 9, above. What it caught:
+A value that is "per frame", so every use of it is wrong away from 60 fps.
+Two spellings: a delta between this frame and the last, used as a velocity or
+compared against a threshold; and a per-frame increment written in one
+function and added in another. The write and the read are usually in
+different functions.
 
-    zEntPickup.cpp:1266     the grabbed golden spatula. See the correction below
+    zEntPickup.cpp          the grabbed golden spatula. xMat3x3MulRotC takes an
+                            angle per frame. PI * dt is right. The
+                            sSpatulaGrabbedSpinMult term beside it ramps per
+                            second and was added raw
     zNPCTypeBossSandy.cpp   the limb springs' node velocity, +-0.05 of a limb
-                            per frame, added on the RENDER path
-    zEntHangable.cpp:341    the candle test compares a per-frame displacement
-                            against a fixed band, so above 60 fps the band never
-                            opens and the candles stay lit
-    zEntPlayer.cpp:7889     the downhill stick-down takes the square root of a
-                            per-frame distance, so the pull per second grows
-                            with the square root of the frame rate
-    xEnt.cpp:1695           step-up is gated on a per-frame displacement against
-                            0.001, which is 3.2 units a second at 3200 fps
-    zEntPlayer.cpp:359      the wand bubbles inherit the wand's displacement
-                            since the last spawn as a velocity in units a second
+                            per frame, added on the render path
+    zEntHangable.cpp        the candle test compares a per-frame displacement
+                            against a fixed band. Above 60 fps the band never
+                            opened and the candles stayed lit
+    zEntPlayer.cpp          the downhill stick-down takes the square root of a
+                            per-frame distance. Now xsqrt(ndotm * 60 * dt)
+    xEnt.cpp                step-up in xEntCollideFloor is gated on a per-frame
+                            displacement against 0.001
+    zEntPlayer.cpp          the wand bubbles inherit the wand's displacement
+                            since the last spawn as a velocity. Rebased by the
+                            time since last_center_time
+    zNPCGoalRobo.cpp        the tubelet spin-down compares drot.angle, one
+                            frame's rotation, against two absolute thresholds.
+                            The branch works in radians a second now
 
-### A regression this branch introduced
+Reading one operand of an expression is not reading the expression. The
+spatula's `PI * dt` is correct, and the term beside it is not.
 
-`fizzicalSlack` consumes a rope-length delta that `zLasso_Render` stamps every
-RENDERED frame, but the update it runs from is now gated to 60 Hz for the FIR
-filters beside it. At 240 fps three of every four deltas were overwritten before
-it saw them, so the sum telescoped to a quarter of the real length change while
-the drain still took the whole window, and the rope read taut. Gating an update
-does not gate what writes into it.
+### Rotation composed into itself
 
-## A bound and a lag that multiply
+A matrix multiplied into itself once a frame accumulates error per multiply,
+not per second. `xMat3x3RMulRotY` and `xMat3x3Mul` do not renormalise. Hold the
+angle as a scalar advanced by `rate * dt` and rebuild the basis.
 
-Reported from play: the Poseidome camera is really slow, and only above 60 fps.
+    zEntPickup.cpp          zEntPickup_SceneUpdate rotated one shared matrix,
+                            sPickupOrientation, which every pickup copies. The
+                            next line set rwMATRIXTYPEORTHONORMAL on it. Now
+                            sPickupAngle += PI * dt and xMat3x3RotY
+    zNPCHazard.cpp          TypData_RotMatApply does xMat3x3Mul(frame, mat,
+                            frame). The basis is rebuilt from `at` after the
+                            multiply. The frame carries no scale: the hazard's
+                            scale is mdl_hazard->Scale, applied at render, and
+                            every writer of the frame stores an orthonormal
+                            basis
+    zNPCGlyph.cpp           NPCGlyph::RotAddDelta composed rot_glyph, a
+                            per-frame delta, into the frame. See below
 
-`xBinaryCamera::update` runs the Robo-Sandy and Robo-Patrick fights.
-`zCameraDisableTracking(CO_BOSS)` hands it the camera for the whole battle, so
-none of the `pcur`/`pgoal` machinery above is live there. Every filter in it is
-written against a variable frame time and every one of them is right on its own.
-Three lines together are not:
+The talk glyph, the task glyph and the stunned robot's stars spun a constant
+angle per frame: `DEG2RAD(3)` for `NPC_GLYPH_TALK`, `DEG2RAD(-3)` for
+`NPC_GLYPH_TALKOTHER`, `DEG2RAD(2.1)` for `NPC_GLYPH_DAZED`. The euler
+`RotSet` now also records the angles as a rate a second (`angrate_glyph`). A
+PC-only `RotAddDelta(xMat3x3*, F32 dt)` steps `angspin_glyph` by that rate and
+rebuilds the basis with `xMat3x3Euler`. Callers: `zNPCGlyph.cpp`'s autospin
+branch and shiny `Timestep`, `zNPCGoalVillager.cpp`, and
+`zNPCRobot::SyncStunGlyph`. With no rate recorded the new overload calls the
+old one.
+
+Only those three glyph types are acquired. The five shiny types and
+`NPC_GLYPH_FRIEND` have no `GLYF_Acquire` caller, and `NPCGlyph::Reset` does
+not initialise `rot_glyph`. `NPCGlyph::Timestep`'s billboard branch for the
+talk glyphs needs bit 2 or 3 of `flg_glyph`. Bit 2 is set only by `VelSet` and
+bit 3 by nothing, so the talk glyph free-spins at any frame rate.
+
+### Rounding that reaches zero
+
+`zNPCTypeKingJelly.cpp` sizes a burst as
+`S32 total = amount * dt * xurand() + 0.5f`. Below a sixtieth-second frame
+`amount * dt` never reaches one half, the count is zero every frame, and the
+effect vanishes. A fractional accumulator feeding `total` does not help: the
+distribution loop spends `j * total / (ring_size - 1)`, which never reaches
+`total`, so a total of one emits nothing.
+
+The wave ring in `update_rings` and the tentacle zaps in
+`update_tentacle_lightning` run on a fixed 60 Hz step with the remainder in
+`tmr_ringemit` and `tmr_zapemit`. `RyzMemData::operator new` clears only the
+first four bytes and the constructor does not zero them, so both are clamped
+to 0.1 s before the loop. A `while (t >= 1/60)` loop over garbage would hang.
+
+### Epsilon guards
+
+`if (dt < small) return;` written when the shortest frame was a sixtieth. At a
+high frame rate the guard fires every frame and the system stops advancing.
+`xFXRingUpdate` in `xFX.cpp` returned for any `dt` under 1e-3. Above 1000 fps
+rings never expired and held all eight pool slots. The PC arm returns only for
+`dt <= 0`. The rest of the codebase's guards are at 1e-5.
+
+### Accumulators never taken back
+
+`x += dt; if (x < period) return;` with no `x -= period`. It limits the rate
+once, then the gate stays open and the body runs every frame.
+`sSteamAnimTime` in `zParPTank.cpp` made steam die in eight host frames rather
+than eight sixtieths of a second. It now steps at 60 Hz, subtracting 1/60 per
+step and clamping the carry.
+
+### Frame-counted animation
+
+`xhud::shake_motive_update` keeps a frame counter in `motive::context`, flips
+the sign of the displacement every frame, decays the amplitude every fourth and
+ends after fifty. `zHud.cpp`'s `ping_widget` uses it to jog a HUD widget when
+its count changes. The four-frame pattern is the effect, so rebasing the decay
+alone does not help. It runs on a 60 Hz step with the remainder in the PC-only
+`motive::step_time`.
+
+### Two per-frame factors in series
+
+`xBinaryCamera::update` in `xCamera.cpp` runs the Robo-Sandy and Robo-Patrick
+fights. `zCameraDisableTracking(CO_BOSS)` hands it the camera for the battle.
+Each filter in it is written against a variable frame time. Three lines
+together are not:
 
     F32 max_yaw_diff = cfg.max_yaw_vel * dt;              // the bound
     F32 sloc = 1.0f - xexp(-cfg.move_speed * dt);         // the lag
     F32 yaw_start = xatan2(B.x - A.x, B.z - A.z);         // re-derived from A
 
-The bound puts the goal at most `max_yaw_vel * dt` ahead of where the camera is
-now. The camera then closes `sloc` of that goal, which is itself proportional to
-`dt`. And `yaw_start` comes back from the camera's own position next frame, so
-the part it did not close is not carried over - it is simply gone. The angle
-turned per frame goes as `dt * dt` and the rate per second as `dt`:
+The bound puts the goal at most `max_yaw_vel * dt` ahead. The camera closes
+`sloc` of that, which is also proportional to `dt`. `yaw_start` is re-derived
+from the camera's position next frame, so the part not closed is discarded.
+The angle per frame goes as `dt * dt` and the rate per second as `dt`.
+Degrees a second from `fps_selftest`'s model of the loop with Sandy's
+`bossCam` config:
 
-    retail    60: 88.5   144: 38.5   240: 23.4   1000: 5.7   3000: 1.9  deg/s
+    retail    60: 88.5   144: 38.5   240: 23.4   1000: 5.7   3000: 1.9
     rebased   60: 88.5   144: 88.5   240: 88.5   1000: 88.5  3000: 88.6
 
-The fix scales the bound by `sloc(1/60) / sloc(dt)`, which is exactly 1 at a
-console frame. `stick_offset.x` is rebased with it: its target is written
-`stick_yaw_vel * stick.offset.x * dt`, and since `stick_yaw_vel` and
-`max_yaw_vel` are both 10 that lands full deflection exactly on the bound at any
-frame rate. Rebase the bound alone and the stick stops reaching it above 60 fps.
+The fix scales the bound by `sloc(1/60) / sloc(dt)`, which is 1 at a console
+frame. `stick_offset.x` is rebased with it. Its target is
+`stick_yaw_vel * stick.offset.x * dt`, and `stick_yaw_vel` and `max_yaw_vel`
+are both 10, so full deflection lands on the bound at any frame rate. Rebasing
+the bound alone stops the stick reaching it above 60 fps. Rebasing the stick
+alone changes nothing, because the bound is the binding constraint.
 
-Rebasing the stick ALONE does nothing at all, which is worth knowing before
-reading a site like this: the bound was the binding constraint, so the first
-attempt shipped, changed no behaviour anybody could feel, and had to come back
-out. Two per-frame quantities in series are one defect, not two, and neither
-line is wrong where it stands.
+Two per-frame quantities in series are one defect. Neither line is wrong on
+its own, and `fpsdep.py` has no shape for it.
 
-`fpsdep.py` has no shape for this and cannot get one. Both lines already carry a
-`dt`, correctly; what is wrong is that they compose. The scan looks for a missing
-`dt`, and the fifth shape - the one-pole - looks at a single statement. `fps_selftest`
-covers the arithmetic instead, running a second of the loop at six frame rates
-against Sandy's own config, and the baseline covers the two rebased lines.
+### Collision that depends on step size
 
-## Telling a real site from a false one
+`xEntBoulder_Update` recomputes velocity from the frame's position change, so
+depenetration the motion did not cause enters as `overlap / dt`. JF01's cannon
+spawns its boulder 0.59 units inside the cannon mesh. One 1/60 step tunnels it
+out straight. A shorter step leaves it scraping the barrel and it exits 57
+degrees off at 240 fps.
 
-Nine things wear the same clothes, in rough order of how often they turn up:
+`xEntBoulder_FixedStep` runs the boulder body at a fixed 1/60 with the
+remainder carried, and the rendered transform interpolates between the last
+two steps. At 60 fps it is one step per frame with a zero remainder. A boulder
+whose caller supplies its own `xEntCollis` is left at the frame's `dt`: the
+spongeball drives one directly from `zEntPlayer.cpp` and reads the contacts
+back out of that buffer.
 
-1. A RATE. Multiplied by a timestep, ACCUMULATES into persistent state. Needs
-   `dt`. Example: the hazard spin rates.
-2. A UNIT CONVERSION. A constant that happens to be 1/60 but converts units, with
-   nothing accumulating. Leave alone. Example: `pitch_s`, and every emitter rate
-   set to a multiple of 60 next to its call.
-3. A WRAP. `-= 360.0f` or `+= 1.0f` to bring a value back into range, inside an
-   `if`. Leave alone. Example: the `zSurface` UV wrap.
-4. A ONE-SHOT. Runs on an event, not every frame, and happens to sit in a
-   function that takes `dt`. Example: particle emission spread.
-5. A ONE-POLE FILTER. A decay and an input weight that sum to one, on two
-   adjacent lines. Both coefficients move together or the value runs away.
-   Example: `jawLevel` in `zNPCTypeBossSandy.cpp`.
-6. AN EPSILON GUARD. `if (dt < someSmallNumber) return;`, written when the
-   shortest possible frame was a sixtieth of a second. Uncapped the guard fires
-   every frame and the system it protects stops advancing. Example:
-   `xFX.cpp:364`, which stalled the whole ring pool at anything over 1000 fps.
-   The rest of the codebase's guards are at 1e-5, which is 100,000 fps and out
-   of reach; that one was at 1e-3.
-7. A BOUNDED HISTORY. A fixed number of slots -- a ribbon's joint queue, a
-   streak's fifty elements, a FIR filter's five-sample ring -- pushed once per
-   frame. The window is then measured in frames, so the trail gets shorter and
-   the filter less smooth as the frame rate rises. No coefficient can be
-   rebased to fix this; the samples have to arrive at a fixed rate. Examples:
-   `xFXStreakUpdate`, `zLasso_Update`, the cruise bubble wake.
-9. A QUANTITY WHOSE UNIT IS A FRAME. Not a rate against a wrong constant --
-   a value that IS "per frame", so every use of it is wrong anywhere but 60
-   fps. Two spellings: a delta between this frame and last used as a velocity
-   or compared against a threshold (`d = pos - old_pos`, then `if (d > 20)`),
-   and a per-frame increment written in one function and added in another
-   (`vel1 = 0.05f` at goal entry, `node1 += vel1` in the renderer). The write
-   and the read are usually in different functions, which is what hides it.
-   Examples: the chandelier's candle test, Sandy's limb springs.
-8. AN ACCUMULATOR NEVER TAKEN BACK. `x += dt; if (x < period) return;` with no
-   `x -= period` anywhere. It reads as a rate limiter and is one exactly once,
-   after which the gate stays open and the body runs every frame. Example:
-   `sSteamAnimTime` in `zParPTank.cpp`, which made steam die in eight host
-   frames rather than eight sixtieths of a second.
+### Loading paced by the frame rate
 
-What separates 1 from 2 is whether the value survives the frame. If it is reset
-at the top of the function, or consumed and discarded, it is integrating nothing
-and `dt` does not belong in it.
-
-"Survives the frame" is not the same as "is a member". The camera yaw writes
-`cam->pcur`, which is a member and looks persistent, and the write is thrown
-away at the top of the next frame by `xCam_worldtocyl` re-deriving it from the
-position. Follow the value to its next READ, not to its declaration. If
-something recomputes it from elsewhere before anything reads the accumulated
-part, it is not accumulating.
-
-## One thing the cap is not for
-
-`zGame.cpp` substitutes 1/60 for any frame measured under ten microseconds.
-That is above 100,000 fps and was never reached in testing, so it is not the
-cause of anything observed. Earlier notes in this repo blamed the spinning
-pickups on it. That was wrong. The real cause is in the pickups section above.
-
-## Loading paced by the frame rate — fixed
-
-Everything above is about a quantity advancing once per frame. This one is the
-other direction: work that only happens when a frame does.
-
-`xSTLoadStep` in `xstransvc.cpp` advances the package loader by one state
-transition per call. One call starts a layer's read, the next polls it and, when
-the read lands, runs the fixup and hands the layer to RenderWare. The loops that
-call it draw a frame between calls:
+`xSTLoadStep` in `xstransvc.cpp` advances the package loader one state
+transition per call. The scene loops in `zScene.cpp` draw a frame between
+calls:
 
     do {
-        zGameScreenTransitionUpdate(pdone, "... scene loading ...
-", rgba_bkgrd);
+        zGameScreenTransitionUpdate(pdone, "... scene loading ...\n", rgba_bkgrd);
     } while (xSTLoadStep(theSceneID) < 1.0f);
 
-`zScene.cpp:927` and `:975`. `zGameScreenTransitionUpdate` ends in
-`RwCameraShowRaster`, which waits for the display and then paces to the cap, so
-the loop runs at exactly the frame rate and a scene's load time is its step count
-divided by that rate.
+`zGameScreenTransitionUpdate` ends in `RwCameraShowRaster`, which waits for the
+display and paces to the cap. On the GameCube each step queues a drive read and
+the frame is time the drive needed anyway. On PC, `iFileAsyncService`, which
+`xSTLoadStep` calls, completes the read in one call, so load time was the step
+count divided by the frame rate.
 
-On the GameCube that costs nothing. The step queues a read on the drive and the
-frame is time the drive needed anyway. Here `iFileReadAsync` queues into
-`file_queue` and `iFileAsyncService` — which `xSTLoadStep` itself calls —
-completes the whole read in that one service call, so a layer costs the same
-fixed number of iterations however fast the disk is. The frame is the only thing
-the loader waits for. Loads finished sooner the faster the game ran.
+The PC arm of `xSTLoadStep` keeps stepping until `kLoadStepBudget`, a
+thirtieth of a second, has passed. Batching changes no call and no order:
+`PKR_LoadStep_Async` holds its layer in a static and drives one at a time, and
+the memory mark `PKR_LayerMemReserve` pushes for a RenderWare handoff is popped
+by the step that hands that layer over.
 
-The PC arm of `xSTLoadStep` now keeps stepping until a thirtieth of a second has
-gone, then returns. Batching changes no call and no order: `PKR_LoadStep_Async`
-holds the layer it is working on in a static and drives one at a time, and the
-memory mark `PKR_LayerMemReserve` pushes for a RenderWare handoff is popped by
-the step that hands that same layer over. Only the gaps go away.
+The budget has to be at least one refresh period for both pacers to stop
+waiting:
 
-A thirtieth is the floor for the coupling to go away rather than shrink, and
-both halves of the pacing have to clear it:
+- `iWindowPaceFrame` drops a missed deadline, and a 33 ms budget misses every
+  period `video.framerate` allows.
+- librw's D3D9 device uses `BackBufferCount = 1` and `D3DSWAPEFFECT_DISCARD`
+  (`d3ddevice.cpp`). `Present` queues a flip and blocks only while an earlier
+  flip is pending. With 33 ms between presents the earlier flip has happened.
 
-`iWindowPaceFrame` advances a deadline by one frame period and, when the frame
-already overran it, drops it and returns without sleeping (`iWindowSDL.cpp`).
-A 33 ms budget overruns every period `video.framerate` can be set to, so the cap
-sleeps zero.
+30 Hz is the slowest display designed for. A budget at the floor keeps the
+loading-screen bubbles moving. The cost is the loading screen's draw, a
+constant few ms out of every 33. Going below that means loading off the main
+thread. `xMemAlloc` is not thread safe and the RenderWare handoff at the end of
+`PKR_LoadStep_Async` has to run where the device is.
 
-The present is the half the first draft of this section got wrong. It reads as
-though `D3DPRESENT_INTERVAL_ONE` waits for a vblank boundary on every call, and
-it does not. librw asks for `BackBufferCount = 1` and `SWAPEFFECT_DISCARD`
-(`d3ddevice.cpp:2194`), so `Present` queues a flip and blocks only while an
-earlier flip is still pending. With 33 ms between presents and a 16.6 ms refresh,
-the earlier flip happened two refreshes ago. It returns immediately.
+`video.load_time` (`iLoadScreen.cpp`) is a separate minimum on how long the
+loading screen stays up.
 
-So the budget has to be at least one refresh period, and 30 Hz is the slowest
-display worth designing for. Keeping it at the floor rather than well above it
-is what leaves the bubbles moving. The cost is the loading screen's own draw, a
-few ms out of every 33, and that is a constant — it does not vary with the frame
-rate, which is the whole point.
+The startup loops in `zMain.cpp` (`BOOT`, `PLAT`, `MNU4`, `MNU5`) and
+`zEntPlayer_LoadHOP` have empty bodies, draw no frame, and already ran
+unpaced.
 
-Going past that constant means loading off the main thread, and it is not a
-small change: `xMemAlloc` is not thread safe and the RenderWare handoff at the
-end of `PKR_LoadStep_Async` has to happen where the device is. The split would
-be file reads on a worker and fixup on the main thread. Nothing here needs it.
+## Shapes that are not defects
 
-The startup loops in `zMain.cpp` — `BOOT`, `PLAT`, `MNU4`, `MNU5` — and
-`zEntPlayer_LoadHOP` have empty bodies and never drew a frame, so they were
-already running flat out. They are unchanged in speed.
+### The camera
 
-## Reproducing the candidate lists
+`zCamera.cpp`'s yaw is `dp` built from the stick times a constant `1/60`. It
+looks like a rate times a hardcoded timestep. It is not. Changing it to `dt`
+makes the turn rate proportional to `dt`: about half speed at 128 fps.
 
-Two scans, both lead generators. Neither output is a defect list.
+`dp` does not accumulate. It is added to `cam->pcur` and to a local `pgoal`,
+and `xCameraMove` writes that local into `cam->pgoal`, so the goal is always
+`dp` ahead of the camera. `xCameraUpdate` re-derives `pcur` from `mat.pos`
+through `xCam_worldtocyl` at the top of every frame, discarding the `pcur`
+write. `xCam_CorrectP` springs the position toward the goal by a fraction
+proportional to `dt`. The angle per frame is `(k * dt) * dp`, so the rate per
+second is `k * dp`. A constant `dp` makes the turn rate frame-rate independent.
+The `1/60` converts stick units into radians of gap.
 
-The additive scan walks `src/SB/Game` and `src/SB/Core/x`, tracks brace depth to
-find functions taking `F32 dt`, and reports lines inside them using `+=`, `-=` or
-`*=` against a float literal without mentioning `dt`.
+- `pitch_s` is reset to zero every frame and consumed in
+  `zCameraFreeLookSetGoals` as a 0..1 blend weight.
+- The overrotation site builds its `dp` from `zcam_overrot_rate` with no `dt`
+  and feeds the same mechanism.
+- `xCamera.cpp` keeps a `static F32 last_dt` and uses it to turn a per-frame
+  position delta into a velocity. This camera was written for a variable frame
+  time.
 
-The counter scan does the same walk and reports `++` or `--` on a member or a
-file static — a counter ticked once per frame measures frames, not seconds. It
-yields 41 leads, of which the `cnt_nextemit` group and `ostrich_delay` were real
-and the rest count events (hit points, bounces, misses, deaths).
+The boss fights use `xBinaryCamera`, which has a real defect. See *Two
+per-frame factors in series*.
+
+### The pickups' spin rate
+
+`zEntPickup_SceneUpdate` takes `dt` from `zSceneUpdate` and rotates by
+`PI * dt`. The rate was always right. The fix there removes drift. Golden
+spatulas are ordinary `zEntPickup`s: `zEntPickup_RenderOne` (reached from the
+aura pass in `xFX.cpp`) and `zEntPickup_RenderList` both copy
+`sPickupOrientation` into the model matrix.
+
+### An emitter rate that spells a count
+
+An emitter whose `rate` is set to a multiple of 60 right before a `1/60` call
+is spelling a particle count per call: `rate.set(59.999996f)` is one particle,
+`rate.set(119.99999f * n)` is `2n`. Whether it needs `dt` depends on how often
+the call runs. The Dutchman's beam light runs every frame while the beam
+travels, so it takes `dt`. These run on an event or on distance and stay:
+
+    zNPCTypeDutchman.cpp    the flame. `emit = (S32)(dist * emit_rate) + 1`
+                            against wave.emitted[i]: runs on distance
+    zNPCTypeKingJelly.cpp   the shock ring (rate 59.999996f; `total` already
+                            carries dt) and the thump ring (rate 59.999996f *
+                            tweak.thump.particles; its caller sets delay = 1e9
+                            right after)
+    xParEmitter.cpp         eEventEmit
+    zGust.cpp               behind debris_timer, reset to 0.15-0.3 seconds
+    zPlatform.cpp           zPlatform_Tremble on an event, and
+                            zPlatform_BreakawayFallFX, called only from the
+                            state 2 -> 3 transition
+    zEntHangable.cpp        zEntHangableMountFX, on eEventMount
+
+`xLaserBolt.cpp` passes `dt` to both emits. `xClimate.cpp` and `zLightning.cpp`
+pass `seconds`, the real frame time.
+
+### Systems checked and clean
+
+- `xAnim.cpp` is time-based: `xModelUpdate(inst, dt)` advances time by
+  `timeDelta * CurrentSpeed`, and blend progress uses `BlendRecip`, one over a
+  number of seconds. Keyframes sample by absolute time in `iAnimSKB.cpp` and
+  `xMorph.cpp`. The 30 fps authoring rate appears only as load-time unit
+  conversions in `zMain.cpp`.
+- `xScrFx.cpp` ages fade, letterbox, glare and the distortion pool by `dt`.
+- `zSurface.cpp` uses `dt` throughout, apart from the UV clock above.
+- `zGust.cpp` uses `dt` and a seconds timer.
+- `zShrapnel.cpp` ages by `lifetime -= dt` and integrates the parabola
+  analytically.
+- `xFFXShakeUpdateEnt` derives its magnitude from an absolute timer and
+  applies the delta.
+
+Rotation sites advanced by `dt` or not per frame:
+
+    xEntMotion.cpp          the mech rotation is speed * dt. The PEN
+                            xMat3x3Mul(modlrot, modlrot, &pshrot) is in the
+                            reset path. ORB evaluates position from motion->t
+    zPlatform.cpp           FM platforms step by ds, solved from dt and the
+                            asset's accel/decel times. Teeter and paddle derive
+                            angles from dt and a timer
+    zNPCTypeBossSB2.cpp     xAccelMove(..., dt, ...)
+    zShrapnel.cpp           xMat3x3Rot(&spin, axis, dt * angVel)
+    xEntBoulder.cpp         xMat3x3Rot(&rotM, rotVec, angVel * dt)
+    zEntPlayer.cpp          sReticleRot += 8.0f * dt, sHitchAngle += 3.14f * dt
+    xFX.cpp                 the aura pulse and spin, both * dt
+    xHud.cpp                rc.rot from the asset and the motives, which use dt
+    xFont.cpp               a parsed markup argument
+    zEntTrigger.cpp         one-time setup from asset->ang
+    zEntTeleportBox.cpp     eulers built from a launch angle on an event
+    zNPCTypeVillager.cpp    screenRot, set once to 1.0f and changed only by a
+                            debug tweak
+    zEntHangable.cpp        ent->spin, set to zero and never advanced
+    zNPCGoalVillager.cpp    ang_spinrate += 16.0f, an impulse on side damage
+
+### Telling a real site from a false one
+
+A hit from a scan is a lead. Six shapes look like a defect and are not:
+
+1. A unit conversion. A constant that equals 1/60 or 1/30 but converts units,
+   with nothing accumulating. Examples: `pitch_s`, `zcam_flytime`, an emitter
+   rate set to a multiple of 60.
+2. A wrap. `-= 360.0f` or `+= 1.0f` inside an `if` that brings a value back
+   into range. Example: the `zSurface.cpp` UV wrap.
+3. A one-shot. Runs on an event and happens to sit in a function that takes
+   `dt`. Examples: per-particle spread in `xParEmitterType.cpp`,
+   `zEntPickup.cpp`'s offscreen `+= 10000.0f`.
+4. A value that does not survive the frame. Reset at the top of the function,
+   or recomputed from elsewhere before anything reads the accumulated part.
+   Follow the value to its next read, not to its declaration: `cam->pcur` is a
+   member and is still discarded every frame by `xCam_worldtocyl`.
+   `zEntPickup.cpp`'s `vel.y += 0.08f * ydiff` is another: `ent->vel` is
+   overwritten from a normalised direction three lines above.
+5. A counter of events. Hit points, bounces, misses, deaths.
+   `cnt_nextfunfrag` counts robot deaths.
+6. A value already in seconds. A seconds accumulator
+   (`shared.trail.bubbles += dt * bubble_rate`), a seconds timer gating the
+   path (`debris_timer`), or `dt` already in the expression.
+
+A per-frame counter that only throttles work is still a defect when something
+else steps inside the throttled block. `cnt_nextlos` looked like a pure
+raycast throttle, and `cnt_inContact` steps inside it.
+
+## What holds this in place
+
+### fps_selftest
+
+`src/SB/Core/pc/tests/fpstest.cpp`, built as `fps_selftest`. It checks the
+helpers as properties:
+
+- At a sixtieth of a second each helper returns the constant it replaced.
+- Out-of-range coefficients clamp and never produce a NaN.
+- A second of damping, approach, emission and pop chance gives the same total
+  at 60, 120, 144, 240, 1000 and 3000 fps.
+- The bubble pop loop, driven through the real `xurand`, keeps 18% survival.
+- The boss camera model turns at one rate at every frame rate, and the
+  unrebased loop does not.
+
+36 checks. It is its own target rather than a case in `pc_selftest` because
+linking `xMath.cpp` needs `range_limit<F32>`, which CodeWarrior placed in
+`xCamera.cpp`.
+
+### tools/fpsdep.py and tools/fpsdep.json
+
+The rebased game sites need a scene, a model and a player, so a unit test
+cannot reach them. `fpsdep.py` scans `src/SB/Game` and `src/SB/Core/x` for the
+mechanically recognisable shapes:
+
+    timestep  a hardcoded console frame: 1/60, 1/30, 59.999996, 119.99999
+    damping   `*= 0.97f`, `*= <name>decay` and friends, xVec3SMul by a literal
+    counter   ++ or -- on a member or file static in a function taking dt
+    gate      a random draw against a constant on a per-frame path
+    history   one sample pushed per frame into a fixed-slot container
+
+It scans the PC arm only, so a fixed site reports its guarded line. Every
+judged hit is recorded in `fpsdep.json`, and any hit not in it fails. The
+baseline records what has been read, not what is correct.
+
+    fpsdep.py                  report hits not in the baseline; exit 1 if any
+    fpsdep.py --all            list every hit
+    fpsdep.py --shape counter  one shape only
+    fpsdep.py --update         rewrite the baseline from the current tree
+
+It cannot see two correct lines that compose badly (the boss camera), a
+one-pole spelled across functions, or a quantity whose unit is a frame.
+
+### ctest
+
+Both are `ctest` cases in `build-pc`: `fps_selftest`, and `fpsdep` when
+Python 3 is found.
+
+## Open items
+
+### Known and left
+
+- `tools/fpsdep.py` reports six hits not in the baseline, so the `fpsdep`
+  ctest fails. All six are the fixed-step fixes: `tmr_nextlos` (two sites) and
+  `tmr_emit` in `zNPCGoalRobo.cpp`, `tmr_breath` and `tmr_moreorless` in
+  `zNPCTypeRobot.cpp`, and `kLoadStepBudget` in `xstransvc.cpp`. They need
+  `fpsdep.py --update`.
+- `zNPCGoalVillager.cpp`'s `cnt_nextMedic` decrements per frame to grant a
+  health point. It is a cheat.
+- `zMain.cpp`'s memory-card screen calls
+  `xPadUpdate(globals.currentActivePad, 1.0f / 60)`, so rumble timers there age
+  one console frame per loop iteration. Nothing rumbles on that screen.
+- `zEntHangable.cpp`'s `enabled = -2` counts up to zero, a two-frame re-enable
+  delay. The countdown is its only reader, and `grabTimer` beside it is
+  decremented but never tested. It gates nothing.
+- `iFMV.cpp`'s movie loop presents every iteration and decodes on a timestamp.
+  With no cap and vsync off it re-presents the same frame thousands of times a
+  second. Playback speed is correct. Either setting bounds it.
+- `zUI.cpp`'s `ushift += 0.05f` in `zUIRenderAll` is a per-rendered-frame
+  counter. Nothing reads `ushift`.
+- `zNPCTypeTiki.cpp`'s `loveyFloat` walks `t2` and `t3` per frame. Nothing
+  reads them.
+
+### Not swept
+
+Additive accumulation without `dt`: `+=` or `-=` against a float literal
+inside a function that takes `F32 dt`, on a line that does not mention `dt`.
+`fpsdep.py` has no shape for it. A scan of this shape finds a couple of
+hundred hits, mostly false positives of kinds 2 to 4 above: `zSurface.cpp`'s wraps,
+`xParEmitterType.cpp`'s per-particle spread, `zEntPickup.cpp`'s offsets. About
+one in five is worth changing, and which one takes reading the function.
+`zSurface.cpp`, `zEntPlayer.cpp`, `zNPCSupplement.cpp`, `xParCmd.cpp`,
+`xParEmitterType.cpp`, `zNPCTypeBossPatrick.cpp` and `zNPCTypeTiki.cpp` have
+the most hits.

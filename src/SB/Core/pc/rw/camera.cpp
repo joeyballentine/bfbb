@@ -330,7 +330,7 @@ RwCamera* RwCameraShowRaster(RwCamera* camera, void* pDev, RwUInt32 flags)
 
     // BFBB_FPS: how fast the port is ACTUALLY presenting.
     //
-    // The frame rate is not cosmetic here. zGame.cpp:559 substitutes a
+    // The frame rate is not cosmetic here. zGameLoop substitutes a
     // sixtieth of a second for any frame it measures at under ten
     // microseconds, so a game running far above the display's rate does not
     // merely look smooth, it runs its simulation too fast. When something

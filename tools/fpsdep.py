@@ -9,7 +9,7 @@ test -- they need a scene, a model, a player -- so what protects them is this:
 the shapes are mechanically recognisable, every known one is recorded in
 fpsdep.json, and a new one fails the build.
 
-Four shapes, all of them checked only on the PC arm, so a fixed site reports its
+Five shapes, all of them checked only on the PC arm, so a fixed site reports its
 guarded line and not the retail line beside it:
 
   timestep  a hardcoded console frame -- 1/60, 1/30, 59.999996, 119.99999.
