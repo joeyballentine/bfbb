@@ -27,3 +27,11 @@ Helpers like 0x512e20 recurse -- capture at depth 0. Compiles finish in
 tens of ms, so collect via send() during the run, not rpc polling. Paths in
 battery.py/fsolo.py hardcode the worktree ROOT near the top; fix them if
 this directory moves.
+
+- `sigrank.py` + `sigprobe.js` + `flip.js` -- tree-wide measurement without
+  deriving a compiler. `snap` records every game function's match percent
+  (optionally under a frida script); `probe` counts `may_alias` query
+  signatures per function; `rank` orders them by non-matching over matching
+  occurrences; `flip` inverts the answer for chosen signatures and compares.
+  A tree-wide snap takes about 30 s. Repo-relative, output in build/sigrank/.
+  Clause W was found this way (docs/DUPLOTRON.md).
