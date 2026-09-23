@@ -4789,8 +4789,7 @@ void zNPCTubelet::Unbonk()
     ModelAtomicHide(1, NULL);
     ModelAtomicHide(4, NULL);
     hitpoints = cfg_npc->pts_damage;
-    pflags &= 0xdf;
-    // Epilogue weirdness: the target restores r31 before r0.
+    pflags &= (U8)0xdf;
     bonkSpinRate = -1.0f;
 }
 
