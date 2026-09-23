@@ -7229,3 +7229,67 @@ losses were all stores into `const` locals (flag 0x40), and widening from
 | compiler temporaries too | +31 / -176 |
 | indirect stores, or static stores, too | identical (never reached) |
 | store size up to 8 | identical |
+
+## Measured NO-GOs and the remaining residue (2026-09-22)
+
+Every entry below was measured tree-wide (224 game units, objdiff exact
+counts) against the compiler of its day. Tool: `tools/frida/sigrank.py`.
+
+**Value numbering / constant CSE**
+- `li` CSE (`isCSEop`, ValueNumbering.c): the `mr`-for-`li` witnesses
+  (`xAccelMove`, `zTalkBox wait_state::stop`, Prawn `update_turn`,
+  `xSerial::Read/Write`, `iSndInit`) all need a user-variable `li` to be CSE'd.
+  Allowing it: lower bound at the real registers -320, no bound -871, CSE only
+  into temporaries from a user variable -202, cross-block only -81. Disabling
+  `li` CSE -1091. The stock register-range test is right; the witnesses are
+  source shape or something upstream.
+- Constant propagation of `mr` (`propagateconstantstoblock`): disabling it is
+  -1 / +0.
+- Clause V's walk killing 8-byte literals: on every store -2, on static
+  stores only 0 / 0 (`Show_frame` up, `iParMgrInit` down); on stores through a
+  pointer to a large static 0 / 0; killing large static wholes -6.
+- Clause V's walk skipping stores to compiler temporaries: 0 / 0, four
+  partials up (`xFXStreakRender` 76.8 -> 92.2, `NCIN_SleepyLamp_AR` 94.0 ->
+  99.7, `xFXShineRender` 94.1 -> 97.9, `xScrFXGlareRender` 62.4 -> 65.0), none
+  down. Held because it crosses nothing; the residue is register numbering.
+- Store-kill rules ranked from a VN probe (small-static store kills cached
+  large-static loads, the `zThrown_AddFruit` / `zCutsceneMgrPlayStart` shape):
+  0 / 0.
+
+**Scheduler**
+- Small-static rule on frame objects (<=8, 12, 16 bytes): -223 at best.
+- Store order within one declared frame aggregate: +10 / -365.
+- E3n on entry 1 -7, on entry 4 +1 / -192; E3n restricted to literal loads
+  -17, to named statics +5 / -112 (the five are E3n's patch-cost list).
+- C+ on entries 1 and 3 -5; C+ allowing 8-byte literals after an indirect
+  static store +2 / -1 (`zMusicDo`).
+- Clause B replaced by "both static" -1.
+- Frame-to-frame write-after-read -1 to -8.
+- The top 45 signatures of the post-W ranking, flipped one at a time: at most
+  +2, nothing clean.
+
+**Other passes**
+- Alias propagation through pointer induction variables (stores through an
+  IV pointer answered as worst case): +6 / -12 (`iParMgrInit` 70 -> 100 among
+  the gains); loads too +4 / -74.
+- `find_entry`: `#pragma opt_strength_reduction off` gives retail's loop
+  shape exactly (an offset IV plus `add`, the address kept across the call);
+  only register numbers differ. The other two offset-IV witnesses do not move
+  with the pragma, and rejecting IRO's pointer-form `Reducable` costs 406.
+
+**What is left.** 316 game functions. Mechanical buckets (`classify` on the
+diff, registers abstracted):
+
+| bucket | count | reading |
+|---|---|---|
+| reorder + register renumbering | 93 | mostly allocator colour order |
+| pure reorder | 31 | 22 invisible to alias (ALU pick order), 9 memory pairs |
+| register renumbering only | 68 | allocator |
+| `li`/`mr`/`addi`/`fmr` deltas | 40 | rematerialise-vs-copy, see above |
+| retail reloads a value we reuse | 22 | half source (templates), half VN |
+| we reload what retail reuses | 6 | clause V/E3n over-fire |
+| branch form | 7 | kept switch skeletons, inverted tests |
+| other small deltas | 20 | `frsp` x3, `clrlwi`, IV shapes |
+| large differences | 20 | source |
+| frame layout | 1 | source |
+| missing | 8 | not written |
