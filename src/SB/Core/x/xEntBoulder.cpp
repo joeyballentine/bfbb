@@ -166,7 +166,7 @@ void xEntBoulder_Init(xEntBoulder* ent, xEntAsset* asset)
         ent->rollingID = xStrHash("Boulder_Bounce");
     }
 
-    ent->baseFlags |= 0x20;
+    ent->baseFlags |= (U16)0x20;
 }
 
 void xEntBoulder_AddForce(xEntBoulder* ent, xVec3* force);
