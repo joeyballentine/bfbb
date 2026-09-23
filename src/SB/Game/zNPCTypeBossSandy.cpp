@@ -688,8 +688,8 @@ void zNPCBSandy::Reset()
         this->feetRaster = *x;
     }
 
-    crashedScoreboard->chkby &= 0xef;
-    crashedScoreboard->flags &= ~0x1;
+    crashedScoreboard->chkby &= (U8)~XENT_COLLTYPE_PLYR;
+    crashedScoreboard->flags &= (U8)~XENT_IS_VISIBLE;
 
     strcpy(objName, "CORNER_00");
     for (i = 0; i < 8; i++)
