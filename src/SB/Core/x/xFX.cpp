@@ -2405,8 +2405,7 @@ void xFXRibbon::init(const char* group, const char* name)
     debug_init(group, name);
 }
 
-template <>
-void tier_queue<xFXRibbon::joint_data>::clear()
+template <> void tier_queue<xFXRibbon::joint_data>::clear()
 {
     u32 block = get_block(first);
     u32 last = wrap_block(block + get_block(_size + alloc->block_size() - 1));

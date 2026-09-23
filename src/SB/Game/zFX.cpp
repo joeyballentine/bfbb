@@ -1969,7 +1969,7 @@ namespace
         xEntShow(data.ent);
         xModelInstance* p = data.ent->model;
         p->Alpha = alpha;
-        p->Flags |= 0x4000;
+        p->Flags |= (U16)0x4000;
         p->PipeFlags = (p->PipeFlags & ~0xc) | 8;
     }
 

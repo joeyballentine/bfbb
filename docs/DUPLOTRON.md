@@ -7049,3 +7049,268 @@ pattern;` declared before `i`, and the loop walks `p`. Rule of thumb recorded.
   read back (`CheckObjectAgainstMeleeBound`: `stfs f1; frsp f0, f1; fcmpo`),
   and after `fabs`/`fneg` (`xGridInit`, `xQuickCullForSphere`); none of those
   constructs is present here. The build is otherwise DOL-clean at 7308/7673.
+
+## Clause S: a static of at most 8 bytes is one alias unit (2026-09-22)
+
+Shipped. `GC/2.0p1a` sha1 `d607436cef80246fa74bce4293eb2a997195292d`. Full
+`ninja`: game **matched_functions 7308 -> 7313 (+5 / -0)**, matched_code
+81.968 -> 82.157, fuzzy 99.353 -> 99.370, DOL `306526d9...` intact, no function
+anywhere lower in `report.json` (rwsdk `_rpGeometryOpen` also crosses).
+`patchcost.py --stock` against the same compiler with the clause compiled out:
++5 functions / 3,100 bytes, 0 lost.
+
+**The defect.** `make_alias` (Alias.c) gives an access to part of an object a
+subrange alias (kind 1). Two subranges of one object that do not overlap never
+alias (`may_alias_alias` case 1x1), and a store to one subrange only kills that
+subrange in value numbering (`update_alias_value` AliasType1). Retail treats a
+static object of at most 8 bytes -- the `-sdata` threshold, i.e. anything in
+small data -- as one unit:
+
+- `sTimeCurrent = iTimeGet()` (an `S64`): retail reloads both words after
+  storing them; we forwarded the registers. `zGameUpdateTransitionBubbles`,
+  `zGameLoop`, `zSaveLoad_Tick`.
+- `gTrcDisk[0] = state; gTrcDisk[1] = ...` keep their order (`xTRCDisk`).
+- `sAuraPulseAng[0]`/`[1]` (`xFXAuraUpdate`), the two `F32[2]` UV statics in
+  `NightLightUVStep`, `sCamTweakDistMult` in `zCameraTweak`.
+
+**The clause** (`small_static_whole` in AliasPatch.c):
+
+- scheduler entry 4 (subrange x subrange): both sides subranges of static
+  objects of at most 8 bytes -> the same object always may-alias; two
+  different objects may-alias under clause A's test (differing opcodes, plain
+  accesses, both at most 4 bytes);
+- VN entry 1: a store to such a subrange records a fresh value number instead
+  of the stored register (clause F for subranges).
+
+Each half is load-bearing (frida A/B on the shipped compiler): without the
+same-object rule +1, without the different-object rule +4 and one partial
+down, without the VN half +4 and one partial down. The size bound is
+load-bearing: 12 bytes +5/-3, 16 bytes +5/-4, unbounded +5/-119. Killing the
+sibling subranges in VN as well is inert. Excluding anonymous `@NNN` objects is
+inert.
+
+A whole-alias rewrite at `make_alias` (the direct model: return the whole
+alias for a subrange of a small static) reaches a different set: +4/-1, five
+partials down, because the whole alias then has size 8 and falls outside
+clauses A/C/C+, whose size tests were fitted on access size. Excluding `@NNN`
+templates takes it to +4/-0 with the partials still down. The predicate form
+is strictly better.
+
+**Injection layout changed.** The blob grew to 1,118 bytes and no longer fit
+the grown page. It now starts at `0x57ea50` in the original cave and runs
+into the grown page; the eight stubs follow it (1,367 of 1,460 bytes used).
+Blob sections are packed at 4-byte alignment instead of 16. Refactor checked
+by compiling the clause out: all 224 game objects byte-identical to the old
+compiler's.
+
+**Direct stores also run clause V's walk (2026-09-22, +1 / -0).** A store that
+names part of a small static directly (`stfs f0, sCamTweakPitch@sda21`) kills
+the cached small statics the way a whole-object store does:
+`zCameraTweakGlobal_Reset` reloads `0.0f` after it. A store to the same half
+through a pointer (`stfs f0, 0x4(r4)`) does not: `zCameraTweakGlobal_Remove`
+holds `1.0f` in `f2` across two of them. Running the walk on every
+small-static subrange store gains the same function and drops those two
+partials; running it on every direct subrange store of any static costs 2
+exact functions. Applying clause S's forwarding half only to direct stores is
+indistinguishable from applying it to all of them on this corpus. New sha1
+`c1241e54e45c258cca85d5860b6a911e2f82db2a`; game 7314, matched_code 82.162,
+fuzzy 99.371. The injected region now has 29 bytes free.
+
+**The patch now lives in its own section.** The .text tail had 29 bytes left
+after the direct-store walk. `patch_compiler.py` now appends an executable
+`.sbpatch` section (4 KiB at RVA `0x20e000`, the stock SizeOfImage; the file
+ended exactly at `.reloc`'s raw data and the section table had a free slot
+below SizeOfHeaders) and puts the blob and all eight stubs there; `.text` is
+no longer grown and its cave is untouched. 542 objects byte-identical before
+and after on a full build, sjiswrap units included. New sha1
+`5c4e8e29f9d24079bb1f52d4d79bb3ec30bd4566`; about 2.7 KiB free.
+
+**Two small statics are compared the way entry 0 compares whole objects
+(2026-09-22, +2 / -0).** Clause S's different-object test was clause A alone,
+so two same-opcode stores to different small statics could still pass each
+other: `xFXanimUVSetAngle` stores `xFXanimUVRotMat0[1]` (through a pointer)
+before `xFXanimUVRotMat1[0]`, and retail keeps that order. The test now
+mirrors entry 0 under the same 4-byte gate: clause A for differing opcodes,
+clause B for two stores of one opcode. `xFXanimUVSetAngle` and
+`xFXanimUV2PSetAngle` cross, nothing moves down. Clause B's own tests are
+satisfied by any subrange (it belongs to its whole object and contains
+nothing), so no new predicate was needed. sha1
+`e4b080e02f4437e788524b14e9736089c86a9d14`, game 7318, matched_code 82.307,
+fuzzy 99.382.
+
+Moved but not closed: `zGameLoop` 99.979, `xFXAuraUpdate` 99.838,
+`zCameraTweakGlobal_Add` 96.331, `NightLightUVStep` 67.700.
+
+## Clause A needs a static side (2026-09-22)
+
+Shipped. `GC/2.0p1a` sha1 `61ab511748b3dc08df62f55a72e28218c72dac7a`. Full
+`ninja`: game **7314 -> 7316 (+2 / -0)**, matched_code 82.162 -> 82.296,
+fuzzy 99.371 -> 99.381, DOL intact. One partial down:
+`SkinXformVertAndNormal` 85.504 -> 85.451.
+
+An ablation of every scheduler clause against the clause-S compiler found one
+that costs more than it pays. Clause A (entry 0: two whole accesses of at most
+4 bytes, differing opcodes, plain) had no storage test, so it also serialised
+two frame objects. Retail does not: `LOD_r_PLAT` interleaves its frame-slot
+copies, and `xFXRenderProximityFade` (the recorded entry-0 over-fire witness)
+hoists a frame reload over a frame store. Removing clause A outright is
++2 / -1 (`xShadowManager_Render` needs it for a frame load against a store to
+`sEntSelf`). Requiring one side to be a static object keeps that and drops
+the frame-frame pairs; "not both frame objects" measures the same.
+
+Ablations of the other scheduler clauses on the same compiler, each removed
+alone (exact functions lost): C on entry 1 -35, B on entry 1 -16, C on entry
+3 -86, B on entry 3 -6, E3n on entry 0 -2, C+ -57, B on entry 0 -30. None
+is free.
+
+## Clause H is gone: the LICM call-site hook subsumes it (2026-09-22)
+
+Removed. `GC/2.0p1a` sha1 `b4f01e81afc552380a76dd5b3f7ea790aeee42b0`. Full
+`ninja`: **542 objects byte-identical** to the previous compiler, 7316 / 7673,
+DOL intact.
+
+Clause H made a store to a static array in a loop a def of every small static
+in the use-def chains, so `isloopinvariant` kept a literal load in the loop.
+The later `sb_licm_invariant` hook refuses every whole static read at
+`moveinvariantsfromloop`'s call regardless of defs, which covers the same
+loads. Returning 0 from `sb_licm_clause` changed no object anywhere, so the
+predicate, its stub, the jump rewrite at `0x511ce5` and the retyped
+relocation all went.
+
+Ablations of the other non-scheduler pieces on the same compiler (exact
+functions lost when removed alone): clause F -39, clause V's walk -38, the
+LICM hook -11. E3n on entry 3 is -120 / +5, and those 5 are five of the six
+functions on the patch-cost list (`xBoxFromCircle`,
+`zNPCGoalJellyBirth::Process`, `BasisBspline`, `zEntPlayer_AnimTable`,
+`zNPCGoalPatrol::MoveNormal`); the sixth, `zNPCFodBzzt::Setup`, is recovered
+by no single ablation.
+
+## Clause E3n counts indirect stores into frame arrays (2026-09-22)
+
+Shipped. `GC/2.0p1a` sha1 `1d1bae88d9550883de90779e85cabcb9983e29ac`. Full
+`ninja`: game **7318 -> 7322 (+4 / -0)**, matched_code 82.307 -> 82.726,
+fuzzy 99.382 -> 99.386, DOL intact, nothing down.
+
+This closes the "literal load hoisted over an INDEXED frame store" candidate
+recorded under zNPCTypeBossPlankton. A store through a pointer into a local
+array carries the indirect bit (0x20, set by `gather_alias_info` when the
+alias is the whole object rather than the accessed word), so E3n's
+`flags == 4` test declined it. Retail keeps the literal load after
+`stwx` into `anim_list[]` (`ZNPC_AnimTable_BossPlankton`,
+`ZNPC_AnimTable_BossSB2`), after `stfs` into `pos[100]`
+(`zFX_SpawnBubbleWall`) and after `stfs` into `tranresult[]`
+(`xcsCalcAnimMatrices`). The clause now tolerates the bit, as clause C+ did
+for clause C, with two gates, each backed by one witness:
+
+- the store writes a word or more: `zMainFirstScreen`'s `stb` into
+  `text[617]` lets a template load pass (without this gate, -1);
+- the array is larger than 16 bytes: `zNPCBSandy::Process`'s `stfsx` into a
+  12-byte local lets `1.0f` pass (without this gate, one partial down).
+
+Measured variants: indirect bit tolerated with no gate +4 / -1; float loads
+only +4 / -1.
+
+## Clause W: E3n's write-after-read half, for float literals (2026-09-22)
+
+Shipped. `GC/2.0p1a` sha1 `a78a5fdb6c1d5677e987636b2e0743dbaefe9542`. Full
+`ninja`: game **7322 -> 7357 (+35 / -0)**, matched_code 82.726 -> 84.288,
+fuzzy 99.386 -> 99.421, DOL intact. Four partials down:
+`add_trail_sample` 97.661 -> 91.457, `RendConeRange` 89.021 -> 85.967,
+`DiscoRender` 81.053 -> 79.620, `NPCCone::RenderCone` 99.056 -> 98.925.
+
+**The rule.** A plain store to a declared frame local (Object+0x18 non-zero,
+E3n's frame gate) may not pass an earlier `lfs`/`lfd` from the literal pool
+(an anonymous static of at most 8 bytes). E3n is the read-after-write
+direction (store, then a later static load); this is the write-after-read
+direction, and only for float literals. The alias edge carries the load's
+latency, so retail leaves the store behind it. That is the "retail leaves the
+stall" shape these notes recorded as the entry-4 plurality of the SCHED list:
+`BoulderRollCB`, `BoulderRollDoneCB`, `xEntDriveMount`, `xEntDriveUpdate`,
+`xSphereHitsOBB_nu`, `InvertRaster` and `NPCC_LineHitsBound` all cross. The
+store's frame object and the literal are different objects, so the pair
+reaches the clause on entries 0 and 1, not entry 4.
+
+**How it was found.** `scratchpad`-style frida probe: every `may_alias` query
+tagged with a feature signature (opcode class, indirect bit, direct operand,
+storage class -- literal / named static / declared frame / temporary --
+subrange or whole, size bucket), counted per function, then each signature
+ranked by how many non-matching functions contain it against how many
+matching ones do. Flipping the top signature alone was +13 / -5; the five
+losses were all stores into `const` locals (flag 0x40), and widening from
+`stw` to every plain store took it to +35 / -0.
+
+**Measured variants (frida, against the E3n-indirect compiler):**
+
+| variant | result |
+|---|---|
+| shipped: lfs/lfd literal, any plain store, declared frame | +35 / -0 |
+| `stw` stores only | +13 / -0 |
+| integer loads too (lwz of templates) | +39 / -43 |
+| named statics too | +13 / -2 (lfs only) |
+| compiler temporaries too | +31 / -176 |
+| indirect stores, or static stores, too | identical (never reached) |
+| store size up to 8 | identical |
+
+## Measured NO-GOs and the remaining residue (2026-09-22)
+
+Every entry below was measured tree-wide (224 game units, objdiff exact
+counts) against the compiler of its day. Tool: `tools/frida/sigrank.py`.
+
+**Value numbering / constant CSE**
+- `li` CSE (`isCSEop`, ValueNumbering.c): the `mr`-for-`li` witnesses
+  (`xAccelMove`, `zTalkBox wait_state::stop`, Prawn `update_turn`,
+  `xSerial::Read/Write`, `iSndInit`) all need a user-variable `li` to be CSE'd.
+  Allowing it: lower bound at the real registers -320, no bound -871, CSE only
+  into temporaries from a user variable -202, cross-block only -81. Disabling
+  `li` CSE -1091. The stock register-range test is right; the witnesses are
+  source shape or something upstream.
+- Constant propagation of `mr` (`propagateconstantstoblock`): disabling it is
+  -1 / +0.
+- Clause V's walk killing 8-byte literals: on every store -2, on static
+  stores only 0 / 0 (`Show_frame` up, `iParMgrInit` down); on stores through a
+  pointer to a large static 0 / 0; killing large static wholes -6.
+- Clause V's walk skipping stores to compiler temporaries: 0 / 0, four
+  partials up (`xFXStreakRender` 76.8 -> 92.2, `NCIN_SleepyLamp_AR` 94.0 ->
+  99.7, `xFXShineRender` 94.1 -> 97.9, `xScrFXGlareRender` 62.4 -> 65.0), none
+  down. Held because it crosses nothing; the residue is register numbering.
+- Store-kill rules ranked from a VN probe (small-static store kills cached
+  large-static loads, the `zThrown_AddFruit` / `zCutsceneMgrPlayStart` shape):
+  0 / 0.
+
+**Scheduler**
+- Small-static rule on frame objects (<=8, 12, 16 bytes): -223 at best.
+- Store order within one declared frame aggregate: +10 / -365.
+- E3n on entry 1 -7, on entry 4 +1 / -192; E3n restricted to literal loads
+  -17, to named statics +5 / -112 (the five are E3n's patch-cost list).
+- C+ on entries 1 and 3 -5; C+ allowing 8-byte literals after an indirect
+  static store +2 / -1 (`zMusicDo`).
+- Clause B replaced by "both static" -1.
+- Frame-to-frame write-after-read -1 to -8.
+- The top 45 signatures of the post-W ranking, flipped one at a time: at most
+  +2, nothing clean.
+
+**Other passes**
+- Alias propagation through pointer induction variables (stores through an
+  IV pointer answered as worst case): +6 / -12 (`iParMgrInit` 70 -> 100 among
+  the gains); loads too +4 / -74.
+- `find_entry`: `#pragma opt_strength_reduction off` gives retail's loop
+  shape exactly (an offset IV plus `add`, the address kept across the call);
+  only register numbers differ. The other two offset-IV witnesses do not move
+  with the pragma, and rejecting IRO's pointer-form `Reducable` costs 406.
+
+**What is left.** 316 game functions. Mechanical buckets (`classify` on the
+diff, registers abstracted):
+
+| bucket | count | reading |
+|---|---|---|
+| reorder + register renumbering | 93 | mostly allocator colour order |
+| pure reorder | 31 | 22 invisible to alias (ALU pick order), 9 memory pairs |
+| register renumbering only | 68 | allocator |
+| `li`/`mr`/`addi`/`fmr` deltas | 40 | rematerialise-vs-copy, see above |
+| retail reloads a value we reuse | 22 | half source (templates), half VN |
+| we reload what retail reuses | 6 | clause V/E3n over-fire |
+| branch form | 7 | kept switch skeletons, inverted tests |
+| other small deltas | 20 | `frsp` x3, `clrlwi`, IV shapes |
+| large differences | 20 | source |
+| frame layout | 1 | source |
+| missing | 8 | not written |

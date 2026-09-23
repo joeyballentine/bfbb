@@ -262,8 +262,6 @@ void xEntInit(xEnt* ent, xEntAsset* asset)
 {
     xBaseInit(ent, asset);
 
-    // non-matching: instruction order
-
     ent->asset = asset;
     ent->update = xEntUpdate;
     ent->bupdate = xEntDefaultBoundUpdate;
@@ -286,7 +284,7 @@ void xEntInit(xEnt* ent, xEntAsset* asset)
     ent->lightKit = NULL;
     ent->simpShadow = NULL;
     ent->entShadow = NULL;
-    ent->baseFlags |= 0x20;
+    ent->baseFlags |= (U16)0x20;
 
     xGridBoundInit(&ent->gridb, ent);
 
@@ -366,10 +364,7 @@ void xEntInitForType(xEnt* ent)
         memset(ent->frame, 0, sizeof(xEntFrame));
     }
 
-    ent->baseFlags |= 0x20;
-
-    // non-matching: instruction order in epilogue :|
-    // no idea how to fix that
+    ent->baseFlags |= (U16)0x20;
 }
 
 namespace

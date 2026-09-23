@@ -56,7 +56,7 @@ void zEntButton_Init(_zEntButton* ent, xEntAsset* asset)
         ent->topHeight = 0.0f;
     }
 
-    ent->pflags |= (1 << 0);
+    ent->pflags |= XENT_PFLAGS_IS_MOVING;
     ent->penby |= XENT_COLLTYPE_PLYR;
     ent->chkby |= XENT_COLLTYPE_PLYR;
 
@@ -158,7 +158,7 @@ void zEntButton_Reset(_zEntButton* ent, xScene* sc)
     xEntMotionInit(&ent->motion, (xEnt*)ent, (xEntMotionAsset*)(ent->basset + 1));
     xEntMotionReset(&ent->motion, sc);
 
-    ent->pflags |= (1 << 0);
+    ent->pflags |= XENT_PFLAGS_IS_MOVING;
     ent->penby |= XENT_COLLTYPE_PLYR;
     if (ent->asset->flags & (1 << 0))
     {

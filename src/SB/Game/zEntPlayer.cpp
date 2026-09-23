@@ -6071,7 +6071,7 @@ void zEntPlayer_Init(xEnt* ent, xEntAsset* asset)
     globals.player.Visible = 1;
     globals.player.AutoMoveSpeed = 0;
     ent->pflags &= (U8)~XENT_PFLAGS_HAS_GRAVITY;
-    ent->collis->chk &= ~0x1;
+    ent->collis->chk &= (U8)~0x1;
     ent->update = zEntPlayer_Update;
     ent->move = zEntPlayer_Move;
     ent->render = (xEntRenderCallback)zEntPlayer_Render;

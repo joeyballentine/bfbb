@@ -237,7 +237,7 @@ void zEntSimpleObj_MgrUpdateRender(RpWorld* world, F32 dt)
                     }
                 }
                 model = ent->model;
-                model->Flags &= 0xFBFF;
+                model->Flags &= (u16)0xFBFF;
                 smgr->lastlod = picklod;
                 model->Bucket = smgr->lodBucket[picklod];
                 model->Data = (*model->Bucket)->OriginalData;
