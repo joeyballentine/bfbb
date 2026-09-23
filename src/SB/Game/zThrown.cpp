@@ -827,7 +827,7 @@ void zThrown_LaunchVel(xEnt* ent, xVec3* vel)
     newThrown->vel = *vel;
     newThrown->collResetTimer = stats->launch->collResetTimer;
     ent->update = zThrown_Update;
-    ent->baseFlags |= 0x80;
+    ent->baseFlags |= (U16)0x80;
     zThrown_AddTempFrame(newThrown);
 }
 
@@ -1002,7 +1002,7 @@ void zThrown_AddFruit(xEnt* ent)
             zThrownList[i].stackEnt = NULL;
             zThrownList[i].stackTgt = NULL;
             ent->update = zFruit_Update;
-            ent->baseFlags |= 0x80;
+            ent->baseFlags |= (U16)0x80;
             if (zThrownList[i].drv.driver != NULL)
             {
                 xEntDriveDismount(&zThrownList[i].drv, 1e-5f);
@@ -1039,7 +1039,7 @@ void zThrown_AddFruit(xEnt* ent)
     newThrown->stackTgt = NULL;
     newThrown->oldRecShadow = ent->baseFlags & 0x10;
     ent->update = zFruit_Update;
-    ent->baseFlags |= 0x80;
+    ent->baseFlags |= (U16)0x80;
     zThrown_AddTempFrame(newThrown);
     xEntDriveInit(&newThrown->drv, ent);
     newThrown->driveDebounce = 0;
