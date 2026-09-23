@@ -2204,7 +2204,7 @@ void zNPCBubbleBuddy::Setup()
 void zNPCBubbleBuddy::Reset()
 {
     zNPCFish::Reset();
-    flags |= 0x40;
+    flags |= XENT_0x40;
 }
 
 void zNPCBubbleBuddy::RenderExtra()
