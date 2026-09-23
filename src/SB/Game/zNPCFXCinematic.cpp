@@ -3458,10 +3458,10 @@ static void NCIN_SpatGlow_AR(const zCutsceneMgr*, NCINEntry* fxrec, RpAtomic* mo
 
     zShrapnel_CinematicInit(fxrec->fxdata.shrapdata.shrap, model, animMat, NULL, NULL);
 
-    color.r = (U8)(S32)fxrec->pos_B[0].x;
-    color.g = (U8)(S32)fxrec->pos_B[0].y;
-    color.b = (U8)(S32)fxrec->pos_B[0].z;
-    color.a = (U8)(S32)fxrec->pos_B[1].x;
+    color.r = (U8)fxrec->pos_B[0].x;
+    color.g = (U8)fxrec->pos_B[0].y;
+    color.b = (U8)fxrec->pos_B[0].z;
+    color.a = (U8)fxrec->pos_B[1].x;
 
     xFXAuraAdd(fxrec, (xVec3*)&animMat[boneIndex].pos, &color, fxrec->pos_B[1].y);
 }
