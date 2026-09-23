@@ -2489,7 +2489,7 @@ void zNPCB_SB2::bind_nodes()
         }
         else
         {
-            ent->baseFlags &= 0xfff7;
+            ent->baseFlags &= (U16)0xfff7;
             nodes[i].skin_model = models[node_hooks[i].model]->Data;
             nodes[i].skin_mat = models[node_hooks[i].model]->Mat;
         }
