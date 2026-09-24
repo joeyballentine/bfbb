@@ -847,6 +847,10 @@ target_compile_options(bfbb_rw PRIVATE ${BFBB_NO_WARNINGS})
 # src/SB/Core/pc/README.md with what each one is waiting on; adding a file here
 # before it exists would make this build fail rather than under-report, which
 # is the right way round.
+# The menus as code; see src/SB/Core/pc/menu/README.md. A glob, so a package
+# converted by tools/menugen needs no edit here.
+file(GLOB MENU_SOURCES CONFIGURE_DEPENDS ${PC_DIR}/menu/*.cpp)
+
 add_library(bfbb_platform STATIC
   ${PC_DIR}/iBoot.cpp
   ${PC_DIR}/iCameraLook.cpp
@@ -873,6 +877,8 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iPadStick.cpp
   ${PC_DIR}/iSystem.cpp
   ${PC_DIR}/iTextPatch.cpp
+  ${PC_DIR}/iAssetOverride.cpp
+  ${MENU_SOURCES}
   ${PC_DIR}/iTRC.cpp
   ${PC_DIR}/iTime.cpp
   ${PC_DIR}/isavegame.cpp
@@ -1081,6 +1087,13 @@ endif()
 # compat/ shadows <math.h>, <string.h> and <cmath> to add the CodeWarrior
 # extensions the game's sources use, chaining to the system headers with
 # include_next. It has to come first for that to work.
+# The assets written as code include the game's own headers, and get the game
+# code's warning settings with them.
+set_source_files_properties(
+  ${PC_DIR}/iAssetOverride.cpp
+  ${MENU_SOURCES}
+  PROPERTIES COMPILE_OPTIONS "${BFBB_NO_WARNINGS}")
+
 target_include_directories(bfbb_platform PUBLIC
   ${PC_DIR}/compat
   ${PC_DIR}

@@ -19,6 +19,7 @@
 #include "iHipoly.h"
 #include "iSoundtrack.h"
 #include "iTextPatch.h"
+#include "iAssetOverride.h"
 #include "iTime.h"
 #include "iLoadScreen.h"
 #include "iLoadTransition.h"
@@ -967,6 +968,7 @@ static void ApplyConfig()
     // config.ini is.
     S32 wording = iConfigGetBool("assets.platform_wording", TRUE);
     iTextPatchSetEnabled(wording);
+    iAssetOverrideSetEnabled(iConfigGetBool("assets.code_menu", TRUE));
 
     // Said out loud, and always, because these change what the game looks and
     // sounds like. Someone reporting that the port looks wrong should not have

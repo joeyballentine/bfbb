@@ -49,6 +49,9 @@ const iConfigSetting kConfigSettings[] = {
       "Rewrite the Xbox wording in the game's text as it loads: dashboard,\n"
       "; memory card slots. The port never changes the files on disk.",
       ICONFIG_BOOL, NULL, kNone, kNone },
+    { "assets", "code_menu", "on",
+      "Build the menus and talk boxes from the port's code, not mnu3-5.HIP. Off is retail.",
+      ICONFIG_BOOL, NULL, kNone, kNone },
     { "game", "boot", "",
       "Start straight in this scene, skipping the menu: a four-character scene\n"
       "; id like jf01. Empty starts at the menu. Overrides SB.INI's BOOT=.",

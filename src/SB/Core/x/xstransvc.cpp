@@ -37,7 +37,7 @@ S32 xSTStartup(st_PACKER_ASSETTYPE* handlers)
         g_typeHandlers = handlers;
         XST_reset_raw();
         PKRStartup();
-        g_pkrf = PKRGetReadFuncs(1);
+        g_pkrf = iFilePackageReadFuncs(PKRGetReadFuncs(1));
     }
     return g_straninit;
 }

@@ -78,6 +78,13 @@ const char* iFileAssetPlatform(const char** longName);
 // retries a failed HIP open forever. See the call site.
 void iFileMissingPackage(const char* subdirPath, const char* rootPath);
 
+// The packer's read functions, as xstransvc.cpp uses them. On PC they are
+// wrapped so a package can have some asset types built from code instead of
+// read from the HIP; see iAssetOverride.h. The GameCube build returns them as
+// they are.
+struct st_PACKER_READ_FUNCS;
+st_PACKER_READ_FUNCS* iFilePackageReadFuncs(st_PACKER_READ_FUNCS* funcs);
+
 S32 iFileSeek(tag_xFile* file, S32 offset, S32 whence);
 U32 iFileRead(tag_xFile* file, void* buf, U32 size);
 S32 iFileReadAsync(tag_xFile* file, void* buf, U32 aSize, void (*callback)(tag_xFile*),

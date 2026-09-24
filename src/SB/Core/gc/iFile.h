@@ -68,4 +68,7 @@ U32 iFileFind(const char* name, tag_xFile* file);
 void iFileGetInfo(tag_xFile* file, U32* addr, U32* length);
 void iFileAsyncService();
 
+// The PC port wraps the packer's read functions; see pc/iFile.h.
+#define iFilePackageReadFuncs(funcs) (funcs)
+
 #endif
