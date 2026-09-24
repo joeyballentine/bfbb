@@ -41,9 +41,11 @@ namespace
     // original is held by a reference of its own so that swapping it out does
     // not free it.
     //
-    // A menu scene's atomics are made again each time it loads, and a new one
-    // can land where an old one was. An entry is only this atomic's while the
-    // atomic still holds one of the two geometries it recorded.
+    // Other passes replace a drawn atomic's geometry too -- a copy of whatever
+    // this built can be what the atomic holds on the next draw -- so an entry
+    // is found by its atomic and nothing else, and is dropped when the model
+    // that owns the atomic is unloaded (iMenuFrameForget). That is what stops
+    // a new atomic made where an old one was from inheriting its entry.
     struct Seen
     {
         RpAtomic* atomic;
@@ -61,11 +63,9 @@ namespace
     {
         for (int i = 0; i < sSeenCount; i++)
         {
-            Seen& e = sSeen[i];
-            if (e.atomic == atomic &&
-                (atomic->geometry == e.original || atomic->geometry == e.built))
+            if (sSeen[i].atomic == atomic)
             {
-                return &e;
+                return &sSeen[i];
             }
         }
         return NULL;
@@ -73,12 +73,10 @@ namespace
 
     Seen* add_seen(RpAtomic* atomic, RpGeometry* original)
     {
-        // Reuse a slot whose atomic has moved on to other geometry, which is
-        // what a reloaded scene leaves behind.
         Seen* slot = NULL;
         for (int i = 0; i < sSeenCount && slot == NULL; i++)
         {
-            if (sSeen[i].atomic == atomic)
+            if (sSeen[i].atomic == NULL)
             {
                 slot = &sSeen[i];
             }
@@ -92,7 +90,8 @@ namespace
             slot = &sSeen[sSeenCount++];
         }
 
-        // A reference of its own; the layout mirror carries librw's count.
+        // A reference of its own, so the rebuilds can always start again from
+        // the artist's mesh; given back in iMenuFrameForget.
         original->refCount++;
         slot->atomic = atomic;
         slot->original = original;
@@ -100,6 +99,22 @@ namespace
         slot->extra = -1;
         slot->rope = false;
         return slot;
+    }
+
+    RpAtomic* ForgetCB(RpAtomic* atomic, void*)
+    {
+        for (int i = 0; i < sSeenCount; i++)
+        {
+            Seen& e = sSeen[i];
+            if (e.atomic == atomic)
+            {
+                RpGeometryDestroy(e.original);
+                e.atomic = NULL;
+                e.original = NULL;
+                e.built = NULL;
+            }
+        }
+        return atomic;
     }
 
     // A quad's four vertices, as the exporter laid them out: bottom-left,
@@ -177,6 +192,42 @@ namespace
     };
 }
 
+namespace
+{
+    // The frame as the artist built it, by its signature -- and the reason this
+    // needs no hardcoded asset id: eighty vertices, and the four middle quads of
+    // a rail are one tile repeated, so they share a texture rectangle exactly.
+    // A mesh of this size whose tiles do not repeat is some other model that
+    // happens to have eighty vertices, and it is left alone.
+    bool is_artist_frame(const RpGeometry* g)
+    {
+        if (g == NULL || g->numVertices != kSrcVerts || g->numTriangles != kSrcTris ||
+            g->numMorphTargets == 0 || g->numTexCoordSets == 0 || g->matList.numMaterials == 0)
+        {
+            return false;
+        }
+
+        const RwTexCoords* su = g->texCoords[0];
+        if (g->morphTarget[0].verts == NULL || su == NULL)
+        {
+            return false;
+        }
+
+        for (int i = 1; i < kRailTiles; i++)
+        {
+            for (int k = 0; k < 4; k++)
+            {
+                if (su[kTopTiles + i * 4 + k].u != su[kTopTiles + k].u ||
+                    su[kTopTiles + i * 4 + k].v != su[kTopTiles + k].v)
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+} // namespace
+
 int iMenuFrameWiden(RpAtomic* atomic, float rectWidth)
 {
     if (atomic == NULL || rectWidth <= 0.0f)
@@ -184,37 +235,16 @@ int iMenuFrameWiden(RpAtomic* atomic, float rectWidth)
         return 0;
     }
 
+
     Seen* seen = find_seen(atomic);
     RpGeometry* src = seen != NULL ? seen->original : atomic->geometry;
-    if (src == NULL || src->numVertices != kSrcVerts || src->numTriangles != kSrcTris ||
-        src->numMorphTargets == 0 || src->numTexCoordSets == 0)
+    if (!is_artist_frame(src))
     {
         return 0;
     }
 
     const RwV3d* sp = src->morphTarget[0].verts;
     const RwTexCoords* su = src->texCoords[0];
-    if (sp == NULL || su == NULL || src->matList.numMaterials == 0)
-    {
-        return 0;
-    }
-
-    // The signature, and the reason this needs no hardcoded asset id: in this
-    // frame the four middle quads of a rail are one tile repeated, so they
-    // share a texture rectangle exactly. A mesh of this size whose tiles do not
-    // repeat is some other model that happens to have eighty vertices, and it
-    // is left alone.
-    for (int i = 1; i < kRailTiles; i++)
-    {
-        for (int k = 0; k < 4; k++)
-        {
-            if (su[kTopTiles + i * 4 + k].u != su[kTopTiles + k].u ||
-                su[kTopTiles + i * 4 + k].v != su[kTopTiles + k].v)
-            {
-                return 0;
-            }
-        }
-    }
 
     // One bamboo segment, measured off the mesh rather than assumed.
     const float period = sp[kTopTiles + kBR].x - sp[kTopTiles + kBL].x;
@@ -392,4 +422,12 @@ int iMenuFrameWiden(RpAtomic* atomic, float rectWidth)
            ropeFix ? ", corner lashings brought forward" : "");
     fflush(stdout);
     return 1;
+}
+
+void iMenuFrameForget(RpClump* clump)
+{
+    if (clump != NULL)
+    {
+        RpClumpForAllAtomics(clump, ForgetCB, NULL);
+    }
 }

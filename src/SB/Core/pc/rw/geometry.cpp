@@ -24,6 +24,18 @@ static inline rw::Material* asMaterial(const RpMaterial* m)
     return const_cast<rw::Material*>(reinterpret_cast<const rw::Material*>(m));
 }
 
+// Drops one reference, and frees the geometry with the last. Reference counted
+// on both sides, as RpAtomicSetGeometry's comment describes.
+RwBool RpGeometryDestroy(RpGeometry* geometry)
+{
+    if (geometry == NULL)
+    {
+        return FALSE;
+    }
+    asGeometry(geometry)->destroy();
+    return TRUE;
+}
+
 RpGeometry* RpGeometryCreate(RwInt32 numVert, RwInt32 numTriangles, RwUInt32 format)
 {
     // The format word carries the flags in its low byte and the texture

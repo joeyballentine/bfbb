@@ -1,4 +1,5 @@
 #include "iModel.h"
+#include "iMenuFrame.h"
 #include "iScreen.h"
 #include "iToon.h"
 
@@ -294,6 +295,7 @@ void iModelUnload(RpAtomic* userdata)
     {
         iToonForgetModel(clump);
         iHipolyForget(clump);
+        iMenuFrameForget(clump);
         iEnvForgetModel(clump);
         RpClumpDestroy(clump);
     }

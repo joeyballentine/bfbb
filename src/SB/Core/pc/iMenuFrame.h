@@ -17,6 +17,7 @@
 // resample, not a guess, just the repeat the artist was already making.
 
 struct RpAtomic;
+struct RpClump;
 
 // Rebuild this atomic's geometry to fit the screen's margin, from the mesh the
 // artist made. Asked on every draw; it rebuilds only when the margin has
@@ -28,5 +29,10 @@ struct RpAtomic;
 // `rectWidth` is the normalized width the model is drawn into, which is what
 // converts the screen's margin into the frame's own object space.
 int iMenuFrameWiden(RpAtomic* atomic, float rectWidth);
+
+// The model is being unloaded: forget its atomics and give back the original
+// mesh kept for each. Called from iModel.cpp's unload, beside the other passes
+// that keep something per model.
+void iMenuFrameForget(RpClump* clump);
 
 #endif

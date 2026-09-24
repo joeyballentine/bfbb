@@ -495,13 +495,14 @@ namespace
     void Draw()
     {
         // The tab bar: the shoulder buttons' pictures either side, the tab
-        // showing in white and the rest dimmed.
+        // showing in the menu's own dark teal and the rest faded toward the
+        // background.
         char title[256];
         snprintf(title, sizeof(title), "{i:button_picture_07} ");
         for (S32 t = 0; t < TAB_COUNT; t++)
         {
             char one[48];
-            snprintf(one, sizeof(one), t == sTab ? "{c=ffffffff}%s{~:c}   " : "{c=ff9aa6b4}%s{~:c}   ",
+            snprintf(one, sizeof(one), t == sTab ? "%s   " : "{c=ff6f98a3}%s{~:c}   ",
                      kTabNames[t]);
             strncat(title, one, sizeof(title) - strlen(title) - 1);
         }
