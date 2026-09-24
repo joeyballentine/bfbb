@@ -25,6 +25,8 @@
 #include "iAssetOverride.h"
 #include "iBoot.h"
 #include "iConfig.h"
+#include "iPadBind.h"
+#include "iPadHost.h"
 #include "iDistort.h"
 #include "iDrawDist.h"
 #include "iGlow.h"
@@ -217,6 +219,10 @@ namespace
           ApplySnapshot, false },
         { TAB_EFFECTS, "Cave echo", "xbox.reverb", "on|off", "On|Off", NEXT_AREA,
           "The Xbox version's echo in caves and big rooms.", NULL, false },
+        { TAB_CONTROLS, "Keyboard buttons", "bind.keyboard", "", "Change", NOW,
+          "Which keys press each of the game's buttons.", NULL, false },
+        { TAB_CONTROLS, "Controller buttons", "bind.pad", "", "Change", NOW,
+          "Which controller buttons press each of the game's buttons.", NULL, false },
         { TAB_CONTROLS, "Stick deadzone", "input.deadzone", "auto|5|10|15|20|25|30",
           "Controller's own|5%|10%|15%|20%|25%|30%", NOW,
           "How far a stick moves before the game notices.", ApplyDeadzone, false },
@@ -510,6 +516,11 @@ namespace
         iAssetTextSet(xStrHash(ISETTINGS_HELP_TEXT), help);
     }
 
+    bool IsBindEntry(const Setting& s)
+    {
+        return strncmp(s.key, "bind.", 5) == 0;
+    }
+
     void Draw()
     {
         // The tab bar: the shoulder buttons' pictures either side, the tab
@@ -542,7 +553,14 @@ namespace
             Name(s, IndexOf(s), value, sizeof(value));
 
             char shown[96];
-            snprintf(shown, sizeof(shown), "< %s >", value);
+            if (IsBindEntry(s))
+            {
+                snprintf(shown, sizeof(shown), "{i:button_picture_01} Change");
+            }
+            else
+            {
+                snprintf(shown, sizeof(shown), "< %s >", value);
+            }
             SetText(ISETTINGS_LABEL_TEXT, row, s.label);
             SetText(ISETTINGS_VALUE_TEXT, row, shown);
         }
@@ -595,10 +613,226 @@ namespace
         }
     }
 
+
+    // ------------------------------------------------------------------
+    // The binding pages: one row per button the game reads, what presses it,
+    // and a row that puts them all back. Confirm on a row waits for the next
+    // key or controller button and binds it; Escape, or eight seconds, leaves
+    // it alone. Written to config.ini's [keyboard] or [pad] and read again at
+    // once (iPadHostReloadBindings).
+
+    // What each row of kPadBindButtons is called here. The game's own names
+    // are the GameCube's, and what a button does depends on the preset, so the
+    // help line carries the table's description instead.
+    const char* const kBindLabels[] = {
+        "A button", "B button", "X button", "Y button", "Z (camera close)", "Show HUD",
+        "Camera left", "Camera right", "L2", "R2", "Start (pause)", "Select",
+        "D-pad up", "D-pad down", "D-pad left", "D-pad right",
+    };
+    const S32 kBindLabelCount = (S32)(sizeof(kBindLabels) / sizeof(kBindLabels[0]));
+
+    // Rows: one per button, then the reset row.
+    S32 BindRows()
+    {
+        return kPadBindButtonCount + 1;
+    }
+
+    void BindKey(bool pad, S32 row, char* out, size_t size)
+    {
+        snprintf(out, size, "%s.%s", pad ? "pad" : "keyboard", kPadBindButtons[row].name);
+    }
+
+    void DrawBindPage(bool pad, S32 sel, S32 top, const char* help)
+    {
+        iAssetTextSet(xStrHash(ISETTINGS_TITLE_TEXT),
+                      pad ? "Controller buttons" : "Keyboard buttons");
+
+        for (S32 r = 0; r < ISETTINGS_ROWS; r++)
+        {
+            const S32 i = top + r;
+            if (i >= BindRows())
+            {
+                SetText(ISETTINGS_LABEL_TEXT, r, "");
+                SetText(ISETTINGS_VALUE_TEXT, r, "");
+                continue;
+            }
+            if (i == kPadBindButtonCount)
+            {
+                SetText(ISETTINGS_LABEL_TEXT, r, "Reset all");
+                SetText(ISETTINGS_VALUE_TEXT, r, "{i:button_picture_01} Defaults");
+                continue;
+            }
+
+            char key[64];
+            BindKey(pad, i, key, sizeof(key));
+            SetText(ISETTINGS_LABEL_TEXT, r,
+                    i < kBindLabelCount ? kBindLabels[i] : kPadBindButtons[i].name);
+            const char* bound = iConfigGetString(key, "");
+            SetText(ISETTINGS_VALUE_TEXT, r, bound[0] != '\0' ? bound : "(nothing)");
+        }
+
+        if (help != NULL)
+        {
+            DrawHelp(help);
+            return;
+        }
+
+        char text[256];
+        if (sel == kPadBindButtonCount)
+        {
+            snprintf(text, sizeof(text),
+                     "Put every binding on this page back to the default.{n}"
+                     "{i:button_picture_03} goes back.");
+        }
+        else
+        {
+            const char* does = kPadBindButtons[sel].does;
+            snprintf(text, sizeof(text), "%s%s{n}{i:button_picture_01} changes it, "
+                     "{i:button_picture_03} goes back.",
+                     does != NULL ? "In the game: " : "", does != NULL ? does : "");
+        }
+        DrawHelp(text);
+    }
+
+    // Wait for the next input on the device and bind it. FALSE if left alone.
+    bool Capture(bool pad, S32 row)
+    {
+        const iTime start = iTimeGet();
+        char token[32];
+
+        // The confirm press that got here is still down: forget it first.
+        iPadHostCaptureKey(TRUE, token, sizeof(token));
+        iPadHostCaptureButton(TRUE, token, sizeof(token));
+
+        for (;;)
+        {
+            const S32 left = 8 - (S32)iTimeDiffSec(start, iTimeGet());
+            if (left <= 0)
+            {
+                return false;
+            }
+
+            char help[160];
+            snprintf(help, sizeof(help), "Press the %s for %s.{n}Escape leaves it alone (%d).",
+                     pad ? "controller button" : "key",
+                     row < kBindLabelCount ? kBindLabels[row] : kPadBindButtons[row].name,
+                     (int)left);
+            DrawHelp(help);
+
+            zSaveLoad_Tick();
+
+            // Escape cancels on either page, and so cannot be bound here.
+            bool gotKey = iPadHostCaptureKey(FALSE, token, sizeof(token)) != 0;
+            if (gotKey && strcmp(token, "escape") == 0)
+            {
+                return false;
+            }
+            if (!pad && gotKey)
+            {
+                break;
+            }
+            if (pad && iPadHostCaptureButton(FALSE, token, sizeof(token)))
+            {
+                break;
+            }
+        }
+
+        char key[64];
+        BindKey(pad, row, key, sizeof(key));
+        iConfigSet(key, token);
+        iPadHostReloadBindings();
+        Send("MNU4 MOVE B SFX", eEventPlay);
+        return true;
+    }
+
+    void RunBindPage(bool pad)
+    {
+        S32 sel = 0;
+        S32 top = 0;
+
+        for (S32 r = 0; r < ISETTINGS_ROWS; r++)
+        {
+            SelectRow(r, false);
+        }
+        SelectRow(0, true);
+        DrawBindPage(pad, sel, top, NULL);
+
+        for (;;)
+        {
+            zSaveLoad_Tick();
+            const U32 pressed = mPad[globals.currentActivePad].pressed;
+
+            if (pressed & XPAD_BUTTON_TRIANGLE)
+            {
+                Send("MNU4 DENY SFX", eEventPlay);
+                break;
+            }
+
+            S32 move = 0;
+            if (pressed & XPAD_BUTTON_UP)
+            {
+                move = -1;
+            }
+            else if (pressed & XPAD_BUTTON_DOWN)
+            {
+                move = 1;
+            }
+            if (move != 0 && sel + move >= 0 && sel + move < BindRows())
+            {
+                SelectRow(sel - top, false);
+                sel += move;
+                if (sel < top)
+                {
+                    top = sel;
+                }
+                else if (sel >= top + ISETTINGS_ROWS)
+                {
+                    top = sel - ISETTINGS_ROWS + 1;
+                }
+                SelectRow(sel - top, true);
+                DrawBindPage(pad, sel, top, NULL);
+            }
+
+            if (pressed & XPAD_BUTTON_X)
+            {
+                if (sel == kPadBindButtonCount)
+                {
+                    for (S32 i = 0; i < kPadBindButtonCount; i++)
+                    {
+                        char key[64];
+                        BindKey(pad, i, key, sizeof(key));
+                        iConfigUnset(key);
+                    }
+                    iPadHostReloadBindings();
+                    Send("MNU4 MOVE B SFX", eEventPlay);
+                }
+                else
+                {
+                    Capture(pad, sel);
+                }
+                DrawBindPage(pad, sel, top, NULL);
+            }
+        }
+
+        // Back to the list the page was opened from.
+        SelectRow(sel - top, false);
+        SelectRow(sSel - sTop, true);
+        Draw();
+    }
+
     // Left and right stop at the ends; X goes round.
     void Change(S32 dir, bool wrap)
     {
         const Setting& s = Selected();
+        if (IsBindEntry(s))
+        {
+            // Only Confirm opens a page; left and right have nothing to move.
+            if (wrap)
+            {
+                RunBindPage(strcmp(s.key, "bind.pad") == 0);
+            }
+            return;
+        }
         const S32 n = WordCount(Words(s));
         const S32 was = IndexOf(s);
 

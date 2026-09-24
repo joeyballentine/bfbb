@@ -76,6 +76,11 @@ const char* iConfigGetString(const char* key, const char* def);
 void iConfigSet(const char* key, const char* value);
 bool iConfigSave();
 
+// Take a setting out, so it answers with its default again; iConfigSave then
+// removes its line from the file. A binding put back this way follows the
+// preset again, where writing the default out would pin it.
+void iConfigUnset(const char* key);
+
 // Write a config.ini holding every setting at its default, with the comments
 // that document each one. This is what the load calls when it finds no file;
 // it is public because a settings front end -- a launcher, whenever there is

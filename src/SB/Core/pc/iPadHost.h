@@ -89,4 +89,16 @@ const char* iPadHostPadKind();
 // so a preset does not have to enumerate every family of controller.
 const char* iPadHostInputForLabel(char letter);
 
+// For the in-game settings screen's binding pages.
+//
+// Re-read [pad] and [keyboard], after iConfigSet has changed one.
+void iPadHostReloadBindings();
+
+// The next key, or the next input on the controller on port 0, to go down,
+// written as its binding name ("space", "lb"). Called every frame while
+// waiting; `prime` TRUE on the first call forgets whatever is already held, so
+// the press that opened the wait does not answer it. FALSE until one goes down.
+S32 iPadHostCaptureKey(S32 prime, char* out, S32 size);
+S32 iPadHostCaptureButton(S32 prime, char* out, S32 size);
+
 #endif

@@ -510,6 +510,62 @@ static void MapPortsToSlots()
 
 static iPadHostHotkeyFn sHotkey;
 
+void iPadHostReloadBindings()
+{
+    LoadPadBindings();
+    iPadKeyboardInit();
+}
+
+S32 iPadHostCaptureKey(S32 prime, char* out, S32 size)
+{
+    return iPadKeyboardCapture(prime, out, size);
+}
+
+S32 iPadHostCaptureButton(S32 prime, char* out, S32 size)
+{
+    static U32 sWasHeld;
+
+    SDL_Gamepad* pad = sGamepad[0];
+    U32 held = 0;
+    if (pad != NULL)
+    {
+        SDL_UpdateGamepads();
+        for (S32 b = 0; b < SDL_GAMEPAD_BUTTON_COUNT; b++)
+        {
+            S32 input = iPadInputFromSDLButton(b);
+            if (input >= 0 && SDL_GetGamepadButton(pad, (SDL_GamepadButton)b))
+            {
+                held |= 1u << input;
+            }
+        }
+        if (SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) >= IPAD_SDL_TRIGGER_THRESHOLD)
+        {
+            held |= 1u << PADIN_LT;
+        }
+        if (SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) >= IPAD_SDL_TRIGGER_THRESHOLD)
+        {
+            held |= 1u << PADIN_RT;
+        }
+    }
+
+    const U32 pressed = prime ? 0 : (held & ~sWasHeld);
+    sWasHeld = held;
+
+    for (S32 input = 0; input < PADIN_COUNT; input++)
+    {
+        if (pressed & (1u << input))
+        {
+            const char* name = PadTokenName((S16)input);
+            if (name != NULL)
+            {
+                snprintf(out, (size_t)size, "%s", name);
+                return TRUE;
+            }
+        }
+    }
+    return FALSE;
+}
+
 void iPadHostSetHotkey(iPadHostHotkeyFn fn)
 {
     sHotkey = fn;

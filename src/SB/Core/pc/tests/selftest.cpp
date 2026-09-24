@@ -453,6 +453,25 @@ static void test_config()
     }
     check(iConfigSave(), "a save with nothing changed succeeds without writing");
 
+    // A binding put back to its default: answered from the table again, and
+    // its line taken out of the file rather than rewritten.
+    iConfigUnset("keyboard.start");
+    check(strcmp(iConfigGetString("keyboard.start", "!"), iPadBindFind("start")->key) == 0,
+          "an unset binding answers with its default");
+    check(iConfigSave(), "and the save succeeds");
+    {
+        char saved[8192];
+        FILE* r = fopen(path, "rb");
+        size_t n = (r != NULL) ? fread(saved, 1, sizeof(saved) - 1, r) : 0;
+        if (r != NULL)
+        {
+            fclose(r);
+        }
+        saved[n] = '\0';
+        check(strstr(saved, "start = f1") == NULL, "and its line is gone from the file");
+        check(strstr(saved, "[keyboard]") != NULL, "while its section stays");
+    }
+
     iHostRemoveFile(path);
 
     // The writer, which the load reaches only when there is no file -- and

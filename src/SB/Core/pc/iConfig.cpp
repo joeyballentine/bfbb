@@ -576,7 +576,65 @@ namespace
 {
     // Settings changed with iConfigSet since the last iConfigSave.
     bool sChanged[kMaxEntries];
+
+    // Settings taken out with iConfigUnset since the last iConfigSave, whose
+    // lines the save removes.
+    const S32 kMaxRemoved = 64;
+    char sRemoved[kMaxRemoved][kMaxKey];
+    S32 sRemovedCount;
+
+    void forgetRemoved(const char* key)
+    {
+        for (S32 i = 0; i < sRemovedCount; i++)
+        {
+            if (strcmp(sRemoved[i], key) == 0)
+            {
+                memmove(sRemoved[i], sRemoved[i + 1], (size_t)(sRemovedCount - i - 1) * kMaxKey);
+                sRemovedCount--;
+                return;
+            }
+        }
+    }
+
+    bool splitKey(const char* key, char* section, char** name)
+    {
+        snprintf(section, kMaxKey, "%s", key);
+        char* dot = strchr(section, '.');
+        if (dot == NULL)
+        {
+            return false;
+        }
+        *dot = '\0';
+        *name = dot + 1;
+        return true;
+    }
 } // namespace
+
+void iConfigUnset(const char* key)
+{
+    iConfigLoad();
+
+    char lower[kMaxKey];
+    snprintf(lower, sizeof(lower), "%s", key);
+    lowerInPlace(lower);
+
+    for (S32 i = 0; i < sCount; i++)
+    {
+        if (strcmp(sEntries[i].key, lower) == 0)
+        {
+            memmove(&sEntries[i], &sEntries[i + 1], (size_t)(sCount - i - 1) * sizeof(Entry));
+            memmove(&sChanged[i], &sChanged[i + 1], (size_t)(sCount - i - 1) * sizeof(bool));
+            sCount--;
+            break;
+        }
+    }
+
+    forgetRemoved(lower);
+    if (sRemovedCount < kMaxRemoved)
+    {
+        snprintf(sRemoved[sRemovedCount++], kMaxKey, "%s", lower);
+    }
+}
 
 void iConfigSet(const char* key, const char* value)
 {
@@ -585,6 +643,7 @@ void iConfigSet(const char* key, const char* value)
     char lower[kMaxKey];
     snprintf(lower, sizeof(lower), "%s", key);
     lowerInPlace(lower);
+    forgetRemoved(lower);
 
     for (S32 i = 0; i < sCount; i++)
     {
@@ -616,7 +675,7 @@ bool iConfigSave()
 {
     iConfigLoad();
 
-    bool any = false;
+    bool any = sRemovedCount > 0;
     for (S32 i = 0; i < sCount; i++)
     {
         any = any || sChanged[i];
@@ -646,15 +705,23 @@ bool iConfigSave()
         }
 
         char section[kMaxKey];
-        snprintf(section, sizeof(section), "%s", sEntries[i].key);
-        char* dot = strchr(section, '.');
-        if (dot == NULL)
+        char* name;
+        if (!splitKey(sEntries[i].key, section, &name))
         {
             continue;
         }
-        *dot = '\0';
 
-        ok = iConfigEditSet(file, section, dot + 1, sEntries[i].value);
+        ok = iConfigEditSet(file, section, name, sEntries[i].value);
+    }
+
+    for (S32 i = 0; i < sRemovedCount && ok; i++)
+    {
+        char section[kMaxKey];
+        char* name;
+        if (splitKey(sRemoved[i], section, &name))
+        {
+            iConfigEditUnset(file, section, name);
+        }
     }
 
     ok = ok && iConfigEditSave(file, sPath);
@@ -663,6 +730,7 @@ bool iConfigSave()
     if (ok)
     {
         memset(sChanged, 0, sizeof(sChanged));
+        sRemovedCount = 0;
     }
     else
     {

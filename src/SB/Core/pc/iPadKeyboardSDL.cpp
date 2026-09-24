@@ -24,6 +24,8 @@
 
 #include <SDL3/SDL.h>
 
+#include <stdio.h>
+
 static iPadBind sKeyBind[IPAD_BIND_MAX_BUTTONS];
 
 static bool ScancodeDown(S32 code)
@@ -145,4 +147,39 @@ void iPadKeyboardPoll(iPadHostState* s)
     s->stick_y = KeyAxis(SDL_SCANCODE_S, SDL_SCANCODE_W);
     s->substick_x = KeyAxis(SDL_SCANCODE_J, SDL_SCANCODE_L);
     s->substick_y = KeyAxis(SDL_SCANCODE_K, SDL_SCANCODE_I);
+}
+
+S32 iPadKeyboardCapture(S32 prime, char* out, S32 size)
+{
+    static bool sWasDown[SDL_SCANCODE_COUNT];
+
+    SDL_PumpEvents();
+    const bool* state = SDL_GetKeyboardState(NULL);
+    if (state == NULL)
+    {
+        return FALSE;
+    }
+
+    S32 count;
+    const iPadBindToken* tokens = iPadKeyTokens(&count);
+
+    S32 found = -1;
+    for (S32 code = 0; code < SDL_SCANCODE_COUNT; code++)
+    {
+        const bool down = state[code];
+        if (down && !sWasDown[code] && !prime && found < 0 &&
+            iPadBindTokenName((S16)code, tokens, count) != NULL)
+        {
+            found = code;
+        }
+        sWasDown[code] = down;
+    }
+
+    if (found < 0)
+    {
+        return FALSE;
+    }
+
+    snprintf(out, (size_t)size, "%s", iPadBindTokenName((S16)found, tokens, count));
+    return TRUE;
 }

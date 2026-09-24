@@ -20,4 +20,7 @@ void iPadKeyboardInit();
 // game does not have focus.
 void iPadKeyboardPoll(iPadHostState* s);
 
+// iPadHostCaptureKey's half; see iPadHost.h.
+S32 iPadKeyboardCapture(S32 prime, char* out, S32 size);
+
 #endif
