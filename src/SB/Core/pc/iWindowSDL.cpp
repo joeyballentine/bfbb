@@ -36,6 +36,7 @@
 #endif
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 // Under GL3, written by librw through the slot handed out below, and null until
@@ -47,6 +48,7 @@ static S32 sWidth;
 static S32 sHeight;
 static iWindowMode sMode = iWINDOW_WINDOWED;
 static S32 sExclusive;
+static bool sTour;
 
 // Where the window was the last time it was windowed, for iWindowSetMode to put
 // it back. Zero until then.
@@ -152,6 +154,10 @@ S32 iWindowOpen(const iWindowParams* params)
 
     sMode = params->mode;
 
+    // iTour.h: a hidden window, which nothing may make visible.
+    const char* tour = getenv("BFBB_TOUR");
+    sTour = tour != NULL && tour[0] != '\0';
+
     // The size the window will be created at, which is the size asked for and
     // not necessarily what it ends up as -- the two fullscreen modes cover a
     // monitor. What it ends up as is read back below.
@@ -195,6 +201,10 @@ S32 iWindowOpen(const iWindowParams* params)
     // Vulkan makes its surface on this window, and SDL refuses to make one on a
     // window that was not created for it.
     SDL_WindowFlags flags = iBackendIsVulkan() ? SDL_WINDOW_VULKAN : 0;
+    if (sTour)
+    {
+        flags |= SDL_WINDOW_HIDDEN;
+    }
     S32 x = 0;
     S32 y = 0;
     S32 w = params->width;
@@ -329,6 +339,11 @@ void iWindowDeferredCreated()
         // fullscreen transitions are asynchronous on every platform that has a
         // compositor.
         SDL_SyncWindow(sWindow);
+    }
+
+    if (sTour)
+    {
+        SDL_HideWindow(sWindow);
     }
 
     // What the window actually got, in the units the back buffer is in.
@@ -607,7 +622,7 @@ S32 iWindowSetMode(iWindowMode mode)
     (void)mode;
     return FALSE;
 #else
-    if (sWindow == NULL || mode == iWINDOW_FULLSCREEN)
+    if (sWindow == NULL || mode == iWINDOW_FULLSCREEN || sTour)
     {
         return FALSE;
     }

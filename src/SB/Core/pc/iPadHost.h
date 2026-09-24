@@ -101,4 +101,8 @@ void iPadHostReloadBindings();
 S32 iPadHostCaptureKey(S32 prime, char* out, S32 size);
 S32 iPadHostCaptureButton(S32 prime, char* out, S32 size);
 
+// For iTour.h: with `on`, port 0 holds exactly `buttons` (XPAD_BUTTON_*) and
+// every real controller and the keyboard are ignored.
+void iPadHostScript(S32 on, U32 buttons);
+
 #endif

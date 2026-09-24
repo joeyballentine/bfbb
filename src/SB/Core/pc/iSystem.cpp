@@ -38,6 +38,7 @@
 #include "xstransvc.h"
 #include "xString.h"
 #include "iWindow.h"
+#include "iTour.h"
 
 #include <rwcore.h>
 #include <rpworld.h>
@@ -1145,6 +1146,12 @@ void iSystemInit(U32 options)
     TRCInit();
 
     iPadHostSetHotkey(iHipolyHotkey);
+
+    if (iTourActive())
+    {
+        sWindowMode = iWINDOW_WINDOWED;
+        iTourInit();
+    }
     printf("bfbb: platform layer up, input backend: %s\n", iPadHostName());
 
     if (RenderWareInit())
@@ -1155,6 +1162,12 @@ void iSystemInit(U32 options)
         // several hundred lines further on, with nothing to point at.
         printf("bfbb: FATAL -- RenderWare failed to start\n");
         exit(1);
+    }
+
+    // A tour counts in frames; see iTour.h.
+    if (iTourActive())
+    {
+        iWindowSetFrameRate(60);
     }
 
     // The reference every alpha test is measured against, which librw leaves

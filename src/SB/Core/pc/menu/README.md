@@ -133,3 +133,28 @@ here are the source now.
 `mnu3` is beside `mnu4`; `mnu5` is beside boot, font, plat and `mnu4`. A new
 package also goes in `kOverrides` in `iAssetOverride.cpp`. A new DYNA kind
 needs a spec in `DYNA_TYPES`.
+
+## Looking at a change
+
+`BFBB_TOUR=script.txt` runs the game in a hidden window, drives port 0 from
+the script, and writes PNGs of its frames. The commands are in `iTour.h`.
+Point `BFBB_CONFIG` at a scratch config.ini: the settings screen writes to
+the one it was started with.
+
+    wait 300          # past the movies and the title
+    press start
+    wait 60
+    press start
+    wait 60
+    press start
+    wait 420
+    press start
+    wait 420          # main menu
+    press down
+    press down
+    press down
+    press a           # Settings
+    wait 90
+    shot settings
+
+At the main menu, New Game is selected and Settings is three down.

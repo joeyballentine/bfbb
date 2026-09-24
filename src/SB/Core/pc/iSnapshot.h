@@ -107,4 +107,16 @@ struct RwRaster* iSnapshotLastFrame();
 // RWHALFPIXEL directly for the same reason in reverse.
 F32 iSnapshotHalfPixel();
 
+// Copies the frame about to be presented into `dst`, whatever the snapshot's
+// own state. `dst` is a raster from an earlier call, or NULL; it is replaced
+// when the screen size no longer matches. Returns the raster holding the copy,
+// or NULL (with `dst` possibly destroyed) when there is nothing to copy.
+struct RwRaster* iSnapshotCopyFrame(struct RwRaster* dst);
+
+// Called once a frame from iSnapshotCapture, after the copy, whether or not a
+// copy was made. For iTour.h, which steps its script on it. A pointer rather
+// than a call so the shim does not link against the platform layer.
+typedef void (*iSnapshotFrameHook)();
+void iSnapshotSetFrameHook(iSnapshotFrameHook fn);
+
 #endif

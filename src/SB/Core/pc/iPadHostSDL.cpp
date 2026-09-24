@@ -103,6 +103,10 @@ static SDL_JoystickID sInstance[IPAD_MAX_CONTROLLERS];
 // Read once, so the per-frame cost is a load.
 static const bool sReportPad = getenv("BFBB_PAD") != NULL;
 
+// Port 0 as a tour script holds it; see iPadHostScript.
+static bool sScripted;
+static U32 sScriptButtons;
+
 // ---------------------------------------------------------------------------
 // Buttons
 //
@@ -510,6 +514,12 @@ static void MapPortsToSlots()
 
 static iPadHostHotkeyFn sHotkey;
 
+void iPadHostScript(S32 on, U32 buttons)
+{
+    sScripted = on != 0;
+    sScriptButtons = buttons;
+}
+
 void iPadHostReloadBindings()
 {
     LoadPadBindings();
@@ -682,6 +692,19 @@ void iPadHostPoll()
         sBackFrames--;
     }
 #endif
+
+    // A tour (iTour.h) plays port 0 alone: every real device is ignored, so a
+    // controller or keyboard someone is using elsewhere cannot steer it.
+    if (sScripted)
+    {
+        for (S32 p = 0; p < IPAD_MAX_CONTROLLERS; p++)
+        {
+            ClearState(&sState[p]);
+        }
+        sState[0].connected = true;
+        sState[0].buttons = sScriptButtons;
+        return;
+    }
 
     if (sHotkey != NULL)
     {

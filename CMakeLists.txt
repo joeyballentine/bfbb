@@ -880,6 +880,7 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iPadStick.cpp
   ${PC_DIR}/iSystem.cpp
   ${PC_DIR}/iTextPatch.cpp
+  ${PC_DIR}/iTour.cpp
   ${PC_DIR}/iAssetOverride.cpp
   ${MENU_SOURCES}
   ${PC_DIR}/iTRC.cpp

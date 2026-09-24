@@ -287,7 +287,71 @@ namespace gl3snap
 } // namespace gl3snap
 #endif
 
-void iSnapshotCapture()
+static iSnapshotFrameHook sFrameHook;
+
+RwRaster* iSnapshotCopyFrame(RwRaster* dst)
+{
+    RwInt32 w = 0;
+    RwInt32 h = 0;
+    bool d3d = false;
+
+#ifdef RW_D3D_ANY
+    if ((iBackendIsD3D() || iBackendIsVulkan()) && rw::d3d::deviceOpen())
+    {
+        rw::d3d::getScreenExtent(&w, &h);
+        d3d = true;
+    }
+#endif
+#ifdef RW_GL3
+    if (iBackendIsGL3() && rw::gl3::virtualScreenFramebuffer() != 0)
+    {
+        w = (RwInt32)rw::gl3::virtualScreenWidth;
+        h = (RwInt32)rw::gl3::virtualScreenHeight;
+    }
+#endif
+
+    if (w <= 0 || h <= 0)
+    {
+        return NULL;
+    }
+
+    if (dst != NULL && (dst->width != w || dst->height != h))
+    {
+        RwRasterDestroy(dst);
+        dst = NULL;
+    }
+    if (dst == NULL)
+    {
+        dst = RwRasterCreate(w, h, 32, rwRASTERTYPECAMERATEXTURE | rwRASTERFORMAT8888);
+        if (dst == NULL)
+        {
+            return NULL;
+        }
+    }
+
+    bool ok = false;
+#ifdef RW_D3D_ANY
+    if (d3d)
+    {
+        ok = rw::d3d::captureFrame(reinterpret_cast<rw::Raster*>(dst));
+    }
+#endif
+#ifdef RW_GL3
+    if (!d3d)
+    {
+        ok = rw::gl3::copyVirtualScreen(reinterpret_cast<rw::Raster*>(dst));
+    }
+#endif
+    (void)d3d;
+    return ok ? dst : NULL;
+}
+
+void iSnapshotSetFrameHook(iSnapshotFrameHook fn)
+{
+    sFrameHook = fn;
+}
+
+static void snapshotCaptureFrame()
 {
 #ifdef RW_D3D_ANY
     if (iBackendIsD3D() || iBackendIsVulkan())
@@ -302,6 +366,16 @@ void iSnapshotCapture()
         gl3snap::iSnapshotCapture();
     }
 #endif
+}
+
+void iSnapshotCapture()
+{
+    snapshotCaptureFrame();
+
+    if (sFrameHook != NULL)
+    {
+        sFrameHook();
+    }
 }
 
 RwTexture* iSnapshotBackgroundTexture()
