@@ -38,34 +38,35 @@ namespace
 
 const iConfigSetting kConfigSettings[] = {
     { "assets", "path", "",
-      "Folder holding boot.HIP, FONT.HIP and fmv/. Empty means the folder you\n"
-      "; started the game from. BFBB_ASSETS overrides this.",
+      "Folder containing boot.HIP, font.HIP and fmv/. Empty: the folder the game\n"
+      "; starts in. BFBB_ASSETS overrides this.",
       ICONFIG_FOLDER, NULL, kNone, kNone },
     { "assets", "mod", "",
-      "Mod folder, laid out like the asset folder. Its files are read in place\n"
-      "; of the originals. Empty means none. BFBB_MOD overrides this.",
+      "Mod folder with the same layout as the asset folder. Its files replace the\n"
+      "; originals. Empty: none. BFBB_MOD overrides this.",
       ICONFIG_FOLDER, NULL, kNone, kNone },
     { "assets", "platform_wording", "on",
-      "Rewrite the Xbox wording in the game's text as it loads: dashboard,\n"
-      "; memory card slots. The port never changes the files on disk.",
+      "Replace Xbox wording (dashboard, memory cards) in the game's text. Files on\n"
+      "; disk are not changed.",
       ICONFIG_BOOL, NULL, kNone, kNone },
     { "assets", "code_menu", "on",
-      "Build the menus and talk boxes from the port's code, not mnu3-5.HIP. Off is retail.",
+      "Use the port's menus, save list and settings screen. Off: the original\n"
+      "; menus.",
       ICONFIG_BOOL, NULL, kNone, kNone },
     { "game", "boot", "",
-      "Start straight in this scene, skipping the menu: a four-character scene\n"
-      "; id like jf01. Empty starts at the menu. Overrides SB.INI's BOOT=.",
+      "Start in this scene instead of the menu: a four-character scene ID, e.g.\n"
+      "; jf01. Empty: start at the menu. Overrides SB.INI's BOOT=.",
       ICONFIG_STRING, NULL, kNone, kNone },
     { "game", "intro_movies", "on",
-      "Play the Nickelodeon, THQ and RenderWare logos before the title screen.", ICONFIG_BOOL, NULL,
+      "Play the Nickelodeon, THQ and RenderWare logos at startup.", ICONFIG_BOOL, NULL,
       kNone, kNone },
     { "game", "save_folder", "",
-      "Folder to keep saves in. Empty uses this machine's own per-user data\n"
-      "; folder. BFBB_SAVE_DIR overrides this.",
+      "Folder for saves. Empty: the per-user data folder. BFBB_SAVE_DIR overrides\n"
+      "; this.",
       ICONFIG_FOLDER, NULL, kNone, kNone },
     { "video", "mode", "borderless",
-      "Window mode: borderless, fullscreen (exclusive), windowed. Alt+Enter toggles\n"
-      "; windowed and borderless.",
+      "Window mode: borderless, fullscreen (exclusive) or windowed. Alt+Enter\n"
+      "; switches between windowed and borderless.",
       ICONFIG_ENUM, "borderless|fullscreen|windowed", kNone, kNone },
     { "video", "profile",
 #ifdef __ANDROID__
@@ -77,320 +78,293 @@ const iConfigSetting kConfigSettings[] = {
       ICONFIG_ENUM, "custom|vanilla|modern", kNone, kNone },
     { "video", "width", "640", "Render width in pixels.", ICONFIG_INT, NULL, 320.0f, 15360.0f },
     { "video", "height", "480",
-      "Render height in pixels. A shape other than 4:3 widens the view rather\n"
-      "; than stretching it.",
+      "Render height in pixels. Wider than 4:3 shows more at the sides instead of\n"
+      "; stretching.",
       ICONFIG_INT, NULL, 240.0f, 8640.0f },
     { "video", "ui", "pillarbox",
-      "Where the HUD sits on a screen wider than 4:3: pillarbox (in a centred\n"
-      "; 4:3 box), native (out at the screen edges).",
+      "HUD position on wide screens: pillarbox (inside a centered 4:3 area) or\n"
+      "; native (at the screen edges).",
       ICONFIG_ENUM, "pillarbox|native", kNone, kNone },
     { "video", "framerate", "60",
-      "Frame rate cap, simulation and picture both: a number, display for the\n"
-      "; monitor's rate, or 0 or off for none.",
+      "Frame rate cap: a number, display (the monitor's refresh rate), or 0 or off\n"
+      "; for no cap.",
       ICONFIG_INT, "display|off", 0.0f, 1000.0f },
     { "video", "vsync", "on",
-      "Wait for the display before showing a finished frame. Stops tearing and\n"
-      "; caps the rate at the refresh rate.",
+      "Wait for the display's refresh before showing a frame. Prevents tearing.",
       ICONFIG_BOOL, NULL, kNone, kNone },
     { "video", "draw_distance", "on",
-      "Draw everything however far away. Off restores the console's culling,\n"
-      "; detail swaps and 400-unit world clip.",
+      "Draw objects at any distance. Off: the original culling, level of detail and\n"
+      "; 400-unit clip.",
       ICONFIG_BOOL, NULL, kNone, kNone },
     { "video", "msaa", "1",
-      "Samples per pixel, for smoother edges: 1 (off), 2, 4, 8. A count the card\n"
-      "; will not grant falls back to off.",
+      "Anti-aliasing samples per pixel: 1 (off), 2, 4 or 8. Falls back to off if\n"
+      "; the GPU doesn't support the value.",
       ICONFIG_ENUM, "1|2|4|8", kNone, kNone },
     { "video", "fov", "75",
-      "Horizontal field of view in degrees, measured at 4:3. A wider screen\n"
-      "; shows more to the sides at the same number.",
+      "Horizontal field of view in degrees at 4:3. Wider screens show more at the\n"
+      "; sides.",
       ICONFIG_FLOAT, NULL, 30.0f, 140.0f },
     { "video", "per_pixel_lighting", "off",
-      "Light characters once per pixel instead of once per vertex.", ICONFIG_BOOL, NULL, kNone,
+      "Light characters per pixel instead of per vertex.", ICONFIG_BOOL, NULL, kNone,
       kNone },
     { "video", "backend", "auto",
-      "Which renderer draws: auto, d3d9, d3d11, gl3, or vulkan. auto takes the best\n"
-      "; one this build has; gl3 and vulkan are the ones that run off Windows.",
+      "Renderer: auto, d3d9, d3d11, gl3 or vulkan. auto picks the best one in this\n"
+      "; build. Only gl3 and vulkan run outside Windows.",
       ICONFIG_ENUM, "auto|d3d9|d3d11|gl3|vulkan", kNone, kNone },
     { "video", "pipeline", "auto",
-      "Which Direct3D 9 path draws: auto, shader, or fixed. fixed runs on cards\n"
-      "; from before 2002 and loses the glow, the distortion and per-pixel light.",
+      "Direct3D 9 rendering path: auto, shader or fixed. fixed supports pre-2002\n"
+      "; GPUs but has no glow, distortion or per-pixel lighting.",
       ICONFIG_ENUM, "auto|shader|fixed", kNone, kNone },
     { "video", "load_time", "1",
-      "Seconds to hold the loading screen for, when a load is too fast to see.\n"
-      "; fancy wipes the still off the loaded level instead. off does neither.",
+      "Minimum loading screen time in seconds. fancy: wipe to the new level\n"
+      "; instead. off: neither.",
       ICONFIG_FLOAT, "fancy|off", 0.0f, 30.0f },
     { "video", "shadow_resolution", "auto",
-      "Character shadow texture size: auto (half the render height, rounded up\n"
-      "; to a power of two), or a power of two from 64 to 4096.",
+      "Character shadow texture size: auto (half the render height, rounded up to a\n"
+      "; power of two) or a power of two from 64 to 4096.",
       ICONFIG_ENUM, "auto|64|128|256|512|1024|2048|4096", kNone, kNone },
-    { "xbox", "glow", "on", "The full-screen glow, the Xbox version's bloom.", ICONFIG_BOOL, NULL,
+    { "xbox", "glow", "on", "Xbox bloom effect.", ICONFIG_BOOL, NULL,
       kNone, kNone },
-    { "xbox", "distortion", "on", "The Cruise Bubble's screen warp.", ICONFIG_BOOL, NULL, kNone,
+    { "xbox", "distortion", "on", "Cruise Bubble screen distortion.", ICONFIG_BOOL, NULL, kNone,
       kNone },
-    { "xbox", "snapshot", "on", "Use a still of the previous level as the loading screen.",
+    { "xbox", "snapshot", "on", "Show a still of the previous level on the loading screen. Also used for save\n"
+      "; pictures.",
       ICONFIG_BOOL, NULL, kNone, kNone },
-    { "xbox", "reverb", "on", "Cave reverb, in the Mermalair and the caves.", ICONFIG_BOOL, NULL,
+    { "xbox", "reverb", "on", "Reverb in caves and the Mermalair.", ICONFIG_BOOL, NULL,
       kNone, kNone },
     { "xbox", "sound_rolloff", "on",
-      "Fade and pan a sound the way the Xbox does. Off uses the GameCube's\n"
-      "; curves, which are louder for ambients and quieter for a centred sound.",
+      "Xbox volume and panning over distance. Off: GameCube curves (louder ambient\n"
+      "; sounds, quieter centered sounds).",
       ICONFIG_BOOL, NULL, kNone, kNone },
     { "fixes", "menu_rope", "on",
-      "Draw the pause menu's bamboo frame so the rope shows at its corners.\n"
-      "; Off is the console's frame, with the corners bare.",
+      "Show the rope at the corners of the pause menu's bamboo frame. Off: the\n"
+      "; original frame without it.",
       ICONFIG_BOOL, NULL, kNone, kNone },
     { "fixes", "sky_clip", "on",
-      "Shrink a skydome too big for its level's fog to fit inside the camera.\n"
-      "; Off is the console's sky, which the camera clips away in Goo Lagoon's\n"
-      "; pier.",
+      "Shrink skydomes that are too large for the camera's far clip. Off: the\n"
+      "; original sky, which is clipped on the Goo Lagoon pier.",
       ICONFIG_BOOL, NULL, kNone, kNone },
     { "input", "controller", "auto",
-      "Which controller to play with: auto (the first one present), or 1 to 4 to\n"
-      "; pin it to that slot.",
+      "Controller to use: auto (the first one found) or 1 to 4 for a specific slot.",
       ICONFIG_INT, "auto", 1.0f, 4.0f },
     { "input", "preset", "auto",
-      "Which console's controls to start from: auto (follows the pad plugged\n"
-      "; in), xbox, ps2, gamecube. A line in [pad] wins over this.",
+      "Default controls: auto (matches the connected controller), xbox, ps2 or\n"
+      "; gamecube. Lines in [pad] override this.",
       ICONFIG_ENUM, "auto|xbox|ps2|gamecube", kNone, kNone },
     { "input", "deadzone", "auto",
-      "How far a stick must move before the game sees it, as a percentage of\n"
-      "; full deflection: auto (the controller's own), or 0 to 90.",
+      "Stick deadzone as a percentage of full movement: auto (the controller's own)\n"
+      "; or 0 to 90.",
       ICONFIG_INT, "auto", 0.0f, 90.0f },
     { "input", "camera_sensitivity", "1.0",
-      "How fast the right stick turns and pitches the camera. 1.0 is the\n"
-      "; game's own speed.",
+      "Right-stick camera speed. 1.0 is the original speed.",
       ICONFIG_FLOAT, NULL, 0.1f, 5.0f },
     { "input", "button_icons", "auto",
-      "Which controller's buttons the prompts draw: auto, xbox, gamecube, ps2,\n"
-      "; off (the ones on the disc), or a folder name under buttons/. The glyph\n"
-      "; follows your binding, not the console named here.",
+      "Button prompts: auto, xbox, gamecube, ps2, off (the original prompts) or a\n"
+      "; folder name under buttons/. Prompts follow your bindings.",
       ICONFIG_STRING, "auto|xbox|gamecube|ps2|off", kNone, kNone },
     { "input", "touch_controls", "auto",
-      "On-screen controls for a touchscreen: auto (on for Android), on, off.",
+      "On-screen touch controls: auto (on for Android), on or off.",
       ICONFIG_ENUM, "auto|on|off", kNone, kNone },
     { "audio", "soundtrack", "",
-      "Folder of your own music to play instead of the game's. Empty uses the\n"
-      "; game's. The port matches a file to a track by asset name, or by a\n"
-      "; soundtrack.txt beside them holding one 'asset name = file' per line.",
+      "Folder with replacement music. Empty: the game's music. Files are matched to\n"
+      "; tracks by asset name, or by 'asset name = file' lines in a soundtrack.txt.",
       ICONFIG_FOLDER, NULL, kNone, kNone },
     { "font", "face", "",
-      "A .ttf to draw the game's text with, or empty for the game's own font.\n"
-      "; Sharper than the game's atlas above 640x480. No font ships with the\n"
-      "; port. tools/getfont.py fetches one and prints the line to paste here.",
+      "A .ttf font for the game's text. Empty: the original font. No font is\n"
+      "; included; tools/getfont.py downloads one and prints the line to paste here.",
       ICONFIG_FONT, NULL, kNone, kNone },
     { "font", "sans", "auto",
-      "The same, for the sans serif on the copyright, memory card and\n"
-      "; controller screens. auto uses the system's Arial, which is the face\n"
-      "; that atlas is. off leaves those screens as the game has them.",
+      "Font for the copyright, memory card and controller screens. auto: the\n"
+      "; system's Arial, the original typeface. off: the original rendering.",
       ICONFIG_FONT, "auto|off", kNone, kNone },
     { "font", "upscale", "0",
-      "How many times the game's own cell resolution to draw the face at, or\n"
-      "; 0 to match the render size. Higher is sharper, and the glyph lands in\n"
-      "; the same cell either way.",
+      "Font rendering scale as a multiple of the original glyph size, or 0 to match\n"
+      "; the render size. Higher is sharper.",
       ICONFIG_INT, NULL, 0.0f, 8.0f },
     { "font", "padding", "auto",
-      "How far to inset a glyph inside its atlas cell, in the game's own atlas\n"
-      "; pixels, or auto to measure it. Larger is smaller letters. Negative\n"
-      "; grows them past the cell.",
+      "Glyph inset within its cell, in original atlas pixels, or auto to measure\n"
+      "; it. Larger values make smaller letters; negative values make larger ones.",
       ICONFIG_FLOAT, "auto", -8.0f, 8.0f },
     { "font", "fit", "box",
-      "How each glyph fills the space the game's own letter took: box (stretch\n"
-      "; it to fit), width (keep the height, let the width be the face's),\n"
-      "; natural (no fitting at all).",
+      "How glyphs fill the original letter space: box (stretch to fit), width (keep\n"
+      "; the height, use the font's width) or natural (no fitting).",
       ICONFIG_ENUM, "box|width|natural", kNone, kNone },
-    { "font", "sans_fit", "natural", "The same, for the sans face.", ICONFIG_ENUM,
+    { "font", "sans_fit", "natural", "Same as fit, for the sans font.", ICONFIG_ENUM,
       "box|width|natural", kNone, kNone },
     { "experimental", "hipoly_assets", "off",
-      "Smooth the level and its models into curved surfaces as they load.\n"
-      "; Loads take a few seconds longer.",
+      "Smooth level and model geometry into curved surfaces at load. Adds a few\n"
+      "; seconds to loads.",
       ICONFIG_BOOL, NULL, kNone, kNone },
     { "experimental", "hipoly_factor", "1.0",
-      "How far the smoothing rounds things: scales every bulge and the\n"
-      "; fillet. 2.0 rounds twice as far, 0 rounds nothing.",
+      "Amount of rounding. 2.0 doubles it; 0 disables it.",
       ICONFIG_FLOAT, NULL, 0.0f, 8.0f, "hipoly_assets" },
     { "experimental", "hipoly_target", "1.0",
-      "Edge length the level is cut to, in units. Smaller is finer and slower.", ICONFIG_FLOAT,
+      "Target edge length for the level, in units. Smaller is finer and slower.", ICONFIG_FLOAT,
       NULL, 0.05f, 8.0f, "hipoly_assets" },
-    { "experimental", "hipoly_max_level", "6", "Most segments an edge is cut into.", ICONFIG_INT,
+    { "experimental", "hipoly_max_level", "6", "Maximum segments per edge.", ICONFIG_INT,
       NULL, 1.0f, 15.0f, "hipoly_assets" },
     { "experimental", "hipoly_passes", "2",
-      "Times the smoothing runs over a model, each pass over the last pass's\n"
-      "; mesh. More is smoother and slower to load. The level gets one pass.",
+      "Smoothing passes for models. More is smoother and slower to load. The level\n"
+      "; always gets one pass.",
       ICONFIG_INT, NULL, 1.0f, 4.0f, "hipoly_assets" },
     { "experimental", "hipoly_crease", "60",
-      "Degrees. Built surfaces folded sharper than this keep the fold.", ICONFIG_FLOAT, NULL, 0.0f,
+      "Angle in degrees above which folds in built surfaces stay sharp.", ICONFIG_FLOAT, NULL, 0.0f,
       180.0f, "hipoly_assets" },
     { "experimental", "hipoly_natural_crease", "100",
-      "The same for rock, sand, kelp and other landscape.", ICONFIG_FLOAT, NULL, 0.0f, 180.0f,
+      "Same as hipoly_crease, for rock, sand, kelp and other terrain.", ICONFIG_FLOAT, NULL, 0.0f, 180.0f,
       "hipoly_assets" },
     { "experimental", "hipoly_fillet", "0",
-      "Units. How far from a sharp landscape fold the rounding reaches; 0 is off.\n"
-      "; 1.5 rounds the rock's folds over, at the cost of some flattened detail.",
+      "How far rounding reaches from sharp terrain folds, in units. 0: off. 1.5\n"
+      "; rounds rock edges but flattens some detail.",
       ICONFIG_FLOAT, NULL, 0.0f, 10.0f, "hipoly_assets" },
-    { "experimental", "hipoly_model_target", "0.25", "Edge length models are cut to, in units.",
+    { "experimental", "hipoly_model_target", "0.25", "Target edge length for models, in units.",
       ICONFIG_FLOAT, NULL, 0.02f, 4.0f, "hipoly_assets" },
     { "experimental", "hipoly_inset", "0.75",
-      "How much of the rounding cuts corners in rather than bowing faces\n"
-      "; out, on the level and its models: 0 bows out only, 1 cuts in only.",
+      "Rounding style for the level and models: 0 bulges faces outward, 1 cuts\n"
+      "; corners inward.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "hipoly_assets" },
     { "experimental", "hipoly_flat_floors", "covered",
-      "Which floors and ceilings keep their shipped height: covered (those\n"
-      "; with a decal or another face lying on them), all, or off, which\n"
-      "; lets every gentle face bow, through whatever lies on it.",
+      "Floors and ceilings that keep their original height: covered (those under a\n"
+      "; decal or another face), all, or off (any may bulge).",
       ICONFIG_ENUM, "covered|all|off", kNone, kNone, "hipoly_assets" },
     { "experimental", "hipoly_budget", "600000",
-      "Most triangles a level's world may have; the cut coarsens past it.", ICONFIG_INT, NULL,
+      "Maximum triangles in a level's geometry. Smoothing is coarsened above it.", ICONFIG_INT, NULL,
       10000.0f, 4000000.0f, "hipoly_assets" },
     { "experimental", "world_lighting", "off",
-      "Light the level as the game runs instead of using its painted colour: off,\n"
-      "; on (its own kit, where it has one), or bake (a rig fitted to the paint).\n"
-      "; A shipped level loses the occlusion and bounce its paint recorded.",
+      "Real-time level lighting instead of painted vertex colors: off, on (the\n"
+      "; level's own light kit, if any) or bake (lights fitted to the vertex colors).\n"
+      "; Loses the shading baked into the colors.",
       ICONFIG_ENUM, "off|on|bake", kNone, kNone },
     { "experimental", "world_light_contrast", "1",
-      "Spread between the lit and shaded sides of a level lit by bake. 1 is the\n"
-      "; rig as fitted. Higher clips the lit end, and each level caps its own.",
+      "Contrast between lit and shaded areas with bake lighting. 1: as fitted.\n"
+      "; Higher values clip bright areas; each level has its own cap.",
       ICONFIG_FLOAT, NULL, 0.0f, 4.0f, "world_lighting" },
     { "experimental", "world_model_shade", "0.8",
-      "How much shade the level's placed models throw on the level. Traced over\n"
-      "; the day at load. Needs toon on and world_light_shadows off.",
+      "Shade cast by placed models onto the level, computed at load. Requires toon\n"
+      "; on and world_light_shadows off.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "world_lighting" },
     { "experimental", "world_light_shadows", "off",
-      "Darken the parts of a level its own geometry hides from the light. Traced\n"
-      "; at load, so the light cannot move afterwards. Coarse: the shadow can\n"
-      "; only land on a vertex, and a level has few.",
+      "Shadows from the level's own geometry, computed at load, so the light can't\n"
+      "; move. Low detail: only vertices can be shadowed.",
       ICONFIG_BOOL, NULL, kNone, kNone, "world_lighting" },
     { "experimental", "day_night_cycle", "off",
-      "Seconds for the sun to go all the way round, or off. Needs world\n"
-      "; lighting on and world_light_shadows off.",
+      "Length of a day in seconds, or off. Requires world lighting on and\n"
+      "; world_light_shadows off.",
       ICONFIG_FLOAT, "off", 5.0f, 3600.0f, "world_lighting" },
     { "experimental", "solid_flat_props", "on",
-      "Give a prop modelled as a flat sheet real thickness, so an outline has\n"
-      "; something to go round. Costs a few hundred triangles each.",
+      "Give flat props some thickness so outlines can go around them. Adds a few\n"
+      "; hundred triangles per prop.",
       ICONFIG_BOOL, NULL, kNone, kNone },
     { "experimental", "toon", "off",
-      "Draw the game like the cartoon it came from: light cut into steps,\n"
-      "; colour pushed from grey, a line round each character.",
+      "Cartoon rendering: stepped lighting, stronger colors and outlines around\n"
+      "; characters.",
       ICONFIG_BOOL, NULL, kNone, kNone },
     { "experimental", "world_outline", "on",
-      "Draw the level itself with a line round it, the way the models are.\n"
-      "; Needs toon on. The level is drawn twice, so it costs a frame.",
+      "Outline the level as well as models. Requires toon on. Draws the level\n"
+      "; twice.",
       ICONFIG_BOOL, NULL, kNone, kNone, "toon" },
     { "experimental", "toon_all", "on",
-      "Cel-shade and ink every model the game draws, not just the characters.\n"
-      "; The level itself keeps its painted lighting either way.",
+      "Apply cel shading and outlines to all models, not only characters. The level\n"
+      "; keeps its painted lighting.",
       ICONFIG_BOOL, NULL, kNone, kNone, "toon" },
     { "experimental", "toon_strength", "0.4",
-      "How far the stylised shading is taken against the plain lighting. 0 is\n"
-      "; the game as it was, 1 is hard bands with no falloff at all.",
+      "Strength of the cel shading. 0: the original lighting. 1: hard bands with no\n"
+      "; falloff.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
     { "experimental", "toon_bands", "3",
-      "Steps the light is cut into. 2 is a lit side and a shadow side with one\n"
-      "; hard line between them.",
+      "Number of lighting steps. 2: one lit tone and one shaded tone.",
       ICONFIG_FLOAT, NULL, 1.0f, 8.0f, "toon" },
     { "experimental", "toon_saturation", "1.5",
-      "How far colour is pushed away from grey, brightness held. 1 leaves it\n"
-      "; alone.",
+      "Color saturation boost at constant brightness. 1: unchanged.",
       ICONFIG_FLOAT, NULL, 0.0f, 3.0f, "toon" },
     { "experimental", "toon_light", "scene",
-      "Where a character's shading is measured from: the room's brightest\n"
-      "; light, his own front, or the camera.",
+      "Where character shading is measured from: the brightest room light, the\n"
+      "; character's front, or the camera.",
       ICONFIG_ENUM, "scene|face|camera", kNone, kNone, "toon" },
     { "experimental", "toon_colors", "0",
-      "Shades each colour on a character is rounded to, to put back the\n"
-      "; flatness a magnified 2003 texture lost. 0 leaves them alone.",
+      "Shades per color on characters, to flatten upscaled textures. 0: unchanged.",
       ICONFIG_FLOAT, NULL, 0.0f, 32.0f, "toon" },
     { "experimental", "toon_outline", "0.05",
-      "Thickness of the black line round each character, in world units.\n"
-      "; SpongeBob is about two units tall. 0 turns it off.",
+      "Character outline thickness in world units. SpongeBob is about 2 units tall.\n"
+      "; 0: off.",
       ICONFIG_FLOAT, NULL, 0.0f, 0.2f, "toon" },
     { "experimental", "toon_room_level", "1.25",
-      "How strongly a level's own brightness shows in its shading. 1 shades it by\n"
-      "; what its paint says, above that exaggerates, and an exterior is untouched.",
+      "How much a level's brightness affects shading. 1: as painted. Higher values\n"
+      "; exaggerate it. Outdoor levels are unaffected.",
       ICONFIG_FLOAT, NULL, 1.0f, 4.0f, "toon" },
     { "experimental", "toon_ink", "0.45",
-      "How dark a character's line is against the surface it goes round. A true\n"
-      "; black stays black at any value.",
+      "Outline darkness relative to the surface. Black stays black at any value.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
     { "experimental", "toon_ink_saturation", "1.5",
-      "How much colour a character's line keeps. 1 is the surface darkened, above\n"
-      "; it the line holds its hue instead of washing towards grey.",
+      "Outline color saturation. 1: the surface color, darkened. Higher values keep\n"
+      "; more of the hue.",
       ICONFIG_FLOAT, NULL, 0.0f, 3.0f, "toon" },
     { "experimental", "toon_ink_gamma", "0.85",
-      "A curve on the line's brightness. Under 1 lifts its middle and leaves both\n"
-      "; ends where they are.",
+      "Brightness curve for outlines. Below 1 brightens the midtones.",
       ICONFIG_FLOAT, NULL, 0.2f, 2.0f, "toon" },
     { "experimental", "toon_outline_min", "1.5",
-      "How thin that line may get, in pixels, so a distant character does not\n"
-      "; stop being inked. 0 lets it vanish.",
+      "Minimum outline thickness in pixels, so distant characters keep an outline.\n"
+      "; 0: no minimum.",
       ICONFIG_FLOAT, NULL, 0.0f, 8.0f, "toon" },
     { "experimental", "toon_outline_max", "4",
-      "How thick that line may get, so a character close to the camera is not\n"
-      "; inked in marker. In pixels of a 1440-line picture, so its weight holds at\n"
-      "; any resolution. 0 lets it swell.",
+      "Maximum outline thickness in pixels at 1440p, scaled for other resolutions.\n"
+      "; 0: no maximum.",
       ICONFIG_FLOAT, NULL, 0.0f, 16.0f, "toon" },
     { "experimental", "toon_flat_strength", "0.75",
-      "How hard the cel shading bites on a prop built of flat panels. Its own,\n"
-      "; because a panel holds one tone across a whole face.",
+      "Cel shading strength on props made of flat panels.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
     { "experimental", "toon_sky_bright", "on",
-      "Draw a skydome at full strength, dropping the gradient painted into its\n"
-      "; vertex colours. Off is the sky the console drew.",
+      "Draw skydomes at full brightness, without their painted gradient. Off: the\n"
+      "; original sky.",
       ICONFIG_BOOL, NULL, kNone, kNone, "toon" },
     { "experimental", "toon_tiki_rim", "off",
-      "Let a tiki take the rim light. Its welded corners turn the facing across\n"
-      "; a whole face, so the light lands as a stripe rather than an edge.",
+      "Rim lighting on tikis. Their welded corners make it show as a stripe.",
       ICONFIG_BOOL, NULL, kNone, kNone, "toon" },
     { "experimental", "toon_flat_smooth", "on",
-      "Average the corners of a prop built of flat panels, so its shading and\n"
-      "; its rim travel round it instead of stepping face to face.",
+      "Smooth normals on props made of flat panels, so shading and rim light change\n"
+      "; gradually across faces.",
       ICONFIG_BOOL, NULL, kNone, kNone, "toon" },
     { "experimental", "toon_flat_rim", "on",
-      "Whether a prop built of flat panels catches the rim light. Off is for one\n"
-      "; left faceted, where the band lands square across a face.",
+      "Rim lighting on props made of flat panels. Turn off for faceted props, where\n"
+      "; it shows as square bands.",
       ICONFIG_BOOL, NULL, kNone, kNone, "toon" },
     { "experimental", "toon_outline_bias", "0",
-      "How far the line gives way to whatever a model stands against, in widths\n"
-      "; of the line. -1 is the model's own surface.",
+      "How far outlines give way to what is behind the model, in outline widths.\n"
+      "; -1: the model's own surface.",
       ICONFIG_FLOAT, NULL, -8.0f, 8.0f, "toon" },
     { "experimental", "toon_text_brightness", "1.35",
-      "How far the cel look lifts the game's text, which is painted for a scene\n"
-      "; that is not this one. 1 leaves it alone.",
+      "Brightness boost for text under the cartoon look. 1: unchanged.",
       ICONFIG_FLOAT, NULL, 0.25f, 4.0f, "toon" },
     { "experimental", "toon_text_saturation", "1.2",
-      "How far it pushes that text off grey, the way it pushes every surface\n"
-      "; round it. 1 leaves it alone.",
+      "Saturation boost for text under the cartoon look. 1: unchanged.",
       ICONFIG_FLOAT, NULL, 0.0f, 3.0f, "toon" },
     { "experimental", "toon_wrap", "0",
-      "How far the shading carries round a character's far side, giving it\n"
-      "; somewhere to put a second tone. 0 is the hard horizon.",
+      "How far shading wraps around a character's far side, leaving room for a\n"
+      "; second tone. 0: a hard edge.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
     { "experimental", "toon_rim", "0.25",
-      "How brightly a character's silhouette catches the room's colour, which\n"
-      "; is what keeps a dark character legible on a dark background.",
+      "Brightness of the rim light on character silhouettes. Keeps dark characters\n"
+      "; visible on dark backgrounds.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
     { "experimental", "toon_rim_blend", "room",
-      "How the silhouette light is put on: towards the room's colour, screened\n"
-      "; over the surface, or added.",
+      "How rim light is applied: toward the room's color, screened over the\n"
+      "; surface, or added.",
       ICONFIG_ENUM, "room|screen|add", kNone, kNone, "toon" },
     { "experimental", "toon_occlusion", "0",
-      "How far the colour baked into a model darkens its own shading. It is\n"
-      "; occlusion somebody drew, and no light rig recovers it.",
+      "How much a model's baked vertex colors darken its shading.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
     { "experimental", "toon_goo_wave", "0.35",
-      "How steep the goo's ripple is made to look, as a slope. 0 shades it by\n"
-      "; the real one, which the levels author at half a degree.",
+      "Apparent steepness of goo ripples, as a slope. 0: the level's actual ripple.",
       ICONFIG_FLOAT, NULL, 0.0f, 2.0f, "toon" },
     { "experimental", "toon_goo_gloss", "0.5",
-      "How brightly the goo catches a highlight under the cel look. It is one\n"
-      "; hard band and not a falloff, so it reads as a glint.",
+      "Brightness of the goo's highlight under the cartoon look.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
     { "experimental", "toon_goo_gloss_edge", "0.92",
-      "How far round the goo's surface that highlight starts. Higher is a\n"
-      "; smaller, tighter glint.",
+      "Where the goo highlight starts. Higher: a smaller, tighter highlight.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
     { "experimental", "toon_hardness", "0",
-      "How square the shading breaks at a corner, against the welded normals\n"
-      "; the outline needs. 0 keeps the weld.",
+      "How sharply shading breaks at corners, against the smoothed normals outlines\n"
+      "; need. 0: fully smoothed.",
       ICONFIG_FLOAT, NULL, 0.0f, 1.0f, "toon" },
 };
 
@@ -502,7 +476,7 @@ bool iConfigTableValidate(const iConfigSetting* setting, const char* value, char
     case ICONFIG_BOOL:
         if (!isBool(value))
         {
-            say(why, whySize, "Has to be on or off.");
+            say(why, whySize, "Must be on or off.");
             return false;
         }
         return true;
@@ -511,7 +485,7 @@ bool iConfigTableValidate(const iConfigSetting* setting, const char* value, char
         // isChoice above was the whole test, so reaching here is a failure.
         {
             char text[256];
-            snprintf(text, sizeof(text), "Has to be one of: %s", setting->choices);
+            snprintf(text, sizeof(text), "Must be one of: %s", setting->choices);
             for (char* p = text; *p != '\0'; p++)
             {
                 if (*p == '|')
@@ -532,7 +506,7 @@ bool iConfigTableValidate(const iConfigSetting* setting, const char* value, char
             char text[256];
             if (setting->choices != NULL)
             {
-                snprintf(text, sizeof(text), "Has to be a number, or one of: %s", setting->choices);
+                snprintf(text, sizeof(text), "Must be a number or one of: %s", setting->choices);
                 for (char* p = text; *p != '\0'; p++)
                 {
                     if (*p == '|')
@@ -543,7 +517,7 @@ bool iConfigTableValidate(const iConfigSetting* setting, const char* value, char
             }
             else
             {
-                snprintf(text, sizeof(text), "Has to be a number.");
+                snprintf(text, sizeof(text), "Must be a number.");
             }
             say(why, whySize, text);
             return false;
@@ -551,14 +525,14 @@ bool iConfigTableValidate(const iConfigSetting* setting, const char* value, char
 
         if (setting->kind == ICONFIG_INT && n != (double)(long)n)
         {
-            say(why, whySize, "Has to be a whole number.");
+            say(why, whySize, "Must be a whole number.");
             return false;
         }
 
         if (setting->min != setting->max && (n < setting->min || n > setting->max))
         {
             char text[128];
-            snprintf(text, sizeof(text), "Outside the usual range, %g to %g.", setting->min,
+            snprintf(text, sizeof(text), "Must be between %g and %g.", setting->min,
                      setting->max);
             say(why, whySize, text);
             return false;

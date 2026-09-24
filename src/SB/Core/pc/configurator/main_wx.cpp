@@ -123,7 +123,7 @@ namespace
         {
             text << does << ". ";
         }
-        text << "Empty is the default: " << def << ".";
+        text << "Default: " << def << ".";
         return text;
     }
 
@@ -348,7 +348,7 @@ namespace
 
             wxString prompt = device == CONFIG_MODEL_KEYBOARD
                                   ? "Press a key for " + what + "."
-                                  : "Press a button on the controller for " + what + ".";
+                                  : "Press a controller button for " + what + ".";
 
             wxStaticText* text = new wxStaticText(this, wxID_ANY, prompt);
             mStatus = new wxStaticText(this, wxID_ANY, "Esc cancels.");
@@ -385,7 +385,7 @@ namespace
         void ShowPadStatus()
         {
             mStatus->SetLabel(AnyPad() ? "Esc cancels."
-                                       : "No controller found. Connect one, or Esc to cancel.");
+                                       : "No controller found. Connect one, or press Esc to cancel.");
         }
 
         void OnCharHook(wxKeyEvent& event)
@@ -405,7 +405,7 @@ namespace
             const wxString token = KeyToken(event);
             if (token.empty())
             {
-                mStatus->SetLabel("That key has no name in config.ini. Try another, or Esc.");
+                mStatus->SetLabel("That key can't be bound. Press another key, or Esc to cancel.");
                 return;
             }
 
@@ -759,8 +759,8 @@ namespace
                                      wxDefaultSize, wxBU_EXACTFIT);
         wxButton* add = new wxButton(mPane, id + kIdRowAdd, "Add...", wxDefaultPosition,
                                      wxDefaultSize, wxBU_EXACTFIT);
-        set->SetToolTip("Replace the binding with the next key or button pressed");
-        add->SetToolTip("Add the next key or button pressed as another way to press this");
+        set->SetToolTip("Replace the binding with the next key or button you press");
+        add->SetToolTip("Add another key or button for this action");
 
         wxBoxSizer* buttons = new wxBoxSizer(wxHORIZONTAL);
         buttons->Add(set, wxSizerFlags().Border(wxRIGHT, FromDIP(4)));
@@ -840,13 +840,12 @@ namespace
             wxStaticText* intro = new wxStaticText(
                 mPane, wxID_ANY,
                 device == CONFIG_MODEL_KEYBOARD
-                    ? "The game's buttons, and the keys that press them. Several keys are "
-                      "written with ',' between them, keys held together with '+', and a key "
-                      "that must not be held with '!'. The left stick is WASD and the camera "
-                      "stick IJKL; those are not bindings."
-                    : "The game's buttons, and the controller inputs that press them, by "
-                      "position: a is the bottom face button on any pad. ',' '+' and '!' work "
-                      "as on the keyboard page. Empty follows input.preset.");
+                    ? "Keys for each game button. Separate alternatives with ',', keys held "
+                      "together with '+', and keys that must not be held with '!'. Movement "
+                      "(WASD) and camera (IJKL) keys are fixed."
+                    : "Controller inputs for each game button, by position: a is the bottom "
+                      "face button on any controller. ',', '+' and '!' work as on the keyboard "
+                      "page. Empty: follow input.preset.");
             intro->Wrap(FromDIP(520));
             mGrid->Add(intro, wxGBPosition(line, 0), wxGBSpan(1, 3), wxEXPAND | wxBOTTOM,
                        FromDIP(12));
@@ -1163,7 +1162,7 @@ namespace
 
         if (result == CONFIG_MODEL_BAD_VALUE)
         {
-            wxMessageBox(why, "That value will not do", wxOK | wxICON_WARNING, this);
+            wxMessageBox(why, "Invalid value", wxOK | wxICON_WARNING, this);
             ShowSection(section);
             return false;
         }
@@ -1187,8 +1186,8 @@ namespace
             return true;
         }
 
-        return wxMessageBox("Changed settings have not been written to config.ini.\n\n"
-                            "Close and lose them?",
+        return wxMessageBox("Your changes have not been saved to config.ini.\n\n"
+                            "Close without saving?",
                             "Unsaved changes", wxYES_NO | wxICON_WARNING, this) == wxYES;
     }
 

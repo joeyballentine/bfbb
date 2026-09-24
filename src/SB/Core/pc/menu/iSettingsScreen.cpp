@@ -189,51 +189,51 @@ namespace
     const Setting kSettings[] = {
         { TAB_DISPLAY, "Window", "video.mode", "borderless|windowed|fullscreen",
           "Borderless|Windowed|Fullscreen", NOW,
-          "Borderless covers the screen without taking it over. Alt+Enter switches too.",
+          "Borderless fills the screen as a window. Alt+Enter also switches.",
           ApplyMode, true },
         { TAB_DISPLAY, "Resolution", "video.resolution", NULL, NULL, RESTART,
-          "The size the game renders at. The picture is scaled to the window.", NULL, false },
+          "Rendering resolution. The image is scaled to fit the window.", NULL, false },
         { TAB_DISPLAY, "VSync", "video.vsync", "on|off", "On|Off", NOW,
-          "Wait for the display between frames, so the picture does not tear.", ApplyVSync,
+          "Wait for the display's refresh before showing a frame. Prevents tearing.", ApplyVSync,
           false },
         { TAB_DISPLAY, "Frame rate limit", "video.framerate", "30|60|120|144|165|240|display|off",
           "30|60|120|144|165|240|Monitor|Unlimited", NOW,
-          "The most frames a second the game runs at. 60 is the console's.", ApplyFrameRate,
+          "Maximum frames per second. 60 is the original.", ApplyFrameRate,
           false },
         { TAB_DISPLAY, "Field of view", "video.fov", "60|65|70|75|80|85|90|95|100|105|110", NULL, NOW,
-          "How wide the camera sees, in degrees across a 4:3 picture. 75 is the console's.",
+          "Horizontal field of view in degrees at 4:3. 75 is the original.",
           ApplyFOV, false },
-        { TAB_DISPLAY, "HUD layout", "video.ui", "pillarbox|native", "4:3, as the console|Screen edges", NOW,
-          "Where the HUD sits on a wide screen.", ApplyUI, false },
+        { TAB_DISPLAY, "HUD layout", "video.ui", "pillarbox|native", "4:3 (original)|Screen edges", NOW,
+          "HUD position on wide screens.", ApplyUI, false },
         { TAB_DISPLAY, "Draw distance", "video.draw_distance", "on|off", "Unlimited|Console", NEXT_AREA,
-          "How far away things are still drawn.", ApplyDrawDistance, false },
+          "How far away objects are drawn.", ApplyDrawDistance, false },
         { TAB_DISPLAY, "Anti-aliasing", "video.msaa", "1|2|4|8", "Off|2x|4x|8x", RESTART,
-          "Smooths jagged edges, at a cost in speed.", NULL, false },
+          "Smooths jagged edges. Lowers performance.", NULL, false },
         { TAB_EFFECTS, "Glow", "xbox.glow", "on|off", "On|Off", NOW,
-          "The Xbox version's soft glow around bright things.", ApplyGlow, false },
+          "Xbox bloom effect.", ApplyGlow, false },
         { TAB_EFFECTS, "Screen warps", "xbox.distortion", "on|off", "On|Off", NOW,
-          "The Xbox version's heat-haze and cruise-bubble screen effects.", ApplyDistortion,
+          "Cruise Bubble screen distortion.", ApplyDistortion,
           false },
         { TAB_EFFECTS, "Loading-screen still", "xbox.snapshot", "on|off", "On|Off", NOW,
-          "Show the level being left behind the loading screen. Save pictures need it.",
+          "Show a still of the previous level on the loading screen. Also used for save pictures.",
           ApplySnapshot, false },
         { TAB_EFFECTS, "Cave echo", "xbox.reverb", "on|off", "On|Off", NEXT_AREA,
-          "The Xbox version's echo in caves and big rooms.", NULL, false },
+          "Reverb in caves and the Mermalair.", NULL, false },
         { TAB_CONTROLS, "Keyboard buttons", "bind.keyboard", "", "Change", NOW,
-          "Which keys press each of the game's buttons.", NULL, false },
+          "Keys for each game button.", NULL, false },
         { TAB_CONTROLS, "Controller buttons", "bind.pad", "", "Change", NOW,
-          "Which controller buttons press each of the game's buttons.", NULL, false },
+          "Controller buttons for each game button.", NULL, false },
         { TAB_CONTROLS, "Stick deadzone", "input.deadzone", "auto|5|10|15|20|25|30",
-          "Controller's own|5%|10%|15%|20%|25%|30%", NOW,
-          "How far a stick moves before the game notices.", ApplyDeadzone, false },
+          "Auto|5%|10%|15%|20%|25%|30%", NOW,
+          "How far a stick moves before input registers.", ApplyDeadzone, false },
         { TAB_CONTROLS, "Button pictures", "input.button_icons", "auto|xbox|gamecube|ps2|off",
-          "Match the controller|Xbox|GameCube|PlayStation|The game's own", NOW,
-          "Which controller's buttons the prompts show.", ApplyIcons, false },
+          "Auto|Xbox|GameCube|PlayStation|Original", NOW,
+          "Controller type shown in button prompts.", ApplyIcons, false },
         { TAB_CONTROLS, "Camera speed", "input.camera_sensitivity", "0.5|0.75|1.0|1.25|1.5|2.0",
-          "0.5x|0.75x|1x|1.25x|1.5x|2x", NOW, "How fast the right stick turns the camera.",
+          "0.5x|0.75x|1x|1.25x|1.5x|2x", NOW, "Right-stick camera speed.",
           ApplyCameraSpeed, false },
         { TAB_GAME, "Intro movies", "game.intro_movies", "on|off", "On|Off", RESTART,
-          "The logos before the title screen.", NULL, false },
+          "Logos shown at startup.", NULL, false },
     };
     const S32 kCount = (S32)(sizeof(kSettings) / sizeof(kSettings[0]));
 
@@ -507,11 +507,11 @@ namespace
         else
         {
             const Setting& s = Selected();
-            const char* when = s.when == RESTART     ? "{n}Takes effect when the game next starts."
-                               : s.when == NEXT_AREA ? "{n}Takes effect in the next area."
+            const char* when = s.when == RESTART     ? "{n}Applies after restart."
+                               : s.when == NEXT_AREA ? "{n}Applies in the next area."
                                                      : "{n}";
             snprintf(help, sizeof(help), "%s%s%s", s.help, when,
-                     sRestart ? "{n}Some changes wait for the game to restart." : "");
+                     sRestart ? "{n}Some changes apply after restart." : "");
         }
         iAssetTextSet(xStrHash(ISETTINGS_HELP_TEXT), help);
     }
@@ -595,8 +595,8 @@ namespace
 
             char text[160];
             snprintf(text, sizeof(text),
-                     "Keep this? {i:button_picture_01} keeps it, {i:button_picture_03} puts it "
-                     "back.{n}Putting it back in %d.",
+                     "Keep this setting? {i:button_picture_01} Keep  {i:button_picture_03} Revert{n}"
+                     "Reverting in %d.",
                      (int)left);
             DrawHelp(text);
 
@@ -681,15 +681,15 @@ namespace
         if (sel == kPadBindButtonCount)
         {
             snprintf(text, sizeof(text),
-                     "Put every binding on this page back to the default.{n}"
-                     "{i:button_picture_03} goes back.");
+                     "Reset every binding on this page to its default.{n}"
+                     "{i:button_picture_03} Back");
         }
         else
         {
             const char* does = kPadBindButtons[sel].does;
-            snprintf(text, sizeof(text), "%s%s{n}{i:button_picture_01} changes it, "
-                     "{i:button_picture_03} goes back.",
-                     does != NULL ? "In the game: " : "", does != NULL ? does : "");
+            snprintf(text, sizeof(text), "%s%s{n}{i:button_picture_01} Change  "
+                     "{i:button_picture_03} Back",
+                     does != NULL ? "Action: " : "", does != NULL ? does : "");
         }
         DrawHelp(text);
     }
@@ -713,7 +713,7 @@ namespace
             }
 
             char help[160];
-            snprintf(help, sizeof(help), "Press the %s for %s.{n}Escape leaves it alone (%d).",
+            snprintf(help, sizeof(help), "Press a %s for %s.{n}Esc to cancel (%d).",
                      pad ? "controller button" : "key",
                      row < kBindLabelCount ? kBindLabels[row] : kPadBindButtons[row].name,
                      (int)left);

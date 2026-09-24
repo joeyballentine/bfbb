@@ -256,8 +256,8 @@ bool ConfigModelOpen(const char* fromCommandLine, char* why, size_t whySize)
     if (gModel.file == NULL)
     {
         snprintf(why, whySize,
-                 "%s could not be read, and one could not be written there either.\n\n"
-                 "Run the game once to have it write a config.ini, or start this with the "
+                 "%s could not be read or created.\n\n"
+                 "Run the game once to create a config.ini, or start this program with the "
                  "path to one.",
                  gModel.path);
         ConfigModelClose();
@@ -481,7 +481,7 @@ void ConfigModelBindDescribeDefault(ConfigModelDevice device, S32 row, char* out
 
     if (automatic)
     {
-        snprintf(out, outSize, "%s (xbox preset; auto follows the controller)", what);
+        snprintf(out, outSize, "%s (xbox preset; auto matches the controller)", what);
     }
     else
     {
@@ -553,9 +553,9 @@ ConfigModelResult ConfigModelSave(char* why, size_t whySize, S32* badSetting, S3
             }
 
             snprintf(why, whySize,
-                     "%s.%s is \"%s\".\n\nA binding is input names from the list, with ',' "
-                     "between alternatives, '+' for inputs held together and '!' for one "
-                     "that must not be held.",
+                     "%s.%s is \"%s\", which is not a valid binding.\n\nUse input names "
+                     "separated by ',' (alternatives), '+' (held together) or '!' (must not "
+                     "be held).",
                      kDeviceSections[d], kPadBindButtons[i].name, text);
             if (badSetting != NULL)
             {
@@ -578,7 +578,7 @@ ConfigModelResult ConfigModelSave(char* why, size_t whySize, S32* badSetting, S3
         }
         if (!iConfigEditSet(gModel.file, s->section, s->name, gModel.values[i].text))
         {
-            snprintf(why, whySize, "There is no room left in config.ini for another line.");
+            snprintf(why, whySize, "config.ini is full; no more lines can be added.");
             return CONFIG_MODEL_NO_ROOM;
         }
     }
@@ -600,7 +600,7 @@ ConfigModelResult ConfigModelSave(char* why, size_t whySize, S32* badSetting, S3
 
             if (!iConfigEditSet(gModel.file, kDeviceSections[d], kPadBindButtons[i].name, v->text))
             {
-                snprintf(why, whySize, "There is no room left in config.ini for another line.");
+                snprintf(why, whySize, "config.ini is full; no more lines can be added.");
                 return CONFIG_MODEL_NO_ROOM;
             }
             v->present = true;
@@ -609,7 +609,7 @@ ConfigModelResult ConfigModelSave(char* why, size_t whySize, S32* badSetting, S3
 
     if (!iConfigEditSave(gModel.file, gModel.path))
     {
-        snprintf(why, whySize, "%s could not be written to.", gModel.path);
+        snprintf(why, whySize, "Could not write to %s.", gModel.path);
         return CONFIG_MODEL_WRITE_FAILED;
     }
 
@@ -682,7 +682,7 @@ bool ConfigModelStartGame(char* why, size_t whySize)
     // "the folder the game was started from", so this is not cosmetic.
     if (!iHostRunDetached(exe, dir))
     {
-        snprintf(why, whySize, "%s would not start.", exe);
+        snprintf(why, whySize, "Could not start %s.", exe);
         return false;
     }
 
