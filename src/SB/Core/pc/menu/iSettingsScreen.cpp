@@ -23,6 +23,7 @@
 #include <rwcore.h>
 
 #include "iAssetOverride.h"
+#include "iBoot.h"
 #include "iConfig.h"
 #include "iDistort.h"
 #include "iDrawDist.h"
@@ -43,6 +44,7 @@
 #include "zGlobals.h"
 #include "zSaveLoad.h"
 #include "zScene.h"
+#include "zCamera.h"
 #include "zUI.h"
 
 namespace
@@ -160,6 +162,22 @@ namespace
         iPadStickSetDeadzone(iHostStrCaseCmp(w, "auto") == 0 ? -1.0f : (F32)atof(w));
     }
 
+    // The startup applied the speed by multiplying the base scales (zMain.cpp,
+    // after SB.INI); a change multiplies them again by new over old, so
+    // SB.INI's base survives however often it is changed.
+    void ApplyCameraSpeed(const char* w)
+    {
+        const F32 was = iBootCameraSensitivity();
+        const F32 now = (F32)atof(w);
+        if (was <= 0.0f || now <= 0.0f)
+        {
+            return;
+        }
+        zcam_pad_pyaw_scale *= now / was;
+        zcam_pad_pitch_scale *= now / was;
+        iBootSetCameraSensitivity(now);
+    }
+
     void ApplyIcons(const char* w)
     {
         iPadGlyphSetChoice(w);
@@ -206,8 +224,8 @@ namespace
           "Match the controller|Xbox|GameCube|PlayStation|The game's own", NOW,
           "Which controller's buttons the prompts show.", ApplyIcons, false },
         { TAB_CONTROLS, "Camera speed", "input.camera_sensitivity", "0.5|0.75|1.0|1.25|1.5|2.0",
-          "0.5x|0.75x|1x|1.25x|1.5x|2x", RESTART, "How fast the right stick turns the camera.",
-          NULL, false },
+          "0.5x|0.75x|1x|1.25x|1.5x|2x", NOW, "How fast the right stick turns the camera.",
+          ApplyCameraSpeed, false },
         { TAB_GAME, "Intro movies", "game.intro_movies", "on|off", "On|Off", RESTART,
           "The logos before the title screen.", NULL, false },
     };
