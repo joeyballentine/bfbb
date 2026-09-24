@@ -122,7 +122,7 @@ void MNU4_BuildText(iAssetPkg& p)
     p.Text(H("ON TXT"), "On");
     p.Text(H("PAUSE BUS TXT"), "{i:ui_accept} Take the taxi");
     p.Text(H("PAUSE GAME PAUSED TXT"), "Game Paused");
-    p.Text(H("PAUSE OPTIONS CONTROLS TXT"), "Adjust Settings");
+    p.Text(H("PAUSE OPTIONS CONTROLS TXT"), "Options");
     p.Text(H("PAUSE OPTIONS EXIT LEVEL TXT"), "Exit {var:CurrentScene}");
     p.Text(H("PAUSE OPTIONS LOAD TXT"), "Load Game");
     p.Text(H("PAUSE OPTIONS QUIT TXT"), "Quit Game");
