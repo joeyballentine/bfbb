@@ -106,9 +106,9 @@ const iConfigSetting kConfigSettings[] = {
       "Light characters once per pixel instead of once per vertex.", ICONFIG_BOOL, NULL, kNone,
       kNone },
     { "video", "backend", "auto",
-      "Which renderer draws: auto, d3d9, d3d11, or gl3. auto takes the best one\n"
-      "; this build has; gl3 is the one that runs off Windows.",
-      ICONFIG_ENUM, "auto|d3d9|d3d11|gl3", kNone, kNone },
+      "Which renderer draws: auto, d3d9, d3d11, gl3, or vulkan. auto takes the best\n"
+      "; one this build has; gl3 and vulkan are the ones that run off Windows.",
+      ICONFIG_ENUM, "auto|d3d9|d3d11|gl3|vulkan", kNone, kNone },
     { "video", "pipeline", "auto",
       "Which Direct3D 9 path draws: auto, shader, or fixed. fixed runs on cards\n"
       "; from before 2002 and loses the glow, the distortion and per-pixel light.",
