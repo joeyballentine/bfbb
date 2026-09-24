@@ -47,13 +47,23 @@ static char g_saveroot[512];
 // six saves rather than three, and it costs no screen the player was not
 // already being shown.
 //
-// ISG_NUM_SLOTS is the ceiling: mcdata is sized by it, and iSG_mcidx2slot maps a
-// target index straight onto a slot index.
+// It is also what iSGTgtCount always reports. With the PC menus on, the PC save
+// screen reaches further folders by index (iSGTargetMax); see isavegame.h.
 #define ISG_HOST_TARGETS 2
 
-#if ISG_HOST_TARGETS > 2
-#error "iSG_target_root has a name for two folders, not more"
-#endif
+// A target index this build accepts: retail's two, or every folder the PC save
+// screen can reach.
+static S32 sPCTargets;
+
+static S32 iSG_targets()
+{
+    return sPCTargets ? ISG_MAX_TARGETS : ISG_HOST_TARGETS;
+}
+
+void iSGSetPCTargets(S32 on)
+{
+    sPCTargets = on;
+}
 
 static st_ISGSESSION g_isgdata_MAIN;
 
@@ -129,15 +139,22 @@ static void iSG_resolve_saveroot()
 // That is not symmetry for its own sake being thrown away -- it is what keeps
 // saves written while this build exposed one target where the game can still
 // find them. Only the second target needs somewhere new to live.
+//
+// The folders past those two exist only for the PC save screen, and are made
+// the first time something is saved into one.
 static void iSG_target_root(S32 slot, char* out, size_t outsize)
 {
     if (slot <= 0)
     {
         snprintf(out, outsize, "%s", g_saveroot);
     }
-    else
+    else if (slot == 1)
     {
         snprintf(out, outsize, "%s/second", g_saveroot);
+    }
+    else
+    {
+        snprintf(out, outsize, "%s/more/%d", g_saveroot, (int)slot);
     }
 }
 
@@ -266,7 +283,7 @@ S32 iSG_mcidx2slot(S32 tidx, S32* out_slot, S32* ready)
         }
     }
 
-    if (tidx < 0 || tidx >= ISG_HOST_TARGETS)
+    if (tidx < 0 || tidx >= iSG_targets())
     {
         return 0;
     }
@@ -367,7 +384,24 @@ S32 iSGTgtFormat(st_ISGSESSION* isgdata, S32 tgtidx, S32 async, S32* canRecover)
 
 U8 iSGCheckMemoryCard(st_ISGSESSION* isgdata, S32 index)
 {
-    return (index >= 0 && index < ISG_HOST_TARGETS) ? 1 : 0;
+    return (index >= 0 && index < iSG_targets()) ? 1 : 0;
+}
+
+S32 iSGTargetMax()
+{
+    return iSG_targets();
+}
+
+S32 iSGMakeTarget(S32 tgt)
+{
+    if (tgt < 0 || tgt >= iSG_targets())
+    {
+        return 0;
+    }
+
+    char root[512];
+    iSG_target_root(tgt, root, sizeof(root));
+    return iSG_mkdir_p(root) ? 1 : 0;
 }
 
 // Retail returns the slot holding a card from another region, which the TRC

@@ -968,7 +968,10 @@ static void ApplyConfig()
     // config.ini is.
     S32 wording = iConfigGetBool("assets.platform_wording", TRUE);
     iTextPatchSetEnabled(wording);
-    iAssetOverrideSetEnabled(iConfigGetBool("assets.code_menu", TRUE));
+    // The PC menus, and the save folders only their save screen reaches.
+    S32 codeMenu = iConfigGetBool("assets.code_menu", TRUE);
+    iAssetOverrideSetEnabled(codeMenu);
+    iSGSetPCTargets(codeMenu);
 
     // Said out loud, and always, because these change what the game looks and
     // sounds like. Someone reporting that the port looks wrong should not have

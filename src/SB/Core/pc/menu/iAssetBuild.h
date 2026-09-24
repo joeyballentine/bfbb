@@ -2,7 +2,10 @@
 #define IASSETBUILD_H
 
 #include <types.h>
+#include <stdio.h>
 #include <string.h>
+
+#include "iSaveScreen.h"
 
 #include "iHostWords.h"
 #include "xCounter.h"
@@ -94,6 +97,12 @@ public:
 
     // A TEXT asset: the length, the string, its terminator, padded to four.
     void Text(U32 id, const char* text);
+
+    // A TEXT asset with room for `capacity` bytes of string, terminator
+    // included, for code to fill in at run time with iAssetTextSet. A text
+    // widget draws straight from the asset's bytes every frame, so rewriting
+    // them is all it takes to change what it shows.
+    void TextSpace(U32 id, const char* initial, U32 capacity);
 
     S32 Count() const { return m_count; }
     void Remove(S32 i);

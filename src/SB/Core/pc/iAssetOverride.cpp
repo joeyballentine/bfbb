@@ -448,6 +448,41 @@ void iAssetOverrideSetEnabled(S32 on)
     sEnabled = on;
 }
 
+S32 iAssetOverrideEnabled()
+{
+    return sEnabled;
+}
+
+S32 iAssetTextSet(U32 id, const char* text)
+{
+    for (S32 i = 0; i < kMaxOpen; i++)
+    {
+        if (sOpen[i].pkg == NULL)
+        {
+            continue;
+        }
+        const iAssetEntry* e = sOpen[i].pkg->Find(id);
+        if (e == NULL || e->type != 'TEXT' || e->size <= sizeof(U32))
+        {
+            continue;
+        }
+
+        const U32 room = e->size - sizeof(U32);
+        U32 len = (U32)strlen(text);
+        if (len >= room)
+        {
+            len = room - 1;
+        }
+
+        char* dst = (char*)e->data + sizeof(U32);
+        memcpy(dst, text, len);
+        dst[len] = '\0';
+        *(U32*)e->data = len;
+        return TRUE;
+    }
+    return FALSE;
+}
+
 st_PACKER_READ_FUNCS* iFilePackageReadFuncs(st_PACKER_READ_FUNCS* funcs)
 {
     sReal = funcs;

@@ -895,7 +895,7 @@ static S32 zGameLoopContinue()
         if (gGameMode == eGameMode_Save)
         {
             gGameWhereAmI = eGameWhere_SaveLoop;
-            zSaveLoad_SaveLoop();
+            iSGSaveLoop();
             sTimeLast = iTimeGet();
             t1 = iTimeGet();
         }

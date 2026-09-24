@@ -65,6 +65,21 @@ first package's copy. `mnu3.HIP` repeats 34 of `mnu4`'s assets, so those are
 only in the `mnu4` files. A code asset whose ID an earlier package already has
 is ignored, and the game prints its ID.
 
+## The save and load screens
+
+`iSaveScreen.cpp` replaces retail's folder-then-slot screens with one list of
+every save, newest first, five rows at a time. The rows are `PC LD ROW n`
+(mnu3) and `PC SV ROW n` (mnu4), inside the groups the retail screens focus
+(`LD GAMESLOT GROUP`, `SV GAMESLOT GROUP`); their text is rewritten as the list
+scrolls (`iAssetPkg::TextSpace`, `iAssetTextSet`). Retail's `LD/SV GAMESLOT n`
+and folder buttons are still built but nothing shows them.
+
+A save is a folder and a slot, as retail's are. The backend reaches ten
+folders with the PC menus on: retail's two, where saves made before this still
+are, and eight more under `saves/more/` for the PC screen. A new save takes the
+first empty slot, retail's folders first. With the PC menus off only retail's
+two exist and retail's screens run.
+
 ## Checking
 
 `BFBB_ASSET_VERIFY=1` compares every built asset with the HIP's after each

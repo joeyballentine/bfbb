@@ -2304,4 +2304,34 @@ void MNU3_BuildUIFont(iAssetPkg& p)
         p.Link(eEventPadPressX, eEventPlayMovie, H("MNU3 PAUSE STATE DISP"), 3.0f);
         p.End();
     }
+
+    // The PC save screen's rows: one list of every save, newest first, a few
+    // at a time. iSaveScreen.cpp moves the selection and scrolls the text; the
+    // links here are the sounds and what Back undoes, as retail's rows and
+    // folder buttons had them.
+    for (S32 i = 0; i < ISAVESCREEN_ROWS; i++)
+    {
+        char name[32];
+        zUIFontAsset a = kUIFontDefaults;
+        a.pos = xVec3{ ISAVESCREEN_ROW_X, ISAVESCREEN_ROW_Y + ISAVESCREEN_ROW_STEP * i, 0.0f };
+        a.uiFlags = 0x34;
+        a.dim[0] = ISAVESCREEN_ROW_W; a.dim[1] = ISAVESCREEN_ROW_H;
+        a.uiFontFlags = 0xA71;
+        sprintf(name, ISAVESCREEN_ROW_TEXT, (int)i);
+        a.textAssetID = H(name);
+        a.space[0] = 22; a.space[1] = 22;
+        a.cdim[0] = 22; a.cdim[1] = 22;
+        sprintf(name, ISAVESCREEN_LOAD_ROW, (int)i);
+        p.Begin('UIFT', H(name), a);
+        p.Link(eEventUISelect, eEventPlay, H("MNU3 MOVE A SFX"));
+        p.Link(eEventPadPressX, eEventPlay, H("MNU3 CONFIRM SFX"));
+        p.Link(eEventPadPressTriangle, eEventPlay, H("MNU3 DENY SFX"));
+        p.Link(eEventPadPressTriangle, eEventDispatcher_SLBack, H("MNU3 CONTROLS DISP"));
+        p.Link(eEventPadPressTriangle, eEventUIFocusOff_Unselect, H("LD GAMESLOT GROUP"));
+        p.Link(eEventPadPressTriangle, eEventInvisible, H("LD MAKE INVISIBLE"));
+        p.Link(eEventPadPressTriangle, eEventInvisible, H("MNU3 LD TITLE GROUP"));
+        p.Link(eEventPadPressTriangle, eEventUIFocusOn, H("MNU3 START GROUP"));
+        p.Link(eEventPadPressTriangle, eEventUISelect, H("MNU3 START LOAD UIF"));
+        p.End();
+    }
 }

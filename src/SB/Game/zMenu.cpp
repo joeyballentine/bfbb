@@ -335,7 +335,7 @@ U32 zMenuUpdateMode()
     if (gGameMode == eGameMode_Load)
     {
         F32 elapsed1 = float(iTimeGet()) - time_last;
-        retVal = zSaveLoad_LoadLoop();
+        retVal = iSGLoadLoop();
         if (retVal == '0000')
         {
             retVal = 0;
@@ -348,7 +348,7 @@ U32 zMenuUpdateMode()
     }
     else if (gGameMode == eGameMode_Save)
     {
-        zSaveLoad_SaveLoop();
+        iSGSaveLoop();
         globals.autoSaveFeature = 1;
         retVal = 'HB00';
     }

@@ -102,6 +102,26 @@ void iAssetPkg::Text(U32 id, const char* text)
     Store('TEXT', id);
 }
 
+void iAssetPkg::TextSpace(U32 id, const char* initial, U32 capacity)
+{
+    U32 len = (U32)strlen(initial);
+    if (len + 1 > capacity)
+    {
+        capacity = len + 1;
+    }
+    U32 size = (sizeof(U32) + capacity + 3) & ~3u;
+
+    m_size = 0;
+    Append(&len, sizeof(len));
+    Append(initial, len + 1);
+    while (m_size < size)
+    {
+        U8 zero = 0;
+        Append(&zero, 1);
+    }
+    Store('TEXT', id);
+}
+
 void iAssetPkg::Store(U32 type, U32 id)
 {
     if (m_count == m_capacity)

@@ -282,9 +282,12 @@ void MNU3_BuildGroup(iAssetPkg& p)
     {
         xGroupAsset a = kGroupDefaults;
         p.Begin('GRUP', H("LD GAMESLOT GROUP"), a);
-        p.Item(H("LD GAMESLOT 0"));
-        p.Item(H("LD GAMESLOT 1"));
-        p.Item(H("LD GAMESLOT 2"));
+        for (S32 i = 0; i < ISAVESCREEN_ROWS; i++)
+        {
+            char name[32];
+            sprintf(name, ISAVESCREEN_LOAD_ROW, (int)i);
+            p.Item(H(name));
+        }
         p.Item(H("LD LOAD GAME UIF"));
         p.End();
     }

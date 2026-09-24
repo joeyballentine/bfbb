@@ -26,4 +26,12 @@
 // iSystem.cpp's ApplyConfig. Read when a package opens.
 void iAssetOverrideSetEnabled(S32 on);
 
+// Whether the PC menus are on ([assets] code_menu). The PC save screen and the
+// save folders it reaches follow this too, so off is retail throughout.
+S32 iAssetOverrideEnabled();
+
+// Rewrite a code-built TEXT asset's string, cut to the room it was built with
+// (iAssetPkg::TextSpace). FALSE when no open package built one by that ID.
+S32 iAssetTextSet(U32 id, const char* text);
+
 #endif

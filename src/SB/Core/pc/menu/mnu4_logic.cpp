@@ -439,9 +439,12 @@ void MNU4_BuildGroup(iAssetPkg& p)
         xGroupAsset a = kGroupDefaults;
         a.baseFlags = 0x1D;
         p.Begin('GRUP', H("SV GAMESLOT GROUP"), a);
-        p.Item(H("SV GAMESLOT 0"));
-        p.Item(H("SV GAMESLOT 1"));
-        p.Item(H("SV GAMESLOT 2"));
+        for (S32 i = 0; i < ISAVESCREEN_ROWS; i++)
+        {
+            char name[32];
+            sprintf(name, ISAVESCREEN_SAVE_ROW, (int)i);
+            p.Item(H(name));
+        }
         p.End();
     }
 

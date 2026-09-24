@@ -40,7 +40,7 @@ void MNU4_BuildText(iAssetPkg& p)
     p.Text(H("LD GAMESLOT 1 TXT"), "{var:GameSlot1}");
     p.Text(H("LD GAMESLOT 2 TXT"), "{var:GameSlot2}");
     p.Text(H("LD GAMESLOT 3 TXT"), "{var:GameSlot3}");
-    p.Text(H("LD LOAD GAME TXT"), "Load saved game{n}{var:MCName}");
+    p.TextSpace(H("LD LOAD GAME TXT"), "Load saved game", 64);
     p.Text(H("LD MC DONTREMOVE PAL TXT"), "WARNING: {var:MCAccessType}...{n}Do not close the game while it is saving.");
     p.Text(H("LD MC DONTREMOVE TXT"), "Loading Game.....{n}Please wait.");
     p.Text(H("LD MC MISSING TXT"), "The save folder could not be opened.");
@@ -236,7 +236,7 @@ void MNU4_BuildText(iAssetPkg& p)
     p.Text(H("PS2_NAME"), HOST_NAME);
     p.Text(H("PS2_PAD"), "controller");
     p.Text(H("PS2_PAD_PAL"), "controller");
-    p.Text(H("SAVE GAME TXT"), "Save Game{n}{var:MCName}");
+    p.TextSpace(H("SAVE GAME TXT"), "Save Game", 64);
     p.Text(H("SCREEN ADJUST TXT"), "Screen{n}Adjust");
     p.Text(H("SCREEN TITLE TXT"), "Screen Adjust");
     p.Text(H("SFX TITLE TXT"), "SFX Volume");
@@ -360,4 +360,12 @@ void MNU4_BuildText(iAssetPkg& p)
     p.Text(H("autosave"), "{red=0}{blue=0}{green=0.2}AutoSave{~:c}");
     p.Text(H("ps2_save_text"), "At least {i:keyword}{var:MCPS2MinSpace} KB{~:c} of free space is needed to save game data. Up to {i:keyword}{var:MCPS2MaxSpace} KB{~:c} may be needed to save all three games");
     p.Text(H("text_pause_stall"), "{w*1.5}{h*1.5}{n}Paused{n}");
+
+    // The PC save screen's rows, filled in by iSaveScreen.cpp.
+    for (S32 i = 0; i < ISAVESCREEN_ROWS; i++)
+    {
+        char name[32];
+        sprintf(name, ISAVESCREEN_ROW_TEXT, (int)i);
+        p.TextSpace(H(name), "", ISAVESCREEN_ROW_TEXT_SIZE);
+    }
 }

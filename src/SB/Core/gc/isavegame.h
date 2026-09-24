@@ -181,4 +181,8 @@ S32 iSGAutoSave_Monitor(st_ISGSESSION* isg, S32 idx_target);
 S32 iSGCheckForWrongDevice();
 S32 iSGCheckForCorruptFiles(st_ISGSESSION*, char files[][64]);
 
+// The save and load screens. The PC port has its own; see pc/isavegame.h.
+#define iSGLoadLoop zSaveLoad_LoadLoop
+#define iSGSaveLoop zSaveLoad_SaveLoop
+
 #endif

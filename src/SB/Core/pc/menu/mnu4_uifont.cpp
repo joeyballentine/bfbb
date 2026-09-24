@@ -3093,4 +3093,32 @@ void MNU4_BuildUIFont(iAssetPkg& p)
         p.Link(eEventInvisible, eEventPlay, H("MNU4 MOVE A SFX"));
         p.End();
     }
+
+    // The PC save screen's rows: one list of every save, newest first, a few
+    // at a time. iSaveScreen.cpp moves the selection and scrolls the text; the
+    // links here are the sounds and what Back undoes, as retail's rows and
+    // folder buttons had them.
+    for (S32 i = 0; i < ISAVESCREEN_ROWS; i++)
+    {
+        char name[32];
+        zUIFontAsset a = kUIFontDefaults;
+        a.pos = xVec3{ ISAVESCREEN_ROW_X, ISAVESCREEN_ROW_Y + ISAVESCREEN_ROW_STEP * i, 0.0f };
+        a.uiFlags = 0x34;
+        a.dim[0] = ISAVESCREEN_ROW_W; a.dim[1] = ISAVESCREEN_ROW_H;
+        a.uiFontFlags = 0x871;
+        sprintf(name, ISAVESCREEN_ROW_TEXT, (int)i);
+        a.textAssetID = H(name);
+        a.space[0] = 22; a.space[1] = 22;
+        a.cdim[0] = 22; a.cdim[1] = 22;
+        sprintf(name, ISAVESCREEN_SAVE_ROW, (int)i);
+        p.Begin('UIFT', H(name), a);
+        p.Link(eEventUISelect, eEventPlay, H("MNU4 MOVE A SFX"));
+        p.Link(eEventPadPressX, eEventPlay, H("MNU4 CONFIRM SFX"));
+        p.Link(eEventPadPressTriangle, eEventPlay, H("MNU4 DENY SFX"));
+        p.Link(eEventPadPressTriangle, eEventDispatcher_SLBack, H("SV DISPATCH"));
+        p.Link(eEventPadPressTriangle, eEventUIFocusOff_Unselect, H("SV GAMESLOT GROUP"));
+        p.Link(eEventPadPressTriangle, eEventInvisible, H("SV MAKE INVISIBLE"));
+        p.Link(eEventPadPressTriangle, eEventInvisible, H("SV SAVE GAME TITLE UIF"));
+        p.End();
+    }
 }
