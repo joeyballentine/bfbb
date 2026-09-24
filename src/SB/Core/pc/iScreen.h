@@ -182,6 +182,20 @@ F32 iScreenAnchorMarginYF();
 F32 iScreenStretchX(F32 n);
 F32 iScreenStretchY(F32 n);
 
+// The exception: a backdrop with something painted into it that a widget on
+// top was placed against. Stretched, the painting slides away from the widget.
+// The options screen's is the one -- its bamboo panel's shadow is in the
+// texture. TRUE for such a texture; it is drawn in the box instead, and
+// iScreenUIDrawBleed fills the margins beside it.
+S32 iScreenUIBleedBoxed(U32 textureID);
+
+// Fills the margins beside a boxed backdrop in NATIVE by mirror-repeating the
+// plain strip at each edge of the texture. Nothing in PILLARBOX, where the
+// sides show the menu's 3D scene. Called right after the backdrop is drawn,
+// with its render state still set: the rect it was drawn at, in pixels, and
+// its texture coordinates at (x1,y1), (x1,y2), (x2,y2), (x2,y1).
+void iScreenUIDrawBleed(F32 x1, F32 y1, F32 x2, F32 y2, F32 z, const F32* uv);
+
 // The next UI model is a full-screen overlay, not an object placed in the box.
 //
 // xModelRender2D shrinks the camera's view window to the 4:3 box so that a HUD

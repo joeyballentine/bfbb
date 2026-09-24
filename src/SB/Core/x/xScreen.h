@@ -70,6 +70,8 @@
 
 #define xScreenStretchX(n) iScreenStretchX(n)
 #define xScreenStretchY(n) iScreenStretchY(n)
+#define xScreenUIBleedBoxed(tex) iScreenUIBleedBoxed(tex)
+#define xScreenUIDrawBleed(x1, y1, x2, y2, z, uv) iScreenUIDrawBleed(x1, y1, x2, y2, z, uv)
 
 // Is this normalized UI-space rect entirely off the screen?
 //

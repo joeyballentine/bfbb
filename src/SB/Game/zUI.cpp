@@ -853,8 +853,11 @@ void zUI_Render(xEnt* ent)
                 F32 nx2 = (ui->sasset->pos.x + ui->sasset->dim[0]) / w;
                 F32 ny2 = (ui->sasset->pos.y + ui->sasset->dim[1]) / h;
 
+                const S32 fullBleed = xScreenUIRectFullBleed(nx1, ny1, nx2, ny2);
+                const S32 boxed = fullBleed && xScreenUIBleedBoxed(ui->sasset->textureID);
+
                 F32 x1, y1, x2, y2;
-                if (xScreenUIRectFullBleed(nx1, ny1, nx2, ny2))
+                if (fullBleed && !boxed)
                 {
                     x1 = xScreenStretchX(nx1);
                     y1 = xScreenStretchY(ny1);
@@ -927,6 +930,13 @@ void zUI_Render(xEnt* ent)
                 RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, 0);
 
                 RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex, 4, Index, 6);
+#ifdef PLATFORM_PC
+                if (boxed)
+                {
+                    const F32 uv[8] = { u1, v1, u4, v4, u3, v3, u2, v2 };
+                    xScreenUIDrawBleed(x1, y1, x2, y2, cz, uv);
+                }
+#endif
             }
             else if (ui->model != NULL)
             {
