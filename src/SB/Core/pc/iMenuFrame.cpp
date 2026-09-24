@@ -31,28 +31,75 @@ namespace
     const int kRailTiles = 4;
     const int kStileTiles = 4;
 
-    // Which atomics have already been through this.
+    // The frames this has rebuilt, each with the mesh the artist made and the
+    // widening it was last rebuilt for.
     //
-    // The count-based test is not enough on its own: on a 4:3 or pillarboxed
-    // screen the rebuild adds no segments, so the mesh it produces has exactly
-    // the eighty vertices the signature looks for and would be rebuilt again on
-    // the next frame, and every frame after, leaking a geometry each time. The
-    // frame appears on two menu screens, so a couple of slots is plenty.
+    // Kept rather than rebuilt once and forgotten because the widening follows
+    // video.ui, and the settings screen changes that while the frame is up:
+    // the next draw has to see a different margin and build again from the
+    // original. A 4:3 or pillarboxed screen gets the original back. The
+    // original is held by a reference of its own so that swapping it out does
+    // not free it.
+    //
+    // A menu scene's atomics are made again each time it loads, and a new one
+    // can land where an old one was. An entry is only this atomic's while the
+    // atomic still holds one of the two geometries it recorded.
+    struct Seen
+    {
+        RpAtomic* atomic;
+        RpGeometry* original;
+        RpGeometry* built;
+        int extra;
+        bool rope;
+    };
+
     const int kMaxSeen = 8;
-    RpAtomic* sSeen[kMaxSeen];
+    Seen sSeen[kMaxSeen];
     int sSeenCount = 0;
 
-    bool already_done(RpAtomic* atomic)
+    Seen* find_seen(RpAtomic* atomic)
     {
         for (int i = 0; i < sSeenCount; i++)
         {
-            if (sSeen[i] == atomic)
+            Seen& e = sSeen[i];
+            if (e.atomic == atomic &&
+                (atomic->geometry == e.original || atomic->geometry == e.built))
             {
-                return true;
+                return &e;
             }
         }
+        return NULL;
+    }
 
-        return false;
+    Seen* add_seen(RpAtomic* atomic, RpGeometry* original)
+    {
+        // Reuse a slot whose atomic has moved on to other geometry, which is
+        // what a reloaded scene leaves behind.
+        Seen* slot = NULL;
+        for (int i = 0; i < sSeenCount && slot == NULL; i++)
+        {
+            if (sSeen[i].atomic == atomic)
+            {
+                slot = &sSeen[i];
+            }
+        }
+        if (slot == NULL)
+        {
+            if (sSeenCount == kMaxSeen)
+            {
+                return NULL;
+            }
+            slot = &sSeen[sSeenCount++];
+        }
+
+        // A reference of its own; the layout mirror carries librw's count.
+        original->refCount++;
+        slot->atomic = atomic;
+        slot->original = original;
+        slot->built = NULL;
+        slot->extra = -1;
+        slot->rope = false;
+        return slot;
     }
 
     // A quad's four vertices, as the exporter laid them out: bottom-left,
@@ -137,12 +184,8 @@ int iMenuFrameWiden(RpAtomic* atomic, float rectWidth)
         return 0;
     }
 
-    if (already_done(atomic))
-    {
-        return 0;
-    }
-
-    RpGeometry* src = atomic->geometry;
+    Seen* seen = find_seen(atomic);
+    RpGeometry* src = seen != NULL ? seen->original : atomic->geometry;
     if (src == NULL || src->numVertices != kSrcVerts || src->numTriangles != kSrcTris ||
         src->numMorphTargets == 0 || src->numTexCoordSets == 0)
     {
@@ -195,9 +238,29 @@ int iMenuFrameWiden(RpAtomic* atomic, float rectWidth)
     // the same missing rope as every other screen. With that fix off there is
     // nothing left for the rebuild to do, and the mesh is better left alone.
     const bool ropeFix = iFixMenuRope() != 0;
-    if (extra == 0 && !ropeFix)
+    if (seen != NULL && seen->extra == extra && seen->rope == ropeFix)
     {
         return 0;
+    }
+    if (seen == NULL)
+    {
+        seen = add_seen(atomic, src);
+        if (seen == NULL)
+        {
+            return 0;
+        }
+    }
+
+    if (extra == 0 && !ropeFix)
+    {
+        if (atomic->geometry != seen->original)
+        {
+            RpAtomicSetGeometry(atomic, seen->original, 0);
+        }
+        seen->built = NULL;
+        seen->extra = 0;
+        seen->rope = false;
+        return 1;
     }
 
     const int railTiles = kRailTiles + 2 * extra;
@@ -313,14 +376,17 @@ int iMenuFrameWiden(RpAtomic* atomic, float rectWidth)
 
     RpGeometryUnlock(dst);
 
-    if (sSeenCount < kMaxSeen)
-    {
-        sSeen[sSeenCount++] = atomic;
-    }
+    seen->built = dst;
+    seen->extra = extra;
+    seen->rope = ropeFix;
 
     // No rpATOMICSAMEBOUNDINGSPHERE: the frame is wider than it was, and the
     // sphere it is culled against has to know.
     RpAtomicSetGeometry(atomic, dst, 0);
+
+    // The atomic holds the new frame now. Dropping the reference it was made
+    // with is what lets the next rebuild -- or the scene's teardown -- free it.
+    dst->refCount--;
 
     printf("bfbb: menu frame rebuilt: %d extra segment(s) each side, %d quads%s\n", extra, quads,
            ropeFix ? ", corner lashings brought forward" : "");

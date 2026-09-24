@@ -372,7 +372,7 @@ void MNU4_BuildText(iAssetPkg& p)
     // The settings screen (iSettingsScreen.cpp fills these in) and the two
     // menu entries that open it.
     p.Text(H("PC SETTINGS TXT"), "Settings");
-    p.TextSpace(H(ISETTINGS_TITLE_TEXT), "Settings", 96);
+    p.TextSpace(H(ISETTINGS_TITLE_TEXT), "Settings", 256);
     p.TextSpace(H(ISETTINGS_HELP_TEXT), "", 256);
     for (S32 i = 0; i < ISETTINGS_ROWS; i++)
     {

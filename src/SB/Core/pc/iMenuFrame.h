@@ -18,10 +18,12 @@
 
 struct RpAtomic;
 
-// Rebuild this atomic's geometry wider, once. Returns TRUE if it replaced the
-// geometry, FALSE if there was nothing to do (a 4:3 or pillarboxed screen has
-// no margin to fill) or if the mesh is not the frame this knows how to widen,
-// in which case the atomic is left exactly as it was.
+// Rebuild this atomic's geometry to fit the screen's margin, from the mesh the
+// artist made. Asked on every draw; it rebuilds only when the margin has
+// changed since the last rebuild -- video.ui changing in the settings screen --
+// and a margin of nothing puts the original back. Returns TRUE if it replaced
+// the geometry, FALSE if there was nothing to do or if the mesh is not the
+// frame this knows how to widen, in which case the atomic is left as it was.
 //
 // `rectWidth` is the normalized width the model is drawn into, which is what
 // converts the screen's margin into the frame's own object space.

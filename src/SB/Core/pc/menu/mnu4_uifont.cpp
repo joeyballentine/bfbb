@@ -3127,12 +3127,12 @@ void MNU4_BuildUIFont(iAssetPkg& p)
     // text; the rows' links are only the sound of moving.
     {
         zUIFontAsset a = kUIFontDefaults;
-        a.pos = xVec3{ 65.0f, 45.0f, 0.0f };
-        a.dim[0] = 520; a.dim[1] = 60;
+        a.pos = xVec3{ 45.0f, 55.0f, 0.0f };
+        a.dim[0] = 560; a.dim[1] = 40;
         a.uiFontFlags = 0x64;
         a.textAssetID = H(ISETTINGS_TITLE_TEXT);
-        a.space[0] = 30; a.space[1] = 24;
-        a.cdim[0] = 30; a.cdim[1] = 30;
+        a.space[0] = 22; a.space[1] = 22;
+        a.cdim[0] = 22; a.cdim[1] = 22;
         p.Begin('UIFT', H(ISETTINGS_TITLE), a);
         p.End();
     }

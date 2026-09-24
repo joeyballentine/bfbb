@@ -54,8 +54,20 @@ namespace
         RESTART
     };
 
+    // The tabs, in order. The shoulder buttons move between them.
+    enum Tab
+    {
+        TAB_DISPLAY,
+        TAB_EFFECTS,
+        TAB_CONTROLS,
+        TAB_GAME,
+        TAB_COUNT
+    };
+    const char* const kTabNames[TAB_COUNT] = { "Display", "Effects", "Controls", "Game" };
+
     struct Setting
     {
+        Tab tab;
         const char* label;
 
         // The config.ini key. "video.resolution" is not one: it stands for
@@ -155,48 +167,48 @@ namespace
     }
 
     const Setting kSettings[] = {
-        { "Window", "video.mode", "borderless|windowed|fullscreen",
+        { TAB_DISPLAY, "Window", "video.mode", "borderless|windowed|fullscreen",
           "Borderless|Windowed|Fullscreen", NOW,
           "Borderless covers the screen without taking it over. Alt+Enter switches too.",
           ApplyMode, true },
-        { "Resolution", "video.resolution", NULL, NULL, RESTART,
+        { TAB_DISPLAY, "Resolution", "video.resolution", NULL, NULL, RESTART,
           "The size the game renders at. The picture is scaled to the window.", NULL, false },
-        { "VSync", "video.vsync", "on|off", "On|Off", NOW,
+        { TAB_DISPLAY, "VSync", "video.vsync", "on|off", "On|Off", NOW,
           "Wait for the display between frames, so the picture does not tear.", ApplyVSync,
           false },
-        { "Frame rate limit", "video.framerate", "30|60|120|144|165|240|display|off",
+        { TAB_DISPLAY, "Frame rate limit", "video.framerate", "30|60|120|144|165|240|display|off",
           "30|60|120|144|165|240|Monitor|Unlimited", NOW,
           "The most frames a second the game runs at. 60 is the console's.", ApplyFrameRate,
           false },
-        { "Field of view", "video.fov", "60|65|70|75|80|85|90|95|100|105|110", NULL, NOW,
+        { TAB_DISPLAY, "Field of view", "video.fov", "60|65|70|75|80|85|90|95|100|105|110", NULL, NOW,
           "How wide the camera sees, in degrees across a 4:3 picture. 75 is the console's.",
           ApplyFOV, false },
-        { "HUD layout", "video.ui", "pillarbox|native", "4:3, as the console|Screen edges", NOW,
+        { TAB_DISPLAY, "HUD layout", "video.ui", "pillarbox|native", "4:3, as the console|Screen edges", NOW,
           "Where the HUD sits on a wide screen.", ApplyUI, false },
-        { "Draw distance", "video.draw_distance", "on|off", "Unlimited|Console", NEXT_AREA,
+        { TAB_DISPLAY, "Draw distance", "video.draw_distance", "on|off", "Unlimited|Console", NEXT_AREA,
           "How far away things are still drawn.", ApplyDrawDistance, false },
-        { "Anti-aliasing", "video.msaa", "1|2|4|8", "Off|2x|4x|8x", RESTART,
+        { TAB_DISPLAY, "Anti-aliasing", "video.msaa", "1|2|4|8", "Off|2x|4x|8x", RESTART,
           "Smooths jagged edges, at a cost in speed.", NULL, false },
-        { "Glow", "xbox.glow", "on|off", "On|Off", NOW,
+        { TAB_EFFECTS, "Glow", "xbox.glow", "on|off", "On|Off", NOW,
           "The Xbox version's soft glow around bright things.", ApplyGlow, false },
-        { "Screen warps", "xbox.distortion", "on|off", "On|Off", NOW,
+        { TAB_EFFECTS, "Screen warps", "xbox.distortion", "on|off", "On|Off", NOW,
           "The Xbox version's heat-haze and cruise-bubble screen effects.", ApplyDistortion,
           false },
-        { "Loading-screen still", "xbox.snapshot", "on|off", "On|Off", NOW,
+        { TAB_EFFECTS, "Loading-screen still", "xbox.snapshot", "on|off", "On|Off", NOW,
           "Show the level being left behind the loading screen. Save pictures need it.",
           ApplySnapshot, false },
-        { "Cave echo", "xbox.reverb", "on|off", "On|Off", NEXT_AREA,
+        { TAB_EFFECTS, "Cave echo", "xbox.reverb", "on|off", "On|Off", NEXT_AREA,
           "The Xbox version's echo in caves and big rooms.", NULL, false },
-        { "Stick deadzone", "input.deadzone", "auto|5|10|15|20|25|30",
+        { TAB_CONTROLS, "Stick deadzone", "input.deadzone", "auto|5|10|15|20|25|30",
           "Controller's own|5%|10%|15%|20%|25%|30%", NOW,
           "How far a stick moves before the game notices.", ApplyDeadzone, false },
-        { "Button pictures", "input.button_icons", "auto|xbox|gamecube|ps2|off",
+        { TAB_CONTROLS, "Button pictures", "input.button_icons", "auto|xbox|gamecube|ps2|off",
           "Match the controller|Xbox|GameCube|PlayStation|The game's own", NOW,
           "Which controller's buttons the prompts show.", ApplyIcons, false },
-        { "Camera speed", "input.camera_sensitivity", "0.5|0.75|1.0|1.25|1.5|2.0",
+        { TAB_CONTROLS, "Camera speed", "input.camera_sensitivity", "0.5|0.75|1.0|1.25|1.5|2.0",
           "0.5x|0.75x|1x|1.25x|1.5x|2x", RESTART, "How fast the right stick turns the camera.",
           NULL, false },
-        { "Intro movies", "game.intro_movies", "on|off", "On|Off", RESTART,
+        { TAB_GAME, "Intro movies", "game.intro_movies", "on|off", "On|Off", RESTART,
           "The logos before the title screen.", NULL, false },
     };
     const S32 kCount = (S32)(sizeof(kSettings) / sizeof(kSettings[0]));
@@ -205,9 +217,31 @@ namespace
     // them. Built when the screen opens.
     char sResWords[256];
 
+    // The tab showing, and the settings on it: sSel and sTop index this list.
+    Tab sTab;
+    S32 sList[kCount];
+    S32 sListCount;
+
     S32 sSel;
     S32 sTop;
     bool sRestart;
+
+    void BuildList()
+    {
+        sListCount = 0;
+        for (S32 i = 0; i < kCount; i++)
+        {
+            if (kSettings[i].tab == sTab)
+            {
+                sList[sListCount++] = i;
+            }
+        }
+    }
+
+    const Setting& Selected()
+    {
+        return kSettings[sList[sSel]];
+    }
 
     void Send(const char* name, U32 event)
     {
@@ -448,32 +482,43 @@ namespace
         }
         else
         {
-            const Setting& s = kSettings[sSel];
+            const Setting& s = Selected();
             const char* when = s.when == RESTART     ? "{n}Takes effect when the game next starts."
                                : s.when == NEXT_AREA ? "{n}Takes effect in the next area."
-                                                     : "";
-            snprintf(help, sizeof(help), "%s%s", s.help, when);
+                                                     : "{n}";
+            snprintf(help, sizeof(help), "%s%s%s", s.help, when,
+                     sRestart ? "{n}Some changes wait for the game to restart." : "");
         }
         iAssetTextSet(xStrHash(ISETTINGS_HELP_TEXT), help);
     }
 
     void Draw()
     {
-        iAssetTextSet(xStrHash(ISETTINGS_TITLE_TEXT),
-                      sRestart ? "Settings{n}Some changes take effect when the game next starts"
-                               : "Settings");
+        // The tab bar: the shoulder buttons' pictures either side, the tab
+        // showing in white and the rest dimmed.
+        char title[256];
+        snprintf(title, sizeof(title), "{i:button_picture_07} ");
+        for (S32 t = 0; t < TAB_COUNT; t++)
+        {
+            char one[48];
+            snprintf(one, sizeof(one), t == sTab ? "{c=ffffffff}%s{~:c}   " : "{c=ff9aa6b4}%s{~:c}   ",
+                     kTabNames[t]);
+            strncat(title, one, sizeof(title) - strlen(title) - 1);
+        }
+        strncat(title, "{i:button_picture_05}", sizeof(title) - strlen(title) - 1);
+        iAssetTextSet(xStrHash(ISETTINGS_TITLE_TEXT), title);
 
         for (S32 row = 0; row < ISETTINGS_ROWS; row++)
         {
             const S32 i = sTop + row;
-            if (i >= kCount)
+            if (i >= sListCount)
             {
                 SetText(ISETTINGS_LABEL_TEXT, row, "");
                 SetText(ISETTINGS_VALUE_TEXT, row, "");
                 continue;
             }
 
-            const Setting& s = kSettings[i];
+            const Setting& s = kSettings[sList[i]];
             char value[80];
             Name(s, IndexOf(s), value, sizeof(value));
 
@@ -534,7 +579,7 @@ namespace
     // Left and right stop at the ends; X goes round.
     void Change(S32 dir, bool wrap)
     {
-        const Setting& s = kSettings[sSel];
+        const Setting& s = Selected();
         const S32 n = WordCount(Words(s));
         const S32 was = IndexOf(s);
 
@@ -639,6 +684,8 @@ S32 iSettingsRequested(S32 fromPause)
 void iSettingsRun(S32 fromPause)
 {
     BuildResolutions();
+    sTab = TAB_DISPLAY;
+    BuildList();
     sSel = 0;
     sTop = 0;
     sRestart = false;
@@ -665,7 +712,7 @@ void iSettingsRun(S32 fromPause)
         {
             move = 1;
         }
-        if (move != 0 && sSel + move >= 0 && sSel + move < kCount)
+        if (move != 0 && sSel + move >= 0 && sSel + move < sListCount)
         {
             SelectRow(sSel - sTop, false);
             sSel += move;
@@ -679,6 +726,29 @@ void iSettingsRun(S32 fromPause)
             }
             SelectRow(sSel - sTop, true);
             Draw();
+        }
+
+        // L1 and R1 turn the page, and go round.
+        S32 page = 0;
+        if (pressed & XPAD_BUTTON_L1)
+        {
+            page = -1;
+        }
+        else if (pressed & XPAD_BUTTON_R1)
+        {
+            page = 1;
+        }
+        if (page != 0)
+        {
+            SelectRow(sSel - sTop, false);
+            sTab = (Tab)((sTab + page + TAB_COUNT) % TAB_COUNT);
+            BuildList();
+            sSel = 0;
+            sTop = 0;
+            SelectRow(0, true);
+            Send("MNU4 MOVE B SFX", eEventPlay);
+            Draw();
+            continue;
         }
 
         if (pressed & XPAD_BUTTON_LEFT)

@@ -965,7 +965,7 @@ void zUI_Render(xEnt* ent)
                 #ifdef PLATFORM_PC
                 // The menu frame is a mesh of repeated bamboo segments, and on a screen
                 // wider than the one it was drawn for it wants more of them rather than
-                // longer ones. Asked on every draw and answered once.
+                // longer ones. Asked on every draw; rebuilt when the margin changes.
                 iMenuFrameWiden(ui->model->Data, r.w);
 
                 // Is this the overlay that lights the whole menu, rather than something
