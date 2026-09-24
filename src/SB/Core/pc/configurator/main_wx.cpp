@@ -12,6 +12,9 @@
 #include "config_model.h"
 
 #include "iConfigTable.h"
+#include "iPadTokens.h"
+
+#include <SDL3/SDL.h>
 
 #include <wx/wx.h>
 
@@ -51,9 +54,11 @@ namespace
         kIdRowBase
     };
 
-    const int kIdsPerRow = 2;
+    // A binding row uses the Browse slot for Set and one more for Add.
+    const int kIdsPerRow = 3;
     const int kIdRowValue = 0;
     const int kIdRowBrowse = 1;
+    const int kIdRowAdd = 2;
 
     // One setting's controls.
     //
@@ -69,6 +74,11 @@ namespace
     {
         S32 setting;
 
+        // A binding's button, or -1 for a setting's row. `device` is only
+        // meaningful beside it.
+        S32 bindRow;
+        ConfigModelDevice device;
+
         wxCheckBox* check;
         wxChoice* choice;
         wxTextEntry* entry;
@@ -82,9 +92,363 @@ namespace
         // to what is left of the width rather than all of it.
         int indent;
 
-        Row() : setting(0), check(NULL), choice(NULL), entry(NULL), description(NULL), indent(0)
+        Row()
+            : setting(0), bindRow(-1), device(CONFIG_MODEL_KEYBOARD), check(NULL), choice(NULL),
+              entry(NULL), description(NULL), indent(0)
         {
         }
+    };
+
+    // The pages after the settings' sections: one per device.
+    ConfigModelDevice DeviceOfSection(int section)
+    {
+        return (ConfigModelDevice)(section - ConfigModelSectionCount());
+    }
+
+    bool IsBindSection(int section)
+    {
+        return section >= ConfigModelSectionCount();
+    }
+
+    // What a binding row says under its box: what the button does, and what
+    // an empty box means.
+    wxString DescribeBinding(ConfigModelDevice device, S32 row)
+    {
+        char def[256];
+        ConfigModelBindDescribeDefault(device, row, def, sizeof(def));
+
+        wxString text;
+        const char* does = ConfigModelBindDoes(row);
+        if (does != NULL)
+        {
+            text << does << ". ";
+        }
+        text << "Empty is the default: " << def << ".";
+        return text;
+    }
+
+    // -----------------------------------------------------------------
+    // Capturing one input
+    //
+    // Keys come from wx: the dialog has the keyboard focus, and CHAR_HOOK
+    // sees every key before navigation takes Tab or the arrows. The controller
+    // comes from SDL, polled on a timer, because wx has no gamepad input; SDL
+    // is told to report pads while it has no window of its own focused, which
+    // is always here.
+
+    wxString SidedModifier(const wxKeyEvent& event, const char* left, const char* right,
+                           const char* either, int leftScan, int rightScan, bool extendedIsRight)
+    {
+#ifdef __WXMSW__
+        // The raw flags are the message's lParam: scan code in bits 16-23,
+        // the extended-key bit at 24. Right Ctrl and right Alt are extended;
+        // the two Shifts differ by scan code.
+        const wxUint32 flags = event.GetRawKeyFlags();
+        const int scan = (int)((flags >> 16) & 0xFF);
+        const bool extended = (flags & (1u << 24)) != 0;
+        if (extendedIsRight)
+        {
+            return extended ? right : left;
+        }
+        if (scan == leftScan)
+        {
+            return left;
+        }
+        if (scan == rightScan)
+        {
+            return right;
+        }
+#else
+        (void)event;
+        (void)left;
+        (void)right;
+        (void)leftScan;
+        (void)rightScan;
+        (void)extendedIsRight;
+#endif
+        return either;
+    }
+
+    // The [keyboard] name for a key, or "" for one the bindings cannot name.
+    wxString KeyToken(const wxKeyEvent& event)
+    {
+        const int code = event.GetKeyCode();
+
+        if (code >= 'A' && code <= 'Z')
+        {
+            return wxString((wxChar)(code - 'A' + 'a'));
+        }
+        if (code >= '0' && code <= '9')
+        {
+            return wxString((wxChar)code);
+        }
+        if (code >= WXK_F1 && code <= WXK_F12)
+        {
+            return wxString::Format("f%d", code - WXK_F1 + 1);
+        }
+        if (code >= WXK_NUMPAD0 && code <= WXK_NUMPAD9)
+        {
+            return wxString::Format("numpad%d", code - WXK_NUMPAD0);
+        }
+
+        switch (code)
+        {
+        case WXK_SPACE:
+            return "space";
+        case WXK_RETURN:
+            return "enter";
+        case WXK_TAB:
+            return "tab";
+        case WXK_BACK:
+            return "backspace";
+        case WXK_UP:
+            return "up";
+        case WXK_DOWN:
+            return "down";
+        case WXK_LEFT:
+            return "left";
+        case WXK_RIGHT:
+            return "right";
+        case WXK_INSERT:
+            return "insert";
+        case WXK_DELETE:
+            return "delete";
+        case WXK_HOME:
+            return "home";
+        case WXK_END:
+            return "end";
+        case WXK_PAGEUP:
+            return "pageup";
+        case WXK_PAGEDOWN:
+            return "pagedown";
+        case WXK_CAPITAL:
+            return "capslock";
+        case WXK_NUMPAD_ADD:
+            return "numpadplus";
+        case WXK_NUMPAD_SUBTRACT:
+            return "numpadminus";
+        case WXK_NUMPAD_MULTIPLY:
+            return "numpadstar";
+        case WXK_NUMPAD_DIVIDE:
+            return "numpadslash";
+        case WXK_NUMPAD_DECIMAL:
+            return "numpaddot";
+        case WXK_SHIFT:
+            return SidedModifier(event, "lshift", "rshift", "shift", 0x2A, 0x36, false);
+        case WXK_CONTROL:
+            return SidedModifier(event, "lctrl", "rctrl", "ctrl", 0, 0, true);
+        case WXK_ALT:
+            return SidedModifier(event, "lalt", "ralt", "alt", 0, 0, true);
+        default:
+            break;
+        }
+
+        // The punctuation keys arrive as the character on them, unshifted.
+        switch (event.GetUnicodeKey())
+        {
+        case ',':
+            return "comma";
+        case '.':
+            return "period";
+        case '-':
+            return "minus";
+        case '=':
+            return "equals";
+        case ';':
+            return "semicolon";
+        case '/':
+            return "slash";
+        case '`':
+            return "tilde";
+        case '[':
+            return "lbracket";
+        case '\\':
+            return "backslash";
+        case ']':
+            return "rbracket";
+        case '\'':
+            return "quote";
+        default:
+            return "";
+        }
+    }
+
+    // The controller inputs held right now on any pad, as PADIN_* bits.
+    U32 PadHeld()
+    {
+        static bool sStarted = false;
+        if (!sStarted)
+        {
+            sStarted = true;
+            SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+            SDL_InitSubSystem(SDL_INIT_GAMEPAD);
+        }
+
+        SDL_UpdateGamepads();
+
+        int count = 0;
+        SDL_JoystickID* ids = SDL_GetGamepads(&count);
+        U32 held = 0;
+
+        for (int i = 0; i < count; i++)
+        {
+            SDL_Gamepad* pad = SDL_GetGamepadFromID(ids[i]);
+            if (pad == NULL)
+            {
+                pad = SDL_OpenGamepad(ids[i]);
+            }
+            if (pad == NULL)
+            {
+                continue;
+            }
+
+            for (int b = 0; b < SDL_GAMEPAD_BUTTON_COUNT; b++)
+            {
+                const S32 input = iPadInputFromSDLButton(b);
+                if (input >= 0 && SDL_GetGamepadButton(pad, (SDL_GamepadButton)b))
+                {
+                    held |= 1u << input;
+                }
+            }
+            if (SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) >= IPAD_SDL_TRIGGER_THRESHOLD)
+            {
+                held |= 1u << PADIN_LT;
+            }
+            if (SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) >= IPAD_SDL_TRIGGER_THRESHOLD)
+            {
+                held |= 1u << PADIN_RT;
+            }
+        }
+
+        SDL_free(ids);
+        return held;
+    }
+
+    bool AnyPad()
+    {
+        int count = 0;
+        SDL_JoystickID* ids = SDL_GetGamepads(&count);
+        SDL_free(ids);
+        return count > 0;
+    }
+
+    class CaptureDialog : public wxDialog
+    {
+    public:
+        CaptureDialog(wxWindow* parent, ConfigModelDevice device, S32 row)
+            : wxDialog(parent, wxID_ANY, "Set a binding"), mDevice(device), mTimer(this),
+              mHeld(0), mStatus(NULL)
+        {
+            wxString what = ConfigModelBindName(row);
+            const char* does = ConfigModelBindDoes(row);
+            if (does != NULL)
+            {
+                what << " (" << does << ")";
+            }
+
+            wxString prompt = device == CONFIG_MODEL_KEYBOARD
+                                  ? "Press a key for " + what + "."
+                                  : "Press a button on the controller for " + what + ".";
+
+            wxStaticText* text = new wxStaticText(this, wxID_ANY, prompt);
+            mStatus = new wxStaticText(this, wxID_ANY, "Esc cancels.");
+            mStatus->SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT));
+
+            wxBoxSizer* outer = new wxBoxSizer(wxVERTICAL);
+            outer->Add(text, wxSizerFlags().Border(wxALL, FromDIP(kMargin)));
+            outer->Add(mStatus, wxSizerFlags().Border(wxLEFT | wxRIGHT | wxBOTTOM,
+                                                      FromDIP(kMargin)));
+            outer->Add(CreateStdDialogButtonSizer(wxCANCEL),
+                       wxSizerFlags().Expand().Border(wxALL, FromDIP(kMargin)));
+            SetSizerAndFit(outer);
+            CenterOnParent();
+
+            Bind(wxEVT_CHAR_HOOK, &CaptureDialog::OnCharHook, this);
+
+            if (device == CONFIG_MODEL_PAD)
+            {
+                // Anything already held when the dialog opened has to be let go
+                // and pressed again, or the click on Set would count.
+                mHeld = PadHeld();
+                Bind(wxEVT_TIMER, &CaptureDialog::OnTimer, this);
+                mTimer.Start(16);
+                ShowPadStatus();
+            }
+        }
+
+        wxString Token() const
+        {
+            return mToken;
+        }
+
+    private:
+        void ShowPadStatus()
+        {
+            mStatus->SetLabel(AnyPad() ? "Esc cancels."
+                                       : "No controller found. Connect one, or Esc to cancel.");
+        }
+
+        void OnCharHook(wxKeyEvent& event)
+        {
+            if (event.GetKeyCode() == WXK_ESCAPE)
+            {
+                EndModal(wxID_CANCEL);
+                return;
+            }
+
+            if (mDevice != CONFIG_MODEL_KEYBOARD)
+            {
+                event.Skip();
+                return;
+            }
+
+            const wxString token = KeyToken(event);
+            if (token.empty())
+            {
+                mStatus->SetLabel("That key has no name in config.ini. Try another, or Esc.");
+                return;
+            }
+
+            mToken = token;
+            EndModal(wxID_OK);
+        }
+
+        void OnTimer(wxTimerEvent&)
+        {
+            const U32 held = PadHeld();
+            const U32 pressed = held & ~mHeld;
+            mHeld = held;
+
+            if (pressed == 0)
+            {
+                ShowPadStatus();
+                return;
+            }
+
+            S32 count;
+            const iPadBindToken* tokens = ConfigModelBindTokens(CONFIG_MODEL_PAD, &count);
+            for (S32 input = 0; input < PADIN_COUNT; input++)
+            {
+                if ((pressed & (1u << input)) == 0)
+                {
+                    continue;
+                }
+                const char* name = iPadBindTokenName((S16)input, tokens, count);
+                if (name != NULL)
+                {
+                    mTimer.Stop();
+                    mToken = name;
+                    EndModal(wxID_OK);
+                    return;
+                }
+            }
+        }
+
+        ConfigModelDevice mDevice;
+        wxTimer mTimer;
+        U32 mHeld;
+        wxStaticText* mStatus;
+        wxString mToken;
     };
 
     class ConfigFrame : public wxFrame
@@ -94,6 +458,8 @@ namespace
 
     private:
         void AddRow(wxWindow* parent, wxGridBagSizer* grid, int& line, S32 setting, int indent);
+        void AddBindRow(int& line, ConfigModelDevice device, S32 row);
+        void Capture(Row& row, bool add);
         int GroupSize(S32 master) const;
         void BuildRows();
         void ShowSection(int which);
@@ -150,6 +516,10 @@ namespace
         for (S32 i = 0; i < ConfigModelSectionCount(); i++)
         {
             mSections->Append(ConfigModelSectionName(i));
+        }
+        for (S32 d = 0; d < CONFIG_MODEL_DEVICE_COUNT; d++)
+        {
+            mSections->Append(ConfigModelDeviceSection((ConfigModelDevice)d));
         }
         mSections->SetSelection(0);
         mSections->SetMinSize(FromDIP(wxSize(kLabelWidth, 100)));
@@ -364,6 +734,73 @@ namespace
         mRows.push_back(row);
     }
 
+    // One button's binding: its name, a box holding the binding as the file has
+    // it (the default shows as grey hint text when it is empty), Set to replace
+    // it with one captured input and Add to append one as an alternative.
+    void ConfigFrame::AddBindRow(int& line, ConfigModelDevice device, S32 bind)
+    {
+        Row row;
+        row.bindRow = bind;
+        row.device = device;
+
+        const int id = kIdRowBase + (int)mRows.size() * kIdsPerRow;
+
+        wxTextCtrl* text = new wxTextCtrl(mPane, id + kIdRowValue, ConfigModelBindText(device, bind),
+                                          wxDefaultPosition, FromDIP(wxSize(kValueWidth, -1)));
+        char def[256];
+        ConfigModelBindDescribeDefault(device, bind, def, sizeof(def));
+        text->SetHint(def);
+        row.entry = text;
+
+        wxStaticText* label = new wxStaticText(mPane, wxID_ANY, ConfigModelBindName(bind));
+        label->SetMinSize(FromDIP(wxSize(kLabelWidth, -1)));
+
+        wxButton* set = new wxButton(mPane, id + kIdRowBrowse, "Set...", wxDefaultPosition,
+                                     wxDefaultSize, wxBU_EXACTFIT);
+        wxButton* add = new wxButton(mPane, id + kIdRowAdd, "Add...", wxDefaultPosition,
+                                     wxDefaultSize, wxBU_EXACTFIT);
+        set->SetToolTip("Replace the binding with the next key or button pressed");
+        add->SetToolTip("Add the next key or button pressed as another way to press this");
+
+        wxBoxSizer* buttons = new wxBoxSizer(wxHORIZONTAL);
+        buttons->Add(set, wxSizerFlags().Border(wxRIGHT, FromDIP(4)));
+        buttons->Add(add);
+
+        mGrid->Add(label, wxGBPosition(line, 0), wxGBSpan(1, 1), wxALIGN_CENTER_VERTICAL);
+        mGrid->Add(text, wxGBPosition(line, 1), wxGBSpan(1, 1), wxEXPAND);
+        mGrid->Add(buttons, wxGBPosition(line, 2), wxGBSpan(1, 1), wxALIGN_CENTER_VERTICAL);
+        line++;
+
+        row.descriptionText = DescribeBinding(device, bind);
+        row.description = new wxStaticText(mPane, wxID_ANY, row.descriptionText);
+        row.description->SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_GRAYTEXT));
+        mGrid->Add(row.description, wxGBPosition(line, 0), wxGBSpan(1, 3), wxEXPAND | wxBOTTOM,
+                   FromDIP(10));
+        line++;
+
+        mRows.push_back(row);
+    }
+
+    // Replace or extend a binding with the next input pressed.
+    void ConfigFrame::Capture(Row& row, bool add)
+    {
+        CaptureDialog dialog(this, row.device, row.bindRow);
+        if (dialog.ShowModal() != wxID_OK)
+        {
+            return;
+        }
+
+        wxString value = dialog.Token();
+        const wxString have = row.entry->GetValue();
+        if (add && !have.empty())
+        {
+            value = have + ", " + value;
+        }
+
+        // SetValue sends the change event, which records it.
+        row.entry->SetValue(value);
+    }
+
     // How many settings in this section hang off `master`.
     int ConfigFrame::GroupSize(S32 master) const
     {
@@ -394,8 +831,41 @@ namespace
         mRows.clear();
         mWrappedAt = 0;
 
-        const char* section = ConfigModelSectionName(mSection);
         int line = 0;
+
+        if (IsBindSection(mSection))
+        {
+            const ConfigModelDevice device = DeviceOfSection(mSection);
+
+            wxStaticText* intro = new wxStaticText(
+                mPane, wxID_ANY,
+                device == CONFIG_MODEL_KEYBOARD
+                    ? "The game's buttons, and the keys that press them. Several keys are "
+                      "written with ',' between them, keys held together with '+', and a key "
+                      "that must not be held with '!'. The left stick is WASD and the camera "
+                      "stick IJKL; those are not bindings."
+                    : "The game's buttons, and the controller inputs that press them, by "
+                      "position: a is the bottom face button on any pad. ',' '+' and '!' work "
+                      "as on the keyboard page. Empty follows input.preset.");
+            intro->Wrap(FromDIP(520));
+            mGrid->Add(intro, wxGBPosition(line, 0), wxGBSpan(1, 3), wxEXPAND | wxBOTTOM,
+                       FromDIP(12));
+            line++;
+
+            for (S32 i = 0; i < ConfigModelBindCount(); i++)
+            {
+                AddBindRow(line, device, i);
+            }
+
+            mPane->Scroll(0, 0);
+            mPane->Layout();
+            RewrapDescriptions();
+            mPane->FitInside();
+            mPane->Thaw();
+            return;
+        }
+
+        const char* section = ConfigModelSectionName(mSection);
 
         for (S32 i = 0; i < ConfigModelSettingCount(); i++)
         {
@@ -494,6 +964,13 @@ namespace
     // under the caret while a path is being typed.
     void ConfigFrame::RefreshRow(Row& row)
     {
+        // A binding's description says what the default is, which the value
+        // does not change.
+        if (row.bindRow >= 0)
+        {
+            return;
+        }
+
         char text[768];
         ConfigModelDescribe(row.setting, text, sizeof(text));
 
@@ -567,7 +1044,7 @@ namespace
         // the selection is cleared -- and -1 would index the section table off
         // its front.
         const int which = event.GetSelection();
-        if (which < 0 || which >= ConfigModelSectionCount())
+        if (which < 0 || which >= ConfigModelSectionCount() + CONFIG_MODEL_DEVICE_COUNT)
         {
             return;
         }
@@ -584,6 +1061,16 @@ namespace
             return;
         }
 
+        if (row->bindRow >= 0)
+        {
+            // Trimmed, so a box emptied down to a space still means the default.
+            wxString value = ValueOf(*row);
+            value.Trim(true).Trim(false);
+            ConfigModelBindSetText(row->device, row->bindRow, value.utf8_str());
+            RefreshApply();
+            return;
+        }
+
         ConfigModelSetText(row->setting, ValueOf(*row).utf8_str());
         RefreshApply();
         RefreshRow(*row);
@@ -595,6 +1082,13 @@ namespace
         if (row == NULL || row->entry == NULL)
         {
             event.Skip();
+            return;
+        }
+
+        if (row->bindRow >= 0)
+        {
+            const bool add = (event.GetId() - kIdRowBase) % kIdsPerRow == kIdRowAdd;
+            Capture(*row, add);
             return;
         }
 
@@ -640,6 +1134,14 @@ namespace
 
     void ConfigFrame::OnResetSection(wxCommandEvent&)
     {
+        if (IsBindSection(mSection))
+        {
+            ConfigModelBindResetAll(DeviceOfSection(mSection));
+            RefreshApply();
+            BuildRows();
+            return;
+        }
+
         ConfigModelResetSection(mSection);
         RefreshApply();
         BuildRows();
@@ -832,6 +1334,9 @@ bool ConfigApp::OnInit()
 int ConfigApp::OnExit()
 {
     ConfigModelClose();
+
+    // Up only if a controller binding was captured; harmless otherwise.
+    SDL_Quit();
     return wxApp::OnExit();
 }
 

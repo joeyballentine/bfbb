@@ -5,6 +5,7 @@
 
 #include "iConfigEdit.h"
 #include "iHost.h"
+#include "iPadTokens.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,10 +41,46 @@ namespace
         const char** sectionNames;
         S32 sectionCount;
 
+        // One per device per button. `present` is whether the file has the
+        // line, so a binding put back on its default can take it out again.
+        Value binds[CONFIG_MODEL_DEVICE_COUNT][IPAD_BIND_MAX_BUTTONS];
+
         bool dirty;
     };
 
     Model gModel;
+
+    const char* const kDeviceSections[CONFIG_MODEL_DEVICE_COUNT] = { "keyboard", "pad" };
+
+    void loadBindings()
+    {
+        for (S32 d = 0; d < CONFIG_MODEL_DEVICE_COUNT; d++)
+        {
+            for (S32 i = 0; i < ConfigModelBindCount(); i++)
+            {
+                const char* have =
+                    iConfigEditGet(gModel.file, kDeviceSections[d], kPadBindButtons[i].name);
+                gModel.binds[d][i].present = (have != NULL);
+                snprintf(gModel.binds[d][i].text, kConfigModelMaxValue, "%s",
+                         have != NULL ? have : "");
+            }
+        }
+    }
+
+    // The preset the model holds for input.preset, as typed. "auto" follows
+    // the controller in the game, which this program cannot see.
+    const char* modelPreset()
+    {
+        for (S32 i = 0; i < kConfigSettingCount; i++)
+        {
+            if (strcmp(kConfigSettings[i].section, "input") == 0 &&
+                strcmp(kConfigSettings[i].name, "preset") == 0)
+            {
+                return gModel.values[i].text;
+            }
+        }
+        return "auto";
+    }
 
     // The names the build gives the game, in the order they are tried. Two
     // rather than a #ifdef because that is the whole of the difference: the
@@ -230,6 +267,7 @@ bool ConfigModelOpen(const char* fromCommandLine, char* why, size_t whySize)
     collectSections();
     resolveGroups();
     loadValues();
+    loadBindings();
     return true;
 }
 
@@ -376,6 +414,100 @@ bool ConfigModelDirty()
     return gModel.dirty;
 }
 
+const char* ConfigModelDeviceSection(ConfigModelDevice device)
+{
+    return kDeviceSections[device];
+}
+
+S32 ConfigModelBindCount()
+{
+    return kPadBindButtonCount < IPAD_BIND_MAX_BUTTONS ? kPadBindButtonCount
+                                                       : IPAD_BIND_MAX_BUTTONS;
+}
+
+const char* ConfigModelBindName(S32 row)
+{
+    return kPadBindButtons[row].name;
+}
+
+const char* ConfigModelBindDoes(S32 row)
+{
+    return kPadBindButtons[row].does;
+}
+
+const char* ConfigModelBindText(ConfigModelDevice device, S32 row)
+{
+    return gModel.binds[device][row].text;
+}
+
+void ConfigModelBindSetText(ConfigModelDevice device, S32 row, const char* text)
+{
+    Value* v = &gModel.binds[device][row];
+    if (strcmp(v->text, text) == 0)
+    {
+        return;
+    }
+
+    snprintf(v->text, kConfigModelMaxValue, "%s", text);
+    gModel.dirty = true;
+}
+
+void ConfigModelBindDescribeDefault(ConfigModelDevice device, S32 row, char* out, size_t outSize)
+{
+    if (device == CONFIG_MODEL_KEYBOARD)
+    {
+        snprintf(out, outSize, "%s", kPadBindButtons[row].key);
+        return;
+    }
+
+    const char* preset = modelPreset();
+    const bool automatic = iHostStrCaseCmp(preset, "auto") == 0;
+    const char* shown = automatic ? "xbox" : preset;
+
+    const char* entry = iPadBindPresetEntry(shown, row);
+    char what[64];
+    if (entry == NULL)
+    {
+        snprintf(what, sizeof(what), "%s", kPadBindButtons[row].pad);
+    }
+    else if (entry[0] == '#')
+    {
+        snprintf(what, sizeof(what), "the button printed %c", entry[1]);
+    }
+    else
+    {
+        snprintf(what, sizeof(what), "%s", entry);
+    }
+
+    if (automatic)
+    {
+        snprintf(out, outSize, "%s (xbox preset; auto follows the controller)", what);
+    }
+    else
+    {
+        snprintf(out, outSize, "%s (%s preset)", what, shown);
+    }
+}
+
+const iPadBindToken* ConfigModelBindTokens(ConfigModelDevice device, S32* count)
+{
+    return device == CONFIG_MODEL_KEYBOARD ? iPadKeyTokens(count) : iPadPadTokens(count);
+}
+
+bool ConfigModelBindResetAll(ConfigModelDevice device)
+{
+    bool changed = false;
+    for (S32 i = 0; i < ConfigModelBindCount(); i++)
+    {
+        if (gModel.binds[device][i].text[0] != '\0')
+        {
+            ConfigModelBindSetText(device, i, "");
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 ConfigModelResult ConfigModelSave(char* why, size_t whySize, S32* badSetting, S32* badSection)
 {
     for (S32 i = 0; i < kConfigSettingCount; i++)
@@ -403,6 +535,40 @@ ConfigModelResult ConfigModelSave(char* why, size_t whySize, S32* badSetting, S3
         return CONFIG_MODEL_BAD_VALUE;
     }
 
+    // A binding is checked by the parser the game uses, against the same input
+    // names, so one that passes here is one the game will read.
+    for (S32 d = 0; d < CONFIG_MODEL_DEVICE_COUNT; d++)
+    {
+        S32 tokenCount;
+        const iPadBindToken* tokens = ConfigModelBindTokens((ConfigModelDevice)d, &tokenCount);
+
+        for (S32 i = 0; i < ConfigModelBindCount(); i++)
+        {
+            const char* text = gModel.binds[d][i].text;
+            iPadBind parsed;
+            if (text[0] == '\0' ||
+                iPadBindParse(text, tokens, tokenCount, kPadBindButtons[i].name, &parsed))
+            {
+                continue;
+            }
+
+            snprintf(why, whySize,
+                     "%s.%s is \"%s\".\n\nA binding is input names from the list, with ',' "
+                     "between alternatives, '+' for inputs held together and '!' for one "
+                     "that must not be held.",
+                     kDeviceSections[d], kPadBindButtons[i].name, text);
+            if (badSetting != NULL)
+            {
+                *badSetting = i;
+            }
+            if (badSection != NULL)
+            {
+                *badSection = ConfigModelSectionCount() + d;
+            }
+            return CONFIG_MODEL_BAD_VALUE;
+        }
+    }
+
     for (S32 i = 0; i < kConfigSettingCount; i++)
     {
         const iConfigSetting* s = &kConfigSettings[i];
@@ -414,6 +580,30 @@ ConfigModelResult ConfigModelSave(char* why, size_t whySize, S32* badSetting, S3
         {
             snprintf(why, whySize, "There is no room left in config.ini for another line.");
             return CONFIG_MODEL_NO_ROOM;
+        }
+    }
+
+    for (S32 d = 0; d < CONFIG_MODEL_DEVICE_COUNT; d++)
+    {
+        for (S32 i = 0; i < ConfigModelBindCount(); i++)
+        {
+            Value* v = &gModel.binds[d][i];
+            if (v->text[0] == '\0')
+            {
+                if (v->present)
+                {
+                    iConfigEditUnset(gModel.file, kDeviceSections[d], kPadBindButtons[i].name);
+                    v->present = false;
+                }
+                continue;
+            }
+
+            if (!iConfigEditSet(gModel.file, kDeviceSections[d], kPadBindButtons[i].name, v->text))
+            {
+                snprintf(why, whySize, "There is no room left in config.ini for another line.");
+                return CONFIG_MODEL_NO_ROOM;
+            }
+            v->present = true;
         }
     }
 

@@ -2,6 +2,7 @@
 #define CONFIG_MODEL_H
 
 #include "iConfigTable.h"
+#include "iPadBind.h"
 
 #include <stddef.h>
 
@@ -76,6 +77,50 @@ bool ConfigModelWantsCombo(const iConfigSetting* s);
 bool ConfigModelWantsBrowse(const iConfigSetting* s);
 
 // -----------------------------------------------------------------------
+// Controls
+//
+// The [keyboard] and [pad] sections: one binding per button the game reads
+// (kPadBindButtons), in the grammar iPadBind.h describes. A front end shows
+// them as two more sections after the settings', numbered
+// ConfigModelSectionCount() + device.
+
+enum ConfigModelDevice
+{
+    CONFIG_MODEL_KEYBOARD,
+    CONFIG_MODEL_PAD,
+    CONFIG_MODEL_DEVICE_COUNT
+};
+
+// "keyboard" or "pad", as the file names the section.
+const char* ConfigModelDeviceSection(ConfigModelDevice device);
+
+S32 ConfigModelBindCount();
+
+// The button's name, left of the '=', and what it does, or NULL.
+const char* ConfigModelBindName(S32 row);
+const char* ConfigModelBindDoes(S32 row);
+
+// The binding the file gives the button, or "" for none. None means the
+// default: the game answers a missing line from its own table.
+const char* ConfigModelBindText(ConfigModelDevice device, S32 row);
+
+// Record a binding. "" puts the button back on its default and takes the line
+// out of the file on the next save. Checked on save, like a setting.
+void ConfigModelBindSetText(ConfigModelDevice device, S32 row, const char* text);
+
+// What the default is, in words: the key table's binding for the keyboard,
+// and for the pad what input.preset (as this model now holds it) binds the
+// row to. A preset that names a printed letter rather than a position says so.
+void ConfigModelBindDescribeDefault(ConfigModelDevice device, S32 row, char* out, size_t outSize);
+
+// The input names a binding for this device may use.
+const iPadBindToken* ConfigModelBindTokens(ConfigModelDevice device, S32* count);
+
+// Put every binding for one device back on its default. False if they all
+// were already.
+bool ConfigModelBindResetAll(ConfigModelDevice device);
+
+// -----------------------------------------------------------------------
 // Saving
 
 // Whether anything has been changed since the last write.
@@ -85,8 +130,10 @@ enum ConfigModelResult
 {
     CONFIG_MODEL_OK,
 
-    // A value the table will not accept. `badSetting` and `badSection` say
-    // which, so the UI can show that setting before it shows the message.
+    // A value the table will not accept, or a binding that does not parse.
+    // `badSetting` and `badSection` say which, so the UI can show that setting
+    // before it shows the message. A binding's section is
+    // ConfigModelSectionCount() + device, and `badSetting` is then its row.
     CONFIG_MODEL_BAD_VALUE,
 
     // The file could not take another line, or could not be written.

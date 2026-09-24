@@ -79,11 +79,30 @@ Which file it edits is the order the game searches in: `BFBB_CONFIG`, then
 overrides all three. A missing file is written at the defaults, as the game
 does it.
 
+## Bindings
+
+`[keyboard]` and `[pad]` are two more pages after the settings' sections, one
+row per button the game reads (`kPadBindButtons`). Each row holds the binding
+as the file has it, typable in the full grammar (`,` `+` `!`), with Set to
+replace it with the next input pressed and Add to append one as another
+alternative.
+
+An empty box is the default, and saving takes the line out of the file. The
+default shows as grey hint text: the key table's for the keyboard, and for the
+pad whatever `input.preset` (as this window holds it) binds the row to. A
+preset's face buttons name a printed letter rather than a position, and the
+hint says so.
+
+A binding is checked on Save by `iPadBindParse`, against the same input names
+the game uses (`../iPadTokens.cpp`), so one that saves is one the game reads.
+
+Keys are captured from wx. The controller is read through SDL, polled while the
+capture dialog is open, with background events allowed because the focused
+window is wx's. Left and right Shift, Ctrl and Alt are told apart on Windows;
+elsewhere they capture as the either-side name.
+
 ## Not yet
 
-- `[pad]` and `[keyboard]`. Editing a binding wants a control that captures a
-  button press, and the grammar takes `,` `+` and `!`, which is a second screen
-  rather than a row.
 - Live validation. A value is checked on Save, which reports the first one that
   will not do and shows it.
 

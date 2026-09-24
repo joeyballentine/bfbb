@@ -1018,6 +1018,126 @@ static void test_config_model()
     iHostRemoveDir(dir);
 }
 
+static S32 bind_row(const char* name)
+{
+    for (S32 i = 0; i < ConfigModelBindCount(); i++)
+    {
+        if (strcmp(ConfigModelBindName(i), name) == 0)
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// The [keyboard] and [pad] pages: bindings read from the file, written back
+// through the game's own parser, and an empty one taking its line out again.
+static void test_config_model_bindings()
+{
+    printf("config_model bindings\n");
+
+    char dir[512];
+    if (!scratch_dir("configbind", dir, sizeof(dir)))
+    {
+        check(false, "could not make a temp directory");
+        return;
+    }
+
+    char path[512];
+    snprintf(path, sizeof(path), "%s/config.ini", dir);
+
+    static const char kFile[] = "[keyboard]\na = space\n\n[pad]\nb = x\n";
+    FILE* w = fopen(path, "wb");
+    if (w != NULL)
+    {
+        fwrite(kFile, 1, sizeof(kFile) - 1, w);
+        fclose(w);
+    }
+
+    char why[1024];
+    why[0] = '\0';
+    if (!ConfigModelOpen(path, why, sizeof(why)))
+    {
+        check(false, "the model opens a file with bindings");
+        iHostRemoveFile(path);
+        iHostRemoveDir(dir);
+        return;
+    }
+
+    const S32 a = bind_row("a");
+    const S32 b = bind_row("b");
+    const S32 y = bind_row("y");
+    check(a >= 0 && b >= 0 && y >= 0, "a, b and y are bindable");
+    if (a < 0 || b < 0 || y < 0)
+    {
+        ConfigModelClose();
+        iHostRemoveFile(path);
+        iHostRemoveDir(dir);
+        return;
+    }
+
+    check(strcmp(ConfigModelBindText(CONFIG_MODEL_KEYBOARD, a), "space") == 0,
+          "a keyboard binding reads from the file");
+    check(strcmp(ConfigModelBindText(CONFIG_MODEL_PAD, b), "x") == 0, "and a pad one");
+    check(ConfigModelBindText(CONFIG_MODEL_PAD, a)[0] == '\0',
+          "and one the file lacks reads empty, meaning the default");
+
+    char def[256];
+    ConfigModelBindDescribeDefault(CONFIG_MODEL_KEYBOARD, a, def, sizeof(def));
+    check(strcmp(def, "space") == 0, "the keyboard default is the table's key");
+    ConfigModelBindDescribeDefault(CONFIG_MODEL_PAD, a, def, sizeof(def));
+    check(strstr(def, "printed A") != NULL, "and a face button's pad default names its letter");
+
+    ConfigModelBindSetText(CONFIG_MODEL_KEYBOARD, a, "space, enter");
+    ConfigModelBindSetText(CONFIG_MODEL_PAD, a, "lt+!rb");
+    ConfigModelBindSetText(CONFIG_MODEL_PAD, b, "");
+    check(ConfigModelDirty(), "changing a binding marks the model dirty");
+    check(ConfigModelSave(why, sizeof(why), NULL, NULL) == CONFIG_MODEL_OK,
+          "alternatives, chords and negation all save");
+    ConfigModelClose();
+
+    {
+        char buf[8192];
+        FILE* r = fopen(path, "rb");
+        size_t n = (r != NULL) ? fread(buf, 1, sizeof(buf) - 1, r) : 0;
+        if (r != NULL)
+        {
+            fclose(r);
+        }
+        buf[n] = '\0';
+
+        const char* pad = strstr(buf, "[pad]");
+        check(strstr(buf, "a = space, enter") != NULL, "the keyboard binding is in the file");
+        check(pad != NULL && strstr(pad, "a = lt+!rb") != NULL, "the pad one is under [pad]");
+        check(pad != NULL && strstr(pad, "b = ") == NULL,
+              "and an emptied binding's line is gone");
+    }
+
+    if (ConfigModelOpen(path, why, sizeof(why)))
+    {
+        ConfigModelBindSetText(CONFIG_MODEL_KEYBOARD, y, "space+nonsense");
+
+        S32 bad = -1;
+        S32 section = -1;
+        check(ConfigModelSave(why, sizeof(why), &bad, &section) == CONFIG_MODEL_BAD_VALUE,
+              "a binding naming no key refuses to save");
+        check(bad == y && section == ConfigModelSectionCount() + CONFIG_MODEL_KEYBOARD,
+              "and says which button on which page");
+
+        check(ConfigModelBindResetAll(CONFIG_MODEL_KEYBOARD), "resetting the page changes it");
+        check(ConfigModelSave(why, sizeof(why), NULL, NULL) == CONFIG_MODEL_OK,
+              "and then it saves");
+        ConfigModelClose();
+    }
+    else
+    {
+        check(false, "the model reopens the file it wrote");
+    }
+
+    iHostRemoveFile(path);
+    iHostRemoveDir(dir);
+}
+
 static void test_screen()
 {
     printf("iScreen\n");
@@ -5002,6 +5122,7 @@ int main()
     test_config();
     test_config_edit();
     test_config_model();
+    test_config_model_bindings();
     test_screen();
     test_drawdist();
     test_boot();

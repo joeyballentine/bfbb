@@ -1615,6 +1615,12 @@ if(BFBB_BUILD_CONFIGURATOR)
     ${PC_DIR}/configurator/config_model.cpp
     ${PC_DIR}/iConfigTable.cpp
     ${PC_DIR}/iConfigEdit.cpp
+
+    # The binding table, the parser and the input names, for the [keyboard]
+    # and [pad] pages. None of it reads config.ini or opens a device; SDL is
+    # linked for the controller capture.
+    ${PC_DIR}/iPadBindTable.cpp
+    ${PC_DIR}/iPadTokens.cpp
     ${HOST_SOURCES}
   )
 
@@ -1650,7 +1656,7 @@ if(BFBB_BUILD_CONFIGURATOR)
     ${CMAKE_CURRENT_SOURCE_DIR}/src/SB/Core/x
   )
   target_compile_options(bfbb_config PRIVATE ${BFBB_NO_WARNINGS})
-  target_link_libraries(bfbb_config PRIVATE bfbb_wx)
+  target_link_libraries(bfbb_config PRIVATE bfbb_wx bfbb_sdl)
 endif()
 
 # --- self-test ---------------------------------------------------------------
