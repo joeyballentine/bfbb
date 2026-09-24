@@ -395,6 +395,15 @@ void iSnapshotDiscard()
     sHaveFrame = 0;
 }
 
+RwRaster* iSnapshotLastFrame()
+{
+    if (!sEnabled || sFailed || !sHaveFrame || sLatched)
+    {
+        return NULL;
+    }
+    return sRaster;
+}
+
 void iSnapshotSetEnabled(S32 enabled)
 {
     sEnabled = enabled ? TRUE : FALSE;

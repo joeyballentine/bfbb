@@ -74,6 +74,13 @@ every save, newest first, five rows at a time. The rows are `PC LD ROW n`
 scrolls (`iAssetPkg::TextSpace`, `iAssetTextSet`). Retail's `LD/SV GAMESLOT n`
 and folder buttons are still built but nothing shows them.
 
+Each save gets a still of the game beside it (`SpongeBob00.tga`, see
+`iSaveThumb.h`), shown in the list where retail showed a stock picture of the
+level: the frame on screen when the game was paused, for a save from the pause
+menu, or when an autosave ran. A save from the title has none and shows the
+stock picture. The stills come from the loading-screen snapshot, so with
+`xbox.snapshot` off there are none.
+
 A save is a folder and a slot, as retail's are. The backend reaches ten
 folders with the PC menus on: retail's two, where saves made before this still
 are, and eight more under `saves/more/` for the PC screen. A new save takes the

@@ -232,6 +232,30 @@ void iSGSetPCTargets(S32 on);
 // Make target `tgt`'s folder, so a first save into it has somewhere to go.
 S32 iSGMakeTarget(S32 tgt);
 
+// The save stills (iSaveThumb.h), with the PC menus on. A save file written
+// with iSGSaveFile gets a still beside it, taken per the source set here:
+//
+//   ISG_THUMB_NOW   take one now. The default, and right for an autosave,
+//                   which happens with the game on screen.
+//   ISG_THUMB_KEPT  the one iSGCaptureThumb kept when the game paused; the pause
+//                   menu is on screen by the time anyone saves from it.
+//   ISG_THUMB_NONE  none: a save made from the title screen, before there is a
+//                   game to take a picture of.
+enum
+{
+    ISG_THUMB_NOW,
+    ISG_THUMB_KEPT,
+    ISG_THUMB_NONE
+};
+void iSGSetThumbSource(S32 source);
+
+// Keep a still of the frame on screen, for a save made from the pause menu.
+// zGamePause calls it as the game stops; gc/isavegame.h makes it nothing.
+void iSGCaptureThumb();
+
+// Where the still for folder `tgt`, slot `game` is. 0 for no such slot.
+S32 iSGThumbPath(S32 tgt, S32 game, char* out, U32 outsize);
+
 // The save and load screens. The GameCube's are zSaveLoad_LoadLoop and
 // zSaveLoad_SaveLoop; gc/isavegame.h names them. Here they are the same
 // functions with the PC menus off, and the PC save screen with them on:

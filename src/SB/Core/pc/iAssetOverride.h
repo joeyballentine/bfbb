@@ -34,4 +34,9 @@ S32 iAssetOverrideEnabled();
 // (iAssetPkg::TextSpace). FALSE when no open package built one by that ID.
 S32 iAssetTextSet(U32 id, const char* text);
 
+// An asset made at run time, answered by ID from the open code packages as if
+// one of them had it: the save list's still, a texture the thumbnail widget
+// looks up with xSTFindAsset. NULL takes it away.
+void iAssetOverrideSetRuntime(U32 id, void* data);
+
 #endif

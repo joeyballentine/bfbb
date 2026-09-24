@@ -944,6 +944,7 @@ void zGamePause()
         }
         else
         {
+            iSGCaptureThumb();
             zEntEvent("techbutton6_click", 24);
             zEntEvent("SAVING GAME ICON UI", 4);
             zEntEvent("MNU4 AUTO SAVE FAILED", 4);

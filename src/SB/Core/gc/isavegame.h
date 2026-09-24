@@ -185,4 +185,7 @@ S32 iSGCheckForCorruptFiles(st_ISGSESSION*, char files[][64]);
 #define iSGLoadLoop zSaveLoad_LoadLoop
 #define iSGSaveLoop zSaveLoad_SaveLoop
 
+// The PC port keeps a still of the game for its save list; see pc/isavegame.h.
+#define iSGCaptureThumb()
+
 #endif

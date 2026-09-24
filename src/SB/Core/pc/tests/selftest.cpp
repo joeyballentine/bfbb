@@ -3204,6 +3204,23 @@ char* xST_xAssetID_HIPFullPath(U32 aid)
     return aid == sFakePkgAsset ? sFakePkgName : NULL;
 }
 
+// isavegame.cpp writes a still beside a save through rw/savethumb.cpp, which
+// needs a renderer this binary does not have. The tests save with the PC
+// folders off, where no still is taken; these only have to link.
+void iSaveThumbCapture()
+{
+}
+
+S32 iSaveThumbHave()
+{
+    return FALSE;
+}
+
+S32 iSaveThumbWrite(const char*)
+{
+    return FALSE;
+}
+
 S32 xSTGetAssetInfoInHxP(U32 aid, st_PKR_ASSET_TOCINFO* info, U32)
 {
     if (aid != sFakePkgAsset)

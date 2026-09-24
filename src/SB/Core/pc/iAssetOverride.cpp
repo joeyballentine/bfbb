@@ -233,6 +233,32 @@ Open* Owned(st_PACKER_READ_DATA* pr, U32 type)
     return o;
 }
 
+// Assets made at run time; see iAssetOverrideSetRuntime.
+struct Runtime
+{
+    U32 id;
+    void* data;
+};
+const S32 kMaxRuntime = 4;
+Runtime sRuntime[kMaxRuntime];
+
+// A run-time asset by that ID, when `pr` is one of the open code packages.
+void* RuntimeAsset(st_PACKER_READ_DATA* pr, U32 aid)
+{
+    if (aid == 0 || Find(pr) == NULL)
+    {
+        return NULL;
+    }
+    for (S32 i = 0; i < kMaxRuntime; i++)
+    {
+        if (sRuntime[i].id == aid)
+        {
+            return sRuntime[i].data;
+        }
+    }
+    return NULL;
+}
+
 // An ID the code built, or NULL. *hidden is set when the HIP has the ID as an
 // owned type the code left out, so the asset must look absent.
 const iAssetEntry* Lookup(st_PACKER_READ_DATA* pr, U32 aid, S32* hidden)
@@ -329,6 +355,10 @@ void W_Done(st_PACKER_READ_DATA* pr)
 
 U32 W_GetAssetSize(st_PACKER_READ_DATA* pr, U32 aid)
 {
+    if (RuntimeAsset(pr, aid) != NULL)
+    {
+        return 0;
+    }
     S32 hidden;
     const iAssetEntry* e = Lookup(pr, aid, &hidden);
     if (e != NULL)
@@ -340,6 +370,11 @@ U32 W_GetAssetSize(st_PACKER_READ_DATA* pr, U32 aid)
 
 void* W_LoadAsset(st_PACKER_READ_DATA* pr, U32 aid, const char* name, void* dflt)
 {
+    void* runtime = RuntimeAsset(pr, aid);
+    if (runtime != NULL)
+    {
+        return runtime;
+    }
     S32 hidden;
     const iAssetEntry* e = Lookup(pr, aid, &hidden);
     if (e != NULL)
@@ -386,6 +421,10 @@ S32 W_AssetCount(st_PACKER_READ_DATA* pr, U32 type)
 
 S32 W_IsAssetReady(st_PACKER_READ_DATA* pr, U32 aid)
 {
+    if (RuntimeAsset(pr, aid) != NULL)
+    {
+        return TRUE;
+    }
     S32 hidden;
     if (Lookup(pr, aid, &hidden) != NULL)
     {
@@ -434,6 +473,10 @@ S32 W_GetAssetInfoByType(st_PACKER_READ_DATA* pr, U32 type, S32 idx, st_PKR_ASSE
 
 S32 W_PkgHasAsset(st_PACKER_READ_DATA* pr, U32 aid)
 {
+    if (RuntimeAsset(pr, aid) != NULL)
+    {
+        return TRUE;
+    }
     S32 hidden;
     if (Lookup(pr, aid, &hidden) != NULL)
     {
@@ -451,6 +494,32 @@ void iAssetOverrideSetEnabled(S32 on)
 S32 iAssetOverrideEnabled()
 {
     return sEnabled;
+}
+
+void iAssetOverrideSetRuntime(U32 id, void* data)
+{
+    S32 empty = -1;
+    for (S32 i = 0; i < kMaxRuntime; i++)
+    {
+        if (sRuntime[i].id == id)
+        {
+            sRuntime[i].data = data;
+            if (data == NULL)
+            {
+                sRuntime[i].id = 0;
+            }
+            return;
+        }
+        if (sRuntime[i].id == 0 && empty < 0)
+        {
+            empty = i;
+        }
+    }
+    if (data != NULL && empty >= 0)
+    {
+        sRuntime[empty].id = id;
+        sRuntime[empty].data = data;
+    }
 }
 
 S32 iAssetTextSet(U32 id, const char* text)

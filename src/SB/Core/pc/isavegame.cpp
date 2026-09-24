@@ -1,6 +1,7 @@
 #include "isavegame.h"
 #include "iHost.h"
 #include "iFile.h"
+#include "iSaveThumb.h"
 
 #include <types.h>
 
@@ -702,6 +703,80 @@ static void iSG_fail(st_ISGSESSION* isgdata, en_ASYNC_OPERR err)
     isgdata->as_operr = err;
 }
 
+// Where a save's still comes from; see iSGSetThumbSource.
+static S32 sThumbSource = ISG_THUMB_NOW;
+
+void iSGSetThumbSource(S32 source)
+{
+    sThumbSource = source;
+}
+
+void iSGCaptureThumb()
+{
+    if (sPCTargets)
+    {
+        iSaveThumbCapture();
+    }
+}
+
+S32 iSGThumbPath(S32 tgt, S32 game, char* out, U32 outsize)
+{
+    if (tgt < 0 || tgt >= iSG_targets() || game < 0 || game >= ISG_NUM_FILES)
+    {
+        return 0;
+    }
+
+    char root[512];
+    iSG_target_root(tgt, root, sizeof(root));
+    snprintf(out, outsize, "%s/%s.tga", root, iSGMakeName(ISG_NGTYP_GAMEFILE, NULL, game));
+    return 1;
+}
+
+// The still beside a save that has just been written, as SpongeBob00.tga next
+// to SpongeBob00. PC menus only: retail's screens have nowhere to show one.
+//
+// A save with no still to go with it takes the old one away, unless it is an
+// autosave with nothing to take right now -- then the one it had is still of
+// the same game, only earlier, and better than the stock picture.
+static void iSG_write_still(const char* savePath)
+{
+    if (!sPCTargets)
+    {
+        return;
+    }
+
+    char still[544];
+    snprintf(still, sizeof(still), "%s.tga", savePath);
+
+    switch (sThumbSource)
+    {
+    case ISG_THUMB_NOW:
+        iSaveThumbCapture();
+        if (!iSaveThumbHave())
+        {
+            return;
+        }
+        break;
+
+    case ISG_THUMB_KEPT:
+        if (!iSaveThumbHave())
+        {
+            iHostRemoveFile(still);
+            return;
+        }
+        break;
+
+    default:
+        iHostRemoveFile(still);
+        return;
+    }
+
+    if (!iSaveThumbWrite(still))
+    {
+        iHostRemoveFile(still);
+    }
+}
+
 // Written to a temporary and renamed, so that losing power partway through
 // leaves the previous save intact rather than a truncated one. The console got
 // this for free -- CARD writes whole sectors and updates the directory entry
@@ -757,6 +832,8 @@ S32 iSGSaveFile(st_ISGSESSION* isgdata, const char* fname, char* data, S32 n, S3
         iSG_fail(isgdata, ISG_OPERR_SVWRITE);
         return 0;
     }
+
+    iSG_write_still(path);
 
     isgdata->as_opstat = ISG_OPSTAT_SUCCESS;
     isgdata->as_operr = ISG_OPERR_NONE;

@@ -25,7 +25,10 @@
 #include <string.h>
 
 #include "iAssetOverride.h"
+#include "iSaveThumb.h"
 #include "isavegame.h"
+#include "xstransvc.h"
+#include "zUI.h"
 #include "xEvent.h"
 #include "xPad.h"
 #include "xString.h"
@@ -201,6 +204,95 @@ namespace
         }
     }
 
+    // The picture beside the list: the save's own still when it has one
+    // (iSaveThumb.h), retail's stock picture of the level when it does not.
+    //
+    // The still is served to the thumbnail widget as a run-time asset under
+    // this name, and the widget's box is reshaped to it; the stock pictures
+    // are square, and the box goes back to retail's for them.
+    const char* const kStill = "PC SAVE STILL";
+
+    // Retail's box, and the width a still is drawn at inside the same centre.
+    const F32 kBoxX = 430.0f;
+    const F32 kBoxY = 180.0f;
+    const F32 kBoxSize = 128.0f;
+    const F32 kStillWidth = 176.0f;
+
+    RwTexture* sStill;
+
+    zUIAsset* ThumbAsset(bool save)
+    {
+        return (zUIAsset*)xSTFindAsset(xStrHash(save ? "MNU4 THUMBICON" : "MNU3 THUMBICON"),
+                                       NULL);
+    }
+
+    void ThumbBox(bool save, F32 aspect)
+    {
+        zUIAsset* a = ThumbAsset(save);
+        if (a == NULL)
+        {
+            return;
+        }
+
+        F32 w = kBoxSize;
+        F32 h = kBoxSize;
+        if (aspect > 0.0f)
+        {
+            w = kStillWidth;
+            h = kStillWidth / aspect;
+        }
+        a->dim[0] = (U16)(w + 0.5f);
+        a->dim[1] = (U16)(h + 0.5f);
+        a->pos.x = kBoxX + 0.5f * kBoxSize - 0.5f * w;
+        a->pos.y = kBoxY + 0.5f * kBoxSize - 0.5f * h;
+    }
+
+    // Take the still away. The widget is pointed at nothing FIRST: it looks its
+    // texture up every frame and does not check what it gets back.
+    void DropStill(bool save)
+    {
+        if (sStill == NULL)
+        {
+            return;
+        }
+        zChangeThumbIcon("");
+        iAssetOverrideSetRuntime(xStrHash(kStill), NULL);
+        iSaveThumbFree(sStill);
+        sStill = NULL;
+        ThumbBox(save, 0.0f);
+    }
+
+    void ShowPicture(bool save, const Entry& e)
+    {
+        DropStill(save);
+
+        char path[512];
+        F32 aspect = 0.0f;
+        if (!e.fresh && iSGThumbPath(e.tgt, e.game, path, sizeof(path)))
+        {
+            sStill = iSaveThumbLoad(path, &aspect);
+        }
+
+        if (sStill != NULL)
+        {
+            iAssetOverrideSetRuntime(xStrHash(kStill), sStill);
+            ThumbBox(save, aspect);
+            zChangeThumbIcon(kStill);
+            zSendEventToThumbIcon(eEventVisible);
+            return;
+        }
+
+        if (e.thumb >= 0 && e.thumb < 15)
+        {
+            zChangeThumbIcon(thumbIconMap[e.thumb]);
+            zSendEventToThumbIcon(eEventVisible);
+        }
+        else
+        {
+            zSendEventToThumbIcon(eEventInvisible);
+        }
+    }
+
     // The title, the rows' text, and which row is selected.
     void Draw(bool save)
     {
@@ -243,16 +335,7 @@ namespace
             return;
         }
 
-        const S32 thumb = sEntries[sSel].thumb;
-        if (thumb >= 0 && thumb < 15)
-        {
-            zChangeThumbIcon(thumbIconMap[thumb]);
-            zSendEventToThumbIcon(eEventVisible);
-        }
-        else
-        {
-            zSendEventToThumbIcon(eEventInvisible);
-        }
+        ShowPicture(save, sEntries[sSel]);
     }
 
     void SelectRow(bool save, S32 row, bool on)
@@ -393,6 +476,7 @@ namespace
             }
         }
 
+        DropStill(false);
         zSendEventToThumbIcon(eEventInvisible);
         return SceneCode();
     }
@@ -463,9 +547,14 @@ namespace
 
             Send("SV GAMESLOT GROUP", eEventUIFocusOff_Unselect);
             Send("SV MAKE INVISIBLE", eEventInvisible);
+            DropStill(true);
 
+            // The still is the frame the pause kept: the pause menu has been
+            // on screen since. From the title there is no game to picture.
+            iSGSetThumbSource(gGameState != 0 ? ISG_THUMB_KEPT : ISG_THUMB_NONE);
             sAccessType = 2;
             const S32 rc = zSaveLoad_SaveGame();
+            iSGSetThumbSource(ISG_THUMB_NOW);
             if (rc == 1)
             {
                 zGameModeSwitch(eGameMode_Game);
@@ -503,6 +592,7 @@ namespace
             }
         }
 
+        DropStill(true);
         sAccessType = 0;
         return saveSuccess;
     }
