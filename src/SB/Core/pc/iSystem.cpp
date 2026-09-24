@@ -456,7 +456,7 @@ static RwTexture* TextureRead(const RwChar* name, const RwChar* maskName)
 // directly.
 static iWindowMode WindowModeFromConfig()
 {
-    const char* name = iConfigGetString("video.mode", "fullscreen");
+    const char* name = iConfigGetString("video.mode", "borderless");
 
     if (iHostStrCaseCmp(name, "fullscreen") == 0)
     {
@@ -474,7 +474,7 @@ static iWindowMode WindowModeFromConfig()
     printf("bfbb: config: video.mode is not fullscreen, borderless or windowed, using "
            "the default: %s\n",
            name);
-    return iWINDOW_FULLSCREEN;
+    return iWINDOW_BORDERLESS;
 }
 
 // The size of the shadow raster, from config.ini's video.shadow_resolution.

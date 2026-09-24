@@ -63,8 +63,10 @@ const iConfigSetting kConfigSettings[] = {
       "Folder to keep saves in. Empty uses this machine's own per-user data\n"
       "; folder. BFBB_SAVE_DIR overrides this.",
       ICONFIG_FOLDER, NULL, kNone, kNone },
-    { "video", "mode", "fullscreen", "Window mode: fullscreen, borderless, windowed.", ICONFIG_ENUM,
-      "fullscreen|borderless|windowed", kNone, kNone },
+    { "video", "mode", "borderless",
+      "Window mode: borderless, fullscreen (exclusive), windowed. Alt+Enter toggles\n"
+      "; windowed and borderless.",
+      ICONFIG_ENUM, "borderless|fullscreen|windowed", kNone, kNone },
     { "video", "profile",
 #ifdef __ANDROID__
       "modern",

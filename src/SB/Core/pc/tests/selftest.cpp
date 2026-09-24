@@ -461,7 +461,7 @@ static void test_config()
         check(strstr(buf, "[assets]") != NULL, "it has the [assets] section header");
         check(strstr(buf, "path =") != NULL, "and the asset path, empty as it has to be");
         check(strstr(buf, "[video]") != NULL, "it has the [video] section header");
-        check(strstr(buf, "mode = fullscreen") != NULL, "and the window mode at its default");
+        check(strstr(buf, "mode = borderless") != NULL, "and the window mode at its default");
         check(strstr(buf, "width = 640") != NULL, "and the render width at its default");
         check(strstr(buf, "height = 480") != NULL, "and the height");
         check(strstr(buf, "framerate = 60") != NULL, "and the frame rate at the console's");
