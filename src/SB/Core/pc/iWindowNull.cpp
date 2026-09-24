@@ -117,6 +117,16 @@ iWindowMode iWindowGetMode()
     return sMode;
 }
 
+// No window to change.
+S32 iWindowSetMode(iWindowMode)
+{
+    return FALSE;
+}
+
+void iWindowSetExclusive(S32)
+{
+}
+
 void* iWindowNativeHandle()
 {
     return NULL;

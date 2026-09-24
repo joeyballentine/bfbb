@@ -45,10 +45,33 @@ static bool ScancodeDown(S32 code)
     return state[code];
 }
 
+// An Enter pressed while Alt is held is the windowed toggle (iWindowSDL.cpp),
+// not a game button. It stays swallowed until released, so letting go of Alt
+// first does not then press Start.
+static bool sEnterSwallowed[2];
+
+static bool EnterDown(S32 code, bool* swallowed)
+{
+    bool down = ScancodeDown(code);
+    if (!down)
+    {
+        *swallowed = false;
+    }
+    else if (ScancodeDown(SDL_SCANCODE_LALT) || ScancodeDown(SDL_SCANCODE_RALT))
+    {
+        *swallowed = true;
+    }
+    return down && !*swallowed;
+}
+
 static bool KeyDown(S32 id)
 {
     switch (id)
     {
+    case SDL_SCANCODE_RETURN:
+        return EnterDown(id, &sEnterSwallowed[0]);
+    case SDL_SCANCODE_KP_ENTER:
+        return EnterDown(id, &sEnterSwallowed[1]);
     case KEY_EITHER_SHIFT:
         return ScancodeDown(SDL_SCANCODE_LSHIFT) || ScancodeDown(SDL_SCANCODE_RSHIFT);
     case KEY_EITHER_CTRL:

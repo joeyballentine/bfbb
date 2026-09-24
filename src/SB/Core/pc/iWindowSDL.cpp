@@ -1,5 +1,6 @@
 #include "iWindow.h"
 
+#include "iScreen.h"
 #include "rw/backend.h"
 
 // The window, on SDL, for both render backends.
@@ -45,6 +46,14 @@ static S32 sShouldClose;
 static S32 sWidth;
 static S32 sHeight;
 static iWindowMode sMode = iWINDOW_WINDOWED;
+static S32 sExclusive;
+
+// Where the window was the last time it was windowed, for iWindowSetMode to put
+// it back. Zero until then.
+static int sWindowedX;
+static int sWindowedY;
+static int sWindowedW;
+static int sWindowedH;
 
 // Copied rather than pointed at. iWindowParams::title belongs to the caller's
 // stack frame in iSystem.cpp and librw reads it much later, inside
@@ -428,6 +437,18 @@ void iWindowPump()
             sHeight = event.window.data2;
             break;
 
+        // Alt+Enter and F11 toggle windowed. iPadKeyboardSDL.cpp keeps an Enter
+        // pressed with Alt held from also reaching the game as Start.
+        case SDL_EVENT_KEY_DOWN:
+            if (!event.key.repeat &&
+                (event.key.key == SDLK_F11 ||
+                 ((event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER) &&
+                  (event.key.mod & SDL_KMOD_ALT) != 0)))
+            {
+                iWindowSetMode(sMode == iWINDOW_WINDOWED ? iWINDOW_BORDERLESS : iWINDOW_WINDOWED);
+            }
+            break;
+
         default:
             break;
         }
@@ -573,6 +594,123 @@ S32 iWindowShouldClose()
 iWindowMode iWindowGetMode()
 {
     return sMode;
+}
+
+void iWindowSetExclusive(S32 on)
+{
+    sExclusive = on;
+}
+
+S32 iWindowSetMode(iWindowMode mode)
+{
+#ifdef __ANDROID__
+    (void)mode;
+    return FALSE;
+#else
+    if (sWindow == NULL || mode == iWINDOW_FULLSCREEN)
+    {
+        return FALSE;
+    }
+
+    if (sExclusive)
+    {
+        printf("bfbb: the window is in exclusive fullscreen; set video.mode and restart to "
+               "change it\n");
+        fflush(stdout);
+        return FALSE;
+    }
+
+    bool windowed = sMode == iWINDOW_WINDOWED;
+    if ((mode == iWINDOW_WINDOWED) == windowed)
+    {
+        return TRUE;
+    }
+
+    if (mode == iWINDOW_WINDOWED)
+    {
+        // GL3's borderless is SDL fullscreen (iWindowDeferredCreated); the
+        // others' is a frameless window the size of the monitor. Undoing the
+        // first is harmless for the second.
+        SDL_SetWindowFullscreen(sWindow, false);
+        SDL_SetWindowBordered(sWindow, true);
+        SDL_SetWindowResizable(sWindow, true);
+
+        S32 w = sWindowedW;
+        S32 h = sWindowedH;
+        if (w <= 0 || h <= 0)
+        {
+            // Never windowed this session: three quarters of the monitor, in
+            // the render size's shape.
+            SDL_Rect bounds;
+            SDL_DisplayID display = SDL_GetDisplayForWindow(sWindow);
+            if (!SDL_GetDisplayBounds(display, &bounds) || bounds.w <= 0 || bounds.h <= 0)
+            {
+                bounds.w = 1280;
+                bounds.h = 720;
+            }
+            w = bounds.w * 3 / 4;
+            h = bounds.h * 3 / 4;
+            S32 rw = iScreenWidth();
+            S32 rh = iScreenHeight();
+            if (rw > 0 && rh > 0)
+            {
+                if (w * rh > h * rw)
+                {
+                    w = h * rw / rh;
+                }
+                else
+                {
+                    h = w * rh / rw;
+                }
+            }
+        }
+
+        SDL_SetWindowSize(sWindow, w, h);
+        if (sWindowedW > 0)
+        {
+            SDL_SetWindowPosition(sWindow, sWindowedX, sWindowedY);
+        }
+        else
+        {
+            SDL_SetWindowPosition(sWindow, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+        }
+    }
+    else
+    {
+        // Kept so going back lands where the window was.
+        SDL_GetWindowPosition(sWindow, &sWindowedX, &sWindowedY);
+        SDL_GetWindowSize(sWindow, &sWindowedW, &sWindowedH);
+
+        SDL_Rect bounds;
+        if (!SDL_GetDisplayBounds(SDL_GetDisplayForWindow(sWindow), &bounds) || bounds.w <= 0 ||
+            bounds.h <= 0)
+        {
+            return FALSE;
+        }
+
+        SDL_SetWindowResizable(sWindow, false);
+        SDL_SetWindowBordered(sWindow, false);
+        SDL_SetWindowPosition(sWindow, bounds.x, bounds.y);
+        SDL_SetWindowSize(sWindow, bounds.w, bounds.h);
+    }
+
+    // The transitions are asynchronous wherever there is a compositor. The size
+    // read back is what the back buffer follows.
+    SDL_SyncWindow(sWindow);
+    int got_w = 0;
+    int got_h = 0;
+    if (SDL_GetWindowSizeInPixels(sWindow, &got_w, &got_h) && got_w > 0 && got_h > 0)
+    {
+        sWidth = got_w;
+        sHeight = got_h;
+    }
+
+    sMode = mode;
+    printf("bfbb: window is now %s, %dx%d\n", mode == iWINDOW_WINDOWED ? "windowed" : "borderless",
+           (int)sWidth, (int)sHeight);
+    fflush(stdout);
+    return TRUE;
+#endif
 }
 
 void iWindowGetSize(S32* width, S32* height)

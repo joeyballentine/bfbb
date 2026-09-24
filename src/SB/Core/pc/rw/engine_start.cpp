@@ -766,6 +766,7 @@ static void SelectFullscreenVideoMode()
             mode.depth == desktop.depth)
         {
             rw::Engine::setVideoMode(i);
+            iWindowSetExclusive(TRUE);
             printf("bfbb: exclusive fullscreen at %dx%d\n", (int)mode.width, (int)mode.height);
             fflush(stdout);
             return;

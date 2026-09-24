@@ -148,6 +148,18 @@ S32 iWindowGetDisplaySize(S32* width, S32* height);
 // it rather than one that would put the device into exclusive fullscreen.
 iWindowMode iWindowGetMode();
 
+// Switches between WINDOWED and BORDERLESS while the game runs. Both are plain
+// windows to the renderer, so this is a change of frame and size and nothing
+// else. FALSE, with nothing changed, when it cannot be done live: exclusive
+// fullscreen belongs to the device (see above), and Android has one mode.
+//
+// Alt+Enter and F11 call this through the event pump, toggling.
+S32 iWindowSetMode(iWindowMode mode);
+
+// Called by rw/engine_start.cpp once the renderer has taken exclusive
+// fullscreen. FULLSCREEN without it is the borderless fallback.
+void iWindowSetExclusive(S32 on);
+
 // The backend's handle. See the note above: only the RenderWare shim may
 // interpret this, and what it means depends on which backend was linked.
 void* iWindowNativeHandle();
