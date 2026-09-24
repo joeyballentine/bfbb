@@ -51,7 +51,9 @@ namespace
         RpAtomic* atomic;
         RpGeometry* original;
         RpGeometry* built;
-        int extra;
+        // The widening it was built for, in thousandths of object space; -1
+        // before the first build.
+        int widen;
         bool rope;
     };
 
@@ -96,7 +98,7 @@ namespace
         slot->atomic = atomic;
         slot->original = original;
         slot->built = NULL;
-        slot->extra = -1;
+        slot->widen = -1;
         slot->rope = false;
         return slot;
     }
@@ -133,7 +135,8 @@ namespace
         int vert;
         int tri;
 
-        // One quad, moved to start at x0 and otherwise exactly as drawn.
+        // One quad, moved to start at x0, `sx` times as long, and otherwise
+        // exactly as drawn.
         //
         // This is a TRANSLATION, and it has to be. The two end caps do not
         // share a vertex order -- the artist turned the right-hand one 180
@@ -141,7 +144,8 @@ namespace
         // one where the left cap's is the near bottom one. Writing positions
         // into fixed slots therefore mirrors one cap and leaves the other
         // alone. Moving every vertex by one offset cannot.
-        void quad(const RwV3d* srcPos, const RwTexCoords* srcUV, float x0, float z)
+        void quad(const RwV3d* srcPos, const RwTexCoords* srcUV, float x0, float z,
+                  float sx = 1.0f)
         {
             float minX = srcPos[0].x;
             for (int i = 1; i < 4; i++)
@@ -154,7 +158,7 @@ namespace
 
             for (int i = 0; i < 4; i++)
             {
-                verts[vert + i].x = x0 + (srcPos[i].x - minX);
+                verts[vert + i].x = x0 + (srcPos[i].x - minX) * sx;
                 verts[vert + i].y = srcPos[i].y;
                 verts[vert + i].z = z;
                 uvs[vert + i] = srcUV[i];
@@ -253,22 +257,32 @@ int iMenuFrameWiden(RpAtomic* atomic, float rectWidth)
         return 0;
     }
 
-    // How much of the frame's own object space one screen margin is worth. The
-    // model spans rectWidth of the screen for every 1.0 of object space, so the
-    // margin divides straight through.
+    // How far each stile moves out, in the frame's own object space.
+    //
+    // The whole margin less a fixed clearance, so the stiles sit the same
+    // distance from the screen edge at every width, and the HUD anchored to
+    // that edge stays inside them.
+    //
+    // One unit of object space covers kScale * rectWidth of the box, not
+    // rectWidth: the frame is drawn nearer the camera than the plane its rect
+    // is measured on. Measured off 16:9 and 21:9 frames, with the stiles'
+    // outer edges 0.02 of the box inside it at 4:3.
+    const float kScale = 1.16f;
+    const float kEdgeClear = 0.02f;
     const float margin = iScreenAnchorMarginXF();
-    int extra = (int)(margin / (period * rectWidth) + 0.5f);
-    if (extra < 0)
+    float shift = (margin - kEdgeClear) / (kScale * rectWidth);
+    if (shift < 0.0f)
     {
-        extra = 0;
+        shift = 0.0f;
     }
+    const int widen = (int)(shift * 1000.0f + 0.5f);
 
     // Zero extra segments is not a reason to stop while the corner lashings are
     // being fixed: a 4:3 or pillarboxed screen needs no extra bamboo, but it has
     // the same missing rope as every other screen. With that fix off there is
     // nothing left for the rebuild to do, and the mesh is better left alone.
     const bool ropeFix = iFixMenuRope() != 0;
-    if (seen != NULL && seen->extra == extra && seen->rope == ropeFix)
+    if (seen != NULL && seen->widen == widen && seen->rope == ropeFix)
     {
         return 0;
     }
@@ -281,19 +295,28 @@ int iMenuFrameWiden(RpAtomic* atomic, float rectWidth)
         }
     }
 
-    if (extra == 0 && !ropeFix)
+    if (widen == 0 && !ropeFix)
     {
         if (atomic->geometry != seen->original)
         {
             RpAtomicSetGeometry(atomic, seen->original, 0);
         }
         seen->built = NULL;
-        seen->extra = 0;
+        seen->widen = 0;
         seen->rope = false;
         return 1;
     }
 
-    const int railTiles = kRailTiles + 2 * extra;
+    // The tiles between the caps: as many whole ones as the widened rail holds,
+    // each stretched by the few percent left over, so the rail ends exactly
+    // where the stiles now stand.
+    const float span = kRailTiles * period + 2.0f * shift;
+    int railTiles = (int)(span / period + 0.5f);
+    if (railTiles < kRailTiles)
+    {
+        railTiles = kRailTiles;
+    }
+    const float step = span / railTiles;
     const int quads = 2 * (2 + railTiles) + 2 * kStileTiles;
 
     RpGeometry* dst = RpGeometryCreate(quads * 4, quads * 2,
@@ -316,8 +339,6 @@ int iMenuFrameWiden(RpAtomic* atomic, float rectWidth)
     b.tris = dst->triangles;
     b.vert = 0;
     b.tri = 0;
-
-    const float shift = extra * period;
 
     // The two depths the frame is drawn on. Retail puts the stiles on the nearer
     // one AND draws them second, so they beat the rails twice over: at each
@@ -346,9 +367,8 @@ int iMenuFrameWiden(RpAtomic* atomic, float rectWidth)
         }
     };
 
-    // Each rail is a cap, the tiles, and the other cap. The tiles are laid on
-    // the same grid the original ones were, so a widened rail is
-    // indistinguishable from the one the artist drew except for being longer.
+    // Each rail is a cap, the tiles, and the other cap. With no widening the
+    // tiles land on the grid the original ones were on.
     const auto rails = [&]() {
         const int caps[2][3] = { { kTopCapL, kTopTiles, kTopCapR },
                                  { kBotCapL, kBotTiles, kBotCapR } };
@@ -365,11 +385,11 @@ int iMenuFrameWiden(RpAtomic* atomic, float rectWidth)
 
             for (int i = 0; i < railTiles; i++)
             {
-                const float x = left + (i + 1) * period;
-                b.quad(&sp[tile], &su[tile], x, railZ);
+                const float x = left + period + i * step;
+                b.quad(&sp[tile], &su[tile], x, railZ, step / period);
             }
 
-            const float right = left + (railTiles + 1) * period;
+            const float right = left + period + span;
             b.quad(&sp[capR], &su[capR], right, railZ);
         }
     };
@@ -407,7 +427,7 @@ int iMenuFrameWiden(RpAtomic* atomic, float rectWidth)
     RpGeometryUnlock(dst);
 
     seen->built = dst;
-    seen->extra = extra;
+    seen->widen = widen;
     seen->rope = ropeFix;
 
     // No rpATOMICSAMEBOUNDINGSPHERE: the frame is wider than it was, and the
@@ -418,7 +438,7 @@ int iMenuFrameWiden(RpAtomic* atomic, float rectWidth)
     // with is what lets the next rebuild -- or the scene's teardown -- free it.
     dst->refCount--;
 
-    printf("bfbb: menu frame rebuilt: %d extra segment(s) each side, %d quads%s\n", extra, quads,
+    printf("bfbb: menu frame rebuilt: %d segments a rail, %d quads%s\n", railTiles, quads,
            ropeFix ? ", corner lashings brought forward" : "");
     fflush(stdout);
     return 1;
