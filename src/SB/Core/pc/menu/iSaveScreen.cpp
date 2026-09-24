@@ -25,6 +25,7 @@
 #include <string.h>
 
 #include "iAssetOverride.h"
+#include "iMenuWide.h"
 #include "iSaveThumb.h"
 #include "iSettingsScreen.h"
 #include "isavegame.h"
@@ -235,16 +236,20 @@ namespace
             return;
         }
 
-        F32 w = kBoxSize;
-        F32 h = kBoxSize;
+        // Larger, and moved right, on a wide screen (iMenuWide.h).
+        const F32 m = iMenuWideMargin();
+        const F32 scale = 1.0f + m / 200.0f;
+
+        F32 w = kBoxSize * scale;
+        F32 h = kBoxSize * scale;
         if (aspect > 0.0f)
         {
-            w = kStillWidth;
-            h = kStillWidth / aspect;
+            w = kStillWidth * scale;
+            h = w / aspect;
         }
         a->dim[0] = (U16)(w + 0.5f);
         a->dim[1] = (U16)(h + 0.5f);
-        a->pos.x = kBoxX + 0.5f * kBoxSize - 0.5f * w;
+        a->pos.x = kBoxX + 0.5f * kBoxSize + 0.3f * m - 0.5f * w;
         a->pos.y = kBoxY + 0.5f * kBoxSize - 0.5f * h;
     }
 
@@ -365,8 +370,13 @@ namespace
             Send("LD GAMESLOT GROUP", eEventUIFocusOn);
         }
 
+        // The rows out toward the frame on a wide screen (iMenuWide.h).
+        const F32 rowX = ISAVESCREEN_ROW_X - 0.6f * iMenuWideMargin();
         for (S32 row = 0; row < ISAVESCREEN_ROWS; row++)
         {
+            char name[32];
+            RowName(save, row, name);
+            iMenuWidePlace(name, rowX, ISAVESCREEN_ROW_W);
             SelectRow(save, row, false);
         }
         if (sCount > 0)

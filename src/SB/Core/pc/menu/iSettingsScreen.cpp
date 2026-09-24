@@ -34,6 +34,7 @@
 #include "iPadGlyph.h"
 #include "iPadStick.h"
 #include "iScreen.h"
+#include "iMenuWide.h"
 #include "iSnapshot.h"
 #include "iTime.h"
 #include "iWindow.h"
@@ -521,8 +522,29 @@ namespace
         return strncmp(s.key, "bind.", 5) == 0;
     }
 
+    // The authored layout, spread toward the frame on a wide screen: labels
+    // out to the left, values out to the right, the title and help as wide as
+    // both. See iMenuWide.h.
+    void Layout()
+    {
+        const F32 s = 0.6f * iMenuWideMargin();
+        char name[32];
+
+        iMenuWidePlace(ISETTINGS_TITLE, 45.0f - s, 560.0f + 2.0f * s);
+        for (S32 row = 0; row < ISETTINGS_ROWS; row++)
+        {
+            sprintf(name, ISETTINGS_LABEL, (int)row);
+            iMenuWidePlace(name, 55.0f - s, 270.0f + s);
+            sprintf(name, ISETTINGS_VALUE, (int)row);
+            iMenuWidePlace(name, 330.0f + s, 270.0f);
+        }
+        iMenuWidePlace(ISETTINGS_HELP, 55.0f - s, 545.0f + 2.0f * s);
+    }
+
     void Draw()
     {
+        Layout();
+
         // The tab bar: the shoulder buttons' pictures either side, the tab
         // showing in the menu's own dark teal and the rest faded toward the
         // background.
@@ -644,6 +666,7 @@ namespace
 
     void DrawBindPage(bool pad, S32 sel, S32 top, const char* help)
     {
+        Layout();
         iAssetTextSet(xStrHash(ISETTINGS_TITLE_TEXT),
                       pad ? "Controller buttons" : "Keyboard buttons");
 
