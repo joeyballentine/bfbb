@@ -8,6 +8,7 @@ The menu packages' logic assets are built here instead of read from their HIPs.
 | `mnu3` | the main menu: title, new/load game, options, extras | in the menu scene |
 | `mnu4` | the pause menu, save/load dialogs, autosave text, the HUD, the NPC talk text boxes | at boot, never unloaded |
 | `mnu5` | the talk box, the taxi warning, the task counters | at boot, never unloaded |
+| `font` | the game-wide text; only the 7 strings that name a console are here (`font_text.cpp`), replacing the HIP's by ID | at boot, never unloaded |
 
 Each package has these files, where it has assets of that kind:
 
@@ -49,7 +50,9 @@ An asset is its struct, set from the type's defaults, then its links:
 - Within a type, objects are created in the order they are added. For DYNA
   that order runs across all its kinds, which is why they share one function.
 - `p.Text(id, "...")` strings are xtextbox markup (`{i:...}`, `{var:...}`,
-  `{n}`). They still go through iTextPatch.
+  `{n}`). They are written in PC wording and do not go through iTextPatch;
+  what the host is called comes from `iHostWords.h` (`"your " HOST_MACHINE`),
+  which is what makes Android say "device".
 - A portal's `sceneID` is `iAssetTag("SB10")`.
 - Code that looks widgets up by name (`zMenu.cpp`, `zUI.cpp`,
   `zSaveLoad.cpp`, `zGame.cpp`, `zTaxi.cpp`) keeps working as long as the
@@ -66,10 +69,13 @@ is ignored, and the game prints its ID.
 
 `BFBB_ASSET_VERIFY=1` compares every built asset with the HIP's after each
 package loads, and prints what differs, what was added or removed, and
-anything out of order. As generated, all three are identical: 409, 835 and 180
-assets.
+anything out of order. As generated, all three were identical: 409, 835 and
+180 assets. Every edit since shows up as a difference; the PC wording is the
+first 34 of them.
 
-`[assets] code_menu = off` in config.ini goes back to the HIPs.
+`[assets] code_menu = off` in config.ini goes back to the HIPs, with
+iTextPatch rewriting their text as it loads, which is exactly retail plus the
+word swaps.
 
 ## Regenerating
 

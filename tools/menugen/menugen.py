@@ -68,7 +68,7 @@ def load_source_strings(names):
     code spells out. Any string literal in the source that hashes to an ID."""
     lit = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
     found = {}
-    for sub in ('src/SB/Game', 'src/SB/Core/x'):
+    for sub in ('src/SB/Game', 'src/SB/Core/x', 'src/SB/Core/pc'):
         for dirpath, _, files in os.walk(os.path.join(ROOT, sub)):
             for f in files:
                 if not f.endswith(('.cpp', '.h')):

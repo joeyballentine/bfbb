@@ -6,9 +6,11 @@
 
 void MNU3_BuildText(iAssetPkg& p)
 {
-    p.Text(H("LD ACCESS HARD DISK? TXT"), "Press {i:button_picture_01} to access Xbox Hard Disk");
-    p.Text(H("LD ACCESSING HARD DISK TXT"), "Accessing Xbox Hard Disk...");
-    p.Text(H("LD DAMAGED SAVE GAME TXT"), "{c=ffff0000}Load failed!{~:c}{n}The data could not be loaded correctly!{n}Check {i:PS2_MEMCARD} in memory card slot {var:MCSelectedCard} and please try again.");
+    p.Text(H("LD ACCESS HARD DISK? TXT"), "Press {i:button_picture_01} to access saved games");
+    p.Text(H("LD ACCESSING HARD DISK TXT"), "Accessing saved games...");
+    p.Text(H("LD DAMAGED SAVE GAME TXT"),
+           "{c=ffff0000}Load failed!{~:c}{n}The data could not be loaded correctly!{n}Check your "
+           "save folder and please try again.");
     p.Text(H("MAIN MENU TXT"), "Main Menu");
     p.Text(H("MNU3  CIRCLE TXT"), "{i:ui_options}");
     p.Text(H("MNU3  CREDITS TXT"), "Credits");
@@ -45,18 +47,20 @@ void MNU3_BuildText(iAssetPkg& p)
     p.Text(H("MNU3  X CHOOSE TXT"), "{i:ui_accept} Choose");
     p.Text(H("MNU3  X TXT"), "{i:ui_accept}");
     p.Text(H("MNU3  YES TXT"), "Yes");
-    p.Text(H("MNU3 CANT CREATE A NEW GAME TXT"), "No {i:PS2_MEMCARD} was found. Please insert a {i:PS2_MEMCARD}.");
+    p.Text(H("MNU3 CANT CREATE A NEW GAME TXT"), "The save folder could not be created.");
     p.Text(H("MNU3 CONTINUE TXT"), "{i:ui_accept} Continue");
     p.Text(H("MNU3 CONTROLS MUSIC VOL TXT"), "Music Volume");
     p.Text(H("MNU3 CONTROLS SFX VOL TXT"), "SFX Volume");
     p.Text(H("MNU3 CONTROLS SOUND MODE TXT"), "Sound Mode");
     p.Text(H("MNU3 CONTROLS VIBE MODE TXT"), "Vibration Mode");
     p.Text(H("MNU3 CREATE A NEW GAME NO TXT"), "No");
-    p.Text(H("MNU3 CREATE A NEW GAME PAL TXT"), "Would you like to create a game file to save your progress?{n}{n}(The game uses autosave feature. While playing, Do not remove {i:PS2_MEMCARD}, or the {i:PS2_PAD_PAL}, or reset/switch off the console.)");
-    p.Text(H("MNU3 CREATE A NEW GAME TXT"), "{n}{n}The game uses an autosave feature.{n}While playing, please do not turn off your Xbox console.{n}Would you like to create a save game to save your progress?");
+    p.Text(H("MNU3 CREATE A NEW GAME PAL TXT"),
+           "Would you like to create a game file to save your progress?{n}{n}(The game uses an "
+           "autosave feature. While playing, do not close the game.)");
+    p.Text(H("MNU3 CREATE A NEW GAME TXT"), "{n}{n}The game uses an autosave feature.{n}While playing, do not close the game while it is saving.{n}Would you like to create a save game to save your progress?");
     p.Text(H("MNU3 CREATE A NEW GAME YES TXT"), "Yes");
     p.Text(H("MNU3 EXTRAS TXT"), "Extras");
-    p.Text(H("MNU3 FREE DISK TEXT"), "Available Free Block(s): {var:SpaceAvailableString} block(s)");
+    p.Text(H("MNU3 FREE DISK TEXT"), "Available Free Space: {var:SpaceAvailableString}");
     p.Text(H("MNU3 INTENTIONALLY BLANK TXT"), "");
     p.Text(H("MNU3 LEVEL TXT 1"), "Bikini Bottom");
     p.Text(H("MNU3 LEVEL TXT 10"), "Kelp Forest");

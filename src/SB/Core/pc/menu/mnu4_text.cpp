@@ -28,24 +28,26 @@ void MNU4_BuildText(iAssetPkg& p)
     p.Text(H("CURRENTDATE TXT"), "{var:CurrentDate}");
     p.Text(H("CURRENTTIME TXT"), "{var:CurrentTime}");
     p.Text(H("INTENTIONALLY BLANK TXT"), "");
-    p.Text(H("LD BADFORMAT TXT"), "{c=ffff0000}Format failed!{~:c}{n}The {i:PS2_MEMCARD} in MEMORY CARD slot {var:MCSelectedCard} could not be formatted correctly! Check {i:PS2_MEMCARD} in memory card slot {var:MCSelectedCard} and please try again.  Press {i:ui_accept} to continue.");
+    p.Text(H("LD BADFORMAT TXT"),
+           "{c=ffff0000}Save failed!{~:c}{n}The save folder could not be written to.{n}Press "
+           "{i:ui_accept} to continue.");
     p.Text(H("LD BADLOAD TXT"), "{c=ffff0000}Load failed!{~:c} Unable to load game. Press {i:ui_accept} to continue");
-    p.Text(H("LD ERR NOCARD TXT"), "Insert a {i:PS2_MEMCARD}.");
-    p.Text(H("LD ERR NOGAME TXT"), "No Scooby games were found.  Please insert a {i:PS2_MEMCARD}.");
-    p.Text(H("LD FORMAT PROMPT TXT"), "The {i:PS2_MEMCARD} in MEMORY CARD slot {var:MCSelectedCard} is unformatted.{n}{n}Do you wish to proceed with formatting?");
-    p.Text(H("LD FORMATCONFIRM TXT"), "Are you sure you wish to format {i:PS2_MEMCARD} in MEMORY CARD slot {var:MCSelectedCard}?  Press {i:ui_accept} to confirm.");
+    p.Text(H("LD ERR NOCARD TXT"), "No save folder was found.");
+    p.Text(H("LD ERR NOGAME TXT"), "No SpongeBob games were found.");
+    p.Text(H("LD FORMAT PROMPT TXT"), "Your save folder is not ready.{n}{n}Do you wish to create it?");
+    p.Text(H("LD FORMATCONFIRM TXT"), "Are you sure you wish to create your save folder?  Press {i:ui_accept} to confirm.");
     p.Text(H("LD GAMESLOT 0 TXT"), "{var:GameSlot0}");
     p.Text(H("LD GAMESLOT 1 TXT"), "{var:GameSlot1}");
     p.Text(H("LD GAMESLOT 2 TXT"), "{var:GameSlot2}");
     p.Text(H("LD GAMESLOT 3 TXT"), "{var:GameSlot3}");
     p.Text(H("LD LOAD GAME TXT"), "Load saved game{n}{var:MCName}");
-    p.Text(H("LD MC DONTREMOVE PAL TXT"), "WARNING: {var:MCAccessType}...{n}Do not remove {i:PS2_MEMCARD} in memory card slot {var:MCSelectedCard}, or the {i:PS2_PAD_PAL}, or reset/switch off the console");
-    p.Text(H("LD MC DONTREMOVE TXT"), "Loading Game.....{n}Please don't turn off your Xbox console.");
-    p.Text(H("LD MC MISSING TXT"), "No {i:PS2_MEMCARD} was found in MEMORY CARD slot {var:MCSelectedCard}.  Please insert a {i:PS2_MEMCARD}.");
-    p.Text(H("LD MC1 TXT"), "Xbox Hard Disk");
-    p.Text(H("LD MC2 TXT"), "MEMORY CARD slot 2");
+    p.Text(H("LD MC DONTREMOVE PAL TXT"), "WARNING: {var:MCAccessType}...{n}Do not close the game while it is saving.");
+    p.Text(H("LD MC DONTREMOVE TXT"), "Loading Game.....{n}Please wait.");
+    p.Text(H("LD MC MISSING TXT"), "The save folder could not be opened.");
+    p.Text(H("LD MC1 TXT"), "save folder");
+    p.Text(H("LD MC2 TXT"), "second save folder");
     p.Text(H("LD NOGAME TXT"), "No save file exists.");
-    p.Text(H("LD NOGAMES TXT"), "No game saves present on the Xbox Hard Disk.");
+    p.Text(H("LD NOGAMES TXT"), "No saved games were found.");
     p.Text(H("LEVEL TXT 1"), "Bikini Bottom");
     p.Text(H("LEVEL TXT 10"), "Kelp Forest");
     p.Text(H("LEVEL TXT 11"), "Flying Dutchman's Graveyard");
@@ -67,18 +69,40 @@ void MNU4_BuildText(iAssetPkg& p)
     p.Text(H("MNU3 CREDITS TXT"), "Credits");
     p.Text(H("MNU3 NEW GAME TXT"), "New Game");
     p.Text(H("MNU3 PROMOTIONAL MATERIALS TXT"), "Promo Materials");
-    p.Text(H("MNU4 AUTO SAVE CHANGED TXT"), "{i:keyword}Data could not be autosaved correctly!{~:c}{n}The {i:PS2_MEMCARD} in memory card Slot {var:MCAutoSaveCard} has been {i:keyword}changed{~:c}. The {i:autosave} feature has been {i:keyword}disabled{~:c}. {i:blacktext}To re-enable {i:autosave}, go to {red=0}{blue=0}{green=0.2}Options{~:c} in the {red=0}{blue=0}{green=0.2}Pause Menu{~:c} and save to a save game file.{n}Press {i:ui_accept} to continue without saving.");
-    p.Text(0x3EDB7748, "{i:keyword}Data could not be autosaved correctly!{~:c}{n}There is not enough space in {i:PS2_MEMCARD} in memory card Slot {var:MCAutoSaveCard}. {i:ps2_save_text}. The {i:autosave} feature has been {i:keyword}disabled{~:c}. {i:blacktext}To re-enable {i:autosave}, go to {red=0}{blue=0}{green=0.2}Options{~:c} in the {red=0}{blue=0}{green=0.2}Pause Menu{~:c} and save to a save game file.{n}Press {i:ui_accept} to continue without saving.");
-    p.Text(H("MNU4 AUTO SAVE FAILED TXT"), "{i:keyword}Warning: Autosave failed! {~:c}{n}Your Xbox doesn't have enough free blocks to create a new save game. The {i:autosave}{i:blacktext} feature has been {i:keyword}disabled{~:c}. {i:blacktext}To re-enable {i:autosave}{i:blacktext}, go to the {red=0}{blue=0}{green=0.2}Options{~:c}{i:blacktext} in the {red=0}{blue=0}{green=0.2}Pause Menu{~:c}{i:blacktext} and save to a game save.");
-    p.Text(0xE4650EF2, "{i:keyword}Data could not be autosaved correctly!{~:c}{n}The {i:PS2_MEMCARD} in memory card Slot {var:MCAutoSaveCard} is {i:keyword}unformatted{~:c}. The {i:autosave} feature has been {i:keyword}disabled{~:c}. {i:blacktext}To re-enable {i:autosave}, go to {red=0}{blue=0}{green=0.2}Options{~:c} in the {red=0}{blue=0}{green=0.2}Pause Menu{~:c} and save to a save game file.{n}Press {i:ui_accept} to continue without saving.");
-    p.Text(H("MNU4 AUTO SAVE PAL TXT"), "{red=.3}{blue=0}{green=0}Autosaving Data...{~:c}{n}{n}Do not remove {i:PS2_MEMCARD} in memory card slot {var:MCAutoSaveCard}, or the {i:PS2_PAD_PAL}, or reset/switch off the console");
-    p.Text(H("MNU4 AUTO SAVE TXT"), "Please don't turn off your Xbox console.");
+    p.Text(H("MNU4 AUTO SAVE CHANGED TXT"),
+           "{i:keyword}Data could not be autosaved correctly!{~:c}{n}Your save folder has "
+           "{i:keyword}changed{~:c}. The {i:autosave} feature has been {i:keyword}disabled{~:c}. "
+           "{i:blacktext}To re-enable {i:autosave}, go to {red=0}{blue=0}{green=0.2}Options{~:c} in "
+           "the {red=0}{blue=0}{green=0.2}Pause Menu{~:c} and save to a save game file.{n}Press "
+           "{i:ui_accept} to continue without saving.");
+    p.Text(H("MNU4 AUTO SAVE FAILED NOSPACE TXT"),
+           "{i:keyword}Data could not be autosaved correctly!{~:c}{n}There is not enough free space "
+           "to save. The {i:autosave} feature has been {i:keyword}disabled{~:c}. {i:blacktext}To "
+           "re-enable {i:autosave}, go to {red=0}{blue=0}{green=0.2}Options{~:c} in the "
+           "{red=0}{blue=0}{green=0.2}Pause Menu{~:c} and save to a save game file.{n}Press "
+           "{i:ui_accept} to continue without saving.");
+    p.Text(H("MNU4 AUTO SAVE FAILED TXT"),
+           "{i:keyword}Warning: Autosave failed! {~:c}{n}There is not enough free space to create a "
+           "new save game. The {i:autosave}{i:blacktext} feature has been {i:keyword}disabled{~:c}. "
+           "{i:blacktext}To re-enable {i:autosave}{i:blacktext}, go to the "
+           "{red=0}{blue=0}{green=0.2}Options{~:c}{i:blacktext} in the "
+           "{red=0}{blue=0}{green=0.2}Pause Menu{~:c}{i:blacktext} and save to a game save.");
+    p.Text(H("MNU4 AUTO SAVE FAILED UNFORMATTED TXT"),
+           "{i:keyword}Data could not be autosaved correctly!{~:c}{n}Your save folder is not "
+           "{i:keyword}ready{~:c}. The {i:autosave} feature has been {i:keyword}disabled{~:c}. "
+           "{i:blacktext}To re-enable {i:autosave}, go to {red=0}{blue=0}{green=0.2}Options{~:c} in "
+           "the {red=0}{blue=0}{green=0.2}Pause Menu{~:c} and save to a save game file.{n}Press "
+           "{i:ui_accept} to continue without saving.");
+    p.Text(H("MNU4 AUTO SAVE PAL TXT"),
+           "{red=.3}{blue=0}{green=0}Autosaving Data...{~:c}{n}{n}Do not close the game while it is "
+           "saving.");
+    p.Text(H("MNU4 AUTO SAVE TXT"), "Please do not close the game while it is saving.");
     p.Text(H("MNU4 BUSSTOP TXT"), "Pull the {i:button_exitlevel_text} to switch characters");
     p.Text(H("MNU4 D-PAD ADJUST TXT"), "{c=ff646464}{~:c}< > Adjust");
     p.Text(H("MNU4 EXIT GAME NO TXT"), "No");
     p.Text(H("MNU4 EXIT GAME PROMPT TXT"), "Quit Game and lose all unsaved game data ?");
     p.Text(H("MNU4 EXIT GAME YES TXT"), "Yes");
-    p.Text(H("MNU4 FREE DISK TEXT"), "Available Free Block(s): {var:SpaceAvailableString} block(s)");
+    p.Text(H("MNU4 FREE DISK TEXT"), "Available Free Space: {var:SpaceAvailableString}");
     p.Text(H("MNU4 OPTIONS SCREEN TXT"), "Screen Adjust");
     p.Text(H("MNU4 SAVE COMPLETED TXT"), "Save Completed!");
     p.Text(H("MNU4 SCREEN ACCEPT TXT"), "{i:button_picture_01} Accept");
@@ -208,10 +232,10 @@ void MNU4_BuildText(iAssetPkg& p)
     p.Text(H("PAUSE TASK TXT 1507"), "Pay Mr. Krabs 6,500 Shiny Objects");
     p.Text(H("PAUSE TASK TXT 1508"), "Pay Mr. Krabs 7,500 Shiny Objects");
     p.Text(H("PAUSE TASK TXT none"), "You have not received this task");
-    p.Text(H("PS2_MEMCARD"), "memory card (8MB) (for {i:PS2_NAME})");
-    p.Text(H("PS2_NAME"), "P{w*.8}{h*.8}lay{reset:w}{reset:h}S{w*.8}{h*.8}tation{reset:w}{reset:h}_2");
-    p.Text(H("PS2_PAD"), "DUALSHOCK_2 analog controller");
-    p.Text(H("PS2_PAD_PAL"), "analog controller (DUALSHOCK_2)");
+    p.Text(H("PS2_MEMCARD"), "save folder");
+    p.Text(H("PS2_NAME"), HOST_NAME);
+    p.Text(H("PS2_PAD"), "controller");
+    p.Text(H("PS2_PAD_PAL"), "controller");
     p.Text(H("SAVE GAME TXT"), "Save Game{n}{var:MCName}");
     p.Text(H("SCREEN ADJUST TXT"), "Screen{n}Adjust");
     p.Text(H("SCREEN TITLE TXT"), "Screen Adjust");
@@ -222,11 +246,15 @@ void MNU4_BuildText(iAssetPkg& p)
     p.Text(H("SOUND TITLE TXT"), "Sound Mode");
     p.Text(H("SQUARE TXT"), "{i:ui_misc}");
     p.Text(H("STEREO TXT"), "Stereo");
-    p.Text(H("SV BADSAVE TXT"), "{c=ffff0000}Save failed!{~:c} Your Xbox doesn't have enough free blocks to create new save games. Press {i:ui_accept} to continue.");
-    p.Text(H("SV FORMAT CONFIRM TXT"), "Are you sure you wish to format memory card in MEMORY CARD slot {var:MCSelectedCard}?");
-    p.Text(H("SV MC DONTREMOVE PAL TXT"), "WARNING: {var:MCAccessType}...{n}Do not remove {i:PS2_MEMCARD} in memory card slot {var:MCSelectedCard}, or the {i:PS2_PAD_PAL}, or reset/switch off the console");
-    p.Text(H("SV MC DONTREMOVE TXT"), "Saving Game.....{n}Please don't turn off your Xbox console.");
-    p.Text(H("SV NOSPACE TXT"), "Your Xbox console doesn't have enough free blocks to create new save games. Press {i:ui_accept} to continue.");
+    p.Text(H("SV BADSAVE TXT"),
+           "{c=ffff0000}Save failed!{~:c} There is not enough free space to create new save games. "
+           "Press {i:ui_accept} to continue.");
+    p.Text(H("SV FORMAT CONFIRM TXT"), "Are you sure you wish to create your save folder?");
+    p.Text(H("SV MC DONTREMOVE PAL TXT"), "WARNING: {var:MCAccessType}...{n}Do not close the game while it is saving.");
+    p.Text(H("SV MC DONTREMOVE TXT"), "Saving Game.....{n}Do not close the game while it is saving.");
+    p.Text(H("SV NOSPACE TXT"),
+           "There is not enough free space to create new save games. Press {i:ui_accept} to "
+           "continue.");
     p.Text(H("SV NOSPACEGAME TXT"), "There is not enough space to save your game.");
     p.Text(H("SV OVERWRITE TXT"), "A game already exists. Would you like to overwrite it?");
     p.Text(H("SV RETRY TXT"), "{i:ui_accept} Retry");

@@ -2919,7 +2919,7 @@ void MNU4_BuildUIFont(iAssetPkg& p)
         a.uiFlags = 0x36;
         a.dim[0] = 515; a.dim[1] = 200;
         a.uiFontFlags = 0x864;
-        a.textAssetID = 0xE4650EF2; // "{i:keyword}Data could not be autosaved correctly!{~:c}{n}The"
+        a.textAssetID = H("MNU4 AUTO SAVE FAILED UNFORMATTED TXT");
         a.color[0] = 4; a.color[1] = 57; a.color[2] = 95; a.color[3] = 255;
         a.inset[0] = 25; a.inset[1] = 2; a.inset[2] = 2; a.inset[3] = 2;
         a.space[0] = 20; a.space[1] = 20;
@@ -3065,7 +3065,7 @@ void MNU4_BuildUIFont(iAssetPkg& p)
         a.uiFlags = 0x36;
         a.dim[0] = 515; a.dim[1] = 200;
         a.uiFontFlags = 0x864;
-        a.textAssetID = 0x3EDB7748; // "{i:keyword}Data could not be autosaved correctly!{~:c}{n}The"
+        a.textAssetID = H("MNU4 AUTO SAVE FAILED NOSPACE TXT");
         a.color[0] = 4; a.color[1] = 57; a.color[2] = 95; a.color[3] = 255;
         a.space[0] = 20; a.space[1] = 20;
         a.cdim[0] = 20; a.cdim[1] = 20;

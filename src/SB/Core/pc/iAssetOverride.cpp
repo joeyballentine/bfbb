@@ -15,6 +15,8 @@ void MNU5_Build(iAssetPkg& p);
 extern const U32 kMNU3OwnedTypes[];
 extern const U32 kMNU4OwnedTypes[];
 extern const U32 kMNU5OwnedTypes[];
+void FONT_Build(iAssetPkg& p);
+extern const U32 kFontOwnedTypes[];
 
 namespace
 {
@@ -23,12 +25,18 @@ struct Override
     const char* package; // the HIP's file name, any folder, any case
     const U32* types;    // zero-terminated
     void (*build)(iAssetPkg&);
+
+    // FALSE: the code is all of the package's assets of these types, and the
+    // HIP's are never seen. TRUE: the code replaces the HIP's assets it has an
+    // ID for and leaves every other one, in the HIP's order.
+    S32 replaceOnly;
 };
 
 const Override kOverrides[] = {
-    { "mnu3.HIP", kMNU3OwnedTypes, MNU3_Build },
-    { "mnu4.HIP", kMNU4OwnedTypes, MNU4_Build },
-    { "mnu5.HIP", kMNU5OwnedTypes, MNU5_Build },
+    { "mnu3.HIP", kMNU3OwnedTypes, MNU3_Build, FALSE },
+    { "mnu4.HIP", kMNU4OwnedTypes, MNU4_Build, FALSE },
+    { "mnu5.HIP", kMNU5OwnedTypes, MNU5_Build, FALSE },
+    { "font.HIP", kFontOwnedTypes, FONT_Build, TRUE },
 };
 
 // A package open with an override. Few at once: the menu scene and whatever
@@ -168,6 +176,15 @@ void Verify(Open* o)
         }
     }
 
+    // A replace-only package keeps the rest of the HIP's assets of its types,
+    // in the HIP's order, so there is nothing to have removed or reordered.
+    if (o->ov->replaceOnly)
+    {
+        printf("bfbb: %s: %d assets match the HIP, %d replaced, %d not in the HIP\n",
+               o->ov->package, same, differ, added);
+        return;
+    }
+
     // What the HIP has of the owned types that the code does not.
     for (const U32* t = o->ov->types; *t != 0; t++)
     {
@@ -228,12 +245,24 @@ const iAssetEntry* Lookup(st_PACKER_READ_DATA* pr, U32 aid, S32* hidden)
     }
     Verify(o);
     const iAssetEntry* e = o->pkg->Find(aid);
-    if (e == NULL)
+    if (e == NULL && !o->ov->replaceOnly)
     {
         U32 type = RealType(pr, aid);
         *hidden = type != 0 && Owns(o, type);
     }
     return e;
+}
+
+// For a replace-only package: the code's version of the HIP's idx'th asset of
+// a type, or NULL where the code has none and the HIP's stands.
+const iAssetEntry* ReplacementByType(Open* o, U32 type, S32 idx)
+{
+    st_PKR_ASSET_TOCINFO info;
+    if (!sReal->GetAssetInfoByType(o->pr, type, idx, &info))
+    {
+        return NULL;
+    }
+    return o->pkg->Find(info.aid);
 }
 
 st_PACKER_READ_DATA* W_Init(void* userdata, char* pkgfile, U32 opts, S32* cltver,
@@ -327,6 +356,19 @@ void* W_AssetByType(st_PACKER_READ_DATA* pr, U32 type, S32 idx, U32* size)
     {
         return sReal->AssetByType(pr, type, idx, size);
     }
+    if (o->ov->replaceOnly)
+    {
+        const iAssetEntry* r = ReplacementByType(o, type, idx < 0 ? 0 : idx);
+        if (r == NULL)
+        {
+            return sReal->AssetByType(pr, type, idx, size);
+        }
+        if (size != NULL)
+        {
+            *size = r->size;
+        }
+        return r->data;
+    }
     const iAssetEntry* e = o->pkg->ByType(type, idx < 0 ? 0 : idx);
     if (size != NULL)
     {
@@ -338,7 +380,8 @@ void* W_AssetByType(st_PACKER_READ_DATA* pr, U32 type, S32 idx, U32* size)
 S32 W_AssetCount(st_PACKER_READ_DATA* pr, U32 type)
 {
     Open* o = Owned(pr, type);
-    return o != NULL ? o->pkg->CountType(type) : sReal->AssetCount(pr, type);
+    return o != NULL && !o->ov->replaceOnly ? o->pkg->CountType(type)
+                                            : sReal->AssetCount(pr, type);
 }
 
 S32 W_IsAssetReady(st_PACKER_READ_DATA* pr, U32 aid)
@@ -369,6 +412,16 @@ S32 W_GetAssetInfoByType(st_PACKER_READ_DATA* pr, U32 type, S32 idx, st_PKR_ASSE
     if (o == NULL)
     {
         return sReal->GetAssetInfoByType(pr, type, idx, info);
+    }
+    if (o->ov->replaceOnly)
+    {
+        const iAssetEntry* r = ReplacementByType(o, type, idx < 0 ? 0 : idx);
+        if (r == NULL)
+        {
+            return sReal->GetAssetInfoByType(pr, type, idx, info);
+        }
+        FillInfo(pr, r, info);
+        return TRUE;
     }
     const iAssetEntry* e = o->pkg->ByType(type, idx < 0 ? 0 : idx);
     if (e == NULL)

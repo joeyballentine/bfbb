@@ -2,7 +2,6 @@
 
 #include <stdlib.h>
 
-#include "iTextPatch.h"
 #include "xLinkAsset.h"
 
 iAssetPkg::iAssetPkg()
@@ -98,9 +97,8 @@ void iAssetPkg::Text(U32 id, const char* text)
         Append(&zero, 1);
     }
 
-    // The HIP's TEXT goes through iTextPatch as it loads (zAssetTypes.cpp's
-    // TEXT_Read); text written here gets the same pass.
-    iTextPatchAsset(id, (char*)m_buf + sizeof(U32), size - sizeof(U32));
+    // Not through iTextPatch, which the HIP's text gets as it loads. Text
+    // written here is written for this platform already.
     Store('TEXT', id);
 }
 

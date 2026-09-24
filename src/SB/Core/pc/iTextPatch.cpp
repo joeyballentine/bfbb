@@ -3,6 +3,7 @@
 
 #include "iTextPatch.h"
 
+#include "iHostWords.h"
 #include "iPadLayout.h"
 #include "xPad.h"
 
@@ -36,20 +37,9 @@ namespace
         const char* to;
     };
 
-// What the host is called. A phone or a tablet on Android is "device"; the
-// name has to fit inside the console names it replaces, which is why Android
-// has no rule for the bare four-letter "Xbox".
-#ifdef __ANDROID__
-#define HOST_NAME "device"
-#define HOST_MACHINE "device"
-#define HOST_DISK "storage"
-#define HOST_HOME "home screen"
-#else
-#define HOST_NAME "PC"
-#define HOST_MACHINE "computer"
-#define HOST_DISK "hard drive"
-#define HOST_HOME "Desktop"
-#endif
+// What the host is called is iHostWords.h. The name has to fit inside the
+// console names it replaces, which is why Android has no rule for the bare
+// four-letter "Xbox".
 
     const Rule kRules[] = {
         // "please do not turn off your Xbox console" -- the autosave warnings,
@@ -270,11 +260,7 @@ namespace
         // The pause menu's last entry, and the controller prompt. Both are live
         // on this build: the first is one button press away at any time, the
         // second appears whenever a pad is unplugged.
-#ifdef __ANDROID__
-        { "text_menu_reboot", "{i:button_picture_03} Quit Game" },
-#else
-        { "text_menu_reboot", "{i:button_picture_03} Quit to Desktop" },
-#endif
+        { "text_menu_reboot", "{i:button_picture_03} " HOST_QUIT },
         { "text_no_controller",
           "No controller is detected.{n}Please connect a controller, and press the {i:ui_accept} "
           "button to continue" },

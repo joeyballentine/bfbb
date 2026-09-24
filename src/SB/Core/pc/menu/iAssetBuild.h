@@ -4,6 +4,7 @@
 #include <types.h>
 #include <string.h>
 
+#include "iHostWords.h"
 #include "xCounter.h"
 #include "xDynAsset.h"
 #include "xEvent.h"
