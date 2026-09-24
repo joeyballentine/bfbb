@@ -361,7 +361,8 @@ set(INPUT_LIBS)
 if(BFBB_INPUT_BACKEND STREQUAL "null")
   set(INPUT_SOURCES ${PC_DIR}/iPadHostNull.cpp)
 elseif(BFBB_INPUT_BACKEND STREQUAL "sdl")
-  set(INPUT_SOURCES ${PC_DIR}/iPadHostSDL.cpp ${PC_DIR}/iPadKeyboardSDL.cpp ${PC_DIR}/iPadTouch.cpp)
+  set(INPUT_SOURCES ${PC_DIR}/iPadHostSDL.cpp ${PC_DIR}/iPadKeyboardSDL.cpp ${PC_DIR}/iPadTokens.cpp
+                    ${PC_DIR}/iPadTouch.cpp)
 
   # So the self-test knows which backend it is linked against: the contract it
   # checks is the same either way, but "no controller on port 0" means an
@@ -873,6 +874,7 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iPad.cpp
   ${PC_DIR}/iPadLayout.cpp
   ${PC_DIR}/iPadBind.cpp
+  ${PC_DIR}/iPadBindTable.cpp
   ${PC_DIR}/iPadGlyph.cpp
   ${PC_DIR}/iPadStick.cpp
   ${PC_DIR}/iSystem.cpp
@@ -1738,6 +1740,7 @@ add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   ${PC_DIR}/iPad.cpp
   ${PC_DIR}/iPadLayout.cpp
   ${PC_DIR}/iPadBind.cpp
+  ${PC_DIR}/iPadBindTable.cpp
   ${PC_DIR}/iPadStick.cpp
 
   # What iPadTouch.cpp hands on: the camera it turns and the shapes it draws.

@@ -118,6 +118,13 @@ struct iPadBindPreset
 extern const iPadBindPreset kPadBindPresets[];
 extern const S32 kPadBindPresetCount;
 
+// What preset `preset` binds row `row` to, as the table spells it: a token
+// list, or '#' and a letter for "the button printed with this letter". The
+// row's own `pad` for a preset that leaves it alone or a name no preset has.
+// NULL for a row out of range. Needs no config file and no device, which is
+// what lets bfbb_config show a preset's defaults.
+const char* iPadBindPresetEntry(const char* preset, S32 row);
+
 // The default binding for one row on the pad, under whatever preset
 // `input.preset` names. iConfig.cpp answers `pad.*` with this and writes a
 // generated file from it, so changing the preset changes both together and the

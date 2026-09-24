@@ -19,19 +19,12 @@
 
 #include "iPadBind.h"
 #include "iPadHost.h"
+#include "iPadTokens.h"
 #include "xPad.h"
 
 #include <SDL3/SDL.h>
 
 static iPadBind sKeyBind[IPAD_BIND_MAX_BUTTONS];
-
-// SDL has a scancode for each side of a modifier and none for "either", which
-// is what the bare names have always meant here. These ids stand for the pair
-// and are resolved in KeyDown; they are above SDL_SCANCODE_COUNT so they can
-// never collide with a real one.
-#define KEY_EITHER_SHIFT 1000
-#define KEY_EITHER_CTRL 1001
-#define KEY_EITHER_ALT 1002
 
 static bool ScancodeDown(S32 code)
 {
@@ -102,117 +95,11 @@ static bool KeyInputHeld(S16 id)
     return KeyDown(id);
 }
 
-// Key names, for the right-hand side of a [keyboard] binding. The names are the
-// ones config.ini has always used, so a file written by an older build still
-// parses; only what they resolve to changed.
-//
-// Letters and digits are not listed: they are appended below, because writing
-// out thirty-six rows that each say "this key is called what is on it" is
-// noise. What is listed is everything whose name is not its character.
-static const iPadBindToken kKeyTokens[] = {
-    { "space", SDL_SCANCODE_SPACE },
-    { "enter", SDL_SCANCODE_RETURN },
-    { "tab", SDL_SCANCODE_TAB },
-    { "escape", SDL_SCANCODE_ESCAPE },
-    { "backspace", SDL_SCANCODE_BACKSPACE },
-    { "shift", KEY_EITHER_SHIFT },
-    { "lshift", SDL_SCANCODE_LSHIFT },
-    { "rshift", SDL_SCANCODE_RSHIFT },
-    { "ctrl", KEY_EITHER_CTRL },
-    { "lctrl", SDL_SCANCODE_LCTRL },
-    { "rctrl", SDL_SCANCODE_RCTRL },
-    { "alt", KEY_EITHER_ALT },
-    { "lalt", SDL_SCANCODE_LALT },
-    { "ralt", SDL_SCANCODE_RALT },
-    { "up", SDL_SCANCODE_UP },
-    { "down", SDL_SCANCODE_DOWN },
-    { "left", SDL_SCANCODE_LEFT },
-    { "right", SDL_SCANCODE_RIGHT },
-    { "insert", SDL_SCANCODE_INSERT },
-    { "delete", SDL_SCANCODE_DELETE },
-    { "home", SDL_SCANCODE_HOME },
-    { "end", SDL_SCANCODE_END },
-    { "pageup", SDL_SCANCODE_PAGEUP },
-    { "pagedown", SDL_SCANCODE_PAGEDOWN },
-    { "capslock", SDL_SCANCODE_CAPSLOCK },
-    { "comma", SDL_SCANCODE_COMMA },
-    { "period", SDL_SCANCODE_PERIOD },
-    { "minus", SDL_SCANCODE_MINUS },
-    { "equals", SDL_SCANCODE_EQUALS },
-    { "semicolon", SDL_SCANCODE_SEMICOLON },
-    { "slash", SDL_SCANCODE_SLASH },
-    { "tilde", SDL_SCANCODE_GRAVE },
-    { "lbracket", SDL_SCANCODE_LEFTBRACKET },
-    { "backslash", SDL_SCANCODE_BACKSLASH },
-    { "rbracket", SDL_SCANCODE_RIGHTBRACKET },
-    { "quote", SDL_SCANCODE_APOSTROPHE },
-    { "f1", SDL_SCANCODE_F1 },
-    { "f2", SDL_SCANCODE_F2 },
-    { "f3", SDL_SCANCODE_F3 },
-    { "f4", SDL_SCANCODE_F4 },
-    { "f5", SDL_SCANCODE_F5 },
-    { "f6", SDL_SCANCODE_F6 },
-    { "f7", SDL_SCANCODE_F7 },
-    { "f8", SDL_SCANCODE_F8 },
-    { "f9", SDL_SCANCODE_F9 },
-    { "f10", SDL_SCANCODE_F10 },
-    { "f11", SDL_SCANCODE_F11 },
-    { "f12", SDL_SCANCODE_F12 },
-    { "numpad0", SDL_SCANCODE_KP_0 },
-    { "numpad1", SDL_SCANCODE_KP_1 },
-    { "numpad2", SDL_SCANCODE_KP_2 },
-    { "numpad3", SDL_SCANCODE_KP_3 },
-    { "numpad4", SDL_SCANCODE_KP_4 },
-    { "numpad5", SDL_SCANCODE_KP_5 },
-    { "numpad6", SDL_SCANCODE_KP_6 },
-    { "numpad7", SDL_SCANCODE_KP_7 },
-    { "numpad8", SDL_SCANCODE_KP_8 },
-    { "numpad9", SDL_SCANCODE_KP_9 },
-    { "numpadplus", SDL_SCANCODE_KP_PLUS },
-    { "numpadminus", SDL_SCANCODE_KP_MINUS },
-    { "numpadstar", SDL_SCANCODE_KP_MULTIPLY },
-    { "numpadslash", SDL_SCANCODE_KP_DIVIDE },
-    { "numpaddot", SDL_SCANCODE_KP_PERIOD },
-};
-
-static const S32 kKeyTokenCount = (S32)(sizeof(kKeyTokens) / sizeof(kKeyTokens[0]));
-
-static iPadBindToken sTokens[kKeyTokenCount + 36];
-static S32 sTokenCount;
-static char sLetterNames[36][2];
-
-// The number row is not contiguous with itself: SDL runs 1 through 9 and then
-// puts 0 after them, in the order the keys sit on the board.
-static S32 DigitScancode(S32 digit)
-{
-    return digit == 0 ? SDL_SCANCODE_0 : (SDL_SCANCODE_1 + digit - 1);
-}
-
-static void BuildKeyTokens()
-{
-    sTokenCount = 0;
-
-    for (S32 i = 0; i < kKeyTokenCount; i++)
-    {
-        sTokens[sTokenCount++] = kKeyTokens[i];
-    }
-
-    for (S32 i = 0; i < 36; i++)
-    {
-        sLetterNames[i][0] = (i < 26) ? (char)('a' + i) : (char)('0' + (i - 26));
-        sLetterNames[i][1] = '\0';
-
-        sTokens[sTokenCount].name = sLetterNames[i];
-        sTokens[sTokenCount].id =
-            (S16)((i < 26) ? (SDL_SCANCODE_A + i) : DigitScancode(i - 26));
-        sTokenCount++;
-    }
-}
-
 void iPadKeyboardInit()
 {
-    BuildKeyTokens();
-    iPadBindLoad(IPAD_BIND_KEYBOARD, sTokens, sTokenCount, sKeyBind);
+    S32 count;
+    const iPadBindToken* tokens = iPadKeyTokens(&count);
+    iPadBindLoad(IPAD_BIND_KEYBOARD, tokens, count, sKeyBind);
 }
 
 void iPadKeyboardPoll(iPadHostState* s)
