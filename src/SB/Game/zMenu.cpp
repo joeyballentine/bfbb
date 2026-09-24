@@ -286,7 +286,7 @@ U32 zMenuLoop()
             tgt[1] = src[2];
             tgt[2] = src[1];
             tgt[3] = src[0];
-            if (tgt[3] < '0' || tgt[3] > '9')
+            if (tgt[ITAG_LAST_CHAR_BYTE] < '0' || tgt[ITAG_LAST_CHAR_BYTE] > '9')
             {
                 memcpy(tgt, src, sizeof(U32));
             }

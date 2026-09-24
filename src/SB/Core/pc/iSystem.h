@@ -22,6 +22,14 @@
 // src/SB/Core/gc reads it; kept so the header's contract is unchanged.
 #define GET_MAKER_CODE() ((U32)0)
 
+// Which byte of a four-character tag in memory holds its last character: the
+// low byte, which is byte 3 on the GameCube and byte 0 on a little-endian host.
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#define ITAG_LAST_CHAR_BYTE 3
+#else
+#define ITAG_LAST_CHAR_BYTE 0
+#endif
+
 void iVSync();
 
 void iSystemInit(U32 options);

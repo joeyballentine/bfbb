@@ -33,6 +33,9 @@ void iVSync();
 #define GET_MAKER_CODE() (*((U32*)0x80000004))
 #define GET_BUS_FREQUENCY() (*((U32*)0x800000F8))
 
+// Which byte of a four-character tag in memory holds its last character.
+#define ITAG_LAST_CHAR_BYTE 3
+
 struct RwMemoryFunctions* psGetMemoryFunctions();
 void iVSync();
 
