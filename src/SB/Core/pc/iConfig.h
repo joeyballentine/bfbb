@@ -68,6 +68,14 @@ S32 iConfigGetInt(const char* key, S32 def);
 F32 iConfigGetFloat(const char* key, F32 def);
 const char* iConfigGetString(const char* key, const char* def);
 
+// Change a setting while the game runs, from the in-game settings screen. The
+// getters answer with the new value from here on; applying it is the caller's
+// job, since what applying means differs per setting. iConfigSave writes every
+// setting changed this way into the file, in place, keeping its comments and
+// layout (iConfigEdit.h); nothing else in the game writes the file.
+void iConfigSet(const char* key, const char* value);
+bool iConfigSave();
+
 // Write a config.ini holding every setting at its default, with the comments
 // that document each one. This is what the load calls when it finds no file;
 // it is public because a settings front end -- a launcher, whenever there is

@@ -857,6 +857,7 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/iCameraLook.cpp
   ${PC_DIR}/iConfig.cpp
   ${PC_DIR}/iConfigTable.cpp
+  ${PC_DIR}/iConfigEdit.cpp
   ${PC_DIR}/iDrawDist.cpp
   ${PC_DIR}/iFile.cpp
   ${PC_DIR}/iFixes.cpp

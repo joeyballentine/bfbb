@@ -26,6 +26,7 @@
 
 #include "iAssetOverride.h"
 #include "iSaveThumb.h"
+#include "iSettingsScreen.h"
 #include "isavegame.h"
 #include "xstransvc.h"
 #include "zUI.h"
@@ -598,12 +599,36 @@ namespace
     }
 } // namespace
 
+// The title's Settings entry comes through Load mode and the pause menu's
+// through Save mode; see iSettingsScreen.cpp.
 U32 iSGLoadLoop()
 {
-    return iAssetOverrideEnabled() ? LoadScreen() : zSaveLoad_LoadLoop();
+    if (!iAssetOverrideEnabled())
+    {
+        return zSaveLoad_LoadLoop();
+    }
+    if (iSettingsRequested(FALSE))
+    {
+        iSettingsRun(FALSE);
+        zGameModeSwitch(eGameMode_Title);
+        zGameStateSwitch(0);
+
+        // zMenuUpdateMode reads '0000' as "stay on the menu".
+        return '0000';
+    }
+    return LoadScreen();
 }
 
 U32 iSGSaveLoop()
 {
-    return iAssetOverrideEnabled() ? SaveScreen() : zSaveLoad_SaveLoop();
+    if (!iAssetOverrideEnabled())
+    {
+        return zSaveLoad_SaveLoop();
+    }
+    if (iSettingsRequested(TRUE))
+    {
+        iSettingsRun(TRUE);
+        return 0;
+    }
+    return SaveScreen();
 }

@@ -213,6 +213,11 @@ F32 iScreenStretchY(F32 n)
     return (F32)sHeight * n;
 }
 
+iScreenUIMode iScreenGetUIMode()
+{
+    return sUIMode;
+}
+
 void iScreenSetUIMode(iScreenUIMode mode)
 {
     sUIMode = mode;

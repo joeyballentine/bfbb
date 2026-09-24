@@ -1178,7 +1178,7 @@ void MNU3_BuildUIFont(iAssetPkg& p)
         p.Link(eEventPadPressUp, eEventUIUnselect, H("MNU3 START CONTROLS UIF"));
         p.Link(eEventPadPressUp, eEventUISelect, H("MNU3 START LOAD UIF"));
         p.Link(eEventPadPressDown, eEventUIUnselect, H("MNU3 START CONTROLS UIF"));
-        p.Link(eEventPadPressDown, eEventUISelect, H("MNU3 START CREDITS UIF"));
+        p.Link(eEventPadPressDown, eEventUISelect, H(ISETTINGS_TITLE_ENTRY));
         p.Link(eEventPadPressX, eEventInvisible, H("MNU3 START GROUP"));
         p.Link(eEventPadPressX, eEventUIFocusOff_Unselect, H("MNU3 START GROUP"));
         p.Link(eEventPadPressX, eEventInvisible, H("BLUE ALPHA 1 BAMBOO UI"));
@@ -1191,7 +1191,7 @@ void MNU3_BuildUIFont(iAssetPkg& p)
 
     {
         zUIFontAsset a = kUIFontDefaults;
-        a.pos = xVec3{ 325.0f, 240.0f, 0.0f };
+        a.pos = xVec3{ 345.0f, 270.0f, 0.0f };
         a.dim[0] = 300; a.dim[1] = 60;
         a.uiFontFlags = 0x271;
         a.textAssetID = H("MNU3  CREDITS TXT");
@@ -1200,7 +1200,7 @@ void MNU3_BuildUIFont(iAssetPkg& p)
         p.Begin('UIFT', H("MNU3 START CREDITS UIF"), a);
         p.Link(eEventUISelect, eEventPlay, H("MNU3 MOVE B SFX"));
         p.Link(eEventPadPressUp, eEventUIUnselect, H("MNU3 START CREDITS UIF"));
-        p.Link(eEventPadPressUp, eEventUISelect, H("MNU3 START CONTROLS UIF"));
+        p.Link(eEventPadPressUp, eEventUISelect, H(ISETTINGS_TITLE_ENTRY));
         p.Link(eEventPadPressDown, eEventUIUnselect, H("MNU3 START CREDITS UIF"));
         p.Link(eEventPadPressDown, eEventUISelect, H("MNU3 START PROMO UIF"));
         p.Link(eEventPadPressX, eEventInvisible, H("MNU3 START GROUP"));
@@ -1216,7 +1216,7 @@ void MNU3_BuildUIFont(iAssetPkg& p)
 
     {
         zUIFontAsset a = kUIFontDefaults;
-        a.pos = xVec3{ 345.0f, 270.0f, 0.0f };
+        a.pos = xVec3{ 360.0f, 300.0f, 0.0f };
         a.dim[0] = 300; a.dim[1] = 60;
         a.uiFontFlags = 0x271;
         a.textAssetID = H("MNU3 EXTRAS TXT");
@@ -2332,6 +2332,28 @@ void MNU3_BuildUIFont(iAssetPkg& p)
         p.Link(eEventPadPressTriangle, eEventInvisible, H("MNU3 LD TITLE GROUP"));
         p.Link(eEventPadPressTriangle, eEventUIFocusOn, H("MNU3 START GROUP"));
         p.Link(eEventPadPressTriangle, eEventUISelect, H("MNU3 START LOAD UIF"));
+        p.End();
+    }
+
+    // The title's Settings entry, after Options. Confirm switches to Load mode
+    // as the Load entry does and leaves this selected, which is how
+    // iSGLoadLoop knows to open the settings screen instead.
+    {
+        zUIFontAsset a = kUIFontDefaults;
+        a.pos = xVec3{ 325.0f, 240.0f, 0.0f };
+        a.dim[0] = 300; a.dim[1] = 60;
+        a.uiFontFlags = 0x271;
+        a.textAssetID = H("PC SETTINGS TXT");
+        a.space[0] = 32; a.space[1] = 28;
+        a.cdim[0] = 32; a.cdim[1] = 32;
+        p.Begin('UIFT', H(ISETTINGS_TITLE_ENTRY), a);
+        p.Link(eEventUISelect, eEventPlay, H("MNU3 MOVE B SFX"));
+        p.Link(eEventPadPressUp, eEventUIUnselect, H(ISETTINGS_TITLE_ENTRY));
+        p.Link(eEventPadPressUp, eEventUISelect, H("MNU3 START CONTROLS UIF"));
+        p.Link(eEventPadPressDown, eEventUIUnselect, H(ISETTINGS_TITLE_ENTRY));
+        p.Link(eEventPadPressDown, eEventUISelect, H("MNU3 START CREDITS UIF"));
+        p.Link(eEventPadPressX, eEventPlay, H("MNU3 CONFIRM SFX"));
+        p.Link(eEventPadPressX, eEventDispatcher_SetLoadState_Loading, H("MNU3 PRESS START DISP"));
         p.End();
     }
 }

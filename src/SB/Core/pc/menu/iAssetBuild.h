@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "iSaveScreen.h"
+#include "iSettingsScreen.h"
 
 #include "iHostWords.h"
 #include "xCounter.h"

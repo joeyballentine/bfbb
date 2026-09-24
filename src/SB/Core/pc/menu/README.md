@@ -87,6 +87,26 @@ are, and eight more under `saves/more/` for the PC screen. A new save takes the
 first empty slot, retail's folders first. With the PC menus off only retail's
 two exist and retail's screens run.
 
+## The settings screen
+
+`iSettingsScreen.cpp`: config.ini's settings a player would change, from a
+Settings entry on the title (after Options) and in the pause menu (after
+Options). Up and down pick one, left and right change it, X steps round. A
+change applies at once through the same setters `ApplyConfig` uses, and the
+screen writes what changed back into config.ini when it closes
+(`iConfigSet` / `iConfigSave`). A setting that only takes effect on a restart
+or in the next area says so. Switching the window asks to be kept and puts
+itself back after 15 seconds unanswered.
+
+No game code knows it is there. The title's entry switches to Load mode and
+the pause menu's to Save mode, as their Load and Save entries do, and stays
+selected; `iSGLoadLoop` / `iSGSaveLoop` see that and run the settings screen
+instead. Its widgets are in mnu4, which is loaded everywhere.
+
+To add a setting, add a row to `kSettings`: the label, the config key, its
+words and what to call them, when it takes effect, one line of help, and the
+function that applies it.
+
 ## Checking
 
 `BFBB_ASSET_VERIFY=1` compares every built asset with the HIP's after each

@@ -60,6 +60,7 @@ void MNU4_BuildGroup(iAssetPkg& p)
         p.Item(H("PAUSE OPTION MGR UIF"));
         p.Item(H("PAUSE OPTION QUIT UIF"));
         p.Item(H("PAUSE OPTION CONTROLS UIF"));
+        p.Item(H(ISETTINGS_PAUSE_ENTRY));
         p.Item(H("PAUSE OPTION SAVE UIF"));
         p.Item(H("PAUSE OPTIONS PRESSX UIF"));
         p.Item(H("PAUSE OPTIONS PRESS TRI UIF"));
@@ -1499,6 +1500,24 @@ void MNU4_BuildPortal(iAssetPkg& p)
         a.assetMarkerID = H("FROM MNU4");
         a.sceneID = iAssetTag("SM40");
         p.Begin('PORT', H("WARP TO SM40"), a);
+        p.End();
+    }
+
+    // The settings screen's widgets, shown and focused together.
+    {
+        xGroupAsset a = kGroupDefaults;
+        a.baseFlags = 0x1D;
+        p.Begin('GRUP', H(ISETTINGS_GROUP), a);
+        p.Item(H(ISETTINGS_TITLE));
+        for (S32 i = 0; i < ISETTINGS_ROWS; i++)
+        {
+            char name[32];
+            sprintf(name, ISETTINGS_LABEL, (int)i);
+            p.Item(H(name));
+            sprintf(name, ISETTINGS_VALUE, (int)i);
+            p.Item(H(name));
+        }
+        p.Item(H(ISETTINGS_HELP));
         p.End();
     }
 }

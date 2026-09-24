@@ -427,6 +427,32 @@ static void test_config()
         }
     }
 
+    // The in-game settings screen: a set value is what the getters answer from
+    // then on, and the save writes it into the file in place -- the rest of the
+    // file, the unknown line included, comes back as it was.
+    iConfigSet("XBOX.glow", "on");
+    iConfigSet("video.fov", "90");
+    check(iConfigGetBool("xbox.glow", FALSE) == TRUE, "a set value is answered at once");
+    check(iConfigGetFloat("video.fov", 0.0f) == 90.0f, "and so is one the file never had");
+    check(iConfigSave(), "the changed settings save");
+    {
+        char saved[8192];
+        FILE* r = fopen(path, "rb");
+        size_t n = (r != NULL) ? fread(saved, 1, sizeof(saved) - 1, r) : 0;
+        if (r != NULL)
+        {
+            fclose(r);
+        }
+        saved[n] = '\0';
+
+        check(strstr(saved, "Glow   =   on") != NULL, "the set value replaces the line's own");
+        check(strstr(saved, "OFF") == NULL, "and the old value is gone");
+        check(strstr(saved, "fov = 90") != NULL, "a setting the file lacked is added");
+        check(strstr(saved, "; the port's settings") != NULL && strstr(saved, "glwo = off") != NULL,
+              "the comment and the unknown line survive the save");
+    }
+    check(iConfigSave(), "a save with nothing changed succeeds without writing");
+
     iHostRemoveFile(path);
 
     // The writer, which the load reaches only when there is no file -- and

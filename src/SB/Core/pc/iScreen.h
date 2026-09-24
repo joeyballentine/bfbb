@@ -113,6 +113,7 @@ enum iScreenUIMode
 };
 
 void iScreenSetUIMode(iScreenUIMode mode);
+iScreenUIMode iScreenGetUIMode();
 
 // The anchor is a TRANSLATION, and this is the widget it currently translates.
 //

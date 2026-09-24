@@ -8,11 +8,10 @@
 // PC-only: changing a value in an existing config.ini without disturbing
 // anything else in it.
 //
-// iConfig.cpp reads the file and never writes to one that exists -- the only
-// writes it has are an exclusive create of the defaults and an append of
-// settings a newer build added. That is right for the game, which has no
-// business rewriting a file someone is editing. The configurator does have
-// that business, and this is what it uses.
+// The configurator uses it, and so does iConfigSave, which writes back what the
+// in-game settings screen changed. Those are the only two writers of an
+// existing file; iConfig.cpp's own writes are an exclusive create of the
+// defaults and an append of settings a newer build added.
 //
 // The file is held as its own LINES, not as a set of key/value pairs that get
 // written back out. Setting a value rewrites the text between the '=' and any

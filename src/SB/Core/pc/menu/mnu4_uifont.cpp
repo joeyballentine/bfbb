@@ -371,7 +371,7 @@ void MNU4_BuildUIFont(iAssetPkg& p)
         p.Begin('UIFT', H("PAUSE OPTION CONTROLS UIF"), a);
         p.Link(eEventUISelect, eEventPlay, H("MNU4 MOVE A SFX"));
         p.Link(eEventPadPressDown, eEventUIUnselect, H("PAUSE OPTION CONTROLS UIF"));
-        p.Link(eEventPadPressDown, eEventUISelect, H("PAUSE OPTION SAVE UIF"));
+        p.Link(eEventPadPressDown, eEventUISelect, H(ISETTINGS_PAUSE_ENTRY));
         p.Link(eEventPadPressX, eEventUIFocusOff_Unselect, H("PAUSE OPTIONS BKG GROUP"));
         p.Link(eEventPadPressX, eEventUIFocusOff_Unselect, H("PAUSE OPTIONS GROUP"));
         p.Link(eEventPadPressX, eEventUIFocusOn, H("PAUSE CONTROLS GC/XB GROUP"));
@@ -383,7 +383,7 @@ void MNU4_BuildUIFont(iAssetPkg& p)
 
     {
         zUIFontAsset a = kUIFontDefaults;
-        a.pos = xVec3{ 270.0f, 190.0f, 0.0f };
+        a.pos = xVec3{ 300.0f, 230.0f, 0.0f };
         a.dim[0] = 300; a.dim[1] = 40;
         a.uiFontFlags = 0x271;
         a.textAssetID = H("PAUSE OPTIONS SAVE TXT");
@@ -392,7 +392,7 @@ void MNU4_BuildUIFont(iAssetPkg& p)
         p.Begin('UIFT', H("PAUSE OPTION SAVE UIF"), a);
         p.Link(eEventUISelect, eEventPlay, H("MNU4 MOVE A SFX"));
         p.Link(eEventPadPressUp, eEventUIUnselect, H("PAUSE OPTION SAVE UIF"));
-        p.Link(eEventPadPressUp, eEventUISelect, H("PAUSE OPTION CONTROLS UIF"));
+        p.Link(eEventPadPressUp, eEventUISelect, H(ISETTINGS_PAUSE_ENTRY));
         p.Link(eEventPadPressDown, eEventUIUnselect, H("PAUSE OPTION SAVE UIF"));
         p.Link(eEventPadPressDown, eEventUISelect, H("PAUSE OPTION QUIT UIF"));
         p.Link(eEventPadPressX, eEventUIFocusOff_Unselect, H("PAUSE OPTIONS GROUP"));
@@ -421,7 +421,7 @@ void MNU4_BuildUIFont(iAssetPkg& p)
 
     {
         zUIFontAsset a = kUIFontDefaults;
-        a.pos = xVec3{ 300.0f, 230.0f, 0.0f };
+        a.pos = xVec3{ 325.0f, 270.0f, 0.0f };
         a.dim[0] = 300; a.dim[1] = 40;
         a.uiFontFlags = 0x271;
         a.textAssetID = H("PAUSE OPTIONS QUIT TXT");
@@ -3119,6 +3119,81 @@ void MNU4_BuildUIFont(iAssetPkg& p)
         p.Link(eEventPadPressTriangle, eEventUIFocusOff_Unselect, H("SV GAMESLOT GROUP"));
         p.Link(eEventPadPressTriangle, eEventInvisible, H("SV MAKE INVISIBLE"));
         p.Link(eEventPadPressTriangle, eEventInvisible, H("SV SAVE GAME TITLE UIF"));
+        p.End();
+    }
+
+    // The settings screen: a title, a label and a value per row, and a line of
+    // help under them. iSettingsScreen.cpp moves the selection and writes the
+    // text; the rows' links are only the sound of moving.
+    {
+        zUIFontAsset a = kUIFontDefaults;
+        a.pos = xVec3{ 65.0f, 45.0f, 0.0f };
+        a.dim[0] = 520; a.dim[1] = 60;
+        a.uiFontFlags = 0x64;
+        a.textAssetID = H(ISETTINGS_TITLE_TEXT);
+        a.space[0] = 30; a.space[1] = 24;
+        a.cdim[0] = 30; a.cdim[1] = 30;
+        p.Begin('UIFT', H(ISETTINGS_TITLE), a);
+        p.End();
+    }
+
+    for (S32 i = 0; i < ISETTINGS_ROWS; i++)
+    {
+        char name[32];
+        zUIFontAsset a = kUIFontDefaults;
+        a.pos = xVec3{ 55.0f, ISETTINGS_ROW_Y + ISETTINGS_ROW_STEP * i, 0.0f };
+        a.uiFlags = 0x34;
+        a.dim[0] = 270; a.dim[1] = 32;
+        a.uiFontFlags = 0x871;
+        sprintf(name, ISETTINGS_LABEL_TEXT, (int)i);
+        a.textAssetID = H(name);
+        a.space[0] = 22; a.space[1] = 22;
+        a.cdim[0] = 22; a.cdim[1] = 22;
+        sprintf(name, ISETTINGS_LABEL, (int)i);
+        p.Begin('UIFT', H(name), a);
+        p.Link(eEventUISelect, eEventPlay, H("MNU4 MOVE A SFX"));
+        p.End();
+
+        a.pos.x = 330.0f;
+        a.dim[0] = 270;
+        sprintf(name, ISETTINGS_VALUE_TEXT, (int)i);
+        a.textAssetID = H(name);
+        sprintf(name, ISETTINGS_VALUE, (int)i);
+        p.Begin('UIFT', H(name), a);
+        p.End();
+    }
+
+    {
+        zUIFontAsset a = kUIFontDefaults;
+        a.pos = xVec3{ 55.0f, ISETTINGS_ROW_Y + ISETTINGS_ROW_STEP * ISETTINGS_ROWS + 6.0f, 0.0f };
+        a.dim[0] = 545; a.dim[1] = 60;
+        a.uiFontFlags = 0x61;
+        a.textAssetID = H(ISETTINGS_HELP_TEXT);
+        a.space[0] = 18; a.space[1] = 18;
+        a.cdim[0] = 18; a.cdim[1] = 18;
+        p.Begin('UIFT', H(ISETTINGS_HELP), a);
+        p.End();
+    }
+
+    // The pause menu's entry, between Options and Save. Confirm leaves it
+    // selected on purpose: that is how iSGSaveLoop knows it was this entry and
+    // not Save that switched the game to Save mode.
+    {
+        zUIFontAsset a = kUIFontDefaults;
+        a.pos = xVec3{ 270.0f, 190.0f, 0.0f };
+        a.dim[0] = 300; a.dim[1] = 40;
+        a.uiFontFlags = 0x271;
+        a.textAssetID = H("PC SETTINGS TXT");
+        a.space[0] = 32; a.space[1] = 28;
+        a.cdim[0] = 32; a.cdim[1] = 32;
+        p.Begin('UIFT', H(ISETTINGS_PAUSE_ENTRY), a);
+        p.Link(eEventUISelect, eEventPlay, H("MNU4 MOVE A SFX"));
+        p.Link(eEventPadPressUp, eEventUIUnselect, H(ISETTINGS_PAUSE_ENTRY));
+        p.Link(eEventPadPressUp, eEventUISelect, H("PAUSE OPTION CONTROLS UIF"));
+        p.Link(eEventPadPressDown, eEventUIUnselect, H(ISETTINGS_PAUSE_ENTRY));
+        p.Link(eEventPadPressDown, eEventUISelect, H("PAUSE OPTION SAVE UIF"));
+        p.Link(eEventPadPressX, eEventUIFocusOff, H("PAUSE OPTIONS GROUP"));
+        p.Link(eEventPadPressX, eEventDispatcher_SetSaveState_Saving, H("SV DISPATCH"));
         p.End();
     }
 }
