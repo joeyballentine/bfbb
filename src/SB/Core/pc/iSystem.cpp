@@ -1027,6 +1027,26 @@ void iSystemInit(U32 options)
     xMemInit();
     iFileInit();
 
+    // The code-built menus are the retail menus' logic, and point at the
+    // retail menus' textures and models by ID. A mod's own menu package has
+    // other ones, and the first missing texture ends the run, so the mod's
+    // menus are used whole.
+    if (iAssetOverrideEnabled())
+    {
+        static const char* const kMenuPackages[] = { "mn/mnu3.HIP", "mn/mnu4.HIP", "mn/mnu5.HIP" };
+        for (U32 i = 0; i < sizeof(kMenuPackages) / sizeof(kMenuPackages[0]); i++)
+        {
+            if (iFileModReplaces(kMenuPackages[i]))
+            {
+                printf("bfbb: the mod replaces %s; PC menus off, the mod's menus are used\n",
+                       kMenuPackages[i]);
+                iAssetOverrideSetEnabled(FALSE);
+                iSGSetPCTargets(FALSE);
+                break;
+            }
+        }
+    }
+
     // The assets, before anything asks for one and before the window opens.
     //
     // Before anything asks, because the first thing that does is

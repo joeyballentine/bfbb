@@ -119,6 +119,10 @@ first 34 of them.
 iTextPatch rewriting their text as it loads, which is exactly retail plus the
 word swaps.
 
+A mod folder with its own `mn/mnu3.HIP`, `mnu4.HIP` or `mnu5.HIP` turns
+code_menu off for the run. The built assets name the retail menus' textures
+and models by ID, and a mod's menus have other ones.
+
 ## Regenerating
 
 `tools/menugen/menugen.py` wrote these files from the Xbox HIPs, naming IDs

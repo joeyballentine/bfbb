@@ -652,6 +652,16 @@ static bool iModOverride(char* path, size_t pathsize)
     return true;
 }
 
+bool iFileModReplaces(const char* rel)
+{
+    char path[512];
+    if (snprintf(path, sizeof(path), "%s%s", sAssetRoot, rel) >= (int)sizeof(path))
+    {
+        return false;
+    }
+    return iModOverride(path, sizeof(path));
+}
+
 // A package the game cannot open, and the end of the run.
 //
 // xSTPreLoadScene's HIP arm is `do { ... } while (i == 0)`: a failed open is

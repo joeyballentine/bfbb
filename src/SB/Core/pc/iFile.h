@@ -58,6 +58,11 @@ const char* iFileModRoot();
 // under this name.
 const char* iFileModName();
 
+// PC-only. Whether the mod folder supplies the file at `rel`, a path relative
+// to the asset root like "mn/mnu3.HIP". Asks the same question a read does, so
+// a package from another console's release is not counted. After iFileInit.
+bool iFileModReplaces(const char* rel);
+
 // PC-only. The full path of the first file the game cannot run without that
 // is not under the asset root, or NULL when they are all there. Asked once by
 // iSystemInit, because the alternative is a hang: zMainLoadFontHIP spins on

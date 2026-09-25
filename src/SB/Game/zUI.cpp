@@ -821,7 +821,6 @@ void zUI_Render(xEnt* ent)
                     RwRenderStateSet(rwRENDERSTATETEXTURERASTER, texture->raster);
                 }
 
-                RwRaster* raster = texture->raster;
                 U8 r = 0xFF;
                 U8 g = 0xFF;
                 U8 b = 0xFF;
