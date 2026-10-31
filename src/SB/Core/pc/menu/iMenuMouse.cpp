@@ -446,10 +446,16 @@ namespace
     // map's level bubbles are each drawn only while selected and focused, and
     // the walk is what says they are this screen's. A shown option under the
     // pointer still wins over a hidden one.
+    //
+    // Of two options with the same middle, the one fewer presses away wins.
+    // BFBB Deluxe's pause map lays several spatula rows over each other, and
+    // the row being browsed is the near one; the others are reached through
+    // the level list, so picking one would change the level.
     _zUI* Pick(zScene* s, S32* step)
     {
         _zUI* best = NULL;
         F32 bestDistance = 0.0f;
+        S32 bestPresses = 0;
         bool bestShown = false;
         *step = -1;
 
@@ -488,13 +494,20 @@ namespace
                 {
                     continue;
                 }
-                if (best != NULL && bestShown == shown && d >= bestDistance)
+                S32 presses = 0;
+                for (S32 back = at; sSteps[back].from >= 0; back = sSteps[back].from)
+                {
+                    presses++;
+                }
+                if (best != NULL && bestShown == shown &&
+                    (d > bestDistance || (d == bestDistance && presses >= bestPresses)))
                 {
                     continue;
                 }
 
                 best = ui;
                 bestDistance = d;
+                bestPresses = presses;
                 bestShown = shown;
                 *step = at;
             }
