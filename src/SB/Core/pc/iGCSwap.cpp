@@ -135,6 +135,7 @@ static S32 iGCSwapSoundTable(U8* p, U32 size);
 static S32 iGCSwapJspInfo(U8* p, U32 size);
 static S32 iGCSwapCredits(U8* p, U32 size);
 static S32 iGCSwapShrapnel(U8* p, U32 size);
+static S32 iGCSwapPlayer(U8* p, U32 size);
 
 #include "iGCSwapTable.inc"
 
@@ -262,6 +263,27 @@ static void gcsSwapWords(U8* p, U32 from, U32 to)
     {
         gcsSwap32(p + c);
     }
+}
+
+// PLYR: an xEntAsset, its links, then the light kit id. The links are not at
+// the end as in other xBase assets: zEntPlayerInit reads the light kit id
+// after them. Retail's PLYRs have no links; mods' do.
+static S32 iGCSwapPlayer(U8* p, U32 size)
+{
+    const U32 kEnt = 0x54;
+
+    U32 links = kEnt + p[5] * 0x20;
+    if (size < links)
+    {
+        return 0;
+    }
+    gcs_xEntAsset(p);
+    for (U32 at = kEnt; at < links; at += 0x20)
+    {
+        gcsSwapLink(p + at);
+    }
+    gcsSwapWords(p, links, size);
+    return 1;
 }
 
 // CTOC, the cutscene table xCutscene_Init takes: a count, then that many

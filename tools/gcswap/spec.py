@@ -54,7 +54,7 @@ TYPES = {
     "TRIG": ["xEntAsset", "xTriggerAsset"],
     "DSTR": ["xEntAsset", "zEntDestructObjAsset"],
     "BOUL": ["xEntAsset", "xEntBoulderAsset"],
-    "PLYR": ["xEntAsset", ("words",)],
+    "PLYR": [("custom", "iGCSwapPlayer")],
     "TIMR": ["xTimerAsset"],
     # Mods only: retail has no SCRP assets. See pc/iModPatch.h.
     "SCRP": ["xScriptAsset", ("array", "xScriptEventAsset", "xScriptAsset.eventCount")],

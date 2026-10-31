@@ -3336,19 +3336,7 @@ static S32 gcs_type_BOUL(U8* p, U32 size)
 
 static S32 gcs_type_PLYR(U8* p, U32 size)
 {
-    U32 end;
-    if (!gcsSwapLinks(p, size, &end)) return 0;
-    U32 c = 0;
-    if (c + 0x54 > end) // an older, shorter asset: what is there
-    {
-        if (c < end) gcs_xEntAsset_upto(p + c, end - c);
-        return 1;
-    }
-    gcs_xEntAsset(p + c);
-    c += 0x54;
-    for (; c + 4 <= end; c += 4)
-        gcsSwap32(p + c);
-    return 1;
+    return iGCSwapPlayer(p, size);
 }
 
 static S32 gcs_type_TIMR(U8* p, U32 size)
