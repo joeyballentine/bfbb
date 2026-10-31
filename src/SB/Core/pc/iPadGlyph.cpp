@@ -87,41 +87,44 @@ namespace
     // Nothing draws the close camera. No disc has a prompt for it, so giving it
     // a button of its own costs no picture.
     //
-    // The face four are read off the discs, and all three agree. Each disc's
-    // menu prompts name a picture, that picture names one of these textures,
-    // and the texture is a picture of a physical button: cancel draws the
-    // button printed B everywhere, options the one printed X, accept A and the
-    // third choice Y. The code cancels on TRIANGLE and opens options on O, so
-    // B is TRIANGLE and X is O -- which is gc/iPad.cpp's mapping as well.
+    // The face four are numbered by `picture`, and which bit each shows depends
+    // on the disc the font came off: iPadLayoutPictureBit. Every disc's menu
+    // prompts agree on the buttons themselves: cancel draws the button printed
+    // B, options the one printed X, accept A and the third choice Y. The code
+    // cancels on TRIANGLE and opens options on O, so B is TRIANGLE and X is O
+    // -- which is gc/iPad.cpp's mapping as well.
     //
     // A MOVE is not read here. The consoles do disagree about those, and what
     // they disagree about is which bit the move reads rather than which button
     // the bit is; iPadLayout.h holds that, and iTextPatch.cpp points a move's
     // prompt at the picture to match.
-    //
-    // `fallback` is the Xbox set's own slot order, since that is the art this
-    // resolves against: 1 is A, 2 is Y, 3 is B, 4 is X.
     struct Slot
     {
         const char* name;
+        S32 picture; // 1 to 4 for the face four, else 0
         U32 mask;
         const char* fallback;
     };
 
     const Slot kSlots[] = {
-        { "pad_button1", XPAD_BUTTON_X, "south" },
-        { "pad_button2", XPAD_BUTTON_SQUARE, "north" },
-        { "pad_button3", XPAD_BUTTON_TRIANGLE, "east" },
-        { "pad_button4", XPAD_BUTTON_O, "west" },
-        { "pad_button_L1", XPAD_BUTTON_L1, "lt" },
-        { "pad_button_R1", XPAD_BUTTON_R1, "rt" },
-        { "pad_button_L2", XPAD_BUTTON_L2, "lb" },
-        { "pad_button_R2", XPAD_BUTTON_HUD, "rb" },
-        { "pad_button_start", XPAD_BUTTON_START, "start" },
-        { "pad_button_select", XPAD_BUTTON_SELECT, "back" },
-        { "pad_button_L_analog", 0, "stick_left" },
-        { "pad_button_R_analog", 0, "stick_right" },
+        { "pad_button1", 1, 0, NULL },
+        { "pad_button2", 2, 0, NULL },
+        { "pad_button3", 3, 0, NULL },
+        { "pad_button4", 4, 0, NULL },
+        { "pad_button_L1", 0, XPAD_BUTTON_L1, "lt" },
+        { "pad_button_R1", 0, XPAD_BUTTON_R1, "rt" },
+        { "pad_button_L2", 0, XPAD_BUTTON_L2, "lb" },
+        { "pad_button_R2", 0, XPAD_BUTTON_HUD, "rb" },
+        { "pad_button_start", 0, XPAD_BUTTON_START, "start" },
+        { "pad_button_select", 0, XPAD_BUTTON_SELECT, "back" },
+        { "pad_button_L_analog", 0, 0, "stick_left" },
+        { "pad_button_R_analog", 0, 0, "stick_right" },
     };
+
+    U32 slotMask(const Slot* slot)
+    {
+        return (slot->picture != 0) ? iPadLayoutPictureBit(slot->picture) : slot->mask;
+    }
 
     const S32 kSlotCount = (S32)(sizeof(kSlots) / sizeof(kSlots[0]));
 
@@ -437,11 +440,16 @@ namespace
 
     // The file a slot is drawn from when its binding names no picture in the
     // live set. Without the layout lookup a GameCube set would draw its X
-    // beside "Return to Game", because the slot order the files are keyed to is
-    // the Xbox's.
+    // beside "Return to Game". A set nobody has a table for gets the Xbox's
+    // positions.
     const char* slotOwnFile(const Slot* slot)
     {
-        const char* printed = iPadLayoutFaceGlyph(sActive, slot->mask);
+        U32 mask = slotMask(slot);
+        const char* printed = iPadLayoutFaceGlyph(sActive, mask);
+        if (printed == NULL && slot->picture != 0)
+        {
+            printed = iPadLayoutFaceGlyph("xbox", mask);
+        }
         return (printed != NULL) ? printed : slot->fallback;
     }
 
@@ -452,9 +460,10 @@ namespace
     {
         // A prompt about a game button asks what presses it. A prompt about a
         // stick (mask 0) has nothing to ask and goes straight to its picture.
-        if (slot->mask != 0)
+        U32 mask = slotMask(slot);
+        if (mask != 0)
         {
-            const char* input = iPadHostBoundInput(slot->mask);
+            const char* input = iPadHostBoundInput(mask);
             if (input != NULL)
             {
                 const char* bound = glyphFileFor(input, iPadHostKeyboardIsLive());

@@ -65,4 +65,18 @@ U32 iPadLayoutButton(U32 mask);
 // would draw its X beside "Return to Game".
 const char* iPadLayoutFaceGlyph(const char* set, U32 mask);
 
+// The face bit that button_picture_0N, and the pad_buttonN texture it draws,
+// is a picture of, for N from 1 to 4; 0 otherwise. The discs number two of
+// them differently: the Xbox's 02 is SQUARE and 03 TRIANGLE, the GameCube's
+// the other way round. Each disc's font.HIP draws ui_cancel, which is
+// TRIANGLE everywhere, with its own number, so iPadLayoutSetCancelPicture
+// reads which numbering the loaded font uses off that. The Xbox's until then.
+U32 iPadLayoutPictureBit(S32 picture);
+
+// The inverse: which of pictures 1 to 4 shows `mask`, or 0.
+S32 iPadLayoutBitPicture(U32 mask);
+
+// The picture number ui_cancel names in the font that loaded.
+void iPadLayoutSetCancelPicture(S32 picture);
+
 #endif

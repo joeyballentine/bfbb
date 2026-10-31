@@ -11,7 +11,7 @@ extern const U32 kFontOwnedTypes[] = { 'TEXT', 0 };
 void FONT_Build(iAssetPkg& p)
 {
     // The pause menu's last entry.
-    p.Text(H("text_menu_reboot"), "{i:button_picture_03} " HOST_QUIT);
+    p.Text(H("text_menu_reboot"), "{i:ui_cancel} " HOST_QUIT);
 
     p.Text(H("text_no_controller"),
            "No controller is detected.{n}Please connect a controller, and press the {i:ui_accept} "
@@ -38,6 +38,6 @@ void FONT_Build(iAssetPkg& p)
 
     p.Text(H("text_mem_card_no_card"),
            "No save folder could be opened. Do you want to start the "
-           "game?{n}{n}{n}{n}{font=0}{w*1.5}{h*1.5}{i:button_picture_03}No{n}{i:button_picture_01}"
+           "game?{n}{n}{n}{n}{font=0}{w*1.5}{h*1.5}{i:ui_cancel}No{n}{i:button_picture_01}"
            "Yes");
 }

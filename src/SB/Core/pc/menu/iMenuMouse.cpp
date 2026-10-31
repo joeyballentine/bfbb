@@ -4,6 +4,7 @@
 #include "iMenuMouse.h"
 
 #include "iPadHost.h"
+#include "iPadLayout.h"
 #include "iScreen.h"
 #include "iWindow.h"
 #include "xEnt.h"
@@ -341,19 +342,15 @@ namespace
             U32 mask;
         };
 
-        // The disc's own mapping, the one iTextPatch.cpp's pictureForBit and
-        // iPadGlyph.cpp read: 1 accept, 2 the third choice, 3 cancel, 4
-        // options.
+        // The same on every disc. A picture's number is not; iPadLayout.h.
         static const Name kNames[] = {
             { "ui_accept", XPAD_BUTTON_X },
             { "ui_misc", XPAD_BUTTON_SQUARE },
             { "ui_cancel", XPAD_BUTTON_TRIANGLE },
             { "ui_options", XPAD_BUTTON_O },
-            { "button_picture_01", XPAD_BUTTON_X },
-            { "button_picture_02", XPAD_BUTTON_SQUARE },
-            { "button_picture_03", XPAD_BUTTON_TRIANGLE },
-            { "button_picture_04", XPAD_BUTTON_O },
         };
+        static const char kPicture[] = "button_picture_0";
+        const size_t kPictureLen = sizeof(kPicture) - 1;
 
         const char* s = ent->text;
         if (s == NULL)
@@ -387,6 +384,10 @@ namespace
             if (name != NULL)
             {
                 size_t n = (size_t)(close - name);
+                if (n == kPictureLen + 1 && strncmp(name, kPicture, kPictureLen) == 0)
+                {
+                    return iPadLayoutPictureBit(name[kPictureLen] - '0');
+                }
                 for (size_t i = 0; i < sizeof(kNames) / sizeof(kNames[0]); i++)
                 {
                     if (strlen(kNames[i].include) == n && strncmp(name, kNames[i].include, n) == 0)

@@ -1081,7 +1081,7 @@ namespace
 
             char text[160];
             snprintf(text, sizeof(text),
-                     "Keep this setting? {i:button_picture_01} Keep  {i:button_picture_03} Revert{n}"
+                     "Keep this setting? {i:button_picture_01} Keep  {i:ui_cancel} Revert{n}"
                      "Reverting in %d.",
                      (int)left);
             DrawHelp(text);
@@ -1215,7 +1215,7 @@ namespace
         {
             snprintf(text, sizeof(text),
                      "Reset every binding on this page to its default.{n}"
-                     "{i:button_picture_03} Back");
+                     "{i:ui_cancel} Back");
         }
         else
         {
@@ -1227,7 +1227,7 @@ namespace
             SharedWith(pad, sel, shared, sizeof(shared));
             snprintf(text, sizeof(text),
                      "%s%s%s{n}{i:button_picture_01} Change  %s"
-                     "{i:button_picture_03} Back",
+                     "{i:ui_cancel} Back",
                      does != NULL ? "Action: " : "", does != NULL ? does : "", shared,
                      MenuNeeds(sel) ? "" : "{i:button_picture_04} Clear  ");
         }

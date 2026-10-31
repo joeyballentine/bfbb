@@ -119,8 +119,8 @@ namespace
     // round, the PS2 spins on SQUARE and bashes on TRIANGLE. iPadLayout.h
     // carries the table and the evidence for it.
     //
-    // The port ships the Xbox archives, so their move prompts are right only
-    // under the xbox preset. Under the others the prompt has to name the
+    // A disc's move prompts are right only under that console's preset.
+    // Under the others the prompt has to name the
     // picture whose button the move has moved to, or a sign in Bikini Bottom
     // tells you to press a button that does something else.
     //
@@ -162,25 +162,15 @@ namespace
         { "button_throw_text", MOVE_BOUNCE },
     };
 
-    // The two digits of the button_picture_NN that draws this bit. The mapping
-    // is the discs' own and is the same on all three: 1 is accept, 2 the third
-    // menu choice, 3 cancel, 4 options. iPadGlyph.cpp reads the same table from
+    // The two digits of the button_picture_NN that draws this bit in the font
+    // that loaded. iPadLayout.h has the numbering; iPadGlyph.cpp reads it from
     // the other end.
     const char* pictureForBit(U32 mask)
     {
-        switch (mask)
-        {
-        case XPAD_BUTTON_X:
-            return "01";
-        case XPAD_BUTTON_SQUARE:
-            return "02";
-        case XPAD_BUTTON_TRIANGLE:
-            return "03";
-        case XPAD_BUTTON_O:
-            return "04";
-        default:
-            return NULL;
-        }
+        static const char* const kDigits[] = { "01", "02", "03", "04" };
+
+        S32 picture = iPadLayoutBitPicture(mask);
+        return (picture != 0) ? kDigits[picture - 1] : NULL;
     }
 
     const Override kOverrides[] = {
@@ -262,7 +252,7 @@ namespace
         // The pause menu's last entry, and the controller prompt. Both are live
         // on this build: the first is one button press away at any time, the
         // second appears whenever a pad is unplugged.
-        { "text_menu_reboot", "{i:button_picture_03} " HOST_QUIT },
+        { "text_menu_reboot", "{i:ui_cancel} " HOST_QUIT },
         { "text_no_controller",
           "No controller is detected.{n}Please connect a controller, and press the {i:ui_accept} "
           "button to continue" },
@@ -306,7 +296,7 @@ namespace
         // saves need. There is nothing to put in its place.
         { "text_mem_card_no_card",
           "No save folder could be opened. Do you want to start the "
-          "game?{n}{n}{n}{n}{font=0}{w*1.5}{h*1.5}{i:button_picture_03}No{n}{i:button_picture_01}"
+          "game?{n}{n}{n}{n}{font=0}{w*1.5}{h*1.5}{i:ui_cancel}No{n}{i:button_picture_01}"
           "Yes" },
     };
 
@@ -709,7 +699,7 @@ S32 iTextPatchEnabled()
 
 S32 iTextPatchAsset(U32 assetID, char* text, U32 capacity)
 {
-    if (!sEnabled || text == NULL || capacity == 0)
+    if (text == NULL || capacity == 0)
     {
         return FALSE;
     }
@@ -718,6 +708,27 @@ S32 iTextPatchAsset(U32 assetID, char* text, U32 capacity)
     // the end of its own bytes without one is not a string, and walking it
     // would read into whatever the packer put next.
     if (memchr(text, '\0', capacity) == NULL)
+    {
+        return FALSE;
+    }
+
+    // Read even with the patch off: the glyphs need the font's numbering
+    // whatever the wording.
+    static U32 sCancelID;
+    if (sCancelID == 0)
+    {
+        sCancelID = iTextPatchAssetID("ui_cancel");
+    }
+    if (assetID == sCancelID)
+    {
+        const char* at = strstr(text, "button_picture_0");
+        if (at != NULL)
+        {
+            iPadLayoutSetCancelPicture(at[16] - '0');
+        }
+    }
+
+    if (!sEnabled)
     {
         return FALSE;
     }

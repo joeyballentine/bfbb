@@ -45,12 +45,12 @@
 // and X on a GameCube one, so b.png would be ambiguous and gamecube/b.png
 // holding an X would read like a bug instead of like the truth.
 //
-// **The slot table is the Xbox's, because the port runs the Xbox assets.** The
-// three discs number the slots differently -- Xbox's button_picture_02 is the
-// GameCube's and the PS2's 03 -- so a slot means nothing until you say which
-// disc it came off. tools/padglyphs.py resolves that when it extracts a set,
-// which is why every set here is already in the port's terms and this file
-// needs only one table.
+// **A face slot means nothing until you say which disc it came off.** The
+// discs number them differently -- Xbox's button_picture_02 is the GameCube's
+// and the PS2's 03 -- so the bit behind pad_button2 and pad_button3 follows the
+// font that loaded (iPadLayoutPictureBit). tools/padglyphs.py resolves the
+// numbering when it extracts a set, which is why every set here is named by
+// position and serves either disc.
 //
 // **A chord has no glyph.** `l2 = lt+rb` is two inputs and one picture, so a
 // binding that is not a single input falls back to the set's own art for the

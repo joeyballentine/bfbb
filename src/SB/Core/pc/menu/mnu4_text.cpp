@@ -108,7 +108,7 @@ void MNU4_BuildText(iAssetPkg& p)
     p.Text(H("MNU4 OPTIONS SCREEN TXT"), "Screen Adjust");
     p.Text(H("MNU4 SAVE COMPLETED TXT"), "Save Completed!");
     p.Text(H("MNU4 SCREEN ACCEPT TXT"), "{i:button_picture_01} Accept");
-    p.Text(H("MNU4 SCREEN CANCEL TXT"), "{i:button_picture_03} Cancel");
+    p.Text(H("MNU4 SCREEN CANCEL TXT"), "{i:ui_cancel} Cancel");
     p.Text(H("MNU4 SCREEN INF TXT"), "Use the Left Analog Stick or directional buttons to adjust the screen.");
     p.Text(H("MNU4 SCREEN PRESS X TXT"), "{i:ui_options} Adjust");
     p.Text(H("MNU4 SCREEN RESET TXT"), "{i:button_picture_04} Reset");

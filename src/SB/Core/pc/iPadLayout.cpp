@@ -52,6 +52,10 @@ namespace
     };
 
     const S32 kFaceSetCount = (S32)(sizeof(kFaceSets) / sizeof(kFaceSets[0]));
+
+    // Pictures 1 to 4 in the Xbox's numbering: accept, the third choice,
+    // cancel, options.
+    U32 sPictureBit[4] = { XPAD_BUTTON_X, XPAD_BUTTON_SQUARE, XPAD_BUTTON_TRIANGLE, XPAD_BUTTON_O };
 } // namespace
 
 const char* iPadLayoutFaceGlyph(const char* set, U32 mask)
@@ -107,4 +111,32 @@ U32 iPadLayoutButton(U32 mask)
     }
 
     return mask;
+}
+
+U32 iPadLayoutPictureBit(S32 picture)
+{
+    return (picture >= 1 && picture <= 4) ? sPictureBit[picture - 1] : 0;
+}
+
+S32 iPadLayoutBitPicture(U32 mask)
+{
+    for (S32 i = 0; i < 4; i++)
+    {
+        if (mask != 0 && sPictureBit[i] == mask)
+        {
+            return i + 1;
+        }
+    }
+    return 0;
+}
+
+void iPadLayoutSetCancelPicture(S32 picture)
+{
+    // Only 2 and 3 trade places. Anything else is a font this does not know,
+    // and the Xbox's numbering stands.
+    if (picture == 2 || picture == 3)
+    {
+        sPictureBit[1] = (picture == 2) ? XPAD_BUTTON_TRIANGLE : XPAD_BUTTON_SQUARE;
+        sPictureBit[2] = (picture == 2) ? XPAD_BUTTON_SQUARE : XPAD_BUTTON_TRIANGLE;
+    }
 }

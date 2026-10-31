@@ -1666,6 +1666,24 @@ static void test_textpatch()
         patch_run(&p, "button_spinattack_text");
         check(strcmp(p.buf, want) == 0, "a move's prompt names the button the preset moved it to");
         check(strstr(p.buf, " Spin") != NULL, "and the word beside it is untouched either way");
+
+        // The GameCube's font draws cancel with picture 02, where the Xbox's
+        // draws the third choice. Its ui_cancel says so as it loads.
+        patch_setup(&p, "{i:button_picture_02}", 64);
+        patch_run(&p, "ui_cancel");
+        check(iPadLayoutPictureBit(2) == kTriangle && iPadLayoutPictureBit(3) == kSquare,
+              "a GameCube font's ui_cancel turns pictures 2 and 3 round");
+
+        const char* gcDigits = (spin == kTriangle) ? "02" : (spin == kSquare) ? "03" : "04";
+        snprintf(want, sizeof(want), "{i:button_picture_%s} Spin", gcDigits);
+        patch_setup(&p, "{i:button_picture_04} Spin", 64);
+        patch_run(&p, "button_spinattack_text");
+        check(strcmp(p.buf, want) == 0, "and a move's prompt is numbered the GameCube's way");
+
+        patch_setup(&p, "{i:button_picture_03}", 64);
+        patch_run(&p, "ui_cancel");
+        check(iPadLayoutPictureBit(2) == kSquare && iPadLayoutPictureBit(3) == kTriangle,
+              "and an Xbox font's turns them back");
     }
 
     // A MENU prompt is not rewritten at all. All three discs cancel on the
@@ -1702,8 +1720,7 @@ static void test_textpatch()
     // An override replaces the whole string, by name.
     patch_setup(&p, "{i:button_picture_03} Reboot to Xbox Dashboard", 48);
     check(patch_run(&p, "text_menu_reboot"), "an override matches by name");
-    check(strcmp(p.buf, "{i:button_picture_03} Quit to Desktop") == 0,
-          "and replaces the whole string");
+    check(strcmp(p.buf, "{i:ui_cancel} Quit to Desktop") == 0, "and replaces the whole string");
 
     // The save location under "Load saved game". Retail ships two different
     // strings under this one name -- "MEMORY CARD slot 1" in the shared menu
