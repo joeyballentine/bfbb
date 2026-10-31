@@ -13,6 +13,7 @@
 #include "rw.h"
 
 #include "iHost.h"
+#include "iPad.h"
 #include "iPadBind.h"
 #include "iPadGlyph.h"
 #include "iPadHost.h"
@@ -21,6 +22,7 @@
 #include "iToon.h"
 #include "xModel.h"
 #include "xPad.h"
+#include "xString.h"
 
 #include <rpworld.h>
 
@@ -869,6 +871,46 @@ void iPadGlyphModelEnd(xModelInstance* model)
         model->Data = sModelDisc;
     }
     sModelDisc = NULL;
+}
+
+RwTexture* iPadGlyphTexture(U32 textureID, RwTexture* disc)
+{
+    if (!sEnabled || textureID == 0)
+    {
+        return disc;
+    }
+
+    static U32 sSlotIDs[kSlotCount];
+    if (sSlotIDs[0] == 0)
+    {
+        for (S32 i = 0; i < kSlotCount; i++)
+        {
+            sSlotIDs[i] = xStrHash(kSlots[i].name);
+        }
+    }
+
+    const Slot* slot = NULL;
+    for (S32 i = 0; i < kSlotCount; i++)
+    {
+        if (sSlotIDs[i] == textureID)
+        {
+            slot = &kSlots[i];
+            break;
+        }
+    }
+    if (slot == NULL)
+    {
+        return disc;
+    }
+
+    if (!ensureSet())
+    {
+        return disc;
+    }
+
+    const char* file;
+    RwTexture* glyph = slotGlyph(slot, &file);
+    return (glyph != NULL) ? glyph : disc;
 }
 
 void iPadGlyphSetEnabled(S32 on)

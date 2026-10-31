@@ -38,6 +38,12 @@ U32 iPadTalkBoxButtons(U32 pressed);
 void iPadGlyphModelBegin(xModelInstance* model, S32 talk);
 void iPadGlyphModelEnd(xModelInstance* model);
 
+// The texture to draw for a UI sprite whose texture is `textureID`: the
+// player's glyph when that is one of font.HIP's button textures, else `disc`.
+// Defined in iPadGlyph.cpp.
+struct RwTexture;
+RwTexture* iPadGlyphTexture(U32 textureID, RwTexture* disc);
+
 // Whether vibration starts on: config.ini's input.vibration, which on PC is
 // one setting for the install rather than a value in each save file.
 U8 iPadVibrationDefault();

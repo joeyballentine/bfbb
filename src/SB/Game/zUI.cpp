@@ -28,6 +28,7 @@
 #include "xTRC.h"
 
 #include "iMath.h"
+#include "iPad.h"
 
 #if defined(PS2)
 #include <stdlib.h>
@@ -877,7 +878,8 @@ void zUI_Render(xEnt* ent)
         {
             if (ui->sasset->textureID)
             {
-                RwTexture* texture = (RwTexture*)xSTFindAsset(ui->sasset->textureID, 0);
+                RwTexture* texture = iPadGlyphTexture(
+                    ui->sasset->textureID, (RwTexture*)xSTFindAsset(ui->sasset->textureID, 0));
 
                 if (texture != NULL && texture->raster != NULL)
                 {

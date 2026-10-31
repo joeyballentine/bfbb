@@ -30,6 +30,7 @@ void iPadKill();
 // The talk prompt over an NPC draws the disc's own model.
 #define iPadGlyphModelBegin(model, talk)
 #define iPadGlyphModelEnd(model)
+#define iPadGlyphTexture(textureID, disc) (disc)
 
 // Whether vibration starts on. Always, on a console; the PC reads config.ini.
 #define iPadVibrationDefault() 1
