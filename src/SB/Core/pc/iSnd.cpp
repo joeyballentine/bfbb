@@ -1365,16 +1365,18 @@ static S32 iStartVoice(xSndVoiceInfo* vp)
         sample.sample_rate = pcm.sample_rate;
     }
 
-    // Both halves of the GameCube's test (src/SB/Core/gc/iSnd.cpp:1304): the
-    // asset's own loop flag OR the caller's 0x8000. Taking only the caller's
-    // flag silences every ambient loop in the game -- 28 of Kelp Forest 01's 51
-    // SFX emitters play a sound the table marks looping while carrying no
-    // looping flag themselves, because on hardware they never needed one. That
-    // is the waterfall that fades out after a few seconds.
+    // The GameCube's test: a stream loops on the asset's own loop flag OR the
+    // caller's 0x8000 (iSndPrepStream), a sound on the asset's flag alone
+    // (iSndPlaySound). Taking only the caller's flag silences every ambient
+    // loop in the game -- 28 of Kelp Forest 01's 51 SFX emitters play a sound
+    // the table marks looping while carrying no looping flag themselves. Taking
+    // the caller's flag for a sound loops one-shots forever: Deluxe's Wildest
+    // West marks its button-press SFX looping over sounds the table does not.
     //
     // A loop restarts where the table says: the GameCube's loop start, or the
     // beginning for an Xbox entry, which carries no loop points.
-    sample.looping = (vp->flags & 0x8000) != 0 || (found && ref_loops(r));
+    sample.looping =
+        (found && ref_loops(r)) || (i < ISND_STREAM_VOICES && (vp->flags & 0x8000) != 0);
     sample.loop_start = found && !pcm.overridden ? ref_loop_start(r) : 0;
     sample.loop_end = 0;
 
