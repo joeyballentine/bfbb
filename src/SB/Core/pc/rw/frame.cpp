@@ -111,19 +111,68 @@ void _rwObjectHasFrameSetFrame(void* object, RwFrame* frame)
 // the drift that accumulates when rotations are concatenated over thousands of
 // frames -- without it a rotating object slowly shears.
 //
-// Gram-Schmidt, in RenderWare's axis order: at is taken as given, up is made
-// perpendicular to it, and right follows from the cross product, which is what
-// keeps a camera's forward direction the one the caller set.
+// RenderWare's MatrixOrthoNormalize (bamatrix.c), step for step. Each axis is
+// normalized, one is kept, a second is rebuilt as the cross of the kept one
+// and the third, and the third as the cross of those two. A zero axis is the
+// one rebuilt, because _rwInvSqrt(0) is 0 rather than infinity: a camera
+// asset with a zero `at` (BFBB Deluxe's Moon, b107) gets right x up on the
+// GameCube, where a plain normalize gives NaN and a black screen.
+static float InvLength(const rw::V3d& v)
+{
+    float sq = rw::dot(v, v);
+    return sq > 0.0f ? 1.0f / sqrtf(sq) : 0.0f;
+}
+
 RwFrame* RwFrameOrthoNormalize(RwFrame* frame)
 {
     rw::Matrix* m = asMatrix(&frame->modelling);
 
-    m->at = rw::normalize(m->at);
+    float r = InvLength(m->right);
+    float u = InvLength(m->up);
+    float a = InvLength(m->at);
+    m->right = rw::scale(m->right, r);
+    m->up = rw::scale(m->up, u);
+    m->at = rw::scale(m->at, a);
 
-    // up minus its component along at
-    m->up = rw::normalize(rw::sub(m->up, rw::scale(m->at, rw::dot(m->up, m->at))));
+    rw::V3d* keep;
+    rw::V3d* other;
+    rw::V3d* rebuilt;
+    if (r <= 0.0f)
+    {
+        keep = &m->up, other = &m->at, rebuilt = &m->right;
+    }
+    else if (u <= 0.0f)
+    {
+        keep = &m->at, other = &m->right, rebuilt = &m->up;
+    }
+    else if (a <= 0.0f)
+    {
+        keep = &m->right, other = &m->up, rebuilt = &m->at;
+    }
+    else
+    {
+        // Keep an axis of the pair that is closest to perpendicular.
+        float ua = fabsf(rw::dot(m->up, m->at));
+        float ra = fabsf(rw::dot(m->right, m->at));
+        float ru = fabsf(rw::dot(m->right, m->up));
+        if (ua < ra && ua < ru)
+        {
+            keep = &m->up, other = &m->at, rebuilt = &m->right;
+        }
+        else if (ua >= ra && ra < ru)
+        {
+            keep = &m->at, other = &m->right, rebuilt = &m->up;
+        }
+        else
+        {
+            keep = &m->right, other = &m->up, rebuilt = &m->at;
+        }
+    }
 
-    m->right = rw::cross(m->up, m->at);
+    *rebuilt = rw::cross(*keep, *other);
+    *rebuilt = rw::scale(*rebuilt, InvLength(*rebuilt));
+    *other = rw::cross(*rebuilt, *keep);
+    *other = rw::scale(*other, InvLength(*other));
 
     // The cached "what kind of matrix is this" flags are now stale.
     m->update();
