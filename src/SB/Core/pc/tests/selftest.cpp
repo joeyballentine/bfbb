@@ -2422,6 +2422,26 @@ static bool bind_says(const char* text, U32 held)
 
 // Mod folders as the game and bfbb_config both find them: the setting, the
 // mod.ini, and the asset root inside an unpacked archive.
+// The Xbox archives' talk boxes need O and TRIANGLE transposed; the
+// GameCube's are read as they are.
+static void test_talkbox_buttons()
+{
+    printf("iPadTalkBoxButtons\n");
+
+    const U32 kO = 0x20000u;
+    const U32 kTriangle = 0x80000u;
+
+    iPadLayoutSetCancelPicture(3);
+    check(iPadTalkBoxButtons(kO) == kTriangle && iPadTalkBoxButtons(kTriangle) == kO,
+          "with the Xbox's data, O and TRIANGLE trade places");
+
+    iPadLayoutSetCancelPicture(2);
+    check(iPadTalkBoxButtons(kO) == kO && iPadTalkBoxButtons(kTriangle) == kTriangle,
+          "with the GameCube's, they reach the talk box as pressed");
+
+    iPadLayoutSetCancelPicture(3);
+}
+
 static void test_mod_folder()
 {
     printf("iModFolder\n");
@@ -6442,6 +6462,7 @@ int main()
     test_gcmem();
     test_idtag();
     test_pad();
+    test_talkbox_buttons();
     test_savegame();
     test_snd_dsp();
     test_snd_data();

@@ -140,3 +140,8 @@ void iPadLayoutSetCancelPicture(S32 picture)
         sPictureBit[2] = (picture == 2) ? XPAD_BUTTON_SQUARE : XPAD_BUTTON_TRIANGLE;
     }
 }
+
+S32 iPadLayoutXboxData()
+{
+    return sPictureBit[2] == XPAD_BUTTON_TRIANGLE;
+}

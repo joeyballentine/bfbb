@@ -79,4 +79,8 @@ S32 iPadLayoutBitPicture(U32 mask);
 // The picture number ui_cancel names in the font that loaded.
 void iPadLayoutSetCancelPicture(S32 picture);
 
+// Whether the font that loaded numbers its pictures the Xbox's way, which
+// says the game data is the Xbox release's.
+S32 iPadLayoutXboxData();
+
 #endif

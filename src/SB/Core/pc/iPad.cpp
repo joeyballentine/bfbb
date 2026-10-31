@@ -2,6 +2,7 @@
 #include "iConfig.h"
 #include "iPadBind.h"
 #include "iPadHost.h"
+#include "iPadLayout.h"
 #include "iPadStick.h"
 
 #include <types.h>
@@ -238,8 +239,16 @@ void iPadKill()
 // a B and answers to it, so its pad reached talk boxes with the pair transposed.
 // The picture comes from the player's own glyph set, so the prompt and the
 // button move together on every preset.
+//
+// The GameCube archives have no such pair -- the same exits are linked to the
+// event SQUARE raises -- and the GameCube reads talk box pads as they are.
 U32 iPadTalkBoxButtons(U32 pressed)
 {
+    if (!iPadLayoutXboxData())
+    {
+        return pressed;
+    }
+
     U32 swapped = pressed & ~(XPAD_BUTTON_O | XPAD_BUTTON_TRIANGLE);
 
     if (pressed & XPAD_BUTTON_O)
