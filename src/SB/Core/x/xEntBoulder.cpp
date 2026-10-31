@@ -302,6 +302,16 @@ static S32 xEntBoulder_FixedStep(xEntBoulder* ent, xScene* sc, F32 dt)
         return FALSE;
     }
 
+    if (ent == boulderVehicle)
+    {
+        // The spongeball reached through its own update callback, which only a
+        // boulder generator sets on it. zEntPlayer rewrites its transform every
+        // frame, so the interpolation below would undo every step taken here.
+        // On the console this second update per frame doubles its speed, and
+        // BFBB Deluxe's bb05 race is tuned to that.
+        return FALSE;
+    }
+
     if (ent->model == NULL)
     {
         return FALSE;
