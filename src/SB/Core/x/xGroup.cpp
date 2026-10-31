@@ -1,5 +1,6 @@
 #include "xGroup.h"
 
+#include "iModPatch.h"
 #include "xMath.h"
 #include "xMemMgr.h"
 #if defined(PS2)
@@ -118,13 +119,13 @@ S32 xGroupEventCB(xBase* to, xBase* from, U32 toEvent, const F32* toParam, xBase
     if (g->asset->groupFlags & 1)
     {
         U32 rand = xrand();
-        index = rand % g->asset->itemCount;
+        index = iModPatchRemainder(rand, g->asset->itemCount);
     }
     else if (g->asset->groupFlags & 2)
     {
         index = g->last_index;
         U32 count = g->asset->itemCount;
-        g->last_index = (g->last_index + 1) % count;
+        g->last_index = iModPatchRemainder(g->last_index + 1, count);
     }
 
     switch (toEvent)

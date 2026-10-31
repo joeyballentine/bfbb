@@ -88,4 +88,13 @@ inline xGoal* iModPatchFindGoal(xPsyche* psy, S32 gid)
     return goal;
 }
 
+// xGroup's pick of a random or next item, `n % itemCount`. A mod's group can
+// be empty: BFBB Deluxe's gl03 has one, sent an event at scene setup. The
+// GameCube's divwu by zero gives an undefined number and no fault, and the
+// loop over no items ignores it; x86 faults.
+inline U32 iModPatchRemainder(U32 n, U32 d)
+{
+    return d != 0 ? n % d : 0;
+}
+
 #endif
