@@ -895,6 +895,8 @@ add_library(bfbb_platform STATIC
   ${PC_DIR}/isavegame.cpp
   ${PC_DIR}/iSaveFile.cpp
   ${PC_DIR}/iModFolder.cpp
+  ${PC_DIR}/iModManifest.cpp
+  ${PC_DIR}/iHipMerge.cpp
   ${PC_DIR}/iSnd.cpp
   ${PC_DIR}/iSndData.cpp
   ${PC_DIR}/iSndDsp.cpp
@@ -1718,6 +1720,8 @@ add_executable(pc_selftest ${PC_DIR}/tests/selftest.cpp
   ${PC_DIR}/isavegame.cpp
   ${PC_DIR}/iSaveFile.cpp
   ${PC_DIR}/iModFolder.cpp
+  ${PC_DIR}/iModManifest.cpp
+  ${PC_DIR}/iHipMerge.cpp
   ${PC_DIR}/iSnd.cpp
 
   # The sample cache, with test doubles in selftest.cpp standing in for the

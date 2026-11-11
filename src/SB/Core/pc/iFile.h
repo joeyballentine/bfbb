@@ -22,6 +22,12 @@ struct tag_iFile
     U32 flags;
     char path[512];
     void* handle;
+
+    // The file's bytes when they are made at open rather than read from one
+    // file: a mod's merged package or SB.INI lines (iHipMerge.h). `handle` is
+    // NULL then.
+    struct iHipSource* source;
+
     S32 offset;
     S32 length;
     S32 asynckey;

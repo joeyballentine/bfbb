@@ -28,7 +28,9 @@
 #include "iFile.h"
 #include "iGCMem.h"
 #include "iModPatch.h"
+#include "iModManifest.h"
 #include "iGCSwap.h"
+#include "iHipMerge.h"
 #include "iHost.h"
 #include "iSnd.h"
 #include "iSndData.h"
@@ -6422,6 +6424,767 @@ static void test_hip()
     iFileExit();
 }
 
+// A package built in memory for the merge tests: HIPA, PACK { PVER PCNT PLAT },
+// DICT { ATOC LTOC }, STRM { DHDR DPAK }, as the retail packer lays it out.
+struct SynthAsset
+{
+    U32 id;
+    U32 type;
+    const void* data;
+    U32 size;
+};
+
+struct SynthLayer
+{
+    U32 type;
+    S32 count;
+    U32 ids[8];
+};
+
+struct SynthBuf
+{
+    U8 bytes[16384];
+    size_t size;
+
+    void be(U32 v)
+    {
+        bytes[size++] = (U8)(v >> 24);
+        bytes[size++] = (U8)(v >> 16);
+        bytes[size++] = (U8)(v >> 8);
+        bytes[size++] = (U8)v;
+    }
+
+    void raw(const void* p, size_t n)
+    {
+        memcpy(bytes + size, p, n);
+        size += n;
+    }
+
+    size_t begin(const char* tag)
+    {
+        size_t at = size;
+        raw(tag, 4);
+        be(0);
+        return at;
+    }
+
+    void end(size_t at)
+    {
+        U32 n = (U32)(size - at - 8);
+        bytes[at + 4] = (U8)(n >> 24);
+        bytes[at + 5] = (U8)(n >> 16);
+        bytes[at + 6] = (U8)(n >> 8);
+        bytes[at + 7] = (U8)n;
+        if (n & 1)
+        {
+            bytes[size++] = 0;
+        }
+    }
+};
+
+static void synth_hip(SynthBuf* b, const char* plat, const SynthAsset* assets, S32 count,
+                      const SynthLayer* layers, S32 layerCount)
+{
+    b->size = 0;
+    b->end(b->begin("HIPA"));
+
+    size_t pack = b->begin("PACK");
+    size_t c = b->begin("PVER");
+    b->be(2);
+    b->be(0x000A000F);
+    b->be(1);
+    b->end(c);
+    c = b->begin("PCNT");
+    b->be((U32)count);
+    b->be((U32)layerCount);
+    b->be(0);
+    b->be(0);
+    b->be(0);
+    b->end(c);
+    c = b->begin("PLAT");
+    b->raw(plat, 2);
+    b->raw("\0\0Name\0\0", 8);
+    b->end(c);
+    b->end(pack);
+
+    size_t offsetAt[16];
+    size_t dict = b->begin("DICT");
+    size_t atoc = b->begin("ATOC");
+    c = b->begin("AINF");
+    b->be(0);
+    b->end(c);
+    for (S32 i = 0; i < count; i++)
+    {
+        size_t ahdr = b->begin("AHDR");
+        b->be(assets[i].id);
+        b->be(assets[i].type);
+        offsetAt[i] = b->size;
+        b->be(0);
+        b->be(assets[i].size);
+        b->be(0);
+        b->be(0);
+        size_t adbg = b->begin("ADBG");
+        b->be(16);
+        b->raw("\0\0name\0\0", 8);
+        b->be(0x12345678);
+        b->end(adbg);
+        b->end(ahdr);
+    }
+    b->end(atoc);
+
+    size_t ltoc = b->begin("LTOC");
+    c = b->begin("LINF");
+    b->be(0);
+    b->end(c);
+    for (S32 l = 0; l < layerCount; l++)
+    {
+        size_t lhdr = b->begin("LHDR");
+        b->be(layers[l].type);
+        b->be((U32)layers[l].count);
+        for (S32 i = 0; i < layers[l].count; i++)
+        {
+            b->be(layers[l].ids[i]);
+        }
+        b->end(lhdr);
+    }
+    b->end(ltoc);
+    b->end(dict);
+
+    size_t strm = b->begin("STRM");
+    c = b->begin("DHDR");
+    b->be(0xFFFFFFFF);
+    b->end(c);
+    size_t dpak = b->begin("DPAK");
+    for (S32 i = 0; i < count; i++)
+    {
+        while (b->size % 16 != 0)
+        {
+            b->bytes[b->size++] = 0x33;
+        }
+        U32 off = (U32)b->size;
+        b->bytes[offsetAt[i]] = (U8)(off >> 24);
+        b->bytes[offsetAt[i] + 1] = (U8)(off >> 16);
+        b->bytes[offsetAt[i] + 2] = (U8)(off >> 8);
+        b->bytes[offsetAt[i] + 3] = (U8)off;
+        b->raw(assets[i].data, assets[i].size);
+    }
+    b->end(dpak);
+    b->end(strm);
+}
+
+// What a merged package holds, read back with a walker of the tests' own.
+struct ReadAsset
+{
+    U32 id;
+    U32 type;
+    U32 offset;
+    U32 size;
+    U32 pad;
+};
+
+struct ReadLayer
+{
+    U32 type;
+    S32 count;
+    U32 ids[16];
+};
+
+struct ReadHip
+{
+    ReadAsset assets[32];
+    S32 count;
+    ReadLayer layers[16];
+    S32 layerCount;
+    U32 pcntAssets;
+    U32 pcntLayers;
+    const U8* file;
+    size_t fileSize;
+
+    const ReadAsset* find(U32 id) const
+    {
+        for (S32 i = 0; i < count; i++)
+        {
+            if (assets[i].id == id)
+            {
+                return &assets[i];
+            }
+        }
+        return NULL;
+    }
+
+    // The asset's data, if it lies in the file.
+    bool holds(U32 id, const void* data, U32 size) const
+    {
+        const ReadAsset* a = find(id);
+        return a != NULL && a->size == size && a->offset + size <= fileSize &&
+               memcmp(file + a->offset, data, size) == 0;
+    }
+};
+
+static U32 rd_be(const U8* p)
+{
+    return ((U32)p[0] << 24) | ((U32)p[1] << 16) | ((U32)p[2] << 8) | p[3];
+}
+
+static void read_chunks(const U8* p, size_t size, ReadHip* out)
+{
+    size_t at = 0;
+    while (at + 8 <= size)
+    {
+        U32 id = rd_be(p + at);
+        U32 n = rd_be(p + at + 4);
+        const U8* body = p + at + 8;
+
+        if (id == TAG4('P', 'A', 'C', 'K') || id == TAG4('D', 'I', 'C', 'T') ||
+            id == TAG4('A', 'T', 'O', 'C') || id == TAG4('L', 'T', 'O', 'C'))
+        {
+            read_chunks(body, n, out);
+        }
+        else if (id == TAG4('P', 'C', 'N', 'T'))
+        {
+            out->pcntAssets = rd_be(body);
+            out->pcntLayers = rd_be(body + 4);
+        }
+        else if (id == TAG4('A', 'H', 'D', 'R') && out->count < 32)
+        {
+            ReadAsset* a = &out->assets[out->count++];
+            a->id = rd_be(body);
+            a->type = rd_be(body + 4);
+            a->offset = rd_be(body + 8);
+            a->size = rd_be(body + 12);
+            a->pad = rd_be(body + 16);
+        }
+        else if (id == TAG4('L', 'H', 'D', 'R') && out->layerCount < 16)
+        {
+            ReadLayer* l = &out->layers[out->layerCount++];
+            l->type = rd_be(body);
+            l->count = (S32)rd_be(body + 4);
+            for (S32 i = 0; i < l->count && i < 16; i++)
+            {
+                l->ids[i] = rd_be(body + 8 + 4 * i);
+            }
+        }
+
+        at += 8 + n + (n & 1);
+    }
+}
+
+static void read_hip(const U8* p, size_t size, ReadHip* out)
+{
+    memset(out, 0, sizeof(*out));
+    out->file = p;
+    out->fileSize = size;
+    read_chunks(p, size, out);
+}
+
+// Whether every layer is laid out the way the packer reads it: from a 2K
+// boundary, its assets back to back in order, each pad the gap to the next.
+static bool layers_readable(const ReadHip& h)
+{
+    for (S32 l = 0; l < h.layerCount; l++)
+    {
+        const ReadLayer& layer = h.layers[l];
+        for (S32 i = 0; i < layer.count; i++)
+        {
+            const ReadAsset* a = h.find(layer.ids[i]);
+            if (a == NULL || a->offset + a->size > h.fileSize)
+            {
+                return false;
+            }
+            if (i == 0 && a->offset % 0x800 != 0)
+            {
+                return false;
+            }
+            if (i + 1 < layer.count)
+            {
+                const ReadAsset* next = h.find(layer.ids[i + 1]);
+                if (next == NULL || a->offset + a->size + a->pad != next->offset)
+                {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+static void le32(U8* p, U32 v)
+{
+    p[0] = (U8)v;
+    p[1] = (U8)(v >> 8);
+    p[2] = (U8)(v >> 16);
+    p[3] = (U8)(v >> 24);
+}
+
+static U32 rd_le(const U8* p)
+{
+    return ((U32)p[3] << 24) | ((U32)p[2] << 16) | ((U32)p[1] << 8) | p[0];
+}
+
+// A merged package read back whole.
+struct MergedBytes
+{
+    U8* data;
+    U32 size;
+};
+
+// Merges `mod` into `base` through iHipSourceMerge and reads the result.
+static bool merge_synth(const U8* base, size_t baseSize, const U8* mod, size_t modSize,
+                        MergedBytes* out, char* why, size_t whySize)
+{
+    U8* b = (U8*)malloc(baseSize);
+    U8* m = (U8*)malloc(modSize);
+    memcpy(b, base, baseSize);
+    memcpy(m, mod, modSize);
+
+    iHipSource* merged = iHipSourceMerge(iHipSourceMemory(b, (U32)baseSize),
+                                         iHipSourceMemory(m, (U32)modSize), why, whySize);
+    if (merged == NULL)
+    {
+        return false;
+    }
+
+    out->size = iHipSourceSize(merged);
+    out->data = (U8*)malloc(out->size);
+    bool ok = iHipSourceRead(merged, 0, out->data, out->size);
+
+    // The same bytes read in small pieces that straddle the merge's spans.
+    U8* piecewise = (U8*)malloc(out->size);
+    for (U32 at = 0; at < out->size; at += 7)
+    {
+        U32 n = out->size - at < 7 ? out->size - at : 7;
+        ok = ok && iHipSourceRead(merged, at, piecewise + at, n);
+    }
+    ok = ok && memcmp(piecewise, out->data, out->size) == 0;
+    free(piecewise);
+
+    U8 past[4] = { 1, 1, 1, 1 };
+    ok = ok && iHipSourceRead(merged, out->size - 2, past, 4) && past[2] == 0 && past[3] == 0;
+
+    iHipSourceClose(merged);
+    return ok;
+}
+
+static void test_hip_merge()
+{
+    printf("Heavy Mod Manager package merge\n");
+
+    const U32 TEXT = TAG4('T', 'E', 'X', 'T');
+    const U32 MODL = TAG4('M', 'O', 'D', 'L');
+    const U32 LODT = TAG4('L', 'O', 'D', 'T');
+    const U32 SNDI = TAG4('S', 'N', 'D', 'I');
+    const U32 JAW = TAG4('J', 'A', 'W', ' ');
+    enum
+    {
+        DEFAULT = 0,
+        TEXTURE = 1,
+        MODEL = 3
+    };
+
+    // LODT: a count, then 32-byte entries keyed by their first word. Xbox
+    // payloads are little-endian.
+    U8 baseLod[4 + 2 * 32] = {};
+    le32(baseLod, 2);
+    le32(baseLod + 4, 0xA1);
+    le32(baseLod + 8, 100);
+    le32(baseLod + 36, 0xA2);
+    le32(baseLod + 40, 200);
+    U8 modLod[4 + 2 * 32] = {};
+    le32(modLod, 2);
+    le32(modLod + 4, 0xA2);
+    le32(modLod + 8, 222);
+    le32(modLod + 36, 0xA3);
+    le32(modLod + 40, 333);
+
+    SynthAsset baseAssets[] = {
+        { 0x10, TEXT, "game text", 9 },
+        { 0x20, TEXT, "untouched", 9 },
+        { 0x30, LODT, baseLod, sizeof(baseLod) },
+    };
+    SynthLayer baseLayers[] = {
+        { TEXTURE, 1, { 0x10 } },
+        { DEFAULT, 2, { 0x20, 0x30 } },
+    };
+    SynthAsset modAssets[] = {
+        { 0x10, MODL, "the mod's version", 17 },
+        { 0x40, MODL, "a new model", 11 },
+        { 0x50, LODT, modLod, sizeof(modLod) },
+    };
+    SynthLayer modLayers[] = {
+        { DEFAULT, 1, { 0x50 } },
+        { TEXTURE, 1, { 0x10 } },
+        { MODEL, 1, { 0x40 } },
+    };
+
+    static SynthBuf base;
+    static SynthBuf mod;
+    synth_hip(&base, "XB", baseAssets, 3, baseLayers, 2);
+    synth_hip(&mod, "XB", modAssets, 3, modLayers, 3);
+
+    MergedBytes out;
+    char why[256] = "";
+    bool ok = merge_synth(base.bytes, base.size, mod.bytes, mod.size, &out, why, sizeof(why));
+    check(ok, "an Xbox mod package merges into an Xbox game package");
+    if (!ok)
+    {
+        printf("    %s\n", why);
+        return;
+    }
+
+    ReadHip h;
+    read_hip(out.data, out.size, &h);
+
+    check(h.count == 4 && h.pcntAssets == 4,
+          "the game's three assets and the mod's new one, and the count says so");
+    check(h.holds(0x10, "the mod's version", 17) && h.find(0x10)->type == MODL,
+          "an asset the mod has too takes the mod's data and type");
+    check(h.holds(0x20, "untouched", 9), "an asset the mod lacks keeps the game's data");
+    check(h.holds(0x40, "a new model", 11), "an asset only the mod has is added");
+    check(h.find(0x50) == NULL, "the mod's LODT is merged, not added");
+
+    bool idOrder = true;
+    for (S32 i = 1; i < h.count; i++)
+    {
+        idOrder = idOrder && h.assets[i - 1].id < h.assets[i].id;
+    }
+    check(idOrder, "the asset table is in ID order");
+
+    // The mod's TEXTURE and DEFAULT layers emptied out; its MODEL layer goes
+    // between the game's TEXTURE and DEFAULT.
+    check(h.layerCount == 3 && h.pcntLayers == 3, "a mod layer left with no assets is dropped");
+    check(h.layerCount == 3 && h.layers[0].type == TEXTURE && h.layers[0].count == 1 &&
+              h.layers[0].ids[0] == 0x10 && h.layers[1].type == MODEL &&
+              h.layers[1].ids[0] == 0x40 && h.layers[2].type == DEFAULT && h.layers[2].count == 2,
+          "a replaced asset stays in the game's layer, and layers are in retail's type order");
+    check(layers_readable(h), "every layer is one block from a 2K boundary, pads exact");
+
+    const ReadAsset* lod = h.find(0x30);
+    bool lodRight = lod != NULL && lod->size == 4 + 3 * 32;
+    if (lodRight)
+    {
+        const U8* t = out.data + lod->offset;
+        lodRight = rd_le(t) == 3 && rd_le(t + 4) == 0xA1 && rd_le(t + 8) == 100 &&
+                   rd_le(t + 36) == 0xA2 && rd_le(t + 40) == 222 && rd_le(t + 68) == 0xA3 &&
+                   rd_le(t + 72) == 333;
+    }
+    check(lodRight, "LODT: a mod entry replaces the game's with the same model, moved to the end");
+    free(out.data);
+
+    // SNDI on the Xbox: three lists, 44-byte entries keyed by the sound at 24.
+    // A mod entry replaces only within its own list.
+    U8 baseSndi[12 + 3 * 44] = {};
+    le32(baseSndi, 2);
+    le32(baseSndi + 4, 1);
+    le32(baseSndi + 8, 0);
+    le32(baseSndi + 12 + 24, 0x111);
+    le32(baseSndi + 56 + 24, 0x222);
+    le32(baseSndi + 100 + 24, 0x111);
+    baseSndi[56] = 0xBB;
+    U8 modSndi[12 + 44] = {};
+    le32(modSndi, 1);
+    le32(modSndi + 12 + 24, 0x222);
+    modSndi[12] = 0xCC;
+
+    // JAW: a count, (sound, start, length) per entry, then the data.
+    U8 baseJaw[4 + 2 * 12 + 8] = {};
+    le32(baseJaw, 2);
+    le32(baseJaw + 4, 0x701);
+    le32(baseJaw + 8, 0);
+    le32(baseJaw + 12, 3);
+    le32(baseJaw + 16, 0x702);
+    le32(baseJaw + 20, 4);
+    le32(baseJaw + 24, 4);
+    memcpy(baseJaw + 28, "abc\0wxyz", 8);
+    U8 modJaw[4 + 12 + 5] = {};
+    le32(modJaw, 1);
+    le32(modJaw + 4, 0x701);
+    le32(modJaw + 8, 0);
+    le32(modJaw + 12, 5);
+    memcpy(modJaw + 16, "HELLO", 5);
+
+    SynthAsset baseSounds[] = { { 0x60, SNDI, baseSndi, sizeof(baseSndi) },
+                                { 0x70, JAW, baseJaw, sizeof(baseJaw) } };
+    SynthLayer soundLayer[] = { { DEFAULT, 2, { 0x60, 0x70 } } };
+    SynthAsset modSounds[] = { { 0x61, SNDI, modSndi, sizeof(modSndi) },
+                               { 0x71, JAW, modJaw, sizeof(modJaw) } };
+    SynthLayer modSoundLayer[] = { { DEFAULT, 2, { 0x61, 0x71 } } };
+    synth_hip(&base, "XB", baseSounds, 2, soundLayer, 1);
+    synth_hip(&mod, "XB", modSounds, 2, modSoundLayer, 1);
+
+    ok = merge_synth(base.bytes, base.size, mod.bytes, mod.size, &out, why, sizeof(why));
+    check(ok, "sound tables merge");
+    if (ok)
+    {
+        read_hip(out.data, out.size, &h);
+        const ReadAsset* sndi = h.find(0x60);
+        bool sndiRight = h.count == 2 && sndi != NULL && sndi->size == 12 + 3 * 44;
+        if (sndiRight)
+        {
+            const U8* t = out.data + sndi->offset;
+            sndiRight = rd_le(t) == 2 && rd_le(t + 4) == 1 && rd_le(t + 8) == 0 &&
+                        rd_le(t + 12 + 24) == 0x111 && rd_le(t + 56 + 24) == 0x222 &&
+                        t[56] == 0xCC && rd_le(t + 100 + 24) == 0x111;
+        }
+        check(sndiRight, "SNDI: the mod's sound replaces the game's in the same list only");
+
+        const ReadAsset* jaw = h.find(0x70);
+        bool jawRight = jaw != NULL;
+        if (jawRight)
+        {
+            const U8* t = out.data + jaw->offset;
+            const U8* rawData = t + 4 + 2 * 12;
+            jawRight = rd_le(t) == 2 && rd_le(t + 4) == 0x702 && rd_le(t + 12) == 4 &&
+                       memcmp(rawData + rd_le(t + 8), "wxyz", 4) == 0 && rd_le(t + 16) == 0x701 &&
+                       rd_le(t + 24) == 5 && memcmp(rawData + rd_le(t + 20), "HELLO", 5) == 0;
+        }
+        check(jawRight, "JAW: the mod's mouth data replaces the game's for the same sound");
+        free(out.data);
+    }
+
+    // GameCube SNDI: four header words, the second filler; 100-byte entries
+    // keyed by the sound at 96, big-endian.
+    U8 gcBase[16 + 100] = {};
+    gcBase[3] = 1;
+    memset(gcBase + 4, 0xCD, 4);
+    gcBase[16 + 99] = 0x55;
+    U8 gcMod[16 + 100] = {};
+    gcMod[3] = 1;
+    gcMod[16 + 99] = 0x66;
+    SynthAsset gcBaseAssets[] = { { 0x80, SNDI, gcBase, sizeof(gcBase) } };
+    SynthAsset gcModAssets[] = { { 0x81, SNDI, gcMod, sizeof(gcMod) } };
+    SynthLayer gcBaseLayer[] = { { DEFAULT, 1, { 0x80 } } };
+    SynthLayer gcModLayer[] = { { DEFAULT, 1, { 0x81 } } };
+    synth_hip(&base, "GC", gcBaseAssets, 1, gcBaseLayer, 1);
+    synth_hip(&mod, "GC", gcModAssets, 1, gcModLayer, 1);
+    ok = merge_synth(base.bytes, base.size, mod.bytes, mod.size, &out, why, sizeof(why));
+    if (ok)
+    {
+        read_hip(out.data, out.size, &h);
+        const ReadAsset* sndi = h.find(0x80);
+        const U8* t = sndi != NULL ? out.data + sndi->offset : NULL;
+        check(t != NULL && sndi->size == 16 + 200 && rd_be(t) == 2 && rd_be(t + 4) == 0xCDCDCDCD &&
+                  t[16 + 99] == 0x55 && t[116 + 99] == 0x66,
+              "GameCube SNDI: entries with different sounds both stay, the filler word kept");
+        free(out.data);
+    }
+    else
+    {
+        check(false, "GameCube sound tables merge");
+    }
+
+    // Refusals.
+    synth_hip(&base, "XB", baseAssets, 3, baseLayers, 2);
+    synth_hip(&mod, "GC", modAssets, 3, modLayers, 3);
+    check(!merge_synth(base.bytes, base.size, mod.bytes, mod.size, &out, why, sizeof(why)) &&
+              strstr(why, "GC") != NULL,
+          "a GameCube mod package does not merge into an Xbox game package");
+
+    synth_hip(&mod, "XB", modAssets, 3, modLayers, 3);
+    check(!merge_synth(base.bytes, base.size / 2, mod.bytes, mod.size, &out, why, sizeof(why)),
+          "a truncated game package is refused");
+
+    SynthLayer stray[] = { { MODEL, 1, { 0x99 } } };
+    synth_hip(&mod, "XB", modAssets, 3, stray, 1);
+    check(!merge_synth(base.bytes, base.size, mod.bytes, mod.size, &out, why, sizeof(why)) &&
+              strstr(why, "00000099") != NULL,
+          "a layer naming an asset the package lacks is refused");
+}
+
+static void test_mod_manifest()
+{
+    printf("Heavy Mod Manager mod.json\n");
+
+    char top[512];
+    if (!scratch_dir("hmm", top, sizeof(top)))
+    {
+        check(false, "could not make a temp directory");
+        return;
+    }
+
+    char files[600];
+    snprintf(files, sizeof(files), "%s/files", top);
+    iHostMakeDir(files);
+
+    // A byte order mark, fields the reader steps over, escapes.
+    static const char kJson[] =
+        "\xEF\xBB\xBF{\"Game\":2,\"Nested\":{\"a\":[1,\"x\\\"y\",{}],\"b\":null},"
+        "\"MergeFiles\":\"font.HIP\\nhb\\\\hb01.HIP\\r\\n\",\"DOLPatches\":\"\","
+        "\"INIReplacements\":\"BOOT=hb02\\nName = caf\\u00e9\",\"IpsPatchBase64\":\"UEFUQ0g=\","
+        "\"Version\":\"1.3\"}";
+    write_scratch(top, "mod.json", kJson, sizeof(kJson) - 1);
+
+    iModManifest m;
+    check(iModManifestRead(files, &m), "the mod.json beside a mod's files/ folder is found");
+    check(m.mergeFiles != NULL && strcmp(m.mergeFiles, "font.HIP\nhb\\hb01.HIP\r\n") == 0,
+          "MergeFiles is read with its escapes decoded");
+    check(m.iniReplacements != NULL &&
+              strcmp(m.iniReplacements, "BOOT=hb02\nName = caf\xC3\xA9") == 0,
+          "INIReplacements is read, \\u escapes as UTF-8");
+    check(m.patchesExecutable, "a non-empty IPS patch is noticed");
+    check(iModManifestMerges(&m, "FONT.hip") && iModManifestMerges(&m, "HB/hb01.hip") &&
+              iModManifestMerges(&m, "hb\\HB01.HIP"),
+          "a merge file matches ignoring case, '/' matching '\\', and the line's CR");
+    check(!iModManifestMerges(&m, "hb01.HIP") && !iModManifestMerges(&m, "font.HIP2"),
+          "but only the whole path");
+    iModManifestFree(&m);
+
+    char other[600];
+    snprintf(other, sizeof(other), "%s/other", top);
+    iHostMakeDir(other);
+    check(!iModManifestRead(other, &m), "only files/ looks beside itself for mod.json");
+
+    write_scratch(top, "mod.json", "{\"MergeFiles\":\"a\"", 17);
+    check(!iModManifestRead(files, &m) && m.mergeFiles == NULL, "unterminated JSON is not read");
+
+    char path[700];
+    snprintf(path, sizeof(path), "%s/mod.json", top);
+    iHostRemoveFile(path);
+    iHostRemoveDir(other);
+    iHostRemoveDir(files);
+    iHostRemoveDir(top);
+
+    static const char kIni[] = "# SB.INI\r\n"
+                               "BOOT=HB00\r\n"
+                               "G.TakeDamage = 1   # comment\r\n"
+                               "TaskStatus = a\r\n"
+                               "TaskStatus = b\r\n"
+                               "ScenePlayerMapping = HB01 0\r\n"
+                               "ScenePlayerMapping = HB02 0\r\n"
+                               "NoMusic=0";
+    size_t n;
+    char* got = iModManifestApplyIni(kIni, sizeof(kIni) - 1,
+                                     "boot = hb02\n"
+                                     "G.TakeDamage=0 # off\n"
+                                     "TaskStatus = c\n"
+                                     "ScenePlayerMapping = HB02   1\n"
+                                     "no equals sign\n",
+                                     &n);
+    static const char kWant[] = "# SB.INI\r\n"
+                                "ScenePlayerMapping = HB01 0\r\n"
+                                "NoMusic=0\n"
+                                "boot=hb02\n"
+                                "G.TakeDamage=0\n"
+                                "TaskStatus=c\n"
+                                "ScenePlayerMapping=HB02 1\n";
+    check(got != NULL && n == strlen(got) && strcmp(got, kWant) == 0,
+          "INIReplacements: same keys replaced ignoring case, lists as a whole, scene keys by "
+          "scene, comments kept");
+    free(got);
+}
+
+// The merge through iFileOpen: a mod with mod.json beside files/, its
+// packages merged into the asset root's, its SB.INI lines applied.
+static void test_file_mod_merge()
+{
+    printf("iFile Heavy Mod Manager mods\n");
+
+    char base[512];
+    char top[512];
+    char lower[512];
+    if (!scratch_dir("mergebase", base, sizeof(base)) ||
+        !scratch_dir("mergetop", top, sizeof(top)) ||
+        !scratch_dir("mergelow", lower, sizeof(lower)))
+    {
+        check(false, "could not make the temp directories");
+        return;
+    }
+
+    char topFiles[600];
+    snprintf(topFiles, sizeof(topFiles), "%s/files", top);
+    iHostMakeDir(topFiles);
+
+    const U32 TEXT = TAG4('T', 'E', 'X', 'T');
+    SynthAsset baseAssets[] = { { 0x10, TEXT, "game one", 8 }, { 0x20, TEXT, "game two", 8 } };
+    SynthLayer baseLayers[] = { { 0, 2, { 0x10, 0x20 } } };
+    SynthAsset topAssets[] = { { 0x10, TEXT, "top one", 7 }, { 0x30, TEXT, "top three", 9 } };
+    SynthLayer topLayers[] = { { 0, 2, { 0x10, 0x30 } } };
+    SynthAsset lowAssets[] = { { 0x10, TEXT, "low one", 7 }, { 0x20, TEXT, "low two", 7 } };
+    SynthLayer lowLayers[] = { { 0, 2, { 0x10, 0x20 } } };
+
+    static SynthBuf b;
+    synth_hip(&b, "XB", baseAssets, 2, baseLayers, 1);
+    bool made = write_scratch(base, "PKG.HIP", b.bytes, b.size) &&
+                write_scratch(base, "WHOLE.HIP", b.bytes, b.size) &&
+                write_scratch(base, "SB.INI", "BOOT=HB00\nNoMusic=0\n", 20);
+    synth_hip(&b, "XB", topAssets, 2, topLayers, 1);
+    made = made && write_scratch(topFiles, "pkg.hip", b.bytes, b.size) &&
+           write_scratch(topFiles, "whole.hip", b.bytes, b.size);
+    synth_hip(&b, "XB", lowAssets, 2, lowLayers, 1);
+    made = made && write_scratch(lower, "PKG.HIP", b.bytes, b.size);
+
+    static const char kTopJson[] = "{\"MergeFiles\":\"pkg.HIP\",\"INIReplacements\":\"BOOT=hb02\"}";
+    static const char kLowJson[] = "{\"MergeFiles\":\"PKG.HIP\",\"INIReplacements\":\"NoMusic=1\"}";
+    made = made && write_scratch(top, "mod.json", kTopJson, sizeof(kTopJson) - 1) &&
+           write_scratch(lower, "mod.json", kLowJson, sizeof(kLowJson) - 1);
+    check(made, "the scratch asset and mod folders can be written");
+
+    char setting[1200];
+    snprintf(setting, sizeof(setting), "%s|%s", topFiles, lower);
+    iHostSetEnv("BFBB_ASSETS", base);
+    iHostSetEnv("BFBB_MOD", setting);
+    iFileInit();
+    iFileSetPath((char*)".");
+
+    static U8 got[16384];
+    tag_xFile file = {};
+    bool opened = iFileOpen("PKG.HIP", 0, &file) == 0;
+    check(opened, "a merged package opens");
+    if (opened)
+    {
+        U32 size = iFileGetSize(&file);
+        iFileRead(&file, got, size < sizeof(got) ? size : sizeof(got));
+        iFileClose(&file);
+
+        ReadHip h;
+        read_hip(got, size, &h);
+        check(h.count == 3 && h.holds(0x10, "top one", 7),
+              "the higher mod's change to an asset wins over the lower mod's");
+        check(h.holds(0x20, "low two", 7),
+              "the lower mod's change shows where the higher has none");
+        check(h.holds(0x30, "top three", 9), "and the higher mod's new asset is added");
+    }
+
+    opened = iFileOpen("WHOLE.HIP", 0, &file) == 0;
+    if (opened)
+    {
+        U32 size = iFileGetSize(&file);
+        iFileRead(&file, got, size < sizeof(got) ? size : sizeof(got));
+        iFileClose(&file);
+        ReadHip h;
+        read_hip(got, size, &h);
+        check(h.count == 2 && h.holds(0x30, "top three", 9) && h.find(0x20) == NULL,
+              "a package not in MergeFiles replaces the game's whole");
+    }
+    else
+    {
+        check(false, "a package not in MergeFiles opens");
+    }
+
+    char ini[64];
+    read_through_ifile("SB.INI", ini, sizeof(ini));
+    check(strcmp(ini, "NoMusic=1\nBOOT=hb02\n") == 0, "both mods' SB.INI lines apply");
+
+    iHostSetEnv("BFBB_ASSETS", NULL);
+    iHostSetEnv("BFBB_MOD", NULL);
+    iFileInit();
+    iFileExit();
+
+    const char* made_files[][2] = { { base, "PKG.HIP" },       { base, "WHOLE.HIP" },
+                                    { base, "SB.INI" },        { topFiles, "pkg.hip" },
+                                    { topFiles, "whole.hip" }, { top, "mod.json" },
+                                    { lower, "PKG.HIP" },      { lower, "mod.json" } };
+    char path[1200];
+    for (size_t i = 0; i < sizeof(made_files) / sizeof(made_files[0]); i++)
+    {
+        snprintf(path, sizeof(path), "%s/%s", made_files[i][0], made_files[i][1]);
+        iHostRemoveFile(path);
+    }
+    iHostRemoveDir(topFiles);
+    iHostRemoveDir(top);
+    iHostRemoveDir(lower);
+    iHostRemoveDir(base);
+}
+
 int main()
 {
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -6454,6 +7217,9 @@ int main()
     test_mem();
     test_file();
     test_file_mod();
+    test_file_mod_merge();
+    test_mod_manifest();
+    test_hip_merge();
     test_mod_folder();
     test_mods_model();
     test_save_file();

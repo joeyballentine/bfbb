@@ -43,7 +43,14 @@ at load rather than ignored.
                         The asset folder is never written to. A .HIP or .HOP
                         whose PLAT is not the Xbox's is skipped with a message
                         and the next mod, or the original, is read. Each
-                        replaced file is logged once. `BFBB_MOD` overrides it. iModOverride in iFile.cpp.
+                        replaced file is logged once. `BFBB_MOD` overrides it. iModSteps in iFile.cpp.
+                        A Heavy Mod Manager mod is used by naming its files/
+                        folder, which has mod.json beside it. It works as
+                        that manager installs it: packages in MergeFiles are
+                        merged into the game's (iHipMerge.h), and
+                        INIReplacements replace SB.INI lines
+                        (iModManifest.h). Its executable patches are not
+                        applied.
                         A relative path is tried in the working directory,
                         then beside the executable; bfbb_config installs mods
                         to `mods/` there and writes `mods/<name>`. A mod.ini

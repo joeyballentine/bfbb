@@ -2,8 +2,10 @@
 #include "iConfig.h"
 #include "iGCMem.h"
 #include "iGCSwap.h"
+#include "iHipMerge.h"
 #include "iHost.h"
 #include "iModFolder.h"
+#include "iModManifest.h"
 #include "iSaveFile.h"
 
 #include "xFile.h"
@@ -51,9 +53,12 @@ static char sAssetRoot[512];
 
 // The mod folders that were found, highest priority first, each with a
 // trailing slash. A file in one is read in place of the asset root's file of
-// the same relative name. See iModOverride.
+// the same relative name, or merged into it. See iModSteps.
 static iModFolderPath sModRoots[kModFolderMax];
 static S32 sModCount;
+
+// Each mod's Heavy Mod Manager mod.json, zeroed when it has none.
+static iModManifest sManifests[kModFolderMax];
 
 // Where the game's files are. No trailing slash is added -- the callers that
 // print it want the folder someone named and not a decorated version of it,
@@ -190,8 +195,17 @@ void iFileInit()
         }
         else
         {
+            iModManifestFree(&sManifests[sModCount]);
+            iModManifestRead(folder, &sManifests[sModCount]);
             snprintf(sModRoots[sModCount++], kModFolderMaxPath, "%s/", folder);
             printf("bfbb: mod folder: %s\n", folder);
+
+            if (sManifests[sModCount - 1].patchesExecutable)
+            {
+                printf("bfbb: mod: %s also patches the game's executable; the port cannot apply "
+                       "that part\n",
+                       folder);
+            }
         }
     }
     fflush(stdout);
@@ -570,31 +584,19 @@ static bool iHasPackageExtension(const char* path)
            (iHostStrCaseCmp(path + n - 4, ".HIP") == 0 || iHostStrCaseCmp(path + n - 4, ".HOP") == 0);
 }
 
-// The first mod folder's copy of a file under the asset root. When a mod has
-// one, its path is written over `path` and the result is true.
-//
-// Matched on the path relative to the asset root, so `gl/gl01.HIP` in a mod
-// folder replaces `gl/gl01.HIP` in the assets, and whatever SB.INI's PATH= did
-// to the base path applies to both. A path outside the asset root is left
-// alone. The mods are asked in priority order.
-//
-// A package from a release other than the Xbox's or the GameCube's is refused
-// and the next mod, or the original, is read: it would load and then crash far
-// from the cause. See iFileAssetPlatform.
-static bool iModOverride(char* path, size_t pathsize)
+// `path` relative to the asset root, pointing into `path`, or NULL when it is
+// outside the asset root. Mods match files on this, so `gl/gl01.HIP` in a mod
+// folder stands for `gl/gl01.HIP` in the assets, and whatever SB.INI's PATH=
+// did to the base path applies to both.
+static const char* iAssetRelative(const char* path)
 {
-    if (sModCount == 0)
-    {
-        return false;
-    }
-
     const char* rel;
     size_t rootlen = strlen(sAssetRoot);
     if (rootlen > 0)
     {
         if (strncmp(path, sAssetRoot, rootlen) != 0)
         {
-            return false;
+            return NULL;
         }
         rel = path + rootlen;
     }
@@ -602,7 +604,7 @@ static bool iModOverride(char* path, size_t pathsize)
     {
         if (iPathIsAbsolute(path))
         {
-            return false;
+            return NULL;
         }
         rel = path;
     }
@@ -611,70 +613,212 @@ static bool iModOverride(char* path, size_t pathsize)
     {
         rel += 2;
     }
+    return rel;
+}
+
+// Mod `m`'s copy of `rel`, written to `out`. False when it has none.
+//
+// A package from a release other than the Xbox's or the GameCube's is refused,
+// as if the mod did not have it: it would load and then crash far from the
+// cause. See iFileAssetPlatform.
+static bool iModCopy(S32 m, const char* rel, char* out, size_t outsize)
+{
+    if (snprintf(out, outsize, "%s%s", sModRoots[m], rel) >= (int)outsize ||
+        !iResolveCaseInsensitive(out, outsize))
+    {
+        return false;
+    }
+
+    if (iHasPackageExtension(out))
+    {
+        char id[8];
+        char longName[32];
+        if (iHipPlatform(out, id, sizeof(id), longName, sizeof(longName)) &&
+            strcmp(id, "XB") != 0 && strcmp(id, "GC") != 0)
+        {
+            if (iModFirstReport(rel))
+            {
+                char leaf[256];
+                iSaveFileLeaf(sModRoots[m], leaf, sizeof(leaf));
+                printf("bfbb: mod: %s in %s is from the %s release, not the Xbox or "
+                       "GameCube one; passed over\n",
+                       rel, leaf, longName[0] != '\0' ? longName : id);
+                fflush(stdout);
+            }
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// What one mod does to a file: gives its own copy, gives a package to merge
+// into the file (iHipMerge.h), or, for SB.INI, replaces some of its lines
+// (iModManifest.h). A mod can give a copy and replace lines.
+struct iModStep
+{
+    S32 mod;
+    bool hasCopy;
+    bool merge;
+    bool ini;
+    char path[512];
+};
+
+// The steps the mods take on `rel`, highest priority first. They end at the
+// first mod whose copy replaces the file whole, since nothing below it shows.
+static S32 iModSteps(const char* rel, iModStep* steps)
+{
+    const bool isIni = iHostStrCaseCmp(rel, "SB.INI") == 0;
+    S32 count = 0;
 
     for (S32 m = 0; m < sModCount; m++)
     {
-        char candidate[512];
-        if (snprintf(candidate, sizeof(candidate), "%s%s", sModRoots[m], rel) >=
-            (int)sizeof(candidate))
+        iModStep* s = &steps[count];
+        s->mod = m;
+        s->hasCopy = iModCopy(m, rel, s->path, sizeof(s->path));
+        s->merge =
+            s->hasCopy && iHasPackageExtension(s->path) && iModManifestMerges(&sManifests[m], rel);
+        s->ini = isIni && sManifests[m].iniReplacements != NULL &&
+                 sManifests[m].iniReplacements[0] != '\0';
+
+        if (!s->hasCopy && !s->ini)
         {
             continue;
         }
 
-        if (!iResolveCaseInsensitive(candidate, sizeof(candidate)))
+        count++;
+        if (s->hasCopy && !s->merge)
         {
-            continue;
+            break;
         }
+    }
 
-        char leaf[256];
-        iSaveFileLeaf(sModRoots[m], leaf, sizeof(leaf));
+    return count;
+}
 
-        if (iHasPackageExtension(candidate))
+// A mod's package that cannot be merged, and the end of the run: the game
+// would load the mod's partial package or the unmodded one, and neither is
+// the mod.
+static void iModMergeFailed(const char* rel, S32 mod, const char* why)
+{
+    char leaf[256];
+    iSaveFileLeaf(sModRoots[mod], leaf, sizeof(leaf));
+
+    printf("bfbb: FATAL -- mod %s: could not merge %s into the game's: %s\n", leaf, rel, why);
+    fflush(stdout);
+
+    char message[1024];
+    snprintf(message, sizeof(message),
+             "The mod %s changes %s, and its changes could not be merged into the game's "
+             "file:\n\n%s",
+             leaf, rel, why);
+    iHostErrorBox("SpongeBob SquarePants: Battle for Bikini Bottom", message);
+    exit(1);
+}
+
+// `source` with SB.INI lines from mod `mod` applied, as a new source. Takes
+// `source`, which may be NULL for a file the game does not have.
+static iHipSource* iModApplyIni(iHipSource* source, S32 mod)
+{
+    U32 size = source != NULL ? iHipSourceSize(source) : 0;
+    char* ini = (char*)malloc((size_t)size + 1);
+    if (ini == NULL || (source != NULL && !iHipSourceRead(source, 0, ini, size)))
+    {
+        printf("bfbb: mod: could not read SB.INI to apply its lines\n");
+        fflush(stdout);
+        free(ini);
+        return source;
+    }
+    iHipSourceClose(source);
+
+    size_t length;
+    char* text = iModManifestApplyIni(ini, size, sManifests[mod].iniReplacements, &length);
+    free(ini);
+    return text != NULL ? iHipSourceMemory((U8*)text, (U32)length) : NULL;
+}
+
+// The file `rel` once `steps` (from iModSteps) are applied to `base`, the
+// asset root's copy, lowest priority first. NULL when there is nothing: no
+// copy anywhere and no SB.INI lines.
+static iHipSource* iModBuild(const char* rel, const char* base, const iModStep* steps, S32 count)
+{
+    iHipSource* source = NULL;
+
+    const iModStep* lowest = &steps[count - 1];
+    if (!(lowest->hasCopy && !lowest->merge))
+    {
+        source = iHipSourceFile(base);
+    }
+
+    for (S32 i = count - 1; i >= 0; i--)
+    {
+        const iModStep* s = &steps[i];
+
+        if (s->hasCopy)
         {
-            char id[8];
-            char longName[32];
-            if (iHipPlatform(candidate, id, sizeof(id), longName, sizeof(longName)) &&
-                strcmp(id, "XB") != 0 && strcmp(id, "GC") != 0)
+            iHipSource* copy = iHipSourceFile(s->path);
+            if (copy == NULL)
             {
-                if (iModFirstReport(rel))
+                printf("bfbb: mod: could not read %s\n", s->path);
+                fflush(stdout);
+            }
+            else if (source == NULL || !s->merge)
+            {
+                // A package to merge into a file the game does not have is
+                // the whole file, as Heavy Mod Manager installs it.
+                iHipSourceClose(source);
+                source = copy;
+            }
+            else
+            {
+                char why[256];
+                source = iHipSourceMerge(source, copy, why, sizeof(why));
+                if (source == NULL)
                 {
-                    printf("bfbb: mod: %s in %s is from the %s release, not the Xbox or "
-                           "GameCube one; passed over\n",
-                           rel, leaf, longName[0] != '\0' ? longName : id);
-                    fflush(stdout);
+                    iModMergeFailed(rel, s->mod, why);
                 }
-                continue;
             }
         }
 
-        // `rel` points into `path`, so it is reported before path is overwritten.
-        size_t len = strlen(candidate);
-        if (len >= pathsize)
+        if (s->ini)
         {
-            return false;
+            source = iModApplyIni(source, s->mod);
         }
-
-        if (iModFirstReport(rel))
-        {
-            printf("bfbb: mod: %s from %s\n", rel, leaf);
-            fflush(stdout);
-        }
-
-        memcpy(path, candidate, len + 1);
-        return true;
     }
 
-    return false;
+    if (iModFirstReport(rel))
+    {
+        for (S32 i = count - 1; i >= 0; i--)
+        {
+            char leaf[256];
+            iSaveFileLeaf(sModRoots[steps[i].mod], leaf, sizeof(leaf));
+            if (steps[i].hasCopy)
+            {
+                printf("bfbb: mod: %s %s %s\n", rel, steps[i].merge ? "merged with" : "from", leaf);
+            }
+            if (steps[i].ini)
+            {
+                printf("bfbb: mod: %s lines from %s\n", rel, leaf);
+            }
+        }
+        fflush(stdout);
+    }
+
+    return source;
 }
 
 bool iFileModReplaces(const char* rel)
 {
-    char path[512];
-    if (snprintf(path, sizeof(path), "%s%s", sAssetRoot, rel) >= (int)sizeof(path))
+    iModStep steps[kModFolderMax];
+    S32 count = iModSteps(rel, steps);
+    for (S32 i = 0; i < count; i++)
     {
-        return false;
+        if (steps[i].hasCopy)
+        {
+            return true;
+        }
     }
-    return iModOverride(path, sizeof(path));
+    return false;
 }
 
 // A package the game cannot open, and the end of the run.
@@ -925,9 +1069,51 @@ U32 iFileOpen(const char* name, S32 flags, tag_xFile* file)
 
     const char* mode = (flags & IFILE_OPEN_WRITE) ? "wb" : "rb";
 
-    if (!(flags & IFILE_OPEN_WRITE) && !iModOverride(ps->path, sizeof(ps->path)))
+    ps->source = NULL;
+
+    char rel[512] = "";
+    iModStep steps[kModFolderMax];
+    S32 stepCount = 0;
+    if (!(flags & IFILE_OPEN_WRITE) && sModCount > 0 && iAssetRelative(ps->path) != NULL)
+    {
+        snprintf(rel, sizeof(rel), "%s", iAssetRelative(ps->path));
+        stepCount = iModSteps(rel, steps);
+    }
+
+    // One mod's copy in place of the file is opened like any file; anything
+    // else is made at open (iModBuild).
+    const bool whole = stepCount == 1 && steps[0].hasCopy && !steps[0].merge && !steps[0].ini;
+    if (whole)
+    {
+        if (iModFirstReport(rel))
+        {
+            char leaf[256];
+            iSaveFileLeaf(sModRoots[steps[0].mod], leaf, sizeof(leaf));
+            printf("bfbb: mod: %s from %s\n", rel, leaf);
+            fflush(stdout);
+        }
+        snprintf(ps->path, sizeof(ps->path), "%s", steps[0].path);
+    }
+    else
     {
         iResolveCaseInsensitive(ps->path, sizeof(ps->path));
+    }
+
+    if (stepCount > 0 && !whole)
+    {
+        iHipSource* source = iModBuild(rel, ps->path, steps, stepCount);
+        if (source != NULL)
+        {
+            sOpenedAny = 1;
+
+            ps->handle = NULL;
+            ps->source = source;
+            ps->length = (S32)iHipSourceSize(source);
+            ps->offset = 0;
+            ps->asynckey = -1;
+            ps->flags = 0x1;
+            return 0;
+        }
     }
 
     FILE* fp = fopen(ps->path, mode);
@@ -997,6 +1183,17 @@ U32 iFileRead(tag_xFile* file, void* buf, U32 size)
 {
     tag_iFile* ps = &file->ps;
     FILE* fp = (FILE*)ps->handle;
+
+    if (ps->source != NULL)
+    {
+        // Past the end reads as zeros, as it does from disk below.
+        if (ps->offset < 0 || !iHipSourceRead(ps->source, (U32)ps->offset, buf, size))
+        {
+            memset(buf, 0, size);
+        }
+        ps->offset += (S32)size;
+        return size;
+    }
 
     if (fp == NULL)
     {
@@ -1140,6 +1337,14 @@ void iFileReadStop()
 U32 iFileClose(tag_xFile* file)
 {
     tag_iFile* ps = &file->ps;
+
+    if (ps->source != NULL)
+    {
+        iHipSourceClose(ps->source);
+        ps->source = NULL;
+        ps->flags = 0;
+        return 0;
+    }
 
     if (ps->handle == NULL)
     {
