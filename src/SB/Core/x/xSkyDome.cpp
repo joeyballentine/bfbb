@@ -9,6 +9,7 @@
 #ifdef PLATFORM_PC
 #include "iScreen.h"
 #include "iToon.h"
+#include "zGlobals.h"
 #endif
 
 struct SkyDomeInfo
@@ -161,9 +162,10 @@ void xSkyDome_Render()
                 // the camera puts it back without moving a pixel of it; the
                 // argument is in iFixes.h.
                 RwMatrix skySave;
-                S32 skyRefit = iFixSkyDomeToFarPlane(ent->model->Mat, &cammat->pos,
-                                                     &ent->model->Data->worldBoundingSphere,
-                                                     &skySave);
+                U32 sceneID = globals.sceneCur ? globals.sceneCur->sceneID : 0;
+                S32 skyRefit =
+                    iFixSkyDomeToFarPlane(sceneID, ent->model->Mat, &cammat->pos,
+                                          &ent->model->Data->worldBoundingSphere, &skySave);
 #endif
 
 #ifdef PLATFORM_PC

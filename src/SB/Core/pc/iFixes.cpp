@@ -115,9 +115,11 @@ S32 iFixMeleeNewContact(const void* ent, F64 now)
     return TRUE;
 }
 
-S32 iFixSkyDomeToFarPlane(RwMatrix* mat, const RwV3d* eye, const RwSphere* world, RwMatrix* saved)
+S32 iFixSkyDomeToFarPlane(U32 sceneID, RwMatrix* mat, const RwV3d* eye, const RwSphere* world,
+                          RwMatrix* saved)
 {
-    if (!sSkyClip || mat == NULL || eye == NULL || world == NULL || saved == NULL)
+    if (!sSkyClip || sceneID != 'GL03' || mat == NULL || eye == NULL || world == NULL ||
+        saved == NULL)
     {
         return FALSE;
     }

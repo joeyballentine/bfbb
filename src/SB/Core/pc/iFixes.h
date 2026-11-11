@@ -47,7 +47,12 @@ void iFixSetMenuRope(S32 on);
 //
 // GL03 is the only level in the game where this happens. The other 51 sky
 // entities all sit inside their own level's fog stop, most of them by a wide
-// margin, so nothing else changes when this is on.
+// margin.
+//
+// **The fix is for GL03 alone.** Mods use a fog stop short of the dome on
+// purpose: BFBB Deluxe's GY07 stops its fog at 100 so that the clear colour,
+// orange, is the sky. Refitting that dome would draw the Graveyard's sky in
+// its place, which the GameCube never shows.
 //
 // **The fix shrinks the dome, not the frustum.** Pushing the far plane out
 // would stretch the fog gradient with it and thin the fog the level was
@@ -71,12 +76,12 @@ void iFixSetSkyClip(S32 on);
 // Shrink `mat` about `eye` until the model it places is inside the current
 // camera's far clip plane, and answer TRUE if it did, having put the matrix it
 // replaced in `saved` for the caller to hand back after the draw. FALSE means
-// `mat` was not touched and `saved` holds nothing -- the fix is off, there is
-// no camera, or the model already fits, which is every level but GL03.
+// `mat` was not touched and `saved` holds nothing -- the fix is off, `sceneID`
+// is not GL03, there is no camera, or the model already fits.
 //
 // `world` is the model's world bounding sphere, which `iModelCull` fills in on
 // the way past, so the caller has one already.
-S32 iFixSkyDomeToFarPlane(RwMatrix* mat, const RwV3d* eye, const RwSphere* world,
+S32 iFixSkyDomeToFarPlane(U32 sceneID, RwMatrix* mat, const RwV3d* eye, const RwSphere* world,
                           RwMatrix* saved);
 
 // **A melee hit reaches its target once per frame of contact, not once.**

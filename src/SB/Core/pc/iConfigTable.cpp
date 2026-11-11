@@ -140,8 +140,8 @@ const iConfigSetting kConfigSettings[] = {
       "; original frame without it.",
       ICONFIG_BOOL, NULL, kNone, kNone },
     { "fixes", "sky_clip", "on",
-      "Shrink skydomes that are too large for the camera's far clip. Off: the\n"
-      "; original sky, which is clipped on the Goo Lagoon pier.",
+      "Shrink the Goo Lagoon pier's skydome to fit the camera's far clip. Off:\n"
+      "; the original sky, which is clipped there.",
       ICONFIG_BOOL, NULL, kNone, kNone },
     { "fixes", "melee_once", "on",
       "Hit a target once per contact. Off: once per frame of contact, which stacks\n"

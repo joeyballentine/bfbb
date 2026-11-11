@@ -1057,7 +1057,7 @@ static void test_cameras()
 
         // Well inside a 100-unit far plane, which is every level but GL03.
         RwSphere fits = { { 0.0f, 0.0f, 0.0f }, 50.0f };
-        check(iFixSkyDomeToFarPlane(&mat, &eye, &fits, &saved) == FALSE,
+        check(iFixSkyDomeToFarPlane('GL03', &mat, &eye, &fits, &saved) == FALSE,
               "a dome already inside the far plane is not refitted");
         check(mat.pos.y == before.pos.y && mat.right.x == before.right.x,
               "and its matrix is not touched");
@@ -1065,7 +1065,7 @@ static void test_cameras()
         // GL03's shape: a shell far enough out that not one vertex of it is
         // inside the frustum.
         RwSphere tooBig = { { 0.0f, 20.0f, 0.0f }, 400.0f };
-        check(iFixSkyDomeToFarPlane(&mat, &eye, &tooBig, &saved) == TRUE,
+        check(iFixSkyDomeToFarPlane('GL03', &mat, &eye, &tooBig, &saved) == TRUE,
               "a dome past the far plane is refitted");
         check(saved.pos.y == before.pos.y && saved.right.x == before.right.x,
               "the caller gets the matrix it had back to restore");
@@ -1091,9 +1091,15 @@ static void test_cameras()
         check(sqrtf(d.x * d.x + d.y * d.y + d.z * d.z) < 100.0f,
               "the refitted dome is inside the far plane it was clipped by");
 
+        // BFBB Deluxe's GY07: a fog stop short of the dome, so the clear colour
+        // is the sky. Only GL03's is a bug.
         mat = before;
+        check(iFixSkyDomeToFarPlane('GY07', &mat, &eye, &tooBig, &saved) == FALSE,
+              "a dome past the far plane in any scene but GL03 is left alone");
+        check(mat.pos.y == before.pos.y && mat.right.x == before.right.x, "and its matrix with it");
+
         iFixSetSkyClip(FALSE);
-        check(iFixSkyDomeToFarPlane(&mat, &eye, &tooBig, &saved) == FALSE,
+        check(iFixSkyDomeToFarPlane('GL03', &mat, &eye, &tooBig, &saved) == FALSE,
               "fixes.sky_clip off leaves the dome where the game put it");
         check(mat.pos.y == before.pos.y && mat.right.x == before.right.x, "and the matrix with it");
         iFixSetSkyClip(TRUE);
