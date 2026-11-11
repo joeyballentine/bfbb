@@ -4,6 +4,7 @@
 
 #include "config_model.h"
 #include "iHost.h"
+#include "iModManifest.h"
 #include "iSaveFile.h"
 
 #include <ctype.h>
@@ -177,7 +178,7 @@ namespace
             }
 
             const char* rel = path + rootLength + 1;
-            if (iHostStrCaseCmp(rel, "mod.ini") == 0)
+            if (iHostStrCaseCmp(rel, "mod.ini") == 0 || iHostStrCaseCmp(rel, "mod.json") == 0)
             {
                 continue;
             }
@@ -266,6 +267,24 @@ namespace
 
         freeList(&list);
         return ok;
+    }
+
+    // A Heavy Mod Manager mod keeps its mod.json beside files/, the folder
+    // that is installed. The game reads it from the installed folder, so it
+    // is copied into `dest`.
+    bool copyManifest(const char* root, const char* dest)
+    {
+        char inside[1024];
+        char manifest[1024];
+        snprintf(inside, sizeof(inside), "%s/mod.json", root);
+        if (iHostPathExists(inside) || !iModManifestPath(root, manifest, sizeof(manifest)))
+        {
+            return true;
+        }
+
+        char to[1024];
+        snprintf(to, sizeof(to), "%s/mod.json", dest);
+        return copyFile(manifest, to);
     }
 
     S32 findFolder(const char* folder)
@@ -595,6 +614,12 @@ bool ModsModelInstall(const char* staged, const char* name, S32* index, char* wh
     char dest[kModsModelMaxPath];
     snprintf(dest, sizeof(dest), "%s/%s", ModsModelLibrary(), name);
 
+    if (!copyManifest(root, root))
+    {
+        snprintf(why, whySize, "Could not copy the mod's mod.json.");
+        return false;
+    }
+
     if (!iHostRenameReplace(root, dest))
     {
         snprintf(why, whySize, "Could not move the mod into %s.", dest);
@@ -630,7 +655,7 @@ bool ModsModelCopyIn(const char* source, const char* name, S32* index, char* why
     char dest[kModsModelMaxPath];
     snprintf(dest, sizeof(dest), "%s/%s", library, name);
 
-    if (!iHostMakeDir(library) || !copyTree(root, dest))
+    if (!iHostMakeDir(library) || !copyTree(root, dest) || !copyManifest(root, dest))
     {
         ModsModelRemoveTree(dest);
         snprintf(why, whySize, "Could not copy the mod into %s.", dest);

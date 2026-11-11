@@ -59,8 +59,8 @@ void ModsModelMove(S32 i, S32 delta);
 void ModsModelUseFolder(const char* folder);
 
 // The files entries `a` and `b` both have, by path relative to their roots
-// and ignoring case; mod.ini is not counted. `examples` gets the first few,
-// separated by ", ". Returns how many.
+// and ignoring case; mod.ini and mod.json are not counted. `examples` gets
+// the first few, separated by ", ". Returns how many.
 S32 ModsModelOverlap(S32 a, S32 b, char* examples, size_t examplesSize);
 
 // The folder name to suggest for something unpacked into `staged`: the asset

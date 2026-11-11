@@ -1638,6 +1638,7 @@ if(BFBB_BUILD_CONFIGURATOR)
     ${PC_DIR}/iConfigEdit.cpp
     ${PC_DIR}/iSaveFile.cpp
     ${PC_DIR}/iModFolder.cpp
+    ${PC_DIR}/iModManifest.cpp
 
     # The binding table, the parser and the input names, for the [keyboard]
     # and [pad] pages. None of it reads config.ini or opens a device; SDL is

@@ -2719,6 +2719,31 @@ static void test_mods_model()
         check(strcmp(ConfigModelText(setting), other) == 0, "which takes it out of the load order");
     }
 
+    // A Heavy Mod Manager mod: files/ is installed, and its mod.json, beside
+    // it in the archive, goes in with it.
+    char hmm[512];
+    check(ModsModelStage(hmm, sizeof(hmm), why, sizeof(why)), "a staging folder for an HMM mod");
+    char hmmFiles[600];
+    snprintf(hmmFiles, sizeof(hmmFiles), "%s/files", hmm);
+    iHostMakeDir(hmmFiles);
+    write_scratch(hmmFiles, "boot.HIP", "x", 1);
+    write_scratch(hmm, "mod.json", "{\"MergeFiles\":\"boot.HIP\"}", 25);
+
+    snprintf(unique, sizeof(unique), "bfbb selftest hmm %llu",
+             (unsigned long long)(iHostMonotonicNs() % 1000000000ULL));
+    S32 hmmIndex = -1;
+    check(ModsModelInstall(hmm, unique, &hmmIndex, why, sizeof(why)) && hmmIndex >= 0,
+          "an HMM mod installs");
+    if (hmmIndex >= 0)
+    {
+        iModManifest manifest;
+        const bool read = iModManifestRead(ModsModelAt(hmmIndex)->folder, &manifest);
+        check(read && iModManifestMerges(&manifest, "boot.HIP"),
+              "with its mod.json in the installed folder");
+        iModManifestFree(&manifest);
+        ModsModelRemove(hmmIndex, why, sizeof(why));
+    }
+
     if (!hadLibrary)
     {
         iHostRemoveDir(ModsModelLibrary());

@@ -121,7 +121,8 @@ format is in `../iModFolder.h`.
 
 Install from zip unpacks into a dot folder in `mods/`, finds the asset root in
 it from where the `.HIP` and `.HOP` files are (`iModFolderFindAssets`), and
-moves that folder to `mods/<name>`. Add a folder copies one in, or picks it
+moves that folder to `mods/<name>`. A Heavy Mod Manager mod's `mod.json`,
+beside its `files/`, is copied into that folder. Add a folder copies one in, or picks it
 where it is. Remove deletes a folder in `mods/` and leaves its saves. Those
 three change the disk at once.
 
