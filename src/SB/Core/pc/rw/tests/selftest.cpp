@@ -31,6 +31,8 @@
 #include <string.h>
 #include <math.h>
 
+#include <vector>
+
 #include <rwcore.h>
 #include <rpcollis.h>
 #include <rpcollbsptree.h>
@@ -54,6 +56,7 @@
 // and types.h has `#define null 0` in it, which turns librw's `namespace null`
 // into a syntax error.
 #include "../backend.h"
+#include "../sector.h"
 
 // --- the watchdog -----------------------------------------------------------
 //
@@ -1207,9 +1210,6 @@ static void test_lights()
     check(RpLightSetColor(NULL, &grey) == NULL, "RpLightSetColor(NULL) is refused");
 }
 
-// Counts calls without ever being reached, which is the point: nothing may call
-// back out of RpCollisionWorldForAllIntersections while it is unimplemented,
-// least of all with a made-up triangle.
 static int sWorldTrianglesSeen;
 
 static RpCollisionTriangle* countWorldTriangleCB(RpIntersection*, RpWorldSector*,
@@ -1248,7 +1248,7 @@ static void test_worlds()
           "the caller's bounding box lands in RpWorld::boundingBox");
     check(RpWorldGetNumMaterials(world) == 0, "a new world has no materials");
     check(world->matList.materials == NULL, "and no material array to free");
-    check(world->rootSector == NULL, "and no root sector -- there is no world reader");
+    check(world->rootSector == NULL, "and no sectors");
     check(RpWorldGetRenderOrder(world) == rpWORLDRENDERNARENDERORDER,
           "RpWorld::renderOrder starts at NA rather than at whatever rwMalloc returned");
 
@@ -1341,8 +1341,9 @@ static void test_worlds()
 
     // --- refusals ----------------------------------------------------------
 
-    check(RpWorldStreamRead(NULL) == NULL, "RpWorldStreamRead is not implemented and says so");
+    check(RpWorldStreamRead(NULL) == NULL, "RpWorldStreamRead(NULL) is refused");
 
+    // What a JSP level's world answers: iRayHitsEnv queries it on every ray.
     RpIntersection isx;
     isx.type = rpINTERSECTSPHERE;
     isx.t.sphere.center.x = 0.0f;
@@ -1350,9 +1351,12 @@ static void test_worlds()
     isx.t.sphere.center.z = 0.0f;
     isx.t.sphere.radius = 1000.0f;
     sWorldTrianglesSeen = 0;
+    check(RpCollisionWorldForAllIntersections(world, &isx, countWorldTriangleCB, NULL) == world,
+          "RpCollisionWorldForAllIntersections on a created world");
+    check(sWorldTrianglesSeen == 0, "finds no triangles in it");
+    isx.type = rpINTERSECTPOINT;
     check(RpCollisionWorldForAllIntersections(world, &isx, countWorldTriangleCB, NULL) == NULL,
-          "RpCollisionWorldForAllIntersections is not implemented and says so");
-    check(sWorldTrianglesSeen == 0, "and reports no triangles rather than invented ones");
+          "a point query is refused, as RenderWare refuses it");
 
     // --- destroy -----------------------------------------------------------
     //
@@ -1377,6 +1381,442 @@ static void test_worlds()
     check(RpWorldDestroy(NULL) == FALSE, "RpWorldDestroy(NULL) is refused");
     check(RpWorldAddLight(NULL, NULL) == NULL, "RpWorldAddLight(NULL, NULL) is refused");
     check(RpWorldAddCamera(NULL, NULL) == NULL, "RpWorldAddCamera(NULL, NULL) is refused");
+}
+
+// --- world streams -----------------------------------------------------------
+//
+// A RenderWare world stream written out by hand, so that every field the
+// reader takes is one the test chose.
+
+struct ChunkWriter
+{
+    std::vector<RwUInt8> bytes;
+
+    void u32(RwUInt32 v)
+    {
+        bytes.insert(bytes.end(), (RwUInt8*)&v, (RwUInt8*)&v + 4);
+    }
+    void f32(RwReal v)
+    {
+        bytes.insert(bytes.end(), (RwUInt8*)&v, (RwUInt8*)&v + 4);
+    }
+    void u16(RwUInt16 v)
+    {
+        bytes.insert(bytes.end(), (RwUInt8*)&v, (RwUInt8*)&v + 2);
+    }
+    void v3(RwReal x, RwReal y, RwReal z)
+    {
+        f32(x);
+        f32(y);
+        f32(z);
+    }
+    void chunk(RwUInt32 id, RwUInt32 libraryID, const ChunkWriter& body)
+    {
+        u32(id);
+        u32((RwUInt32)body.bytes.size());
+        u32(libraryID);
+        bytes.insert(bytes.end(), body.bytes.begin(), body.bytes.end());
+    }
+};
+
+// Library ids as RenderWare stamps them: 3.3.0.2, 3.4.0.3 and 3.6.0.3.
+static const RwUInt32 kRw33 = 0x0C02FFFF;
+static const RwUInt32 kRw34 = 0x1003FFFF;
+static const RwUInt32 kRw36 = 0x1803FFFF;
+
+static const RwUInt32 kTestWorldFormat = rpWORLDSECTORSOVERLAP | rpWORLDTEXTURED | rpWORLDPRELIT;
+
+// An atomic sector holding one quad at height y over [x0, x1] x [z0, z1], both
+// triangles facing up and using material matIndex.
+static ChunkWriter quadSector(RwUInt32 libraryID, RwReal x0, RwReal x1, RwReal z0, RwReal z1,
+                              RwReal y, RwUInt16 matIndex, bool collides, RwUInt16 badVertex = 0)
+{
+    ChunkWriter data;
+    data.u32(0); // matListWindowBase
+    data.u32(2); // polygons
+    data.u32(4); // vertices
+    data.v3(x0, y, z0);
+    data.v3(x1, y, z1);
+    data.u32(0);
+    data.u32(0);
+
+    data.v3(x0, y, z0);
+    data.v3(x0, y, z1);
+    data.v3(x1, y, z1);
+    data.v3(x1, y, z0);
+    for (int i = 0; i < 4; i++)
+    {
+        data.u32(0xFF808080); // prelight
+    }
+    for (int i = 0; i < 4; i++)
+    {
+        data.f32((RwReal)(i & 1));
+        data.f32((RwReal)(i >> 1));
+    }
+    const RwUInt16 polygons[2][3] = { { 0, 1, 3 }, { 1, 2, 3 } };
+    for (int i = 0; i < 2; i++)
+    {
+        data.u16(matIndex);
+        data.u16(polygons[i][0]);
+        data.u16(polygons[i][1]);
+        data.u16(i == 1 && badVertex != 0 ? badVertex : polygons[i][2]);
+    }
+
+    ChunkWriter mesh;
+    mesh.u32(0); // triangle list
+    mesh.u32(1);
+    mesh.u32(6);
+    mesh.u32(6);
+    mesh.u32(matIndex);
+    for (int i = 0; i < 2; i++)
+    {
+        for (int j = 0; j < 3; j++)
+        {
+            mesh.u32(polygons[i][j]);
+        }
+    }
+
+    ChunkWriter extension;
+    extension.chunk(0x50E, libraryID, mesh);
+    if (collides)
+    {
+        // Its contents are never read: only whether it is there.
+        ChunkWriter collision;
+        collision.u32(0);
+        extension.chunk(0x11D, libraryID, collision);
+    }
+
+    ChunkWriter sector;
+    sector.chunk(rwID_STRUCT, libraryID, data);
+    sector.chunk(rwID_EXTENSION, libraryID, extension);
+    return sector;
+}
+
+static ChunkWriter planeSector(RwUInt32 libraryID, RwInt32 type, RwReal value, RwReal leftValue,
+                               RwReal rightValue, RwUInt32 leftChunk, const ChunkWriter& left,
+                               RwUInt32 rightChunk, const ChunkWriter& right)
+{
+    ChunkWriter data;
+    data.u32((RwUInt32)type);
+    data.f32(value);
+    data.u32(leftChunk == 9);
+    data.u32(rightChunk == 9);
+    data.f32(leftValue);
+    data.f32(rightValue);
+
+    ChunkWriter plane;
+    plane.chunk(rwID_STRUCT, libraryID, data);
+    plane.chunk(leftChunk, libraryID, left);
+    plane.chunk(rightChunk, libraryID, right);
+    return plane;
+}
+
+static ChunkWriter materialList(RwUInt32 libraryID, int count)
+{
+    ChunkWriter data;
+    data.u32((RwUInt32)count);
+    for (int i = 0; i < count; i++)
+    {
+        data.u32(0xFFFFFFFF);
+    }
+
+    ChunkWriter list;
+    list.chunk(rwID_STRUCT, libraryID, data);
+    for (int i = 0; i < count; i++)
+    {
+        ChunkWriter matData;
+        matData.u32(0);
+        matData.u32(0xFFFFFFFF); // colour
+        matData.u32(0);
+        matData.u32(0); // untextured
+        matData.v3(1.0f, 1.0f, 1.0f);
+
+        ChunkWriter material;
+        material.chunk(rwID_STRUCT, libraryID, matData);
+        material.chunk(rwID_EXTENSION, libraryID, ChunkWriter());
+        list.chunk(rwID_MATERIAL, libraryID, material);
+    }
+    return list;
+}
+
+// The world chunk's STRUCT: 52 bytes up to 3.4.0.0, 64 with a bounding box
+// after that.
+static ChunkWriter worldHeader(RwUInt32 libraryID, bool rootIsAtomic, RwUInt32 format,
+                               const RwBBox* bbox)
+{
+    ChunkWriter data;
+    data.u32(rootIsAtomic);
+    data.v3(0.0f, 0.0f, 0.0f);
+    if (bbox == NULL)
+    {
+        data.v3(1.0f, 0.0f, 1.0f); // surface properties
+    }
+    data.u32(0); // triangles, vertices, plane sectors, atomic sectors: unused
+    data.u32(0);
+    data.u32(0);
+    data.u32(0);
+    data.u32(0); // colSectorSize
+    data.u32(format);
+    if (bbox != NULL)
+    {
+        data.v3(bbox->sup.x, bbox->sup.y, bbox->sup.z);
+        data.v3(bbox->inf.x, bbox->inf.y, bbox->inf.z);
+    }
+    return data;
+}
+
+static RpWorld* readWorld(const ChunkWriter& world)
+{
+    RwMemory mem = { (RwUInt8*)world.bytes.data(), (RwUInt32)world.bytes.size() };
+    RwStream* stream = RwStreamOpen(rwSTREAMMEMORY, rwSTREAMREAD, &mem);
+    RpWorld* result = NULL;
+    if (RwStreamFindChunk(stream, rwID_WORLD, NULL, NULL))
+    {
+        result = RpWorldStreamRead(stream);
+    }
+    RwStreamClose(stream, NULL);
+    return result;
+}
+
+struct WorldHit
+{
+    RpWorldSector* sector;
+    RwInt32 matIndex;
+    RwReal distance;
+    RwV3d normal;
+};
+
+struct WorldHits
+{
+    WorldHit hits[8];
+    int count;
+    int stopAfter;
+};
+
+static RpCollisionTriangle* recordWorldHitCB(RpIntersection*, RpWorldSector* sector,
+                                             RpCollisionTriangle* tri, RwReal distance, void* data)
+{
+    WorldHits* hits = (WorldHits*)data;
+    if (hits->count < 8)
+    {
+        WorldHit& hit = hits->hits[hits->count];
+        hit.sector = sector;
+        hit.matIndex = sector->polygons[tri->index].matIndex;
+        hit.distance = distance;
+        hit.normal = tri->normal;
+    }
+    hits->count++;
+    return hits->count == hits->stopAfter ? NULL : tri;
+}
+
+static WorldHits queryWorld(RpWorld* world, RpIntersection* isx, int stopAfter = 0)
+{
+    WorldHits hits;
+    memset(&hits, 0, sizeof(hits));
+    hits.stopAfter = stopAfter;
+    RpCollisionWorldForAllIntersections(world, isx, recordWorldHitCB, &hits);
+    return hits;
+}
+
+static RpIntersection sphereQuery(RwReal x, RwReal y, RwReal z, RwReal radius)
+{
+    RpIntersection isx;
+    isx.type = rpINTERSECTSPHERE;
+    isx.t.sphere.center.x = x;
+    isx.t.sphere.center.y = y;
+    isx.t.sphere.center.z = z;
+    isx.t.sphere.radius = radius;
+    return isx;
+}
+
+static RpIntersection lineQuery(RwReal x, RwReal y0, RwReal y1, RwReal z)
+{
+    RpIntersection isx;
+    isx.type = rpINTERSECTLINE;
+    isx.t.line.start.x = x;
+    isx.t.line.start.y = y0;
+    isx.t.line.start.z = z;
+    isx.t.line.end.x = x;
+    isx.t.line.end.y = y1;
+    isx.t.line.end.z = z;
+    return isx;
+}
+
+static void test_world_stream()
+{
+    printf("RpWorldStreamRead\n");
+
+    rw::int32 geometries = rw::Geometry::numAllocated;
+    rw::int32 atomics = rw::Atomic::numAllocated;
+    rw::int32 frames = rw::Frame::numAllocated;
+
+    // Three sectors under two planes, as hbc1.HOP has them (RenderWare 3.3):
+    //
+    //   x below 0.5:              floor at y = 0, material 0, collision data
+    //   x above -0.5, z below 0:  floor at y = 1, material 1, collision data
+    //   x above -0.5, z above 0:  floor at y = 1, material 1, NO collision data
+    //
+    // The x plane's sectors overlap between -0.5 and 0.5.
+    ChunkWriter left = quadSector(kRw33, -10.0f, 0.5f, -10.0f, 10.0f, 0.0f, 0, true);
+    ChunkWriter rightNear = quadSector(kRw33, -0.5f, 10.0f, -10.0f, 0.0f, 1.0f, 1, true);
+    ChunkWriter rightFar = quadSector(kRw33, -0.5f, 10.0f, 0.0f, 10.0f, 1.0f, 1, false);
+    ChunkWriter right = planeSector(kRw33, 8, 0.0f, 0.0f, 0.0f, 9, rightNear, 9, rightFar);
+
+    ChunkWriter body;
+    body.chunk(rwID_STRUCT, kRw33, worldHeader(kRw33, false, kTestWorldFormat, NULL));
+    body.chunk(rwID_MATLIST, kRw33, materialList(kRw33, 2));
+    body.chunk(10, kRw33, planeSector(kRw33, 0, 0.0f, 0.5f, -0.5f, 9, left, 10, right));
+    ChunkWriter stream;
+    stream.chunk(rwID_WORLD, kRw33, body);
+
+    RpWorld* world = readWorld(stream);
+    check(world != NULL, "a RenderWare 3.3 world reads");
+    if (world == NULL)
+    {
+        return;
+    }
+
+    check(RpWorldGetNumMaterials(world) == 2, "with its two materials");
+    check(world->numTexCoordSets == 1, "and one set of texture coordinates");
+    check(world->rootSector != NULL && world->rootSector->type == 0,
+          "and a plane on x at the root");
+    const RwBBox* bbox = RpWorldGetBBox(world);
+    check(bbox->inf.x == -10.0f && bbox->sup.x == 10.0f && bbox->inf.y == 0.0f &&
+              bbox->sup.y == 1.0f && bbox->inf.z == -10.0f && bbox->sup.z == 10.0f,
+          "a 3.3 stream's world box is the union of its sectors'");
+
+    RpPlaneSector* root = (RpPlaneSector*)world->rootSector;
+    check(root->leftValue == 0.5f && root->rightValue == -0.5f,
+          "overlapping sectors keep the plane's two bounds");
+    rwshim::AtomicSector* leftSector = (rwshim::AtomicSector*)root->leftSubTree;
+    check(leftSector->sector.type == rwSECTORATOMIC && leftSector->sector.numPolygons == 2 &&
+              leftSector->sector.numVertices == 4,
+          "the left sector holds the quad");
+    check(leftSector->sector.polygons[1].vertIndex[0] == 1 &&
+              leftSector->sector.polygons[1].vertIndex[2] == 3 &&
+              leftSector->sector.vertices[2].x == 0.5f && leftSector->sector.vertices[2].z == 10.0f,
+          "its polygons and vertices are the stream's");
+    check(leftSector->sector.preLitLum != NULL && leftSector->sector.preLitLum[0].red == 0x80 &&
+              leftSector->sector.preLitLum[0].alpha == 0xFF,
+          "and so is its prelight");
+
+    rw::Atomic* atomic = leftSector->atomic;
+    check(atomic != NULL && atomic->geometry->meshHeader != NULL &&
+              atomic->geometry->meshHeader->numMeshes == 1 &&
+              atomic->geometry->meshHeader->totalIndices == 6,
+          "the sector draws through an atomic with the stream's mesh");
+    check(atomic != NULL && atomic->geometry->meshHeader->getMeshes()[0].material ==
+                                (rw::Material*)RpWorldGetMaterial(world, 0),
+          "whose material is the world's own");
+
+    // Spheres: distance is divided by the radius.
+    RpIntersection isx = sphereQuery(-8.0f, 0.3f, -8.0f, 0.5f);
+    WorldHits hits = queryWorld(world, &isx);
+    check(hits.count == 1 && hits.hits[0].sector == &leftSector->sector &&
+              hits.hits[0].matIndex == 0,
+          "a sphere touching one triangle finds it, in its sector");
+    check(near(hits.hits[0].distance, 0.6f) && near(hits.hits[0].normal.y, 1.0f),
+          "at its distance over the radius, with the triangle's normal");
+
+    isx = sphereQuery(0.0f, 0.5f, -8.0f, 0.6f);
+    hits = queryWorld(world, &isx);
+    check(hits.count == 2 && hits.hits[0].matIndex == 0 && hits.hits[1].matIndex == 1,
+          "a sphere in the overlap finds both sides, left first");
+
+    isx = sphereQuery(8.0f, 1.3f, 5.0f, 0.5f);
+    hits = queryWorld(world, &isx);
+    check(hits.count == 0, "a sector without collision data is not hit");
+
+    isx = sphereQuery(8.0f, 1.3f, -2.0f, 0.5f);
+    hits = queryWorld(world, &isx);
+    check(hits.count == 1 && hits.hits[0].matIndex == 1, "but its neighbour with it is");
+
+    isx = sphereQuery(-8.0f, 3.0f, -8.0f, 0.5f);
+    hits = queryWorld(world, &isx);
+    check(hits.count == 0, "a sphere clear of the floor finds nothing");
+
+    // Lines: a parameter along the line, and only faces that look at its start.
+    isx = lineQuery(-8.0f, 5.0f, -5.0f, -8.0f);
+    hits = queryWorld(world, &isx);
+    check(hits.count == 1 && near(hits.hits[0].distance, 0.5f) && near(hits.hits[0].normal.y, 1.0f),
+          "a line down onto the floor hits it halfway");
+
+    isx = lineQuery(-8.0f, -5.0f, 5.0f, -8.0f);
+    hits = queryWorld(world, &isx);
+    check(hits.count == 0, "a line up through its back does not");
+
+    // Boxes: distance zero.
+    isx.type = rpINTERSECTBOX;
+    isx.t.box.inf.x = -9.0f;
+    isx.t.box.inf.y = -0.1f;
+    isx.t.box.inf.z = -9.0f;
+    isx.t.box.sup.x = -7.0f;
+    isx.t.box.sup.y = 0.1f;
+    isx.t.box.sup.z = -7.0f;
+    hits = queryWorld(world, &isx);
+    check(hits.count >= 1 && hits.hits[0].matIndex == 0 && hits.hits[0].distance == 0.0f,
+          "a box through the floor finds it at distance zero");
+
+    isx = sphereQuery(0.0f, 0.5f, -8.0f, 0.6f);
+    hits = queryWorld(world, &isx, 1);
+    check(hits.count == 1, "a callback returning NULL ends the query");
+
+    check(RpWorldDestroy(world) != FALSE, "RpWorldDestroy on a read world");
+    check(rw::Geometry::numAllocated == geometries && rw::Atomic::numAllocated == atomics &&
+              rw::Frame::numAllocated == frames,
+          "frees every sector's geometry, atomic and frame");
+
+    // 3.4.0.3 and later carry the world's box in the header, which wins over
+    // the sectors'.
+    RwBBox headerBox = { { 20.0f, 20.0f, 20.0f }, { -20.0f, -20.0f, -20.0f } };
+    body = ChunkWriter();
+    body.chunk(rwID_STRUCT, kRw34, worldHeader(kRw34, true, kTestWorldFormat, &headerBox));
+    body.chunk(rwID_MATLIST, kRw34, materialList(kRw34, 1));
+    body.chunk(9, kRw34, quadSector(kRw34, -1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 0, true));
+    stream = ChunkWriter();
+    stream.chunk(rwID_WORLD, kRw34, body);
+    world = readWorld(stream);
+    check(world != NULL && world->rootSector != NULL && world->rootSector->type == rwSECTORATOMIC,
+          "a 3.4 world whose root is an atomic sector reads");
+    check(world != NULL && RpWorldGetBBox(world)->sup.x == 20.0f &&
+              RpWorldGetBBox(world)->inf.z == -20.0f,
+          "and takes its box from the header");
+    RpWorldDestroy(world);
+
+    // Refusals.
+    body = ChunkWriter();
+    body.chunk(rwID_STRUCT, kRw33, worldHeader(kRw33, true, kTestWorldFormat, NULL));
+    body.chunk(rwID_MATLIST, kRw33, materialList(kRw33, 1));
+    body.chunk(9, kRw33, quadSector(kRw33, -1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 0, true, 7));
+    stream = ChunkWriter();
+    stream.chunk(rwID_WORLD, kRw33, body);
+    check(readWorld(stream) == NULL, "a polygon naming a vertex the sector lacks is refused");
+
+    body = ChunkWriter();
+    body.chunk(rwID_STRUCT, kRw33, worldHeader(kRw33, true, kTestWorldFormat, NULL));
+    body.chunk(rwID_MATLIST, kRw33, materialList(kRw33, 1));
+    body.chunk(9, kRw33, quadSector(kRw33, -1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 1, true));
+    stream = ChunkWriter();
+    stream.chunk(rwID_WORLD, kRw33, body);
+    check(readWorld(stream) == NULL, "so is one naming a material the world lacks");
+
+    body = ChunkWriter();
+    body.chunk(rwID_STRUCT, kRw33,
+               worldHeader(kRw33, true, kTestWorldFormat | rpWORLDNATIVE, NULL));
+    stream = ChunkWriter();
+    stream.chunk(rwID_WORLD, kRw33, body);
+    check(readWorld(stream) == NULL, "so is a native world");
+
+    RwBBox box36 = headerBox;
+    body = ChunkWriter();
+    body.chunk(rwID_STRUCT, kRw36, worldHeader(kRw36, true, kTestWorldFormat, &box36));
+    stream = ChunkWriter();
+    stream.chunk(rwID_WORLD, kRw36, body);
+    check(readWorld(stream) == NULL, "and one newer than GameCube's RenderWare 3.5");
+
+    check(rw::Geometry::numAllocated == geometries && rw::Atomic::numAllocated == atomics &&
+              rw::Frame::numAllocated == frames,
+          "the refused worlds leak nothing");
 }
 
 // The null device swallows every render state, so what actually reaches librw
@@ -4240,6 +4680,7 @@ int main(int argc, char** argv)
     test_cameras();
     test_lights();
     test_worlds();
+    test_world_stream();
     test_renderstate();
     test_renderstate_roundtrip();
     test_perpixel_lighting();

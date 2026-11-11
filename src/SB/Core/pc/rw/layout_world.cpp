@@ -70,17 +70,15 @@ static_assert((int)rpLIGHTPOSITIONINGSTART == (int)rw::Light::POINT,
 
 // --- RpWorldSector is NOT mirrored -----------------------------------------
 //
-// There is nothing to mirror it onto: librw has no world sector type, no plane
-// sectors and no world chunk reader, so RpWorldSector in rpworld.h keeps
-// RenderWare's own layout untouched and nothing allocates one. The assertion
-// that matters about it is therefore not an offset but the fact that no
-// RpWorldSector is ever handed to librw -- see collision_world.cpp.
+// There is nothing to mirror it onto: librw has no world sector type, so
+// RpWorldSector in rpworld.h keeps RenderWare's own layout and world.cpp
+// allocates it (sector.h). No RpWorldSector is ever handed to librw.
 //
-// One thing is worth pinning down anyway, because a world reader will have to
-// honour it: iCollide.cpp and xCollide.cpp read
-// `sector->polygons[tri->index].matIndex`, so RpPolygon's stride and the
-// position of matIndex within it are load-bearing for the object ids the whole
-// collision system dispatches on.
+// RpPolygon is pinned down because world.cpp reads the stream's polygons
+// straight into it, and iCollide.cpp and xCollide.cpp read
+// `sector->polygons[tri->index].matIndex`, so its stride and the position of
+// matIndex within it are load-bearing for the object ids the whole collision
+// system dispatches on.
 static_assert(sizeof(RpPolygon) == 8, "RpPolygon is not four uint16s");
 static_assert(offsetof(RpPolygon, matIndex) == 0, "RpPolygon::matIndex moved");
 static_assert(offsetof(RpPolygon, vertIndex) == 2, "RpPolygon::vertIndex moved");

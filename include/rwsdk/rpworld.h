@@ -676,11 +676,9 @@ struct RpWorld
     //
     // Nothing below this line exists in librw. It is real memory, because
     // RpWorldPluginAttach reserved it; it is not maintained by librw, because
-    // librw does not know it is here. world.cpp says which of these the port
-    // keeps up to date and which stay at the zeros the plugin constructor
-    // wrote -- `rootSector` is always NULL, in particular, because the only
-    // thing that would build sectors is RpWorldStreamRead and that is not
-    // written.
+    // librw does not know it is here. RpWorldStreamRead in world.cpp fills it
+    // in; a world from RpWorldCreate has only its bounding box, and its
+    // `rootSector` is NULL.
     RwUInt32 flags;
     RpWorldRenderOrder renderOrder;
     RpMaterialList matList;

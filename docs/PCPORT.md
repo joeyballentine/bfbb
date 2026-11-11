@@ -252,27 +252,28 @@ compiles and reads the wrong field.
 
 ### World sectors
 
-librw has no world sectors: no `RpWorldSector` counterpart, no plane sectors, no
-world chunk reader. `rw::World` holds clumps and lights. `World::render` walks
-the clump list.
+librw has no world sectors: `rw::World` holds clumps and lights, and
+`World::render` walks the clump list. The port keeps the sector tree itself
+(`src/SB/Core/pc/rw/sector.h`).
 
-The Xbox assets need none of it. All 121 packs carry 0 BSP and 110 JSP assets.
-A JSP's payload is a clump, loaded through `RpClumpStreamRead`.
-`src/SB/Core/gc/iEnv.cpp` gives a JSP level an empty world
-(`RpWorldCreate(&tmpbbox)`) and takes collision from the JSP's own tree
-through `xClumpColl_InstancePointers`. `xCollide.cpp` branches on the JSP
-before it reaches `RpCollisionWorldForAllIntersections`.
+Retail levels are JSPs. A JSP's payload is a clump, loaded through
+`RpClumpStreamRead`. `src/SB/Core/gc/iEnv.cpp` gives a JSP level an empty
+world (`RpWorldCreate(&tmpbbox)`) and takes collision from the JSP's own tree
+through `xClumpColl_InstancePointers`.
 
-- `RpWorldStreamRead` reads only the bounding box and returns an empty world.
-  Mods ship placeholder BSPs for scenes with no level, and `iCameraAssignEnv`
-  adds the camera to `env->world` without a NULL check. A world with triangles
-  is reported, since its geometry, materials and collision are dropped.
-- `RpCollisionWorldForAllIntersections` returns NULL. There is no sector tree to
-  walk.
+Mods ship BSP levels: BFBB Deluxe's hbc1, and placeholder BSPs for scenes with
+no level. All are portable RenderWare 3.1 to 3.4 streams.
 
-A BSP level would need a sector implementation in librw, including a pipeline
-for GameCube display-list sector geometry (`iFX.cpp` reads
-`_rpDlWorldVtxFmtOffset` off the current world).
+- `RpWorldStreamRead` (`world.cpp`) reads the plane and atomic sectors. Each
+  atomic sector's vertices, prelight, texture coordinates, polygons and
+  BINMESH meshes become a librw geometry and atomic. Native GameCube worlds,
+  whose sectors carry display lists, are refused; none exist.
+- `RpWorldRender` draws the sectors in the camera's frustum, then the world's
+  clumps.
+- `RpCollisionWorldForAllIntersections` (`collision_world.cpp`) answers sphere,
+  line and box queries from each sector's polygons, with GameCube's rules: a
+  sector without collision data is skipped, and a line hits only triangles
+  facing its start.
 
 ## Word size and the low-4 GB arena
 

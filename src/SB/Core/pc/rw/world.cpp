@@ -23,14 +23,14 @@
 // malloc: the plugin block is real, and the offset is checked at attach time
 // against what the struct declaration assumes rather than trusted.
 //
-// Two of the eight functions in this group are incomplete. RpWorldStreamRead
-// reads only the bounding box and says why below;
-// RpCollisionWorldForAllIntersections is blocked on the same missing piece and
-// is in collision_world.cpp.
+// librw has no world sectors, so the sector tree a world stream carries is the
+// port's own (sector.h): RpWorldStreamRead builds it, RpWorldRender draws it,
+// and collision_world.cpp queries it.
 
 #include <rwcore.h>
 #include <rpworld.h>
 
+#include "sector.h"
 #include "stream.h" // brings in librw's rw.h, which must not be included twice
 
 // Declared rather than included: librw's src/d3d/rwxbox.h has no include guard
@@ -104,6 +104,33 @@ static void* worldTailCtor(void* object, rw::int32 offset, rw::int32 size)
     return object;
 }
 
+static void destroySectorTree(RpSector* sector)
+{
+    if (sector == NULL)
+    {
+        return;
+    }
+
+    if (sector->type == rwSECTORATOMIC)
+    {
+        rwshim::AtomicSector* atomicSector = (rwshim::AtomicSector*)sector;
+        if (atomicSector->atomic != NULL)
+        {
+            rw::Frame* frame = atomicSector->atomic->getFrame();
+            atomicSector->atomic->destroy();
+            frame->destroy();
+        }
+        delete[] atomicSector->sector.polygons;
+        delete atomicSector;
+        return;
+    }
+
+    RpPlaneSector* plane = (RpPlaneSector*)sector;
+    destroySectorTree(plane->leftSubTree);
+    destroySectorTree(plane->rightSubTree);
+    delete plane;
+}
+
 static void* worldTailDtor(void* object, rw::int32 offset, rw::int32 size)
 {
     if (offset != kWorldTailOffset)
@@ -111,11 +138,11 @@ static void* worldTailDtor(void* object, rw::int32 offset, rw::int32 size)
         return object;
     }
 
-    // Drops a reference on every material the world holds, which is what
-    // RenderWare's RpWorldDestroy does with its material list. Always a no-op
-    // today -- the list only ever gets filled by a world stream reader, and
-    // there is not one -- but it is the correct teardown for when there is.
+    // The sectors first: their geometries hold references on the world's
+    // materials.
     RpWorld* world = (RpWorld*)object;
+    destroySectorTree(world->rootSector);
+    world->rootSector = NULL;
     reinterpret_cast<rw::MaterialList*>(&world->matList)->deinit();
 
     return object;
@@ -210,13 +237,12 @@ RpWorld* RpWorldCreate(RwBBox* boundingBox)
 
     RpWorld* result = reinterpret_cast<RpWorld*>(world);
 
-    // RenderWare builds a single root sector spanning this box here, and every
-    // sector-based thing the world does starts from it. There is no sector code
-    // on this side (see RpWorldStreamRead below), so the box is recorded and
-    // rootSector stays NULL. iEnvGetBBox is the one reader and it gets the
-    // right answer; iEnv.cpp:61 is the one caller that passes a real box, and
-    // it passes an inverted one (1000..-1000) that RenderWare would have
-    // treated as empty too.
+    // RenderWare builds a single empty root sector spanning this box here.
+    // Nothing reads it -- a created world is a JSP level's, whose geometry and
+    // collision live in the JSP -- so rootSector stays NULL and the world's
+    // sector walks find nothing. iEnv.cpp:61 is the one caller that passes a
+    // real box, and it passes an inverted one (1000..-1000) that RenderWare
+    // would have treated as empty too.
     if (boundingBox != NULL)
     {
         result->boundingBox = *boundingBox;
@@ -349,106 +375,527 @@ RpWorld* RpWorldRemoveLight(RpWorld* world, RpLight* light)
 // ---------------------------------------------------------------------------
 // RpWorldStreamRead
 //
-// Reads the world's bounding box and nothing else: the result is an empty world
-// the size of the stream's. Every retail Xbox level is a JSP, so no retail
-// asset reaches this. Mods do, with placeholder BSPs for scenes that have no
-// level, and the scene needs a world regardless: iCameraAssignEnv adds the
-// camera to env->world without a NULL check. A world with triangles is
-// reported, since its geometry, materials and collision are all dropped.
+// Reads a world stream the way GameCube's RenderWare does (RpWorldStreamRead,
+// PlaneSectorStreamRead and WorldSectorStreamRead in the retail DOL): versions
+// 3.1 to 3.5, the plane and atomic sector tree, and each atomic sector's
+// vertices, prelight, texture coordinates, polygons and meshes.
 //
-// What is missing is not a shim but a subsystem. librw has no world sector code
-// of any kind -- no RpWorldSector, no plane sectors, no world chunk reader, and
-// World::render's own comment says "this is very wrong, we really want world
-// sectors". So there is nothing to forward to and nothing to mirror onto, which
-// is why RpWorldSector below keeps RenderWare's own layout unmodified: it is
-// not mirrored because there is no counterpart to mirror it onto.
+// Only the portable format is read. Retail ships no BSP, and every one in mods
+// is portable: BFBB Deluxe's hbc1 (RenderWare 3.3) and the SEE mod's
+// placeholders (3.1 and 3.4). A native GameCube world carries display lists in
+// place of polygons and is refused.
 //
-// Writing the reader means writing two separable things:
-//
-//   1. The portable world chunk -- header, material list, and the plane/atomic
-//      sector tree with its vertices, normals, prelit colours, texture
-//      coordinates and polygons. This is a documented RenderWare stream format
-//      and librw's MaterialList::streamRead already covers part of it.
-//
-//   2. The GameCube native path, which is what BFBB's own BSPs actually are.
-//      A native world's atomic sectors carry no portable geometry at all; the
-//      real data is a GameCube display list in a platform extension chunk, and
-//      librw has PS2, D3D and OpenGL pipelines but no GameCube one. iFX.cpp:107
-//      reading _rpDlWorldVtxFmtOffset off the current world is the game's own
-//      evidence for which kind it is loading.
-//
-// The struct chunk is 64 bytes, or 76 in older streams that put a
-// surface-properties block after the origin; the bounding box is its last 24
-// bytes in both. RenderWare 3.1 streams, which GameCube mods' placeholder BSPs
-// are, have a 52-byte one: the origin, the surface properties, then the counts
-// and the format, and no bounding box. Those get an empty one.
+// Each atomic sector with polygons gets a librw atomic over a geometry made
+// from its arrays and its BINMESH meshes, which RpWorldRender draws. The
+// RpWorldSector points into that geometry, so collision tests the triangles
+// that are drawn.
+
+static const rw::uint32 kWorldVersionMin = 0x31000;
+static const rw::uint32 kWorldVersionMax = 0x35000;
+
+// The world chunk's STRUCT. Up to 3.4.0.0 it has surface properties after the
+// origin and no bounding box (52 bytes); after that, the reverse (64 bytes).
+struct WorldStreamHeader
+{
+    RwInt32 rootIsWorldSector;
+    RwV3d inverseOrigin;
+    RwInt32 numTriangles;
+    RwInt32 numVertices;
+    RwInt32 numPlaneSectors;
+    RwInt32 numWorldSectors;
+    RwInt32 colSectorSize;
+    RwUInt32 format;
+    RwBBox boundingBox;
+};
+
+struct PlaneSectorStreamHeader
+{
+    RwInt32 type;
+    RwReal value;
+    RwInt32 leftIsWorldSector;
+    RwInt32 rightIsWorldSector;
+    RwReal leftValue;
+    RwReal rightValue;
+};
+
+struct AtomicSectorStreamHeader
+{
+    RwInt32 matListWindowBase;
+    RwInt32 numPolygons;
+    RwInt32 numVertices;
+    RwV3d inf;
+    RwV3d sup;
+    RwInt32 collSectorPresent;
+    RwInt32 unused;
+};
+
+struct SectorReader
+{
+    rw::Stream* stream;
+    RpWorld* world;
+    RwUInt32 format;
+    RwInt32 numTexCoordSets;
+};
+
+// The format bits a sector's geometry takes over. They have the same values in
+// RpWorldFlag and rw::Geometry::Flags.
+static const rw::uint32 kSectorGeometryFlags =
+    rw::Geometry::TRISTRIP | rw::Geometry::TEXTURED | rw::Geometry::PRELIT | rw::Geometry::NORMALS |
+    rw::Geometry::LIGHT | rw::Geometry::MODULATE | rw::Geometry::TEXTURED2;
+
+static const rw::uint32 kAtomicSectorChunk = 0x9;
+static const rw::uint32 kPlaneSectorChunk = 0xA;
+static const rw::uint32 kCollisionPluginChunk = 0x11D;
+
+static RpSector* readSector(SectorReader* reader, bool isAtomic);
+
+static bool skipBytes(rw::Stream* stream, rw::uint32 count)
+{
+    stream->seek((rw::int32)count);
+    return !stream->eof() || count == 0;
+}
+
+// The BINMESH chunk: a header, then each mesh's index count, its index into
+// the world's material list and its indices as 32-bit values.
+static bool readSectorMeshes(rw::Stream* stream, rw::Geometry* geo, rw::uint32 length)
+{
+    struct
+    {
+        rw::uint32 flags;
+        rw::uint32 numMeshes;
+        rw::uint32 totalIndices;
+    } header;
+
+    if (length < sizeof(header) || stream->read32(&header, sizeof(header)) != sizeof(header) ||
+        header.numMeshes > 0xFFFF ||
+        length < sizeof(header) + header.numMeshes * 8 + header.totalIndices * 4)
+    {
+        return false;
+    }
+
+    rw::MeshHeader* meshHeader = geo->allocateMeshes(header.numMeshes, header.totalIndices, FALSE);
+    meshHeader->flags = header.flags;
+
+    rw::Mesh* mesh = meshHeader->getMeshes();
+    rw::uint16* indices = mesh->indices;
+    rw::uint32 indicesLeft = header.totalIndices;
+    for (rw::uint32 i = 0; i < header.numMeshes; i++, mesh++)
+    {
+        rw::uint32 numIndices = stream->readU32();
+        rw::int32 matIndex = stream->readI32();
+        if (numIndices > indicesLeft || matIndex < 0 || matIndex >= geo->matList.numMaterials)
+        {
+            return false;
+        }
+
+        mesh->numIndices = numIndices;
+        mesh->material = geo->matList.materials[matIndex];
+        mesh->indices = indices;
+        for (rw::uint32 j = 0; j < numIndices; j++)
+        {
+            rw::uint32 index = stream->readU32();
+            if (index >= (rw::uint32)geo->numVertices)
+            {
+                return false;
+            }
+            indices[j] = (rw::uint16)index;
+        }
+        indices += numIndices;
+        indicesLeft -= numIndices;
+    }
+
+    return skipBytes(stream, length - sizeof(header) - header.numMeshes * 8 -
+                                 (header.totalIndices - indicesLeft) * 4);
+}
+
+// The vertex arrays and polygons of an atomic sector's STRUCT, after its
+// header, into a new geometry.
+static rw::Geometry* readSectorGeometry(SectorReader* reader,
+                                        const AtomicSectorStreamHeader& header, RpPolygon* polygons)
+{
+    rw::Stream* stream = reader->stream;
+    rw::int32 numVertices = header.numVertices;
+    rw::uint32 flags = rw::Geometry::POSITIONS | (reader->format & kSectorGeometryFlags) |
+                       ((rw::uint32)reader->numTexCoordSets << 16);
+
+    rw::Geometry* geo = rw::Geometry::create(numVertices, header.numPolygons, flags);
+    if (geo == NULL)
+    {
+        return NULL;
+    }
+
+    rw::MorphTarget* morphTarget = &geo->morphTargets[0];
+    stream->read32(morphTarget->vertices, numVertices * sizeof(rw::V3d));
+
+    if (reader->format & rpWORLDNORMALS)
+    {
+        for (rw::int32 i = 0; i < numVertices; i++)
+        {
+            RpVertexNormal packed;
+            stream->read8(&packed, sizeof(packed));
+            morphTarget->normals[i].x = packed.x / 128.0f;
+            morphTarget->normals[i].y = packed.y / 128.0f;
+            morphTarget->normals[i].z = packed.z / 128.0f;
+        }
+    }
+
+    if (reader->format & rpWORLDPRELIT)
+    {
+        stream->read8(geo->colors, numVertices * sizeof(rw::RGBA));
+    }
+
+    for (rw::int32 i = 0; i < reader->numTexCoordSets; i++)
+    {
+        stream->read32(geo->texCoords[i], numVertices * sizeof(rw::TexCoords));
+    }
+
+    stream->read16(polygons, header.numPolygons * sizeof(RpPolygon));
+
+    rw::int32 numMaterials = reader->world->matList.numMaterials;
+    for (rw::int32 i = 0; i < header.numPolygons; i++)
+    {
+        const RpPolygon& polygon = polygons[i];
+        if (polygon.matIndex >= numMaterials || polygon.vertIndex[0] >= numVertices ||
+            polygon.vertIndex[1] >= numVertices || polygon.vertIndex[2] >= numVertices)
+        {
+            geo->destroy();
+            return NULL;
+        }
+
+        geo->triangles[i].v[0] = polygon.vertIndex[0];
+        geo->triangles[i].v[1] = polygon.vertIndex[1];
+        geo->triangles[i].v[2] = polygon.vertIndex[2];
+        geo->triangles[i].matId = polygon.matIndex;
+    }
+
+    // The whole world list, so that a mesh's material index is the world's.
+    rw::MaterialList* worldMaterials = reinterpret_cast<rw::MaterialList*>(&reader->world->matList);
+    for (rw::int32 i = 0; i < worldMaterials->numMaterials; i++)
+    {
+        geo->matList.appendMaterial(worldMaterials->materials[i]);
+    }
+
+    return geo;
+}
+
+static RpSector* readAtomicSector(SectorReader* reader)
+{
+    rw::Stream* stream = reader->stream;
+    rw::uint32 length;
+    AtomicSectorStreamHeader header;
+    if (!rw::findChunk(stream, rw::ID_STRUCT, &length, NULL) || length < sizeof(header) ||
+        stream->read32(&header, sizeof(header)) != sizeof(header))
+    {
+        return NULL;
+    }
+
+    rw::uint32 vertexSize = sizeof(RwV3d) + sizeof(RwTexCoords) * reader->numTexCoordSets;
+    if (reader->format & rpWORLDNORMALS)
+    {
+        vertexSize += sizeof(RpVertexNormal);
+    }
+    if (reader->format & rpWORLDPRELIT)
+    {
+        vertexSize += sizeof(RwRGBA);
+    }
+
+    if (header.numVertices < 0 || header.numVertices > 0xFFFF || header.numPolygons < 0 ||
+        header.numPolygons > 0xFFFF ||
+        length < sizeof(header) + header.numVertices * vertexSize +
+                     header.numPolygons * sizeof(RpPolygon))
+    {
+        return NULL;
+    }
+
+    rwshim::AtomicSector* atomicSector = new rwshim::AtomicSector();
+    RpWorldSector* sector = &atomicSector->sector;
+    sector->type = rwSECTORATOMIC;
+    sector->matListWindowBase = (RwUInt16)header.matListWindowBase;
+    sector->numVertices = (RwUInt16)header.numVertices;
+    sector->numPolygons = (RwUInt16)header.numPolygons;
+    sector->tightBoundingBox.inf = header.inf;
+    sector->tightBoundingBox.sup = header.sup;
+    rwLinkListInitialize(&sector->collAtomicsInWorldSector);
+    rwLinkListInitialize(&sector->noCollAtomicsInWorldSector);
+    rwLinkListInitialize(&sector->lightsInWorldSector);
+
+    rw::Geometry* geo = NULL;
+    rw::uint32 dataSize = 0;
+    if (header.numPolygons > 0)
+    {
+        sector->polygons = new RpPolygon[header.numPolygons];
+        geo = readSectorGeometry(reader, header, sector->polygons);
+        if (geo == NULL)
+        {
+            destroySectorTree((RpSector*)atomicSector);
+            return NULL;
+        }
+
+        dataSize = header.numVertices * vertexSize + header.numPolygons * sizeof(RpPolygon);
+        sector->vertices = (RwV3d*)geo->morphTargets[0].vertices;
+        sector->preLitLum = (RwRGBA*)geo->colors;
+        for (RwInt32 i = 0; i < reader->numTexCoordSets; i++)
+        {
+            sector->texCoords[i] = (RwTexCoords*)geo->texCoords[i];
+        }
+    }
+
+    // A sector without polygons still carries its arrays if it has vertices;
+    // nothing reads them.
+    bool ok = skipBytes(stream, length - sizeof(header) - dataSize);
+
+    rw::uint32 extensionLength = 0;
+    ok = ok && rw::findChunk(stream, rw::ID_EXTENSION, &extensionLength, NULL);
+    while (ok && extensionLength >= 12)
+    {
+        rw::ChunkHeaderInfo chunk;
+        ok = rw::readChunkHeaderInfo(stream, &chunk) && chunk.length <= extensionLength - 12;
+        if (!ok)
+        {
+            break;
+        }
+
+        if (chunk.type == rw::ID_MESH && geo != NULL)
+        {
+            ok = readSectorMeshes(stream, geo, chunk.length);
+        }
+        else
+        {
+            if (chunk.type == kCollisionPluginChunk)
+            {
+                atomicSector->collides = true;
+            }
+            ok = skipBytes(stream, chunk.length);
+        }
+        extensionLength -= 12 + chunk.length;
+    }
+
+    if (ok && geo != NULL && geo->meshHeader != NULL)
+    {
+        geo->calculateBoundingSphere();
+        rw::Atomic* atomic = rw::Atomic::create();
+        atomic->setFrame(rw::Frame::create());
+        atomic->setGeometry(geo, 0);
+        atomicSector->atomic = atomic;
+    }
+
+    // The atomic took its own reference, or the sector has nothing to draw.
+    if (geo != NULL)
+    {
+        geo->destroy();
+    }
+
+    if (!ok)
+    {
+        destroySectorTree((RpSector*)atomicSector);
+        return NULL;
+    }
+
+    return (RpSector*)atomicSector;
+}
+
+static RpSector* readPlaneSector(SectorReader* reader)
+{
+    rw::Stream* stream = reader->stream;
+    rw::uint32 length;
+    PlaneSectorStreamHeader header;
+    if (!rw::findChunk(stream, rw::ID_STRUCT, &length, NULL) || length < sizeof(header) ||
+        stream->read32(&header, sizeof(header)) != sizeof(header) ||
+        !skipBytes(stream, length - sizeof(header)) ||
+        (header.type != 0 && header.type != 4 && header.type != 8))
+    {
+        return NULL;
+    }
+
+    RpPlaneSector* plane = new RpPlaneSector();
+    plane->type = header.type;
+    plane->value = header.value;
+    if (reader->format & rpWORLDSECTORSOVERLAP)
+    {
+        plane->leftValue = header.leftValue;
+        plane->rightValue = header.rightValue;
+    }
+    else
+    {
+        plane->leftValue = header.value;
+        plane->rightValue = header.value;
+    }
+
+    plane->leftSubTree = readSector(reader, header.leftIsWorldSector != 0);
+    if (plane->leftSubTree != NULL)
+    {
+        plane->rightSubTree = readSector(reader, header.rightIsWorldSector != 0);
+    }
+
+    if (plane->leftSubTree == NULL || plane->rightSubTree == NULL)
+    {
+        destroySectorTree((RpSector*)plane);
+        return NULL;
+    }
+
+    return (RpSector*)plane;
+}
+
+static RpSector* readSector(SectorReader* reader, bool isAtomic)
+{
+    if (isAtomic)
+    {
+        return rw::findChunk(reader->stream, kAtomicSectorChunk, NULL, NULL) ?
+                   readAtomicSector(reader) :
+                   NULL;
+    }
+
+    return rw::findChunk(reader->stream, kPlaneSectorChunk, NULL, NULL) ? readPlaneSector(reader) :
+                                                                          NULL;
+}
+
+// The union of the atomic sectors' boxes, for streams that predate the world's
+// own (_rpWorldFindBBox).
+static void addSectorBoxes(RpSector* sector, RwBBox* box, bool* first)
+{
+    if (sector->type != rwSECTORATOMIC)
+    {
+        addSectorBoxes(((RpPlaneSector*)sector)->leftSubTree, box, first);
+        addSectorBoxes(((RpPlaneSector*)sector)->rightSubTree, box, first);
+        return;
+    }
+
+    const RwBBox& tight = ((RpWorldSector*)sector)->tightBoundingBox;
+    if (*first)
+    {
+        *box = tight;
+        *first = false;
+        return;
+    }
+
+    box->inf.x = tight.inf.x < box->inf.x ? tight.inf.x : box->inf.x;
+    box->inf.y = tight.inf.y < box->inf.y ? tight.inf.y : box->inf.y;
+    box->inf.z = tight.inf.z < box->inf.z ? tight.inf.z : box->inf.z;
+    box->sup.x = tight.sup.x > box->sup.x ? tight.sup.x : box->sup.x;
+    box->sup.y = tight.sup.y > box->sup.y ? tight.sup.y : box->sup.y;
+    box->sup.z = tight.sup.z > box->sup.z ? tight.sup.z : box->sup.z;
+}
+
 RpWorld* RpWorldStreamRead(RwStream* stream)
 {
     rw::uint32 length;
-    if (stream == NULL || !rw::findChunk(stream, rw::ID_STRUCT, &length, NULL) || length < 52 ||
-        length > 128)
+    rw::uint32 version;
+    if (stream == NULL || !rw::findChunk(stream, rw::ID_STRUCT, &length, &version) ||
+        version < kWorldVersionMin || version > kWorldVersionMax)
     {
         return NULL;
     }
 
-    rw::uint8 buf[128];
-    if (stream->read32(buf, length) != length)
+    rw::uint8 buf[64];
+    if (length > sizeof(buf) || stream->read32(buf, length) != length)
     {
         return NULL;
     }
 
-    RwBBox bbox;
-    memset(&bbox, 0, sizeof(bbox));
-    if (length >= 64)
+    WorldStreamHeader header;
+    memset(&header, 0, sizeof(header));
+    if (version <= 0x34000)
     {
-        memcpy(&bbox, buf + length - sizeof(bbox), sizeof(bbox));
+        if (length < 52)
+        {
+            return NULL;
+        }
+        memcpy(&header, buf, 16);
+        memcpy(&header.numTriangles, buf + 28, 24);
+    }
+    else
+    {
+        if (length < 64)
+        {
+            return NULL;
+        }
+        memcpy(&header, buf, 64);
     }
 
-    // numTriangles follows rootIsWorldSector and the origin in the 64-byte
-    // form, and the surface properties too in the 52-byte one.
-    rw::int32 numTriangles = 0;
-    if (length == 64)
+    if (header.colSectorSize > 0 || (header.format & rpWORLDNATIVE))
     {
-        memcpy(&numTriangles, buf + 16, sizeof(numTriangles));
-    }
-    else if (length == 52)
-    {
-        memcpy(&numTriangles, buf + 28, sizeof(numTriangles));
-    }
-    if (numTriangles != 0)
-    {
-        printf("bfbb: BSP world has %d triangles; BSP geometry is not read, loading it empty\n",
-               (int)numTriangles);
+        printf("bfbb: BSP world format %08X is not a portable RenderWare world\n",
+               (unsigned)header.format);
         fflush(stdout);
+        return NULL;
     }
 
-    return RpWorldCreate(&bbox);
+    RpWorld* world = RpWorldCreate(&header.boundingBox);
+    if (world == NULL)
+    {
+        return NULL;
+    }
+
+    world->flags = header.format;
+    world->worldOrigin.x = -header.inverseOrigin.x;
+    world->worldOrigin.y = -header.inverseOrigin.y;
+    world->worldOrigin.z = -header.inverseOrigin.z;
+
+    SectorReader reader;
+    reader.stream = stream;
+    reader.world = world;
+    reader.format = header.format;
+    reader.numTexCoordSets = (header.format >> 16) & 0xFF;
+    if (reader.numTexCoordSets == 0)
+    {
+        reader.numTexCoordSets = (header.format & rpWORLDTEXTURED2) ? 2 :
+                                 (header.format & rpWORLDTEXTURED)  ? 1 :
+                                                                      0;
+    }
+    world->numTexCoordSets = reader.numTexCoordSets;
+
+    if (!rw::findChunk(stream, rw::ID_MATLIST, NULL, NULL) ||
+        rw::MaterialList::streamRead(stream,
+                                     reinterpret_cast<rw::MaterialList*>(&world->matList)) == NULL)
+    {
+        RpWorldDestroy(world);
+        return NULL;
+    }
+
+    world->rootSector = readSector(&reader, header.rootIsWorldSector != 0);
+    if (world->rootSector == NULL)
+    {
+        RpWorldDestroy(world);
+        return NULL;
+    }
+
+    if (version < 0x34003)
+    {
+        bool first = true;
+        addSectorBoxes(world->rootSector, &world->boundingBox, &first);
+    }
+
+    return world;
 }
 
-// Render everything in the world.
-//
-// **This draws the clumps and NOT the level.** librw's World::render walks the
-// world's clump list and renders each atomic; RenderWare's descends the world's
-// sector tree and renders the static geometry in each sector it decides is
-// visible. librw has no sectors -- its own comment on this function is "this is
-// very wrong, we really want world sectors" -- so everything that would have
-// come out of the tree is missing.
-//
-// For BFBB that is less bad than it sounds, and the reason is in docs/PCPORT.md: the
-// Xbox assets carry no BSP at all. A JSP level's RpWorld is the empty one
-// iEnv.cpp:61 creates with RpWorldCreate(&tmpbbox), and the level's geometry
-// lives in atomics that xJSP renders itself. So the sectors this cannot walk
-// are, on this asset set, always empty.
-//
-// It is still forwarded rather than refused, because iEnv.cpp:197 calls it on
-// every environment render and a refusal would lose whatever HAS been added to
-// the world -- lights are attached to it, and RpWorldAddClump is how a
-// non-JSP model would get drawn if anything used it.
+static void renderSectors(RpSector* sector, rw::Camera* camera)
+{
+    if (sector->type != rwSECTORATOMIC)
+    {
+        renderSectors(((RpPlaneSector*)sector)->leftSubTree, camera);
+        renderSectors(((RpPlaneSector*)sector)->rightSubTree, camera);
+        return;
+    }
+
+    rw::Atomic* atomic = ((rwshim::AtomicSector*)sector)->atomic;
+    if (atomic != NULL &&
+        camera->frustumTestSphere(atomic->getWorldBoundingSphere()) != rw::Camera::SPHEREOUTSIDE)
+    {
+        atomic->render();
+    }
+}
+
+// The sectors the camera can see, then the clumps added to the world.
 RpWorld* RpWorldRender(RpWorld* world)
 {
     if (world == NULL)
     {
         return NULL;
+    }
+
+    if (world->rootSector != NULL && rw::engine->currentCamera != NULL)
+    {
+        renderSectors(world->rootSector, rw::engine->currentCamera);
     }
 
     asWorld(world)->render();

@@ -442,48 +442,25 @@ without any other symptom.
 
 ### What the world path does NOT do yet
 
-**There is no world reader, so there is no level.** `RpWorldStreamRead` returns
-NULL, and every BSP asset comes through it (zAssetTypes.cpp:220). What is
-missing is not a shim but a subsystem: librw has no world sector code of any
-kind -- no `RpWorldSector` counterpart, no plane sectors, no world chunk reader,
-and `World::render`'s own comment is "this is very wrong, we really want world
-sectors". Writing it is two separable jobs:
+**Sector collision trees are not read.** RenderWare walks each atomic
+sector's collision tree (the 0x11D chunk) to find the polygons a query
+touches; `collision_world.cpp` tests every polygon of the sector instead. The
+triangles found are the same, but within a sector the callbacks come in
+polygon order rather than tree order.
 
-  1. the portable world chunk -- header, material list, and the plane/atomic
-     sector tree with its vertices, normals, prelit colours, texture coordinates
-     and polygons. `rw::MaterialList::streamRead` already covers part of it.
-  2. the GameCube native path, which is what BFBB's own BSPs actually are. A
-     native world's atomic sectors carry no portable geometry; the real data is
-     a GameCube display list in a platform extension chunk, and librw has PS2,
-     D3D and OpenGL pipelines but no GameCube one. iFX.cpp:107 reading
-     `_rpDlWorldVtxFmtOffset` off the current world is the game's own evidence
-     for which kind it is loading.
+**Native GameCube worlds are refused.** Their atomic sectors carry display
+lists in place of polygons. Retail ships no BSP and every BSP in mods is
+portable, so none has been seen.
 
-A partial reader was considered and rejected: filling in the material list and
-leaving the geometry empty would report success and hand back a level with
-nothing in it. NULL is honest and the game is already loud about it -- BSP_Read
-prints "BSP_Read RpWorldStreamRead failed".
+**`RpWorldSector` is not mirrored.** There is no librw type to mirror it onto,
+so it keeps RenderWare's own layout and `world.cpp` allocates it beside the
+librw atomic that draws it (`sector.h`). `layout_world.cpp` asserts `RpPolygon`,
+because the stream's polygons are read straight into it and iCollide.cpp and
+xCollide.cpp read `sector->polygons[tri->index].matIndex`.
 
-**`RpCollisionWorldForAllIntersections` is blocked on the same thing**, which is
-why `collision_world.cpp` is a file with one refusal in it and a long comment.
-The maths it needs already exists -- atomic.cpp's sphere, segment and box
-triangle tests, written for `RpAtomicForAllIntersections` -- but there is
-nothing to run it over, because `rootSector` is always NULL. Until both are
-written, everything in the game walks through the level geometry and falls
-through the floor. Model-to-model collision is unaffected: that is
-`RpAtomicForAllIntersections`, and xClumpColl and the JSP path go through it.
-
-**`RpWorldSector` is not mirrored, and deliberately so.** There is no librw type
-to mirror it onto, so it keeps RenderWare's own layout untouched and nothing
-allocates one. `layout_world.cpp` asserts `RpPolygon` instead, because
-iCollide.cpp and xCollide.cpp read `sector->polygons[tri->index].matIndex` and
-that stride is what the whole collision system's object ids come out of.
-
-**Nothing maintains most of RpWorld's plugin tail.** `boundingBox`, `matList`
-and `renderOrder` are real; `rootSector`, `numClumpsInWorld`, `currentClumpLink`,
-`numTexCoordSets`, `worldOrigin`, `flags`, `renderCallBack` and `pipeline` stay
-at the zeros the plugin constructor wrote, because nothing in the port writes
-them and nothing in the game reads them. A world reader will change that.
+**Part of RpWorld's plugin tail is not maintained.** `numClumpsInWorld`,
+`currentClumpLink`, `renderCallBack` and `pipeline` stay at the zeros the plugin
+constructor wrote; nothing in the game reads them.
 
 **`RpWorldDestroy` detaches where RenderWare dangles.** Retail leaves whatever
 is still in a world holding a link into freed memory; librw notices later, by
@@ -693,24 +670,3 @@ shaders. Where they differ they do not simply skip: under `NULL` the animated-UV
 test asserts the OPPOSITE, that `iFXanimUVCreatePipe` answers NULL, because "no
 shader, so draw the surface unanimated" is a supported outcome and the point of
 checking it is that it stays a quiet one.
-
-## Still unwritten, though the symbol exists
-
-Two functions that link, and return NULL. They are one job, not two, and it is
-the same job as the world reader -- see "What the world path does NOT do yet".
-
-  - `RpWorldStreamRead` (world.cpp) -- every BSP asset comes through it
-    (zAssetTypes.cpp:220). librw has no world sector code of any kind.
-  - `RpCollisionWorldForAllIntersections` (collision_world.cpp) -- the maths it
-    needs already exists in intersect.cpp; there is nothing to run it over,
-    because `rootSector` is always NULL.
-
-**Neither is on the Xbox asset path.** The Xbox packs carry 0 BSP and 110 JSP
-across all 121 files, and `iEnv.cpp:61` gives a JSP level an empty
-`RpWorldCreate(&tmpbbox)` and takes its collision from
-`xClumpColl_InstancePointers` instead. See docs/PCPORT.md. So these block the
-GameCube assets and not the ones the port is being built against.
-
-The per-group tally that used to live here has been removed: every group in it
-read (0) except these two, and it was a second place to keep the same list up
-to date. The command at the top of this file is the tally now.
