@@ -182,7 +182,11 @@ struct grid_index
 {
     U16 x;
     U16 z;
-#ifdef XGRID_DEFER_BOUND_HELPERS
+#if defined(XGRID_DEFER_BOUND_HELPERS) && defined(__MWERKS__)
+    // Only for the retail match. On a host, a user-declared operator= in one
+    // unit makes MSVC's x86 ABI return grid_index through a hidden pointer
+    // there and in EAX everywhere else, and the linker keeps one copy of
+    // get_grid_index for both.
     grid_index& operator=(const grid_index& other);
 #endif
 };

@@ -1199,12 +1199,14 @@ bool cb_ray_hits_ent::operator()(xEnt& ent, xGridBound& gridb)
     return true;
 }
 
+#ifdef __MWERKS__
 WEAK grid_index& grid_index::operator=(const grid_index& other)
 {
     x = other.x;
     z = other.z;
     return *this;
 }
+#endif
 
 #if !defined(PS2)
 void xEntEnable(xEnt* ent)
