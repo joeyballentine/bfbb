@@ -693,6 +693,11 @@ iSndFileInfo* iSndLookup(U32 id)
     for (S32 i = sinfo_array_max - 1; i >= 0; i--)
     {
         const sndtable& t = sinfo_array[i];
+        if (t.xbox == NULL && t.gc == NULL)
+        {
+            continue;
+        }
+
         U32 sfx = table_sfx(t);
         U32 streams = sfx + table_streams(t);
         U32 n = table_entries(t);

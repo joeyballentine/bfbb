@@ -5723,6 +5723,13 @@ static void test_snd()
     check(iSndLookup(gcIds[0]) == NULL && iSndLookup(SND_ASSET) != NULL,
           "a scene ending pops the GameCube table and leaves the one below");
 
+    static test_sndinfo empty;
+    memset(&empty, 0, sizeof(empty));
+    check(iSndLoadSounds(&empty) == 0, "an empty table loads as an empty slot");
+    check(iSndLookup(SND_ASSET) != NULL, "a lookup passes over an empty slot to the table below");
+    iSndSceneExit();
+    check(iSndLookup(SND_ASSET) != NULL, "a scene ending pops the empty slot");
+
     iSndExit();
     iHostSetEnv("BFBB_AUDIO", NULL);
 }
